@@ -57,9 +57,13 @@ function worseConformance(a, b) {
  * which is otherwise indistinguishable from a seat that never emitted JSON at
  * all. Both are additive and present only when set, so a run without either is
  * byte-for-byte unchanged.
+ *
+ * `seat` (v4.8 PR4c §3.1) is the seat OBJECT — {id, alias, role, lens, position}
+ * or null — never an id string. Callers pass `r.seat` / the dead-seat loop's own
+ * `seat` verbatim, so the object IS the contract instead of a prose one.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
-  repairRefused }) {
+  repairRefused, seat }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
@@ -69,6 +73,16 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     ...(repairRefused ? { repairRefused } : {}),
     ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
     ...(leg && leg.model ? { resolvedModel: leg.model } : {}),
+    // v4.8 PR4c §3.1 / R4c-9: emit-when-DIFFERENT, compared against the seat's
+    // OWN alias — never against `model`. buildSeats mints `alias#N` only when
+    // an alias repeats (seats.js:67), so `id !== alias` IS "the bench repeats
+    // this alias": the single predicate all four seat-emit producers now share,
+    // which is what stops them disagreeing. `model` is the LEG's modelInput,
+    // which is NOT the alias when a leg reports none (it falls back to the
+    // RESOLVED id, run-launch.js:205) or when a --council preset carries a
+    // padded member — either would ship a seat id with no seat table behind it,
+    // on a bench with no twin at all.
+    ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
@@ -161,13 +175,17 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   const okJudges = judgeResults.filter(j => j.ok);
   const adjudications = okJudges.flatMap(j =>
     j.adjudications.map(a => ({ findingId: a.id, judge: j.judge, verdict: a.verdict,
-      // v4.8 PR3 Task 5: emit-when-DIFFERENT (§3.3) — j.seat.id === j.judge on
-      // a unique-alias bench, so this stays absent there.
-      ...(j.seat && j.seat.id !== j.judge ? { seat: j.seat.id } : {}) })));
+      // v4.8 PR3 Task 5, re-based by PR4c R4c-9: emit-when-DIFFERENT against
+      // the seat's OWN alias, matching buildRunStatsEntry and run.js's
+      // raiserSeat call site. It was `!== j.judge` — the alias as the LEG
+      // reported it — which emitted a seat id equal to its own alias whenever
+      // the two strings drifted (a padded --council member; a leg with no
+      // modelInput), i.e. exactly where the field carries no information.
+      ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) })));
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
-    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused,
+    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused, seat: r.seat,
   }));
   // v4.7 D2/E4: pre-built rows (repair/superseded/dead-seat-error) ride right
   // after the primary review rows — same "primary-adjacent" shape, just not

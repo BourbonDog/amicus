@@ -4,6 +4,12 @@ const { assignTier } = require('../../src/council/tally');
 const { computeStreetCred } = require('../../src/council/tally');
 const { tally } = require('../../src/council/tally');
 const avInput = require('./fixtures/av-receiver-input');
+// v4.8 PR4c: `runStats[].seat` crosses THREE files — the producer's literal
+// (run-assemble.js), tally's allowlist (tally.js) and verdict's verbatim copy
+// (verdict.js:129). The T13 round trip below drives all three rather than
+// re-declaring the row shape by hand at each hop.
+const { buildRunStatsEntry } = require('../../src/council/run-assemble');
+const { buildVerdict } = require('../../src/council/verdict');
 
 describe('assignTier (peers-only cascade)', () => {
   const cases = [
@@ -256,5 +262,47 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
       adjudications: [],
     });
     expect('raiserSeat' in record.findings[0]).toBe(false);
+  });
+});
+
+// v4.8 PR4c Task 1 (plan §3.1, T13): tally.js:115-134 is an explicit allowlist
+// that builds a FRESH object literal, so a `seat` key on an input row is
+// stripped before it can reach tally.json — and verdict.js:129 copies tally's
+// output verbatim, so verdict.json inherits the strip. Producing the row with
+// the REAL buildRunStatsEntry makes T13c a genuine round trip between two
+// independently-written literals rather than a restatement of one of them.
+describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => {
+  const seat = { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 };
+  const input = {
+    meta: { runId: 'r', runType: 'headless', date: 'd', models: ['deepseek', 'deepseek'],
+      chair: 'x', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+    runStats: [
+      buildRunStatsEntry({ leg: { model: 'deepseek', status: 'complete', durationMs: 1, usage: null,
+        waveId: 'r-s1' }, model: 'deepseek', role: 'seat', wasChair: false, conformance: 'clean', seat }),
+      buildRunStatsEntry({ leg: { model: 'gpt', status: 'complete', durationMs: 1, usage: null },
+        model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+        seat: { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 3 } }),
+    ],
+  };
+  const record = tally(input);
+
+  test('T13a: the seat survives tally()\'s allowlist into the tally record', () => {
+    expect(input.runStats[0].seat).toBe('deepseek#1');       // the producer really emitted it
+    expect(record.runStats[0].seat).toBe('deepseek#1');
+    expect('seat' in record.runStats[1]).toBe(false);        // unique alias ⇒ nothing to say
+  });
+
+  test('T13b: the seat reaches verdict.json (verdict copies runStats verbatim)', () => {
+    const onDisk = JSON.parse(JSON.stringify(buildVerdict(record, [])));
+    expect(onDisk.runStats[0].seat).toBe('deepseek#1');
+    expect('seat' in onDisk.runStats[1]).toBe(false);
+  });
+
+  test('T13c: the row\'s KEY ORDER is identical on both sides of tally()', () => {
+    expect(Object.keys(record.runStats[0])).toEqual(Object.keys(input.runStats[0]));
+    expect(Object.keys(record.runStats[0])).toEqual(
+      ['model', 'role', 'wasChair', 'conformance', 'waveId', 'resolvedModel', 'seat',
+        'status', 'durationMs', 'usage']);
   });
 });

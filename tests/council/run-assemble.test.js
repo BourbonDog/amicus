@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const asm = require('../../src/council/run-assemble');
 const { tally } = require('../../src/council/tally');
+const { buildSeats } = require('../../src/council/seats');
 const { mkLeg } = require('./helpers/fake-launchers');
 
 let tmp;
@@ -124,6 +125,110 @@ describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-differe
     });
     expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
   });
+});
+
+// ---- v4.8 PR4c Task 1 (plan §3.1): runStats rows name their SEAT ----
+// buildRunStatsEntry takes the seat OBJECT and compares the seat id to the
+// seat's OWN alias, never to the caller's `model`. buildSeats mints `alias#N`
+// only when an alias repeats (seats.js:67), so `id !== alias` IS "the bench
+// repeats this alias" — the identical predicate every other seat-emit producer
+// uses after R4c-9. `model` is the LEG's modelInput, which is NOT the alias
+// when a leg reports none or when a --council preset carries a padded member;
+// T12b pins both of those, and the seat OBJECT (not an id string) is what makes
+// the contract structural instead of prose.
+describe('v4.8 PR4c: runStats[].seat on the primary review rows (§3.1, T12)', () => {
+  const seats = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
+  const twinReviews = seats.map(s => ({
+    model: s.alias, role: s.role, conformance: 'clean', seat: s, globalFindings: [],
+    leg: { ...leg(s.alias), waveId: 'r-s1' },
+  }));
+  const twinInput = () => asm.buildTallyInput({
+    runId: 'r', date: 'd', bench: ['deepseek', 'deepseek', 'gpt'], chair: 'x',
+    reviews: twinReviews, judgeResults: [], chairStats: null,
+  });
+
+  test('each twin review row carries ITS OWN seat id; the unique-alias row carries none', () => {
+    const rows = twinInput().runStats;
+    expect(rows.map(r => r.model)).toEqual(['deepseek', 'deepseek', 'gpt']);   // §4.7: model stays the ALIAS
+    expect(rows[0].seat).toBe('deepseek#1');
+    expect(rows[1].seat).toBe('deepseek#2');
+    expect('seat' in rows[2]).toBe(false);        // gpt's seat id IS its alias
+  });
+
+  test('the seat rides in the resolvedModel slot — before status, after resolvedModel', () => {
+    expect(Object.keys(twinInput().runStats[0])).toEqual(
+      ['model', 'role', 'wasChair', 'conformance', 'waveId', 'resolvedModel', 'seat',
+        'status', 'durationMs', 'usage']);
+  });
+
+  test('a review with NO seat (orphaned Stage-1 leg) emits no seat key', () => {
+    const input = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['deepseek', 'deepseek'], chair: 'x',
+      reviews: [{ model: 'deepseek', role: 'seat', conformance: 'clean', leg: leg('deepseek'),
+        seat: null, globalFindings: [] }],
+      judgeResults: [], chairStats: null,
+    });
+    expect('seat' in input.runStats[0]).toBe(false);
+  });
+});
+
+// T12b — the two shapes that separate `seat.id !== seat.alias` from revision 1's
+// `seat.id !== rowModel`. Both are UNIQUE-alias benches, so a correct guard
+// emits nothing; the named mutant emits a seat id with no seat table behind it
+// (plan §1.2 verbatim, on the engine path).
+describe('v4.8 PR4c: the guard compares the seat to its OWN alias, never to `model` (§3.1, T12b)', () => {
+  test('(a) a leg that reports no modelInput still emits NO seat', () => {
+    // result-schema.js:63 can yield modelInput: null; materializeReviews
+    // (run-launch.js:205) then falls back to `leg.model`, the RESOLVED
+    // executable id, and run-stages.js:264 copies that onto the review as
+    // `model`. So rowModel is the resolved id here while the seat is a
+    // perfectly ordinary unique alias — two strings that never coincide.
+    const [seat] = buildSeats(['gemini', 'gpt'], null, null);
+    const row = asm.buildRunStatsEntry({
+      leg: { model: 'openai/gemini-2.5', modelInput: null, status: 'complete',
+        durationMs: 1, usage: null },
+      model: 'openai/gemini-2.5', role: 'seat', wasChair: false, conformance: 'clean', seat,
+    });
+    expect(seat.id).toBe('gemini');
+    expect('seat' in row).toBe(false);
+  });
+
+  test('(b) a whitespace-padded --council member still emits NO seat', () => {
+    // config.js:445-459 classifyCouncilMembers pushes the member RAW, so the
+    // bench alias keeps its padding while fanout-validate.js:24 trims the leg's
+    // — rowModel and seat.id differ by a space on a bench with no twin at all.
+    const [seat] = buildSeats(['openai/gpt-5 ', 'gpt'], null, null);
+    expect(seat.id).toBe('openai/gpt-5 ');
+    const row = asm.buildRunStatsEntry({
+      leg: { model: 'openai/gpt-5', modelInput: 'openai/gpt-5', status: 'complete',
+        durationMs: 1, usage: null },
+      model: 'openai/gpt-5', role: 'seat', wasChair: false, conformance: 'clean', seat,
+    });
+    expect('seat' in row).toBe(false);
+  });
+});
+
+// T14b — `joinsLedger` (ledger.js:49-53) excludes role `judge`, so a judge row
+// can never win the ledger join and must not be stamped. `j.seat` IS in scope
+// at the judge push, which is exactly why this needs a pin rather than a note:
+// run-debate.test.js:838's role Set is {rebuttal,revote,superseded,repair} and
+// does not contain `judge`.
+test('v4.8 PR4c T14b: judge rows carry NO seat, even on a twin bench', () => {
+  const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+  const input = asm.buildTallyInput({
+    runId: 'r', date: 'd', bench: ['deepseek', 'deepseek'], chair: 'x',
+    reviews: [], chairStats: null,
+    judgeResults: seats.map(s => ({
+      judge: s.alias, ok: true, order: ['deepseek'], seat: s, conformance: 'clean',
+      leg: leg('deepseek'), adjudications: [{ id: 'A1', verdict: 'agree' }],
+    })),
+  });
+  const judges = input.runStats.filter(r => r.role === 'judge');
+  expect(judges).toHaveLength(2);
+  for (const j of judges) { expect('seat' in j).toBe(false); }
+  // …while the SAME judgeResults DO stamp the adjudication projection, so this
+  // is a scoping pin, not "the seats never reached this function".
+  expect(input.adjudications.map(a => a.seat)).toEqual(['deepseek#1', 'deepseek#2']);
 });
 
 // Task 4 (v4.7 D2/E4): extraRows is the row-per-launch channel runStage1 now

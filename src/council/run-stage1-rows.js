@@ -103,7 +103,12 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // the SEAT's own role, NOT roleAt(o.seats, seat.id) — o.seats is absent on
     // the buildSeats fallback path while the seat is not, so roleAt's unknown-id
     // 'seat' collapses every critic/lens role. Unidentified seats keep the shim.
-    extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias,
+    // v4.8 PR4c §3.1: `seat` is the seat OBJECT (buildRunStatsEntry compares
+    // its id to its own alias) — never `seat.id`, which would make both sides
+    // of that comparison undefined and the stamp silently inert. Null here is
+    // an orphaned seat, and two orphaned twins have already collapsed into ONE
+    // Map entry above, so that row correctly carries no seat at all.
+    extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
       role: seat ? seat.role : roleFor(o, alias), wasChair: false }));
   }
 }

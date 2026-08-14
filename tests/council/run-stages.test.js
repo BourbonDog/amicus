@@ -8,10 +8,13 @@ const os = require('os');
 // stage loops (review F5). Its tests stay here, next to Stage 1's — they share makeCtx.
 const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
-const { buildSeats } = require('../../src/council/seats');
+const { buildSeats, bindSeats } = require('../../src/council/seats');
 // The REAL judgeResults[].seat -> adjudications[].seat join, so the F1 pins
 // below assert against the shipped projection rather than re-implementing it.
 const { buildTallyInput } = require('../../src/council/run-assemble');
+// v4.8 PR4c: the dead-seat row producer is exported, so its two seat shapes are
+// pinnable with no runCouncil, no launchers and no disk.
+const { pushDeadSeatRows } = require('../../src/council/run-stage1-rows');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -1167,6 +1170,80 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     const primary = primaryRows(r);
     expect(primary.map(x => x.role).sort()).toEqual(['lens:cost', 'lens:risk']);
     expect(primary.every(x => x.model === 'deepseek')).toBe(true);
+  });
+});
+
+// ---- v4.8 PR4c Task 1 (plan §3.1): dead-seat rows name their SEAT ----
+// pushDeadSeatRows is exported (run-stage1-rows.js:111), so both shapes are
+// three-line fixtures over the REAL bindSeats/buildSeats rather than a scripted
+// run. The two shapes are NOT symmetric and that asymmetry is the point:
+//   bound   -> one row per seat, each stamped with its own seat id
+//   orphaned-> deadSeats is a Map keyed by keyOf's ALIAS fallback, so two dead
+//              twins collapse into ONE row and the stamp is inert there
+//              (pre-existing collapse; plan §4.6 lists it as a shape PR4c does
+//              NOT close). Revision 1's T12 was satisfiable on the bound path
+//              alone, which is precisely the false confidence this pins away.
+describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
+  const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
+  const twinLeg = (waveId, slot) => ({
+    taskId: waveId != null ? `${waveId}-${slot}` : 'deepseek-orphan',
+    model: 'deepseek', modelInput: 'deepseek', status: 'error', summary: '',
+    durationMs: null, usage: null, ...(waveId != null ? { waveId } : {}),
+  });
+  const noRetry = () => ({ recoveredLegs: [], stillDeadLegs: [], stillDeadRetryLegs: [],
+    attemptedSeats: new Set() });
+  const roleFor = () => 'seat';
+  const run = (args) => {
+    const extraRows = [];
+    pushDeadSeatRows({ o: {}, deadLegs0: [], stillDeadWaves: [], roleFor, extraRows,
+      retry: noRetry(), ...args });
+    return extraRows;
+  };
+
+  test('T12: two BOUND dead twin seats get TWO rows, each stamped with its OWN seat id', () => {
+    const legs = [twinLeg('w', 1), twinLeg('w', 2)];
+    const { bound } = bindSeats('w', SEATS.slice(0, 2), legs);
+    expect(bound.map(b => b.seat.id)).toEqual(['deepseek#1', 'deepseek#2']);
+    const rows = run({ stillDeadLegs: legs, seatOf: new Map(bound.map(b => [b.leg, b.seat])) });
+    expect(rows.map(r => r.model)).toEqual(['deepseek', 'deepseek']);   // §4.7: the ALIAS stays routable
+    expect(rows.map(r => r.seat)).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('T12: two ORPHANED twin seats collapse to ONE row that carries NO seat (§4.6, pre-existing)', () => {
+    const legs = [twinLeg(), twinLeg()];             // no `${waveId}-${n}` id, no waveId
+    const { bound, unbound } = bindSeats('w', SEATS.slice(0, 2), legs);
+    expect(bound).toEqual([]);                        // the alias fallback needs hits.length === 1
+    expect(unbound.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2']);
+    const rows = run({ stillDeadLegs: legs, seatOf: new Map() });
+    expect(rows).toHaveLength(1);                     // ONE row for TWO paid seats
+    expect('seat' in rows[0]).toBe(false);            // …and the stamp is inert, not wrong
+  });
+
+  test('T12: a bound seat on a UNIQUE-alias bench emits no seat key (byte parity)', () => {
+    const legs = [{ ...twinLeg('w', 1), model: 'gpt', modelInput: 'gpt' }];
+    const { bound } = bindSeats('w', [SEATS[2]], legs);
+    const rows = run({ stillDeadLegs: legs, seatOf: new Map(bound.map(b => [b.leg, b.seat])) });
+    expect(rows).toHaveLength(1);
+    expect('seat' in rows[0]).toBe(false);
+  });
+
+  test('T14: a superseded row carries NO seat, even on a twin bench', () => {
+    // Role `superseded` is excluded by joinsLedger (ledger.js:49-53), so it can
+    // never win the ledger join — stamping it would put a seat id in a row no
+    // seat-aware consumer ever reads. The SAME call emits stamped dead-seat rows
+    // from the same seat table, so this is a scoping pin, not an inert fixture.
+    const first = [twinLeg('w', 1), twinLeg('w', 2)];
+    const retryLegs = [twinLeg('r', 1), twinLeg('r', 2)];
+    const seatOf = new Map([...bindSeats('w', SEATS.slice(0, 2), first).bound,
+      ...bindSeats('r', SEATS.slice(0, 2), retryLegs).bound].map(b => [b.leg, b.seat]));
+    const rows = run({ deadLegs0: first, stillDeadLegs: retryLegs, seatOf,
+      retry: { recoveredLegs: [], stillDeadLegs: retryLegs, stillDeadRetryLegs: retryLegs,
+        attemptedSeats: new Set(['deepseek#1', 'deepseek#2']) } });
+    const superseded = rows.filter(r => r.role === 'superseded');
+    expect(superseded).toHaveLength(2);
+    for (const r of superseded) { expect('seat' in r).toBe(false); }
+    expect(rows.filter(r => r.role === 'seat').map(r => r.seat))
+      .toEqual(['deepseek#1', 'deepseek#2']);
   });
 });
 

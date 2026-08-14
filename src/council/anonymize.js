@@ -49,6 +49,14 @@ function toGlobalId(letter, localId) {
  *   field stays absent and tally-input.json/tally.json/verdict.json stay
  *   byte-identical artifacts. Absent entirely on the Claude review call site
  *   (3 args) — Claude is never a seat.
+ *   ⚠️ v4.8 PR4c R4c-9: the `raiserSeat !== raiser` half is now provably DEAD on
+ *   the engine path. run.js's call site gates on `seat.id !== seat.alias`, and
+ *   for every bench preflightSeats admits that implies `seat.id !== r.model`.
+ *   It is KEPT as defense in depth for the hand-assembled callers (this module
+ *   is pure and has no seat table to consult), and tests/council/
+ *   run-raiserseat-call.test.js exists so that removing EITHER guard fails a
+ *   test — but do not read it as a second, independent decision about an
+ *   engine-produced run.
  * @returns {Array<{id: string, raiser: string, severity: string, claim: string, location: string}>}
  */
 function toGlobalFindings(letter, raiser, findings, raiserSeat) {
