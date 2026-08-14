@@ -262,4 +262,8 @@ module.exports = {
   buildChairPacketFile,
   preflightClaudeReview, labelClaudeReview, claudeRunStatsRow, CLAUDE_SEAT,
   preflightSeats,
+  // Exported for ledger.js's drift guard only (v4.8 PR4b council A1): ledger.js
+  // keeps a LOCAL copy of this table, and the guard deep-compares the two so a
+  // level added here can never silently go missing there.
+  CONFORMANCE_RANK,
 };

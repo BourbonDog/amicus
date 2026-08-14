@@ -153,7 +153,15 @@ function buildLedgerRows(record) {
         // mergeConformance returns its first argument on a rank tie and an
         // unknown value ranks 0, so a 'clean' seed would rewrite an unknown
         // conformance to 'clean' on a SINGLE-row group — i.e. on an ordinary
-        // unique-alias bench, where today emits it verbatim.
+        // unique-alias bench, where today emits it verbatim. T13b is the pin.
+        // The seed means group[0] is folded twice (once as seed, once as the
+        // first element); that is deliberate and a no-op, because
+        // mergeConformance(x, x) === x. Do NOT "simplify" it away.
+        // ⚠️ Consequence, inherited from worseConformance's own tie rule and
+        // NOT introduced here: an unknown value survives only in position 0.
+        // ['weird','clean'] folds to 'weird', ['clean','weird'] to 'clean',
+        // because unknown and 'clean' both rank 0 and the accumulator wins the
+        // tie. T13c pins it so nobody "fixes" it into a divergence.
         conformance: group.length
           ? group.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
             group[0].conformance || 'clean')
@@ -260,4 +268,9 @@ function buildStatsDoc(models) {
 
 // ⚠️ CLAUDE.md's AUTO:modules marker truncates at five exports — append new
 // ones at the END so the generated table stays stable.
-module.exports = { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE, LEDGER_SCHEMA_VERSION, mergeConformance };
+module.exports = {
+  buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE,
+  LEDGER_SCHEMA_VERSION,
+  // Both exported for the drift guard against run-assemble.js's sibling copy.
+  mergeConformance, CONFORMANCE_RANK,
+};

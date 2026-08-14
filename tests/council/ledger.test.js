@@ -4,10 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_SCHEMA_VERSION,
-  mergeConformance } = require('../../src/council/ledger');
+  mergeConformance, CONFORMANCE_RANK } = require('../../src/council/ledger');
 const { tally } = require('../../src/council/tally');
 const { debateRunStatsRows } = require('../../src/council/debate');
-const { worseConformance } = require('../../src/council/run-assemble');
+const { worseConformance,
+  CONFORMANCE_RANK: ASM_CONFORMANCE_RANK } = require('../../src/council/run-assemble');
 const { pickFallbackChair } = require('../../src/council/run-chair');
 const avInput = require('./fixtures/av-receiver-input');
 
@@ -786,14 +787,46 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(pickFallbackChair(deriveReliability({ dir }), ['zeta'], 'zeta-chair')).toBe('gpt-5');
   });
 
-  test('T13a — ledger.js LOCAL conformance rank agrees with run-assemble worseConformance, pairwise', () => {
-    const values = ['clean', 'repaired', 'unstructured', 'weird'];
+  test('T13a — ledger.js LOCAL conformance rank agrees with run-assemble, table AND pairwise', () => {
+    // ⚠️ Council A1: a pairwise sweep over a HARDCODED value list cannot catch
+    // the drift it exists to catch. Adding a level to run-assemble's table and
+    // not to ledger's leaves every hardcoded pair agreeing — measured: the old
+    // ['clean','repaired','unstructured','weird'] list reports no divergence
+    // when the sibling gains `truncated: 3`. Two changes make the guard total:
+    // deep-compare the TABLES, and derive the sweep from their union so a new
+    // level enters it automatically.
+    expect(CONFORMANCE_RANK).toEqual(ASM_CONFORMANCE_RANK);
+    const values = [...new Set([
+      ...Object.keys(CONFORMANCE_RANK), ...Object.keys(ASM_CONFORMANCE_RANK), 'weird',
+    ])];
+    expect(values.length).toBeGreaterThanOrEqual(4);   // never silently empty
     for (const a of values) {
       for (const b of values) {
         // triple so a failure names the pair, not just the merged value
         expect([a, b, mergeConformance(a, b)]).toEqual([a, b, worseConformance(a, b)]);
       }
     }
+  });
+
+  test('T13c — an unknown conformance survives only in position 0, matching worseConformance', () => {
+    // Council A3. This asymmetry is INHERITED from worseConformance's first-wins
+    // -on-tie rule (an unknown ranks 0, same as 'clean'), not introduced by PR4b:
+    // mergeConformance agrees with the sibling on every pair, including these.
+    // Pinned so a future "fix" cannot make the two diverge silently.
+    expect(mergeConformance('weird', 'clean')).toBe('weird');
+    expect(mergeConformance('clean', 'weird')).toBe('clean');
+    expect(worseConformance('clean', 'weird')).toBe('clean');   // the sibling agrees
+    // Through the real fold: a two-row pair group, unknown FIRST vs SECOND.
+    const fold = (a, b) => buildLedgerRows(rec({
+      models: ['alpha'],
+      runStats: [rsRow({ model: 'alpha', conformance: a, resolvedModel: 'v/a' }),
+        rsRow({ model: 'alpha', conformance: b, resolvedModel: 'v/a' })],
+    }))[0].conformance;
+    expect(fold('weird', 'clean')).toBe('weird');
+    expect(fold('clean', 'weird')).toBe('clean');
+    // A ranked value still beats an unknown from either position.
+    expect(fold('unstructured', 'weird')).toBe('unstructured');
+    expect(fold('weird', 'unstructured')).toBe('unstructured');
   });
 
   test('T13b — the conformance fold is seeded from the group FIRST row, so an unknown value survives', () => {
