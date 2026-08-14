@@ -288,7 +288,7 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
   // Errata E6 (task-7 review CRITICAL): 'redteam' is the second-opinion
   // skill's documented primary-seat role (skills/second-opinion/
   // MANUAL-ORCHESTRATION.md:147; red-team runs record to the ledger per
-  // COUNCIL-DESIGN.md:266) and was missing from the allowlist — a redteam
+  // COUNCIL-DESIGN.md:268) and was missing from the allowlist — a redteam
   // row's role/wasChair/conformance never joined, silently fabricating
   // conformance:'clean' via ledger.js's `r.conformance || 'clean'` fallback.
   // Non-vacuous: asserts conformance:'repaired', a value that cannot come
@@ -839,8 +839,9 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   });
 
   test('T14 — chair ON the bench, one shared resolution: worst-wins conformance, any-wins wasChair', () => {
-    // The documented `amicus council tally` shape (docs/council.md:867-875 — the
-    // the golden fixture both put the chair on the bench).
+    // The documented `amicus council tally` shape (docs/council.md:906-913 — the
+    // worked example's own meta block) and the golden fixture both put the chair
+    // on the bench.
     const rows = buildLedgerRows(rec({
       models: ['deepseek', 'gpt', 'mistral'], chair: 'deepseek',
       runStats: [

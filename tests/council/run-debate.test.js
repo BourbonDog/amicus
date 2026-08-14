@@ -996,8 +996,8 @@ describe('runDebate — an absent `o.seats` is re-derived, never treated as "no 
 });
 
 // F4. `run-debate.js`'s `alias !== key` guard on debate.json's revotes[] rows —
-// the third of three emit-when-different sites (run.js:194 and
-// run-assemble.js:166 are its siblings and were both already pinned). Mutating
+// the third of three emit-when-different sites (run.js:198 and
+// run-assemble.js:215 are its siblings and were both already pinned). Mutating
 // it to a bare `key` adds a `seat` key to EVERY revotes[] row on EVERY
 // unique-alias bench, which is a universal artifact-shape change, and it
 // survived the whole suite.

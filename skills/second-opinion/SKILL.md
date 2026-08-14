@@ -462,7 +462,7 @@ The engine's tally stage computes the two scoring signals and writes them to
 
 Both are surfaced in `report.html` and `report.md`. The ledger and Stage-0 bench recommendations use **peersOnly** only.
 
-**Per-finding peer-confidence tier** — assigned by the peers-only cascade (see COUNCIL-DESIGN.md §5.2 for the full table): **Disputed** → **Confirmed** → **Contested** → **Singleton**. The raiser's own adjudication is excluded from the cascade. `confidence: thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, `(0,1)`. **Claude may override a `thin` tier at the margins** before presenting Stage 4 — the override is recorded in `tierOverride: {from, to, reason}` and surfaced in `verdict.json`.
+**Per-finding peer-confidence tier** — assigned by the peers-only cascade (see COUNCIL-DESIGN.md §5.2 for the full table): **Disputed** → **Confirmed** → **Contested** → **Singleton**. The raiser's own adjudication is excluded from the cascade — **by seat, not by model, whenever seat ids are present** (v4.8): on a bench that seats one model twice, the twin's vote is a real peer vote and is now counted, and only the raising *seat's* own vote is dropped. Without seat ids on both the vote and the finding the engine falls back to excluding by alias, which is the pre-v4.8 behaviour. `confidence: thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, `(0,1)`. **Claude may override a `thin` tier at the margins** before presenting Stage 4 — the override is recorded in `tierOverride: {from, to, reason}` and surfaced in `verdict.json`.
 
 ---
 

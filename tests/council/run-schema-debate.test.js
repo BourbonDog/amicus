@@ -112,3 +112,75 @@ describe('council-tally schema genuinely permits seat/raiserSeat (v4.8 PR3 Task 
     expect(vTally(tallyDoc)).toBe(true);
   });
 });
+
+// v4.8 PR4c Task 7: the VERDICT-side twin of the pin above, which had no
+// equivalent. PR4c added `seats`, `findings[].raiserSeat` and
+// `findings[].sameModelCorroboration` to verdict.json, and documented all three
+// in council-verdict.schema.json. The schema edit is DOCUMENTARY — neither the
+// top level nor the findings items declares `additionalProperties: false`, so the
+// keys already validated — which is exactly why it needs a pin: ajv's validate()
+// never strips, so a check that does not put the fields IN its fixture cannot see
+// a schema that has started rejecting them. Both halves run through the REAL
+// buildVerdict, so the pin also fails if the projection stops carrying a key.
+// Three named mutants, all measured against this file:
+//   1. verdict `seats` retyped `object`  ⇒ the twin verdict test RED
+//   2. tally `sameModelCorroboration` retyped `const: false` ⇒ the twin tally test RED
+//   3. a future tightening that FORGETS these keys — close `additionalProperties`
+//      on the verdict's top level and findings items AND drop the three new
+//      declarations ⇒ the twin verdict test RED.
+// Mutant 3 is the one this pin exists for, and note what it implies: a tightening
+// that keeps the declarations is SAFE. Declaring the keys is what makes closing
+// these objects later a non-event for twin-bench documents.
+describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCorroboration (v4.8 PR4c)', () => {
+  // A fresh Ajv instance per the note above: the module-level `ajv` already
+  // registered these $ids and rejects re-registering one on the same instance.
+  const fresh = () => new Ajv({ allErrors: true, strict: false });
+  const twinTally = {
+    schemaVersion: 2, type: 'council-tally',
+    meta: { runId: 'r', runType: 'headless', date: 'd', chair: 'gpt',
+      models: ['deepseek', 'deepseek'], claudeInCouncil: false,
+      seats: [{ id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+        { id: 'deepseek#2', alias: 'deepseek', role: 'seat', lens: null, position: 2 }] },
+    findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major',
+      tier: 'Confirmed', basis: { a: 1, d: 0, n: 0 }, confidence: 'thin', tierOverride: null,
+      adjudications: [{ judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }],
+      sameModelCorroboration: true }],
+    rankings: [], streetCred: [],
+    runStats: [{ model: 'deepseek', role: 'seat', wasChair: false, conformance: 'clean',
+      seat: 'deepseek#1', status: 'complete', durationMs: null, usage: null }],
+    tierCounts: { Confirmed: 1, Contested: 0, Singleton: 0, Disputed: 0 }, judged: true,
+  };
+
+  test('the twin-bench TALLY document validates, seat table and stamp included', () => {
+    expect(fresh().compile(load('council-tally.schema.json'))(twinTally)).toBe(true);
+  });
+
+  test('the verdict buildVerdict derives from it validates, and really carries all five keys', () => {
+    const verdict = require('../../src/council/verdict')
+      .buildVerdict(twinTally, [], { overallVerdict: 'Ship it' });
+    // Guard against a vacuous pin: assert the fields are PRESENT before asserting
+    // the schema accepts them. A projection that dropped them would otherwise
+    // leave this test green against a schema that forbids them.
+    expect(verdict.seats).toEqual(twinTally.meta.seats);
+    expect(verdict.findings[0].raiserSeat).toBe('deepseek#1');
+    expect(verdict.findings[0].sameModelCorroboration).toBe(true);
+    expect(verdict.findings[0].adjudications[0].seat).toBe('deepseek#2');
+    expect(verdict.runStats[0].seat).toBe('deepseek#1');
+    expect(fresh().compile(load('council-verdict.schema.json'))(verdict)).toBe(true);
+  });
+
+  test('a UNIQUE-alias verdict carries none of the three and still validates', () => {
+    const unique = JSON.parse(JSON.stringify(twinTally));
+    delete unique.meta.seats;
+    delete unique.findings[0].raiserSeat;
+    delete unique.findings[0].sameModelCorroboration;
+    delete unique.findings[0].adjudications[0].seat;
+    delete unique.runStats[0].seat;
+    unique.meta.models = ['deepseek', 'gpt'];
+    const verdict = require('../../src/council/verdict').buildVerdict(unique, []);
+    expect('seats' in verdict).toBe(false);
+    expect('raiserSeat' in verdict.findings[0]).toBe(false);
+    expect('sameModelCorroboration' in verdict.findings[0]).toBe(false);
+    expect(fresh().compile(load('council-verdict.schema.json'))(verdict)).toBe(true);
+  });
+});

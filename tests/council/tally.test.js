@@ -6,7 +6,7 @@ const { tally } = require('../../src/council/tally');
 const avInput = require('./fixtures/av-receiver-input');
 // v4.8 PR4c: `runStats[].seat` crosses THREE files — the producer's literal
 // (run-assemble.js), tally's allowlist (tally.js) and verdict's verbatim copy
-// (verdict.js:129). The T13 round trip below drives all three rather than
+// (verdict.js:148). The T13 round trip below drives all three rather than
 // re-declaring the row shape by hand at each hop.
 const { buildRunStatsEntry } = require('../../src/council/run-assemble');
 const { buildVerdict } = require('../../src/council/verdict');
@@ -267,7 +267,7 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
 
 // v4.8 PR4c Task 1 (plan §3.1, T13): tally.js:151-176 is an explicit allowlist
 // that builds a FRESH object literal, so a `seat` key on an input row is
-// stripped before it can reach tally.json — and verdict.js:129 copies tally's
+// stripped before it can reach tally.json — and verdict.js:148 copies tally's
 // output verbatim, so verdict.json inherits the strip. Producing the row with
 // the REAL buildRunStatsEntry makes T13c a genuine round trip between two
 // independently-written literals rather than a restatement of one of them.

@@ -20,7 +20,7 @@ const LEDGER_FILE = 'council-ledger.jsonl';
 // runs, and the av-receiver golden fixture — errata E2, must stay green).
 // 'redteam' is the second-opinion skill's documented primary-seat role
 // (skills/second-opinion/MANUAL-ORCHESTRATION.md:147; red-team runs record
-// to the ledger per COUNCIL-DESIGN.md:266 — errata E6, task-7 review: without
+// to the ledger per COUNCIL-DESIGN.md:268 — errata E6, task-7 review: without
 // it a red-team row's role/wasChair/conformance never join, silently
 // fabricating conformance:'clean' via the `|| 'clean'` fallback below).
 // 'judge' stays excluded (#83's overwrite-guard: judges ARE bench models, and
@@ -127,8 +127,13 @@ function buildLedgerRows(record) {
     const groups = pairs ? [...pairs.entries()] : [['', []]];
     groups.forEach(([resolvedKey, group], i) => {
       // R4b-2: within a block exactly ONE row — the FIRST pair group — carries
-      // the findings statistics; findings are alias-attributed until PR4c, so
-      // splitting them would fabricate a per-executable confirmRate. The other
+      // the findings statistics. This comment used to forecast that findings were
+      // alias-attributed "until PR4c"; that forecast EXPIRED UNFULFILLED. PR4c
+      // (R4c-3) seat-keys the tally's peer filter, its runStats rows and the
+      // report matrix, but leaves `findings[].raiser` ALIAS-valued — so this join
+      // still has no seat to split on, and R4b-2's concentration stands unchanged.
+      // Splitting on the executable would fabricate a per-executable confirmRate.
+      // Seat-attributed findings are filed to BACKLOG, not scheduled. The other
       // rows' null rates fall out of the `judged && denom` guards at denom 0.
       // Street cred deliberately does NOT concentrate (§0): stripping it flips
       // the launched name from the alias to the raw executable id.

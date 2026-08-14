@@ -23,9 +23,9 @@ function toModel(verdict, wave) {
   }
   const council = verdict.council || [];
   // 'council' (verdict.council / meta.models) is the street-cred universe and
-  // legitimately includes 'claude' on a --claude-review run (run-assemble.js:
-  // 123-125, docs/council.md:326). 'judges' is the adjudication-matrix column
-  // set: SKILL.md:482 / run-stages.js:162-163 guarantee Claude is judged but
+  // legitimately includes 'claude' on a --claude-review run (buildTallyInput's
+  // run-assemble.js:226, docs/council.md:326). 'judges' is the matrix column
+  // set: SKILL.md:448 / run-stage2.js:61-62 guarantee Claude is judged but
   // never judges, so its reserved seat must never grow a matrix column — filter
   // it out ONLY when claudeInCouncil is true. This is name+flag gated, not
   // vote-derived: a bench judge that cast zero adjudications (dead/unstructured

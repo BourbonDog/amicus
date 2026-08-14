@@ -17,7 +17,11 @@
         "date": { "type": "string" },
         "models": { "type": "array", "items": { "type": "string" } },
         "chair": { "type": ["string", "null"] },
-        "claudeInCouncil": { "type": "boolean" }
+        "claudeInCouncil": { "type": "boolean" },
+        "seats": {
+          "type": "array",
+          "description": "v4.8, optional. The run's seat table, one {id, alias, role, lens, position} entry per BENCH seat in bench order, echoed verbatim from the tally input. The engine emits it only when the bench repeats an alias — the one case where the `alias#N` ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat resolve to nothing else in the document, since meta.models is the ALIAS list. Bench-only: 'claude' is never a seat, so meta.models.length need not equal seats.length and the two must never be joined positionally. ABSENCE DOES NOT MEAN the bench had no repeated alias — hand-assembled and MCP-assembled input reaches tally() with no seat machinery behind it; it means only that no seat table is available. `items` is deliberately unconstrained: consumers must tolerate a table that is not an array of seat objects (the report and Workspace renderers fall back to alias space whole rather than failing), and the MCP input schema accepts the same latitude."
+        }
       }
     },
     "judged": { "type": "boolean" },
@@ -52,6 +56,14 @@
           "confidence": { "enum": ["thin", "solid"] },
           "tierOverride": { "type": ["object", "null"] },
           "adjudications": { "type": "array", "items": { "type": "object" } },
+          "raiserSeat": {
+            "type": ["string", "null"],
+            "description": "v4.8, optional. The raising SEAT's id (e.g. 'deepseek#1'), echoed from the input finding. Emitted only when it differs from the raiser's alias, so a bench with no repeated alias never carries it; `raiser` stays the alias in every case. Resolve it against meta.seats."
+          },
+          "sameModelCorroboration": {
+            "const": true,
+            "description": "v4.8, optional, TRUE ONLY (never emitted as false, so a document without it is byte-identical to a pre-v4.8 one). Set when, after the seat-aware raiser exclusion, at least one AGREEING peer of this finding shares the raiser's alias — corroboration that is real but came from another seat of the same model, so it is not independent. WRONG IN BOTH DIRECTIONS, by construction: the comparison is on the ALIAS only. It MISSES one model reached under two aliases (e.g. --models gpt-5,openai/gpt-5), because votes carry no resolved-executable id. And it FIRES FALSELY on a SPLIT alias — one alias whose two seats resolved to different executables — telling a reader to discount a genuinely independent cross-executable corroboration. The reliability ledger keys identity on (alias, resolvedModel) for the same run, so the two documents can disagree about what 'the same model' means. Treat this as 'worth a second look', never as proof."
+          },
           "debate": {
             "type": "object",
             "properties": {

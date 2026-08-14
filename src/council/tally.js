@@ -167,7 +167,7 @@ function tally(input) {
       // v4.8 PR4c §3.1: `seat` rides the same slot. It is emitted upstream only
       // when the bench repeats that alias (run-assemble.js's buildRunStatsEntry),
       // so a unique-alias run is byte-for-byte unchanged here and in verdict.json,
-      // which copies this array verbatim (verdict.js:129).
+      // which copies this array verbatim (verdict.js:148).
       ...(r.seat ? { seat: r.seat } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
