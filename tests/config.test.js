@@ -161,7 +161,7 @@ describe('Sidecar Config Module', () => {
         'deepseek',
         'qwen', 'qwen-coder', 'qwen-flash',
         'mistral',
-        'glm', 'minimax', 'grok', 'kimi', 'seed'
+        'glm', 'minimax', 'grok', 'kimi', 'seed', 'inkling'
       ];
 
       for (const key of expectedKeys) {
@@ -236,6 +236,7 @@ describe('Sidecar Config Module', () => {
       expect(aliases.grok).toBe('openrouter/x-ai/grok-4.3');
       expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
       expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
+      expect(aliases.inkling).toBe('openrouter/thinkingmachines/inkling');
     });
   });
 

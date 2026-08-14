@@ -14,9 +14,9 @@ on:
   workflow_call:
     inputs:
       models:
-        description: Comma-separated amicus model aliases (cheap bench default)
+        description: Comma-separated amicus model aliases (must be aliases this repo SHIPS in src/utils/curated-models.js — a CI runner has no user config)
         type: string
-        default: 'glm,qwen,minimax,qwen-coder'
+        default: 'glm,qwen,inkling,kimi'
       chair:
         description: Chair model that synthesizes the verdict. Must not sit on the bench — if it appears in models, it is excluded from the bench for the run.
         type: string
@@ -80,7 +80,10 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # pull_request events carry empty inputs, so the || fallback IS this
       # repo's own bench. workflow_call callers get the input default above.
-      MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}
+      # KEEP THE TWO IN SYNC: changing only the input default above silently
+      # leaves every PR on this repo running the old bench, because no
+      # pull_request run ever reads it.
+      MODELS: ${{ inputs.models || 'glm,qwen,inkling,kimi' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
