@@ -33,13 +33,45 @@ function toModel(verdict, wave) {
   // its (blank) column — deriving the roster from "who actually voted" would
   // silently delete that column too and break the byte-unchanged-artifact
   // contract for degraded v4.0.1-shaped runs.
-  const judges = verdict.claudeInCouncil === true ? council.filter(j => j !== 'claude') : council;
+  const aliasJudges = verdict.claudeInCouncil === true ? council.filter(j => j !== 'claude') : council;
+  // v4.8 PR4c §3.6 (R4c-8): ONE flag decides THREE readers of the seat space —
+  // the roster, the vote key, and the RAISER. Gating any two of them ships a
+  // self-contradicting artifact: gate the roster and the vote key only and the
+  // star vanishes (`'deepseek' === 'deepseek#1'` is false for both columns);
+  // gate the raiser only and the Raiser cell renders a seat id while every
+  // column header renders the alias. `verdict.seats` is NEW here while
+  // `adjudications[].seat` shipped in PR3, so independent fallbacks would leave
+  // EVERY vote cell blank on the twin verdicts already on disk.
+  // Array.isArray, not `?.`/`??`: `[]` is not nullish, so `??` would delete
+  // every judge column, and a non-array `seats` throws where HEAD renders.
+  // The per-element check exists because every path that reaches this function
+  // with an on-disk document is schema-free — `council report <verdict.json>`
+  // and `council verdict <tally.json> --render` are raw JSON.parse, and
+  // `amicus_verdict` takes `record: z.record(z.any())` — while R4c-5 widened
+  // the MCP tally schema to `z.array(z.any())` on purpose. So `seats: [null,…]`
+  // and `seats: ["deepseek#1",…]` both arrive here: the first makes `s.id`
+  // THROW where HEAD renders, the second yields `undefined` columns. A
+  // malformed table falls back to alias space WHOLE instead.
+  const seatSpace = Array.isArray(verdict.seats) && verdict.seats.length > 0
+    && verdict.seats.every(s => s && typeof s.id === 'string');
+  // No claude filter needed in seat space: seats[] is bench-only (seats.js
+  // excludes the reserved claude seat), so it can never grow a claude column.
+  const judges = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
   const findings = verdict.findings.map((f) => {
     const byJudge = {};
     for (const j of judges) { byJudge[j] = null; }
-    for (const adj of (f.adjudications || [])) { byJudge[adj.judge] = adj.verdict; }
+    // Alias-keyed and LAST-WINS at HEAD: on a twin bench the second seat's vote
+    // overwrote the first's, so a finding whose basis was a0/d1 rendered as two
+    // agreements. A vote whose Stage-2 seat orphaned still keys to its bare
+    // alias here, which no seat column reads — counted in basis, rendered
+    // nowhere (a disclosed shape, plan §4.6, pinned in seat-matrix.test.js).
+    for (const adj of (f.adjudications || [])) { byJudge[(seatSpace && adj.seat) || adj.judge] = adj.verdict; }
     return {
-      id: f.id, severity: f.severity, raiser: f.raiser, tier: f.tier,
+      // The raiser re-key IS the star fix, and it is why report-html.js needs
+      // zero edits: renderMd's cell map and report-html.js's both test
+      // `j === f.raiser` against THIS field, so both become seat-correct at
+      // once — and the Raiser column follows instead of contradicting them.
+      id: f.id, severity: f.severity, raiser: seatSpace ? (f.raiserSeat || f.raiser) : f.raiser, tier: f.tier,
       basis: f.basis || { a: 0, d: 0, n: 0 }, decision: f.decision || null,
       applied: f.applied === true, byJudge, debate: f.debate || null,
     };
