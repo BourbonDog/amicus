@@ -34,7 +34,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
-    expect(y).toContain('glm,qwen,minimax,qwen-coder');
+    expect(y).toContain('glm,qwen,inkling,kimi');
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).not.toMatch(/\bo3\b|o3-pro|opus/);
   });
