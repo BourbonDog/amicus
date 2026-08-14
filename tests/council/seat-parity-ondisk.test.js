@@ -43,7 +43,11 @@ const {
 // verdict.json on every unique-alias bench. This is a --debate run, so
 // tally-provisional.json (run-debate-stage.js:45) is a FIFTH document on that
 // same seam; it is read below for exactly that reason.
-const FORBIDDEN = ['"seat":', '"raiserSeat":', '"seats":', '__unbound-'];
+// `"sameModelCorroboration":` is v4.8 PR4c §3.3's R8 stamp. It is emitted only
+// when TRUE, so an always-emitted `sameModelCorroboration: false` — which would
+// falsify CHANGELOG's "none of these documents changes shape at all there" —
+// shows up here and nowhere else in the suite.
+const FORBIDDEN = ['"seat":', '"raiserSeat":', '"seats":', '"sameModelCorroboration":', '__unbound-'];
 
 /** The union of every row's key set, sorted — one row shape or a real skew. */
 function keyUnion(rows) {

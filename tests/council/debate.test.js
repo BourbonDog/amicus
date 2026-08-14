@@ -339,3 +339,54 @@ describe('debateRunStatsRows', () => {
     expect('resolvedModel' in rows[1]).toBe(false);
   });
 });
+
+// v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the SECOND alias-space peer filter.
+//
+// `debate.js`'s `peerVerdicts` moves to the same guard as `tally.js`'s `peers`,
+// in the same commit. debate.js:81 and :178 are already seat-space, so this was
+// the last alias-space filter left; fixing one site without the other makes the
+// defense brief's peer split disagree with the tally the chair reads.
+//
+// ⚠️ The trailing `.map(a => a.verdict)` is load-bearing: briefings-debate.js's
+// `verdictCounts` indexes its counter BY THE ELEMENT, so a list of adjudication
+// OBJECTS renders "0 dispute, 0 agree, 0 neutral" — byte-identical to the
+// no-data case, i.e. a paid defense brief telling the model nobody disputed it.
+// `run-debate.test.js`'s "the defense brief carries the REAL peer split" is the
+// end-to-end guard; the `toEqual` on VERDICT STRINGS below is the unit one.
+describe('debateTargets — peerVerdicts takes the guarded filter (v4.8 PR4c §3.3, T4)', () => {
+  const meta = { runId: 'r', models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini',
+    claudeInCouncil: false };
+
+  test('T4a: symmetric twin seats ⇒ the twin\'s dispute IS a peer verdict', () => {
+    const input = {
+      meta,
+      findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major',
+        claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#2' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute', seat: 'gpt' },
+      ],
+      rankings: [], runStats: [],
+    };
+    const { byRaiser } = debateTargets(tally(input), input);
+    // HEAD drops the twin by alias and briefs "1 dispute" against a tally of two.
+    expect(byRaiser['deepseek#1'][0].peerVerdicts).toEqual(['dispute', 'dispute']);
+  });
+
+  test('T4b: direction A — the twin vote carries NO seat ⇒ still excluded', () => {
+    const input = {
+      meta,
+      findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major',
+        claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'deepseek', verdict: 'agree' },   // Stage-2 seat orphaned
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute', seat: 'gpt' },
+      ],
+      rankings: [], runStats: [],
+    };
+    const { byRaiser } = debateTargets(tally(input), input);
+    // NAIVE (`a.seat !== f.raiserSeat`) would brief the raiser's own alias back
+    // to it as a corroborating peer.
+    expect(byRaiser['deepseek#1'][0].peerVerdicts).toEqual(['dispute']);
+  });
+});

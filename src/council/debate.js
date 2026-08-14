@@ -186,11 +186,11 @@ function disputingJudges(provisionalRecord, bundledIds) {
  * v4.8 PR3 Task 6: keyed on `f.raiserSeat || f.raiser`. Claude's findings carry
  * no `raiserSeat`, so its key stays the literal 'claude' and run-debate.js's
  * `.filter(m => m !== 'claude')` / `byRaiser.claude` keep working unchanged.
- * ⚠️ `peerVerdicts`' `a.judge !== f.raiser` below stays ALIAS-space on purpose:
- * it is a second copy of the #137 class (a twin judge's vote on its twin's
- * finding is wrongly excluded) and belongs to PR4 with `tally.js`'s identical
- * comparison — fixing one without the other would make the brief's peer split
- * disagree with the tally the chair reads.
+ * v4.8 PR4c §3.3 (#137): `peerVerdicts` below now takes the SAME guard as
+ * tally.js's `peers` — seats when both sides carry one, aliases otherwise — and
+ * moved in the same commit, because fixing one site without the other makes this
+ * brief's peer split disagree with the tally the chair reads. It was the last
+ * alias-space filter in this file (:81 and :178 were already seat-space).
  */
 function debateTargets(provisionalRecord, tallyInput) {
   const claimById = new Map(tallyInput.findings.map(f => [f.id, f]));
@@ -200,7 +200,14 @@ function debateTargets(provisionalRecord, tallyInput) {
     if (f.tier !== 'Contested' && f.tier !== 'Disputed') { continue; }
     previousTier[f.id] = f.tier;
     const src = claimById.get(f.id) || {};
-    const peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser).map(a => a.verdict);
+    // ⚠️ The trailing `.map(a => a.verdict)` is load-bearing: briefings-debate's
+    // verdictCounts indexes its counter BY THE ELEMENT, so a list of
+    // adjudication OBJECTS renders "0 dispute, 0 agree, 0 neutral" — a silent
+    // all-zero byte-identical to the no-data case, i.e. a paid brief telling the
+    // model nobody disputed it.
+    const peerVerdicts = (f.adjudications || [])
+      .filter(a => (a.seat && f.raiserSeat) ? a.seat !== f.raiserSeat : a.judge !== f.raiser)
+      .map(a => a.verdict);
     const raiserKey = f.raiserSeat || f.raiser;
     (byRaiser[raiserKey] = byRaiser[raiserKey] || []).push({ id: f.id, claim: src.claim,
       severity: f.severity, location: src.location, peerVerdicts, disputeReasons: [] });
