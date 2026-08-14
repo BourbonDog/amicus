@@ -60,8 +60,10 @@ function countSeverity(findings) {
 
 // v4.8 PR4b (R4b-4): a LOCAL COPY of run-assemble.js's CONFORMANCE_RANK +
 // worseConformance. Deliberately copied, not imported: this module requires
-// only fs/path/utils-config, while run-assemble pulls verdict → report →
-// findings → anonymize → seats plus atomic-write. The duplication is paid for
+// only fs/path/utils-config, while run-assemble pulls findings → anonymize →
+// seats, atomic-write, and — since v4.8 PR4c moved writeVerdictFiles out —
+// run-verdict-files → verdict → report. The graph is one hop longer than the
+// comment PR4b wrote, not one hop shorter. The duplication is paid for
 // by a drift guard (tests/council/ledger.test.js T13a) that asserts pairwise
 // agreement with the exported original — including an UNKNOWN value, which is
 // where the two spellings can silently diverge.

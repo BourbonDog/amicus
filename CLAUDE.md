@@ -126,6 +126,7 @@ src/
 │   ├── run-stage2.js
 │   ├── run-stages.js
 │   ├── run-state.js
+│   ├── run-verdict-files.js
 │   ├── run.js
 │   ├── seats.js
 │   ├── stage1-bind.js
@@ -524,6 +525,7 @@ evals/
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
+| `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()` |

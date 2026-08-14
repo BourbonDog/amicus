@@ -7,8 +7,9 @@
  * the `--claude-review` pre-flight it now also owns: the five-keys tally input
  * (meta pins: claudeInCouncil false, models = bench seats exactly — critic
  * included, chair excluded — runType 'headless'), runStats rows copied
- * verbatim from leg docs, the run-dir artifact set (tally-input.json,
- * tally.json, verdict.json with overallVerdict, report.html, chair-output.md),
+ * verbatim from leg docs, the tally half of the run-dir artifact set
+ * (tally-input.json, tally.json — the verdict half moved to
+ * ./run-verdict-files and is re-exported below), the chair packet,
  * v4.1 §4.4 pre-flight validation of the file-sourced Claude review
  * (preflightClaudeReview — the reserved-seat/chair/critic guards), its review-N+1
  * labelling (labelClaudeReview), and its synthesized null-usage runStats row
@@ -19,14 +20,17 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('../utils/atomic-write');
-const { buildVerdict, summarizeSeatLoss, deriveSeatLoss, writeVerdictAtomic } = require('./verdict');
-const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
 // Seat identity lives in ./seats (v4.8 PR1) — that module is require-free by
 // design, so preflightSeats' body lives there and is re-exported here to keep
 // the asm.preflightSeats(o) call spelling and this file under the size gate.
 const { preflightSeats } = require('./seats');
+// Same precedent (v4.8 PR4c): writeVerdictFiles' body lives in
+// ./run-verdict-files — with the ./verdict and ./report requires it was the
+// sole consumer of — and is re-exported here so the asm.writeVerdictFiles(...)
+// call spelling and every existing test survive the move untouched.
+const { writeVerdictFiles } = require('./run-verdict-files');
 
 const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
 
@@ -217,36 +221,6 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
     JSON.stringify(tallyInput, null, 2), { mode: 0o600 });
   writeFileAtomic(path.join(runDir, 'tally.json'),
     JSON.stringify(record, null, 2), { mode: 0o600 });
-}
-
-/**
- * Undecided verdict + deterministic report. Sets the nullable overallVerdict
- * (council family v2, Plan A) on buildVerdict's output — independent of
- * buildVerdict's own signature.
- * @param {{runDir: string, record: object, overallVerdict?: (string|null),
- *   chairText?: string, critic?: string, deadWaves?: Array<object>,
- *   degrades?: Array<object>}} o `degrades` (v4.6 Plan 2), when present, is
- *   both carried onto the verdict and used to DERIVE `seatLoss` (deriveSeatLoss)
- *   in preference to summarizing it from `deadWaves` (summarizeSeatLoss).
- * @returns {object} the verdict written to disk
- */
-function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves, degrades }) {
-  // v4.6 Plan 2 (spec D3): when the sink's records are available they are the
-  // single source of truth — seatLoss derives from them so it can never
-  // disagree with degrades[]. deadWaves remains the fallback for direct
-  // callers that predate the sink (their tests pass unedited).
-  const seatLoss = degrades
-    ? deriveSeatLoss({ runId: record.meta.runId, critic, degrades })
-    : summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
-  const verdict = buildVerdict(record, [], { seatLoss, degrades });
-  verdict.overallVerdict = (overallVerdict === undefined) ? null : overallVerdict;
-  writeVerdictAtomic(path.join(runDir, 'verdict.json'), verdict);
-  const html = buildReport({ verdict }, { format: 'html' });
-  fs.writeFileSync(path.join(runDir, 'report.html'), html, { mode: 0o600 });
-  if (chairText) {
-    fs.writeFileSync(path.join(runDir, 'chair-output.md'), chairText, { mode: 0o600 });
-  }
-  return verdict;
 }
 
 /**
