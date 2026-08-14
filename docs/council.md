@@ -675,6 +675,11 @@ it). It does **not** move the lifetime averages: a duplicated set of rows has th
 original. Since v4.8 it no longer doubles `runs`/`low-N` either — those count distinct `meta.runId`
 values, and a re-tally of the same input carries the same one — so a harness that writes a
 **constant** `runId` across genuinely different runs will pin that group at `runs: 1` forever.
+⚠️ That holds only when `meta.runId` is a **non-empty string**. `council-tally.schema.json` declares
+it as a bare `string`, so `"runId": ""` is valid input, and an empty string is not an identity —
+each such row counts individually, so re-tallying *that* file still inflates `runs` and `low-N`.
+Measured on a one-model bench, three tallies of the same input: `runs` 1 → 2 → 3, with `low-N`
+clearing on the third. A numeric `runId` behaves identically; a real string stays pinned at 1.
 Two standing uses from the skill's
 optional elements (v2.2.0): **debate mode** tallies provisionally with `--no-ledger` after Stage 2
 and records only the final post-rebuttal tally, and **expert-lens runs** always pass `--no-ledger`

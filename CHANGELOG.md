@@ -34,19 +34,23 @@ All notable changes to Amicus are documented here. Format follows
   empty-string or numeric `runId` is not treated as an identity — each such row counts individually.
 - **⚠️ The ledger-promoted fallback chair can change on existing history.** When the requested chair
   fails twice, `amicus council run` promotes the best-street-cred non-bench model from the ledger.
-  Correcting the ledger's model of history re-ranks it: measured over randomised ledgers, the
-  promoted chair changes on **15.5%** of benches. The causes, largest first, are the join fix moving
-  which group wins, the emission-order change moving which alias is launched, and the `runs` change.
-  The old values were derived from erased and double-counted rows; the new ones are not "wrong
-  differently", but they are different. Related: `avgStreetCredPeersOnly`, `lifetimeConfirmRate`
+  Correcting the ledger's model of history re-ranks it, so on a ledger that already contains any
+  bench where one executable served more than one seat, the promoted chair can differ from what the
+  same history would have promoted before. Two independent randomised sweeps put this in the low
+  tens of percent of such ledgers, but neither harness ships here, so treat the shape — not a rate —
+  as the claim. Three causes, each with a deterministic case pinned in `tests/council/ledger.test.js`:
+  the join fix moving which group wins, the emission-order change moving which alias is launched
+  (the `gpt-5, openai/gpt-5, gpt-5` bench flips the launched name from the alias to the raw
+  executable id if the anchor is wrong), and the `runs` change. The old values were derived from
+  erased and double-counted rows; the new ones are not "wrong differently", but they are different. Related: `avgStreetCredPeersOnly`, `lifetimeConfirmRate`
   and `lifetimeFactErrorRate` move too — each is a mean over a group's rows, and dropping a
   duplicate row moves a mean whenever the group's remaining rows disagree (on
   `--models gpt-5,openai/gpt-5,gpt-5` all resolving to one executable, `avgStreetCredPeersOnly`
   goes 1.333 → 1.5). The conformance histogram moves for the same reason, but it is a **tally**,
   not an average — nothing divides it; it simply counts one row fewer.
-- **⚠️ The fallback chair can also go from promoted to absent** (measured 4.7% of randomised
-  single-run ledgers). Chair promotion excludes any aggregate whose key or aliases appear on the
-  bench; now that an executable legitimately carries every alias that really resolved to it, a bench
+- **⚠️ The fallback chair can also go from promoted to absent** — rarer than the re-ranking above,
+  and pinned as a shape rather than a rate. Chair promotion excludes any aggregate whose key or
+  aliases appear on the bench; now that an executable legitimately carries every alias that really resolved to it, a bench
   containing one of those aliases excludes the whole group. That is the exclusion working correctly
   on newly-accurate data, but the visible outcome is a run that gives up on the chair, writes
   `overallVerdict: null` and exits 2 where it previously synthesised a verdict.

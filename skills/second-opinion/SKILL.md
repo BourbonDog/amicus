@@ -409,7 +409,10 @@ fast path, never run `council tally` yourself.** The ledger is append-only, so a
 the same run double-appends: that permanently doubles every affected model's `conformance` histogram
 in `amicus council stats` and cannot be undone. (It does *not* skew the lifetime averages — a
 duplicated set of rows has the same mean — and since v4.8 it no longer inflates `runs`/`low-N`
-either, because a re-tally of the same input carries the same `meta.runId`.)
+either, because a re-tally of the same input carries the same `meta.runId`. That last part needs
+`meta.runId` to be a non-empty string: an empty or numeric one is not an identity, so each row
+counts individually and a re-tally of that input still doubles `runs`. Engine-produced runs always
+mint a real id; hand-assembled tally input may not.)
 Everything you would have wanted from it (tiers, both street-cred numbers, `runStats`,
 `tierCounts`) is already in `<run-folder>/tally.json`. The quantitative reviewer-reliability data
 in `MODEL-NOTES.md` is sourced entirely from `amicus council stats` (which aggregates the ledger) —

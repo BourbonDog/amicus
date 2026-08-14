@@ -806,7 +806,7 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   });
 
   test('T14 — chair ON the bench, one shared resolution: worst-wins conformance, any-wins wasChair', () => {
-    // The documented `amicus council tally` shape (docs/council.md:850-858 and
+    // The documented `amicus council tally` shape (docs/council.md:867-875 — the
     // the golden fixture both put the chair on the bench).
     const rows = buildLedgerRows(rec({
       models: ['deepseek', 'gpt', 'mistral'], chair: 'deepseek',
@@ -845,8 +845,9 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   test('T16 — wasChair and role are scoped to the PAIR GROUP, not to the whole alias', () => {
     // Chair on the bench with its chair leg and seat leg resolved DIFFERENTLY:
     // the alias splits, and each row must describe only its own executable.
-    // HEAD wrote ONE row here (measured: model 'ds', resolvedModel 'v/ds-turbo',
-    // wasChair true — the seat leg's resolution erased); PR4b writes two.
+    // HEAD wrote ONE row for the `ds` ALIAS here (two rows overall, counting
+    // `gpt`) — measured: model 'ds', resolvedModel 'v/ds-turbo', wasChair true,
+    // the seat leg's resolution erased. PR4b writes two `ds` rows, three overall.
     const rows = buildLedgerRows(rec({
       models: ['ds', 'gpt'], chair: 'ds',
       runStats: [

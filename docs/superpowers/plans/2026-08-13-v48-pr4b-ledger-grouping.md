@@ -308,7 +308,7 @@ take the same fix:
 11. **Chair-on-bench, one shared resolution:** row count unchanged, but `conformance` moves from the
     chair row's value to worst-wins and `wasChair` from last-wins to any-wins (R4b-4). ⚠️ **This is
     the documented `amicus council tally` shape, not an engine-only edge** — the golden fixture
-    (`models: JUDGES, chair: 'deepseek'`) and `docs/council.md:850-858`'s worked example both put
+    (`models: JUDGES, chair: 'deepseek'`) and `docs/council.md:867-875`'s worked example both put
     the chair on the bench, `docs/council.md:575-581` prescribes one row per paid launch with both
     `council` and `chair` as primary roles, and neither hand-assembled call site has or can have a
     chair guard. Measured on that exact meta: `conformance` `clean → unstructured`.
