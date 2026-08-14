@@ -196,4 +196,23 @@ describe('twin bench: the seat table reaches disk (§3.2, the run.js seam)', () 
     // …and NOT positionally joinable to `council`, which is the ALIAS list.
     expect(v.council).toEqual(['gemini', 'gemini']);
   });
+
+  // v4.8 PR4c §3.4, T11a + T6c — the ENGINE half. buildVerdict is reached here
+  // through run-verdict-files.js (Task 2 extracted it out of run-assemble.js),
+  // never called directly, so this separates "the literal carries the fields"
+  // from "the run that writes verdict.json carries them".
+  //
+  // Measured at HEAD on exactly this fixture: tally.json's findings carry BOTH
+  // fields and verdict.json's carry NEITHER — §1.2 of the plan, live.
+  test('T11a/T6c: verdict.json findings carry raiserSeat and sameModelCorroboration', () => {
+    const t = docs['tally.json'];        // the SOURCE document
+    const v = docs['verdict.json'];      // the document under test
+    expect(t.findings.map(f => f.raiserSeat).sort()).toEqual(['gemini#1', 'gemini#2']);
+    expect(t.findings.map(f => f.sameModelCorroboration)).toEqual([true, true]);
+    expect(v.findings.map(f => f.raiserSeat).sort()).toEqual(['gemini#1', 'gemini#2']);
+    expect(v.findings.map(f => f.sameModelCorroboration)).toEqual([true, true]);
+    // The stamp is what makes the seat ids MEAN something: both seats are
+    // `gemini`, so every corroboration on this bench is same-model.
+    expect(v.findings.map(f => f.basis)).toEqual([{ a: 1, d: 0, n: 0 }, { a: 1, d: 0, n: 0 }]);
+  });
 });

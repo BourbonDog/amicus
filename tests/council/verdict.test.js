@@ -71,6 +71,75 @@ describe('v4.8 PR4c T10: verdict.seats', () => {
   });
 });
 
+// v4.8 PR4c §3.4 — the two finding fields tally() stamps have to survive
+// buildVerdict's finding literal, which is CLOSED: it names eleven keys and
+// copies nothing else off `f`. Measured at HEAD on a real twin run, both fields
+// are present on tally.json's findings and absent from verdict.json's.
+//
+// Each assertion below names the DOCUMENT it reads, because that is exactly the
+// distinction the plan's own coverage gap turned on: every stamp test written
+// for §3.3 reads the TALLY record, so deleting the carry-through from
+// verdict.js left all of them green.
+describe('v4.8 PR4c §3.4: findings[] carry raiserSeat and sameModelCorroboration', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+
+  // The TALLY document — the SOURCE of both fields, driven through the real
+  // tally() rather than hand-stamped, so a change to either emit rule shows up
+  // here instead of being papered over by a literal.
+  const twin = tally({
+    meta, rankings: [], runStats: [],
+    findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+    adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }],
+  });
+
+  // The TALLY document for a unique-alias bench: neither field is emitted, which
+  // is the shape every legacy and every non-twin run produces.
+  const legacy = tally({
+    meta: { ...meta, models: ['gemini', 'gpt'] }, rankings: [], runStats: [],
+    findings: [{ id: 'F1', raiser: 'gemini', severity: 'major', claim: 'c' }],
+    adjudications: [{ findingId: 'F1', judge: 'gpt', verdict: 'agree' }],
+  });
+
+  test('T11a: raiserSeat survives the projection into the VERDICT document', () => {
+    expect(twin.findings[0].raiserSeat).toBe('deepseek#1');                 // TALLY document
+    expect(buildVerdict(twin, []).findings[0].raiserSeat).toBe('deepseek#1'); // VERDICT document
+  });
+
+  test('T6c: sameModelCorroboration survives into the VERDICT document', () => {
+    expect(twin.findings[0].sameModelCorroboration).toBe(true);             // TALLY document
+    const f = buildVerdict(twin, []).findings[0];                           // VERDICT document
+    expect(f.sameModelCorroboration).toBe(true);
+    // …and after serialization, which is the form a consumer actually reads.
+    expect(JSON.parse(JSON.stringify(buildVerdict(twin, []))).findings[0]
+      .sameModelCorroboration).toBe(true);
+  });
+
+  test('T11c: absent stays ABSENT — the `|| null` idiom is refused', () => {
+    // `JSON.stringify({...f, raiserSeat: null})` still WRITES `"raiserSeat":`,
+    // so `|| null` would change the shape of every unique-alias verdict.json.
+    // `toBeUndefined()` cannot see the difference; `in` and the serialized text
+    // can.
+    expect('raiserSeat' in legacy.findings[0]).toBe(false);                 // TALLY document
+    const f = buildVerdict(legacy, []).findings[0];                         // VERDICT document
+    expect('raiserSeat' in f).toBe(false);
+    expect('sameModelCorroboration' in f).toBe(false);
+    const text = JSON.stringify(f, null, 2);
+    expect(text).not.toContain('"raiserSeat":');
+    expect(text).not.toContain('"sameModelCorroboration":');
+  });
+
+  test('both are a pure TAIL — the shipped eleven-key finding order is untouched', () => {
+    expect(Object.keys(buildVerdict(legacy, []).findings[0])).toEqual(
+      ['id', 'raiser', 'severity', 'tier', 'basis', 'confidence', 'tierOverride',
+        'duplicateOf', 'adjudications', 'decision', 'applied']);
+    expect(Object.keys(buildVerdict(twin, []).findings[0])).toEqual(
+      ['id', 'raiser', 'severity', 'tier', 'basis', 'confidence', 'tierOverride',
+        'duplicateOf', 'adjudications', 'decision', 'applied',
+        'raiserSeat', 'sameModelCorroboration']);
+  });
+});
+
 test('writeVerdictAtomic writes valid JSON via rename', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdict-'));
   const file = path.join(dir, 'verdict.json');

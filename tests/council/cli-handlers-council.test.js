@@ -300,6 +300,37 @@ test('verdict: --decisions is optional (defaults to [])', async () => {
   expect(written.findings.every(f => f.decision === null)).toBe(true);
 });
 
+// v4.8 PR4c §3.4 — the SECOND buildVerdict call path. The engine reaches
+// buildVerdict through run-verdict-files.js; this Stage-5 rebuild reaches it
+// from a raw `JSON.parse` of a tally.json with no schema in between
+// (cli-handlers-council.js), and it OVERWRITES the run's verdict.json. One fix
+// covers both only if nothing on this path drops the keys — so it is measured
+// here rather than argued.
+test('verdict: the Stage-5 CLI rebuild carries raiserSeat and sameModelCorroboration', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-seat-'));
+  const record = tally({
+    meta: { runId: 'twin', runType: 'headless', date: 'd',
+      models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false },
+    rankings: [], runStats: [],
+    findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+    adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }],
+  });
+  // The tally.json ON DISK — the CLI's only input.
+  const tallyPath = path.join(dir, 'tally.json');
+  fs.writeFileSync(tallyPath, JSON.stringify(record));
+  expect(record.findings[0].raiserSeat).toBe('deepseek#1');
+  expect(record.findings[0].sameModelCorroboration).toBe(true);
+
+  const outPath = path.join(dir, 'verdict.json');
+  const { code } = await capture(() =>
+    handleCouncil({ _: ['council', 'verdict', tallyPath], out: outPath }));
+  expect(code).toBe(0);
+  // The verdict.json THIS COMMAND WROTE.
+  const written = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
+  expect(written.findings[0].raiserSeat).toBe('deepseek#1');
+  expect(written.findings[0].sameModelCorroboration).toBe(true);
+});
+
 test('verdict: missing tally path → BAD_ARGS, exit 1', async () => {
   const { code, out } = await capture(() => handleCouncil({ _: ['council', 'verdict'], json: true }));
   expect(code).toBe(1);
