@@ -53,9 +53,22 @@ function pickFallbackChair(statsRows, bench, failedChair) {
   // aggregate shapes only.
   const names = (r) => [r.model, ...(Array.isArray(r.aliases) ? r.aliases : [])];
   const excluded = (r) => names(r).some(n => n === 'claude' || benchSet.has(n) || n === failedChair);
+  // v4.8 PR4a: every sort term is read off the row, so CANDIDATE SELECTION is
+  // independent of the order `statsRows` arrives in — previously that order
+  // (deriveReliability's Map insertion order = council-ledger.jsonl row order)
+  // silently decided every exact street-cred tie, and such ties are an ordinary
+  // arithmetic outcome. Terms: street cred (lower mean rank = better), then
+  // council appearances, then model id for a guaranteed total order. ⚠️ `runs`
+  // is TOTAL ledger rows (ledger.js:137) including `judged:false` ones that
+  // contributed no street cred — a tie-break, never a ranking signal. It is
+  // always present on deriveReliability output; the default serves fixtures.
+  // Full rationale + the tie arithmetic: tests/council/run-chair.test.js.
+  const runsOf = (r) => (typeof r.runs === 'number' ? r.runs : 0);
   const candidates = (statsRows || [])
     .filter(r => !excluded(r) && typeof r.avgStreetCredPeersOnly === 'number')
-    .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
+    .sort((a, b) => (a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly)
+      || (runsOf(b) - runsOf(a))
+      || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
   if (!candidates.length) { return null; }
   const top = candidates[0];
   return (Array.isArray(top.aliases) && top.aliases.length) ? top.aliases[0] : top.model;
