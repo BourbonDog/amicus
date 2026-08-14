@@ -22,9 +22,13 @@ const { buildRunStatsEntry } = require('./run-assemble');
  *
  * ⚠️ The row's `model` stays the ALIAS (spec §4.7): a seat id must never appear
  * in a ledger row, because pickFallbackChair launches `top.aliases[0]` and
- * 'deepseek#2' is not routable. Two rows both reading `model: 'deepseek'` is
- * the CORRECT outcome for two dead twins; the ledger's (model, resolvedModel)
- * grouping is PR4's job, not this function's.
+ * 'deepseek#2' is not routable. Two RUNSTATS rows both reading
+ * `model: 'deepseek'` remains the CORRECT outcome for two dead twins — runStats
+ * is row-per-launch and both seats were paid for. What changed in v4.8 PR4b is
+ * downstream: the ledger now groups by (model, resolvedModel), and two dead
+ * twins are both leg-less, so they share the empty resolved key and collapse
+ * into ONE ledger row. Two ledger rows for two dead twins is no longer the
+ * expected outcome; two runStats rows still is.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
   roleFor, seatOf }) {

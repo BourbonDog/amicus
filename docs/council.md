@@ -656,9 +656,19 @@ A lone corroborating peer (`a=1, d=0`) ranks as **Confirmed (thin)** — it must
 a lone disputing peer (`a=0, d=1`, which is **Contested (thin)**). A 2-vs-2 split is **Contested**
 (large-bench tie), not Disputed — `d > a` is required for Disputed, not just `d >= 2`.
 
-**Ledger append.** Unless `--no-ledger`, `tally` writes one row per `meta.models` entry to
-`council-ledger.jsonl` (append-only, JSON Lines). Use `--no-ledger` for a re-tally that shouldn't
-double-count (e.g. re-running after fixing a malformed input). Two standing uses from the skill's
+**Ledger append.** Unless `--no-ledger`, `tally` writes one row per distinct
+(`model`, `resolvedModel`) pair on the bench to `council-ledger.jsonl` (append-only, JSON Lines).
+That is one row per `meta.models` entry on an ordinary bench, where every alias is unique and each
+was served by one executable — but **not** when one executable served more than one seat (v4.8):
+`--models a,a` whose two seats resolved to the same executable writes **one** row, not two, and a
+chair that is also a bench seat still writes one. An alias whose seats resolved *differently*
+writes one row per executable, so no leg is erased. Use `--no-ledger` for a re-tally that shouldn't
+double-count (e.g. re-running after fixing a malformed input): a re-tally appends a second full set
+of rows, which re-weights the lifetime averages and doubles the conformance histogram in
+`council stats`. Since v4.8 it no longer doubles `runs`/`low-N` — those count distinct `meta.runId`
+values, and a re-tally of the same input carries the same one — so a harness that writes a
+**constant** `runId` across genuinely different runs will pin that group at `runs: 1` forever.
+Two standing uses from the skill's
 optional elements (v2.2.0): **debate mode** tallies provisionally with `--no-ledger` after Stage 2
 and records only the final post-rebuttal tally, and **expert-lens runs** always pass `--no-ledger`
 (lens reviews aren't comparable to standard reviews, so they must not feed `stats`). This is

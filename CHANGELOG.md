@@ -7,7 +7,54 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Changed
 
-- **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
+- **The reliability ledger now records one row per (model, resolved executable) pair, not one per
+  bench slot.** Previously the row-building join was keyed by council alias and last-wins, so any
+  bench where one executable served more than one seat wrote something untrue into an append-only
+  file that is never migrated. Fixed: an alias whose seats resolved to *different* executables now
+  records both, instead of recording the last one twice and erasing the other; a mixed live/dead
+  twin keeps the live leg's `resolvedModel` and `conformance` instead of inheriting the dead seat's;
+  a twin whose seats shared one executable writes **one** row instead of two byte-identical ones;
+  and a run's `findingsRaised` finally sums correctly across its rows. Benches whose aliases are
+  distinct and each served by one executable are unchanged, row for row and in order.
+- **`runs` in `amicus council stats` counts distinct council runs, not ledger rows.** One run on
+  `--models a,a` reported `runs: 2`; so did `--models gpt-5,openai/gpt-5` when both resolved to the
+  same executable. `runs` (and the `low-N` flag that follows it) now counts distinct `meta.runId`
+  values, retroactively for pre-existing history. Two consequences worth knowing: re-running
+  `amicus council tally input.json` without `--no-ledger` no longer double-counts `runs` (it still
+  appends a duplicate set of rows, which re-weights the lifetime averages and doubles the
+  conformance histogram), and a harness that writes a **constant** `runId` across genuinely
+  different runs will pin that group at `runs: 1` forever. An empty-string or numeric `runId` is
+  not treated as an identity — each such row counts individually.
+- **⚠️ The ledger-promoted fallback chair can change on existing history.** When the requested chair
+  fails twice, `amicus council run` promotes the best-street-cred non-bench model from the ledger.
+  Correcting the ledger's model of history re-ranks it: measured over randomised ledgers, the
+  promoted chair changes on **15.5%** of benches. The causes, largest first, are the join fix moving
+  which group wins, the emission-order change moving which alias is launched, and the `runs` change.
+  The old values were derived from erased and double-counted rows; the new ones are not "wrong
+  differently", but they are different. Related: lifetime averages move too —
+  `avgStreetCredPeersOnly`, `lifetimeConfirmRate`, `lifetimeFactErrorRate` and the conformance
+  histogram were all divided by a row count that duplicate rows inflated.
+- **⚠️ The fallback chair can also go from promoted to absent** (measured 4.7% of randomised
+  single-run ledgers). Chair promotion excludes any aggregate whose key or aliases appear on the
+  bench; now that an executable legitimately carries every alias that really resolved to it, a bench
+  containing one of those aliases excludes the whole group. That is the exclusion working correctly
+  on newly-accurate data, but the visible outcome is a run that gives up on the chair, writes
+  `overallVerdict: null` and exits 2 where it previously synthesised a verdict.
+- **Merged rows report the worst conformance and any chair flag.** When one executable served
+  several of a bench's seats, the resulting single row records the **worst** `conformance` of them
+  (a seat that came back `unstructured` is no longer recorded as `clean`) and `wasChair: true` if
+  **any** of them chaired. `role` still takes the last contributing row's value. ⚠️ This is reachable
+  from plain `amicus council tally` input, not only the engine: the documented worked example puts
+  the chair on the bench, so a chair whose seat row was `unstructured` now reads `unstructured`
+  where it previously read the chair leg's `clean`. Conversely, on an alias whose seats resolved
+  *differently*, `wasChair` no longer propagates to the seat row that did not chair.
+- **A mixed live/dead twin now shows an extra permanent line in `amicus council stats`** — the
+  executable-keyed group plus a `legacy` alias-keyed one for the leg-less seat, where there was
+  previously one line. The legacy line accrues `runs`, clears `low-N` at three runs, and carries
+  zero findings but a numeric street cred borrowed from its live twin, because street cred remains
+  alias-level. Not fixed here, and filed: that leg-less group is a chair-promotion candidate and can
+  outrank the executable it routes to. Findings also remain attributed by alias rather than by seat,
+  so on a split alias they are recorded against one of its rows rather than divided across them. `amicus council run` now refuses to start
   when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
   because that alias occupies more than one bench seat (remove the duplicate entry, or use two
   distinct aliases), or when two bench entries would write the same `review-<name>.md` after

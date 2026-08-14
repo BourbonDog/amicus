@@ -266,7 +266,10 @@ describe('debateRunStatsRows', () => {
       }),
     ];
     const rows = buildLedgerRows(tally(input));
-    expect(rows).toHaveLength(3);               // one per meta.models entry — debate legs add none
+    // One per distinct (model, resolvedModel) pair (v4.8 PR4b). This bench's
+    // three aliases are unique and none carries a resolvedModel, so that is
+    // also one per meta.models entry — and debate legs still add none.
+    expect(rows).toHaveLength(3);
     const gemini = rows.find(r => r.model === 'gemini');
     const gpt = rows.find(r => r.model === 'gpt');
     expect(gemini.role).toBe('seat');           // NOT 'rebuttal'

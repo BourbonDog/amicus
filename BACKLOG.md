@@ -1291,20 +1291,22 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   as their siblings." ⚠️ The picker prompt must state that `runs: 0 — untested` is
   neutral-to-positive (a scout-seat candidate) — an uninstructed LLM picker reads missing data as
   risk, which recreates the entrenchment loop GOA-5 exists to break.
-- [ ] **GOA-7 · Defect+Feature · Segment ledger history by RESOLVED model (prerequisite), then recency decay** — [M; prerequisite S–M, independent]
-  **Prerequisite is a live defect today, worth doing even if no other GOA item ships:** ledger
-  rows key by council ALIAS (`buildLedgerRows` joins `meta.models` by exact string; the comment at
-  `src/council/run-debate.js:135-137` states it verbatim), and aliases silently retarget —
+- [ ] **GOA-7 · Feature · Recency decay in `deriveReliability`** — [M, independent]
+  **The resolved-model prerequisite is DONE — v4.7 GOA-7 (D9/D10) and v4.8 PR4b.** Ledger rows now
+  carry `resolvedModel` at `LEDGER_SCHEMA_VERSION` 2, `deriveReliability` groups by
+  `row.resolvedModel || row.model` (`src/council/ledger.js`) and `buildLedgerRows` emits one row per
+  distinct (model, resolvedModel) pair, so `council stats` no longer conflates different underlying
+  models under one alias — the defect this item opened on (aliases silently retarget;
   `council-presets.js` documents `gpt-pro` → `gpt-5.6-sol-pro` and the `opus` re-pin, both
-  2026-08-04 — so `council stats` conflates different underlying models under one name. Fix:
-  record the resolved executable id on each ledger row and aggregate per resolved id.
-  ⚠️ Schema discipline: the append-only ledger was deliberately NOT extended by review F3 (see
-  `src/council/tally.js:117-124`) — this is THE sanctioned shape change, so bump
-  `LEDGER_SCHEMA_VERSION`, keep old rows readable (absent id ⇒ legacy row), no drive-by fields.
-  Then: recency decay (or last-K window) in `deriveReliability` so stale evidence fades, improved
-  models get a path back in, and a retarget naturally resets an alias to `lowN` ⇒ scout treatment.
-  Bonus: resolved-id keying is the natural moment to introduce seat-id ≠ model-id, the blocker
-  recorded against self-ensemble seats (adoption notes §4.3).
+  2026-08-04). ⚠️ The old citation for the alias-join, `src/council/run-debate.js:135-137`, was
+  wrong and is struck: those lines are the debate round's whole-round cost-ceiling prose and say
+  nothing about the ledger join. The join lived in `buildLedgerRows` and nowhere else.
+  **What remains is the decay half:** recency decay (or a last-K window) in `deriveReliability` so
+  stale evidence fades, improved models get a path back in, and a retarget naturally resets an
+  alias to `lowN` ⇒ scout treatment. ⚠️ `lowN` now follows `runs` = distinct runIds (v4.8 PR4b
+  R4b-1), so a window must be defined over RUNS, not rows, or it will re-introduce the twin
+  over-count the PR4b change removed. Note the seat-id ≠ model-id blocker recorded against
+  self-ensemble seats (adoption notes §4.3) is also addressed — v4.8 PR1 minted seat identity.
 - [ ] **GOA-8 · Feature · Shadow seat: zero-risk audition variant** — [M, needs GOA-1; alternative/complement to GOA-5]
   For benches where even one merit seat is too precious: the rookie's review IS included in the
   anonymized Stage-2 judge bundle (blind labels — judges can't tell), so it earns rankings,
@@ -1857,8 +1859,11 @@ design them together, not separately.
   review **is** delivered inside the briefing, so "cites the briefing" does not separate the cases
   on its own. The engine can still do it — it composes the brief and knows where its instruction
   scaffold ends and the user body begins — but models write `location` as free text.
-- Skip the ledger row on divergence. Exact precedent: `run.js:271`'s `if (!o.lenses)` — *"Lens runs
-  never feed cross-run reliability stats."* ⚠️ `run.js` is at **295/300**; extract first.
+- Skip the ledger row on divergence. Exact precedent: `run-finish.js:51`'s `if (!o.lenses)` —
+  *"Lens runs never feed cross-run reliability stats."* ⚠️ Both halves of the previous note were
+  stale and are corrected here (re-measured 2026-08-13 at `c1c3a5ee`): the gate moved out of
+  `run.js` into `run-finish.js` (v4.8 PR0's size-gate split), and `run.js` is **272/300**, not
+  295 — there is headroom, so "extract first" no longer applies to this item.
 - Per-population tiers, and split the two Singleton causes ("no peer engaged" vs "no peer was in
   scope to engage"). NB: v4.7 already redefined Singleton as the no-signal case `a=0,d=0`
   (`tally.js:24`, docs match) — the #130 report quotes the older v4.6.2 wording, but the
@@ -2143,6 +2148,42 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   anywhere in the gate). File as a follow-up, noting the seat/placeholder-roster logic inside all
   three is the same safety-critical logic named above, which is what makes them worth splitting
   rather than just noting.
+
+#### Filed by PR4b — ledger grouping (2026-08-13)
+
+Three items PR4b deliberately did NOT fix. All three citations were re-derived from the source at
+`c1c3a5ee`, not inherited from the plan.
+
+- [ ] **Chair-on-bench has no engine-side guard, and PR4b made its consequence observable.** The
+  guard exists in three places and `src/council/` is not one of them:
+  `src/cli-handlers-council-run.js:137`, `src/mcp-council-run.js:114`, and
+  `src/pack/pack-validate.js:93` (packs only, `pack.kind === 'council'`). `preflightSeats` — the
+  engine's own pre-spend seat validator — refuses **five** ways (`src/council/seats.js:186-209`)
+  and chair-on-bench is not among them. Worse, the guard *cannot* cover the two hand-assembled
+  `appendRun` paths (`cli-handlers-council.js`, `mcp-server.js`), where `meta` is copied verbatim
+  from user JSON: the documented `amicus council tally` shape puts the chair ON the bench
+  (`docs/council.md`'s worked example; the golden fixture's `models: JUDGES, chair: 'deepseek'`),
+  so this is the normal case there, not an edge. Since PR4b, such a chair's seat and chair rows
+  merge into one ledger row whose `conformance` is worst-wins and whose `wasChair` is any-wins —
+  a persisted scalar that now reads differently. Decide whether the engine should refuse it,
+  normalise it, or keep accepting it with the merge documented (today's answer, T14).
+- [ ] **Findings are attributed by ALIAS, not by seat → PR4c.** `buildLedgerRows` filters
+  `findings.filter(f => f.raiser === model)`, which is alias-exact, so on a bench where one alias
+  fills two seats each row would claim BOTH seats' findings. PR4b works around this by
+  concentrating the statistics on one row per alias (R4b-2) rather than dividing them, because
+  dividing them fabricates a per-executable `confirmRate` (measured 0.5/0.5 where the truth is
+  1.0/0.0 and 0.0/1.0). The real fix is seat attribution: `raiserSeat` is already on findings
+  (`src/council/anonymize.js`, shipped by PR3); the missing half is `runStats[].seat`, and `r.seat`
+  already reaches `run-assemble.js`'s `buildTallyInput` unread — roughly three lines.
+- [ ] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
+  cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
+  flip the launched name from the short alias to the raw executable id, the exact failure
+  `src/council/run-chair.js:48-52` argues against). So on a mixed live/dead twin, the leg-less
+  group keeps a numeric street cred borrowed from its live twin while carrying zero findings, and
+  `pickFallbackChair` can rank it above the executable it routes to. The borrowed cred is
+  **pre-existing** — today it is merged into one group — but PR4b splits it out as its own
+  promotable aggregate with its own permanent `legacy` line in `council stats`. Do not invent a
+  rule here: the real fix is seat-attributed street cred, which belongs with the item above.
 
 ### Bench adaptation — closes #135, finishes #129
 

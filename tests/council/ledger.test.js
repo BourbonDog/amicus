@@ -3,9 +3,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_SCHEMA_VERSION } = require('../../src/council/ledger');
+const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_SCHEMA_VERSION,
+  mergeConformance } = require('../../src/council/ledger');
 const { tally } = require('../../src/council/tally');
 const { debateRunStatsRows } = require('../../src/council/debate');
+const { worseConformance } = require('../../src/council/run-assemble');
+const { pickFallbackChair } = require('../../src/council/run-chair');
 const avInput = require('./fixtures/av-receiver-input');
 
 // A provisional tally-input: 3 findings, judges gpt+qwen adjudicated. Carried
@@ -86,8 +89,12 @@ test('judged:false record yields null rates and street-cred', () => {
 
 test('appendRun + deriveReliability round-trip; trailing partial line tolerated', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  // v4.8 PR4b (R4b-1): `runs` counts DISTINCT runIds, so the second append has
+  // to be a genuinely different run — `record` is tally(avInput) and both
+  // appends would otherwise carry meta.runId 'av-receiver-council', which is
+  // ONE run written twice, not two council appearances.
   appendRun(record, { dir });
-  appendRun(record, { dir });
+  appendRun({ ...record, meta: { ...record.meta, runId: 'av-receiver-council-2' } }, { dir });
   fs.appendFileSync(path.join(dir, 'council-ledger.jsonl'), '{ broken partial');
   const agg = deriveReliability({ dir });
   const gpt = agg.find(a => a.model === 'gpt');
@@ -150,11 +157,19 @@ test('a NON-allowlisted role carrying resolvedModel does not join it onto the le
   expect('resolvedModel' in rows[0]).toBe(false);
 });
 
+// ⚠️ There is only ONE appendRun here; the second row is hand-built and
+// appended raw. The assertion's job is the version-blind legacy-read contract
+// (ledger.js: schemaVersion is never inspected) — `runs: 2` is how it proves
+// the unknown-version row was AGGREGATED, so it must stay 2. v4.8 PR4b (R4b-1)
+// makes `runs` count distinct runIds and the spread inherits `record`'s, so
+// the literal is stamped with its own id: relaxing this to `toBe(1)` instead
+// would stay green with the whole future-row block deleted, i.e. with the
+// contract under test never exercised at all.
 test('aggregates rows written under a FUTURE schemaVersion', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
   appendRun(record, { dir });
   const gptRow = buildLedgerRows(record).find(r => r.model === 'gpt');
-  const future = { ...gptRow, schemaVersion: LEDGER_SCHEMA_VERSION + 1 };
+  const future = { ...gptRow, schemaVersion: LEDGER_SCHEMA_VERSION + 1, runId: 'r-future' };
   fs.appendFileSync(path.join(dir, 'council-ledger.jsonl'), JSON.stringify(future) + '\n');
   expect(deriveReliability({ dir }).find(a => a.model === 'gpt').runs).toBe(2);
 });
@@ -383,7 +398,12 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
     const agg = deriveReliability({ dir });
     expect(agg).toHaveLength(1);
     expect(agg[0].model).toBe('openai/gpt-5.2');
-    expect(agg[0].runs).toBe(2);
+    // v4.8 PR4b (R4b-1) — a semantic CORRECTION, not a papered-over failure:
+    // both rows carry `runId: 'r1'`, so this is ONE council run in which two
+    // aliases were served by the same executable. Counting it as two
+    // appearances is exactly the over-count PR4b exists to fix; do NOT
+    // "restore" it by giving the second row a different runId.
+    expect(agg[0].runs).toBe(1);
     expect(agg[0].aliases).toEqual(['gpt4', 'gpt']);   // most recent FIRST
     expect('legacy' in agg[0]).toBe(false);
   });
@@ -453,5 +473,331 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
     expect(agg).toHaveLength(1);
     expect(agg[0].aliases).toEqual(['openai/gpt-5.2', 'gpt', 'gpt4']);
     expect('legacy' in agg[0]).toBe(false);
+  });
+});
+
+// ---- v4.8 PR4b — (model, resolvedModel) grouping (spec §4.7/§4.9) ----------
+// HEAD's join is model-keyed and last-wins (`new Map(runStats.filter(...).map(
+// r => [r.model, r]))`), so a bench where ONE executable serves more than one
+// seat — a twin (`--models a,a`), an alias sharing a resolution with another
+// alias, a chair that is also a bench seat — silently erased rows, double-
+// weighted every average, and over-counted `runs`. PR4b replaces that join
+// with an `alias → resolvedKey → row[]` fan-out and emits one row per
+// (model, resolvedModel) pair. Every test below was measured RED-or-GREEN
+// against unmutated HEAD before the implementation landed (plan §5); the ones
+// that came out GREEN each name the mutant that kills them.
+describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
+  function mkLedgerDir() { return fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-pr4b-')); }
+
+  /** One runStats row in the engine's shape (run-assemble.js buildRunStatsEntry). */
+  function rsRow(o) {
+    return {
+      model: o.model,
+      role: 'role' in o ? o.role : 'seat',
+      wasChair: !!o.wasChair,
+      conformance: o.conformance || 'clean',
+      ...(o.resolvedModel ? { resolvedModel: o.resolvedModel } : {}),
+      status: o.status || 'complete', durationMs: 1, usage: null,
+    };
+  }
+
+  /** A tally record with exactly the five keys buildLedgerRows reads. */
+  function rec({ models, runStats, findings = [], streetCred = [], judged = true,
+    runId = 'r1', chair = 'c' }) {
+    return {
+      meta: { runId, date: '2026-08-01', runType: 'headless', models, chair,
+        claudeInCouncil: false },
+      findings, streetCred, judged, runStats,
+    };
+  }
+
+  /** One PERSISTED ledger row, written raw — bypasses buildLedgerRows on purpose. */
+  function persistedRow(overrides = {}) {
+    return {
+      schemaVersion: LEDGER_SCHEMA_VERSION, runId: 'r1', date: '2026-08-01',
+      runType: 'headless', model: 'alpha', role: 'seat', wasChair: false, judged: true,
+      streetCredWithSelf: 1, streetCredPeersOnly: 1,
+      findingsRaised: 0, bySeverity: { blocker: 0, major: 0, minor: 0, nit: 0 },
+      confirmRate: 1, factErrorRate: 0, conformance: 'clean',
+      ...overrides,   // `runId: undefined` drops the key — JSON.stringify omits it
+    };
+  }
+  function writeRawRows(dir, rows) {
+    const file = path.join(dir, 'council-ledger.jsonl');
+    for (const r of rows) { fs.appendFileSync(file, JSON.stringify(r) + '\n'); }
+  }
+
+  // The §1.4 forcing bench: `--models gpt-5,openai/gpt-5,gpt-5`, everything
+  // resolving to the executable id `openai/gpt-5`. HEAD emits THREE rows
+  // (creds [1,2,1] → mean 1.333); PR4b emits TWO (creds [2,1] → mean 1.5).
+  function forcingBenchRecord() {
+    return rec({
+      models: ['gpt-5', 'openai/gpt-5', 'gpt-5'],
+      streetCred: [{ model: 'gpt-5', withSelf: 1, peersOnly: 1 },
+        { model: 'openai/gpt-5', withSelf: 2, peersOnly: 2 }],
+      runStats: [
+        rsRow({ model: 'gpt-5', resolvedModel: 'openai/gpt-5' }),
+        rsRow({ model: 'openai/gpt-5', resolvedModel: 'openai/gpt-5' }),
+      ],
+    });
+  }
+
+  test('T1 — twin bench, SAME resolution: ONE row, not two byte-identical ones', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['alpha', 'alpha'],
+      runStats: [rsRow({ model: 'alpha', resolvedModel: 'vendor/a' }),
+        rsRow({ model: 'alpha', resolvedModel: 'vendor/a' })],
+    }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ model: 'alpha', resolvedModel: 'vendor/a' });
+  });
+
+  test('T2 — twin bench, DIVERGENT resolutions: two rows, BOTH executables recorded', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['alpha', 'alpha'],
+      runStats: [rsRow({ model: 'alpha', resolvedModel: 'vendor/x' }),
+        rsRow({ model: 'alpha', resolvedModel: 'vendor/y' })],
+    }));
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r => r.resolvedModel)).toEqual(['vendor/x', 'vendor/y']);
+    expect(rows.map(r => r.model)).toEqual(['alpha', 'alpha']);
+  });
+
+  test('T3 — mixed live/dead twin (engine order, live first): the LIVE leg keeps its resolvedModel AND conformance', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['deepseek', 'deepseek'],
+      runStats: [
+        rsRow({ model: 'deepseek', conformance: 'repaired', resolvedModel: 'vendor/ds' }),
+        // pushDeadSeatRows passes NO conformance, so buildRunStatsEntry defaults 'clean'
+        rsRow({ model: 'deepseek', status: 'error' }),
+      ],
+    }));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ resolvedModel: 'vendor/ds', conformance: 'repaired' });
+    expect('resolvedModel' in rows[1]).toBe(false);
+    expect(rows[1].conformance).toBe('clean');
+  });
+
+  test('T3b — leg-less row ordered FIRST: the stats anchor is the block FIRST pair group', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['deepseek', 'deepseek'],
+      findings: [{ id: 'A1', raiser: 'deepseek', severity: 'major', tier: 'Confirmed' },
+        { id: 'A2', raiser: 'deepseek', severity: 'minor', tier: 'Confirmed' }],
+      streetCred: [{ model: 'deepseek', withSelf: 1, peersOnly: 1 }],
+      runStats: [
+        rsRow({ model: 'deepseek', status: 'error' }),
+        rsRow({ model: 'deepseek', conformance: 'repaired', resolvedModel: 'vendor/ds' }),
+      ],
+    }));
+    expect(rows).toHaveLength(2);
+    expect('resolvedModel' in rows[0]).toBe(false);
+    expect(rows[0].findingsRaised).toBe(2);        // the FIRST pair group is the anchor
+    expect(rows[0].confirmRate).toBe(1);
+    expect(rows[1].resolvedModel).toBe('vendor/ds');
+    expect(rows[1].findingsRaised).toBe(0);
+    expect(rows[1].bySeverity).toEqual({ blocker: 0, major: 0, minor: 0, nit: 0 });
+    expect(rows[1].confirmRate).toBeNull();
+    expect(rows[1].factErrorRate).toBeNull();
+  });
+
+  test('T4 — two LIVE twins sharing one resolution: conformance is WORST-wins, not last-wins', () => {
+    const merged = (first, second) => buildLedgerRows(rec({
+      models: ['q', 'q'],
+      runStats: [rsRow({ model: 'q', conformance: first, resolvedModel: 'vendor/q' }),
+        rsRow({ model: 'q', conformance: second, resolvedModel: 'vendor/q' })],
+    }));
+    const a = merged('clean', 'unstructured');
+    expect(a).toHaveLength(1);
+    expect(a[0].conformance).toBe('unstructured');
+    const b = merged('unstructured', 'clean');   // last-wins would read 'clean'
+    expect(b).toHaveLength(1);
+    expect(b[0].conformance).toBe('unstructured');
+  });
+
+  test('T5a — the emission anchor is lastIndexOf: the forcing bench promotes the ALIAS, not the executable id', () => {
+    const dir = mkLedgerDir();
+    appendRun(forcingBenchRecord(), { dir });
+    const stats = deriveReliability({ dir });
+    const agg = stats.find(a => a.model === 'openai/gpt-5');
+    expect(agg).toBeTruthy();
+    const launched = pickFallbackChair(stats, ['zeta'], 'zeta-chair');
+    expect(launched).not.toBeNull();          // assert non-null FIRST (plan §5)
+    expect(launched).toBe('gpt-5');
+    expect(agg.aliases).toEqual(['gpt-5', 'openai/gpt-5']);
+  });
+
+  test('T5b — collapsing duplicate rows moves avg(), PR4a first sort term, to 1.5 and flips the launch', () => {
+    const dir = mkLedgerDir();
+    appendRun(forcingBenchRecord(), { dir });
+    appendRun(rec({
+      runId: 'r-competitor', models: ['kimi'],
+      streetCred: [{ model: 'kimi', withSelf: 1.4, peersOnly: 1.4 }],
+      runStats: [rsRow({ model: 'kimi', resolvedModel: 'moonshot/kimi' })],
+    }), { dir });
+    const stats = deriveReliability({ dir });
+    expect(stats.find(a => a.model === 'openai/gpt-5').avgStreetCredPeersOnly).toBe(1.5);
+    expect(pickFallbackChair(stats, ['zeta'], 'zeta-chair')).toBe('kimi');
+  });
+
+  test('T6 — unique-alias benches: the row SET and its order are unchanged', () => {
+    const golden = buildLedgerRows(tally(avInput));
+    expect(golden).toHaveLength(3);
+    expect(golden.map(r => r.model)).toEqual(['deepseek', 'gpt', 'mistral']);
+    const rows = buildLedgerRows(rec({
+      models: ['alpha', 'beta', 'gamma'],
+      runStats: [
+        rsRow({ model: 'alpha', resolvedModel: 'v/a' }),
+        rsRow({ model: 'beta' }),
+        rsRow({ model: 'gamma', role: 'critic', conformance: 'repaired', resolvedModel: 'v/g' }),
+      ],
+    }));
+    expect(rows.map(r => r.model)).toEqual(['alpha', 'beta', 'gamma']);
+    expect(rows.map(r => r.resolvedModel)).toEqual(['v/a', undefined, 'v/g']);
+    expect(rows[1].conformance).toBe('clean');
+    expect(rows[2]).toMatchObject({ role: 'critic', conformance: 'repaired' });
+  });
+
+  test('T7 — hand-assembled input, EMPTY runStats and a REPEATED alias: one row, not two', () => {
+    const rows = buildLedgerRows(rec({ models: ['a', 'a'], runStats: [] }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ model: 'a', role: 'council', wasChair: false, conformance: 'clean' });
+    expect('resolvedModel' in rows[0]).toBe(false);
+  });
+
+  test('T8 — a bench alias whose ONLY runStats row has a non-joinable role still gets its row', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['alpha'],
+      runStats: [rsRow({ model: 'alpha', role: 'judge', wasChair: true,
+        conformance: 'unstructured', resolvedModel: 'v/a' })],
+    }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ model: 'alpha', role: 'council', wasChair: false, conformance: 'clean' });
+    expect('resolvedModel' in rows[0]).toBe(false);
+  });
+
+  test('T9 — runs counts DISTINCT runIds; only a NON-EMPTY STRING is an identity', () => {
+    const d1 = mkLedgerDir();
+    appendRun(rec({ runId: 'run-1', models: ['a', 'a'],
+      runStats: [rsRow({ model: 'a', resolvedModel: 'v/a' }),
+        rsRow({ model: 'a', resolvedModel: 'v/a' })] }), { dir: d1 });
+    const g1 = deriveReliability({ dir: d1 });
+    expect(g1).toHaveLength(1);
+    expect(g1[0].runs).toBe(1);                              // one council run, not two rows
+
+    const d2 = mkLedgerDir();                                // '' is NOT an identity
+    writeRawRows(d2, [persistedRow({ runId: '' }), persistedRow({ runId: '' }), persistedRow({ runId: '' })]);
+    expect(deriveReliability({ dir: d2 })[0].runs).toBe(3);
+
+    const d3 = mkLedgerDir();                                // numeric 0 is NOT an identity
+    writeRawRows(d3, [persistedRow({ runId: 0 }), persistedRow({ runId: 0 })]);
+    expect(deriveReliability({ dir: d3 })[0].runs).toBe(2);
+
+    const d4 = mkLedgerDir();                                // absent runId counts individually
+    writeRawRows(d4, [persistedRow({ runId: undefined }), persistedRow({ runId: undefined })]);
+    expect(deriveReliability({ dir: d4 })[0].runs).toBe(2);
+
+    const d5 = mkLedgerDir();                                // two distinct ids across three rows
+    writeRawRows(d5, [persistedRow({ runId: 'x' }), persistedRow({ runId: 'x' }), persistedRow({ runId: 'y' })]);
+    expect(deriveReliability({ dir: d5 })[0].runs).toBe(2);
+  });
+
+  test('T10 — lowN follows runs, not rows, across 1/2/3 council runs on a twin bench', () => {
+    const dir = mkLedgerDir();
+    const twinRun = (runId) => rec({ runId, models: ['a', 'a'],
+      runStats: [rsRow({ model: 'a', resolvedModel: 'v/a' }),
+        rsRow({ model: 'a', resolvedModel: 'v/a' })] });
+    appendRun(twinRun('run-1'), { dir });
+    expect(deriveReliability({ dir })[0]).toMatchObject({ runs: 1, lowN: true });
+    appendRun(twinRun('run-2'), { dir });
+    expect(deriveReliability({ dir })[0]).toMatchObject({ runs: 2, lowN: true });
+    appendRun(twinRun('run-3'), { dir });
+    expect(deriveReliability({ dir })[0]).toMatchObject({ runs: 3, lowN: false });
+  });
+
+  test('T11 — a split alias concentrates FINDINGS on the anchor: the other row reads 0 and null rates', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['gpt', 'other'],
+      findings: [{ id: 'A1', raiser: 'gpt', severity: 'major', tier: 'Confirmed' },
+        { id: 'A2', raiser: 'gpt', severity: 'nit', tier: 'Disputed' }],
+      streetCred: [{ model: 'gpt', withSelf: 1, peersOnly: 1 },
+        { model: 'other', withSelf: 2, peersOnly: 2 }],
+      runStats: [
+        rsRow({ model: 'gpt', resolvedModel: 'v/x' }),
+        rsRow({ model: 'gpt', resolvedModel: 'v/y' }),
+        rsRow({ model: 'other', resolvedModel: 'v/o' }),
+      ],
+    }));
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({ model: 'gpt', resolvedModel: 'v/x', findingsRaised: 2,
+      confirmRate: 0.5, factErrorRate: 0.5 });
+    expect(rows[1]).toMatchObject({ model: 'gpt', resolvedModel: 'v/y', findingsRaised: 0 });
+    expect(rows[1].bySeverity).toEqual({ blocker: 0, major: 0, minor: 0, nit: 0 });
+    expect(rows[1].confirmRate).toBeNull();
+    expect(rows[1].factErrorRate).toBeNull();
+    expect(rows[1].streetCredPeersOnly).toBe(1);   // street cred does NOT concentrate
+  });
+
+  test('T12 — street cred stays alias-keyed on EVERY row, and the launch stays on the short alias', () => {
+    // §0's forcing bench: one twin leg live, one dead. Concentrating street
+    // cred onto the anchor would strip the leg-less group's numeric cred, drop
+    // it out of candidacy, and flip the launch to the raw executable id.
+    const record2 = rec({
+      models: ['gpt-5', 'gpt-5', 'openai/gpt-5'],
+      streetCred: [{ model: 'gpt-5', withSelf: 1, peersOnly: 1 },
+        { model: 'openai/gpt-5', withSelf: 2, peersOnly: 2 }],
+      runStats: [
+        rsRow({ model: 'gpt-5', resolvedModel: 'openai/gpt-5' }),   // live twin leg
+        rsRow({ model: 'gpt-5', status: 'error' }),                  // dead twin leg — leg-less
+        rsRow({ model: 'openai/gpt-5', resolvedModel: 'openai/gpt-5' }),
+      ],
+    });
+    const rows = buildLedgerRows(record2);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({ model: 'gpt-5', resolvedModel: 'openai/gpt-5' });
+    expect(rows[1].model).toBe('gpt-5');
+    expect('resolvedModel' in rows[1]).toBe(false);
+    expect(rows[1].findingsRaised).toBe(0);
+    expect(rows[1].streetCredPeersOnly).toBe(1);   // NOT nulled onto the anchor
+    const dir = mkLedgerDir();
+    appendRun(record2, { dir });
+    expect(pickFallbackChair(deriveReliability({ dir }), ['zeta'], 'zeta-chair')).toBe('gpt-5');
+  });
+
+  test('T13a — ledger.js LOCAL conformance rank agrees with run-assemble worseConformance, pairwise', () => {
+    const values = ['clean', 'repaired', 'unstructured', 'weird'];
+    for (const a of values) {
+      for (const b of values) {
+        // triple so a failure names the pair, not just the merged value
+        expect([a, b, mergeConformance(a, b)]).toEqual([a, b, worseConformance(a, b)]);
+      }
+    }
+  });
+
+  test('T13b — the conformance fold is seeded from the group FIRST row, so an unknown value survives', () => {
+    const rows = buildLedgerRows(rec({
+      models: ['alpha'],
+      runStats: [rsRow({ model: 'alpha', conformance: 'weird', resolvedModel: 'v/a' })],
+    }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].conformance).toBe('weird');   // a 'clean' seed would rewrite it
+  });
+
+  test('T14 — chair ON the bench, one shared resolution: worst-wins conformance, any-wins wasChair', () => {
+    // The documented `amicus council tally` shape (docs/council.md:850-858 and
+    // the golden fixture both put the chair on the bench).
+    const rows = buildLedgerRows(rec({
+      models: ['deepseek', 'gpt', 'mistral'], chair: 'deepseek',
+      runStats: [
+        rsRow({ model: 'deepseek', role: 'council', conformance: 'unstructured', resolvedModel: 'v/ds' }),
+        rsRow({ model: 'gpt', role: 'council', resolvedModel: 'v/gpt' }),
+        rsRow({ model: 'mistral', role: 'council', resolvedModel: 'v/mi' }),
+        rsRow({ model: 'deepseek', role: 'chair', wasChair: true, conformance: 'clean', resolvedModel: 'v/ds' }),
+      ],
+    }));
+    expect(rows).toHaveLength(3);
+    const ds = rows.find(r => r.model === 'deepseek');
+    expect(ds.conformance).toBe('unstructured');   // worst-wins, NOT the chair row's 'clean'
+    expect(ds.wasChair).toBe(true);                // any-wins
+    expect(ds.role).toBe('chair');                 // last row of the pair group
   });
 });
