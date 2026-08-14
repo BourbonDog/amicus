@@ -85,9 +85,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
-  test('workflow_call surface: callers keep the shipped four-seat default; this repo\'s pull_request fallback benches glm,qwen,deepseek', () => {
+  test('workflow_call surface: callers and this repo\'s pull_request fallback bench the same four seats', () => {
     const y = yml();
-    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}");
+    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,inkling,kimi' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
     expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
@@ -95,6 +95,40 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).not.toContain("'1.00'");
     // fail_on is validated to the enum before any paid step
     expect(y).toContain('none|fix|rethink');
+  });
+
+  // The bench is spelled TWICE in this file and the two spellings serve
+  // disjoint triggers: workflow_call callers read the input default, while
+  // plain pull_request runs carry empty inputs and read the `||` fallback.
+  // Editing one alone is invisible — it type-checks, it lints, and CI stays
+  // green while every PR on this repo silently keeps the OLD bench. That is
+  // exactly what happened on cb7c90fd (2026-08-14). Derive both from the
+  // file and compare them instead of pinning each literal separately.
+  test('the two bench spellings cannot drift apart (input default === pull_request fallback)', () => {
+    const y = yml();
+    const inputDefault = y.match(/models:\s*\n\s*description:[^\n]*\n\s*type: string\s*\n\s*default: '([^']*)'/);
+    const prFallback = y.match(/MODELS: \$\{\{ inputs\.models \|\| '([^']*)' \}\}/);
+    expect(inputDefault).not.toBeNull();
+    expect(prFallback).not.toBeNull();
+    expect(prFallback[1]).toBe(inputDefault[1]);
+  });
+
+  // A CI runner installs amicus from npm and has NO user config, so an alias
+  // that only exists in someone's ~/.config/amicus/config.json resolves to
+  // nothing there — the seat dies mid-run, after the job has already spent.
+  // Every default seat must therefore be an alias this repo SHIPS.
+  test('every default bench seat and the chair are shipped curated aliases (no local-only aliases)', () => {
+    const { toDefaultAliases } = require('../../src/utils/curated-models');
+    const shipped = toDefaultAliases();
+    const y = yml();
+    const bench = y.match(/MODELS: \$\{\{ inputs\.models \|\| '([^']*)' \}\}/)[1].split(',');
+    const chair = y.match(/CHAIR: \$\{\{ inputs\.chair \|\| '([^']*)' \}\}/)[1];
+    for (const alias of [...bench, chair]) {
+      expect(Object.keys(shipped)).toContain(alias);
+    }
+    // The engine refuses a bench under 2 seats, and the chair is stripped
+    // from the bench before launch — so the default must survive that strip.
+    expect(bench.filter((m) => m !== chair).length).toBeGreaterThanOrEqual(2);
   });
 
   test('default chair-in-bench collision is resolved deterministically before any spend', () => {
