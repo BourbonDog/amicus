@@ -73,6 +73,13 @@ function costPanel(run, tally) {
   const stats = tally && Array.isArray(tally.runStats) ? tally.runStats : [];
   const rows = stats.map((r) => ({
     model: r.model,
+    // v4.8 PR5a T3: carry the seat. The engine computes it, writes it to tally.json and
+    // verdict.json, and this five-key projection was throwing it away one function before
+    // the renderer. ⚠️ Its consumer (renderCost) lands in PR5b, so this is honestly a
+    // payload-shape change here, not a visible one — shipping it now keeps PR5b from
+    // needing a src/ change of its own. Emit-when-set: a unique bench has no seat on any
+    // row, so the payload is byte-identical there.
+    ...(r.seat ? { seat: r.seat } : {}),
     role: r.role || (r.wasChair ? 'chair' : 'seat'),
     status: r.status || 'unknown',
     durationMs: r.durationMs === undefined ? null : r.durationMs,

@@ -275,6 +275,10 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
       .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
     rankings: tallyInput.rankings,
     adjudications: tallyInput.adjudications,
+    // v4.8 PR5a T7: `record` is the TALLIED record, so its findings already carry
+    // tally.js's R8 stamp. Passing the array the packet already has access to costs one
+    // line here and keeps every rendering decision in briefings-chair.js.
+    findings: record.findings,
     tierCounts: record.tierCounts, date,
   }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
   fs.writeFileSync(path.join(runDir, 'chair-packet.md'), packet, { mode: 0o600 });

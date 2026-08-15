@@ -84,7 +84,7 @@ function orNone(text, none) {
  *   has nothing to adjudicate, and a Stage 2 whose judges all died has nothing to
  *   rank. Each empty section says WHICH of those it is rather than rendering blank.
  */
-function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }) {
+function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, findings }) {
   const reviewBlocks = reviews.map(r => `--- Review by ${r.model} ---\n${r.text}`).join('\n\n');
   const rankingLines = (rankings || [])
     .map(r => `${r.judge}: ${JSON.stringify(r.order)}`)
@@ -92,6 +92,15 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }
   const adjLines = (adjudications || [])
     .map(a => `${a.findingId} — ${a.judge}: ${a.verdict}`)
     .join('\n');
+  // ⚠️ v4.8 PR5a T7 (R5-3): surface R8. tally.js has stamped sameModelCorroboration since
+  // PR4c and it reached verdict.json — and stopped. Spec §4.6 says the chair packet is
+  // REQUIRED to surface it; measured, nothing did. A Confirmed reached only via the
+  // raiser's own twin read to the chair exactly like independent corroboration, which is
+  // the overstatement R8 was chosen over model-exact exclusion to prevent.
+  // Emit-when-present, so a bench that raised none is byte-identical.
+  const corroborated = (findings || [])
+    .filter(f => f && f.sameModelCorroboration)
+    .map(f => f.id);
   // Every finding lands in exactly one tier (tally.js countTiers), so the tier
   // counts sum to the record's finding count — which is how an all-clean bench is
   // told apart from a bench whose judges simply never voted.
@@ -111,8 +120,19 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }
     orNone(adjLines, raisedCount === 0
       ? '(none — the bench raised no findings, so there was nothing to adjudicate)'
       : '(none — no judge produced a usable adjudication)'),
-    VERDICT_SCALE_ADDENDUM,
   );
+  // Placed AFTER the adjudications it qualifies and BEFORE the verdict scale, so the chair
+  // reads the caveat while the votes are still in view rather than after being told how to
+  // score them.
+  if (corroborated.length) {
+    parts.push(
+      '--- SAME-MODEL CORROBORATION (R8) ---',
+      `These findings were agreed only by a seat running the SAME model as the raiser: ${corroborated.join(', ')}.`
+      + ' Their tier reflects concurrence between two generations of one model, not independent support.'
+      + ' Weigh them accordingly.',
+    );
+  }
+  parts.push(VERDICT_SCALE_ADDENDUM);
   return parts.join('\n\n');
 }
 
