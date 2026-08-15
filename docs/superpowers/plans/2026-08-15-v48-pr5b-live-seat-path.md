@@ -9,9 +9,29 @@
 Size gate exit 0. Lint exit 0. Main CI green (run `31888547400`, after one macOS/node-24
 jest-worker SIGSEGV re-ran clean — environmental, not a code fact).
 
-**Revision 1.** Not yet refutation-tested. Every prior plan in this series took 4–5 rounds and
-**every finding was against the plan, never the code**; assume this one is wrong in ways the
-measurements below do not yet cover.
+**Revision 2.** One refutation round, self-run, aimed at revision 1: **9 findings — 4 MAJOR, 4
+MEDIUM, 1 MINOR. Every one against the plan; none against the code.** Tenth consecutive revision
+in this series with that signature. Corrections are recorded **in place** (⛔ **REV-1 WAS WRONG**)
+rather than silently patched.
+
+| # | sev | what rev 1 got wrong |
+|---|---|---|
+| F1 | MAJOR | Propagated a **rotted citation** (`debate.js:88-96`) by copying a source comment instead of checking it. §3.1 |
+| F2 | MAJOR | Cited the wrong line for the retry join, **and mis-described M5's actual defect**. §0.4 |
+| F3 | MAJOR | **Task 1 makes M5 visibly worse** — so Task 3 was not separable, and rev 1 said it was. §0.4.1 |
+| F4 | MEDIUM | The `JSON.stringify` blast radius, left unmeasured by rev 1, is **exactly 2 sites** — now named. Task 1 Step 6 |
+| F5 | MEDIUM | Rev 1's new F37 test **duplicated two existing guards** it never mentioned. Task 1 Step 1 |
+| F6 | MEDIUM | Rev 1's preservation pins had **no named mutant**, violating its own Global Constraint. Task 1 Step 5 |
+| F7 | MINOR | The fake-DOM harness was copied in the task that does not need it. Task 1 Step 1 |
+| F8 | MAJOR | Task 3's test **could not be written at all** — it called an IIFE-internal that no export exposes. Task 2 |
+| F9 | MEDIUM | The File Structure table listed **two files this PR does not touch** and claimed a `deadSeats` change that its own Task 4 deferral forbids. §File Structure |
+
+**Survived refutation, re-measured and confirmed:** §0.5's scope exclusion (`payload.legs` comes
+only from `buildLegRows` at `mcp-council-awareness.js:196`, which stamps `taskId: legId`
+unconditionally at `council-legs.js:128`, and `allLegIds` collects distinct task ids across waves —
+so a live row genuinely cannot collide); §0.6's emit-when-set claim (`seats.js:67` mints
+`alias#N` **exactly** when `counts.get(alias) > 1`); the `verdict.js:72` and `run-finish.js:43-48`
+citations; and all four measurements in §0.1–§0.3.
 
 **Goal:** Make the Workspace's terminal seats panel tell the truth on a bench that repeats an
 alias — one row per seat, no frozen rows, no silently erased dead seats.
@@ -37,8 +57,7 @@ hand-rolled fake DOM in `tests/workspace/workspace-render.test.js`.
   |---|---|---|
   | `electron/workspace-ui/live-seats.js` | 249 | 51 |
   | `electron/workspace-ui/workspace-seats.js` | 194 | 106 |
-  | `electron/workspace-ui/workspace-render.js` | **282** | **18** ← tight |
-  | `src/council/run-retry-notes.js` | 105 | 195 |
+  | `electron/workspace-ui/workspace-render.js` | **282** | **18** ← tight, and not modified |
 
   `workspace-render.js` has 18 lines of headroom. **No task below adds a line to it.** If one
   turns out to need to, that is a signal to stop and re-scope, not to shave comments — comment
@@ -97,11 +116,38 @@ produces no output anywhere in the panel.
 > This is the sharpest of the four and the one that most clearly fails the product principle: a
 > correct-but-silent degrade fails the bar as hard as a crash.
 
-### 0.4 M5 — the retry marker can land on the wrong row
+### 0.4 M5 — a seat that was never retried is labelled "retried once"
 
-`retriedAliases` (`workspace-seats.js:57-71`) keys on the alias, and its consumer looks rows up
-via `rowsByKey[String(s.id || s.model)]` (`workspace-seats.js:99-104`) — which on duplicate keys
-is last-wins. Not yet probed in isolation; **Task 3 must measure it before fixing it.**
+⛔ **REV-1 WAS WRONG ABOUT THIS DEFECT, AND CITED THE WRONG LINE (F2).** Rev 1 said the marker
+"can land on the wrong row" via last-wins in `rowsByKey`, and put the join at
+`workspace-seats.js:103-104`. Measured: `:104` is the *row lookup*; the retry test is at **`:117`**:
+
+```js
+var isRetried = isReviewingRole(s.role) && !!retried[s.modelInput || s.model];
+```
+
+`seatsFromRunStats` emits **no `modelInput`** (`live-seats.js:84-88` — the key list is
+`model, role, status, stage, messages, tokensIn, tokensOut, costDisplay, lastActivity,
+latestPreview, stalled`), so `s.modelInput || s.model` is always the alias on this path. The
+defect is therefore not misattribution between rows — it is that `retriedAliases`
+(`workspace-seats.js:57-71`) is alias-keyed, so on a twin bench where **one** seat was retried,
+`retried['deepseek']` is true for **both**. A seat that was never retried renders `↻ retried once`.
+
+Rev 1 flagged M5 as its one unmeasured claim and was right to; the measurement changed what the
+defect *is*. **Task 2 still measures before fixing** — that discipline is what caught this.
+
+### 0.4.1 ⚠️ Task 1 makes M5 WORSE — the tasks are not separable (F3)
+
+⛔ **REV-1 PRESENTED TASK 3 AS INDEPENDENTLY REJECTABLE. IT IS NOT.**
+
+At HEAD the twins collapse to one rendered row (§0.1), so the alias-keyed badge paints **one** row.
+After Task 1 there are **two** rows, and the still-alias-keyed lookup at `:117` badges **both** —
+so a seat that was never retried visibly gains a `↻ retried once` badge it did not have before.
+
+Task 1 alone is a **visible regression** on exactly the bench it exists to fix. The retry fix is
+therefore a required companion, not a neighbour a reviewer could reject. This plan reorders
+accordingly: **Task 1 + Task 2 are one shippable unit**, and the DOM proof (now Task 3) covers
+their combined result.
 
 ### 0.5 What is NOT broken — the scope boundary
 
@@ -149,16 +195,21 @@ that `verdict.js:72` compares it against `o.critic`, which is an alias. **Do not
 
 ## File Structure
 
-| file | change |
-|---|---|
-| `electron/workspace-ui/live-seats.js` | modify `seatsFromRunStats` (id + carry `seat`), `deadSeats` (seat-keyed dedup + suppression) |
-| `electron/workspace-ui/workspace-seats.js` | `retriedAliases` → seat-keyed; consumer lookup |
-| `src/council/run-retry-notes.js` | `srcLegStillDeadNote` gains `seatId` (Task 4 only) |
-| `tests/workspace/seat-panel-twins.test.js` | **new** — the twin-bench pins, all multi-tick |
-| `tests/council/degrade-channels.test.js` | update the exact `toEqual` shapes (Task 4 only) |
+⛔ **REV-1'S TABLE LISTED TWO FILES THIS PR DOES NOT TOUCH.** `src/council/run-retry-notes.js` and
+`tests/council/degrade-channels.test.js` belong to the deferred Task 4 and are gone from the table
+below. **This PR changes no file under `src/`.**
 
-`workspace-render.js` is **read but not modified** — its `String(seat.id || seat.model)` keying is
-already correct once `seat.id` is correct. That is the whole reason this PR is small.
+| file | change | task |
+|---|---|---|
+| `electron/workspace-ui/live-seats.js` | `seatsFromRunStats`: seat-keyed injective id + carry `seat`; correct the rotted `debate.js` citation in the F37 comment | 1 |
+| `electron/workspace-ui/workspace-seats.js` | `retriedAliases` → `retriedSeats`, seat-keyed; the `:117` lookup; the `:47` mirror docblock | 2 |
+| `tests/workspace/seat-panel-twins.test.js` | **new** — the twin-bench pins; T2 via `makeFakeDom`, T3 via `makeFakeDoc`, all multi-tick | 1,2,3 |
+| `tests/workspace/live-model.test.js` | F37 guard `:105` → JSON key spelling; fix the rotted `:95` citation | 1 |
+| `tests/workspace/workspace-render.test.js` | F37 guard `:363` → JSON key spelling | 1 |
+
+`deadSeats` is **not** modified — rev 1's table said it was, which contradicted its own Task 4
+deferral. `workspace-render.js` is **read but not modified**: its `String(seat.id || seat.model)`
+keying is already correct once `seat.id` is correct. That is the whole reason this PR is small.
 
 ---
 
@@ -179,9 +230,17 @@ Kills M1/M2 (§0.1).
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/workspace/seat-panel-twins.test.js`. Copy the `makeFakeDoc()` harness from
-`tests/workspace/workspace-render.test.js:20-141` verbatim — it is the established pattern and
-adds no dependency.
+Create `tests/workspace/seat-panel-twins.test.js`.
+
+⛔ **REV-1 SAID TO COPY THE `makeFakeDoc()` HARNESS HERE (F7). Do not** — nothing in this task
+touches the DOM; it calls `seatsFromRunStats` directly. The harness is copied in Task 3, the only
+task that needs it.
+
+⛔ **REV-1 ADDED AN F37 TEST WITHOUT MENTIONING THE TWO THAT ALREADY EXIST (F5).** The
+debate-role guard is already covered twice — `tests/workspace/live-model.test.js:99` and
+`tests/workspace/workspace-render.test.js:354`. **Do not write a third.** It is listed below only
+as a *reference* so you recognise both when Step 6 makes them fail; both are updated there, not
+duplicated here.
 
 ```js
 'use strict';
@@ -214,14 +273,16 @@ describe('T1 — twin-bench row identity', () => {
     expect(rows.map(r => r.seat)).toEqual([null, null]);
   });
 
-  // The F37 pin this id expression originally existed for — a --debate run emits extra
-  // runStats rows for the SAME alias with role rebuttal/revote. Must still not collide.
-  test('F37 preserved: debate roles do not collide with the seat row', () => {
-    const ids = LS.seatsFromRunStats([
-      { model: 'a', role: 'seat' }, { model: 'a', role: 'rebuttal' }, { model: 'a', role: 'revote' },
-    ]).map(r => r.id);
-    expect(new Set(ids).size).toBe(3);
-  });
+  // REFERENCE ONLY — do NOT add this test (F5). The identical guard already exists at
+  // live-model.test.js:99 and workspace-render.test.js:354. Shown so you recognise the shape
+  // when Step 6 turns both of them red.
+  //
+  //   test('F37 preserved: debate roles do not collide with the seat row', () => {
+  //     const ids = LS.seatsFromRunStats([
+  //       { model: 'a', role: 'seat' }, { model: 'a', role: 'rebuttal' }, { model: 'a', role: 'revote' },
+  //     ]).map(r => r.id);
+  //     expect(new Set(ids).size).toBe(3);
+  //   });
 });
 ```
 
@@ -232,8 +293,9 @@ npx jest tests/workspace/seat-panel-twins.test.js
 ```
 
 Expected: the first two tests FAIL (`new Set(ids).size` is `1`, not `2`; `r.seat` is `undefined`,
-not the seat id). The two controls PASS — they are preservation pins and are green at HEAD by
-construction. **Do not treat their passing as progress.**
+not the seat id). The control PASSES — it is a preservation pin, green at HEAD by construction.
+**Do not treat its passing as progress**; Step 5 gives it a named mutant, which is the only thing
+that makes it a pin rather than decoration (F6).
 
 - [ ] **Step 3: Implement**
 
@@ -242,7 +304,8 @@ In `electron/workspace-ui/live-seats.js`, replace the `id:` line and add `seat:`
 ```js
       // ⚠️ DE-ROT (F37) + v4.8 PR5b: the composite id is over the SEAT, not the alias. A
       // --debate run emits extra runStats rows for the same alias (role 'rebuttal'/'revote',
-      // src/council/debate.js:88-96) — that is what the role half kills. PR1 then made a bench
+      // src/council/debate.js:115-130, merged at run-finish.js:43-48) — that is what the role
+      // half kills. PR1 then made a bench
       // that repeats an alias produce distinct SEATS, and two of them collided on the alias
       // half: renderSeats appended both on tick 1, then froze the first forever (it is never
       // re-matched, and `seen[key]` keeps it from being removed). `r.seat` is emit-when-set
@@ -273,22 +336,48 @@ npx jest tests/workspace/seat-panel-twins.test.js
 
 Expected: PASS.
 
-- [ ] **Step 5: Apply the named mutant and measure RED**
+- [ ] **Step 5: Apply BOTH named mutants and measure RED**
 
-Revert the id expression to `(r.model) + ':' + (r.role || 'seat')` in the real file. Re-run.
-Expected: the two twin tests go RED. Restore byte-identically (`git diff` must be empty for the
-mutant line). A pin that does not go red here is not pinning anything.
+Two mutants, because the task makes two claims (F6):
 
-- [ ] **Step 6: Run every suite that touches this function**
+**Mutant 1 — the fix.** Revert the id expression to `(r.model) + ':' + (r.role || 'seat')`.
+Expected: the two twin tests go RED.
+
+**Mutant 2 — the control.** Keep the fix, but drop the `|| r.model` fallback:
+`id: JSON.stringify([r.seat, r.role || 'seat'])`. Expected: the **control** goes RED, because a
+distinct-alias bench has no `r.seat` and every id becomes `[null,"seat"]`. This is the mutant that
+makes the control a pin rather than decoration — without it, the control is green against every
+implementation that happens to work on twins.
+
+Restore byte-identically after each (`git diff` empty for the mutant line). A pin that does not go
+red is not pinning anything.
+
+- [ ] **Step 6: Update the two F37 guards — they are EXPECTED to fail**
+
+⛔ **REV-1 LEFT THIS TO DISCOVERY AND GUESSED THE BLAST RADIUS (F4). Measured: exactly two sites**,
+both asserting the `alias:role` spelling of an id they did **not** construct — so both legitimately
+break, and both are the same F37 guard:
+
+| site | assertion at HEAD |
+|---|---|
+| `tests/workspace/live-model.test.js:105` | `rows.map(r => r.id)` → `['gemini:seat','gemini:rebuttal','gemini:revote']` |
+| `tests/workspace/workspace-render.test.js:363` | `children.map(r => r.dataset.key)` → the same three |
+
+Update both to the JSON spelling — `'["gemini","seat"]'` etc. **Keep them asserting three
+DISTINCT values**; that, not the spelling, is what F37 pins.
+
+Six other grep hits (`workspace-render.test.js:335,345,346,351,389-438`) construct their ids by
+hand and never call `seatsFromRunStats` — they are **unaffected**. Do not touch them.
+
+⚠️ While in `live-model.test.js`, note its comment at `:95` carries the same rotted
+`debate.js:88-96` citation this plan corrects (F1). Fix it there too — see Task 1 Step 3.
 
 ```bash
 npx jest tests/workspace/
 ```
 
-Expected: PASS. `workspace-seats.test.js`, `dead-seat-rows.test.js`, `live-loop.test.js`,
-`blind-flip.test.js` and `workspace-app-boundary.test.js` all exercise `renderSeats`; any of them
-asserting a literal `'a:seat'` key needs its expectation moved to the JSON spelling. **If one
-asserts a key it did not construct, that is a finding — record it, do not silently edit it.**
+Expected after the two updates: PASS. **If any suite beyond those two fails, that is a finding —
+record it, do not silently edit it.**
 
 - [ ] **Step 7: Commit**
 
@@ -299,11 +388,149 @@ git commit -m "v4.8 PR5b T1: key terminal seat rows on the seat, not the alias"
 
 ---
 
-## Task 2: Multi-tick proof that the frozen row is gone
+## Task 2: Seat-keyed retry markers — ⚠️ MUST SHIP WITH TASK 1
 
-Task 1 fixed the *id*. This task proves the *symptom* is gone, at the DOM level. It is a separate
-task because a reviewer could reasonably accept Task 1's unit change and still reject this — the
-id being distinct does not, by itself, prove `renderSeats` behaves.
+Kills M5 (§0.4). ⛔ **REV-1 ORDERED THIS LAST AND CALLED IT INDEPENDENTLY REJECTABLE (F3).**
+Per §0.4.1, Task 1 alone turns one wrongly-badged row into **two**, so shipping Task 1 without this
+is a visible regression. Do not commit Task 1 to a shared branch without this task on top.
+
+**Files:**
+- Modify: `electron/workspace-ui/workspace-seats.js:57-71` (`retriedAliases`), `:117` (the lookup)
+- Test: `tests/workspace/seat-panel-twins.test.js`
+
+**Interfaces:**
+- Consumes: `run.degrades[]`; Task 1's `seat` field on each seat row.
+- Produces: `retriedSeats(degrades)` → a null-prototype object keyed by **seat id when the record
+  names one, alias otherwise**. Renamed from `retriedAliases`. **Two** call sites, not three:
+  the definition (`:57`), the invocation (`:94`), and the lookup (`:117`). `:104` is the *row*
+  lookup and is Task 1's concern, not this one.
+
+⛔ **REV-1'S TEST FOR THIS TASK COULD NOT BE WRITTEN AT ALL (F8).** It called
+`WS.retriedSeats(degrades)` directly. Measured: `workspace-seats.js` has **no `module.exports`**,
+and `window.AmicusSeats` (`:195-199`) exposes only
+`{renderSeatsPanel, renderDeadSeatRows, appendDeadRows}` — `retriedAliases` is an IIFE-internal
+closure and is unreachable from any test. The established pattern for this module
+(`tests/workspace/workspace-seats.test.js:17-28`) is `jest.resetModules()`, install
+`makeFakeDom()` from `./helpers/fake-workspace-page` as `global.window`/`global.document`, then
+`require()` the IIFE and drive it through `renderSeatsPanel`.
+
+That constraint is a gift, not an obstacle: testing **through** `renderSeatsPanel` pins the
+user-visible defect (which rows carry the badge) instead of a helper's return value.
+
+- [ ] **Step 1: Measure the current behaviour**
+
+§0.4 was rewritten from measurement in revision 2, but it was measured by *reading*, not by
+running. Confirm it end-to-end before changing anything: drive `renderSeatsPanel` through the fake
+page with a twin bench where **only `deepseek#2`** was retried, and record how many rows carry
+`↻ retried once`. Expected at HEAD-plus-Task-1: **2** (the bug). Put the measured number in the
+commit message. If it is 1, **stop — this task is not needed** and §0.4 is wrong again.
+
+- [ ] **Step 2: Write the failing test**
+
+```js
+const { makeFakeDom } = require('./helpers/fake-workspace-page');
+
+describe('T2 — the retry badge marks only the seat that was retried', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    const fake = makeFakeDom();
+    global.window = fake.window;
+    global.document = fake.document;
+    global.NodeFilter = fake.NodeFilter;
+    // Load order matches index.html and SCRIPT_LOAD_ORDER.
+    require('../../electron/workspace-ui/workspace-seats');
+  });
+
+  function badgedRows() {
+    window.AmicusSeats.renderSeatsPanel();
+    return Array.prototype.slice.call(window.AmicusApp.$('seats-body').children)
+      .filter(r => r.children[8] && r.children[8].textContent === '↻ retried once').length;
+  }
+
+  test('one retried twin badges ONE row, not both', () => {
+    // Wire the fake app state the way workspace-seats.js reads it (:81-94): cost rows carry
+    // the seat (PR5a, run-detail.js:82); the degrade names the seat id in firstFailure.seatId.
+    window.AmicusApp.state.detail = {
+      run: { degrades: [{ kind: 'degrade', channel: 'dead-leg',
+        data: { seat: 'deepseek', retryWaveId: 'w1',
+          firstFailure: { seat: 'deepseek', seatId: 'deepseek#2', class: 'leg' } } }] },
+      derived: { cost: { rows: [
+        { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: 'ok', costDisplay: '$0.01' },
+        { model: 'deepseek', seat: 'deepseek#2', role: 'seat', status: 'error', costDisplay: '$0.02' },
+      ] } },
+    };
+    expect(badgedRows()).toBe(1);
+  });
+
+  test('control — a distinct-alias bench still badges by alias', () => {
+    window.AmicusApp.state.detail = {
+      run: { degrades: [{ kind: 'degrade', channel: 'dead-leg',
+        data: { seat: 'a', retryWaveId: 'w1' } }] },
+      derived: { cost: { rows: [
+        { model: 'a', role: 'seat', status: 'error', costDisplay: '$0.01' },
+        { model: 'b', role: 'seat', status: 'ok', costDisplay: '$0.02' },
+      ] } },
+    };
+    expect(badgedRows()).toBe(1);
+  });
+});
+```
+
+⚠️ `makeFakeDom()`'s exact `window.AmicusApp` shape is fixture-specific — read
+`tests/workspace/helpers/fake-workspace-page.js` and match it rather than trusting the sketch
+above. If the helper does not let you set `state.detail` directly, extend the helper; do **not**
+weaken the assertion to fit it.
+
+- [ ] **Step 3: Run it and watch it fail**
+
+```bash
+npx jest tests/workspace/seat-panel-twins.test.js -t 'badges ONE row'
+```
+
+Expected: FAIL, received `2`. The control PASSES (preservation pin — its mutant is in Step 5).
+
+- [ ] **Step 4: Implement**
+
+Rename `retriedAliases` → `retriedSeats`, and key it on
+`data.firstFailure && data.firstFailure.seatId ? data.firstFailure.seatId : data.seat`.
+Then change the lookup at `:117` from `retried[s.modelInput || s.model]` to
+`retried[s.seat || s.model]` — `s.seat` is Task 1's new field; `seatsFromRunStats` emits no
+`modelInput`, so dropping it changes nothing on this path (§0.4).
+
+Keep the `kind`/`channel` filter exactly as it is — `workspace-seats.js:47-50` documents that it
+is load-bearing (`kind:'heal'` records carry the same `retryWaveId` fields for seats that
+**recovered**, and a field-only scan would tag a recovered seat "retried once").
+
+⚠️ The docblock at `:47` says this function "Mirrors `window.AmicusLive.deadSeats`' own predicate
+(live-seats.js:186-200) EXACTLY, and must keep mirroring it." This task changes one side of that
+mirror; the deferred M3/M4 PR changes the other. **Update the docblock to say the mirror is now
+partial and why**, or the next reader will trust a claim that is no longer true — the
+two-spellings defect council-1's B1 raised against PR5a.
+
+- [ ] **Step 5: Run, apply both mutants, restore**
+
+```bash
+npx jest tests/workspace/
+```
+
+**Mutant 1:** revert the key to `data.seat`. Expected: the twin test goes RED.
+**Mutant 2:** revert the lookup to `retried[s.modelInput || s.model]`. Expected: the twin test
+goes RED (it reads the alias again). Restore byte-identically after each.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add electron/workspace-ui/workspace-seats.js tests/workspace/seat-panel-twins.test.js
+git commit -m "v4.8 PR5b T2: badge the seat that was retried, not its twin"
+```
+
+---
+
+## Task 3: Multi-tick proof at the DOM
+
+Tasks 1 and 2 fixed the *ids* and the *badge*. This task proves the *symptom* is gone where the
+user sees it. It is separable from them in the one direction that matters: a reviewer could accept
+the unit changes and still want the end-to-end pin, but never the reverse.
 
 **Files:**
 - Modify: `tests/workspace/seat-panel-twins.test.js`
@@ -318,12 +545,17 @@ id being distinct does not, by itself, prove `renderSeats` behaves.
 Append to `tests/workspace/seat-panel-twins.test.js`. **Two ticks minimum** — §0.1 proves a
 single-tick test cannot see this defect.
 
+⚠️ This task needs a *different* harness from Task 2: `makeFakeDoc()` from
+`tests/workspace/workspace-render.test.js:20-141` (a bare element factory), **not**
+`makeFakeDom()` from `helpers/fake-workspace-page` (a whole fake page). Copy `makeFakeDoc`
+verbatim into this file — that is the established pattern and adds no dependency (F7).
+
 ```js
-describe('T2 — the frozen row, at the DOM', () => {
+describe('T3 — the frozen row, at the DOM', () => {
   let R, doc;
   beforeEach(() => {
     global.window = { AmicusLive: require('../../electron/workspace-ui/live-model') };
-    global.document = doc = makeFakeDoc();          // harness copied in Task 1 Step 1
+    global.document = doc = makeFakeDoc();
     jest.isolateModules(() => { require('../../electron/workspace-ui/workspace-render.js'); });
     R = global.window.AmicusRender;
   });
@@ -375,76 +607,24 @@ Expected: PASS.
 
 ```bash
 git add tests/workspace/seat-panel-twins.test.js
-git commit -m "v4.8 PR5b T2: pin the frozen-row symptom across two ticks"
+git commit -m "v4.8 PR5b T3: pin the frozen-row symptom across two ticks"
 ```
 
----
-
-## Task 3: Seat-keyed retry markers
-
-Kills M5 (§0.4). **Measure before fixing** — §0.4 is the one defect in this plan that is reasoned
-from the code rather than probed, and this plan's whole failure history is plans being wrong.
-
-**Files:**
-- Modify: `electron/workspace-ui/workspace-seats.js:57-71` (`retriedAliases`), `:94-104` (consumer)
-- Test: `tests/workspace/seat-panel-twins.test.js`
-
-**Interfaces:**
-- Consumes: `run.degrades[]`; Task 1's `seat` field on each seat row.
-- Produces: `retriedSeats(degrades)` → a null-prototype object keyed by **seat id when known,
-  alias otherwise**. Renamed from `retriedAliases`; update both call sites (`:94` and the
-  `seats.forEach` join at `:103-104`).
-
-- [ ] **Step 1: Measure the current behaviour**
-
-Write a throwaway probe asserting what HEAD does when one twin was retried and the other was not.
-Record the measured output **in the commit message**. If it turns out HEAD is already correct,
-**delete this task and say so** — do not implement a fix for a defect that does not exist.
-
-- [ ] **Step 2: Write the failing test** (only if Step 1 confirmed the defect)
-
-```js
-test('T3 — the retry marker lands on the retried seat only', () => {
-  const degrades = [{ kind: 'degrade', channel: 'dead-leg',
-    data: { seat: 'deepseek', retryWaveId: 'w1',
-      firstFailure: { seat: 'deepseek', seatId: 'deepseek#2', class: 'leg' } } }];
-  const marked = WS.retriedSeats(degrades);
-  expect(marked['deepseek#2']).toBe(true);
-  expect(marked['deepseek#1']).toBeUndefined();
-});
-
-test('T3 control — a distinct-alias bench still marks by alias', () => {
-  const marked = WS.retriedSeats([{ kind: 'degrade', channel: 'dead-leg',
-    data: { seat: 'a', retryWaveId: 'w1' } }]);
-  expect(marked.a).toBe(true);
-});
-```
-
-- [ ] **Step 3: Implement**
-
-Key on `data.firstFailure && data.firstFailure.seatId ? data.firstFailure.seatId : data.seat`.
-Keep the `kind`/`channel` filter exactly as it is — `workspace-seats.js:47-50` documents that it
-is load-bearing (`kind:'heal'` records carry the same `retryWaveId` fields for seats that
-**recovered**, and a field-only scan would tag a recovered seat "retried once").
-
-⚠️ The docblock at `:47` says this function "Mirrors `window.AmicusLive.deadSeats`' own predicate
-(live-seats.js:186-200) EXACTLY, and must keep mirroring it." Task 4 changes that predicate. **If
-Task 4 ships, this comment and this function must move with it in the same PR** — a mirror that
-stops mirroring is exactly the two-spellings defect council-1's B1 raised against PR5a.
-
-- [ ] **Step 4: Run, mutate, restore**
+- [ ] **Step 5: Run the full local gates before opening the PR**
 
 ```bash
-npx jest tests/workspace/
+npm test
 ```
-Then revert the key expression to `data.seat`, confirm RED, restore byte-identically.
 
-- [ ] **Step 5: Commit**
+Full suite, **no path argument, never piped through `tail`**. Then:
 
 ```bash
-git add electron/workspace-ui/workspace-seats.js tests/workspace/seat-panel-twins.test.js
-git commit -m "v4.8 PR5b T3: key retry markers on the seat when the record names one"
+node scripts/check-file-sizes.js --all
+npx eslint .
 ```
+
+Baseline to beat: `526 suites / 7414 passed / 8 skipped / 0 failed`, plus the two F37 guards
+updated in Task 1 Step 6 and the new `seat-panel-twins.test.js`. Sizes and lint exit 0.
 
 ---
 
@@ -507,33 +687,39 @@ fix leaves a silent erasure in place on one emitter while appearing to close the
 - `data.seat` stays the **alias**. `run-retry-notes.js:39-45` explains why (`verdict.js:72`
   compares it against `o.critic`). Add a key; never repurpose that one.
 - `workspace-seats.js:47`'s docblock claims `retriedAliases` mirrors `deadSeats`' predicate
-  "EXACTLY, and must keep mirroring it". Task 3 changes one side of that mirror. **The follow-up
-  PR changes the other side and must re-read that comment first** — a mirror that stops
-  mirroring is exactly the two-spellings defect council-1's B1 raised against PR5a.
+  "EXACTLY, and must keep mirroring it". **Task 2 changes one side of that mirror and renames the
+  function to `retriedSeats`.** The follow-up PR changes the other side and must re-read that
+  comment first — a mirror that stops mirroring is exactly the two-spellings defect council-1's
+  B1 raised against PR5a.
 
 ---
 
 ## Self-Review
 
-**Spec coverage.** M1/M2 → Tasks 1+2. M5 → Task 3 (gated on measuring it first). M3/M4 → Task 4,
-explicitly unresolved and escalated rather than silently dropped. §0.5's live path is out of
-scope and says so.
+**Spec coverage.** M1/M2 → Tasks 1+3. M5 → Task 2 (still gated on measuring it end-to-end first).
+M3/M4 → Task 4, explicitly deferred by ruling rather than silently dropped. §0.5's live path is
+out of scope, and that exclusion was re-measured in revision 2 rather than argued.
 
-**Placeholder scan.** Task 4 contains no implementation steps by design — it is a decision
-record, not a task, and is labelled as such. Task 3 Step 2 is conditional on Step 1's
-measurement, which is deliberate: writing its assertions now would be asserting a property I have
-not measured, which is failure mode #8 and the single most common way these plans have been
-wrong.
+**Placeholder scan.** Task 4 contains no implementation steps by design — it is a decision record,
+not a task, and is labelled as such. Rev 1's one real placeholder (Task 3's un-bootstrappable test)
+is fixed: F8. Task 2 Step 1 remains conditional on a measurement, which is deliberate — writing
+assertions against an unmeasured property is failure mode #8 and the single most common way these
+plans have been wrong. Revision 2 proves the point: measuring §0.4 changed what the defect *is*.
 
-**Type consistency.** `seatsFromRunStats` produces `{id, seat, …}`; Task 3's join consumes
-`seat`. `retriedAliases` → `retriedSeats` is renamed at its definition and both call sites.
+**Type consistency.** `seatsFromRunStats` produces `{id, seat, …}`; Task 2's lookup consumes
+`seat`. `retriedAliases` → `retriedSeats` is renamed at its definition (`:57`) and its invocation
+(`:94`); the lookup at `:117` changes its *key expression*, not the function name.
 `renderSeats`'s `String(seat.id || seat.model)` is unchanged and needs no edit.
 
-**Known gaps in this revision, stated rather than hidden:**
-- §0.4 (M5) is the one defect reasoned from code, not probed. Task 3 Step 1 exists to correct that
-  before any code is written.
-- The `JSON.stringify` key changes the spelling of `dataset.key`. I have **not** measured how many
-  existing tests assert that spelling literally; Task 1 Step 6 is where that surfaces. If it is
-  more than two or three, the key format is the wrong lever and a plain separator that cannot
-  appear in an alias should be reconsidered.
-- No refutation round has been run against this plan. Every predecessor needed four.
+**Task ordering.** 1 → 2 → 3, and **1+2 are one shippable unit** (§0.4.1). Rev 1 had this wrong.
+
+**Known gaps in THIS revision, stated rather than hidden:**
+- Task 2's test sketch guesses at `makeFakeDom()`'s `window.AmicusApp` shape. I read the helper's
+  exports but **not** its internals; the step says so and tells the implementer to match the real
+  fixture. This is the most likely place revision 3 finds a defect.
+- §0.4 was corrected by *reading* `:117`, not by running it. Task 2 Step 1 exists to close that.
+- The two F37 guards are named and their breakage predicted, but I have **not** executed the
+  JSON-key change to confirm nothing else fails. Task 1 Step 6 is the check.
+- One refutation round, self-run. Every predecessor in this series needed four, and a self-run
+  round shares the blind spots of the author — this is weaker evidence than an adjudicated
+  council, and should not be read as equivalent.
