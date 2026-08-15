@@ -73,13 +73,17 @@ describe('artifactAllowlist', () => {
     expect(list.some((n) => n.includes('/') || n.includes('\\') || n.includes('..'))).toBe(false);
   });
 
+  // v4.8 PR5a T1b: SIX fixed names, not five — `review-claude.md` joined the set. It is a
+  // skill-authored INPUT rather than an engine artifact, and it is unconditional because
+  // run.json carries no claude marker to gate on (see artifact-names.js's note).
   test('missing/invalid bench yields fixed names only', () => {
-    expect(artifactAllowlist({})).toHaveLength(5);
-    expect(artifactAllowlist({ bench: 'nope' })).toHaveLength(5);
+    expect(artifactAllowlist({})).toHaveLength(6);
+    expect(artifactAllowlist({ bench: 'nope' })).toHaveLength(6);
+    expect(artifactAllowlist({})).toContain('review-claude.md');
   });
 
   // ⚠️ DE-ROT (F28): v4.1 `--debate` runs write five MORE artifact kinds. They are gated
-  // on run.debate, so both `toHaveLength(5)` asserts above stay correct as written.
+  // on run.debate, so both length asserts above stay correct as written.
   test('a --debate run also allows the v4.1 debate artifacts', () => {
     const list = artifactAllowlist({ bench: ['gemini'], debate: { enabled: true, outcome: 'ran' } });
     expect(list).toEqual(expect.arrayContaining([

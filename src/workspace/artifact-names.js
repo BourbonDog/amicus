@@ -14,7 +14,15 @@ const { sanitizeName } = require('../council/run-launch');
 // report.js:53-56 exports it and src/workspace/matrix-model.js:25 already imports it.
 const { isSeatSpace } = require('../council/report');
 
-const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
+// ⚠️ v4.8 PR5a T1b: `review-claude.md` is NOT an engine artifact — the second-opinion skill
+// authors it as an INPUT and --out-dir places it in the run dir (v4.1 design §:156). It sat
+// unreadable in five real run dirs on the author's machine, so "How Claude's review fared" was
+// permanently unopenable in the Workspace. It is a FIXED name rather than a gated one because
+// run.json carries no claude marker at all: `claudeInCouncil` is set only on tally/verdict meta
+// (run-assemble.js:178) and `claudeReviewFile` never leaves the in-memory options object —
+// run-state.js:129 writes a fixed four-key `options` projection. An unconditional entry is
+// honest here: the presence manifest already reports four fixed names as absent on a normal run.
+const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json', 'review-claude.md']);
 // ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
 // allowlist never named, so the Workspace hard-refused every `--debate` output with
 // `artifact not allowed: <name>`. Writers (re-derived v4.8 PR3 — Task 1 moved runRevoteWave):

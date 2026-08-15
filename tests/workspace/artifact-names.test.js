@@ -19,7 +19,11 @@ const seatsFor = (bench) => buildSeats(bench, null, null);
 const orphanNote = (alias, waveId = 'w-s1') => ({
   channel: 'seat-unbound', data: { legId: `${waveId}-9`, seat: alias, waveId },
 });
-const reviewsIn = (list) => list.filter(n => n.startsWith('review-')).sort();
+// Per-SEAT review names only. `review-claude.md` is a FIXED artifact (T1b) — a
+// skill-authored input, not a seat's output — so it must not be counted here or
+// every seat assertion below silently depends on T1b's separate commit.
+const reviewsIn = (list) => list
+  .filter(n => n.startsWith('review-') && n !== 'review-claude.md').sort();
 
 describe('seat-space allowlist', () => {
   test('a twin bench lists BOTH seats\' files and attributes each to its own seat', () => {
