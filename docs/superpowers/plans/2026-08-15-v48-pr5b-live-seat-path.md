@@ -9,10 +9,33 @@
 Size gate exit 0. Lint exit 0. Main CI green (run `31888547400`, after one macOS/node-24
 jest-worker SIGSEGV re-ran clean — environmental, not a code fact).
 
-**Revision 2.** One refutation round, self-run, aimed at revision 1: **9 findings — 4 MAJOR, 4
-MEDIUM, 1 MINOR. Every one against the plan; none against the code.** Tenth consecutive revision
-in this series with that signature. Corrections are recorded **in place** (⛔ **REV-1 WAS WRONG**)
-rather than silently patched.
+**Revision 3.** Two refutation rounds. Round 2 was an **adjudicated 4-model council** (gpt, glm,
+kimi, minimax; chair deepseek) aimed at revision 2's corrections:
+**14 findings, ALL Confirmed** (peers-only `a=3, d=0`, solid). **Chair verdict: `Fix these first`.**
+Eleventh consecutive revision with the same signature — every finding against the plan, none
+against the code.
+
+> **The chair named the pattern, and it is the most important output of the round:**
+> *"Not fourteen slips — one weakness: **verification by assertion instead of verification by
+> execution**."* Line counts stated rather than measured; citations pointing at comments and
+> docblocks rather than the code path that runs; the degrade-channel model inferred rather than
+> traced; the test harness sketched without confirming which globals the module dereferences.
+>
+> Secondary: **point-wise correction.** Revision 2 fixed the two things round 1 named and only
+> those — which is why C5 found a citation "corrected" to a still-wrong location and A6 found
+> line counts never re-measured. The lesson was applied to symptoms, not to the method.
+
+⚠️ **Round 2 returned 56 adjudications with ZERO disputes.** That is the documented
+agreement-inflation signature of this judging contract (`agree` is defined by worked example;
+`dispute` never is). It is **not** independent corroboration. What makes these findings actionable
+is that 11 of the 14 were separately verified against source by the orchestrator before the judges
+saw them, and the chair was explicitly asked to name findings it would have disputed — it named
+three (A5, C3, C4), and two of those were downgraded in `decisions-r2b.json`.
+
+Round 1 was **self-run by this plan's author and found none of the 14.** That is the measured cost
+of self-review, recorded here so it is not repeated.
+
+Corrections are recorded **in place** (⛔ **REV-N WAS WRONG**) rather than silently patched.
 
 | # | sev | what rev 1 got wrong |
 |---|---|---|
@@ -53,11 +76,20 @@ hand-rolled fake DOM in `tests/workspace/workspace-render.test.js`.
 - **300-line hard file-size gate**, `node scripts/check-file-sizes.js --all`. Current headroom
   on every file this PR touches, measured at `ccb0551d`:
 
-  | file | lines | free |
-  |---|---|---|
-  | `electron/workspace-ui/live-seats.js` | 249 | 51 |
-  | `electron/workspace-ui/workspace-seats.js` | 194 | 106 |
-  | `electron/workspace-ui/workspace-render.js` | **282** | **18** ← tight, and not modified |
+  ⛔ **REV-1 AND REV-2 BOTH GOT THIS TABLE WRONG (round-2 A6 + D1).** The counts were produced
+  with PowerShell `Measure-Object -Line`, **which silently skips blank lines**. The gate counts
+  `content.split('\n').length` (`scripts/check-file-sizes.js`), i.e. blanks included. Corrected,
+  measured the gate's way:
+
+  | file | lines | free | rev-2 claimed |
+  |---|---|---|---|
+  | `electron/workspace-ui/live-seats.js` | **255** | 45 | 249 / 51 |
+  | `electron/workspace-ui/workspace-seats.js` | **200** | 100 | 194 / 106 |
+  | `electron/workspace-ui/workspace-render.js` | **297** | **3** ← and NOT grandfathered | 282 / 18 |
+
+  `workspace-render.js` has **three** lines of headroom, not eighteen. It is still not modified by
+  this PR, but the margin that made that comfortable was five times smaller than stated. **Never
+  use `Measure-Object -Line` for a gate-relevant count** — use `(Get-Content f).Count` or `wc -l`.
 
   `workspace-render.js` has 18 lines of headroom. **No task below adds a line to it.** If one
   turns out to need to, that is a signal to stop and re-scope, not to shave comments — comment
@@ -175,12 +207,30 @@ and is exactly what keeps distinct-alias benches byte-identical.
 
 ### 0.7 Where the seat id lives for dead seats
 
-| emitter | channel | carries a seat id? |
+⛔ **REV-2'S TABLE WAS WRONG ON EVERY ROW BUT ONE (round-2 C1, MAJOR, raised by kimi).** It
+recorded two emitters as unconditionally `dead-leg` when both branch on the failure class, and it
+omitted the dead-**wave** row entirely — which is where round-2 A3 landed. Corrected by tracing
+`run-retry-notes.js` against the two consumers rather than reading the emitters alone:
+
+| emitter | channel | key available to the consumer |
 |---|---|---|
-| `retryLegStillDeadNote` (`run-retry-notes.js:67`) | `dead-leg` | ✅ `data.firstFailure.seatId` |
-| `missingLegStillDeadNote` (`:92`) | `dead-leg` | ✅ `data.firstFailure.seatId` |
-| `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ **no `firstFailure` at all** |
-| `waveStillDeadNote` (`:28`, partial) | `seat-unbound` | ❌ alias only — and `deadSeats` filters this channel out anyway |
+| `retryLegStillDeadNote` (`:67`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ `data.firstFailure.seatId` — **but only on the `dead-leg` branch** |
+| `missingLegStillDeadNote` (`:92`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ same, same caveat |
+| `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ no `firstFailure` → **`data.seat`, an ALIAS** |
+| `waveStillDeadNote` (`:28`) — dead-wave arm | `dead-wave` | ❌ **`data.models[]`, ALIASES**, no `seat`, no `firstFailure` |
+| `waveStillDeadNote` (`:28`) — partial arm | `seat-unbound` | ❌ alias only |
+
+Both consumers filter to `dead-leg`/`dead-wave` only (`live-seats.js:188`,
+`workspace-seats.js:61`), so **every `seat-unbound` record is invisible to this surface.**
+
+⚠️ Round 2's C1 was framed as *"the seat id Task 2 depends on rides a channel nobody reads."*
+That overstates it, and glm said so in adjudication: the **non-missing `dead-leg` branch does
+carry `seatId` and is read.** The accurate statement is narrower and still serious: **a seat id is
+available on exactly one of five emitter arms.** The other four give an alias or nothing.
+
+⚠️ This table is also the reference material filed in `BACKLOG.md` for the deferred M3/M4 PR, so
+the rev-2 error would have propagated into work this plan does not even do. **Update the BACKLOG
+entry with this corrected table when revision 3 lands.**
 
 Evidence, measured not assumed: `run-retry.test.js:628` asserts
 `units[0].firstFailures.map(f => f.seatId)` → `['deepseek#1','deepseek#2']` on a twin bench, and
@@ -190,6 +240,53 @@ degrade record.
 ⚠️ `data.seat` itself stays the **alias**, deliberately — `run-retry-notes.js:39-45` explains
 that `verdict.js:72` compares it against `o.critic`, which is an alias. **Do not re-point
 `data.seat` at the seat id.** Add a key; never repurpose that one.
+
+### 0.8 The key strategy — stated, because no round proposed one
+
+The chair's sharpest observation was that **every finding proves the rev-2 key flip wrong and none
+says what right looks like.** Rev 2 had no §0.8; this is it, and it is the decision the rest of
+Task 2 follows from.
+
+**Rejected: seat-id-only keying** (rev 2's). Four of five emitter arms carry no seat id, so the
+map is keyed by alias for those records while the lookup asks for a seat id → **zero badges**
+(round-2 B1, A3). Silent under-badging, strictly worse than the over-badging at HEAD.
+
+**Rejected: emit the seat id on every channel.** It is a producer change across
+`run-retry-notes.js` and `run-retry-group.js` with exact-`toEqual` fixtures pinning every shape —
+the same blast radius the owner already deferred as Task 4. Re-importing it here reverses that
+ruling by the back door.
+
+**Chosen: dual lookup, seat-id first, alias fallback.**
+
+```js
+// key: seat id when the record names one, alias otherwise (unchanged from rev 2)
+var key = (d.data.firstFailure && d.data.firstFailure.seatId) || d.data.seat;
+// dead-wave arm keeps its existing models[] fan-out, keyed by alias
+// lookup: try the precise key, then the imprecise one
+var isRetried = isReviewingRole(s.role) && !!(retried[s.seat] || retried[s.model]);
+```
+
+**What this buys, stated per arm rather than claimed in aggregate:**
+
+| record | key | twin-bench result |
+|---|---|---|
+| `dead-leg` + `firstFailure.seatId` | `deepseek#2` | **exact** — badges only the retried seat ✅ |
+| `dead-leg`, no `firstFailure` (`srcLeg`) | `deepseek` | badges **both** twins — imprecise, but visible |
+| `dead-wave` (`models[]`) | `deepseek` | badges **both** twins — imprecise, but visible |
+| `seat-unbound` | — | never read (unchanged, pre-existing) |
+
+⚠️ **This does not fully fix M5, and the plan must not claim it does.** For alias-only records a
+twin bench still over-badges. That is **not a defect in the fix — it is the limit of the data**:
+those records do not record which seat failed, so no consumer can attribute them. The honest
+design is precision where the producer supplies it and disclosed imprecision where it does not.
+
+**Why over-badging is the right failure direction:** a badge that appears on one seat too many is
+visible and self-correcting under inspection; a badge that vanishes is silent. The product
+principle rates a silent degrade as severely as a crash, so when the data cannot decide, fail
+loud. Rev 2 chose the silent direction by accident; this chooses the loud one on purpose.
+
+**CHANGELOG must state the residual**: on a bench that repeats an alias, a retry recorded without
+a seat id marks every seat sharing that alias.
 
 ---
 
@@ -304,8 +401,8 @@ In `electron/workspace-ui/live-seats.js`, replace the `id:` line and add `seat:`
 ```js
       // ⚠️ DE-ROT (F37) + v4.8 PR5b: the composite id is over the SEAT, not the alias. A
       // --debate run emits extra runStats rows for the same alias (role 'rebuttal'/'revote',
-      // src/council/debate.js:115-130, merged at run-finish.js:43-48) — that is what the role
-      // half kills. PR1 then made a bench
+      // src/council/debate.js:134 `debateRunStatsRows`, merged at run-finish.js:43-48) — that is
+      // what the role half kills. PR1 then made a bench
       // that repeats an alias produce distinct SEATS, and two of them collided on the alias
       // half: renderSeats appended both on tick 1, then froze the first forever (it is never
       // re-matched, and `seen[key]` keeps it from being removed). `r.seat` is emit-when-set
@@ -382,7 +479,8 @@ record it, do not silently edit it.**
 - [ ] **Step 7: Commit**
 
 ```bash
-git add electron/workspace-ui/live-seats.js tests/workspace/seat-panel-twins.test.js
+git add electron/workspace-ui/live-seats.js tests/workspace/seat-panel-twins.test.js \
+        tests/workspace/live-model.test.js tests/workspace/workspace-render.test.js
 git commit -m "v4.8 PR5b T1: key terminal seat rows on the seat, not the alias"
 ```
 
@@ -409,13 +507,31 @@ is a visible regression. Do not commit Task 1 to a shared branch without this ta
 `WS.retriedSeats(degrades)` directly. Measured: `workspace-seats.js` has **no `module.exports`**,
 and `window.AmicusSeats` (`:195-199`) exposes only
 `{renderSeatsPanel, renderDeadSeatRows, appendDeadRows}` — `retriedAliases` is an IIFE-internal
-closure and is unreachable from any test. The established pattern for this module
-(`tests/workspace/workspace-seats.test.js:17-28`) is `jest.resetModules()`, install
-`makeFakeDom()` from `./helpers/fake-workspace-page` as `global.window`/`global.document`, then
-`require()` the IIFE and drive it through `renderSeatsPanel`.
+closure and is unreachable from any test.
 
 That constraint is a gift, not an obstacle: testing **through** `renderSeatsPanel` pins the
 user-visible defect (which rows carry the badge) instead of a helper's return value.
+
+⛔ **REV-2'S REPLACEMENT COULD NOT RUN EITHER — AND IT CITED THE WRONG PATTERN
+(round-2 A2 + B2 + C2 + C3, three independent raisers).** Rev 2's `beforeEach` loaded **only**
+`workspace-seats`, but `renderSeatsPanel` dereferences `window.AmicusLive.seatsFromRunStats`
+(`:83`), `window.AmicusRender.renderSeats` (`:85`) and `window.AmicusLive.deadSeats` (`:126`).
+`makeFakeDom()` supplies **none** of them, and supplies no `window.AmicusApp` either — so
+rev 2's `window.AmicusApp.state.detail = {…}` throws a TypeError before any assertion runs.
+
+Two further corrections from the same cluster:
+
+- **The module that provides `window.AmicusLive` is `live-model.js`, not `live-seats.js`** (C3).
+  `live-seats.js` sets `window.AmicusLiveSeats`; live-model re-exports it. Loading live-seats
+  alone never populates the global the panel reads.
+- **Rev 2 cited `workspace-seats.test.js:17-28` as "the established pattern". Wrong block** — that
+  is the delegation-spy test, which never drives `renderSeatsPanel` with real data. The block that
+  does is **`:63-98`**, and it loads **three** modules then installs the App stub.
+
+**Required bootstrap** — `jest.resetModules()`, install `makeFakeDom()`'s `window`/`document`/
+`NodeFilter` as globals, then `require()` **live-model → workspace-render → workspace-seats** in
+that order (matching `index.html` and `SCRIPT_LOAD_ORDER`), then install the `window.AmicusApp`
+stub with `state`, `$`, and `labelOf`. **Read `:63-98` and copy it; do not re-derive it.**
 
 - [ ] **Step 1: Measure the current behaviour**
 
@@ -491,11 +607,30 @@ Expected: FAIL, received `2`. The control PASSES (preservation pin — its mutan
 
 - [ ] **Step 4: Implement**
 
-Rename `retriedAliases` → `retriedSeats`, and key it on
-`data.firstFailure && data.firstFailure.seatId ? data.firstFailure.seatId : data.seat`.
-Then change the lookup at `:117` from `retried[s.modelInput || s.model]` to
-`retried[s.seat || s.model]` — `s.seat` is Task 1's new field; `seatsFromRunStats` emits no
-`modelInput`, so dropping it changes nothing on this path (§0.4).
+⛔ **REV-2'S LOOKUP WAS A SILENT REGRESSION (round-2 B1 + A3, two independent raisers).** It
+paired an **alias-or-seat-id key** with a **seat-id-only lookup** (`retried[s.seat || s.model]` —
+which reads `s.seat` first and only falls through when `s.seat` is *null*, i.e. never on a twin
+bench). For `srcLegStillDeadNote` and every `dead-wave` record the key is an alias, so the lookup
+missed and **the retried seat lost its badge entirely** — turning HEAD's visible false positive
+into a silent false negative. That is the defect class this whole module exists to prevent,
+re-created by the fix meant to remove it.
+
+Implement §0.8's **dual lookup** instead:
+
+```js
+// :57 — key: seat id when the record names one, alias otherwise. UNCHANGED from rev 2.
+var key = (d.data.firstFailure && d.data.firstFailure.seatId) || d.data.seat;
+// :117 — lookup: try the precise key, THEN the imprecise one. Both arms are load-bearing:
+// `s.seat` catches dead-leg records that name a seat; `s.model` catches srcLeg + dead-wave,
+// which name only an alias. Dropping either arm silently loses a whole emitter (round-2 B1/A3).
+var isRetried = isReviewingRole(s.role) && !!(retried[s.seat] || retried[s.model]);
+```
+
+⚠️ Keep the existing `data.models[]` fan-out for `dead-wave` (`workspace-seats.js:64-67`) —
+rev 2's key had no dead-wave branch at all, which is round-2 A3.
+
+⚠️ `seatsFromRunStats` emits no `modelInput`, so dropping it from the lookup changes nothing on
+this path (§0.4) — but `s.model` must stay, and now for a *different* reason than rev 2 gave.
 
 Keep the `kind`/`channel` filter exactly as it is — `workspace-seats.js:47-50` documents that it
 is load-bearing (`kind:'heal'` records carry the same `retryWaveId` fields for seats that
@@ -583,17 +718,30 @@ describe('T3 — the frozen row, at the DOM', () => {
 });
 ```
 
-- [ ] **Step 2: Confirm it fails at HEAD-minus-Task-1**
+- [ ] **Step 2: Confirm it fails without Task 1**
+
+⛔ **REV-2'S METHOD HERE WAS VACUOUS (round-2 A1, MAJOR).** It ran
+`git stash push electron/workspace-ui/live-seats.js`. **`git stash push <path>` stashes only
+*uncommitted* changes**, and Task 1 Step 7 already **committed** that file — so the stash is a
+no-op (`No local changes to save`), the tree still contains the fix, and the step passes while
+proving nothing. A step whose purpose is to observe RED, which cannot observe RED, is worse than
+no step: it certifies the pin.
+
+Use a reverse-checkout of the pre-Task-1 file instead, which works regardless of commit state:
 
 ```bash
-git stash push electron/workspace-ui/live-seats.js
+# restore the file as it was BEFORE Task 1's commit, run the pin, then restore the fix
+git checkout <task1-commit>^ -- electron/workspace-ui/live-seats.js
 npx jest tests/workspace/seat-panel-twins.test.js -t 'keep updating'
-git stash pop
+git checkout HEAD -- electron/workspace-ui/live-seats.js
 ```
 
-Expected while stashed: FAIL with received `[['ok','$0.01'],['DONE-2','$0.22']]` — the exact
-frozen-row signature from §0.1. This is the step that proves the test is pinned to the real
-defect and not to an artefact of the harness.
+Expected on the reverted file: FAIL with received `[['ok','$0.01'],['DONE-2','$0.22']]` — the
+exact frozen-row signature from §0.1. Confirm `git diff` is empty afterwards.
+
+⚠️ **Verify the revert actually reverted** before trusting the FAIL: `git diff HEAD --stat` must
+show `live-seats.js` modified during the run. Rev 2's whole failure was assuming a command had an
+effect without checking that it did — the chair named exactly this as the plan's root weakness.
 
 - [ ] **Step 3: Run it with Task 1 applied**
 

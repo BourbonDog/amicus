@@ -2425,14 +2425,27 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     seats. Measured: one seat alive, its twin genuinely dead → **0** dead rows rendered. The dead
     seat produces no output anywhere in the panel. Per the product principle this rates as
     severely as a crash.
-  - **Why it is not a pure renderer fix:** the seat id reaches the renderer as
-    `data.firstFailure.seatId` for `retryLegStillDeadNote` (`run-retry-notes.js:67`) and
-    `missingLegStillDeadNote` (`:92`) — evidenced by `run-retry.test.js:628`
-    (`['deepseek#1','deepseek#2']` on a twin bench) and `degrade-channels.test.js:126` (a shipped
-    degrade carrying `seatId`). But **`srcLegStillDeadNote` (`:51`) emits no `firstFailure` at
-    all**, so it needs a producer change. Its call site does have `unit`, which carries
-    `unit.seats` (index-parallel with `unit.models`, `run-retry-group.js:33`) and
-    `unit.firstFailures[].seatId` — the id is reachable, just not emitted.
+  - **Why it is not a pure renderer fix.** ⛔ **The table first filed here was WRONG on every row
+    but one** — corrected 2026-08-15 by the PR5b round-2 council (finding C1, Confirmed) after
+    tracing `run-retry-notes.js` against the two consumers instead of reading the emitters alone.
+    A seat id is available on **exactly one of five emitter arms**:
+
+    | emitter | channel | key the consumer sees |
+    |---|---|---|
+    | `retryLegStillDeadNote` (`run-retry-notes.js:67`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ `data.firstFailure.seatId` — **`dead-leg` branch only** |
+    | `missingLegStillDeadNote` (`:92`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ same, same caveat |
+    | `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ no `firstFailure` → `data.seat`, an ALIAS |
+    | `waveStillDeadNote` (`:28`) dead-wave arm | `dead-wave` | ❌ `data.models[]`, ALIASES |
+    | `waveStillDeadNote` (`:28`) partial arm | `seat-unbound` | ❌ alias only |
+
+    Both consumers filter to `dead-leg`/`dead-wave` (`live-seats.js:188`,
+    `workspace-seats.js:61`), so **every `seat-unbound` record is invisible to this surface**.
+    The `dead-leg` seatId evidence is real — `run-retry.test.js:628` shows
+    `['deepseek#1','deepseek#2']` on a twin bench and `degrade-channels.test.js:126` shows a
+    shipped degrade carrying `seatId` — but it covers one arm, not the family.
+    `srcLegStillDeadNote`'s call site does have `unit`, carrying `unit.seats` (index-parallel with
+    `unit.models`, `run-retry-group.js:33`) and `unit.firstFailures[].seatId`, so the id is
+    reachable there — just not emitted. **Design the producer change against all five arms.**
   - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
     (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
   - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
