@@ -40,7 +40,14 @@ on:
       diff_cap_bytes:
         description: Max bytes of PR diff fed to the council
         type: string
-        default: '120000'
+        # ⚠️ 120000 -> 240000 (owner ruling, 2026-08-15). MEASURED on PR #159: the diff reached
+        # 214,978 bytes, so ~44% of it was never fed to the council — and the reviewers could
+        # not tell which 44%. Round 4's only MAJOR finding graded a file it said outright was
+        # "elided from the diff, so I can only assess it from the description", i.e. it reviewed
+        # the PR prose about the code instead of the code. Findings about invisible code look
+        # exactly like findings about visible code in the verdict table, which is the real cost.
+        # ⚠️ BOTH this and the `||` fallback below must move together — see the note there.
+        default: '240000'
       require_label:
         description: Require the council-review label on the PR
         type: boolean
@@ -89,7 +96,11 @@ jobs:
       DEBATE: ${{ format('{0}', inputs.debate) }}
       FAIL_ON: ${{ inputs.fail_on || 'none' }}
       MAX_COST: ${{ inputs.max_cost || '2.00' }}
-      DIFF_CAP: ${{ inputs.diff_cap_bytes || '120000' }}
+      # ⚠️ THIS is the load-bearing default, not the `default:` under workflow_call.inputs.
+      # A `pull_request` trigger supplies no `inputs`, so every automatic council review on a
+      # PR takes this `||` branch — editing only the input default would have left the real
+      # path at 120000 and looked like a fix that changed nothing.
+      DIFF_CAP: ${{ inputs.diff_cap_bytes || '240000' }}
       RUN_DIR: council-run
     steps:
       - name: Gate on secret availability (soft-skip fork PRs)
