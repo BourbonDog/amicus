@@ -155,7 +155,22 @@
       // `modelInput` at all — live payload seats, which DO carry it, reach `deadSeats` at :217
       // and never reach here. The invariant is pinned by test (12) in workspace-seats.test.js;
       // if that test ever fails, restore the `s.modelInput` arm rather than deleting the test.
-      var isRetried = isReviewingRole(s.role) && !!(retried[s.seat] || retried[s.model]);
+      // ⚠️ `s.seat &&` is LOAD-BEARING (council A1). `s.seat` is null on a unique bench, and a
+      // bare `retried[s.seat]` coerces null to the STRING key 'null' — so a seat with no seat id
+      // would match a degrade record whose alias is literally `null`. Measured: with
+      // `m = Object.create(null); m['null'] = true`, `m[null]` is `true`. Contrived, but this
+      // module already guards the same class elsewhere — live-seats.js:170-174 records a model
+      // named `toString` crashing the seats repaint, which is why Object.create(null) is used
+      // throughout. The guard costs nothing and closes it.
+      //
+      // ⚠️ KEYSPACE (council B1): `retried` deliberately mixes seat ids (`alias#N`) and bare
+      // aliases as keys, because only one of five emitter arms supplies a seat id. That is a
+      // real collision surface and a KNOWN one — src/council/seats.js:236 already records that
+      // a literal alias containing '#' collides with a minted #N id, and preflightSeats refuses
+      // exactly that shape. This map inherits that guarantee rather than re-deriving it; if
+      // preflightSeats ever stops refusing it, this lookup becomes ambiguous.
+      var isRetried = isReviewingRole(s.role)
+        && !!((s.seat && retried[s.seat]) || retried[s.model]);
       if (isRetried) {
         row.classList.add('seat-retried');
         row.children[8].textContent = '↻ retried once';

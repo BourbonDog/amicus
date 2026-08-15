@@ -333,6 +333,32 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
       expect(r.modelInput).toBeUndefined();
     });
   });
+
+  test('(13) PR5b: a null seat id does not coerce into the string key "null"', () => {
+    // Council finding A1: on a UNIQUE bench `s.seat` is null, and a bare `retried[s.seat]`
+    // coerces null to the string key 'null' — so any seat with no seat id would match a degrade
+    // record whose alias is literally `null`. Same class as the `toString` alias that crashed
+    // the seats repaint (live-seats.js:170-174), which is why this family uses
+    // Object.create(null). The `s.seat &&` guard in the lookup is what closes it.
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat null did not review',
+      why: 'retried once', effect: '0 of 2 seats reviewed',
+      data: { seat: 'null', status: 'error', retryWaveId: 'r1-c1r1' },
+    }];
+    // A unique bench: no `seat` on any cost row, so every seat row carries `seat: null`.
+    const tbody = paint([
+      { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+      { model: 'beta', role: 'seat', status: 'complete', costDisplay: '$0.02' },
+    ], degrades);
+
+    // THREE rows, not two: the two seat rows plus a dead-seat ghost for the alias `null`, which
+    // has no cost row of its own and is therefore not suppressed. The ghost is expected and is
+    // not what this pins — the discriminator is that NEITHER seat row carries the badge.
+    // Without the `s.seat &&` guard both seat rows badge, because retried[null] reads
+    // retried['null'].
+    expect(tbody.children.length).toBe(3);
+    expect(badged(tbody)).toBe(0);
+  });
 });
 
 /**
