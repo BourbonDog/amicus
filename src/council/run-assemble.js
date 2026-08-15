@@ -233,9 +233,14 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // One row per judge, attributing the judge's ORIGINAL Stage-2 wave leg (never
   // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
   // whose wave leg died still gets an honest error row.
+  // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
+  // `joinsLedger` has no 'judge' member, so nothing consumed it; report.js's cost
+  // table does now, and without it a twin bench's two judge rows are identical.
+  // `buildRunStatsEntry` applies the shared emit-when-DIFFERENT predicate (:89), so
+  // a unique bench stays byte-identical and no new predicate enters the tree.
   for (const j of (judgeResults || [])) {
     runStats.push(buildRunStatsEntry({
-      leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance,
+      leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance, seat: j.seat,
     }));
   }
   if (chairStats) { runStats.push(chairStats); }
