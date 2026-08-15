@@ -360,7 +360,12 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       ]);
       AmicusRender.renderSeats(tbody, rows, false, () => null);
       expect(tbody.children.length).toBe(3);
-      expect(tbody.children.map((r) => r.dataset.key)).toEqual(['gemini:seat', 'gemini:rebuttal', 'gemini:revote']);
+      // PR5b Task 1: keys are `JSON.stringify([seat-or-alias, role])`. What this pins is that the
+      // three debate roles stay DISTINCT rows; the key spelling is incidental.
+      expect(new Set(tbody.children.map((r) => r.dataset.key)).size).toBe(3);
+      expect(tbody.children.map((r) => r.dataset.key)).toEqual([
+        '["gemini","seat"]', '["gemini","rebuttal"]', '["gemini","revote"]',
+      ]);
     });
 
     // Regression guard for the key-escaping bug (review item 1): a v4.2 local-provider alias
