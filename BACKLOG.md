@@ -2384,7 +2384,7 @@ reusing the existing priced picker.
 Three adjudicated council rounds on [PR #159] (7 → 9 → 11 Confirmed). The findings are
 answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
 
-- [ ] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
+- [x] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
   before PR5b** (ruling). The file is at **300/300** with zero headroom, and it was itself split
   out of `artifact-guard.js` for this same gate earlier in PR5a. Comment prose has now been
   shaved three times to land defect fixes, which is the tell. **Named seam:** `isSeatTable` +
@@ -2392,6 +2392,17 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   dependency on the name-derivation body); `artifactAllowlist` stays. Council-3's B4/B5 both
   landed inside `artifactAllowlist`, so no work is duplicated by doing this after them.
   ⚠️ Do NOT fold this into a defect PR — it is a restructure no council has reviewed.
+  — done, [PR #160] (merge `ccb0551d`), shipped as `src/workspace/seat-space.js`. Exactly the
+  named seam, moved byte-for-byte and re-exported, so no caller changed: `artifact-names.js`
+  **300 → 222**, `seat-space.js` 113. Pinned by `tests/workspace/seat-space.test.js`, which
+  asserts function **identity** (`toBe`) across all three import paths — a behavioural test
+  cannot catch the re-implementation drift that produced council-1's B1, so identity is the
+  property under test. ⚠️ **This is the pre-PR5b extraction, NOT PR5b itself** — the branch was
+  named `v48-pr5b-seat-space-split`, which mis-labels it. PR5b (the live/DOM path) is still
+  unstarted; see the plan's §0.3 split table.
+  ⚠️ Its council verdict — "Ship it", 0/0/0/0 — was `stage1:PARTIAL` (3 seats, `inkling` n/a)
+  **and** was the first run under the raised `diff_cap_bytes`, so it is not clean evidence that
+  the cap fix worked. The next substantive PR reviewed at 240k is the real test.
 - [ ] **Gate `review-claude.md` on a real producer marker** (council-2 B3 / council-3 A3, minor,
   rated *thin* both rounds; owner ruled HOLD + file). It is unconditional in `FIXED_ARTIFACTS`
   because `run.json` carries **no claude marker at all**: `claudeInCouncil` is set only on
