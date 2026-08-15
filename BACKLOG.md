@@ -2451,12 +2451,35 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
     `run-retry-notes.js:39-41` warns that adding a key unconditionally breaks them. Budget for
     fixture updates.
-  - ⚠️ `workspace-seats.js:47`'s docblock claims `retriedAliases` mirrors `deadSeats`' predicate
-    "EXACTLY, and must keep mirroring it". PR5b Task 3 changes one side. **Re-read that comment
-    before changing the other** — a mirror that stops mirroring is council-1 B1's defect class.
+  - ⚠️ `workspace-seats.js:47`'s docblock claimed `retriedSeats` (then `retriedAliases`) mirrors
+    `deadSeats`' predicate "EXACTLY, and must keep mirroring it". **PR5b shipped and changed one
+    side**: the kind/channel filter still mirrors, the KEY no longer does. The docblock now says
+    so. **Re-read it before changing the other side** — a mirror that stops mirroring is
+    council-1 B1's defect class. When this item lands, restore the full mirror.
   - A **partial** fix (seat-key only where `firstFailure.seatId` exists) was considered and
     rejected: it leaves a silent erasure in place on one emitter while appearing to close the
     class. Either close it on every emitter or disclose the residual case explicitly.
+
+- [ ] **The `dead-wave` arm of `retriedSeats` has no twin-bench test.** Raised by the adjudicated
+  council on [PR #162] as finding A2 (minor, glm, Confirmed a3/d0, solid) against a `Ship it`
+  verdict, and filed rather than fixed in that PR — it is a coverage gap, not a defect.
+  - **What exists:** `tests/workspace/workspace-seats.test.js` test (4) covers dead-wave on
+    **distinct aliases**, and tests (9)–(11) cover twin benches on the **dead-leg** arm. Nothing
+    sits at the intersection.
+  - **Why it matters:** dead-wave is one of the four alias-only emitter arms the dual lookup
+    (`retried[s.seat] || retried[s.model]`, `workspace-seats.js:117`) exists to serve — it emits
+    `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:28-47`). On a twin
+    bench it should badge **both** seats sharing the alias, which is the disclosed imprecision in
+    the plan's §0.8 and in the CHANGELOG, and nothing currently pins that it does.
+  - **Not unexercised, just unpinned at the intersection:** mutant M2 (dropping the `s.model` arm)
+    reddened test (4) along with eight others, so the arm is load-bearing and guarded — but only
+    on a distinct-alias bench.
+  - **Shape of the test:** reuse the `paint(costRows, degrades, …)` helper in that file; two cost
+    rows carrying `seat: 'deepseek#1'` / `'deepseek#2'`, one `dead-wave` degrade with
+    `data: { models: ['deepseek'], retryWaveId: … }`, expect **2** badged. Pair it with the
+    existing distinct-alias case so the asymmetry is visible in one place.
+  - ⚠️ Do this **with** the dead-seat work above if that lands first — both touch the same
+    keyspace, and a twin-bench dead-wave fixture is exactly what the M3/M4 fix needs anyway.
 
 ### Standing note for the next reviewer of this area
 
