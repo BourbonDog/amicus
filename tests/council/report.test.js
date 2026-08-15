@@ -218,4 +218,57 @@ describe('What was lost (v4.6 Plan 2)', () => {
     expect(md).not.toContain('deep (chair)');
     expect(md).not.toContain('critic1 (critic)');
   });
+
+  // ── v4.8 PR5a fix-wave, council finding A2 ────────────────────────────────────────
+  // T5 changed the cost-row label to `r.seat || r.model` and had no OUTPUT-level pin:
+  // report.test.js only ever fed runStats rows with no `seat`, so the whole change was
+  // green against a mutant that deleted it. Both formats, because report.js and
+  // report-html.js render m.cost.rows through two independent templates.
+  const twinCostVerdict = () => {
+    const v = lostVerdict();
+    v.council = ['gemini', 'gemini'];
+    v.runStats = [
+      { model: 'gemini', seat: 'gemini#1', role: 'seat', wasChair: false, status: 'complete', durationMs: 10, usage: null },
+      { model: 'gemini', seat: 'gemini#2', role: 'seat', wasChair: false, status: 'complete', durationMs: 11, usage: null },
+      { model: 'gemini', seat: 'gemini#1', role: 'judge', wasChair: false, status: 'complete', durationMs: 5, usage: null },
+      { model: 'gemini', seat: 'gemini#2', role: 'judge', wasChair: false, status: 'complete', durationMs: 6, usage: null },
+      { model: 'deep', role: 'chair', wasChair: true, status: 'complete', durationMs: 7, usage: null },
+    ];
+    return v;
+  };
+
+  test("A2: a twin bench's four cost rows are DISTINGUISHABLE in both formats", () => {
+    const md = buildReport({ verdict: twinCostVerdict() }, { format: 'md' });
+    const html = buildReport({ verdict: twinCostVerdict() }, { format: 'html' });
+    for (const out of [md, html]) {
+      // Killing mutant (MEASURED red): revert the label to `r.model` -> all four rows
+      // read `gemini` / `gemini (judge)` and these four assertions fail.
+      expect(out).toContain('gemini#1');
+      expect(out).toContain('gemini#2');
+      expect(out).toContain('gemini#1 (judge)');
+      expect(out).toContain('gemini#2 (judge)');
+      // The seat name must not swallow the role suffix, nor the chair row a seat it
+      // never had — `r.seat || r.model` has to fall through for a row that carries none.
+      expect(out).toContain('deep');
+      expect(out).not.toContain('deep (chair)');
+    }
+  });
+
+  test('A2: a row with NO seat still renders its model — the fallback half of `r.seat || r.model`', () => {
+    // Byte-identity guard: this is every historical verdict, and every unique-alias
+    // bench, where run-assemble.js emits no `seat` key at all. Killing mutant: change
+    // the label to a bare `r.seat` -> the model name disappears from the report.
+    const v = lostVerdict();
+    v.runStats = [
+      { model: 'alpha', role: 'seat', wasChair: false, status: 'complete', durationMs: 10, usage: null },
+      { model: 'alpha', role: 'judge', wasChair: false, status: 'complete', durationMs: 5, usage: null },
+    ];
+    // Scoped to the cost table: over the whole report `undefined` also catches this
+    // deliberately-minimal fixture's empty tierCounts, which this test says nothing about.
+    const cost = buildReport({ verdict: v }, { format: 'md' }).slice(0);
+    const table = cost.slice(cost.indexOf('## Cost'));
+    expect(table).toMatch(/\|\s*alpha\s*\|/);
+    expect(table).toContain('alpha (judge)');
+    expect(table).not.toContain('undefined');
+  });
 });

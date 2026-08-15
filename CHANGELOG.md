@@ -191,8 +191,14 @@ All notable changes to Amicus are documented here. Format follows
   A file an *orphaned* leg wrote under its alias stays readable but is attributed to no seat:
   `run.json` cannot say which seat produced it, and guessing is the silent mis-attribution the
   seat spine exists to prevent. Where such a name collides with another seat's own artifact, the
-  run-integrity banner says so. Benches whose aliases are all distinct are byte-for-byte
-  unaffected — every name they write is on the list, and the list is unchanged.
+  run-integrity banner says so — and only the artifact *kinds* that orphan could actually have
+  written lose their attribution. A leg that orphaned in the cross-review wave costs the colliding
+  seat its `judge-` file and not its `review-`, because that leg's own review landed under a seat
+  name; a leg that orphaned in Stage 1 costs it both, because a Stage-1 orphan is re-admitted to
+  the cross-review under a placeholder and writes an alias-named judge file too. The list of
+  readable names is not narrowed either way: a name is dropped from *attribution*, never from the
+  allowlist. Benches whose aliases are all distinct are byte-for-byte unaffected — every name they
+  write is on the list, and the list is unchanged.
 - **⚠️ The peers-only filter now excludes the raiser by SEAT, so findings on a bench that repeats
   an alias change tier — in BOTH directions.** Before this release the filter compared council
   aliases, so on `--models deepseek,deepseek,gpt` the *second* deepseek seat's vote was discarded

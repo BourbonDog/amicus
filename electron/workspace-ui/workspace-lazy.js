@@ -132,8 +132,28 @@
       });
       lastWiredRunId = A.state.detail.runId;
     }
-    var bench = A.state.detail.run.bench || [];
-    var debated = !!A.state.detail.run.debate;
+    // ⚠️ Fix-wave (council A1): CAPTURED here, at wire time, exactly like `bench` and
+    // `debated` have always been — never re-read inside roster(). The `files` closures below
+    // are invoked LATER (on first panel open, and again on every same-run rewire), by which
+    // point `A.state.detail` may be a different payload entirely: an unreadable run, whose
+    // detail carries `error` and no `run` at all. Reading `A.state.detail.run.seats` at that
+    // moment threw — a crash path the bench-iteration code it replaced never had, because
+    // `bench` was already a local. Capturing also stops roster() from returning run B's
+    // seats while `debated` still describes run A.
+    var detail = A.state.detail;
+    var run = detail.run || {};
+    var bench = run.bench || [];
+    var debated = !!run.debate;
+    // ⚠️ Fix-wave (council B1): the seat-space decision is NOT re-derived here. It is
+    // isSeatTable(run.seats) — the same predicate artifactAllowlist gates on — computed in
+    // src/workspace/run-detail.js and shipped as its answer. `!seats || !seats.length`, the
+    // check this replaces, is strictly weaker: it accepts a seats[] with duplicate, empty or
+    // non-string ids that isSeatTable rejects, so a malformed table put derived.artifactsByModel
+    // in ALIAS space while this roster handed resolveArtifactName SEAT ids. Every lookup
+    // missed, resolveArtifactName returned null, present(null) dropped every row, and all
+    // three panels rendered empty with no banner and no error. Absent (a pre-fix detail
+    // payload) reads as alias space, which is the space such a payload's map is keyed in.
+    var seatSpace = !!(detail.derived && detail.derived.seatSpace);
     // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
     // artifact is NOT translated into a friendly "not written yet" note anywhere in this
     // read path — it lands in the panel verbatim, absolute host path and all. `run.debate` is
@@ -160,11 +180,10 @@
     // mode ON. A seat id contains its alias, so rendering one defeats blind mode. This is
     // the same split matrix-model.js already makes for the adjudication columns.
     function roster() {
-      var seats = A.state.detail.run.seats;
-      if (!seats || !seats.length) {
+      if (!seatSpace) {
         return bench.map(function (m) { return { key: m, label: A.state.labelByModel[m] }; });
       }
-      return seats.map(function (s) {
+      return run.seats.map(function (s) {
         return { key: s.id, label: A.state.labelByModel[s.alias] };
       });
     }

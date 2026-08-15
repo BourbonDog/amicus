@@ -19,7 +19,10 @@ const { isRealpathContained } = require('../utils/path-fence');
 // v4.8 PR5a: name derivation moved to ./artifact-names (the 300-line gate). The two
 // constants and artifactAllowlist are re-exported below unchanged, so every existing
 // caller and test keeps importing them from here.
-const { artifactAllowlist, FIXED_ARTIFACTS, DEBATE_ARTIFACTS } = require('./artifact-names');
+// `isSeatTable` joins them (fix-wave, council A1/B1): run-detail.js has to answer "is
+// this run in seat space?" with THE predicate artifactAllowlist gates on, not a second
+// spelling of it, and this module is already its import surface.
+const { artifactAllowlist, isSeatTable, FIXED_ARTIFACTS, DEBATE_ARTIFACTS } = require('./artifact-names');
 
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
@@ -132,6 +135,6 @@ function readRunArtifact(project, runId, name, deps = {}) {
 }
 
 module.exports = {
-  artifactAllowlist, readRunArtifact, isRealpathContained,
+  artifactAllowlist, isSeatTable, readRunArtifact, isRealpathContained,
   FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES,
 };

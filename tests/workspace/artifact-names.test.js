@@ -87,6 +87,72 @@ describe('the orphan intersection — where four designs died', () => {
     expect(list.artifactsByModel['a-1#1'].review).toBe('review-a-1-1.md');
   });
 
+  // ── v4.8 PR5a fix-wave, council finding B2 ──────────────────────────────────────
+  // A contested stem used to drop EVERY kind from the owning seat's attribution. The
+  // kinds an orphan can own are not "all of them": they are what its note proves, and
+  // `data.waveId` proves it exactly — run-stage2.js:67/69/90 build the -s2 wave id from
+  // the same runId run.json carries, so this is an equality test, not a prefix guess.
+  //
+  // ⚠️ The Stage-1 half of B2's rationale ("the orphan may have only written a review")
+  // is measured FALSE and is disputed on the PR, so it is deliberately not implemented:
+  // tests/council/run-stages.test.js:1757 shows a Stage-1 orphan's judge file is
+  // alias-named too (it re-binds to a placeholder in Stage 2 and emits no -s2 note).
+  // The two tests below pin both directions so neither can be "fixed" into the other.
+  const S2_RUN = 'abc123';
+  const s2Orphan = (alias) => orphanNote(alias, `${S2_RUN}-s2`);
+
+  test('B2: a Stage-2 orphan contests the JUDGE half only — the seat keeps its own review', () => {
+    const bench = ['a', 'a', 'a-1', 'a-1'];
+    const list = artifactAllowlist({
+      runId: S2_RUN, bench, seats: seatsFor(bench), degrades: [s2Orphan('a-1')],
+    });
+    // Killing mutant: delete `if (!claimed.has(kind)) { continue; }` from the orphan
+    // loop -> review-a-1.md is contested again and this is undefined (MEASURED red).
+    expect(list.artifactsByModel['a#1'].review).toBe('review-a-1.md');
+    expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
+    // The banner is NOT weakened: the stem is still ambiguous, still named once, and
+    // still names both claimants. Anti-vacuity for the assertion above.
+    expect(list.collisions).toEqual([
+      { sanitized: 'a-1', models: ['a#1', 'a-1'], orphan: true },
+    ]);
+    expect(list).toContain('review-a-1.md');
+  });
+
+  test('B2: a Stage-1 orphan still contests BOTH — its judge file is alias-named too', () => {
+    const bench = ['a', 'a', 'a-1', 'a-1'];
+    // Same run id, same alias, same collision — ONLY the wave differs.
+    const list = artifactAllowlist({
+      runId: S2_RUN, bench, seats: seatsFor(bench), degrades: [orphanNote('a-1', `${S2_RUN}-s1`)],
+    });
+    expect(list.artifactsByModel['a#1'].review).toBeUndefined();
+    expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
+  });
+
+  test('B2: a note whose waveId cannot be matched falls to the WIDER pair (fail-safe)', () => {
+    const bench = ['a', 'a', 'a-1', 'a-1'];
+    // No runId on the run doc -> the -s2 equality can never hold. Over-contesting is
+    // the safe direction: attributing a file that may hold the orphan's prose is the
+    // silent misattribution this whole block exists to prevent.
+    const list = artifactAllowlist({ bench, seats: seatsFor(bench), degrades: [s2Orphan('a-1')] });
+    expect(list.artifactsByModel['a#1'].review).toBeUndefined();
+    expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
+  });
+
+  test('B2: narrowing the CONTEST never narrows the LIST — a --debate orphan keeps its names', () => {
+    const bench = ['gemini', 'gemini'];
+    const list = artifactAllowlist({
+      runId: S2_RUN, bench, seats: seatsFor(bench), debate: true, degrades: [s2Orphan('gemini')],
+    });
+    // A debate leg whose raiser key names no seat takes materializeDebate's alias
+    // branch, so these can exist on disk with no note recording them. Killing mutant:
+    // drive `orphanKinds` off `claimed` -> both of these vanish and readRunArtifact
+    // answers `artifact not allowed` for a file that is really there.
+    expect(list).toContain('rebuttal-gemini.md');
+    expect(list).toContain('revote-gemini.md');
+    expect(list).toContain('review-gemini.md');
+    expect(list).toContain('judge-gemini.md');
+  });
+
   test('the same bench with every leg BOUND banners nothing and attributes all four', () => {
     const bench = ['a', 'a', 'a-1', 'a-1'];
     const list = artifactAllowlist({ bench, seats: seatsFor(bench), degrades: [] });

@@ -1756,6 +1756,16 @@ describe('runStage2', () => {
         // The unbound judge falls back to the ALIAS filename (today's shape).
         const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
         expect(judgeFiles).toEqual(['judge-deepseek-2.md', 'judge-deepseek.md']);
+        // ⚠️ v4.8 PR5a fix-wave (council B2) reads this pair of facts as ONE claim, so both
+        // halves are asserted here rather than one being left to inference. A Stage-1 orphan
+        // is re-admitted to Stage 2 under a placeholder, BINDS to it, and therefore
+        // (a) writes an ALIAS-named judge file — the line above — and (b) emits NO -s2
+        // seat-unbound note of its own. src/workspace/artifact-names.js's orphanClaims
+        // depends on exactly that: a Stage-1 note has to claim review- AND judge-, because
+        // no second note will ever arrive to claim the judge half. Narrowing a Stage-1
+        // note to review- alone (the shape council finding B2's rationale argued for)
+        // would leave `judge-deepseek.md` attributed to seat deepseek#1.
+        expect(ctx._notes).toEqual([]);
         // …and the sentinel never reaches the shipped artifact either. This is
         // the real production join (run-assemble.js), not a re-implementation.
         const { adjudications } = buildTallyInput({

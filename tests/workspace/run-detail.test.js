@@ -271,6 +271,50 @@ describe('getRunDetail', () => {
     });
   });
 
+  // ── v4.8 PR5a fix-wave, council finding B1 ────────────────────────────────────────
+  // The renderer cannot require() src/, so run-detail.js answers "which name space is
+  // this payload in?" ON ITS BEHALF. The finding was that the two halves had drifted:
+  // the answer must be THE predicate the allowlist itself gates on, never a re-spelling.
+  // Only a pin on getRunDetail can say that — tests/workspace/seat-panels.test.js builds
+  // its fixture by calling isSeatTable directly, so it cannot see this file lie.
+  // (MEASURED: a `!!(run.seats && run.seats.length)` mutant here SURVIVED the renderer
+  // suite. That survival is what this test exists to convert into a kill.)
+  describe('derived.seatSpace is isSeatTable, not a second spelling of it', () => {
+    const { isSeatTable } = require('../../src/workspace/artifact-guard'); // eslint-disable-line global-require
+
+    // Each entry is a seats[] a hand-edited run.json can really hold, and each fails
+    // isSeatTable for a DIFFERENT reason — which is exactly what the weaker predicates
+    // (`.length`, a truthiness test) cannot tell apart.
+    const SEAT_TABLES = {
+      'seat space (well formed)': [{ id: 'gemini#1', alias: 'gemini' }, { id: 'gemini#2', alias: 'gemini' }],
+      'absent': undefined,
+      'empty': [],
+      'duplicate ids': [{ id: 'x#1', alias: 'gemini' }, { id: 'x#1', alias: 'gpt' }],
+      'an empty id': [{ id: '', alias: 'gemini' }],
+      'a null id': [{ id: null, alias: 'gemini' }],
+      'a numeric id': [{ id: 1, alias: 'gemini' }],
+    };
+
+    for (const [label, seats] of Object.entries(SEAT_TABLES)) {
+      test(`${label}: agrees with the predicate AND with the map it ships beside`, () => {
+        const project = makeProject();
+        const runDir = runDirIn(project, 'aaaa1111');
+        const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+        run.bench = ['gemini', 'gemini'];
+        if (seats === undefined) { delete run.seats; } else { run.seats = seats; }
+        fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+        registerPointer(project, 'aaaa1111', runDir);
+        const d = getRunDetail(project, 'aaaa1111');
+        expect(d.derived.seatSpace).toBe(isSeatTable(seats));
+        // The property that actually matters downstream, stated so it cannot pass
+        // vacuously: the flag has to describe the space artifactsByModel is KEYED in.
+        // Seat space keys by seat id (which contains '#'), alias space by bench alias.
+        const keys = Object.keys(d.derived.artifactsByModel);
+        expect(keys.every((k) => k.includes('#'))).toBe(d.derived.seatSpace);
+      });
+    }
+  });
+
   test('artifactCollisions is empty when bench models sanitize to distinct names', () => {
     const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
     const d = getRunDetail(project, 'aaaa1111');

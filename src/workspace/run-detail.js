@@ -13,7 +13,7 @@ const { formatCost } = require('../utils/pricing');
 const { readPointer } = require('./run-scan');
 const { buildNamePairs } = require('./blind-mode');
 const { buildMatrixModel } = require('./matrix-model');
-const { artifactAllowlist } = require('./artifact-guard');
+const { artifactAllowlist, isSeatTable } = require('./artifact-guard');
 const { isRealpathContained } = require('../utils/path-fence');
 
 /**
@@ -222,6 +222,16 @@ function getRunDetail(project, runId) {
       // pre-v4.5 runs, live-doc consumers not yet updated) apart from a real map, and fall back
       // to its legacy sanitizeName(model) computation only in the former case.
       artifactsByModel: artifactNames.artifactsByModel || null,
+      // ⚠️ v4.8 PR5a fix-wave (council A1/B1): WHICH SPACE the payload above is in, decided
+      // by the one predicate artifactAllowlist itself gates on (isSeatTable, re-exported
+      // through artifact-guard). The renderer is a plain browser script and cannot
+      // require() it, and the alternative — re-spelling the predicate in workspace-lazy.js
+      // the way sanitizeName/TERMINAL_STATUSES are hand-copied — is exactly the drift that
+      // caused the finding: roster() gated on `!seats || !seats.length`, which is strictly
+      // weaker, so a malformed seats[] sent this map to ALIAS space while the roster stayed
+      // in SEAT space and every artifactsByModel lookup missed. Shipping the ANSWER instead
+      // of a copy of the question makes that divergence unrepresentable.
+      seatSpace: isSeatTable(run.seats),
     };
   }
 

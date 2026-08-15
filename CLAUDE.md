@@ -692,8 +692,8 @@ evals/
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
-| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |
-| `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanNames()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |
+| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()` |
+| `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanNames()`, `orphanClaims()`, `FIXED_ARTIFACTS()` |
 | `workspace/blind-mode.js` | Council Workspace — blind-mode name mapping (v4.4 §6.3). | `buildNamePairs()`, `labelFor()`, `pairFor()` |
 | `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
 | `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |

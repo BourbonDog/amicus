@@ -69,15 +69,41 @@ function isSeatTable(seats) {
  * Gating fallbacks on this — rather than emitting one per seat alias — is what keeps a
  * healthy run (twin, --debate, or with a merely-dead seat) from claiming names nobody
  * wrote and raising a run-integrity banner for it.
+ *
+ * ⚠️ v4.8 PR5a fix-wave (council B2): the note also says WHICH kinds that alias can own,
+ * and it is not "all of them". `orphanLegNote` has exactly three call sites — run-stages.js:71
+ * and :140 (a Stage-1 wave and its retry) and run-stage2.js:110 (the -s2 judge wave) — and
+ * `data.waveId` separates them EXACTLY, not heuristically: run-stage2.js:67/69/90 build that
+ * id as `${runId}-s2` from the same runId this run.json carries.
+ *   - a -s2 note -> `judge-<alias>.md` (run-stage2.js:142) and nothing else; its own review
+ *     landed under a SEAT name, because it bound in Stage 1.
+ *   - any other  -> `review-<alias>.md` (run-launch.js:207) AND `judge-<alias>.md`: a Stage-1
+ *     orphan is re-admitted to Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that
+ *     `judgeSeatOf` filters out (:105-107), so its judge leg takes the alias branch too — and
+ *     emits no -s2 note, because it BOUND. Measured: run-stages.test.js:1757.
+ * An unmatchable waveId falls to the wider Stage-1 pair — over-contesting is fail-safe.
+ * @returns {Map<string, Set<string>>} orphan alias -> the kinds it can own, in
+ *   first-occurrence order (what keeps the emitted name list byte-identical).
  */
-function orphanNames(run) {
+const S2_ORPHAN_KINDS = Object.freeze(['judge']);
+const S1_ORPHAN_KINDS = Object.freeze(['review', 'judge']);
+function orphanClaims(run) {
   const degrades = run && Array.isArray(run.degrades) ? run.degrades : [];
-  const names = degrades
-    .filter(d => d && d.channel === 'seat-unbound' && d.data && d.data.legId)
-    .map(d => d.data && d.data.seat)
-    .filter(s => typeof s === 'string' && s !== '');
-  return [...new Set(names)];
+  const s2WaveId = run && typeof run.runId === 'string' ? `${run.runId}-s2` : null;
+  const claims = new Map();
+  for (const d of degrades) {
+    if (!d || d.channel !== 'seat-unbound' || !d.data || !d.data.legId) { continue; }
+    const alias = d.data.seat;
+    if (typeof alias !== 'string' || alias === '') { continue; }
+    if (!claims.has(alias)) { claims.set(alias, new Set()); }
+    const kinds = (s2WaveId && d.data.waveId === s2WaveId) ? S2_ORPHAN_KINDS : S1_ORPHAN_KINDS;
+    for (const k of kinds) { claims.get(alias).add(k); }
+  }
+  return claims;
 }
+
+/** The orphan aliases alone, first-occurrence order — one spelling of the filter above. */
+function orphanNames(run) { return [...orphanClaims(run).keys()]; }
 
 /**
  * @param {object} run parsed run.json (may be partial)
@@ -165,19 +191,11 @@ function artifactAllowlist(run) {
     }
     names.push(`review-${s}.md`);
     names.push(`judge-${s}.md`);
-    // rebuttal-/revote- are listed here under the same BENCH ALIAS through the same (now
-    // possibly suffixed) name, so a pair of DISTINCT aliases colliding after sanitizeName is
-    // disambiguated the same way review-/judge- are.
-    // ⚠️ v4.8 PR3: this no longer matches what the engine WRITES on a bench that repeats an
-    // alias. materializeDebate (run-launch.js:234) now names the file from the leg's SEAT when
-    // one is bound — run-debate.js:139-140 and run-debate-revote.js:161-163 attach it — so two
-    // twins write `rebuttal-<alias>-1.md` / `-2.md` while this loop lists one
-    // `rebuttal-<alias>.md` that nobody writes. `review-`/`judge-` above diverge identically —
-    // materializeReviews (run-launch.js:207) and run-stage2.js:145 also name from the seat — so
-    // on such a bench NEITHER twin's file is on this list and readRunArtifact refuses both. The
-    // whole allowlist is rebuilt from `run.seats` in the PR5 Workspace flip (BACKLOG: "Hard
-    // prerequisite for PR5"). Every bench with no repeated alias is unaffected — the seat id
-    // and the alias are the same string there.
+    // rebuttal-/revote- ride the SAME entity stem as review-/judge-, so DISTINCT aliases
+    // colliding after sanitizeName are disambiguated identically. (The PR3 warning that sat
+    // here — "no longer matches what the engine WRITES on a bench that repeats an alias" —
+    // described the alias-space loop this rebuild replaced. `s` now derives from the seat id,
+    // exactly what materializeDebate's artifactName(seat, prefix) uses, seats.js:165.)
     if (debated) {
       names.push(`rebuttal-${s}.md`);
       names.push(`revote-${s}.md`);
@@ -191,18 +209,30 @@ function artifactAllowlist(run) {
   // silent mis-attribution spec §4.4 forbids.
   const orphanContested = new Map();   // artifact name -> owning entity
   const orphanByStem = new Map();      // sanitized stem -> Set(claimants), deduped for the banner
+  // ⚠️ TWO kind sets, and the split IS council fix B2.
+  // LISTED (`orphanKinds`) stays wide: listing a name nobody wrote costs nothing (the
+  // presence manifest marks it absent), while omitting one that exists makes it
+  // permanently unreadable. A debate leg whose raiser key names no seat takes
+  // materializeDebate's alias branch (run-debate.js:151-152, run-debate-revote.js:169-171
+  // pass `seatById.get(key) || null`), so an orphan alias CAN own rebuttal-/revote- with
+  // no note recording it — which is why they stay here.
+  // CONTESTED (`claimed`) is narrow — only what the note proves (see orphanClaims) —
+  // because contesting DROPS the owning seat's attribution to its own file.
   const orphanKinds = debated ? ['review', 'judge', 'rebuttal', 'revote'] : ['review', 'judge'];
-  for (const alias of orphanNames(run)) {
+  for (const [alias, claimed] of orphanClaims(run)) {
+    const stem = sanitizeName(alias);
     for (const kind of orphanKinds) {
-      const stem = sanitizeName(alias);
       const n = `${kind}-${stem}.md`;
       const owner = ownerOf.get(n);
       // Its own seat's primary — same alias, so nothing is ambiguous.
       if (owner && owner.alias === alias) { continue; }
       if (owner) {
-        // ANOTHER entity's primary. The file on disk is one or the other and run.json
-        // cannot say which, so it is listed, attributed to NOBODY, and surfaced ONCE
-        // per stem — the kinds share a stem, and emitting per kind double-counts.
+        // ANOTHER entity's primary — but only for a kind this orphan can actually own.
+        // Otherwise the file is unambiguously the owner's and stays attributed to it.
+        if (!claimed.has(kind)) { continue; }
+        // The file on disk is one or the other and run.json cannot say which, so it is
+        // listed (the owner's own push already did that), attributed to NOBODY, and
+        // surfaced ONCE per stem — the kinds share a stem, and per kind double-counts.
         orphanContested.set(n, owner.entity);
         if (!orphanByStem.has(stem)) { orphanByStem.set(stem, new Set()); }
         orphanByStem.get(stem).add(owner.entity).add(alias);
@@ -217,8 +247,11 @@ function artifactAllowlist(run) {
       ...[...collisionModels.entries()].map(([sanitized, models]) => ({
         sanitized, models: [...models],
       })),
-      // `models` carries the ENTITY (a seat id in seat space), not its alias: the banner
-      // names who could own the file, and `a`'s alias never wrote `review-a-1.md` — `a#1` did.
+      // `models` names BOTH claimants of the stem, which is what the banner has to say:
+      // the owning ENTITY (a seat id in seat space — `a#1`, since `a`'s alias never wrote
+      // `review-a-1.md`) AND the orphan's own ALIAS (`a-1`), the string its writer used.
+      // The orphan half is deliberately not projected into entity space: no seat id names
+      // it — being unattributable to a seat is what made it an orphan.
       ...[...orphanByStem.entries()].map(([sanitized, who]) => ({
         sanitized, models: [...who], orphan: true,
       })),
@@ -250,5 +283,7 @@ function artifactAllowlist(run) {
   return list;
 }
 
-module.exports = { artifactAllowlist, isSeatTable, orphanNames, FIXED_ARTIFACTS, DEBATE_ARTIFACTS };
+module.exports = {
+  artifactAllowlist, isSeatTable, orphanNames, orphanClaims, FIXED_ARTIFACTS, DEBATE_ARTIFACTS,
+};
 
