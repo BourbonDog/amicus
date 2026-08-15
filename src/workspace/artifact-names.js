@@ -1,0 +1,246 @@
+/**
+ * Council Workspace — artifact NAME derivation (v4.8 PR5a).
+ *
+ * Split out of artifact-guard.js on the natural seam: this module decides WHICH names a
+ * run dir may legitimately hold and who owns each one; artifact-guard.js keeps the two
+ * read fences (allowlist membership, realpath containment). The guard grew past the
+ * 300-line gate when the seat-space rebuild landed, and the two halves have no shared
+ * state beyond the constants re-exported below.
+ */
+'use strict';
+
+const { sanitizeName } = require('../council/run-launch');
+// ONE seat-space predicate for the whole tree. Shared, never re-spelled —
+// report.js:53-56 exports it and src/workspace/matrix-model.js:25 already imports it.
+const { isSeatSpace } = require('../council/report');
+
+const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
+// ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
+// allowlist never named, so the Workspace hard-refused every `--debate` output with
+// `artifact not allowed: <name>`. Writers (re-derived v4.8 PR3 — Task 1 moved runRevoteWave):
+// tally-provisional.json = src/council/run-debate-stage.js:45; revote-bundle.md =
+// run-debate-revote.js:81; debate.json = run-debate.js:221-222; the rebuttal-/revote- pair =
+// materializeDebate (run-launch.js:230-240).
+// ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
+// holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
+// appended inside artifactAllowlist below, next to review-/judge-.
+const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
+
+/**
+ * Is `seats` a seat table this guard may trust?
+ *
+ * `isSeatSpace` (shared, src/council/report.js) was written for `verdict.seats`, a
+ * producer-controlled document. This function reads a schema-free `JSON.parse` of
+ * run.json, so it adds two conjuncts `isSeatSpace` has no reason to carry:
+ *   - non-empty ids — `{id:''}` otherwise emits `review-.md` and a `""` map key;
+ *   - unique ids — the alias path's `new Set` used to guarantee this, and without it
+ *     duplicate ids mint a one-element "collision" whose `join(' and ')` renders
+ *     malformed English AND suppresses the real run.error banner (workspace-app.js
+ *     returns after the collision branch).
+ * Fails WHOLE: one malformed id sends the run back to the alias branch. Fail-safe but
+ * silent, and only reachable from a hand-edited run.json — parseList trims and filters,
+ * and the MCP path re-joins through the same code.
+ */
+function isSeatTable(seats) {
+  if (!isSeatSpace(seats)) { return false; }
+  const ids = seats.map(s => s.id);
+  return ids.every(id => id !== '') && new Set(ids).size === ids.length;
+}
+
+/**
+ * The alias names an ORPHANED leg wrote, taken from run.json's own degrade notes.
+ *
+ * The engine names an artifact from the seat when a leg binds and from the leg's
+ * `modelInput || model` when it does not (run-launch.js:205-207). Only the second case
+ * puts an alias-named file on disk, and `run-degrade.js` records exactly that case:
+ * channel 'seat-unbound' with `data.legId` set. `data.seat` on such a note IS the string
+ * the writer used, so the name derived here matches the file byte-for-byte — including
+ * the case where the leg reported no modelInput and the writer fell back to the resolved
+ * model id, which no seat.alias could have reproduced.
+ *
+ * Gating fallbacks on this — rather than emitting one per seat alias — is what keeps a
+ * healthy run (twin, --debate, or with a merely-dead seat) from claiming names nobody
+ * wrote and raising a run-integrity banner for it.
+ */
+function orphanNames(run) {
+  const degrades = run && Array.isArray(run.degrades) ? run.degrades : [];
+  const names = degrades
+    .filter(d => d && d.channel === 'seat-unbound' && d.data && d.data.legId)
+    .map(d => d.data && d.data.seat)
+    .filter(s => typeof s === 'string' && s !== '');
+  return [...new Set(names)];
+}
+
+/**
+ * @param {object} run parsed run.json (may be partial)
+ * @returns {string[]} the allowlist. When two or more DISTINCT bench entries sanitize to the
+ *   same artifact name, a non-enumerable-in-spirit (but plain, test-visible) `collisions`
+ *   array is attached: `[{sanitized, models: [rawA, rawB, ...]}, ...]`. See the R4
+ *   council-review note below for why this is surfaced rather than silently deduped.
+ */
+function artifactAllowlist(run) {
+  const names = [...FIXED_ARTIFACTS];
+  const bench = run && Array.isArray(run.bench) ? run.bench : [];
+  // ⚠️ DE-ROT (F28): run.json carries a `debate` key ONLY on --debate runs, and it is seeded
+  // on the FIRST write (initCouncilRun, src/council/run-state.js:100-103), so this gate is safe
+  // and keeps the allowlist tight for the common case.
+  const debated = !!(run && run.debate);
+  if (debated) { names.push(...DEBATE_ARTIFACTS); }
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName is NOT
+  // injective — it maps every character outside [a-zA-Z0-9._-] to '-', so two DISTINCT bench
+  // entries ('vendor/a', 'vendor?a') both produce 'vendor-a'. Both models would then request
+  // the SAME artifact file, and the renderer's `[data-artifact="..."]` lookup (drillIntoJudge)
+  // hands back whichever section matches first — prose silently misattributed to the wrong
+  // model. That is a run-integrity defect (this run directory genuinely cannot hold both
+  // models' review/judge files under distinct names), not a display quirk, so it must be
+  // DETECTED and surfaced, never smoothed away by deduping the resulting name list.
+  //
+  // ⚠️ v4.8 PR5a (R5-13) INVERTS THE INTENT STATED HERE THROUGH v4.7. A bench with repeated
+  // identical entries no longer "collapses to one set of rows": since PR3 each such entry is a
+  // distinct SEAT and the engine writes a distinct file per seat (seats.js artifactName), so
+  // collapsing them is exactly what made both twins' reviews unreadable. What survives from the
+  // old intent is the RN-1 machinery below — two DISTINCT raw entries that coincide after
+  // sanitizeName is still a genuine run-integrity defect and is still surfaced, never deduped.
+  //
+  // The entity list is therefore the SEAT ids when run.json carries a usable seat table, and the
+  // unique raw bench values otherwise. On a bench with no repeated alias the two are the same
+  // list in the same order (seat id === alias, spec §4.2), so the output is byte-identical.
+  const entities = isSeatTable(run && run.seats)
+    ? [...new Set(run.seats.map(s => s.id))]
+    : [...new Set(bench)];
+  const uniqueModels = entities;
+  const rawBySanitized = new Map(); // sanitized name -> first raw model seen for it
+  const collisionModels = new Map(); // sanitized name -> Set(raw models) once >1 raw maps to it
+  for (const m of uniqueModels) {
+    const s = sanitizeName(m);
+    if (rawBySanitized.has(s)) {
+      if (!collisionModels.has(s)) { collisionModels.set(s, new Set([rawBySanitized.get(s)])); }
+      collisionModels.get(s).add(m);
+    } else {
+      rawBySanitized.set(s, m);
+    }
+  }
+
+  // ⚠️ Task 18 (RN-1): the collision above is a real run-integrity defect — the run directory
+  // physically holds ONE file where two models' artifacts should be, and no renderer trick can
+  // recover both. What the renderer CAN stop doing is showing model A's prose under model B's
+  // name. Deterministic disambiguation: per colliding sanitized name, sort the RAW models
+  // (sorting, not insertion order, is what keeps this reproducible across processes/runs); the
+  // first (sorted) keeps the bare sanitized name, the rest get `~2`, `~3`, ... The suffixed
+  // names deliberately do not exist on disk — the presence manifest (run-detail.js, via
+  // fs.statSync over this same allowlist) marks them absent, so the renderer shows the honest
+  // "not written yet" empty state for every model but the first, instead of cross-matching.
+  const nameFor = new Map(); // raw model -> its (possibly suffixed) sanitized name
+  for (const m of uniqueModels) {
+    let s = sanitizeName(m);
+    const collision = collisionModels.get(s);
+    if (collision) {
+      const sortedRaw = [...collision].sort();
+      const index = sortedRaw.indexOf(m);
+      if (index > 0) { s = `${s}~${index + 1}`; }
+    }
+    nameFor.set(m, s);
+  }
+
+  // primary name -> the ALIAS of the entity that owns it (its own alias in the legacy
+  // branch). Used below to tell "an orphan's file IS this seat's own primary" (harmless,
+  // same alias) from "an orphan's file collides with ANOTHER seat's primary" (ambiguous).
+  const aliasOfEntity = new Map(
+    isSeatTable(run && run.seats) ? run.seats.map(s => [s.id, s.alias]) : bench.map(m => [m, m]),
+  );
+  const ownerOf = new Map();
+  for (const m of uniqueModels) {
+    const s = nameFor.get(m);
+    for (const k of ['review', 'judge', 'rebuttal', 'revote']) {
+      ownerOf.set(`${k}-${s}.md`, { entity: m, alias: aliasOfEntity.get(m), stem: s });
+    }
+    names.push(`review-${s}.md`);
+    names.push(`judge-${s}.md`);
+    // rebuttal-/revote- are listed here under the same BENCH ALIAS through the same (now
+    // possibly suffixed) name, so a pair of DISTINCT aliases colliding after sanitizeName is
+    // disambiguated the same way review-/judge- are.
+    // ⚠️ v4.8 PR3: this no longer matches what the engine WRITES on a bench that repeats an
+    // alias. materializeDebate (run-launch.js:234) now names the file from the leg's SEAT when
+    // one is bound — run-debate.js:139-140 and run-debate-revote.js:161-163 attach it — so two
+    // twins write `rebuttal-<alias>-1.md` / `-2.md` while this loop lists one
+    // `rebuttal-<alias>.md` that nobody writes. `review-`/`judge-` above diverge identically —
+    // materializeReviews (run-launch.js:207) and run-stage2.js:145 also name from the seat — so
+    // on such a bench NEITHER twin's file is on this list and readRunArtifact refuses both. The
+    // whole allowlist is rebuilt from `run.seats` in the PR5 Workspace flip (BACKLOG: "Hard
+    // prerequisite for PR5"). Every bench with no repeated alias is unaffected — the seat id
+    // and the alias are the same string there.
+    if (debated) {
+      names.push(`rebuttal-${s}.md`);
+      names.push(`revote-${s}.md`);
+    }
+  }
+  // v4.8 PR5a (R5-13): names an ORPHANED leg wrote under its alias. Emitted AFTER every
+  // primary so the Set below keeps first-occurrence order, which is what preserves
+  // byte-identity on every bench that orphaned nothing (the overwhelming majority).
+  // Listed so a review that LANDED stays readable (stage1-bind.js:35); never attributed,
+  // because bindSeats could not name that leg and guessing here is precisely the
+  // silent mis-attribution spec §4.4 forbids.
+  const orphanContested = new Map();   // artifact name -> owning entity
+  const orphanByStem = new Map();      // sanitized stem -> Set(claimants), deduped for the banner
+  const orphanKinds = debated ? ['review', 'judge', 'rebuttal', 'revote'] : ['review', 'judge'];
+  for (const alias of orphanNames(run)) {
+    for (const kind of orphanKinds) {
+      const stem = sanitizeName(alias);
+      const n = `${kind}-${stem}.md`;
+      const owner = ownerOf.get(n);
+      // Its own seat's primary — same alias, so nothing is ambiguous.
+      if (owner && owner.alias === alias) { continue; }
+      if (owner) {
+        // ANOTHER entity's primary. The file on disk is one or the other and run.json
+        // cannot say which, so it is listed, attributed to NOBODY, and surfaced ONCE
+        // per stem — the kinds share a stem, and emitting per kind double-counts.
+        orphanContested.set(n, owner.entity);
+        if (!orphanByStem.has(stem)) { orphanByStem.set(stem, new Set()); }
+        orphanByStem.get(stem).add(owner.entity).add(alias);
+      } else {
+        names.push(n);
+      }
+    }
+  }
+  const list = [...new Set(names)];
+  if (collisionModels.size || orphanByStem.size) {
+    list.collisions = [
+      ...[...collisionModels.entries()].map(([sanitized, models]) => ({
+        sanitized, models: [...models],
+      })),
+      // `models` carries the ENTITY (a seat id in seat space), not its alias: the banner
+      // names who could own the file, and `a`'s alias never wrote `review-a-1.md` — `a#1` did.
+      ...[...orphanByStem.entries()].map(([sanitized, who]) => ({
+        sanitized, models: [...who], orphan: true,
+      })),
+    ];
+  }
+  // Consumed by workspace-panels.js (wireLazyPanels' file lists + drillIntoJudge's artifact
+  // lookup), which prefers this map over re-deriving names via sanitizeName(model) directly —
+  // that re-derivation is exactly what would ignore the suffixing above and misattribute prose.
+  // ⚠️ Fix-wave (review finding 1) residual limit this map cannot close: the BARE (unsuffixed)
+  // name is still exactly ONE physical file on disk, and its actual bytes belong to whichever
+  // colliding model's writer ran LAST — no map can recover which one that was. The guarantee
+  // delivered here is narrower than "attribution is fully sound": at most the sorted-first
+  // model can still be misattributed under the bare name; artifactCollisions (the run-integrity
+  // banner rendered by workspace-app.js's renderBanners) is what covers that residual case.
+  // v4.8 PR5a: keyed by SEAT ID when the run is in seat space (the map and its consumers
+  // move together — RULE OF ONE SPACE). A kind whose name an orphan also claims is
+  // dropped from the map rather than attributed: the entry would name a file that may
+  // hold the other seat's prose, which is the RN-1 defect this whole block exists to kill.
+  list.artifactsByModel = Object.fromEntries(
+    [...nameFor].map(([m, s]) => {
+      const row = {};
+      for (const k of ['review', 'judge', 'rebuttal', 'revote']) {
+        const n = `${k}-${s}.md`;
+        if (!orphanContested.has(n)) { row[k] = n; }
+      }
+      return [m, row];
+    }),
+  );
+  return list;
+}
+
+module.exports = { artifactAllowlist, isSeatTable, orphanNames, FIXED_ARTIFACTS, DEBATE_ARTIFACTS };
+
