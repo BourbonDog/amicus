@@ -318,7 +318,8 @@ src/
 │   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
-│   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
+│   ├── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
+│   └── seat-space.js  # Council Workspace — the seat-space PREDICATES (v4.8 PR5b).
 ├── cli-council-run-bench.js  # Bench and input resolution for the council run command.
 ├── cli-council-run-render.js
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
@@ -701,6 +702,7 @@ evals/
 | `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
 | `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `costPanel()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
 | `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
+| `workspace/seat-space.js` | Council Workspace — the seat-space PREDICATES (v4.8 PR5b). | `isSeatTable()`, `orphanExonerations()` |
 <!-- /AUTO:modules -->
 
 ---
