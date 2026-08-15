@@ -42,10 +42,18 @@
   'use strict';
 
   /**
-   * Aliases of seats whose degrade record says they were retried. PR1F-4 (v4.7 PR7).
+   * Keys — seat id where a record supplies one, alias otherwise — of seats whose degrade record
+   * says they were retried. PR1F-4 (v4.7 PR7); re-keyed in v4.8 PR5b, renamed from
+   * `retriedAliases` because the keys are no longer uniformly aliases.
    *
-   * ⚠️ Mirrors window.AmicusLive.deadSeats' own predicate (live-seats.js:186-200) EXACTLY, and
-   * must keep mirroring it. The kind/channel filter is load-bearing: run.degrades[] also carries
+   * ⚠️ THE MIRROR IS NOW PARTIAL — it was "EXACTLY" until v4.8 PR5b, and the change is
+   * deliberate. The kind/channel FILTER still mirrors window.AmicusLive.deadSeats
+   * (live-seats.js:186-200) and must keep doing so; the KEY does not. deadSeats still dedups on
+   * the alias (`seen[model]`), which is the deferred M3/M4 work in BACKLOG.md — when that PR
+   * lands, re-read this note and restore the full mirror rather than letting the two drift
+   * silently. Two spellings of one rule is the defect class PR5a's council raised as B1.
+   *
+   * The kind/channel filter is load-bearing: run.degrades[] also carries
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
    * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
    *
@@ -54,7 +62,7 @@
    * with NO status key — so any read of firstFailure.status is undefined on every wave-origin
    * seat.
    */
-  function retriedAliases(degrades) {
+  function retriedSeats(degrades) {
     var out = Object.create(null);
     (degrades || []).forEach(function (d) {
       if (!d || d.kind !== 'degrade') { return; }
@@ -62,8 +70,18 @@
       var data = d.data || {};
       if (!(data.retryWaveId || data.firstFailure)) { return; }
       if (d.channel === 'dead-leg') {
-        if (data.seat) { out[data.seat] = true; }
+        // ⚠️ v4.8 PR5b: prefer the SEAT ID when the record names one. Of the five emitter arms
+        // in run-retry-notes.js, exactly one supplies it — retryLegStillDeadNote (:67) and
+        // missingLegStillDeadNote (:92) on their `dead-leg` branch, via firstFailure.seatId
+        // (pinned by tests/council/run-retry.test.js:628, which shows deepseek-hash-1 /
+        // deepseek-hash-2 on a twin bench). srcLegStillDeadNote (:51) emits no firstFailure at
+        // all, so `data.seat` — an ALIAS — is the only key available for it. The DUAL lookup
+        // below is what reconciles the two; do not "simplify" either side.
+        var key = (data.firstFailure && data.firstFailure.seatId) || data.seat;
+        if (key) { out[key] = true; }
       } else {
+        // dead-wave carries `models[]` — ALIASES, with no seat and no firstFailure anywhere
+        // (run-retry-notes.js:28-47). Alias keys only; the lookup's `s.model` arm matches them.
         (data.models || []).forEach(function (m) { if (m) { out[m] = true; } });
       }
     });
@@ -91,7 +109,7 @@
     // records for the SAME run, and the persisted run.json copy is authoritative when present.
     var deg = (d.run && d.run.degrades && d.run.degrades.length) ? d.run.degrades
       : ((d.verdict && d.verdict.degrades) || []);
-    var retried = retriedAliases(deg);
+    var retried = retriedSeats(deg);
     // ⚠️ Look rows up by data-key, NEVER by position. renderSeats (workspace-render.js:179-216)
     // keys every row on String(seat.id || seat.model) and RN-11 made it REORDER rows to match the
     // composed doc's leg order — so tbody.children[i] is not seats[i]. Build the key exactly the
@@ -114,7 +132,15 @@
       // of the SAME run and leaves a stale 'seat-retried' class on a row that belonged to a
       // PREVIOUS run's non-retried seat. classList.add/remove (not string concatenation) so a
       // repeat add never duplicates the token and a seat that is no longer retried gets cleared.
-      var isRetried = isReviewingRole(s.role) && !!retried[s.modelInput || s.model];
+      // ⚠️ v4.8 PR5b: DUAL lookup, and both arms are load-bearing. `s.seat` (PR5b Task 1, null
+      // on a unique bench) matches the one emitter arm that names a seat; `s.model` matches the
+      // four that carry only an alias — srcLegStillDeadNote and every dead-wave record. Pairing
+      // this map's dual key with a seat-id-ONLY lookup badges NOTHING for those four arms: a
+      // silent false negative replacing a visible false positive, which is strictly worse.
+      // On a twin bench an alias-only record still badges BOTH seats. That is not a defect — the
+      // record does not say which seat failed, so no consumer can attribute it. Over-badging is
+      // the deliberate direction: visible beats silent.
+      var isRetried = isReviewingRole(s.role) && !!(retried[s.seat] || retried[s.model]);
       if (isRetried) {
         row.classList.add('seat-retried');
         row.children[8].textContent = '↻ retried once';
