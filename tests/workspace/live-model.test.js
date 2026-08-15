@@ -148,6 +148,10 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
  * dead-seat-rows.test.js (which exercise the same function through the real DOM-painting call
  * chain). These pin `isReviewing`'s allowlist and the alias-space critic match in isolation.
  */
+// v4.8 PR5c: rows now carry `seat` — the seat id when the record named one, else null.
+// Every fixture in this block is alias-only (no firstFailure.seatId, no data.seatId and no
+// data.seats[]), so `seat` is null throughout; that IS the emit-when-set invariant, and these
+// exact-shape assertions are what pin it. `model` stays the ALIAS, unchanged.
 describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
   function deadLeg(seat) {
     return { kind: 'degrade', channel: 'dead-leg', what: 'seat ' + seat + ' did not review',
@@ -158,33 +162,33 @@ describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
   test('a dead-leg candidate whose alias matches runMeta.critic is tagged role: "critic"; others are role: null', () => {
     const result = deadSeats([deadLeg('foxtrot'), deadLeg('echo')], null, [], { critic: 'foxtrot' });
     expect(result).toEqual([
-      { model: 'foxtrot', role: 'critic', statusText: 'did not review' },
-      { model: 'echo', role: null, statusText: 'did not review' },
+      { model: 'foxtrot', seat: null, role: 'critic', statusText: 'did not review' },
+      { model: 'echo', seat: null, role: null, statusText: 'did not review' },
     ]);
   });
 
   test('a chair-only live row for the dead critic\'s alias does NOT suppress it (chair is not reviewing)', () => {
-    const liveSeats = [{ model: 'foxtrot', role: 'chair' }];
+    const liveSeats = [{ model: 'foxtrot', seat: null, role: 'chair' }];
     const result = deadSeats([deadLeg('foxtrot')], null, liveSeats, { critic: 'foxtrot' });
-    expect(result).toEqual([{ model: 'foxtrot', role: 'critic', statusText: 'did not review' }]);
+    expect(result).toEqual([{ model: 'foxtrot', seat: null, role: 'critic', statusText: 'did not review' }]);
   });
 
   test('a live CRITIC row for the same alias DOES suppress the dead-critic candidate', () => {
-    const liveSeats = [{ model: 'foxtrot', role: 'critic' }];
+    const liveSeats = [{ model: 'foxtrot', seat: null, role: 'critic' }];
     const result = deadSeats([deadLeg('foxtrot')], null, liveSeats, { critic: 'foxtrot' });
     expect(result).toEqual([]);
   });
 
   test('a null-role candidate is suppressed by ANY reviewing-role live leg for its alias: seat, critic, or lens:*', () => {
-    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'seat' }], null)).toEqual([]);
-    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'critic' }], null)).toEqual([]);
-    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'lens:precision' }], null)).toEqual([]);
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', seat: null, role: 'seat' }], null)).toEqual([]);
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', seat: null, role: 'critic' }], null)).toEqual([]);
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', seat: null, role: 'lens:precision' }], null)).toEqual([]);
   });
 
   test('a null-role candidate is NOT suppressed by a chair/judge/rebuttal/revote-only live leg for its alias', () => {
     ['chair', 'judge', 'rebuttal', 'revote'].forEach(function (role) {
-      const result = deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: role }], null);
-      expect(result).toEqual([{ model: 'echo', role: null, statusText: 'did not review' }]);
+      const result = deadSeats([deadLeg('echo')], null, [{ model: 'echo', seat: null, role: role }], null);
+      expect(result).toEqual([{ model: 'echo', seat: null, role: null, statusText: 'did not review' }]);
     });
   });
 
@@ -196,12 +200,12 @@ describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
   test('the seatLoss backstop candidate always carries role: "critic" (it IS the critic-loss backstop)', () => {
     const seatLoss = { criticRequested: 'foxtrot', criticSeated: false };
     const result = deadSeats([], seatLoss, [], null);
-    expect(result).toEqual([{ model: 'foxtrot', role: 'critic', statusText: 'did not review' }]);
+    expect(result).toEqual([{ model: 'foxtrot', seat: null, role: 'critic', statusText: 'did not review' }]);
   });
 
   test('a missing runMeta (3-arg call, pre-PR2 call shape) behaves exactly as no critic requested', () => {
     const result = deadSeats([deadLeg('foxtrot')], null, []);
-    expect(result).toEqual([{ model: 'foxtrot', role: null, statusText: 'did not review' }]);
+    expect(result).toEqual([{ model: 'foxtrot', seat: null, role: null, statusText: 'did not review' }]);
   });
 
   // Task-3 review carry #4: the dead-WAVE branch's critic-tagging call is
@@ -218,8 +222,8 @@ describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
     };
     const result = deadSeats([deadWave], null, [], { critic: 'foxtrot' });
     expect(result).toEqual([
-      { model: 'foxtrot', role: 'critic', statusText: 'did not review' },
-      { model: 'echo', role: null, statusText: 'did not review' },
+      { model: 'foxtrot', seat: null, role: 'critic', statusText: 'did not review' },
+      { model: 'echo', seat: null, role: null, statusText: 'did not review' },
     ]);
   });
 

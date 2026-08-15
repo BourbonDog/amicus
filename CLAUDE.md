@@ -368,6 +368,7 @@ electron/
 │   └── icon.svg
 ├── workspace-ui/
 │   ├── index.html
+│   ├── live-dead-seats.js
 │   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
 │   ├── live-seats.js
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
