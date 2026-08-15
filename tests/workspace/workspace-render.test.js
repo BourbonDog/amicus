@@ -368,6 +368,51 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       ]);
     });
 
+    /**
+     * v4.8 PR5b Task 3 — the frozen row, end to end.
+     *
+     * ⚠️ TWO TICKS ARE MANDATORY. Measured at the pre-Task-1 tree, a twin bench renders
+     * CORRECTLY on tick one: `existing` is snapshotted from tbody.children BEFORE the loop, so
+     * both seats miss the (empty) map and both rows get appended. The defect only appears from
+     * tick two, when `existing` resolves the shared key to the LAST row — both seats then write
+     * into it, and row one is never re-matched again while `seen[key]` keeps it from being
+     * removed. A single-tick test structurally cannot see this; the measured pre-fix signature
+     * across two ticks was [['ok','$0.01'], ['DONE-2','$0.22']] — row one frozen at its
+     * tick-one content, row two showing whichever seat wrote last.
+     */
+    test('PR5b: twin-bench rows BOTH keep updating across ticks (the frozen-row pin)', () => {
+      const tbody = document.createElement('tbody');
+      const paint = (status1, cost1, status2, cost2) => {
+        AmicusRender.renderSeats(tbody, liveModel.seatsFromRunStats([
+          { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: status1, costDisplay: cost1 },
+          { model: 'deepseek', seat: 'deepseek#2', role: 'seat', status: status2, costDisplay: cost2 },
+        ]), false, () => null);
+        return tbody.children.map((r) => [r.children[2].textContent, r.children[6].textContent]);
+      };
+
+      paint('ok', '$0.01', 'error', '$0.02');
+      const afterTick2 = paint('DONE-1', '$0.11', 'DONE-2', '$0.22');
+
+      expect(tbody.children.length).toBe(2);
+      expect(afterTick2).toEqual([['DONE-1', '$0.11'], ['DONE-2', '$0.22']]);
+    });
+
+    // CONTROL (preservation, green before Task 1 too): a distinct-alias bench was never
+    // affected by the frozen-row defect and must stay identical across ticks.
+    test('PR5b CONTROL: a distinct-alias bench updates both rows across ticks', () => {
+      const tbody = document.createElement('tbody');
+      const paint = (sa, sb) => {
+        AmicusRender.renderSeats(tbody, liveModel.seatsFromRunStats([
+          { model: 'a', role: 'seat', status: sa, costDisplay: '$0.01' },
+          { model: 'b', role: 'seat', status: sb, costDisplay: '$0.02' },
+        ]), false, () => null);
+        return tbody.children.map((r) => r.children[2].textContent);
+      };
+
+      paint('ok', 'ok');
+      expect(paint('DONE-A', 'DONE-B')).toEqual(['DONE-A', 'DONE-B']);
+    });
+
     // Regression guard for the key-escaping bug (review item 1): a v4.2 local-provider alias
     // (LM Studio/Ollama free-form ids) can contain a `"` or `\`. The old code queried
     // `tr[data-key="<escaped key>"]` against an UNESCAPED stored `dataset.key` — one side of
