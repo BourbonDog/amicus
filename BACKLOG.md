@@ -2378,3 +2378,32 @@ reusing the existing priced picker.
 - **#136 (easy bug reporting)** — explicitly a brainstorming placeholder. Its "three or more times"
   trigger implies recurring-error tracking that does not exist yet; it needs a design session before
   it can be scoped at all.
+
+## v4.8 PR5a council fix-waves — owner rulings (2026-08-15)
+
+Three adjudicated council rounds on [PR #159] (7 → 9 → 11 Confirmed). The findings are
+answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
+
+- [ ] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
+  before PR5b** (ruling). The file is at **300/300** with zero headroom, and it was itself split
+  out of `artifact-guard.js` for this same gate earlier in PR5a. Comment prose has now been
+  shaved three times to land defect fixes, which is the tell. **Named seam:** `isSeatTable` +
+  `orphanExonerations` move out (both are predicates over `run.seats` / `run.degrades` with no
+  dependency on the name-derivation body); `artifactAllowlist` stays. Council-3's B4/B5 both
+  landed inside `artifactAllowlist`, so no work is duplicated by doing this after them.
+  ⚠️ Do NOT fold this into a defect PR — it is a restructure no council has reviewed.
+- [ ] **Gate `review-claude.md` on a real producer marker** (council-2 B3 / council-3 A3, minor,
+  rated *thin* both rounds; owner ruled HOLD + file). It is unconditional in `FIXED_ARTIFACTS`
+  because `run.json` carries **no claude marker at all**: `claudeInCouncil` is set only on
+  tally/verdict meta (`run-assemble.js:178`) and `claudeReviewFile` never leaves the in-memory
+  options object (`run-state.js:129` writes a fixed four-key `options` projection). Gating it
+  therefore needs a **producer** change — stamp a marker into `run.json` — which is why it is not
+  a Workspace fix. Do it whenever Claude-in-council is next touched. Until then the entry is
+  honest: the presence manifest already reports four fixed names absent on a normal run.
+
+### Standing note for the next reviewer of this area
+
+Council-3's **C1** (waveId coupling) was disputed and, per owner ruling, **not** pinned: a change
+to run-stage2.js's `${runId}-s2` wave-id format will silently stop `orphanExonerations` from
+exonerating anything. That direction is **fail-safe** — it contests more, never less, so it
+cannot cause misattribution — but it is a silent behaviour change with no test standing under it.
