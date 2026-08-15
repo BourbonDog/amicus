@@ -12,7 +12,7 @@
 // artifact-guard.test.js contains no `seats` key at all, which is why the whole
 // rebuild could be applied with 522 suites staying green.
 
-const { artifactAllowlist } = require('../../src/workspace/artifact-names');
+const { artifactAllowlist, isSeatTable } = require('../../src/workspace/artifact-names');
 const { buildSeats } = require('../../src/council/seats');
 
 const seatsFor = (bench) => buildSeats(bench, null, null);
@@ -87,27 +87,28 @@ describe('the orphan intersection — where four designs died', () => {
     expect(list.artifactsByModel['a-1#1'].review).toBe('review-a-1-1.md');
   });
 
-  // ── v4.8 PR5a fix-wave, council finding B2 ──────────────────────────────────────
-  // A contested stem used to drop EVERY kind from the owning seat's attribution. The
-  // kinds an orphan can own are not "all of them": they are what its note proves, and
-  // `data.waveId` proves it exactly — run-stage2.js:67/69/90 build the -s2 wave id from
-  // the same runId run.json carries, so this is an equality test, not a prefix guess.
+  // ── v4.8 PR5a fix-wave, council-1 B2 as CORRECTED by council-2 A1/C1 ────────────────
+  // Attribution survives a stem collision only on a POSITIVE PROOF that the orphan did not
+  // write that kind. Revision 1 asked the opposite question ("can it own this kind?") and
+  // handed a bound seat the debate files an unrecorded alias-named debate leg may have
+  // written — the RN-1 defect, re-armed. The one available proof is a -s2 note: that leg
+  // BOUND in Stage 1, so its review landed under a seat name. `data.waveId` identifies it
+  // EXACTLY (run-stage2.js:67/69/90 build it as `${runId}-s2`), not by prefix guess.
   //
-  // ⚠️ The Stage-1 half of B2's rationale ("the orphan may have only written a review")
-  // is measured FALSE and is disputed on the PR, so it is deliberately not implemented:
-  // tests/council/run-stages.test.js:1757 shows a Stage-1 orphan's judge file is
-  // alias-named too (it re-binds to a placeholder in Stage 2 and emits no -s2 note).
-  // The two tests below pin both directions so neither can be "fixed" into the other.
+  // ⚠️ Council-1 B2's rationale ("the orphan may have only written a review") is measured
+  // FALSE for a STAGE-1 orphan and is disputed on the PR: run-stages.test.js:1757 shows its
+  // judge file is alias-named too (placeholder re-bind, and no -s2 note because it BOUND).
+  // Every direction below is pinned so none can be "fixed" into another.
   const S2_RUN = 'abc123';
   const s2Orphan = (alias) => orphanNote(alias, `${S2_RUN}-s2`);
 
-  test('B2: a Stage-2 orphan contests the JUDGE half only — the seat keeps its own review', () => {
+  test('a Stage-2 orphan contests the JUDGE half only — the seat keeps its own review', () => {
     const bench = ['a', 'a', 'a-1', 'a-1'];
     const list = artifactAllowlist({
       runId: S2_RUN, bench, seats: seatsFor(bench), degrades: [s2Orphan('a-1')],
     });
-    // Killing mutant: delete `if (!claimed.has(kind)) { continue; }` from the orphan
-    // loop -> review-a-1.md is contested again and this is undefined (MEASURED red).
+    // Killing mutant: drop `if (exonerated.has(kind)) { continue; }` -> review-a-1.md is
+    // contested again and this is undefined (MEASURED red).
     expect(list.artifactsByModel['a#1'].review).toBe('review-a-1.md');
     expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
     // The banner is NOT weakened: the stem is still ambiguous, still named once, and
@@ -118,7 +119,7 @@ describe('the orphan intersection — where four designs died', () => {
     expect(list).toContain('review-a-1.md');
   });
 
-  test('B2: a Stage-1 orphan still contests BOTH — its judge file is alias-named too', () => {
+  test('a Stage-1 orphan still contests BOTH — its judge file is alias-named too', () => {
     const bench = ['a', 'a', 'a-1', 'a-1'];
     // Same run id, same alias, same collision — ONLY the wave differs.
     const list = artifactAllowlist({
@@ -128,24 +129,61 @@ describe('the orphan intersection — where four designs died', () => {
     expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
   });
 
-  test('B2: a note whose waveId cannot be matched falls to the WIDER pair (fail-safe)', () => {
+  test('a note whose waveId cannot be matched proves nothing, so nothing is exonerated', () => {
     const bench = ['a', 'a', 'a-1', 'a-1'];
-    // No runId on the run doc -> the -s2 equality can never hold. Over-contesting is
-    // the safe direction: attributing a file that may hold the orphan's prose is the
-    // silent misattribution this whole block exists to prevent.
+    // No runId on the run doc -> the -s2 equality can never hold.
     const list = artifactAllowlist({ bench, seats: seatsFor(bench), degrades: [s2Orphan('a-1')] });
     expect(list.artifactsByModel['a#1'].review).toBeUndefined();
     expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
   });
 
-  test('B2: narrowing the CONTEST never narrows the LIST — a --debate orphan keeps its names', () => {
+  // ⚠️ COUNCIL-2 A1/C1 (both major, two independent raisers): the regression revision 1
+  // introduced, and the reason exoneration replaced claim-listing.
+  // BOTH wave kinds, because they are separate code paths through orphanExonerations and a
+  // mutant that regressed only the Stage-1 one SURVIVED a version of this test that covered
+  // only the -s2 one. No note of ANY kind can exonerate a debate artifact.
+  for (const [waveLabel, wave] of [['a Stage-2', `${S2_RUN}-s2`], ['a Stage-1', `${S2_RUN}-s1`]]) {
+    test(`${waveLabel} orphan NEVER lets a bound seat keep the colliding rebuttal-/revote-`, () => {
+      const bench = ['a', 'a', 'a-1', 'a-1'];
+      const list = artifactAllowlist({
+        runId: S2_RUN, bench, seats: seatsFor(bench), debate: true,
+        degrades: [orphanNote('a-1', wave)],
+      });
+      // Killing mutant (this IS revision 1): exonerate the kinds the note does not name ->
+      // a#1 gets {rebuttal:'rebuttal-a-1.md', revote:'revote-a-1.md'} and the Workspace serves
+      // an orphan's rebuttal under seat a#1's name. MEASURED before the fix.
+      expect(list.artifactsByModel['a#1'].rebuttal).toBeUndefined();
+      expect(list.artifactsByModel['a#1'].revote).toBeUndefined();
+      // …while the -s2 proof still holds for the ONE kind it actually covers, and the
+      // Stage-1 note proves nothing. Anti-vacuity: this is not "everything is undefined".
+      expect(list.artifactsByModel['a#1'].review)
+        .toBe(wave.endsWith('-s2') ? 'review-a-1.md' : undefined);
+    });
+  }
+
+  test('two notes for one alias INTERSECT their proofs — a Stage-1 note revokes the -s2 one', () => {
+    const bench = ['a', 'a', 'a-1', 'a-1'];
+    // The same alias orphaned twice: once in Stage 1, once in the -s2 wave. The Stage-1
+    // leg's review IS alias-named, so the -s2 note's proof no longer covers the run.
+    // Killing mutant: union instead of intersect -> review stays attributed to a#1.
+    for (const degrades of [
+      [s2Orphan('a-1'), orphanNote('a-1', `${S2_RUN}-s1`)],
+      [orphanNote('a-1', `${S2_RUN}-s1`), s2Orphan('a-1')],   // order must not matter
+    ]) {
+      const list = artifactAllowlist({ runId: S2_RUN, bench, seats: seatsFor(bench), degrades });
+      expect(list.artifactsByModel['a#1'].review).toBeUndefined();
+      expect(list.artifactsByModel['a#1'].judge).toBeUndefined();
+    }
+  });
+
+  test('contesting never narrows the LIST — a --debate orphan keeps every name readable', () => {
     const bench = ['gemini', 'gemini'];
     const list = artifactAllowlist({
       runId: S2_RUN, bench, seats: seatsFor(bench), debate: true, degrades: [s2Orphan('gemini')],
     });
     // A debate leg whose raiser key names no seat takes materializeDebate's alias
     // branch, so these can exist on disk with no note recording them. Killing mutant:
-    // drive `orphanKinds` off `claimed` -> both of these vanish and readRunArtifact
+    // drive `orphanKinds` off the exoneration set -> both vanish and readRunArtifact
     // answers `artifact not allowed` for a file that is really there.
     expect(list).toContain('rebuttal-gemini.md');
     expect(list).toContain('revote-gemini.md');
@@ -258,6 +296,24 @@ describe('isSeatTable narrows the shared predicate', () => {
     const list = artifactAllowlist({ bench: ['gemini'], seats: [{ id: '', alias: 'gemini' }] });
     expect(list).not.toContain('review-.md');
     expect(Object.keys(list.artifactsByModel)).toEqual(['gemini']);
+  });
+
+  // ⚠️ COUNCIL-2 C3. `isSeatSpace` validates `id` and says nothing about `alias`, so
+  // `[{id:'a#1'}]` used to pass — and this predicate is what the RENDERER now trusts
+  // wholesale (council-1 B1), where the alias is what resolves a blind-mode label.
+  test('a seat table with no usable ALIAS is refused — the renderer resolves labels by alias', () => {
+    for (const seats of [
+      [{ id: 'gemini#1' }, { id: 'gemini#2' }],
+      [{ id: 'gemini#1', alias: null }, { id: 'gemini#2', alias: null }],
+      [{ id: 'gemini#1', alias: 1 }, { id: 'gemini#2', alias: 2 }],
+      [{ id: 'gemini#1', alias: '' }, { id: 'gemini#2', alias: '' }],
+    ]) {
+      // Killing mutant: drop the alias conjunct from isSeatTable -> true, and the keys
+      // below become seat ids, which is the blind-mode leak stated in the docblock.
+      expect(isSeatTable(seats)).toBe(false);
+      const list = artifactAllowlist({ bench: ['gemini', 'gemini'], seats });
+      expect(Object.keys(list.artifactsByModel)).toEqual(['gemini']);
+    }
   });
 
   test('duplicate seat ids do not mint a one-model "collision"', () => {

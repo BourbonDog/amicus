@@ -154,6 +154,12 @@
     // three panels rendered empty with no banner and no error. Absent (a pre-fix detail
     // payload) reads as alias space, which is the space such a payload's map is keyed in.
     var seatSpace = !!(detail.derived && detail.derived.seatSpace);
+    // ⚠️ Fix-wave 2 (council-2 A2): captured for the same reason `run` is. renderDetail
+    // REBUILDS state.labelByModel per run (workspace-app.js:147-148), so a closure that
+    // read it live could pair THIS run's keys with the NEXT run's labels — and this map
+    // is what blind mode renders, so the failure is a wrong name shown confidently
+    // rather than a visibly empty panel.
+    var labels = A.state.labelByModel;
     // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
     // artifact is NOT translated into a friendly "not written yet" note anywhere in this
     // read path — it lands in the panel verbatim, absolute host path and all. `run.debate` is
@@ -181,10 +187,10 @@
     // the same split matrix-model.js already makes for the adjudication columns.
     function roster() {
       if (!seatSpace) {
-        return bench.map(function (m) { return { key: m, label: A.state.labelByModel[m] }; });
+        return bench.map(function (m) { return { key: m, label: labels[m] }; });
       }
       return run.seats.map(function (s) {
-        return { key: s.id, label: A.state.labelByModel[s.alias] };
+        return { key: s.id, label: labels[s.alias] };
       });
     }
     // ⚠️ v4.4.1 RN-9: these two titles used to hand-roll `A.state.blind && label ? label : m`

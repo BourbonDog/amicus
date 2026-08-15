@@ -161,6 +161,27 @@ describe('v4.8 PR5a T2: prose panels iterate seats', () => {
     await Promise.resolve();
     expect(titles()).toEqual(['gemini#1', 'gemini#2']);
   });
+
+  // ⚠️ COUNCIL-2 A2. renderDetail REBUILDS state.labelByModel per run
+  // (workspace-app.js:147-148). roster() used to read it live, so a closure that ran
+  // after the state moved on paired THIS run's keys with the NEXT run's labels — and
+  // under blind mode a wrong label is a confidently-wrong NAME, not an empty panel.
+  test('A2: blind labels come from the run the panel was WIRED for, not from live state', async () => {
+    await global.window.AmicusApp.openRun('r1');
+    flipBlind(true);
+    // The state moves on — a different run's label map, keyed for a different bench —
+    // before the panel's files() closure ever runs.
+    global.window.AmicusApp.state.labelByModel = { gemini: 'WRONG-RUN-LABEL' };
+    await openReviews();
+    await Promise.resolve();
+    // Killing mutant: read `A.state.labelByModel` inside roster() -> both titles read
+    // 'WRONG-RUN-LABEL'. (Not merely wrong: it is the OTHER run's blind alias.)
+    expect(titles()).not.toContain('WRONG-RUN-LABEL');
+    // Both twins share one label because labelMap is ALIAS-keyed — run.json's own shape
+    // (R5-2), which PR5a does not touch. Asserted as-is rather than papered over: the
+    // property under test is WHICH RUN the label came from, not whether twins differ.
+    expect(titles()).toEqual(['Review A', 'Review A']);
+  });
 });
 
 /**

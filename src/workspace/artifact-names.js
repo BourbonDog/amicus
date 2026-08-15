@@ -39,12 +39,18 @@ const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle
  *
  * `isSeatSpace` (shared, src/council/report.js) was written for `verdict.seats`, a
  * producer-controlled document. This function reads a schema-free `JSON.parse` of
- * run.json, so it adds two conjuncts `isSeatSpace` has no reason to carry:
+ * run.json, so it adds three conjuncts `isSeatSpace` has no reason to carry:
  *   - non-empty ids — `{id:''}` otherwise emits `review-.md` and a `""` map key;
  *   - unique ids — the alias path's `new Set` used to guarantee this, and without it
  *     duplicate ids mint a one-element "collision" whose `join(' and ')` renders
  *     malformed English AND suppresses the real run.error banner (workspace-app.js
- *     returns after the collision branch).
+ *     returns after the collision branch);
+ *   - STRING aliases (council-2 C3) — `isSeatSpace` checks only `id`, so `[{id:'a#1'}]`
+ *     passed and put the RENDERER in seat space, where roster() resolves its label with
+ *     `labelByModel[s.alias]` -> undefined, and AmicusRender.display() falls through to
+ *     `pair.model` — printing the seat id `a#1` with blind mode ON, which defeats blind
+ *     mode (a seat id contains its alias). This predicate is what the renderer now trusts
+ *     wholesale (council-1 B1), so a conjunct the ALIAS path depends on belongs in it.
  * Fails WHOLE: one malformed id sends the run back to the alias branch. Fail-safe but
  * silent, and only reachable from a hand-edited run.json — parseList trims and filters,
  * and the MCP path re-joins through the same code.
@@ -52,58 +58,63 @@ const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle
 function isSeatTable(seats) {
   if (!isSeatSpace(seats)) { return false; }
   const ids = seats.map(s => s.id);
-  return ids.every(id => id !== '') && new Set(ids).size === ids.length;
+  return ids.every(id => id !== '') && new Set(ids).size === ids.length
+    && seats.every(s => typeof s.alias === 'string' && s.alias !== '');
 }
 
 /**
  * The alias names an ORPHANED leg wrote, taken from run.json's own degrade notes.
  *
  * The engine names an artifact from the seat when a leg binds and from the leg's
- * `modelInput || model` when it does not (run-launch.js:205-207). Only the second case
- * puts an alias-named file on disk, and `run-degrade.js` records exactly that case:
- * channel 'seat-unbound' with `data.legId` set. `data.seat` on such a note IS the string
- * the writer used, so the name derived here matches the file byte-for-byte — including
- * the case where the leg reported no modelInput and the writer fell back to the resolved
- * model id, which no seat.alias could have reproduced.
+ * `modelInput || model` when it does not (run-launch.js:205-207). Only the second case puts
+ * an alias-named file on disk, and `run-degrade.js` records exactly that case: channel
+ * 'seat-unbound' with `data.legId` set. `data.seat` on such a note IS the string the writer
+ * used, so the name derived here matches the file byte-for-byte — including where the leg
+ * reported no modelInput and the writer fell back to the resolved model id, which no
+ * seat.alias could have reproduced. Gating fallbacks on the NOTE, rather than emitting one
+ * per seat alias, is what keeps a healthy run (twin, --debate, or with a merely-dead seat)
+ * from claiming names nobody wrote and raising a run-integrity banner for it.
  *
- * Gating fallbacks on this — rather than emitting one per seat alias — is what keeps a
- * healthy run (twin, --debate, or with a merely-dead seat) from claiming names nobody
- * wrote and raising a run-integrity banner for it.
- *
- * ⚠️ v4.8 PR5a fix-wave (council B2): the note also says WHICH kinds that alias can own,
- * and it is not "all of them". `orphanLegNote` has exactly three call sites — run-stages.js:71
- * and :140 (a Stage-1 wave and its retry) and run-stage2.js:110 (the -s2 judge wave) — and
- * `data.waveId` separates them EXACTLY, not heuristically: run-stage2.js:67/69/90 build that
- * id as `${runId}-s2` from the same runId this run.json carries.
- *   - a -s2 note -> `judge-<alias>.md` (run-stage2.js:142) and nothing else; its own review
- *     landed under a SEAT name, because it bound in Stage 1.
- *   - any other  -> `review-<alias>.md` (run-launch.js:207) AND `judge-<alias>.md`: a Stage-1
- *     orphan is re-admitted to Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that
- *     `judgeSeatOf` filters out (:105-107), so its judge leg takes the alias branch too — and
- *     emits no -s2 note, because it BOUND. Measured: run-stages.test.js:1757.
- * An unmatchable waveId falls to the wider Stage-1 pair — over-contesting is fail-safe.
- * @returns {Map<string, Set<string>>} orphan alias -> the kinds it can own, in
- *   first-occurrence order (what keeps the emitted name list byte-identical).
+ * ⚠️ Fix-wave revision 2 (council-1 B2, then council-2 A1/C1 which refuted revision 1).
+ * Contesting DROPS the owning seat's attribution, so the question is never "can the orphan
+ * own this kind?" — absence of evidence is not evidence, and reading it that way handed a
+ * bound seat a `rebuttal-` an orphan may have written, re-arming RN-1 in the debate
+ * namespace (MEASURED; the one regression this fix wave introduced). The question is:
+ * does the note POSITIVELY PROVE the orphan did NOT write this kind? Exactly one such
+ * proof exists. `orphanLegNote` has three call sites — run-stages.js:71 and :140 (Stage-1
+ * and its retry) and run-stage2.js:110 (the -s2 judge wave) — and `data.waveId` separates
+ * them EXACTLY, not heuristically: run-stage2.js:67/69/90 build it as `${runId}-s2` from
+ * the runId this run.json carries. A -s2 note says the leg BOUND in Stage 1, so its review
+ * landed under a SEAT name: `review-<alias>.md` is provably not its. Nothing else is
+ * provable, and the near misses are why:
+ *   - a Stage-1 note exonerates NOTHING, not even judge-: that orphan is re-admitted to
+ *     Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that `judgeSeatOf` filters out
+ *     (:105-107), so its judge leg takes the alias branch too — and emits no -s2 note,
+ *     because it BOUND. Measured: run-stages.test.js:1757.
+ *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser key names no seat
+ *     takes materializeDebate's alias branch (run-debate.js:151-152,
+ *     run-debate-revote.js:169-171 pass `seatById.get(key) || null`) and NO note records it.
+ *   - an unmatchable waveId exonerates nothing.
+ * @returns {Map<string, Set<string>>} orphan alias -> the kinds it provably did NOT write,
+ *   in first-occurrence order (what keeps the emitted name list byte-identical).
  */
-const S2_ORPHAN_KINDS = Object.freeze(['judge']);
-const S1_ORPHAN_KINDS = Object.freeze(['review', 'judge']);
-function orphanClaims(run) {
+const S2_EXONERATES = Object.freeze(['review']);
+function orphanExonerations(run) {
   const degrades = run && Array.isArray(run.degrades) ? run.degrades : [];
   const s2WaveId = run && typeof run.runId === 'string' ? `${run.runId}-s2` : null;
-  const claims = new Map();
+  const byAlias = new Map();
   for (const d of degrades) {
     if (!d || d.channel !== 'seat-unbound' || !d.data || !d.data.legId) { continue; }
     const alias = d.data.seat;
     if (typeof alias !== 'string' || alias === '') { continue; }
-    if (!claims.has(alias)) { claims.set(alias, new Set()); }
-    const kinds = (s2WaveId && d.data.waveId === s2WaveId) ? S2_ORPHAN_KINDS : S1_ORPHAN_KINDS;
-    for (const k of kinds) { claims.get(alias).add(k); }
+    const proven = byAlias.get(alias) || new Set(S2_EXONERATES);
+    // INTERSECTION across an alias's notes, never union: two notes for one alias means two
+    // orphaned legs, and a Stage-1 one proves nothing about the review the -s2 one exonerates.
+    if (!(s2WaveId && d.data.waveId === s2WaveId)) { proven.clear(); }
+    byAlias.set(alias, proven);
   }
-  return claims;
+  return byAlias;
 }
-
-/** The orphan aliases alone, first-occurrence order — one spelling of the filter above. */
-function orphanNames(run) { return [...orphanClaims(run).keys()]; }
 
 /**
  * @param {object} run parsed run.json (may be partial)
@@ -209,17 +220,14 @@ function artifactAllowlist(run) {
   // silent mis-attribution spec §4.4 forbids.
   const orphanContested = new Map();   // artifact name -> owning entity
   const orphanByStem = new Map();      // sanitized stem -> Set(claimants), deduped for the banner
-  // ⚠️ TWO kind sets, and the split IS council fix B2.
-  // LISTED (`orphanKinds`) stays wide: listing a name nobody wrote costs nothing (the
-  // presence manifest marks it absent), while omitting one that exists makes it
-  // permanently unreadable. A debate leg whose raiser key names no seat takes
-  // materializeDebate's alias branch (run-debate.js:151-152, run-debate-revote.js:169-171
-  // pass `seatById.get(key) || null`), so an orphan alias CAN own rebuttal-/revote- with
-  // no note recording it — which is why they stay here.
-  // CONTESTED (`claimed`) is narrow — only what the note proves (see orphanClaims) —
-  // because contesting DROPS the owning seat's attribution to its own file.
+  // Both loops below default to NOT ASSERTING, in the direction that fails safe for each:
+  // LISTING a name nobody wrote costs nothing (the presence manifest marks it absent) while
+  // omitting one that exists makes it permanently unreadable, so `orphanKinds` stays wide.
+  // CONTESTING is likewise the safe default — an unattributed file is still listed and still
+  // bannered, while a wrong attribution serves one seat's prose under another's name. So a
+  // kind is contested unless the note PROVES the orphan did not write it (orphanExonerations).
   const orphanKinds = debated ? ['review', 'judge', 'rebuttal', 'revote'] : ['review', 'judge'];
-  for (const [alias, claimed] of orphanClaims(run)) {
+  for (const [alias, exonerated] of orphanExonerations(run)) {
     const stem = sanitizeName(alias);
     for (const kind of orphanKinds) {
       const n = `${kind}-${stem}.md`;
@@ -227,9 +235,9 @@ function artifactAllowlist(run) {
       // Its own seat's primary — same alias, so nothing is ambiguous.
       if (owner && owner.alias === alias) { continue; }
       if (owner) {
-        // ANOTHER entity's primary — but only for a kind this orphan can actually own.
-        // Otherwise the file is unambiguously the owner's and stays attributed to it.
-        if (!claimed.has(kind)) { continue; }
+        // ANOTHER entity's primary. Attribution survives ONLY on a positive proof of
+        // non-authorship; otherwise the file may be either seat's and is contested.
+        if (exonerated.has(kind)) { continue; }
         // The file on disk is one or the other and run.json cannot say which, so it is
         // listed (the owner's own push already did that), attributed to NOBODY, and
         // surfaced ONCE per stem — the kinds share a stem, and per kind double-counts.
@@ -283,7 +291,10 @@ function artifactAllowlist(run) {
   return list;
 }
 
+// `orphanNames` is deliberately gone (council-2 B1): revision 1 left it as a thin wrapper
+// with zero callers once artifactAllowlist moved to orphanExonerations. An export nothing
+// imports is a second spelling waiting to drift from the one that runs.
 module.exports = {
-  artifactAllowlist, isSeatTable, orphanNames, orphanClaims, FIXED_ARTIFACTS, DEBATE_ARTIFACTS,
+  artifactAllowlist, isSeatTable, orphanExonerations, FIXED_ARTIFACTS, DEBATE_ARTIFACTS,
 };
 
