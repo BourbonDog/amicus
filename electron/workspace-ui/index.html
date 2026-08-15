@@ -115,6 +115,9 @@
        Load order matters: workspace-app.js boots last and owns `state`. -->
   <script src="./workspace-panels.js"></script>
   <script src="./workspace-verbs.js"></script>
+  <!-- ⚠️ v4.8 PR5a fix-wave 3 extraction: workspace-banners.js must load BEFORE
+       workspace-app.js, whose renderBanners delegates to it. -->
+  <script src="./workspace-banners.js"></script>
   <script src="./workspace-app.js"></script>
 </body>
 </html>

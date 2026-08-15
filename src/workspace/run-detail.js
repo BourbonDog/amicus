@@ -13,7 +13,7 @@ const { formatCost } = require('../utils/pricing');
 const { readPointer } = require('./run-scan');
 const { buildNamePairs } = require('./blind-mode');
 const { buildMatrixModel } = require('./matrix-model');
-const { artifactAllowlist } = require('./artifact-guard');
+const { artifactAllowlist, isSeatTable } = require('./artifact-guard');
 const { isRealpathContained } = require('../utils/path-fence');
 
 /**
@@ -73,6 +73,13 @@ function costPanel(run, tally) {
   const stats = tally && Array.isArray(tally.runStats) ? tally.runStats : [];
   const rows = stats.map((r) => ({
     model: r.model,
+    // v4.8 PR5a T3: carry the seat. The engine computes it, writes it to tally.json and
+    // verdict.json, and this five-key projection was throwing it away one function before
+    // the renderer. ⚠️ Its consumer (renderCost) lands in PR5b, so this is honestly a
+    // payload-shape change here, not a visible one — shipping it now keeps PR5b from
+    // needing a src/ change of its own. Emit-when-set: a unique bench has no seat on any
+    // row, so the payload is byte-identical there.
+    ...(r.seat ? { seat: r.seat } : {}),
     role: r.role || (r.wasChair ? 'chair' : 'seat'),
     status: r.status || 'unknown',
     durationMs: r.durationMs === undefined ? null : r.durationMs,
@@ -215,6 +222,25 @@ function getRunDetail(project, runId) {
       // pre-v4.5 runs, live-doc consumers not yet updated) apart from a real map, and fall back
       // to its legacy sanitizeName(model) computation only in the former case.
       artifactsByModel: artifactNames.artifactsByModel || null,
+      // ⚠️ v4.8 PR5a fix-wave (council A1/B1): WHICH SPACE the payload above is in, decided
+      // by the one predicate artifactAllowlist itself gates on (isSeatTable, re-exported
+      // through artifact-guard). The renderer is a plain browser script and cannot
+      // require() it, and the alternative — re-spelling the predicate in workspace-lazy.js
+      // the way sanitizeName/TERMINAL_STATUSES are hand-copied — is exactly the drift that
+      // caused the finding: roster() gated on `!seats || !seats.length`, which is strictly
+      // weaker, so a malformed seats[] sent this map to ALIAS space while the roster stayed
+      // in SEAT space and every artifactsByModel lookup missed. Shipping the ANSWER instead
+      // of a copy of the question makes that divergence unrepresentable.
+      seatSpace: isSeatTable(run.seats),
+      // ⚠️ Fix-wave 3 (council-3 C2): seats[] is PRESENT but unusable, so the run silently
+      // lost per-seat behaviour — two seats on one model become indistinguishable in every
+      // panel. isSeatTable fails WHOLE (one malformed entry drops the entire table), which
+      // is the fail-safe direction but is exactly the correct-but-silent degrade the product
+      // principle rejects. Emitted here, beside the predicate that decides it, rather than
+      // re-derived renderer-side; workspace-app.js's renderBanners is its only consumer.
+      // NOT the same as `!seatSpace`: a run with no seats[] at all is a legacy run, not a
+      // broken one, and must not be bannered.
+      seatTableRejected: Array.isArray(run.seats) && run.seats.length > 0 && !isSeatTable(run.seats),
     };
   }
 

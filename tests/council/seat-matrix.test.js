@@ -119,7 +119,12 @@ describe('T17/T18 twin bench, on disk: one column per SEAT and the row agrees wi
   test('markdown: one column per seat, the star on the raiser SEAT only', () => {
     expect(headerFor(md)).toBe('| Finding | Sev | Raiser | gemini#1 | gemini#2 | Tier | Decision |');
     expect(rowFor(md, 'A1')).toBe('| A1 | major | gemini#1 | ✓* | ✗ | Contested |  |');
-    expect(rowFor(md, 'B1')).toBe('| B1 | major | gemini#2 | ✓ | ✓* | Confirmed |  |');
+    // ⚠️ v4.8 PR5a T6 (R5-10) UPDATES THIS PIN DELIBERATELY. B1 is the finding that carries
+    // sameModelCorroboration on this fixture, so the tier cell now reads `Confirmed†`. The
+    // marker rides the TIER because that is the claim R8 qualifies — a Confirmed reached
+    // only via the raiser's own twin is concurrence, not independent support. The star and
+    // the seat columns are unchanged, which is what keeps PR4c's assertion intact.
+    expect(rowFor(md, 'B1')).toBe('| B1 | major | gemini#2 | ✓ | ✓* | Confirmed† |  |');
   });
 
   test('markdown: EVERY reader of the raiser moves together — matrix, Findings-by-tier, and NOT the council line', () => {

@@ -97,6 +97,12 @@ function toModel(verdict, wave) {
       id: f.id, severity: f.severity, raiser: seatSpace ? (f.raiserSeat || f.raiser) : f.raiser, tier: f.tier,
       basis: f.basis || { a: 0, d: 0, n: 0 }, decision: f.decision || null,
       applied: f.applied === true, byJudge, debate: f.debate || null,
+      // ⚠️ v4.8 PR5a T6: this literal is CLOSED — it names every key it copies off `f` and
+      // copies nothing else, so a field added upstream is invisible to BOTH renderers until
+      // it is named here. tally.js has stamped R8's sameModelCorroboration since PR4c and
+      // verdict.js carries it, but no renderer could see it. Emit-when-true, matching the
+      // producer: it is never written as `false`.
+      ...(f.sameModelCorroboration ? { sameModelCorroboration: true } : {}),
     };
   });
   // 'movements' is deliberately re-vote-only (defended/amended): a withdrawn or
@@ -137,8 +143,13 @@ function toModel(verdict, wave) {
   ROLE_SUFFIX['chair-attempt'] = 'chair-attempt';
   ROLE_SUFFIX.repair = 'repair';
   ROLE_SUFFIX.superseded = 'superseded';
+  // v4.8 PR5a T5: name the row by its SEAT when it has one. On a twin bench the four
+  // seat/judge rows were previously indistinguishable. Depends on T4 — with T5 alone only
+  // the two seat rows separate, because judge rows carried no seat until then.
+  // ⚠️ Only seat and judge rows carry one: repair, superseded and debate rows still
+  // collapse on a twin, and the chair row is not a bench seat at all. Disclosed, not fixed.
   const costRows = runStats.map(r => ({
-    model: ROLE_SUFFIX[r.role] ? `${r.model} (${ROLE_SUFFIX[r.role]})` : r.model,
+    model: ROLE_SUFFIX[r.role] ? `${r.seat || r.model} (${ROLE_SUFFIX[r.role]})` : (r.seat || r.model),
     status: r.status, durationMs: r.durationMs,
     cost: r.usage && r.usage.cost ? r.usage.cost : null,
   }));
@@ -195,9 +206,21 @@ function renderMd(m) {
       const v = f.byJudge[j];
       return (v ? SYMBOL[v] : ' ') + (j === f.raiser ? '*' : '');
     });
-    out.push(`| ${f.id} | ${f.severity} | ${f.raiser} | ${cells.join(' | ')} | ${f.tier} | ${f.decision || ''} |`);
+    // v4.8 PR5a T6 (R5-10): the R8 marker rides the TIER cell. It qualifies the tier's
+    // implicit claim of independent corroboration, which is exactly what R8 exists to stop
+    // overstating — and the other two candidate placements (the finding row, the raiser
+    // cell) are both pinned by seat-matrix.test.js on the one fixture that carries the flag.
+    const tier = f.sameModelCorroboration ? `${f.tier}†` : f.tier;
+    out.push(`| ${f.id} | ${f.severity} | ${f.raiser} | ${cells.join(' | ')} | ${tier} | ${f.decision || ''} |`);
   }
   out.push('\n_Legend: ✓ agree · ✗ dispute · – neutral · `*` raiser\'s own vote_\n');
+  // ⚠️ GATED. Written unconditionally this line shifts every subsequent line of a
+  // unique-alias report, breaking byte-identity on EVERY run and reddening the existing
+  // pins and all four snapshots. Only a twin bench can raise the flag, so only a twin
+  // bench gets the line.
+  if (m.findings.some(f => f.sameModelCorroboration)) {
+    out.push('_`†` corroborated only by another seat running the SAME model — concurrence, not independent support._\n');
+  }
 
   out.push('## Street-cred (peers-only; lower = better)\n');
   out.push('| Model | peers-only | with-self |\n|---|---|---|');

@@ -38,12 +38,23 @@
   // computation only when the map itself is absent: older detail payloads (pre-v4.5 runs,
   // live-doc consumers not yet updated to build the map) never carry it, and re-deriving via
   // sanitizeName is exactly what those payloads always did, so it stays correct for them too.
+  // ⚠️ v4.8 PR5a T2: the map is now keyed by SEAT ID when the run carries a seat table,
+  // and callers pass seat ids to match (RULE OF ONE SPACE — roster, keys and values move
+  // together). The legacy re-derivation below is now REACHABLE in a way it never was: an
+  // alias-keyed caller used to always hit the map, so the fallback only ever served
+  // pre-v4.5 payloads. Under seat keys an alias-keyed caller MISSES — and because a
+  // fallback name can be a real file the guard admits (artifact-names.js), re-deriving
+  // would hand back another seat's prose instead of the honest empty state. So a miss
+  // now returns null and the caller renders "not written yet".
+  // Keep the map absent -> legacy path: pre-v4.5 payloads have no map at all and their
+  // callers still pass aliases, which is exactly what sanitizeName expects.
   function resolveArtifactName(model, kind) {
     var A = window.AmicusApp;
-    var map = A.state.detail.derived && A.state.detail.derived.artifactsByModel;
-    var entry = map && map[model];
-    if (entry && entry[kind]) { return entry[kind]; }
-    return kind + '-' + sanitizeName(model) + '.md';
+    var derived = A.state.detail.derived;
+    var map = derived && derived.artifactsByModel;
+    if (!map) { return kind + '-' + sanitizeName(model) + '.md'; }
+    var entry = map[model];
+    return (entry && entry[kind]) ? entry[kind] : null;
   }
 
   // ⚠️ D8 extraction (Task 1): body moved verbatim to workspace-seats.js
@@ -88,14 +99,16 @@
   // `revotes[].judge` is still keyed on the bench ALIAS (src/council/run-debate.js:217 keeps it
   // alias-valued and puts the seat in a sibling `seat` field only when the two differ), which is
   // the same key state.labelByModel uses, so this join needs no inversion.
-  // ⚠️ v4.8 PR3: `revote-*.md` and `judge-*.md` are no longer named from that alias — they are
-  // named from the SEAT (src/council/run-launch.js:234, run-stage2.js:145). The two agree on
-  // every bench with no repeated alias, which is every bench that has ever run, and diverge only
-  // for a repeated alias, where the seat-named file exists on disk but is not on
-  // artifactAllowlist at all, so resolveArtifactName below cannot reach it and this function
-  // takes its `if (!section) { return; }` path. Closed by the PR5 Workspace flip that rebuilds
-  // the allowlist from `run.seats`; do NOT patch it here by re-deriving a seat name, because the
-  // read guard would still refuse the result.
+  // ⚠️ v4.8 PR5a T2 CLOSES the PR3 forecast that stood here. The allowlist is seat-space now
+  // (artifact-names.js) and the matrix has been seat-space since PR4c, so `judgePair.model` is
+  // a SEAT ID and the name resolves. That is exactly why the re-vote join below had to move in
+  // the SAME commit: `revotes[].judge` stays alias-valued by design (run-debate.js:217), so an
+  // alias-vs-seat comparison is permanently false. At HEAD that was harmless — the name missed
+  // too, so nothing rendered — but once the name resolves, a false join silently serves the
+  // ORIGINAL judge's prose highlighted as the re-vote. `revotes[]` carries a sibling `seat`
+  // emit-when-different, so `(r.seat || r.judge)` is ONE term that is correct in both spaces;
+  // an `alias AND seat` conjunction would be unsatisfiable on every unique-alias bench, i.e.
+  // on every bench that has ever run.
   // Returns the settle promise so callers (and tests) can await the highlight instead of
   // guessing when it lands.
   function drillIntoJudge(judgePair, findingId) {
@@ -106,13 +119,22 @@
     if (!spec) { return Promise.resolve(); }
     return window.AmicusLazy.loadPanel('judges-panel', spec.bodyId, spec.files).then(function () {
       var rv = ((A.state.debate && A.state.debate.revotes) || []).find(function (r) {
-        return r.judge === judgePair.model && r.id === findingId;
+        return (r.seat || r.judge) === judgePair.model && r.id === findingId;
       });
       // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this branch used to recompute the name via
       // bare sanitizeName(judgePair.model), independently of the (already-fixed) judge branch
       // right below it — for a colliding pair, drilling a re-vote on the SECOND model resolved
       // to the bare name and cross-matched the FIRST model's genuine revote section. Both arms
       // of this ternary now go through the same disambiguation-aware helper.
+      // ⚠️ NO ALIAS FALLBACK — refused on purpose (council-3 B3, owner-ruled). The join above
+      // misses for debate.json written between 2026-08-12 (run.json began carrying seats[])
+      // and 2026-08-13 (revotes[] began carrying seat): those rows have only `judge`, an
+      // ALIAS, while judgePair.model is a seat id. Adding `|| r.judge === <this seat's alias>`
+      // would "fix" it by picking the wrong twin's re-vote roughly half the time — both twins
+      // write judge:'gemini' and nothing in that data distinguishes them, so it is RN-1 again,
+      // silent. Missing means rv stays undefined and the judge- artifact renders: the right
+      // seat, the wrong KIND, which is the fail-safe direction. That vintage never shipped in
+      // a release (`git tag --contains` on the first commit is empty).
       var artifactName = rv
         ? resolveArtifactName(judgePair.model, 'revote')
         : resolveArtifactName(judgePair.model, 'judge');

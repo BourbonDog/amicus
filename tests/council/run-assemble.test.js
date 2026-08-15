@@ -283,12 +283,20 @@ describe('v4.8 PR4c: the guard compares the seat to its OWN alias, never to `mod
   });
 });
 
-// T14b — `joinsLedger` (ledger.js:49-53) excludes role `judge`, so a judge row
-// can never win the ledger join and must not be stamped. `j.seat` IS in scope
-// at the judge push, which is exactly why this needs a pin rather than a note:
-// run-debate.test.js:838's role Set is {rebuttal,revote,superseded,repair} and
-// does not contain `judge`.
-test('v4.8 PR4c T14b: judge rows carry NO seat, even on a twin bench', () => {
+// v4.8 PR5a T4 (R5-8) REPLACES PR4c's T14b.
+//
+// T14b pinned the ABSENCE of `seat` on a judge row, as a proxy for the real
+// invariant: a judge row cannot enter the ledger join. That proxy was chosen
+// because nothing consumed the stamp. report.js's cost table now does, so the
+// proxy is retired and the invariant is asserted DIRECTLY — which is strictly
+// stronger, because absence-of-a-key would still pass if `joinsLedger` were
+// refactored to admit `judge`.
+//
+// ⚠️ Assert on the ROLE STRING, not on today's output: `joinsLedger` is
+// fail-OPEN for an absent/unknown role (ledger.js:39-48 documents that
+// deliberately — "the ABSENCE of a role … joins too"), so a pin written against
+// the shipped rows would not catch a refactor that drops or renames `role`.
+test('v4.8 PR5a T4: judge rows carry their seat on a twin bench', () => {
   const seats = buildSeats(['deepseek', 'deepseek'], null, null);
   const input = asm.buildTallyInput({
     runId: 'r', date: 'd', bench: ['deepseek', 'deepseek'], chair: 'x',
@@ -300,10 +308,48 @@ test('v4.8 PR4c T14b: judge rows carry NO seat, even on a twin bench', () => {
   });
   const judges = input.runStats.filter(r => r.role === 'judge');
   expect(judges).toHaveLength(2);
-  for (const j of judges) { expect('seat' in j).toBe(false); }
-  // …while the SAME judgeResults DO stamp the adjudication projection, so this
-  // is a scoping pin, not "the seats never reached this function".
+  expect(judges.map(j => j.seat)).toEqual(['deepseek#1', 'deepseek#2']);
+  // Anti-vacuity: the adjudication projection stamped the same seats, so this
+  // is a real change at the runStats site and not a fixture that always had them.
   expect(input.adjudications.map(a => a.seat)).toEqual(['deepseek#1', 'deepseek#2']);
+});
+
+test('v4.8 PR5a T4: a unique-alias bench stays byte-identical — no seat on any judge row', () => {
+  const seats = buildSeats(['deepseek', 'gpt'], null, null);
+  const input = asm.buildTallyInput({
+    runId: 'r', date: 'd', bench: ['deepseek', 'gpt'], chair: 'x',
+    reviews: [], chairStats: null,
+    judgeResults: seats.map(s => ({
+      judge: s.alias, ok: true, order: ['deepseek'], seat: s, conformance: 'clean',
+      leg: leg(s.alias), adjudications: [{ id: 'A1', verdict: 'agree' }],
+    })),
+  });
+  for (const j of input.runStats.filter(r => r.role === 'judge')) {
+    expect('seat' in j).toBe(false);
+  }
+});
+
+// `joinsLedger` / `LEDGER_JOIN_ROLES` are module-private (ledger.js exports
+// buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE,
+// LEDGER_SCHEMA_VERSION, mergeConformance, CONFORMANCE_RANK), so the invariant is
+// pinned BEHAVIOURALLY through buildLedgerRows — the same idiom
+// ledger.test.js:152 already uses for the resolvedModel half of this gate.
+test('v4.8 PR5a T4: a judge row carrying a seat still cannot reach the ledger', () => {
+  const { buildLedgerRows } = require('../../src/council/ledger');
+  const rec = {
+    runId: 'r', date: '2026-08-14', meta: { models: ['deepseek'], chair: 'x' },
+    findings: [], streetCred: [], tierCounts: {},
+    runStats: [{
+      model: 'deepseek', role: 'judge', wasChair: false, conformance: 'clean',
+      seat: 'deepseek#1', resolvedModel: 'deepseek/chat', status: 'complete',
+      durationMs: 5, usage: null,
+    }],
+  };
+  const rows = buildLedgerRows(rec);
+  // The role is the gate. A judge row's fields — the new `seat` included — must not
+  // land on the ledger row, and `buildLedgerRows` projects no `seat` key in any case.
+  expect(rows.some(r => 'seat' in r)).toBe(false);
+  expect('resolvedModel' in rows[0]).toBe(false);
 });
 
 // Task 4 (v4.7 D2/E4): extraRows is the row-per-launch channel runStage1 now

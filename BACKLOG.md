@@ -1895,12 +1895,12 @@ as two, and an unbound seat (a launched leg that never returns) is retried and, 
 announced on a new `seat-unbound` degrade channel. Three items surfaced by that work belong to
 the PRs still ahead in this stack; recorded here so they do not have to be re-derived.
 
-- [ ] **Hard prerequisite for PR5 · `artifact-guard.js:86`'s `uniqueModels` must build from
+- [ ] **[SHIPPED v4.8.0 PR5a — see the note below] Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
   `o.seats`, not a de-duplicated bench, before PR5's workspace flip.** `const uniqueModels =
   [...new Set(bench)]` still allowlists one `review-<alias>.md` per distinct alias, but a bench
   that repeats an alias now writes `review-<seat>-1.md` / `review-<seat>-2.md` (PR2b Task 3), so
   the Workspace lists only one of the two — see the CHANGELOG's known-limitation entry for this
-  release. **The file's own `:81-85` comment also needs correcting**, not just the code: it
+  release. **The file's own `:82-86` comment also needs correcting**, not just the code: it
   currently frames collapsing a repeated-alias bench to one set of rows as the harmless case
   (spec §4.5's original intent). Post-seat-identity that framing is inverted — a repeated alias is
   now exactly the case where collapsing loses a listing, not the case where collapsing is safe.
@@ -1915,10 +1915,18 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   on a twin `['deepseek','deepseek']` bench whose retry wave returns one bindable leg plus one
   unattributable one, the run dir ends up with BOTH `review-deepseek-1.md` (the real healed
   review, seat-named) and `review-deepseek.md` (the stray, alias-named because it never bound) —
-  and `artifact-guard.js:86` allowlists exactly `review-deepseek.md`, so the only file the
+  and `artifact-guard.js:87` allowlists exactly `review-deepseek.md`, so the only file the
   Workspace surfaces is the one the engine threw away. Do NOT fix this by restructuring the retry
   write path; an allowlist built from `o.seats` stops listing the alias-named stray and starts
   listing both seat-named files, which resolves it.
+
+  > **v4.8.0 PR5a — discharged in substance, NOT in letter.** Both seat-named files are now
+  > listed, so the healed review is reachable and it is the one the panels render. The stray is
+  > **still listed**, because `run.json` cannot tell a discarded retry leg from a legitimately
+  > orphaned one — both emit the same `seat-unbound` degrade note, and PR5a refuses to guess
+  > between them. What it does instead is refuse to *attribute* it: an orphan-written name belongs
+  > to no seat, so no panel renders it under a model, which is the user-visible half this entry
+  > was really about. A surface for genuinely unattributed artifacts is filed, not built.
 
 - [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
@@ -2370,3 +2378,32 @@ reusing the existing priced picker.
 - **#136 (easy bug reporting)** — explicitly a brainstorming placeholder. Its "three or more times"
   trigger implies recurring-error tracking that does not exist yet; it needs a design session before
   it can be scoped at all.
+
+## v4.8 PR5a council fix-waves — owner rulings (2026-08-15)
+
+Three adjudicated council rounds on [PR #159] (7 → 9 → 11 Confirmed). The findings are
+answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
+
+- [ ] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
+  before PR5b** (ruling). The file is at **300/300** with zero headroom, and it was itself split
+  out of `artifact-guard.js` for this same gate earlier in PR5a. Comment prose has now been
+  shaved three times to land defect fixes, which is the tell. **Named seam:** `isSeatTable` +
+  `orphanExonerations` move out (both are predicates over `run.seats` / `run.degrades` with no
+  dependency on the name-derivation body); `artifactAllowlist` stays. Council-3's B4/B5 both
+  landed inside `artifactAllowlist`, so no work is duplicated by doing this after them.
+  ⚠️ Do NOT fold this into a defect PR — it is a restructure no council has reviewed.
+- [ ] **Gate `review-claude.md` on a real producer marker** (council-2 B3 / council-3 A3, minor,
+  rated *thin* both rounds; owner ruled HOLD + file). It is unconditional in `FIXED_ARTIFACTS`
+  because `run.json` carries **no claude marker at all**: `claudeInCouncil` is set only on
+  tally/verdict meta (`run-assemble.js:178`) and `claudeReviewFile` never leaves the in-memory
+  options object (`run-state.js:129` writes a fixed four-key `options` projection). Gating it
+  therefore needs a **producer** change — stamp a marker into `run.json` — which is why it is not
+  a Workspace fix. Do it whenever Claude-in-council is next touched. Until then the entry is
+  honest: the presence manifest already reports four fixed names absent on a normal run.
+
+### Standing note for the next reviewer of this area
+
+Council-3's **C1** (waveId coupling) was disputed and, per owner ruling, **not** pinned: a change
+to run-stage2.js's `${runId}-s2` wave-id format will silently stop `orphanExonerations` from
+exonerating anything. That direction is **fail-safe** — it contests more, never less, so it
+cannot cause misattribution — but it is a silent behaviour change with no test standing under it.

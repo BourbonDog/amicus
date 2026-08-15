@@ -43,7 +43,9 @@ function renderHtml(m) {
     }).join('');
     return `<tr style="background:${TIER_VAR[f.tier] || '#fff'}">` +
       `<td>${esc(f.id)}</td><td>${esc(f.severity)}</td><td>${esc(f.raiser)}</td>${cells}` +
-      `<td style="color:${TIER_INK[f.tier] || 'inherit'};font-weight:600">${esc(f.tier)}</td>` +
+      // v4.8 PR5a T6 (R5-10): the R8 marker on the TIER cell, mirroring renderMd. A
+      // SEPARATE test pins each renderer — a shared one would let either regress silently.
+      `<td style="color:${TIER_INK[f.tier] || 'inherit'};font-weight:600">${esc(f.tier)}${f.sameModelCorroboration ? '<sup>†</sup>' : ''}</td>` +
       `<td>${esc(f.decision || '')}</td></tr>`;
   }).join('');
   const credRows = m.streetCred.map(s =>
@@ -131,7 +133,7 @@ td.c { text-align: center; }
 <table><tr><th>Tier</th><th>Count</th></tr>${tierRows}</table>${lostSection}
 <h2>Adjudication matrix</h2>
 <table><tr><th>Finding</th><th>Sev</th><th>Raiser</th>${judgeHead}<th>Tier</th><th>Decision</th></tr>${matrixRows}</table>
-<p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>
+<p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>${m.findings.some(f => f.sameModelCorroboration) ? '\n<p class="legend"><sup>†</sup> corroborated only by another seat running the SAME model — concurrence, not independent support.</p>' : ''}
 <h2>Street-cred <span class="meta">(peers-only; lower = better)</span></h2>
 <table><tr><th>Model</th><th>peers-only</th><th>with-self</th></tr>${credRows}</table>${debateSection}
 <h2>Cost</h2>

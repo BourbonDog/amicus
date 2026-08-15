@@ -312,6 +312,7 @@ src/
 │   └── version-info.js  # After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps
 ├── workspace/
 │   ├── artifact-guard.js  # Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact).
+│   ├── artifact-names.js  # Council Workspace — artifact NAME derivation (v4.8 PR5a).
 │   ├── blind-mode.js  # Council Workspace — blind-mode name mapping (v4.4 §6.3).
 │   ├── fold-format.js  # Council Workspace — fold payload builder (v4.4 §7).
 │   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
@@ -370,6 +371,7 @@ electron/
 │   ├── live-seats.js
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
 │   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
+│   ├── workspace-banners.js  # Council Workspace — the run-detail banner ladder (v4.4 §9, spec's "graceful when present").
 │   ├── workspace-lazy.js  # Council Workspace — lazy prose-panel loading (v4.4 §5.2). v4.7 PR7 extraction of the
 │   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
 │   ├── workspace-panels.js  # Council Workspace — name resolution + the matrix/verdict/seats panel adapters
@@ -691,7 +693,8 @@ evals/
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
-| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |
+| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()` |
+| `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanExonerations()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |
 | `workspace/blind-mode.js` | Council Workspace — blind-mode name mapping (v4.4 §6.3). | `buildNamePairs()`, `labelFor()`, `pairFor()` |
 | `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
 | `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |

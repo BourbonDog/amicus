@@ -14,21 +14,16 @@
 
 const fsReal = require('fs');
 const path = require('path');
-const { sanitizeName } = require('../council/run-launch');
 const { readPointer } = require('./run-scan');
 const { isRealpathContained } = require('../utils/path-fence');
+// v4.8 PR5a: name derivation moved to ./artifact-names (the 300-line gate). The two
+// constants and artifactAllowlist are re-exported below unchanged, so every existing
+// caller and test keeps importing them from here.
+// `isSeatTable` joins them (fix-wave, council A1/B1): run-detail.js has to answer "is
+// this run in seat space?" with THE predicate artifactAllowlist gates on, not a second
+// spelling of it, and this module is already its import surface.
+const { artifactAllowlist, isSeatTable, FIXED_ARTIFACTS, DEBATE_ARTIFACTS } = require('./artifact-names');
 
-const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
-// ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
-// allowlist never named, so the Workspace hard-refused every `--debate` output with
-// `artifact not allowed: <name>`. Writers (re-derived v4.8 PR3 — Task 1 moved runRevoteWave):
-// tally-provisional.json = src/council/run-debate-stage.js:45; revote-bundle.md =
-// run-debate-revote.js:81; debate.json = run-debate.js:221-222; the rebuttal-/revote- pair =
-// materializeDebate (run-launch.js:230-240).
-// ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
-// holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
-// appended inside artifactAllowlist below, next to review-/judge-.
-const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
 // isRealpathContained itself now lives in ../utils/path-fence.js (the shared "fence 2"
@@ -54,118 +49,6 @@ function truncateUtf8(buf, max) {
   return buf.subarray(0, end);
 }
 
-/**
- * @param {object} run parsed run.json (may be partial)
- * @returns {string[]} the allowlist. When two or more DISTINCT bench entries sanitize to the
- *   same artifact name, a non-enumerable-in-spirit (but plain, test-visible) `collisions`
- *   array is attached: `[{sanitized, models: [rawA, rawB, ...]}, ...]`. See the R4
- *   council-review note below for why this is surfaced rather than silently deduped.
- */
-function artifactAllowlist(run) {
-  const names = [...FIXED_ARTIFACTS];
-  const bench = run && Array.isArray(run.bench) ? run.bench : [];
-  // ⚠️ DE-ROT (F28): run.json carries a `debate` key ONLY on --debate runs, and it is seeded
-  // on the FIRST write (initCouncilRun, src/council/run-state.js:100-103), so this gate is safe
-  // and keeps the allowlist tight for the common case.
-  const debated = !!(run && run.debate);
-  if (debated) { names.push(...DEBATE_ARTIFACTS); }
-
-  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName is NOT
-  // injective — it maps every character outside [a-zA-Z0-9._-] to '-', so two DISTINCT bench
-  // entries ('vendor/a', 'vendor?a') both produce 'vendor-a'. Both models would then request
-  // the SAME artifact file, and the renderer's `[data-artifact="..."]` lookup (drillIntoJudge)
-  // hands back whichever section matches first — prose silently misattributed to the wrong
-  // model. That is a run-integrity defect (this run directory genuinely cannot hold both
-  // models' review/judge files under distinct names), not a display quirk, so it must be
-  // DETECTED and surfaced, never smoothed away by deduping the resulting name list.
-  //
-  // A bench with genuinely REPEATED identical entries (['gemini', 'gemini']) is a different,
-  // harmless case that must keep collapsing to one set of rows (preserved intent) — collapse
-  // those via a Set over the RAW bench values FIRST, so identical entries never even reach
-  // the collision check below (only entries that are distinct as raw strings but coincide
-  // after sanitizeName count as a collision).
-  const uniqueModels = [...new Set(bench)];
-  const rawBySanitized = new Map(); // sanitized name -> first raw model seen for it
-  const collisionModels = new Map(); // sanitized name -> Set(raw models) once >1 raw maps to it
-  for (const m of uniqueModels) {
-    const s = sanitizeName(m);
-    if (rawBySanitized.has(s)) {
-      if (!collisionModels.has(s)) { collisionModels.set(s, new Set([rawBySanitized.get(s)])); }
-      collisionModels.get(s).add(m);
-    } else {
-      rawBySanitized.set(s, m);
-    }
-  }
-
-  // ⚠️ Task 18 (RN-1): the collision above is a real run-integrity defect — the run directory
-  // physically holds ONE file where two models' artifacts should be, and no renderer trick can
-  // recover both. What the renderer CAN stop doing is showing model A's prose under model B's
-  // name. Deterministic disambiguation: per colliding sanitized name, sort the RAW models
-  // (sorting, not insertion order, is what keeps this reproducible across processes/runs); the
-  // first (sorted) keeps the bare sanitized name, the rest get `~2`, `~3`, ... The suffixed
-  // names deliberately do not exist on disk — the presence manifest (run-detail.js, via
-  // fs.statSync over this same allowlist) marks them absent, so the renderer shows the honest
-  // "not written yet" empty state for every model but the first, instead of cross-matching.
-  const nameFor = new Map(); // raw model -> its (possibly suffixed) sanitized name
-  for (const m of uniqueModels) {
-    let s = sanitizeName(m);
-    const collision = collisionModels.get(s);
-    if (collision) {
-      const sortedRaw = [...collision].sort();
-      const index = sortedRaw.indexOf(m);
-      if (index > 0) { s = `${s}~${index + 1}`; }
-    }
-    nameFor.set(m, s);
-  }
-
-  for (const m of uniqueModels) {
-    const s = nameFor.get(m);
-    names.push(`review-${s}.md`);
-    names.push(`judge-${s}.md`);
-    // rebuttal-/revote- are listed here under the same BENCH ALIAS through the same (now
-    // possibly suffixed) name, so a pair of DISTINCT aliases colliding after sanitizeName is
-    // disambiguated the same way review-/judge- are.
-    // ⚠️ v4.8 PR3: this no longer matches what the engine WRITES on a bench that repeats an
-    // alias. materializeDebate (run-launch.js:234) now names the file from the leg's SEAT when
-    // one is bound — run-debate.js:139-140 and run-debate-revote.js:161-163 attach it — so two
-    // twins write `rebuttal-<alias>-1.md` / `-2.md` while this loop lists one
-    // `rebuttal-<alias>.md` that nobody writes. `review-`/`judge-` above diverge identically —
-    // materializeReviews (run-launch.js:207) and run-stage2.js:145 also name from the seat — so
-    // on such a bench NEITHER twin's file is on this list and readRunArtifact refuses both. The
-    // whole allowlist is rebuilt from `run.seats` in the PR5 Workspace flip (BACKLOG: "Hard
-    // prerequisite for PR5"). Every bench with no repeated alias is unaffected — the seat id
-    // and the alias are the same string there.
-    if (debated) {
-      names.push(`rebuttal-${s}.md`);
-      names.push(`revote-${s}.md`);
-    }
-  }
-  // `uniqueModels` already collapsed genuinely-repeated bench entries, so this final Set is
-  // now just a belt-and-suspenders no-op for names — it can no longer mask a real collision,
-  // since that path is detected above from the RAW (pre-sanitize) values instead.
-  const list = [...new Set(names)];
-  if (collisionModels.size) {
-    list.collisions = [...collisionModels.entries()].map(([sanitized, models]) => ({
-      sanitized, models: [...models],
-    }));
-  }
-  // Consumed by workspace-panels.js (wireLazyPanels' file lists + drillIntoJudge's artifact
-  // lookup), which prefers this map over re-deriving names via sanitizeName(model) directly —
-  // that re-derivation is exactly what would ignore the suffixing above and misattribute prose.
-  // ⚠️ Fix-wave (review finding 1) residual limit this map cannot close: the BARE (unsuffixed)
-  // name is still exactly ONE physical file on disk, and its actual bytes belong to whichever
-  // colliding model's writer ran LAST — no map can recover which one that was. The guarantee
-  // delivered here is narrower than "attribution is fully sound": at most the sorted-first
-  // model can still be misattributed under the bare name; artifactCollisions (the run-integrity
-  // banner rendered by workspace-app.js's renderBanners) is what covers that residual case.
-  list.artifactsByModel = Object.fromEntries(
-    [...nameFor].map(([m, s]) => [m, {
-      review: `review-${s}.md`, judge: `judge-${s}.md`,
-      rebuttal: `rebuttal-${s}.md`, revote: `revote-${s}.md`,
-    }]),
-  );
-  return list;
-}
 
 /**
  * @param {string} project
@@ -252,6 +135,6 @@ function readRunArtifact(project, runId, name, deps = {}) {
 }
 
 module.exports = {
-  artifactAllowlist, readRunArtifact, isRealpathContained,
+  artifactAllowlist, isSeatTable, readRunArtifact, isRealpathContained,
   FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES,
 };

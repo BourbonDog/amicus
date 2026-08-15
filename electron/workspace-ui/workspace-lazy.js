@@ -132,8 +132,34 @@
       });
       lastWiredRunId = A.state.detail.runId;
     }
-    var bench = A.state.detail.run.bench || [];
-    var debated = !!A.state.detail.run.debate;
+    // ⚠️ Fix-wave (council A1): CAPTURED here, at wire time, exactly like `bench` and
+    // `debated` have always been — never re-read inside roster(). The `files` closures below
+    // are invoked LATER (on first panel open, and again on every same-run rewire), by which
+    // point `A.state.detail` may be a different payload entirely: an unreadable run, whose
+    // detail carries `error` and no `run` at all. Reading `A.state.detail.run.seats` at that
+    // moment threw — a crash path the bench-iteration code it replaced never had, because
+    // `bench` was already a local. Capturing also stops roster() from returning run B's
+    // seats while `debated` still describes run A.
+    var detail = A.state.detail;
+    var run = detail.run || {};
+    var bench = run.bench || [];
+    var debated = !!run.debate;
+    // ⚠️ Fix-wave (council B1): the seat-space decision is NOT re-derived here. It is
+    // isSeatTable(run.seats) — the same predicate artifactAllowlist gates on — computed in
+    // src/workspace/run-detail.js and shipped as its answer. `!seats || !seats.length`, the
+    // check this replaces, is strictly weaker: it accepts a seats[] with duplicate, empty or
+    // non-string ids that isSeatTable rejects, so a malformed table put derived.artifactsByModel
+    // in ALIAS space while this roster handed resolveArtifactName SEAT ids. Every lookup
+    // missed, resolveArtifactName returned null, present(null) dropped every row, and all
+    // three panels rendered empty with no banner and no error. Absent (a pre-fix detail
+    // payload) reads as alias space, which is the space such a payload's map is keyed in.
+    var seatSpace = !!(detail.derived && detail.derived.seatSpace);
+    // ⚠️ Fix-wave 2 (council-2 A2): captured for the same reason `run` is. renderDetail
+    // REBUILDS state.labelByModel per run (workspace-app.js:147-148), so a closure that
+    // read it live could pair THIS run's keys with the NEXT run's labels — and this map
+    // is what blind mode renders, so the failure is a wrong name shown confidently
+    // rather than a visibly empty panel.
+    var labels = A.state.labelByModel;
     // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
     // artifact is NOT translated into a friendly "not written yet" note anywhere in this
     // read path — it lands in the panel verbatim, absolute host path and all. `run.debate` is
@@ -146,15 +172,34 @@
     // files. Applies to review-/judge- too (the same latent gap, just plan-mandated rather
     // than new).
     var artifacts = A.state.detail.artifacts || {};
-    function present(name) { return !!(artifacts[name] && artifacts[name].present); }
+    function present(name) { return !!(name && artifacts[name] && artifacts[name].present); }
+    // ⚠️ v4.8 PR5a T2: iterate SEATS, not the bench. A repeated alias appears twice in
+    // `bench`, so these loops used to build two identical rows that resolved to one
+    // alias-named file and were then both dropped by present() — the whole issue-137
+    // Workspace symptom. run.json carries `seats[]` unconditionally (run.js checkpoints it), and
+    // getRunDetail returns the parsed run wholesale, so it is already on state.
+    //
+    // ⚠️ The label is resolved from the seat's ALIAS while the seat's ID is carried as
+    // identity. `labelByModel` is alias-keyed (workspace-app.js, from run.json's labelMap,
+    // which PR5a does not touch — R5-2), so keying it with a seat id yields undefined and
+    // AmicusRender.display() falls through to `pair.model` — printing `gemini#1` with blind
+    // mode ON. A seat id contains its alias, so rendering one defeats blind mode. This is
+    // the same split matrix-model.js already makes for the adjudication columns.
+    function roster() {
+      if (!seatSpace) {
+        return bench.map(function (m) { return { key: m, label: labels[m] }; });
+      }
+      return run.seats.map(function (s) {
+        return { key: s.id, label: labels[s.alias] };
+      });
+    }
     // ⚠️ v4.4.1 RN-9: these two titles used to hand-roll `A.state.blind && label ? label : m`
     // inline. Both now go through AmicusRender.display() — the single blind-flip definition the
     // re-vote title below already used — so the next blind-mode ruling lands in one place instead
     // of being re-applied by hand in every file that happens to render an identity.
     loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
-      return bench.map(function (m) {
-        var label = A.state.labelByModel[m];
-        return { name: window.AmicusPanels.resolveArtifactName(m, 'review'), title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+      return roster().map(function (r) {
+        return { name: window.AmicusPanels.resolveArtifactName(r.key, 'review'), title: window.AmicusRender.display({ model: r.key, label: r.label }, A.state.blind) };
       }).filter(function (f) { return present(f.name); });
     } };
     loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
@@ -168,9 +213,8 @@
         .filter(function (f) { return present(f.name); });
     } };
     loaders['judges-panel'] = { bodyId: 'judges-body', files: function () {
-      var files = bench.map(function (m) {
-        var label = A.state.labelByModel[m];
-        return { name: window.AmicusPanels.resolveArtifactName(m, 'judge'), title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+      var files = roster().map(function (r) {
+        return { name: window.AmicusPanels.resolveArtifactName(r.key, 'judge'), title: 'Judge ' + window.AmicusRender.display({ model: r.key, label: r.label }, A.state.blind) };
       });
       if (debated) {
         // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose
@@ -187,9 +231,8 @@
         // for re-votes the exact cross-match bug Task 18 fixed for review-/judge-. Routed
         // through resolveArtifactName(m, 'revote') like the other three sites; its built-in
         // legacy fallback keeps older detail payloads (no artifactsByModel map) correct too.
-        files = files.concat(bench.map(function (m) {
-          var label = A.state.labelByModel[m];
-          return { name: window.AmicusPanels.resolveArtifactName(m, 'revote'), title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+        files = files.concat(roster().map(function (r) {
+          return { name: window.AmicusPanels.resolveArtifactName(r.key, 'revote'), title: 'Re-vote ' + window.AmicusRender.display({ model: r.key, label: r.label }, A.state.blind) };
         }));
       }
       return files.filter(function (f) { return present(f.name); });
