@@ -2384,7 +2384,7 @@ reusing the existing priced picker.
 Three adjudicated council rounds on [PR #159] (7 → 9 → 11 Confirmed). The findings are
 answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
 
-- [ ] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
+- [x] **Extract the seat-space pair out of `src/workspace/artifact-names.js`** — **its own PR,
   before PR5b** (ruling). The file is at **300/300** with zero headroom, and it was itself split
   out of `artifact-guard.js` for this same gate earlier in PR5a. Comment prose has now been
   shaved three times to land defect fixes, which is the tell. **Named seam:** `isSeatTable` +
@@ -2392,6 +2392,17 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   dependency on the name-derivation body); `artifactAllowlist` stays. Council-3's B4/B5 both
   landed inside `artifactAllowlist`, so no work is duplicated by doing this after them.
   ⚠️ Do NOT fold this into a defect PR — it is a restructure no council has reviewed.
+  — done, [PR #160] (merge `ccb0551d`), shipped as `src/workspace/seat-space.js`. Exactly the
+  named seam, moved byte-for-byte and re-exported, so no caller changed: `artifact-names.js`
+  **300 → 222**, `seat-space.js` 113. Pinned by `tests/workspace/seat-space.test.js`, which
+  asserts function **identity** (`toBe`) across all three import paths — a behavioural test
+  cannot catch the re-implementation drift that produced council-1's B1, so identity is the
+  property under test. ⚠️ **This is the pre-PR5b extraction, NOT PR5b itself** — the branch was
+  named `v48-pr5b-seat-space-split`, which mis-labels it. PR5b (the live/DOM path) is still
+  unstarted; see the plan's §0.3 split table.
+  ⚠️ Its council verdict — "Ship it", 0/0/0/0 — was `stage1:PARTIAL` (3 seats, `inkling` n/a)
+  **and** was the first run under the raised `diff_cap_bytes`, so it is not clean evidence that
+  the cap fix worked. The next substantive PR reviewed at 240k is the real test.
 - [ ] **Gate `review-claude.md` on a real producer marker** (council-2 B3 / council-3 A3, minor,
   rated *thin* both rounds; owner ruled HOLD + file). It is unconditional in `FIXED_ARTIFACTS`
   because `run.json` carries **no claude marker at all**: `claudeInCouncil` is set only on
@@ -2400,6 +2411,52 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   therefore needs a **producer** change — stamp a marker into `run.json` — which is why it is not
   a Workspace fix. Do it whenever Claude-in-council is next touched. Until then the entry is
   honest: the presence manifest already reports four fixed names absent on a normal run.
+
+## v4.8 PR5b — owner ruling (2026-08-15)
+
+- [ ] **⚠️ SILENT DATA LOSS · The Workspace's dead-seat rows collapse, and can erase a dead seat
+  entirely, on a bench that repeats an alias.** Deferred out of PR5b by owner ruling so that PR
+  stays renderer-only; **deferred on blast radius, NOT on severity**. Both measured at `ccb0551d`,
+  not reasoned — probes and expected values are in
+  `docs/superpowers/plans/2026-08-15-v48-pr5b-live-seat-path.md` §0.2, §0.3, §0.7.
+  - **M3** — `deadSeats`' `add()` (`live-seats.js:177-185`) returns early on `seen[model]`, keyed
+    on the alias. Measured: two `dead-leg` notes for one alias → **1** row out.
+  - **M4** — its suppression (`live-seats.js:234-243`) builds `reviewing[alias]` from the live
+    seats. Measured: one seat alive, its twin genuinely dead → **0** dead rows rendered. The dead
+    seat produces no output anywhere in the panel. Per the product principle this rates as
+    severely as a crash.
+  - **Why it is not a pure renderer fix.** ⛔ **The table first filed here was WRONG on every row
+    but one** — corrected 2026-08-15 by the PR5b round-2 council (finding C1, Confirmed) after
+    tracing `run-retry-notes.js` against the two consumers instead of reading the emitters alone.
+    A seat id is available on **exactly one of five emitter arms**:
+
+    | emitter | channel | key the consumer sees |
+    |---|---|---|
+    | `retryLegStillDeadNote` (`run-retry-notes.js:67`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ `data.firstFailure.seatId` — **`dead-leg` branch only** |
+    | `missingLegStillDeadNote` (`:92`) | `missing ? 'seat-unbound' : 'dead-leg'` | ✅ same, same caveat |
+    | `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ no `firstFailure` → `data.seat`, an ALIAS |
+    | `waveStillDeadNote` (`:28`) dead-wave arm | `dead-wave` | ❌ `data.models[]`, ALIASES |
+    | `waveStillDeadNote` (`:28`) partial arm | `seat-unbound` | ❌ alias only |
+
+    Both consumers filter to `dead-leg`/`dead-wave` (`live-seats.js:188`,
+    `workspace-seats.js:61`), so **every `seat-unbound` record is invisible to this surface**.
+    The `dead-leg` seatId evidence is real — `run-retry.test.js:628` shows
+    `['deepseek#1','deepseek#2']` on a twin bench and `degrade-channels.test.js:126` shows a
+    shipped degrade carrying `seatId` — but it covers one arm, not the family.
+    `srcLegStillDeadNote`'s call site does have `unit`, carrying `unit.seats` (index-parallel with
+    `unit.models`, `run-retry-group.js:33`) and `unit.firstFailures[].seatId`, so the id is
+    reachable there — just not emitted. **Design the producer change against all five arms.**
+  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
+    (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
+  - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
+    `run-retry-notes.js:39-41` warns that adding a key unconditionally breaks them. Budget for
+    fixture updates.
+  - ⚠️ `workspace-seats.js:47`'s docblock claims `retriedAliases` mirrors `deadSeats`' predicate
+    "EXACTLY, and must keep mirroring it". PR5b Task 3 changes one side. **Re-read that comment
+    before changing the other** — a mirror that stops mirroring is council-1 B1's defect class.
+  - A **partial** fix (seat-key only where `firstFailure.seatId` exists) was considered and
+    rejected: it leaves a silent erasure in place on one emitter while appearing to close the
+    class. Either close it on every emitter or disclose the residual case explicitly.
 
 ### Standing note for the next reviewer of this area
 

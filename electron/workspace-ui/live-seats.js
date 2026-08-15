@@ -75,12 +75,27 @@
       return !SEATS_PANEL_EXCLUDED_ROLES[r.role];
     }).map(function (r) {
       return {
-        // ⚠️ DE-ROT (F37): composite id — a v4.1 `--debate` run emits extra runStats rows for
-        // the SAME bench alias (role 'rebuttal'/'revote', src/council/debate.js:88-96). With no
-        // id, renderSeats keys on model and the re-vote row silently overwrites the seat row.
-        // (If the panel is meant to be bench-only, filter to seat/critic/lens:* instead and
-        // leave rebuttal/revote spend to the cost table — but say which; do not leave it implied.)
-        id: r.model + ':' + (r.role || 'seat'),
+        // ⚠️ DE-ROT (F37) + v4.8 PR5b: composite id over the SEAT, not the alias.
+        // ROLE half: a v4.1 `--debate` run emits extra runStats rows for the SAME bench alias
+        // (role 'rebuttal'/'revote', debateRunStatsRows at src/council/debate.js:134, merged at
+        // run-finish.js:43-48). Without it, renderSeats keys on model and the re-vote row
+        // silently overwrites the seat row.
+        // SEAT half: PR1 made a bench that repeats an alias produce distinct seats, and two of
+        // them collided on the alias. Measured at HEAD across two ticks: renderSeats appended
+        // BOTH rows on tick one, then froze the first forever — `existing` is snapshotted
+        // before the loop, so both seats resolved to the LAST row and the first was never
+        // re-matched, while `seen[key]` kept it from being removed.
+        // `r.seat` is emit-when-set upstream (run-assemble.js:89 stamps it only when
+        // seat.id differs from seat.alias, which seats.js:67 makes true exactly for a repeated
+        // alias), so `|| r.model` is load-bearing — it keeps a unique bench byte-identical.
+        // JSON.stringify, not concatenation: an alias may contain ':' and roles include
+        // 'lens:*', so a concatenated key is NOT injective — ('a','lens:x') and ('a:lens','x')
+        // both spell 'a:lens:x'. Never displayed; it is only ever a dataset.key, and
+        // workspace-render.js:186 uses a plain object lookup so quotes are already safe.
+        id: JSON.stringify([r.seat || r.model, r.role || 'seat']),
+        // Carried for workspace-seats.js's retry-badge join (PR5b Task 2). Null on a unique
+        // bench, matching the upstream payload exactly.
+        seat: r.seat || null,
         model: r.model, role: r.role || null, status: r.status || null,
         stage: null, messages: null, tokensIn: null, tokensOut: null,
         costDisplay: r.costDisplay || null, lastActivity: null, latestPreview: null,

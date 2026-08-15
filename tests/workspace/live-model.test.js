@@ -92,17 +92,27 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
   });
 
   // ⚠️ DE-ROT (F37): v4.1 `--debate` appends EXTRA runStats rows for the SAME bench alias
-  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — src/council/debate.js:88-96,
-  // merged at src/council/run-finish.js:43-48). renderSeats keys on `seat.id || seat.model`, and
-  // seatsFromRunStats set no id, so on any debate run the seat row was silently overwritten
-  // by the re-vote leg. This case is the regression guard.
+  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — `debateRunStatsRows` at
+  // src/council/debate.js:134, merged at src/council/run-finish.js:43-48). renderSeats keys on
+  // `seat.id || seat.model`, and seatsFromRunStats set no id, so on any debate run the seat row
+  // was silently overwritten by the re-vote leg. This case is the regression guard.
+  //   ⚠️ The debate.js citation above read `:88-96` until v4.8 PR5b. That is the adjudication
+  //   assembly, not the runStats-row emitter — a rotted citation that had been copied into two
+  //   other files. Verified: `debateRunStatsRows` is defined at debate.js:134.
+  //   ⚠️ The expected ids below are `JSON.stringify([seat-or-alias, role])`, not `alias:role`
+  //   (PR5b Task 1). What this guard pins is that the three roles stay DISTINCT; the spelling is
+  //   incidental. An alias may contain ':' and roles include 'lens:*', so the concatenated form
+  //   was not injective.
   test('debate rows for the same model get distinct ids', () => {
     const rows = seatsFromRunStats([
       { model: 'gemini', role: 'seat', status: 'complete', durationMs: 120000, costDisplay: '$0.11' },
       { model: 'gemini', role: 'rebuttal', status: 'complete', durationMs: 9000, costDisplay: '$0.03' },
       { model: 'gemini', role: 'revote', status: 'complete', durationMs: 4000, costDisplay: '$0.01' },
     ]);
-    expect(rows.map((r) => r.id)).toEqual(['gemini:seat', 'gemini:rebuttal', 'gemini:revote']);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(3);
+    expect(rows.map((r) => r.id)).toEqual([
+      '["gemini","seat"]', '["gemini","rebuttal"]', '["gemini","revote"]',
+    ]);
   });
 
   // v4.7 D6/E1: three new row-per-launch producer roles (chair-attempt,

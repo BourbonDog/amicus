@@ -243,13 +243,138 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     expect(tbody.children[0].classList.contains('seat-retried')).toBe(false);
     expect(tbody.children[0].children[8].textContent).toBe('');
   });
+
+  // ── v4.8 PR5b Task 2: twin benches ────────────────────────────────────────────────────
+  // A bench that repeats an alias has DISTINCT seats (seats.js:67 mints `alias#N`). The
+  // marker map was keyed on the alias, so one retried twin badged both rows. PR5a plumbed
+  // the seat onto cost rows and PR5b Task 1 carries it onto seat rows as `seat`.
+  //
+  // ⚠️ The key is `firstFailure.seatId ?? data.seat` and the lookup is DUAL —
+  // `retried[s.seat] || retried[s.model]`. Both arms are load-bearing and neither may be
+  // dropped: seat-id records are precise, alias-only records (srcLegStillDeadNote,
+  // dead-wave) can only be matched by alias. Pairing a dual key with a seat-id-only lookup
+  // was the silent regression round 2 caught — it badged NOTHING for the alias-only
+  // emitters, replacing a visible false positive with an invisible false negative.
+
+  function badged(tbody) {
+    return Array.prototype.slice.call(tbody.children)
+      .filter((r) => r.children[8] && r.children[8].textContent === '↻ retried once').length;
+  }
+
+  const twinCostRows = [
+    { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+    { model: 'deepseek', seat: 'deepseek#2', role: 'seat', status: 'error', costDisplay: '$0.02' },
+  ];
+
+  test('(9) PR5b: a record naming ONE twin by seatId badges exactly that seat', () => {
+    // retryLegStillDeadNote / missingLegStillDeadNote on their dead-leg branch: the only
+    // emitter arm of five that names a seat (run-retry.test.js:628 pins the seatIds).
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat deepseek did not review',
+      why: 'retried once', effect: '1 of 2 seats reviewed',
+      data: {
+        seat: 'deepseek', status: 'error', retryWaveId: 'r1-c1r1',
+        firstFailure: { seat: 'deepseek', seatId: 'deepseek#2', class: 'leg', status: 'error' },
+      },
+    }];
+
+    const tbody = paint(twinCostRows, degrades);
+
+    expect(tbody.children.length).toBe(2);
+    expect(badged(tbody)).toBe(1);
+    // and it is the RIGHT one — seat two, not seat one
+    expect(tbody.children[1].children[8].textContent).toBe('↻ retried once');
+    expect(tbody.children[0].children[8].textContent).toBe('');
+  });
+
+  test('(10) PR5b: an ALIAS-only record on a twin bench badges both — disclosed imprecision, not a defect', () => {
+    // srcLegStillDeadNote emits no firstFailure, so `data.seat` is all there is. The record
+    // does not say WHICH seat failed, so no consumer can attribute it. Over-badging is the
+    // deliberate failure direction: visible beats silent.
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat deepseek did not review',
+      why: 'retry wave produced no legs', effect: '1 of 2 seats reviewed',
+      data: { seat: 'deepseek', status: 'error', reason: null, retryWaveId: 'r1-c1r1' },
+    }];
+
+    expect(badged(paint(twinCostRows, degrades))).toBe(2);
+  });
+
+  test('(11) PR5b CONTROL: a distinct-alias bench is unaffected', () => {
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
+      why: 'retried once', effect: '1 of 2 seats reviewed',
+      data: { seat: 'alpha', status: 'error', retryWaveId: 'r1-c1r1' },
+    }];
+    const tbody = paint([
+      { model: 'alpha', role: 'seat', status: 'error', costDisplay: '$0.01' },
+      { model: 'beta', role: 'seat', status: 'complete', costDisplay: '$0.02' },
+    ], degrades);
+
+    expect(badged(tbody)).toBe(1);
+    expect(tbody.children[0].children[8].textContent).toBe('↻ retried once');
+  });
+
+  test('(12) PR5b: the marker loop never sees `modelInput`, which is why the lookup may omit it', () => {
+    // Council finding B1: the pre-PR lookup was `retried[s.modelInput || s.model]` and PR5b
+    // dropped the modelInput arm. Safe ONLY because renderSeatsPanel (:101) drives this loop
+    // exclusively from seatsFromRunStats output, which emits no modelInput — live payload seats,
+    // which DO carry it (live-normalize.js seatOf), go to deadSeats (:217) and never reach here.
+    // That was an undocumented, untested assumption; this pins it. If a future change adds
+    // modelInput to the projection, or routes live seats through renderSeatsPanel, this goes red
+    // and the `s.modelInput` arm must come back.
+    const rows = window.AmicusLive.seatsFromRunStats([
+      { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: 'ok', costDisplay: '$0.01' },
+      { model: 'alpha', role: 'critic', status: 'error', costDisplay: '$0.02' },
+    ]);
+    expect(rows.length).toBe(2);
+    rows.forEach((r) => {
+      expect(Object.prototype.hasOwnProperty.call(r, 'modelInput')).toBe(false);
+      expect(r.modelInput).toBeUndefined();
+    });
+  });
+
+  test('(13) PR5b: a null seat id does not coerce into the string key "null"', () => {
+    // Council finding A1: on a UNIQUE bench `s.seat` is null, and a bare `retried[s.seat]`
+    // coerces null to the string key 'null' — so any seat with no seat id would match a degrade
+    // record whose alias is literally `null`. Same class as the `toString` alias that crashed
+    // the seats repaint (live-seats.js:170-174), which is why this family uses
+    // Object.create(null). The `s.seat &&` guard in the lookup is what closes it.
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat null did not review',
+      why: 'retried once', effect: '0 of 2 seats reviewed',
+      data: { seat: 'null', status: 'error', retryWaveId: 'r1-c1r1' },
+    }];
+    // A unique bench: no `seat` on any cost row, so every seat row carries `seat: null`.
+    const tbody = paint([
+      { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+      { model: 'beta', role: 'seat', status: 'complete', costDisplay: '$0.02' },
+    ], degrades);
+
+    // THREE rows, not two: the two seat rows plus a dead-seat ghost for the alias `null`, which
+    // has no cost row of its own and is therefore not suppressed. The ghost is expected and is
+    // not what this pins — the discriminator is that NEITHER seat row carries the badge.
+    // Without the `s.seat &&` guard both seat rows badge, because retried[null] reads
+    // retried['null'].
+    expect(tbody.children.length).toBe(3);
+    expect(badged(tbody)).toBe(0);
+  });
 });
 
 /**
- * Drift pin (v4.7 PR7 task-8 review finding, "Important"): retriedAliases() above is a
+ * Drift pin (v4.7 PR7 task-8 review finding, "Important"): retriedSeats() above is a
  * hand-mirrored copy of deadSeats' own kind/channel/data-shape filter (live-model.js:227-241)
  * — the comment at this file's :47-56 says it "must keep mirroring it", but nothing enforced
- * that until now. This is a BEHAVIOURAL pin, not a source-text one: it drives both consumers
+ * that until now.
+ *
+ * ⚠️ v4.8 PR5b: the mirror is now PARTIAL and this pin's scope narrowed with it. The
+ * kind/channel FILTER is still mirrored and still pinned here. The KEY is not: retriedSeats now
+ * prefers `firstFailure.seatId` where a record supplies one, while deadSeats still dedups on
+ * the alias (`seen[model]`) — that half is the deferred M3/M4 work in BACKLOG.md. These cases
+ * all use distinct aliases, where seat id and alias coincide, so the two paths still agree;
+ * a TWIN-bench case would legitimately diverge today. When M3/M4 lands, widen this pin.
+ *
+ * This is a BEHAVIOURAL pin, not a source-text one: it drives both consumers
  * with the SAME degrade-record fixtures and asserts they agree on which records count as
  * "retried" — the one axis the two consumers are required to agree on.
  *
@@ -258,13 +383,13 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
  * cost row — different jobs by design (D6's role-aware suppression), so a pin comparing total
  * rows would be false by construction (see test (5) above, which relies on exactly that
  * asymmetry). Comparing "does this degrade record count as retried" sidesteps it: each case
- * drives retriedAliases() (via ONE live reviewing-role row for the alias, so deadSeats' own
+ * drives retriedSeats() (via ONE live reviewing-role row for the alias, so deadSeats' own
  * ghost candidate for that same alias is suppressed and the row painted is unambiguously the
  * marker path's) and deadSeats() (via NO live rows at all, so its ghost candidate's statusText
  * reflects the retried computation in isolation, uncoupled from suppression) against the
  * IDENTICAL degrade array, and asserts the two verdicts match.
  */
-describe('retriedAliases (workspace-seats.js) vs deadSeats retried-set (live-model.js): drift pin', () => {
+describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-model.js): drift pin', () => {
   let AmicusSeats;
   let AmicusLive;
   let document;

@@ -199,6 +199,28 @@ All notable changes to Amicus are documented here. Format follows
   readable names is not narrowed either way: a name is dropped from *attribution*, never from the
   allowlist. Benches whose aliases are all distinct are byte-for-byte unaffected — every name they
   write is on the list, and the list is unchanged.
+- **The Council Workspace's seats panel now shows one live row per seat on a bench that repeats
+  an alias, instead of one usable row beside a frozen ghost.** The terminal seat rows were keyed
+  on `alias:role`, so two seats of one alias collided. The panel rendered both rows on its first
+  repaint and then **froze the first one permanently**: every later repaint resolved the shared
+  key to the *last* row, so both seats wrote into it while the first was never matched again and
+  never removed. What you saw was a stale row that stopped at its first-tick values, beside a row
+  flickering between two seats' data — with no error, no banner, and no indication either was
+  wrong. Rows are now keyed on the seat, which the tally already recorded and which the run
+  detail already carried. Benches whose aliases are all distinct are byte-for-byte unaffected:
+  the seat is only recorded when it differs from the alias, so those rows key exactly as before.
+- **The "↻ retried once" badge now marks the seat that was actually retried, not every seat
+  sharing its alias — where the run records enough to tell them apart.** ⚠️ **It cannot always
+  tell.** Of the five ways a still-dead-after-retry note is written, exactly one records *which*
+  seat failed (`firstFailure.seatId`, on the `dead-leg` branch of a leg-origin retry). The other
+  four record only the council alias: a retry wave that died wholesale, a wave-origin loss
+  carrying `models[]`, and the two arms that route to the `seat-unbound` channel, which this
+  surface has never read. **When only an alias is recorded, every seat sharing that alias is
+  badged.** That is deliberate: the record does not say which seat failed, so nothing downstream
+  can attribute it, and a badge one seat too wide is visible and self-correcting where a missing
+  badge would be silent. Marking the seat exactly would need the producer to stamp the seat id on
+  every channel — a change with its own blast radius, filed in `BACKLOG.md` rather than smuggled
+  in here.
 - **⚠️ The peers-only filter now excludes the raiser by SEAT, so findings on a bench that repeats
   an alias change tier — in BOTH directions.** Before this release the filter compared council
   aliases, so on `--models deepseek,deepseek,gpt` the *second* deepseek seat's vote was discarded
