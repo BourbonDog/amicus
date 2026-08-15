@@ -314,6 +314,25 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     expect(badged(tbody)).toBe(1);
     expect(tbody.children[0].children[8].textContent).toBe('↻ retried once');
   });
+
+  test('(12) PR5b: the marker loop never sees `modelInput`, which is why the lookup may omit it', () => {
+    // Council finding B1: the pre-PR lookup was `retried[s.modelInput || s.model]` and PR5b
+    // dropped the modelInput arm. Safe ONLY because renderSeatsPanel (:101) drives this loop
+    // exclusively from seatsFromRunStats output, which emits no modelInput — live payload seats,
+    // which DO carry it (live-normalize.js seatOf), go to deadSeats (:217) and never reach here.
+    // That was an undocumented, untested assumption; this pins it. If a future change adds
+    // modelInput to the projection, or routes live seats through renderSeatsPanel, this goes red
+    // and the `s.modelInput` arm must come back.
+    const rows = window.AmicusLive.seatsFromRunStats([
+      { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: 'ok', costDisplay: '$0.01' },
+      { model: 'alpha', role: 'critic', status: 'error', costDisplay: '$0.02' },
+    ]);
+    expect(rows.length).toBe(2);
+    rows.forEach((r) => {
+      expect(Object.prototype.hasOwnProperty.call(r, 'modelInput')).toBe(false);
+      expect(r.modelInput).toBeUndefined();
+    });
+  });
 });
 
 /**

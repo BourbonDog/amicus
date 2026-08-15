@@ -140,6 +140,21 @@
       // On a twin bench an alias-only record still badges BOTH seats. That is not a defect — the
       // record does not say which seat failed, so no consumer can attribute it. Over-badging is
       // the deliberate direction: visible beats silent.
+      //
+      // ⚠️ NAMING HAZARD (council A1): `seat` means TWO different things three lines apart.
+      // `s.seat` is a SEAT ID (`alias#N`, from run-assemble.js:89 via the cost row). The degrade
+      // records keyed into `retried` above use `data.seat`, which is an ALIAS and stays one
+      // deliberately (run-retry-notes.js:39-45 — verdict.js:72 compares it against `o.critic`).
+      // Reading one as the other is precisely how an earlier revision of this fix paired an
+      // alias-keyed map with a seat-id lookup and dropped every badge. When touching either
+      // side, say which space you are in.
+      //
+      // ⚠️ The pre-PR expression was `retried[s.modelInput || s.model]` (council B1). The
+      // `modelInput` arm is dropped on purpose: this loop only ever iterates
+      // `seatsFromRunStats(...)` output (assigned at :101), and that projection emits no
+      // `modelInput` at all — live payload seats, which DO carry it, reach `deadSeats` at :217
+      // and never reach here. The invariant is pinned by test (12) in workspace-seats.test.js;
+      // if that test ever fails, restore the `s.modelInput` arm rather than deleting the test.
       var isRetried = isReviewingRole(s.role) && !!(retried[s.seat] || retried[s.model]);
       if (isRetried) {
         row.classList.add('seat-retried');
