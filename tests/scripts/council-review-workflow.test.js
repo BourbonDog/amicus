@@ -34,7 +34,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
-    expect(y).toContain('glm,qwen,inkling,kimi');
+    expect(y).toContain('glm,qwen,gpt,kimi');
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).not.toMatch(/\bo3\b|o3-pro|opus/);
   });
@@ -87,7 +87,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('workflow_call surface: callers and this repo\'s pull_request fallback bench the same four seats', () => {
     const y = yml();
-    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,inkling,kimi' }}");
+    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,gpt,kimi' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
     expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
