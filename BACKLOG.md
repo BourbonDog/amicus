@@ -2412,6 +2412,39 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   a Workspace fix. Do it whenever Claude-in-council is next touched. Until then the entry is
   honest: the presence manifest already reports four fixed names absent on a normal run.
 
+## v4.8 PR5b — owner ruling (2026-08-15)
+
+- [ ] **⚠️ SILENT DATA LOSS · The Workspace's dead-seat rows collapse, and can erase a dead seat
+  entirely, on a bench that repeats an alias.** Deferred out of PR5b by owner ruling so that PR
+  stays renderer-only; **deferred on blast radius, NOT on severity**. Both measured at `ccb0551d`,
+  not reasoned — probes and expected values are in
+  `docs/superpowers/plans/2026-08-15-v48-pr5b-live-seat-path.md` §0.2, §0.3, §0.7.
+  - **M3** — `deadSeats`' `add()` (`live-seats.js:177-185`) returns early on `seen[model]`, keyed
+    on the alias. Measured: two `dead-leg` notes for one alias → **1** row out.
+  - **M4** — its suppression (`live-seats.js:234-243`) builds `reviewing[alias]` from the live
+    seats. Measured: one seat alive, its twin genuinely dead → **0** dead rows rendered. The dead
+    seat produces no output anywhere in the panel. Per the product principle this rates as
+    severely as a crash.
+  - **Why it is not a pure renderer fix:** the seat id reaches the renderer as
+    `data.firstFailure.seatId` for `retryLegStillDeadNote` (`run-retry-notes.js:67`) and
+    `missingLegStillDeadNote` (`:92`) — evidenced by `run-retry.test.js:628`
+    (`['deepseek#1','deepseek#2']` on a twin bench) and `degrade-channels.test.js:126` (a shipped
+    degrade carrying `seatId`). But **`srcLegStillDeadNote` (`:51`) emits no `firstFailure` at
+    all**, so it needs a producer change. Its call site does have `unit`, which carries
+    `unit.seats` (index-parallel with `unit.models`, `run-retry-group.js:33`) and
+    `unit.firstFailures[].seatId` — the id is reachable, just not emitted.
+  - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
+    (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
+  - ⚠️ Note shapes are pinned by exact `toEqual` in `tests/council/degrade-channels.test.js`;
+    `run-retry-notes.js:39-41` warns that adding a key unconditionally breaks them. Budget for
+    fixture updates.
+  - ⚠️ `workspace-seats.js:47`'s docblock claims `retriedAliases` mirrors `deadSeats`' predicate
+    "EXACTLY, and must keep mirroring it". PR5b Task 3 changes one side. **Re-read that comment
+    before changing the other** — a mirror that stops mirroring is council-1 B1's defect class.
+  - A **partial** fix (seat-key only where `firstFailure.seatId` exists) was considered and
+    rejected: it leaves a silent erasure in place on one emitter while appearing to close the
+    class. Either close it on every emitter or disclose the residual case explicitly.
+
 ### Standing note for the next reviewer of this area
 
 Council-3's **C1** (waveId coupling) was disputed and, per owner ruling, **not** pinned: a change
