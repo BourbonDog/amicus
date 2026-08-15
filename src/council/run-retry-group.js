@@ -43,6 +43,59 @@ function lensIndexOf(o, waveId, model, seatObj = null) {
  * compares against `o.critic` (an alias) and the Workspace seat views render.
  * Seat-keying `ff.seat` silently breaks critic-loss detection.
  */
+/**
+ * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
+ * Exported so run-retry.js consumes it rather than re-spelling it — two readers of one
+ * rule that drift apart is how the alias/seat-id keyspace splits in the first place.
+ */
+const seatKey = (s, alias) => (s ? s.id : alias);
+
+/**
+ * Which of a unit's srcLegs still need their own still-dead note once its srcWaves have
+ * emitted theirs, plus every seat key those announcements cover.
+ *
+ * v4.8 PR5c: an UNIDENTIFIED wave slot keys by ALIAS (seatKey's fallback) while a leg that
+ * WAS bound keys by its seat id, so a plain `noted.has(key)` test misses and the same seat
+ * is announced TWICE, once per keyspace. HEAD hides this downstream because the Workspace's
+ * dead-row dedup is alias-keyed too and both collapse into one row; seat-keying that
+ * consumer (PR5c Task 2) turns it into a visible duplicate row.
+ *
+ * A per-alias BUDGET of unnamed slots, not a second alias Set: the wave announced N seats of
+ * this alias without naming them, so at most N later legs on that alias are re-announcements
+ * of seats already covered. Blanket alias suppression would silently drop a genuinely
+ * distinct twin — a miss, which is the worse failure direction.
+ *
+ * @returns {{attempted: Set<string>, legs: Array<{leg: object, seatId: ?string}>}}
+ */
+function planStillDeadSources(unit, seatOf) {
+  const noted = new Set();
+  const attempted = new Set();
+  const unnamedByAlias = new Map();
+  for (const w of unit.srcWaves) {
+    (w.models || []).forEach((m, i) => {
+      const seatObj = (w.seats || [])[i] || null;
+      const k = seatKey(seatObj, m);
+      noted.add(k); attempted.add(k);
+      if (!seatObj) { unnamedByAlias.set(m, (unnamedByAlias.get(m) || 0) + 1); }
+    });
+  }
+  const legs = [];
+  for (const l of unit.srcLegs) {
+    const bound = seatOf.get(l) || null;
+    const alias = l.modelInput || l.model;
+    const key = seatKey(bound, alias);
+    attempted.add(key);
+    if (noted.has(key)) { continue; }
+    const unnamed = unnamedByAlias.get(alias) || 0;
+    // This leg IS one of the seats the wave already announced unnamed. Claim that slot
+    // and stay silent — the wave's note covers it. Still an ATTEMPTED seat.
+    if (unnamed > 0) { unnamedByAlias.set(alias, unnamed - 1); continue; }
+    noted.add(key);
+    legs.push({ leg: l, seatId: bound ? bound.id : null });
+  }
+  return { attempted, legs };
+}
+
 function recordFailure(unit, seat, ff, trackModel = true, seatObj = null) {
   const key = seatObj ? seatObj.id : seat;
   if (unit.firstFailures.some(f => f.seatId === key)) { return; }
@@ -155,4 +208,4 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map())
   return out;
 }
 
-module.exports = { lensIndexOf, recordFailure, groupStage1Losses };
+module.exports = { lensIndexOf, recordFailure, groupStage1Losses, planStillDeadSources, seatKey };

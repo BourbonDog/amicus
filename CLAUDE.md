@@ -519,7 +519,7 @@ evals/
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
-| `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()` |
+| `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()`, `planStillDeadSources()`, `seatKey()` |
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |

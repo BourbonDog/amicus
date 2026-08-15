@@ -24,7 +24,7 @@ const { bindSeats } = require('./seats');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
 // groupStage1Losses is re-exported below — run-retry.test.js imports it
 // from here.
-const { groupStage1Losses } = require('./run-retry-group');
+const { groupStage1Losses, planStillDeadSources, seatKey } = require('./run-retry-group');
 
 /** The briefing a retry unit re-issues — same builders Stage 1 used. */
 function briefingFor(o, unit) {
@@ -146,7 +146,6 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // below must be seat-keyed for the same reason: a MIX (['x#1','x#2','x'])
     // can never match `seenSeats`, so a run where both twins healed would emit
     // a phantom dead-leg degrade and exit 2.
-    const seatKey = (s, alias) => (s ? s.id : alias);
     const launched = new Map(); // key -> {alias, seat, ff}; alias is what notes render
     const addLaunched = (s, alias, ff) => {
       const k = seatKey(s, alias);
@@ -172,21 +171,18 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       // the "wave wins" precedent from the grouping-level dedup); a seat
       // already covered by its wave's note is skipped when its srcLeg is
       // reached.
-      const notedSeats = new Set();
+      // v4.8 PR5c: the srcWave/srcLeg dedup lives in run-retry-group.planStillDeadSources —
+      // an unidentified wave slot and a bound leg for the same seat key in DIFFERENT
+      // spaces, so a naive test announces one seat twice. See that helper for the budget.
+      const plan = planStillDeadSources(unit, seatOf);
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);
-        (w.models || []).forEach((m, i) => {
-          const k = seatKey((w.seats || [])[i] || null, m);
-          notedSeats.add(k); out.attemptedSeats.add(k);
-        });
       }
-      for (const l of unit.srcLegs) {
-        const key = srcLegKey(l);
-        if (notedSeats.has(key)) { continue; }
-        notedSeats.add(key); out.attemptedSeats.add(key);
-        out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts));
-        out.stillDeadLegs.push(l);
+      for (const k of plan.attempted) { out.attemptedSeats.add(k); }
+      for (const { leg, seatId } of plan.legs) {
+        out.stillDeadNotes.push(srcLegStillDeadNote(leg, unit, counts, seatId));
+        out.stillDeadLegs.push(leg);
       }
       continue;
     }
