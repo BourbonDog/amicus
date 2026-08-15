@@ -2481,6 +2481,29 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - ⚠️ Do this **with** the dead-seat work above if that lands first — both touch the same
     keyspace, and a twin-bench dead-wave fixture is exactly what the M3/M4 fix needs anyway.
 
+- [ ] **The seats panel and the artifact panels can disagree about which SPACE they are in,
+  because they read the decision from two different documents.** Found while investigating PR5b's
+  scope boundary (2026-08-15); reported at the time and, in an oversight, never filed until now.
+  - `renderSeatsPanel` (`workspace-seats.js:101`) keys its rows on `r.seat`, which arrives from
+    **`tally.json`** via `derived.cost.rows` (`run-detail.js:73` reads `tally.runStats`).
+  - `workspace-lazy.js:189` gates the three artifact panels on `derived.seatSpace`, which is
+    `isSeatTable(run.seats)` — from **`run.json`** (`run-detail.js`, via `seat-space.js`).
+  - Those are different documents and can disagree. A run whose `run.seats` is malformed
+    (`seatTableRejected`) but whose `runStats[].seat` is intact renders the **seats panel in seat
+    space and the artifact panels in alias space, simultaneously**. Nothing reconciles them.
+  - **This is council-1 B1's defect class** — the one PR5a fixed by making `roster()` consume the
+    same predicate as `artifactAllowlist` instead of spelling the question a second time. Here the
+    two surfaces do not spell the question differently; they ask **different documents**, which is
+    the same failure one level up.
+  - **Reachability is low and should be stated honestly:** `run.seats` is producer-written, so a
+    malformed table needs a hand-edited `run.json`. But that is exactly the case PR5a added the
+    `seatTableRejected` banner for — the project already decided this shape is worth surfacing.
+  - **Likely resolution is one line, not a redesign:** have the seats panel respect
+    `derived.seatSpace` too, so a rejected seat table forces every surface into alias space
+    together. Verify against the banner's own semantics before assuming that is right — the
+    banner says the table was rejected, which may or may not mean the cost rows' seats are
+    untrustworthy. **Measure which document is authoritative before choosing.**
+
 ### Standing note for the next reviewer of this area
 
 Council-3's **C1** (waveId coupling) was disputed and, per owner ruling, **not** pinned: a change
