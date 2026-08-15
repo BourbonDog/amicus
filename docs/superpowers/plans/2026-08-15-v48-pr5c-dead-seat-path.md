@@ -179,18 +179,52 @@ bench with both twins dead, rev 1 produces candidates `{deepseek#1, deepseek#2, 
 ⚠️ kimi rated this "blocker **if** reachable" and named the unprobed precondition. **I probed it:
 `verdict.js:86` is not legacy — it runs on every modern run with a dead bench leg. It is reachable.**
 
-**The fix: `seen` dedups on the seat key, and an alias-only candidate is ABSORBED when a seat-keyed
-candidate already covers its alias.**
+⛔ **REV-2'S ABSORB RULE WAS BROKEN IN THREE MEASURED WAYS (round 2: B1 blocker, A2/C1 major,
+D4 minor).** Rev 2 wrote a *source-blind* rule — `covered[alias]` set by any seat-keyed candidate,
+absorbing any later alias-only candidate. Measured against the real patched `deadSeats`:
+
+| attack | scenario | result | wanted |
+|---|---|---|---|
+| **B1/A2** | dead-wave `seats: ['d#1', null→'d']` — two genuinely distinct dead seats | **1 row** | 2 |
+| **C1** | an alias-only record ordered BEFORE the seat-keyed ones | **3 rows** | 2 |
+| **D4** | the absorber is itself later suppressed | **0 rows** | 1 |
+
+⚠️ Rev 2 tagged this rule `[MEASURED]` on a 15-case pass. **The 15 cases were the ones the rule was
+designed for** — a case-selection artifact, not a measurement of the rule. This is failure mode #8
+wearing a `[MEASURED]` badge, and it is the sharpest lesson of round 2.
+
+**Root cause is THE WRONG LEVER (#7), and it is in the PRODUCER.** The chair's question exposes it:
+*"where is the per-alias seat count available to the consumer?"* — **nowhere.**
+`deadSeats(degrades, seatLoss, liveSeats, runMeta)` cannot know how many seats an alias holds (dead
+seats are by definition absent from `liveSeats`). So no consumer rule can distinguish "one dead
+twin, identified" from "two dead twins, one identified". Rev 2's own Task 1 destroyed that
+information with `so ? so.id : m`, collapsing an unidentified slot onto the alias.
+
+**Corrected design, two parts:**
+
+**(a) Producer preserves the distinction.** The dead-wave arm emits `null` for an unidentified slot,
+never the alias — the array stays index-parallel with `models`, so *each index is one dead seat*
+and `null` means "this seat exists, unidentified", which is not the same statement as the alias:
 
 ```js
-if (seen[key]) { return; }                              // exact repeat
-if (key === alias && covered[alias]) { return; }        // absorbed by a seat-keyed candidate
-seen[key] = true;
-if (key !== alias) { covered[alias] = true; }
+seats: (w.models || []).map((m, i) => {
+  const so = (w.seats || [])[i];
+  return so ? so.id : null;        // NEVER `: m` — that is what created B1
+}),
 ```
 
-Ordering makes this work without a second pass: degrades (seat-keyed) are processed at `:201-215`,
-`criticRequested` at `:216-218`, `deadBenchSeats` at `:219-224` — seat-keyed sources come first.
+**(b) Absorption becomes SOURCE-AWARE.** `seatLoss.deadBenchSeats` is not an independent source:
+`verdict.js:86` builds it *from the same dead legs* that emit `degrades[]`, so on a modern run it is
+**always** derivative. Absorb only that source, never a degrade record:
+
+- degrade records: dedup on the seat key only. **No absorption.** (kills C1 — order within the
+  degrades loop stops mattering; kills B1 — a genuine unidentified twin is never absorbed)
+- `deadBenchSeats` / `criticRequested`: skip when the alias is already covered by *any* candidate.
+  Safe even when the absorber is later suppressed, because a derivative entry is exactly as stale as
+  the record it derives from (kills D4, whose scenario required absorbing an *independent* record).
+
+⚠️ This design is **`[UNVERIFIED]` as written** — Task 2 Step 2 must measure it against all three
+attacks above plus the original fifteen. Do not carry rev 2's `[MEASURED]` tag forward.
 
 **`[MEASURED]` against every case** (simulation of the rule above, all 7 pass):
 
@@ -361,13 +395,17 @@ behaviour change, not a fixture update.
 - [ ] **Step 2** — Failing test: a twin bench where a dead wave and a src leg both die, asserting
       `data.seats` / `data.seatId` carry `deepseek#1`/`deepseek#2`. Run it, watch it FAIL.
 - [ ] **Step 3** — Implement.
-      **`seats[]` element shape is id STRINGS, never seat objects (D7):**
+      **`seats[]` element shape is id STRINGS or `null`, never seat objects (D7), and never the
+      alias (round-2 B1):**
       ```js
       seats: (w.models || []).map((m, i) => {
         const so = (w.seats || [])[i];
-        return so ? so.id : m;          // seatKey rule; null slot -> the alias
+        return so ? so.id : null;       // null = "this seat exists, unidentified"
       }),
       ```
+      ⛔ **REV-2 WROTE `: m` HERE AND IT CAUSED THE ROUND-2 BLOCKER.** Collapsing an unidentified
+      slot onto the alias makes it indistinguishable from a second reference to that alias, and no
+      consumer can recover the difference (§0.7.1).
       Embedding raw seat objects would leak `role`/`lens`/`position` into `run.json` and bloat the
       `:273` fixture. Add `seatId` to `srcLegStillDeadNote` (new param) and pass `key` at `:188`.
       **Dead-wave arm only — not the partial arm**, which emits on `seat-unbound` and is read by no
@@ -397,6 +435,20 @@ behaviour change, not a fixture update.
         row, which is worse than HEAD (B6/A2).
       - `reviewing`: insert the alias **always**, the seat id **only when truthy** (§0.7.2 — the
         `'undefined'` coercion trap).
+      - ⛔ **THE FILTER, STATED BYTE-FOR-BYTE. REV-2 LEFT THIS TO INFERENCE AND IT IS THE WHOLE FIX
+        (round-2 A1 blocker + D1 major; chair hard-question 1).** Populating `reviewing` changes
+        nothing on its own — `:257` still reads `reviewing[s.model]`, which the *alias* arm sets, so
+        the dead twin stays suppressed and **M4 is unfixed**. Change `:255-258` to:
+        ```js
+        return order.filter(function (s) {
+          if (s.role === 'critic') { return !byRole[s.model + '|critic']; }
+          return !reviewing[s.seat || s.model];     // <- seat first, alias fallback
+        });
+        ```
+        ⚠️ `s.model` stays the **alias** on the emitted row (display and blind-mode `labelOf` both
+        key on it). Do **not** "simplify" by assigning the seat id to `model` — that passes every
+        pin in this task while shipping a display and blind-mode regression, which is precisely the
+        realization the chair warned the pin net would not catch.
       - carry `seat` on the emitted row for Task 3.
       ⚠️ Do **not** touch `byRole` (§0.7.4 — decided, disclosed, filed).
       ⚠️ 30-line budget on `live-seats.js` (§Global Constraints).
