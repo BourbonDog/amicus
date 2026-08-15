@@ -1895,12 +1895,12 @@ as two, and an unbound seat (a launched leg that never returns) is retried and, 
 announced on a new `seat-unbound` degrade channel. Three items surfaced by that work belong to
 the PRs still ahead in this stack; recorded here so they do not have to be re-derived.
 
-- [ ] **Hard prerequisite for PR5 · `artifact-guard.js:86`'s `uniqueModels` must build from
+- [ ] **[SHIPPED v4.8.0 PR5a — see the note below] Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
   `o.seats`, not a de-duplicated bench, before PR5's workspace flip.** `const uniqueModels =
   [...new Set(bench)]` still allowlists one `review-<alias>.md` per distinct alias, but a bench
   that repeats an alias now writes `review-<seat>-1.md` / `review-<seat>-2.md` (PR2b Task 3), so
   the Workspace lists only one of the two — see the CHANGELOG's known-limitation entry for this
-  release. **The file's own `:81-85` comment also needs correcting**, not just the code: it
+  release. **The file's own `:82-86` comment also needs correcting**, not just the code: it
   currently frames collapsing a repeated-alias bench to one set of rows as the harmless case
   (spec §4.5's original intent). Post-seat-identity that framing is inverted — a repeated alias is
   now exactly the case where collapsing loses a listing, not the case where collapsing is safe.
@@ -1915,10 +1915,18 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   on a twin `['deepseek','deepseek']` bench whose retry wave returns one bindable leg plus one
   unattributable one, the run dir ends up with BOTH `review-deepseek-1.md` (the real healed
   review, seat-named) and `review-deepseek.md` (the stray, alias-named because it never bound) —
-  and `artifact-guard.js:86` allowlists exactly `review-deepseek.md`, so the only file the
+  and `artifact-guard.js:87` allowlists exactly `review-deepseek.md`, so the only file the
   Workspace surfaces is the one the engine threw away. Do NOT fix this by restructuring the retry
   write path; an allowlist built from `o.seats` stops listing the alias-named stray and starts
   listing both seat-named files, which resolves it.
+
+  > **v4.8.0 PR5a — discharged in substance, NOT in letter.** Both seat-named files are now
+  > listed, so the healed review is reachable and it is the one the panels render. The stray is
+  > **still listed**, because `run.json` cannot tell a discarded retry leg from a legitimately
+  > orphaned one — both emit the same `seat-unbound` degrade note, and PR5a refuses to guess
+  > between them. What it does instead is refuse to *attribute* it: an orphan-written name belongs
+  > to no seat, so no panel renders it under a model, which is the user-visible half this entry
+  > was really about. A surface for genuinely unattributed artifacts is filed, not built.
 
 - [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on

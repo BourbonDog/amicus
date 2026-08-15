@@ -229,12 +229,16 @@ whenever that alias occupies exactly one bench position — which is every bench
 `--models` entry, so these filenames are unchanged there. When the same alias occupies more than
 one seat, the seats are `<alias>#1`, `<alias>#2`, … and the files they write are
 `review-<alias>-1.md`, `review-<alias>-2.md`, and so on. The same rule names the `judge-`,
-`rebuttal-` and `revote-` files below. ⚠️ The Council Workspace cannot open the per-seat artifacts
-of a repeated-alias bench yet — it still derives its readable-file list from the alias, so it
-refuses the real per-seat names and records the alias-named one it *does* allowlist as
-`present: false` in the run's own artifact manifest. Every prose panel filters on that manifest,
-so those seats contribute **no rows at all** rather than one visibly broken entry. The files
-themselves are complete on disk.
+`rebuttal-` and `revote-` files below. The Council Workspace reads these names directly: its
+allowlist is built from `run.seats`, so each seat's own file opens under that seat.
+
+One case is deliberately left unattributed. When a leg cannot be bound to a seat, the engine still
+writes its output — under the **alias**, because that is all it knows (`review-<alias>.md`). That
+file stays readable, but it is attributed to **no seat**: `run.json` records that *an* orphan
+happened, not *which* seat produced it, and guessing would be exactly the silent mis-attribution
+seat identity exists to prevent. If such a name collides with another seat's own artifact — possible
+when one alias sanitizes onto another seat's filename — neither is attributed and the run-integrity
+banner names both claimants.
 
 Two more files appear when the run was started through **`amicus_council_run`** rather than the
 CLI, both written by the MCP handler before it spawns the engine:
@@ -814,7 +818,10 @@ behaves identically, with one deliberate difference: it keeps rendering the blan
 that the report filters out. **Blind mode never renders a seat id** — a seat id contains its
 alias, so both twins collapse to `Review A` there, exactly as before v4.8. Its legend is worded
 `* raiser` where the report's reads `` `*` raiser's own vote ``; the two say the same thing, and
-both now refer to the raiser's seat.
+both now refer to the raiser's seat. The report's legend gains a **second** line the Workspace
+matrix does not carry — `` `†` `` marks a finding corroborated only by another seat running the
+same model — so from v4.8.0 the two legends are no longer interchangeable. That line, and the `†`
+itself, appear only on a run that actually raised such a finding, which is a twin bench only.
 
 This is the same renderer the `second-opinion` skill calls in Stage 5 to produce `report.html`.
 **`report.md` and this renderer's output are two different files** — `report.md` is Claude-authored

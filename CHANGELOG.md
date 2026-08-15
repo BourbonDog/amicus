@@ -176,23 +176,23 @@ All notable changes to Amicus are documented here. Format follows
   findings and `runStats` rows, but it did not touch `deriveSeatLoss`'s channel filter, so
   `seatLoss.deadBenchSeats` still does not name a `seat-unbound` loss. Closing it remains a filed
   BACKLOG item.
-- **Known limitation: the Council Workspace cannot open *any* per-seat artifact of a bench that
-  repeats an alias, and records it `present:false` in its own artifact manifest instead.** (This corrects the
-  wording shipped earlier in this Unreleased section, which said one of the two review files
-  appears and called it a listing gap. Both halves were wrong — measured, not inferred.) The
-  Workspace builds its artifact allowlist from a de-duplicated bench, so for
-  `--models deepseek,deepseek,gemini` it allowlists `review-deepseek.md`, `judge-deepseek.md` and
-  — on a `--debate` run only — `rebuttal-deepseek.md` and `revote-deepseek.md`: names that bench
-  never writes, because its two `deepseek` seats write `…-deepseek-1.md` and `…-deepseek-2.md`
-  instead. So **neither** twin file is reachable, not one, and every artifact family is affected,
-  not just `review-`. The same list is also the read gate: asking for either seat's real file
-  answers `artifact not allowed`, while the allowlisted `review-deepseek.md` is recorded
-  present:false in the run's artifact manifest — and every panel filters on that manifest, so the
-  duplicated seats contribute no rows at all rather than a visible broken one. Nothing is lost on disk: every per-seat file is written and complete, and
-  `run.json`'s `seats[]` still names every seat the run created. This is a Workspace read refusal,
-  not data loss. Closes in v4.8.0, in the Workspace PR later in this stack (PR5), which rebuilds
-  the allowlist from seat identity. Benches whose aliases are all distinct are unaffected — every
-  name they write is on the list.
+- **The Council Workspace now opens per-seat artifacts on a bench that repeats an alias.** The
+  allowlist is built from `run.seats` rather than a de-duplicated bench, so
+  `--models deepseek,deepseek,gemini` lists `review-deepseek-1.md` / `-2.md` (and the judge,
+  rebuttal and revote families alongside) instead of a `review-deepseek.md` that bench never
+  writes. Previously **neither** twin file was reachable and every artifact family was affected.
+  (This supersedes the known-limitation wording shipped earlier in this Unreleased section. That
+  wording said the Workspace could not open *any* per-seat artifact and recorded it
+  `present:false` — true for a pure twin bench, and **measurably false** for a bench that mixes a
+  twin with a sanitize collision. On `--models "vendor/a,vendor?a,vendor/a"` the allowlist
+  attributed `review-vendor-a.md` to `vendor/a` while the file physically held `vendor?a`'s
+  review, so the Workspace opened it and labelled it with the wrong model. That is a
+  misattribution, not a refusal, and it is the sharper half of what this release fixes.)
+  A file an *orphaned* leg wrote under its alias stays readable but is attributed to no seat:
+  `run.json` cannot say which seat produced it, and guessing is the silent mis-attribution the
+  seat spine exists to prevent. Where such a name collides with another seat's own artifact, the
+  run-integrity banner says so. Benches whose aliases are all distinct are byte-for-byte
+  unaffected — every name they write is on the list, and the list is unchanged.
 - **⚠️ The peers-only filter now excludes the raiser by SEAT, so findings on a bench that repeats
   an alias change tier — in BOTH directions.** Before this release the filter compared council
   aliases, so on `--models deepseek,deepseek,gpt` the *second* deepseek seat's vote was discarded
