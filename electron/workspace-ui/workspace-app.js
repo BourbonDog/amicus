@@ -167,47 +167,12 @@
     V.startLiveLoop();
   }
 
-  function renderBanners() {
-    var d = state.detail;
-    var R = window.AmicusRender;
-    if (!d.derived.schemaSupported) {
-      R.renderBanner($('banner'), 'This run was written by a different amicus version (schemaVersion ' +
-        d.run.schemaVersion + ') — artifacts: ' + d.runDir, 'warn');
-      return;
-    }
-    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): two distinct bench
-    // entries that sanitize to the same artifact name (src/workspace/artifact-guard.js's
-    // artifactAllowlist) mean this run directory cannot hold both models' review/judge files
-    // under distinct names — drillIntoJudge's artifact lookup would otherwise silently
-    // misattribute one model's prose to the other. This is a run-integrity defect the user
-    // must see, not a display quirk to smooth over — surfaced ahead of the run.error/reason
-    // banner below since it calls into question every judges-panel section's attribution.
-    if (d.derived.artifactCollisions && d.derived.artifactCollisions.length) {
-      var c = d.derived.artifactCollisions[0];
-      R.renderBanner($('banner'),
-        'Run integrity error: bench entries ' + c.models.join(' and ') + ' both sanitize to "' + c.sanitized +
-        '" — this run directory cannot distinguish their artifacts, so prose below may be misattributed.', '');
-      return;
-    }
-    // ⚠️ PRE-FLIGHT (P3), caught live by the CDP e2e (Task 18): gating on `d.run.error` ALONE
-    // never shows this banner for a `status:'partial'` run — `finalize()` only ever sets
-    // `run.error` on the exit-1 path (src/council/run.js:98-100); the exit-2 "degraded" path
-    // leaves it null (run-detail.js:83-91). `verdictPanel.reason` (degradedReason()) already
-    // covers BOTH cases — exit-1's {code, message} and the partial-run stage-failure/skip
-    // sentence — so check for either signal, not run.error alone.
-    if (d.run.error || d.derived.verdictPanel.reason) {
-      // ⚠️ Code review round 2, finding 2: `d.run.error` is a structured {code, message} object
-      // (never a string) — passing it straight to renderBanner set `textContent = <object>`,
-      // which coerces to the literal string "[object Object]". `d.derived.verdictPanel.reason`
-      // is already the correctly-formatted string (run-detail.js's degradedReason(): "CODE:
-      // message" on the exit-1 path, or a stage-failure/skip sentence otherwise) — reuse it
-      // rather than re-deriving the same formatting a second time here.
-      R.renderBanner($('banner'), d.derived.verdictPanel.reason || 'Run reported an error',
-        d.run.status === 'error' ? '' : 'warn');
-      return;
-    }
-    R.renderBanner($('banner'), null);
-  }
+  // ⚠️ v4.8 PR5a fix-wave 3: the banner ladder moved to workspace-banners.js — this file
+  // hit 310/300 when the orphan-collision and rejected-seat-table banners landed, the same
+  // gate that produced workspace-lazy.js out of workspace-panels.js (v4.7 PR7). Kept as a
+  // named delegate, not deleted: `window.AmicusApp.renderBanners` is a shipped entry point
+  // (workspace-verbs.js:216 calls it after an abort) and boundary tests assert it exists.
+  function renderBanners() { window.AmicusBanners.render(); }
 
   // ---- blind toggle + keyboard ------------------------------------------
   $('blind-toggle').addEventListener('change', function (e) {

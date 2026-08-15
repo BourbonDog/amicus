@@ -306,6 +306,13 @@ describe('getRunDetail', () => {
         registerPointer(project, 'aaaa1111', runDir);
         const d = getRunDetail(project, 'aaaa1111');
         expect(d.derived.seatSpace).toBe(isSeatTable(seats));
+        // ⚠️ seatTableRejected is NOT `!seatSpace` (council-3 C2's banner depends on the
+        // difference): a run with NO seats[] — or an empty one — is a LEGACY run, not a
+        // broken one, and bannering it would tell every pre-PR3 run it is malformed.
+        // Rejected means "seats[] is there and unusable". MEASURED: a `!isSeatTable(seats)`
+        // mutant here survived the whole run-detail suite until this assertion existed.
+        const present = Array.isArray(seats) && seats.length > 0;
+        expect(d.derived.seatTableRejected).toBe(present && !isSeatTable(seats));
         // The property that actually matters downstream, stated so it cannot pass
         // vacuously: the flag has to describe the space artifactsByModel is KEYED in.
         // Seat space keys by seat id (which contains '#'), alias space by bench alias.

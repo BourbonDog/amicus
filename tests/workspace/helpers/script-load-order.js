@@ -18,6 +18,10 @@
  * ⚠️ v4.7 PR7 extraction (Task 1): added 'workspace-lazy' between 'workspace-seats' and
  * 'workspace-panels' — panels.js's wireLazyPanels/proseLoader now delegate to it, so it must
  * load first. Same one-list-updates-both-consumers property as the D8 note above.
+ *
+ * ⚠️ v4.8 PR5a fix-wave 3 extraction: added 'workspace-banners' between 'workspace-verbs' and
+ * 'workspace-app' — app.js's renderBanners now delegates to it, so it must load first. Third
+ * time this list has absorbed a 300-line-gate extraction without either consumer being edited.
  */
 const SCRIPT_LOAD_ORDER = [
   'md-lite',
@@ -29,6 +33,7 @@ const SCRIPT_LOAD_ORDER = [
   'workspace-lazy',
   'workspace-panels',
   'workspace-verbs',
+  'workspace-banners',
   'workspace-app',
 ];
 

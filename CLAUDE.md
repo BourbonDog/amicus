@@ -371,6 +371,7 @@ electron/
 │   ├── live-seats.js
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
 │   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
+│   ├── workspace-banners.js  # Council Workspace — the run-detail banner ladder (v4.4 §9, spec's "graceful when present").
 │   ├── workspace-lazy.js  # Council Workspace — lazy prose-panel loading (v4.4 §5.2). v4.7 PR7 extraction of the
 │   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
 │   ├── workspace-panels.js  # Council Workspace — name resolution + the matrix/verdict/seats panel adapters

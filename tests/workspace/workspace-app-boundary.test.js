@@ -619,6 +619,78 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     expect(bannerText).toContain('vendor/a');
     expect(bannerText).toContain('vendor?a');
     expect(bannerText).toContain('vendor-a');
+    // Anti-vacuity for the orphan test below: THIS case must keep the sanitize wording.
+    expect(bannerText).toContain('sanitize to');
+  });
+
+  // ── v4.8 PR5a fix-wave 3 (council-3 A1) ───────────────────────────────────────────────
+  // PR5a added the `orphan` flag to artifactCollisions and shipped NO consumer, so an orphan
+  // collision rendered the sanitize sentence — which is simply untrue of it: `a#1` and `a-1`
+  // do not sanitize to the same name. An orphaned leg wrote a file under its own alias whose
+  // stem IS another seat's artifact name. Different fact, different sentence.
+  async function bannerFor(collisions, extraDerived) {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.derived.artifactCollisions = collisions;
+        Object.assign(d.derived, extraDerived || {});
+        return Promise.resolve(d);
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    return global.document.getElementById('banner').textContent;
+  }
+
+  test('an ORPHAN collision does not borrow the sanitize sentence', async () => {
+    const text = await bannerFor([{ sanitized: 'a-1', models: ['a#1', 'a-1'], orphan: true }]);
+    // Killing mutant: drop the `c.orphan ?` branch -> this reads "bench entries a#1 and a-1
+    // both sanitize to a-1", which is false about the run.
+    expect(text).not.toContain('sanitize to');
+    expect(text).toContain('orphaned leg');
+    expect(text).toContain('a#1');
+    expect(text).toContain('a-1');
+  });
+
+  // MEASURED (legacy bench ['vendor/a','vendor?a'] with a 'vendor?a' orphan): one stem can
+  // emit BOTH entry kinds. The old renderer showed `[0]` only, so the orphan half was
+  // invisible — the user was told the cause was a sanitize clash and never learned a file
+  // was contested by an orphan too.
+  test('every collision is rendered, not just the first', async () => {
+    const text = await bannerFor([
+      { sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] },
+      { sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'], orphan: true },
+    ]);
+    // Killing mutant: restore `artifactCollisions[0]` -> the orphan clause disappears.
+    expect(text).toContain('sanitize to');
+    expect(text).toContain('orphaned leg');
+  });
+
+  // ── v4.8 PR5a fix-wave 3 (council-3 C2) ───────────────────────────────────────────────
+  // A malformed seats[] drops the WHOLE run to alias space. Fail-safe, but silent until now:
+  // two seats on one model become indistinguishable in every panel with nothing said.
+  test('a rejected seat table is bannered rather than degrading silently', async () => {
+    const text = await bannerFor([], { seatTableRejected: true });
+    // Killing mutant: delete the seatTableRejected branch -> banner is empty and the user is
+    // told nothing about a run whose per-seat behaviour is off.
+    expect(text).toContain('seat table could not be read');
+    expect(text).toContain('cannot be told apart');
+  });
+
+  test('a collision OUTRANKS a rejected seat table — one banner, the worse fact', async () => {
+    const text = await bannerFor(
+      [{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }], { seatTableRejected: true },
+    );
+    // The element is a single node, so ordering IS the ranking: misattributed prose is worse
+    // than losing per-seat granularity. Killing mutant: rank the seat-table branch first.
+    expect(text).toContain('sanitize to');
+    expect(text).not.toContain('seat table could not be read');
+  });
+
+  test('a healthy run banners NOTHING — the new branches cannot fire on a clean payload', async () => {
+    const text = await bannerFor([], { seatTableRejected: false });
+    expect(text).toBe('');
   });
 
   // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderHeaderChips now

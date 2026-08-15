@@ -232,6 +232,15 @@ function getRunDetail(project, runId) {
       // in SEAT space and every artifactsByModel lookup missed. Shipping the ANSWER instead
       // of a copy of the question makes that divergence unrepresentable.
       seatSpace: isSeatTable(run.seats),
+      // ⚠️ Fix-wave 3 (council-3 C2): seats[] is PRESENT but unusable, so the run silently
+      // lost per-seat behaviour — two seats on one model become indistinguishable in every
+      // panel. isSeatTable fails WHOLE (one malformed entry drops the entire table), which
+      // is the fail-safe direction but is exactly the correct-but-silent degrade the product
+      // principle rejects. Emitted here, beside the predicate that decides it, rather than
+      // re-derived renderer-side; workspace-app.js's renderBanners is its only consumer.
+      // NOT the same as `!seatSpace`: a run with no seats[] at all is a legacy run, not a
+      // broken one, and must not be bannered.
+      seatTableRejected: Array.isArray(run.seats) && run.seats.length > 0 && !isSeatTable(run.seats),
     };
   }
 

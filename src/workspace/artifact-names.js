@@ -45,12 +45,12 @@ const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle
  *     duplicate ids mint a one-element "collision" whose `join(' and ')` renders
  *     malformed English AND suppresses the real run.error banner (workspace-app.js
  *     returns after the collision branch);
- *   - STRING aliases (council-2 C3) — `isSeatSpace` checks only `id`, so `[{id:'a#1'}]`
- *     passed and put the RENDERER in seat space, where roster() resolves its label with
- *     `labelByModel[s.alias]` -> undefined, and AmicusRender.display() falls through to
- *     `pair.model` — printing the seat id `a#1` with blind mode ON, which defeats blind
- *     mode (a seat id contains its alias). This predicate is what the renderer now trusts
- *     wholesale (council-1 B1), so a conjunct the ALIAS path depends on belongs in it.
+ *   - STRING aliases (council-2 C3) — `isSeatSpace` checks only `id`, so `[{id:'a#1'}]` passed
+ *     and put the RENDERER in seat space, where roster() resolves `labelByModel[s.alias]` ->
+ *     undefined and AmicusRender.display() falls through to `pair.model`, printing the seat id
+ *     `a#1` with blind mode ON — which defeats blind mode, a seat id containing its alias. The
+ *     renderer now trusts this predicate wholesale (council-1 B1), so a conjunct the ALIAS
+ *     path depends on belongs in it.
  * Fails WHOLE: one malformed id sends the run back to the alias branch. Fail-safe but
  * silent, and only reachable from a hand-edited run.json — parseList trims and filters,
  * and the MCP path re-joins through the same code.
@@ -107,7 +107,9 @@ function orphanExonerations(run) {
     if (!d || d.channel !== 'seat-unbound' || !d.data || !d.data.legId) { continue; }
     const alias = d.data.seat;
     if (typeof alias !== 'string' || alias === '') { continue; }
-    const proven = byAlias.get(alias) || new Set(S2_EXONERATES);
+    // ⚠️ `has`, not `||` (council-3 B1): an empty Set is TRUTHY, so `||` worked — a cleared
+    // set stayed cleared — but read as default-when-missing. A `.size` check re-opens the union.
+    const proven = byAlias.has(alias) ? byAlias.get(alias) : new Set(S2_EXONERATES);
     // INTERSECTION across an alias's notes, never union: two notes for one alias means two
     // orphaned legs, and a Stage-1 one proves nothing about the review the -s2 one exonerates.
     if (!(s2WaveId && d.data.waveId === s2WaveId)) { proven.clear(); }
@@ -154,10 +156,9 @@ function artifactAllowlist(run) {
   const entities = isSeatTable(run && run.seats)
     ? [...new Set(run.seats.map(s => s.id))]
     : [...new Set(bench)];
-  const uniqueModels = entities;
   const rawBySanitized = new Map(); // sanitized name -> first raw model seen for it
   const collisionModels = new Map(); // sanitized name -> Set(raw models) once >1 raw maps to it
-  for (const m of uniqueModels) {
+  for (const m of entities) {
     const s = sanitizeName(m);
     if (rawBySanitized.has(s)) {
       if (!collisionModels.has(s)) { collisionModels.set(s, new Set([rawBySanitized.get(s)])); }
@@ -177,7 +178,7 @@ function artifactAllowlist(run) {
   // fs.statSync over this same allowlist) marks them absent, so the renderer shows the honest
   // "not written yet" empty state for every model but the first, instead of cross-matching.
   const nameFor = new Map(); // raw model -> its (possibly suffixed) sanitized name
-  for (const m of uniqueModels) {
+  for (const m of entities) {
     let s = sanitizeName(m);
     const collision = collisionModels.get(s);
     if (collision) {
@@ -195,7 +196,7 @@ function artifactAllowlist(run) {
     isSeatTable(run && run.seats) ? run.seats.map(s => [s.id, s.alias]) : bench.map(m => [m, m]),
   );
   const ownerOf = new Map();
-  for (const m of uniqueModels) {
+  for (const m of entities) {
     const s = nameFor.get(m);
     for (const k of ['review', 'judge', 'rebuttal', 'revote']) {
       ownerOf.set(`${k}-${s}.md`, { entity: m, alias: aliasOfEntity.get(m), stem: s });
@@ -216,9 +217,8 @@ function artifactAllowlist(run) {
   // primary so the Set below keeps first-occurrence order, which is what preserves
   // byte-identity on every bench that orphaned nothing (the overwhelming majority).
   // Listed so a review that LANDED stays readable (stage1-bind.js:35); never attributed,
-  // because bindSeats could not name that leg and guessing here is precisely the
-  // silent mis-attribution spec §4.4 forbids.
-  const orphanContested = new Map();   // artifact name -> owning entity
+  // because bindSeats could not name that leg and guessing is the mis-attribution §4.4 forbids.
+  const orphanContested = new Set();   // artifact names attributed to NOBODY (council-3 B4)
   const orphanByStem = new Map();      // sanitized stem -> Set(claimants), deduped for the banner
   // Both loops below default to NOT ASSERTING, in the direction that fails safe for each:
   // LISTING a name nobody wrote costs nothing (the presence manifest marks it absent) while
@@ -238,10 +238,10 @@ function artifactAllowlist(run) {
         // ANOTHER entity's primary. Attribution survives ONLY on a positive proof of
         // non-authorship; otherwise the file may be either seat's and is contested.
         if (exonerated.has(kind)) { continue; }
-        // The file on disk is one or the other and run.json cannot say which, so it is
-        // listed (the owner's own push already did that), attributed to NOBODY, and
-        // surfaced ONCE per stem — the kinds share a stem, and per kind double-counts.
-        orphanContested.set(n, owner.entity);
+        // The file is one or the other and run.json cannot say which, so it stays listed
+        // (the owner's push did that), is attributed to NOBODY, and is surfaced ONCE per
+        // stem — the kinds share a stem, and emitting per kind double-counts.
+        orphanContested.add(n);
         if (!orphanByStem.has(stem)) { orphanByStem.set(stem, new Set()); }
         orphanByStem.get(stem).add(owner.entity).add(alias);
       } else {
