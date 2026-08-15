@@ -138,6 +138,42 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
     expect(deadNotes(out)).toHaveLength(1);
   });
 
+  // Kills the mutant `seatId: alias` at the run-retry-group call site. The T1b tests above
+  // pass seatId in by hand, so they pin the note BUILDER but not the WIRING from seatOf —
+  // mutating the call site left all nine green until this test existed.
+  test('the emitted note carries the seat id from seatOf, not the alias', async () => {
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
+    const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [],                                   // no wave -> no budget in play
+      deadLegs: [leg],
+      seatOf: new Map([[leg, ctx.o.seats[1]]]),        // bound to deepseek#2
+      counts: COUNTS,
+    });
+    const note = deadNotes(out).find(n => n.channel === 'dead-leg');
+    expect(note.data.seatId).toBe('deepseek#2');
+    expect(note.data.seat).toBe('deepseek');           // alias, unchanged
+  });
+
+  // Kills the mutant that lets the budget swallow EVERY leg on the alias. The control
+  // below uses two DIFFERENT aliases, so it never exercises over-suppression.
+  test('the budget claims exactly ONE leg per unnamed slot — the second twin still speaks', async () => {
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
+    const seats = ctx.o.seats;
+    const legA = { modelInput: 'deepseek', status: 'error', error: 'a' };
+    const legB = { modelInput: 'deepseek', status: 'error', error: 'b' };
+    const out = await retryStage1Losses(ctx, {
+      // ONE unnamed slot, TWO bound legs on that alias: the slot accounts for one of them,
+      // the other is a genuinely distinct dead seat and must get its own note.
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x' }],
+      deadLegs: [legA, legB],
+      seatOf: new Map([[legA, seats[0]], [legB, seats[1]]]),
+      counts: COUNTS,
+    });
+    expect(deadNotes(out)).toHaveLength(2);            // 1 wave note + 1 leg note
+    expect(deadNotes(out).filter(n => n.channel === 'dead-leg')).toHaveLength(1);
+  });
+
   test('CONTROL — a distinct alias is never absorbed by another alias budget', async () => {
     const ctx = fakeCtx({ models: ['alpha', 'beta'] });
     const leg = { modelInput: 'beta', status: 'error', error: 'boom' };
