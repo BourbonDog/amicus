@@ -99,7 +99,13 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, 
   // the overstatement R8 was chosen over model-exact exclusion to prevent.
   // Emit-when-present, so a bench that raised none is byte-identical.
   const corroborated = (findings || [])
-    .filter(f => f && f.sameModelCorroboration)
+    // ⚠️ `&& f.id` (council-3 C3, as corrected by measurement): the reported symptom —
+    // 'undefined' in the prose — does NOT occur, because Array#join renders undefined as ''.
+    // What DID render is worse in kind: "…corroborated only by a same-model seat: ." — the R8
+    // caveat firing while naming nobody, in the one artifact a paid chair reads as
+    // authoritative. Unnameable findings are dropped, and the emit-when-present guard below
+    // then suppresses the section entirely rather than showing an empty list.
+    .filter(f => f && f.sameModelCorroboration && f.id)
     .map(f => f.id);
   // Every finding lands in exactly one tier (tally.js countTiers), so the tier
   // counts sum to the record's finding count — which is how an all-clean bench is

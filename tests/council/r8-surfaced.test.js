@@ -106,6 +106,25 @@ describe('the chair packet surfaces R8 (spec §4.6:188)', () => {
     expect(scale).toBeGreaterThan(r8);
   });
 
+  // ⚠️ COUNCIL-3 C3, as corrected by measurement. The reported symptom — 'undefined' in the
+  // prose — does not occur: Array#join renders undefined as ''. What DID render is the R8
+  // caveat firing while naming NOBODY ("…as the raiser: ."), asserting to a paid chair that
+  // findings were same-model-corroborated and then listing none.
+  test('a flagged finding with no id cannot put an unnamed caveat in front of the chair', () => {
+    const packet = buildChairPacket({ ...base, findings: [{ sameModelCorroboration: true }] });
+    // Killing mutant: drop `&& f.id` from the filter -> the section renders with an empty
+    // list. MEASURED red. The emit-when-present guard then does the rest: nothing nameable
+    // means no section at all, not an empty one.
+    expect(packet).not.toContain('SAME-MODEL CORROBORATION (R8)');
+    expect(packet).toBe(buildChairPacket({ ...base }));
+    // Anti-vacuity: the guard drops only the UNNAMEABLE one, never a real neighbour.
+    const mixed = buildChairPacket({
+      ...base, findings: [{ sameModelCorroboration: true }, { id: 'B1', sameModelCorroboration: true }],
+    });
+    expect(mixed).toContain('SAME-MODEL CORROBORATION (R8)');
+    expect(mixed).toContain('B1');
+  });
+
   test('a packet with no flagged finding is byte-identical to one built without findings', () => {
     const withNone = buildChairPacket({ ...base, findings: [{ id: 'B1' }] });
     const without = buildChairPacket({ ...base });

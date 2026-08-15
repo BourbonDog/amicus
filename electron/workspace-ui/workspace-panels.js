@@ -126,6 +126,15 @@
       // right below it — for a colliding pair, drilling a re-vote on the SECOND model resolved
       // to the bare name and cross-matched the FIRST model's genuine revote section. Both arms
       // of this ternary now go through the same disambiguation-aware helper.
+      // ⚠️ NO ALIAS FALLBACK — refused on purpose (council-3 B3, owner-ruled). The join above
+      // misses for debate.json written between 2026-08-12 (run.json began carrying seats[])
+      // and 2026-08-13 (revotes[] began carrying seat): those rows have only `judge`, an
+      // ALIAS, while judgePair.model is a seat id. Adding `|| r.judge === <this seat's alias>`
+      // would "fix" it by picking the wrong twin's re-vote roughly half the time — both twins
+      // write judge:'gemini' and nothing in that data distinguishes them, so it is RN-1 again,
+      // silent. Missing means rv stays undefined and the judge- artifact renders: the right
+      // seat, the wrong KIND, which is the fail-safe direction. That vintage never shipped in
+      // a release (`git tag --contains` on the first commit is empty).
       var artifactName = rv
         ? resolveArtifactName(judgePair.model, 'revote')
         : resolveArtifactName(judgePair.model, 'judge');

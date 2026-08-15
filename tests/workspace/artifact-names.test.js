@@ -176,6 +176,25 @@ describe('the orphan intersection — where four designs died', () => {
     }
   });
 
+  // ⚠️ COUNCIL-3 B2. THREE conditions at once — LEGACY alias space (no seats[]) × an orphan
+  // × a sanitizeName collision — and nothing exercised the combination. The behaviour is
+  // CORRECT and this pin exists so nobody "restores" the attribution: review-vendor-a.md may
+  // hold vendor/a's review OR vendor?a's orphaned one, and run.json cannot say which.
+  test('B2: legacy space — an orphan colliding with the sorted-first model drops ITS attribution', () => {
+    const bench = ['vendor/a', 'vendor?a'];          // no `seats` key at all = legacy branch
+    const clean = artifactAllowlist({ runId: 'r1', bench });
+    // Anti-vacuity: without the orphan, the sorted-first model owns the bare name.
+    expect(clean.artifactsByModel['vendor/a'].review).toBe('review-vendor-a.md');
+
+    const list = artifactAllowlist({ runId: 'r1', bench, degrades: [orphanNote('vendor?a')] });
+    expect(list.artifactsByModel['vendor/a'].review).toBeUndefined();
+    expect(list.artifactsByModel['vendor/a'].judge).toBeUndefined();
+    // The orphan's OWN suffixed primary is untouched — it is not ambiguous with anything.
+    expect(list.artifactsByModel['vendor?a'].review).toBe('review-vendor-a~2.md');
+    // …and the contested file stays READABLE. Dropping attribution is not hiding the file.
+    expect(list).toContain('review-vendor-a.md');
+  });
+
   test('contesting never narrows the LIST — a --debate orphan keeps every name readable', () => {
     const bench = ['gemini', 'gemini'];
     const list = artifactAllowlist({
