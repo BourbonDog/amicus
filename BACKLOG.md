@@ -1834,6 +1834,88 @@ Every item is a fix or test hardening. No new flags, no new checks, no new outpu
   stdout; and actually observe a `continue` row landing under `(unattributed)` before item 5 fixes
   it — that path is the v4.7 docs PR's headline sentence and was traced by reading, never exercised.
 
+## v4.8.0 — SCOPE RULED (2026-08-16) — read this before the sections below
+
+⛔ **The checkboxes in the v4.8.0 sections below are STALE and partly WRONG.** A full recon at
+`main` = `53cd689c` verified all 27 "open" seat-identity items by execution, then re-measured every
+verdict adversarially. Result: **6 are DONE and still unticked, 3 PARTIAL, 1 SUPERSEDED, 1 HOLD,
+16 OPEN** — and SI-22 is a roll-up of five independent shapes, so the true open count is **20**.
+
+**Full record, with every citation re-anchored BY SYMBOL:**
+`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`. Read it before planning any item
+here. Line numbers in the sections below predate PR5a/PR5b/PR5c and many have rotted — but rot is
+**per-citation, not per-item**, so re-derive rather than discard.
+
+### The ruling
+
+**Task mode (#134 / #130) moves to v4.9.0, with #146 folded in.** v4.8.0 ships the seat-identity
+remainder plus the cheap repairs. Eleven PRs went into one of three workstreams; the other two are
+sized and deferred rather than carried half-done.
+
+### Traps — do not implement these as written
+
+1. **SI-04's prescribed fix is measurably wrong.** `(v.seat || v.judge) !== (f.raiserSeat || f.raiser)`
+   **re-arms #137** on both orphan directions — it admits the raiser's own vote as its own peer.
+2. **`tally.test.js:329` (T1) and `:341` (T2) pin the WRONG behaviour as disclosed.** The peer-split
+   fix must **replace** them. It cannot be written "keeping the suite green"; pin the replacement
+   with a **named mutant**.
+3. **`position`/`lens` ARE recoverable on twin benches.** `run-assemble.js:190` and
+   `run-assemble.test.js:102` both say otherwise and both are false — measured by executing
+   `buildSeats` + `buildTallyInput`.
+4. **The three duplication filings give three different counts, all wrong.** Measured: **9
+   object-form `seatKey` spellings, all in `src/`, zero in `electron/`**, plus 9 string-form
+   post-emit reads. Two filings say "nine" about **disjoint sets** — state the counting rule.
+5. **PR5c's commit title (`16fbad16`) misleads.** It fixed the dead-seat **consumer**; the runStats
+   **producer** still collapses two orphaned twins to one row on both arms.
+
+### Owner rulings (2026-08-16)
+
+| # | Ruling |
+|---|---|
+| R1 | Task mode → **v4.9.0**, #146 folded in |
+| R2 | Unidentified seat: **hybrid** — producer mints a distinguisher where it has one; where it has nothing, mark, attribute nothing, announce |
+| R3 | Orphaned Stage-2 judge vote: **render as unattributed, keep in basis** |
+| R4 | Chair-on-bench: **normalise before the ledger join**, inside the street-cred PR |
+| R5 | SI-02 + the R4 critic path: **defer to v4.9** |
+| R6 | PR5b-1 two-document split: **defer** — Phase 2 closes the reachable half for free |
+| R7 | R5 live payload: **ship in v4.8**, measured independent |
+| R8 | `-rv` join: **refuse** an unknown-seat re-vote → SI-13 becomes a JSDoc edit |
+| R9 | Stage-2 judge roster: **per-SEAT is intent** — close the double-pay half |
+| R10 | MCP tally schema: **fix the closed z.object properly**, own PR |
+| R11 | Function lengths: **defer the splits**; SI-27 takes the useful slice |
+| R12 | #135 TTFT: **probe first**, then scope C2 |
+| R13 | #133: **Piece 1 only** (`opencodeSessionId`) |
+| R14 | **SI-27 in v4.8** after Phase 2, home `stage1-bind.js`; seatKey consolidation → v4.9 |
+| R15 | SI-25 chair packet: **sites (1)+(2) now**, site (3) rides the street-cred PR |
+| R16 | `sessions-index` leak: **pin all 13 unpinned rails** |
+
+### The durable finding is CONFIRMED, and it is the release's centre
+
+`run-retry-group.js :: recordFailure` writes `const key = seatObj ? seatObj.id : seat`. Measured on
+`['deepseek','deepseek','gpt']` with two **unbound** dead twin legs: `models=["deepseek"],
+seats=[null], firstFailures.seatId=["deepseek"]` — **one retry slot for two dead seats.** Controls:
+both bound → two; unique alias → unaffected. Pairs with SI-22.3, where `pushDeadSeatRows` collapses
+two orphaned twins to one row on **both** arms. Fix either alone and the run's spend and its record
+disagree.
+
+⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
+reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.
+
+### Deferred to v4.9.0
+
+Task mode + #146 · the Workspace dead-seat surface (SI-02, R4, PR5b-1) · SI-16 splits · seatKey
+cross-file consolidation · #133 Pieces 2–3 · #138 Piece 3 · #135 C4 · PR1F-2 *unification*, PR1F-3,
+the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES.
+**Holds — not work, do not re-scope:** SI-21, PR5a-1, PR5c-DOMKEY, PR5c-STANDING.
+
+### Tracker state
+
+**Ten open issues, not eight** — #146 and #161 postdate this section and appear nowhere in it.
+**Zero open PRs.** No issue has a comment. #133 is majority-discharged, #129 ~40%, and #137's
+literal ask was satisfiable at v4.7.1.
+
+---
+
 ## v4.8.0 — the council does new work
 
 The three largest issues attack the same two assumptions baked into the pipeline: **every seat
