@@ -109,6 +109,28 @@ describe('T2 — controls that must not move', () => {
         reason: 'x', retryWaveId: 'w1' } };
     expect(rows([w1, w2])).toHaveLength(4);
   });
+
+  test('B1: an UNIDENTIFIED dead seat is NOT hidden by a live twin on its alias', () => {
+    // ⛔ Shipped as disclosed residual R7 and rejected by the code council as a BLOCKER. It was
+    // the PR's own thesis applied on the producer side but not here: emitting `null` instead of
+    // the alias says "unidentified" and "the alias" are DIFFERENT statements — and then the
+    // filter fell back to the alias, re-asserting the equivalence it had just removed.
+    // A live d#1 does not prove the dead one was d#1; it could be d#2. Suppressing is unjustified,
+    // and silent. A degrade record means the seat stayed dead after its retry, so a live seat on
+    // the same alias is a DIFFERENT seat by definition.
+    expect(rows([deadWave(['d'], [null])], null,
+      [{ model: 'd', seat: 'd#1', role: 'seat' }])).toHaveLength(1);
+  });
+
+  test('B1 control: an identified dead seat that IS the live one stays suppressed', () => {
+    expect(rows([deadWave(['d'], ['d#1'])], null,
+      [{ model: 'd', seat: 'd#1', role: 'seat' }])).toHaveLength(0);
+  });
+
+  test('B1 control: a LEGACY alias-only record is still suppressed (R1 unchanged)', () => {
+    expect(rows([deadLeg('d', null)], null,
+      [{ model: 'd', seat: 'd#1', role: 'seat' }])).toHaveLength(0);
+  });
 });
 
 describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', () => {
@@ -136,14 +158,6 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
       .toHaveLength(0);                                                     // suppressed, like R1
   });
 
-  test('R7 (known-wrong): an UNIDENTIFIED dead seat is hidden by any live seat on its alias', () => {
-    // An unid candidate has no seat id, so the filter falls back to the alias and any live
-    // reviewing seat sharing it suppresses the row. Distinct from R1 (a legacy record) and R3
-    // (an alias-valued seatId) — this is a NEW-format record whose slot the producer could not
-    // name. Raised by the code council as A2; disclosed here rather than silently carried.
-    expect(rows([deadWave(['d', 'd'], [null, null])], null,
-      [{ model: 'd', seat: 'd#1', role: 'seat' }])).toHaveLength(0);
-  });
 
   test('R4: the CRITIC path is not seat-keyed — a dead bench twin beside a live critic twin', () => {
     // role is inferred from ALIAS equality (live-seats.js:209) and critics suppress through

@@ -2541,7 +2541,9 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `live-normalize.js`, not a renderer fix.
   - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (T6).
 
-- [ ] **Unidentified dead rows share a DOM `dataset.key`.** Raised by the code council on
+- [ ] **Unidentified dead rows share a DOM `dataset.key`.** ⚠️ Note the *suppression* half of this
+  shape was fixed in PR5c (an unnamed dead seat is no longer hidden by a live same-alias twin);
+  only the DOM-key collision remains, and it has no measured symptom. Raised by the code council on
   [PR #164] as A1 (major). ⚠️ **Its stated consequence is wrong and was measured so**: A1 says the
   collision "causes the same row-accumulation class T3 fixes", but two unidentified dead twins
   painted across two ticks render `2 rows, keys ["dead:d","dead:d"]` — colliding keys, **no

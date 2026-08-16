@@ -111,14 +111,21 @@ function planStillDeadSources(unit, seatOf, roster) {
     const alias = l.modelInput || l.model;
     const key = seatKey(bound, alias);
     attempted.add(key);
-    if (noted.has(key)) { continue; }
+    // `noted` is an EXACT-identity test, so it only settles a leg we can actually name. An
+    // unbound leg keys by its ALIAS, which matches any unnamed wave slot on that alias without
+    // proving they are the same seat — letting this short-circuit run for unbound legs
+    // collapsed two distinct dead seats into one note.
+    if (bound && noted.has(key)) { continue; }
     const K = seatsPerAlias.has(alias) ? seatsPerAlias.get(alias) : Infinity;
-    const unnamed = unnamedByAlias.get(alias) || 0;
-    // Pigeonhole: room for this seat BESIDE every unnamed slot? If not, the unnamed slots
-    // must already include it, so the wave's note covers it and this one would double-count.
-    if (unnamed > K - (idsFor(alias).size + 1)) { continue; }
+    // Room for one more seat on this alias beside everything already named for it? `I` counts
+    // the seats named by identity, `U` the ones named only as "some seat of this alias". If
+    // adding this leg would exceed the roster, the pigeonhole says it is already among them.
+    if (idsFor(alias).size + (unnamedByAlias.get(alias) || 0) + 1 > K) { continue; }
     noted.add(key);
     if (bound) { idsFor(alias).add(bound.id); }
+    // An admitted UNBOUND leg is one more seat we could not name — it consumes roster room
+    // exactly like an unnamed wave slot, or two of them would each think there was space.
+    else { unnamedByAlias.set(alias, (unnamedByAlias.get(alias) || 0) + 1); }
     legs.push({ leg: l, seatId: bound ? bound.id : null });
   }
   return { attempted, legs };

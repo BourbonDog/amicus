@@ -25,10 +25,11 @@ All notable changes to Amicus are documented here. Format follows
   sharing the alias. This is **not** limited to runs recorded before this release — a seat the
   producer could not identify yields the same alias-valued key on a new run. Two further cases are
   filed and unfixed: the **critic** path is still alias-keyed, and during a **live run** a stale
-  record naming a seat that is alive can show a dead row for it until the terminal refresh. A
-  seat the producer could not name is also hidden by any live seat sharing its alias, for the
-  same reason. Every one of these is pinned by a test asserting the known-wrong behaviour so it
-  cannot rot silently.
+  record naming a seat that is alive can show a dead row for it until the terminal refresh. Every
+  one of these is pinned by a test asserting the known-wrong behaviour so it cannot rot silently.
+  A seat the producer could *not* name is **not** among them: it is never hidden by a live seat
+  sharing its alias, because "unidentified" and "the alias" are different statements and a
+  degrade record means that seat stayed dead after its retry.
 
 ### Changed
 

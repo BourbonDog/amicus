@@ -128,12 +128,16 @@
       // Covered either way: this alias HAS been announced, so a later seatLoss-derived
       // duplicate naming it must still be absorbed.
       covered[alias] = true;
-      order.push({
+      var row = {
         model: alias,
         seat: src === 'keyed' ? key : null,
         role: role || null,
         statusText: retried ? 'did not review — retried once' : 'did not review',
-      });
+      };
+      // Set only when true, so every other row's shape is byte-identical to before —
+      // several suites assert these rows with an exact toEqual.
+      if (src === 'unid') { row.unnamed = true; }
+      order.push(row);
     }
     (degrades || []).forEach(function (d) {
       if (!d || d.kind !== 'degrade') { return; }
@@ -205,6 +209,13 @@
     });
     return order.filter(function (s) {
       if (s.role === 'critic') { return !byRole[s.model + '|critic']; }
+      // An UNNAMED dead seat is never suppressed by alias evidence. The producer emitted
+      // `null` rather than the alias precisely because "unidentified" and "the alias" are
+      // different statements; falling back to the alias here would re-assert the equivalence
+      // that emission removed. A live d#1 does not prove the dead seat was d#1 — and a degrade
+      // record means it stayed dead after its retry, so any live seat sharing the alias is a
+      // DIFFERENT seat. Suppressing would be a silent loss on no evidence.
+      if (s.unnamed) { return true; }
       return !reviewing[s.seat || s.model];
     });
   }

@@ -215,4 +215,33 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
     });
     expect(deadNotes(out)).toHaveLength(2);
   });
+  test('D1: an UNBOUND leg on a twin alias is not swallowed by the wave note', async () => {
+    // srcLegKey falls back to the ALIAS for an unbound leg, so `noted.has(key)` matched the
+    // wave's unnamed slot and skipped it before the pigeonhole ever ran — collapsing two
+    // distinct dead seats into one note. K=2, U=1, I=0: admitting is 0+1+1 = 2 <= 2, so there
+    // is room for both and nothing proves they are the same seat.
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
+    const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x' }],
+      deadLegs: [leg],
+      seatOf: new Map(),                       // never bound
+      counts: COUNTS,
+    });
+    expect(deadNotes(out)).toHaveLength(2);
+  });
+
+  test('D1 control: a UNIQUE alias has no room, so the unbound leg IS the wave slot', async () => {
+    // K=1: 0+1+1 = 2 > 1, so the wave's unnamed slot must be this very seat. Suppress.
+    const ctx = fakeCtx({ models: ['alpha', 'beta'] });
+    const leg = { modelInput: 'alpha', status: 'error', error: 'boom' };
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['alpha'], seats: [null], reason: 'x' }],
+      deadLegs: [leg],
+      seatOf: new Map(),
+      counts: COUNTS,
+    });
+    expect(deadNotes(out)).toHaveLength(1);
+  });
+
 });
