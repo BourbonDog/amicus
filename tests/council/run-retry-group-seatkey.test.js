@@ -5,13 +5,18 @@
 // calling the exported `seatKey` a few lines above it, even though the docblock above
 // `seatKey` already claimed the rule was centralised. Two spellings in one file meant T2.2
 // (which changes what the rule *means* at the dedup site) could update one and miss the
-// other. These two pins guard that it now can't: P1 pins recordFailure's OBSERVABLE OUTPUT (the
-// correct seatId, bound and unbound), P2 pins the SOURCE shape (the rule's `X ? X.id : alias`
-// pattern appears exactly once, and it's seatKey's own definition) — together they cover
-// "keys through"; neither alone claims it.
-const fs = require('fs');
-const path = require('path');
-const { recordFailure, seatKey } = require('../../src/council/run-retry-group');
+// other. These two pins guard that it now can't: P1 pins recordFailure's OBSERVABLE OUTPUT
+// (the correct seatId, bound and unbound); P2 pins recordFailure's OWN TEXT via
+// Function.prototype.toString() — it delegates to seatKey and does not re-inline the rule.
+// P2 was originally a whole-file regex scan; retired after review found it fragile on three
+// independent axes at once (exact-whitespace assertions, brittleness to reformatting/comments/
+// strings elsewhere in the file, and a pattern that cannot span a dot in the matched
+// identifier) — scoping to the function itself, rather than patching the same regex again,
+// fixes the first two outright (see P2's own comment for the third). A separate control below
+// guards planStillDeadSources's DIFFERENT null-fallback rule, so it is never confused with
+// either pin.
+const { recordFailure, planStillDeadSources, seatKey } =
+  require('../../src/council/run-retry-group');
 
 describe('T2.1 — recordFailure keys through the one exported seatKey rule', () => {
   test('P1 — recordFailure emits the correct seatId, for a bound seat and for an unbound one', () => {
@@ -30,24 +35,25 @@ describe('T2.1 — recordFailure keys through the one exported seatKey rule', ()
     expect(unboundUnit.firstFailures[0].seatId).toBe('claude-3'); // alias fallback (seatObj null)
   });
 
-  test('P2 — the rule is spelled once in this module', () => {
-    // Named mutant: re-inline `seatObj ? seatObj.id : seat` at the recordFailure call site
-    // and this goes RED (two matches instead of one). Guards the docblock's own claim,
-    // which was false at dbdf09e6.
-    const src = fs.readFileSync(
-      path.join(__dirname, '../../src/council/run-retry-group.js'), 'utf8');
-    // Matches the seat-key shape `X ? X.id : Y` where Y is a plain identifier (an alias
-    // variable) — NOT the literal `null`. planStillDeadSources's `bound ? bound.id : null`
-    // is a DIFFERENT rule (falls back to null, never to an alias) and must not match here.
-    const seatKeyShape = /\b(\w+)\s*\?\s*\1\.id\s*:\s*(?!null\b)\w+/g;
-    const matches = src.match(seatKeyShape) || [];
-    expect(matches).toHaveLength(1);
-    expect(matches[0]).toBe('s ? s.id : alias'); // seatKey's own definition, the only occurrence
+  test('P2 — recordFailure keys through the exported seatKey rule, not a re-inlined copy', () => {
+    // Named mutant "INLINE": replace the seatKey(...) call with the re-inlined
+    // `seatObj ? seatObj.id : seat` and this goes RED (the negative assertion fails).
+    // Scoped to recordFailure's own text via toString(), not a whole-file regex scan: immune
+    // to comments, string literals, or reformatting elsewhere in the file, and this assertion
+    // is presence/absence, not exact-string, so it is not whitespace-exact either.
+    // Known, disclosed gap (not patched further — same reasoning that retired the old regex
+    // rather than re-patching it): `\w+` cannot span a dot, so a re-inline written with a
+    // dotted identifier (e.g. `u.seatObj ? u.seatObj.id : seat`) would slip past both halves.
+    const src = recordFailure.toString();
+    expect(src).toMatch(/seatKey\s*\(/);          // it delegates to the exported rule
+    expect(src).not.toMatch(/\?\s*\w+\.id\s*:/);  // and does not re-inline the rule itself
+  });
 
-    // Control: planStillDeadSources's `legs.push({ ..., seatId: bound ? bound.id : null })` is
-    // a genuinely different rule (null fallback, not alias) and is untouched — still present
-    // verbatim, and correctly NOT swept up by the regex above.
-    expect(src).toMatch(/bound \? bound\.id : null/);
+  test('control — planStillDeadSources still falls back to null, a different rule from seatKey', () => {
+    // Anchored by symbol, not a line number — a bare line number here has already rotted once
+    // (T2.1's own docblock edit shifted this rule, and the comment pinning it was not
+    // re-derived until a later review round).
+    expect(planStillDeadSources.toString()).toMatch(/bound \? bound\.id : null/);
   });
 
   test('sanity — seatKey itself still implements the alias-fallback rule', () => {
