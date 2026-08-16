@@ -1193,10 +1193,15 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
   const noRetry = () => ({ recoveredLegs: [], stillDeadLegs: [], stillDeadRetryLegs: [],
     attemptedSeats: new Set() });
   const roleFor = () => 'seat';
+  // ⚠️ v4.8 T2.2: `o` carries the REAL roster, never `{}`. run-stages.js's call site
+  // passes `ctx.o`, which run.js populates with `o.seats = seatPre.seats`, and the
+  // roster is the only evidence that two losses on one alias are two seats. Measured
+  // with `o: {}` these fixtures reported success both for a change that does nothing
+  // and for a change that works — they could not express the twin case at all.
   const run = (args) => {
     const extraRows = [];
-    pushDeadSeatRows({ o: {}, deadLegs0: [], stillDeadWaves: [], roleFor, extraRows,
-      retry: noRetry(), ...args });
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [], stillDeadWaves: [], roleFor,
+      extraRows, retry: noRetry(), ...args });
     return extraRows;
   };
 
@@ -1210,7 +1215,12 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
   });
 
   test('T12: two ORPHANED twin seats collapse to ONE row that carries NO seat (§4.6, pre-existing)', () => {
-    const legs = [twinLeg(), twinLeg()];             // no `${waveId}-${n}` id, no waveId
+    // Two DISTINCT non-conforming ids, not one shared literal. Production mints a
+    // unique taskId per launched slot (src/sidecar/leg-ids.js), so a shared id was a
+    // shape the producer cannot emit — and it hid the one distinguisher these legs
+    // actually carry. Measured: both spellings leave bindSeats with bound=[] and two
+    // orphan legs, so the fixture still pins the ORPHANED path it was written for.
+    const legs = [{ ...twinLeg(), taskId: 'orphan-a' }, { ...twinLeg(), taskId: 'orphan-b' }];
     const { bound, unbound } = bindSeats('w', SEATS.slice(0, 2), legs);
     expect(bound).toEqual([]);                        // the alias fallback needs hits.length === 1
     expect(unbound.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2']);
