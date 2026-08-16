@@ -99,8 +99,13 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
 // T8b (v4.8 PR4c R4c-7) — the guard is NARROW BY OWNER RULING. It asks "does the
 // bench repeat an alias?", NOT "does seats[] carry anything unrecoverable?" —
 // and on a --lenses or --critic bench with unique aliases those two questions
-// disagree: `position` is unrecoverable on every bench, and the raw lens text
-// survives nowhere in the tally input (runStats[].role carries only the slug).
+// disagree: on THIS bench `position` and the raw lens text survive nowhere in the
+// tally input (runStats[].role carries only the slug). That loss is unique-alias
+// ONLY, never universal — measured 2026-08-16 by executing buildSeats +
+// buildTallyInput, ['deepseek','deepseek','gpt'] emits meta.seats with `position`
+// on every element, and its lensed twin keeps `lens` verbatim. Both facts are
+// recoverable EXACTLY when the bench repeats an alias, and are absent here BY
+// DESIGN, not by defect — see BACKLOG SI-21, which is a HOLD.
 // R4c-7 chose byte-identity on those benches over a table PR5 can request when
 // it needs one, and filed the gap to BACKLOG. Without this test the ruling and
 // its revert are indistinguishable — the T14c lesson from Task 1.

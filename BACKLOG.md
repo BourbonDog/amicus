@@ -2136,6 +2136,9 @@ deliberately left alone:
   - **Verified by execution (2026-08-16):** `src/council/run-assemble.js :: buildTallyInput` —
     `meta` carries `seats` (emitted only when the bench repeats an alias) at `run-assemble.js:203`:
     `...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {})`.
+  - **Note (2026-08-16):** this item's DONE does **not** endorse the "`position` is unrecoverable
+    on every bench" claim that `run-assemble.js` and `run-assemble.test.js` carried. That claim was
+    measured false and corrected in the same PR. See SI-21.
 - [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
   verdict-only consumer cannot tell which twin raised a finding.** `buildVerdict`
   (`src/council/verdict.js:113-127`) rebuilds every finding from an explicit field list — `id`,
@@ -2343,12 +2346,25 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   a **different question** from "does anything else in the document carry the seat's lens". Measured
   on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
   `runStats[].role` carries only the slug `lens:security-review`, and the raw lens text
-  `"Security Review"` appears **nowhere** in the tally input. `position` is unrecoverable on every
-  bench. R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
-  nowhere else"*; that reason is **withdrawn** — the honest claim is "seat ids are resolvable on
-  twin benches, and only there". The owner chose byte-identity on lens/critic benches (measured
+  `"Security Review"` appears **nowhere** in the tally input. ~~`position` is unrecoverable on every
+  bench.~~ R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
+  nowhere else"*; that reason is **withdrawn** — ~~the honest claim is "seat ids are resolvable on
+  twin benches, and only there"~~. The owner chose byte-identity on lens/critic benches (measured
   identical across eight configurations) over a table PR5 can ask for when it needs one. Revisit
   when a consumer actually needs `lens`/`position`, and widen the predicate then.
+  - ⚠️ **This item's prose is FALSE, and so is its own proposed correction (measured 2026-08-16).**
+    `position` and `lens` ARE recoverable from `meta.seats` — exactly when the bench repeats an
+    alias. Measured by executing `buildSeats` + `buildTallyInput`: on `['deepseek','deepseek','gpt']`
+    every `meta.seats` element carries `position` (`[1,2,3]`), and on the lensed twin bench `lens`
+    survives verbatim (`"Security Review"`, while `role` keeps only the slug `lens:security-review`).
+    The struck "on every bench" is the false universal. The struck replacement is wrong too: when
+    the table ships it carries the WHOLE seat row — `id`, `alias`, `role`, `lens`, `position` — so
+    it is not "seat ids, and only there"; `role`/`lens`/`position` are resolvable on a twin bench
+    as well. Only this item's **title** stands as written: both facts are absent on a unique-alias
+    bench (confirmed on `['deepseek','gpt','gemini']` and on a unique-alias lensed bench, where
+    `meta.seats` is absent entirely) — **by design, not by defect**. The same false universal was
+    corrected in `run-assemble.js` and `run-assemble.test.js` in the same PR.
+    **Remains a HOLD — not work, do not re-scope.**
 - [ ] **Five seat shapes the #137 peer fix does not close.** All measured, all disclosed in the
   CHANGELOG rather than hidden:
   1. **The raiser's own Stage-1 leg orphans** — `findings[].raiserSeat` and that seat's vote-seat
