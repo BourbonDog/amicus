@@ -61,7 +61,12 @@ re-measured size table this plan's numbers come from.
 - `gh` requires `-R BourbonDog/amicus`. A bare `gh` defaults to upstream `jrenaldi79/sidecar`.
 - **This repo has NO required status checks** — `gh pr merge --auto` merges IMMEDIATELY. Both PRs
   touch source: watch `gh pr checks <n> -R BourbonDog/amicus` explicitly and merge only when green.
-- No `council-review` label — Phase 1 is a pure move. Labelling starts at Phase 2.
+- **Both PRs carry the `council-review` label.** Owner ruling (2026-08-16): *only doc-only PRs skip
+  the council tag; everything touching source gets it.* A pure move is still a source change — and
+  the drift class these pins exist to catch is exactly what a council reads for. Bench
+  glm,qwen,gpt,kimi, chair deepseek, diff cap 240k; CI resolves aliases from
+  `src/utils/curated-models.js` with no user config, so CI's glm/kimi are not the ones local
+  overrides give you.
 
 ### Gates — all four must exit 0 before every commit
 
@@ -540,5 +545,6 @@ byte-diff is empty; MUTANT "COPY" was observed RED; no consumer file changed.
 byte-identical to the golden capture; the block byte-diff is empty; MUTANT "DRIFT" was observed RED;
 `report.js`'s `module.exports` unchanged; every comment the move falsified corrected.
 
-**Both:** four gates exit 0; suite failures **0**; no `council-review` label; checks watched
-explicitly before merge because this repo has no required status checks.
+**Both:** four gates exit 0; suite failures **0**; the `council-review` label applied (both PRs
+touch source); checks watched explicitly before merge because this repo has no required status
+checks.
