@@ -1122,6 +1122,72 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     expect(r.extraRows.filter(x => x.role === 'superseded')).toHaveLength(2);
   });
 
+  // ---- v4.8 T2.2: the ORPHANED twins, end to end through the real runStage1 ----
+  // The three tests above are BOUND twins: bindSeats resolves each first leg to its own
+  // seat, so the alias never had to carry two identities. These drive the shape the
+  // producer actually collapsed on — twins whose legs no binding could attribute.
+  test('T2.2: two ORPHANED twins get TWO dead-seat rows, and neither borrows its own first leg', async () => {
+    // The lockstep pin. `recordFailure` now mints two retry slots for these two seats,
+    // and run-stage1-rows.js keys their rows by each leg's own taskId. If
+    // `attemptedSeats` did NOT gain the same keys, `retry.attemptedSeats.has(join)` goes
+    // false and each row re-acquires its own FIRST-attempt leg — which already has a
+    // `superseded` row below, so that leg's cost would land in runStats twice while both
+    // retry legs landed nowhere. Measured under exactly that mutant: all four rows read
+    // waveId 'abc123-s1'. The assertion that separates the two worlds is which waveId
+    // the PRIMARY rows carry.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
+      // hits.length === 1, so on a twin alias BOTH first legs come back orphaned.
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1),
+          deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek', 'deepseek']);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);                              // TWO paid seats, TWO rows
+    expect(primary.every(x => !('seat' in x))).toBe(true);        // attributing NOTHING
+    expect(primary.map(x => x.waveId)).toEqual(['abc123-s1r1', 'abc123-s1r1']);
+    const superseded = r.extraRows.filter(x => x.role === 'superseded');
+    expect(superseded.map(x => x.waveId)).toEqual(['abc123-s1', 'abc123-s1']);
+    // Every billed leg on the record exactly once: two first legs superseded, two retry
+    // legs primary, and no leg appearing on two rows.
+    expect(r.extraRows.filter(x => x.role !== 'repair')).toHaveLength(4);
+  });
+
+  test('T2.2 control: two orphaned twins whose retry wave dies wholesale get TWO leg-less rows', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);
+    expect(primary.every(x => !('waveId' in x))).toBe(true);      // no phantom first-leg id
+    expect(primary.every(x => x.usage === null)).toBe(true);
+  });
+
+  test('T2.2 control: a UNIQUE-alias bench with two orphaned legs is byte-unchanged', async () => {
+    // The rule is roster-gated, so nothing on a bench without a repeated alias may move.
+    const ctx = makeCtx({ models: ['gemini', 'gpt'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('gemini', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('gpt', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('gemini', 'timed-out', null, 'abc123-s1r1', 1),
+          deadLeg('gpt', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary.map(x => x.model)).toEqual(['gemini', 'gpt']);
+    expect(primary.map(x => x.waveId)).toEqual(['abc123-s1r1', 'abc123-s1r1']);
+  });
+
   test('a partially healed dead wave yields exactly ONE dead-seat row, for the seat that stayed lost', async () => {
     const ctx = makeCtx({ models: ['a', 'b'] });
     // The whole -s1 wave dies; the retry names only 'a', so 'b' stays lost.
@@ -1178,11 +1244,13 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 // three-line fixtures over the REAL bindSeats/buildSeats rather than a scripted
 // run. The two shapes are NOT symmetric and that asymmetry is the point:
 //   bound   -> one row per seat, each stamped with its own seat id
-//   orphaned-> deadSeats is a Map keyed by keyOf's ALIAS fallback, so two dead
-//              twins collapse into ONE row and the stamp is inert there
-//              (pre-existing collapse; plan §4.6 lists it as a shape PR4c does
-//              NOT close). Revision 1's T12 was satisfiable on the bound path
-//              alone, which is precisely the false confidence this pins away.
+//   orphaned-> one row per seat too, but the stamp is inert on every one of them:
+//              the run knows N seats died and cannot say WHICH. v4.8 T2.2 closed
+//              the collapse PR4c §4.6 disclosed (deadSeats was keyed by keyOf's
+//              ALIAS fallback, so two dead twins became ONE row); the asymmetry
+//              that remains is attribution, not count. Revision 1's T12 was
+//              satisfiable on the bound path alone, which is precisely the false
+//              confidence this pins away.
 describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinLeg = (waveId, slot) => ({
@@ -1200,8 +1268,8 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
   // and for a change that works — they could not express the twin case at all.
   const run = (args) => {
     const extraRows = [];
-    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [], stillDeadWaves: [], roleFor,
-      extraRows, retry: noRetry(), ...args });
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [], stillDeadLegs: [], stillDeadWaves: [],
+      seatOf: new Map(), roleFor, extraRows, retry: noRetry(), ...args });
     return extraRows;
   };
 
@@ -1214,7 +1282,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     expect(rows.map(r => r.seat)).toEqual(['deepseek#1', 'deepseek#2']);
   });
 
-  test('T12: two ORPHANED twin seats collapse to ONE row that carries NO seat (§4.6, pre-existing)', () => {
+  test('T12: two ORPHANED twin seats get TWO rows, each carrying NO seat (v4.8 T2.2)', () => {
     // Two DISTINCT non-conforming ids, not one shared literal. Production mints a
     // unique taskId per launched slot (src/sidecar/leg-ids.js), so a shared id was a
     // shape the producer cannot emit — and it hid the one distinguisher these legs
@@ -1225,8 +1293,40 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     expect(bound).toEqual([]);                        // the alias fallback needs hits.length === 1
     expect(unbound.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2']);
     const rows = run({ stillDeadLegs: legs, seatOf: new Map() });
-    expect(rows).toHaveLength(1);                     // ONE row for TWO paid seats
-    expect('seat' in rows[0]).toBe(false);            // …and the stamp is inert, not wrong
+    expect(rows).toHaveLength(2);                     // TWO paid seats, TWO rows
+    expect(rows.map(r => r.model)).toEqual(['deepseek', 'deepseek']);  // §4.7: the alias stays routable
+    for (const r of rows) { expect('seat' in r).toBe(false); }         // attributing NOTHING
+  });
+
+  test('T12: two orphaned twins the producer cannot tell apart still collapse (R2 floor)', () => {
+    // legLossKey mints from the leg's OWN taskId. A leg with none has genuinely nothing,
+    // and inventing an id would be the guess this module exists to reject — so ONE row
+    // is the correct answer here, and the count is not a free-floating goal.
+    const rows = run({ stillDeadLegs: [twinLeg(), twinLeg()], seatOf: new Map() });
+    expect(rows).toHaveLength(1);
+    expect('seat' in rows[0]).toBe(false);
+  });
+
+  test('T12: two UNIDENTIFIED slots of a still-dead WAVE get TWO rows (R2 mark branch)', () => {
+    // The wave arm has no leg to mint from and `(waveId, i)` is measurably NOT unique,
+    // so the row is MARKED (an unjoinable key) and attributes nothing. The announcement
+    // is the wave's own dead-wave note, whose data.seats already carries one entry per
+    // slot with null for the unnamed ones.
+    const rows = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [null, null], reason: 'died' }] });
+    expect(rows).toHaveLength(2);
+    for (const r of rows) { expect('seat' in r).toBe(false); }
+  });
+
+  test('T12 control: a still-dead WAVE whose slots ARE identified is untouched', () => {
+    const named = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [SEATS[0], SEATS[1]], reason: 'died' }] });
+    expect(named.map(r => r.seat)).toEqual(['deepseek#1', 'deepseek#2']);
+    // …and a UNIQUE-alias wave with unidentified slots still gets one row per model,
+    // exactly as before: nothing about a unique alias needs the roster's permission.
+    const uniq = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['gpt', 'other'],
+      seats: [null, null], reason: 'died' }] });
+    expect(uniq.map(r => r.model)).toEqual(['gpt', 'other']);
   });
 
   test('T12: a bound seat on a UNIQUE-alias bench emits no seat key (byte parity)', () => {

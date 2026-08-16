@@ -629,15 +629,41 @@ describe('v4.8 PR2b Task 6 (H4): twin seats retry as TWO seats, never collapsed 
     expect(units[0].firstFailures.map(f => f.seat)).toEqual(['deepseek', 'deepseek']);
   });
 
-  test('H4: two UNIDENTIFIED losses on one alias still collapse — nothing distinguishes them', () => {
+  test('T2.2: two UNIDENTIFIED losses on a TWIN alias get TWO retry slots — the roster proves two seats', () => {
+    // REPLACES PR2b's 'H4: two UNIDENTIFIED losses on one alias still collapse — nothing
+    // distinguishes them', which pinned the collapse as CORRECT by name. It is not: the
+    // roster REPEATS `deepseek`, so two dead legs on it are two seats the run already
+    // paid for, and one retry slot bought one leg for both. Something does distinguish
+    // them — each leg's own taskId — and the roster is what proves there are two.
     const seats = buildSeats(['deepseek', 'deepseek'], null, null);
     const o = { runId: 'r1', models: ['deepseek', 'deepseek'], critic: null, lenses: null, seats };
     const d1 = { modelInput: 'deepseek', status: 'error', error: 'a' };
     const d2 = { modelInput: 'deepseek', status: 'error', error: 'b' };
     const units = groupStage1Losses(o, [], [d1, d2], new Map()); // no bindings at all
-    expect(units[0].models).toEqual(['deepseek']);
-    expect(units[0].seats).toEqual([null]);
-    expect(units[0].firstFailures.map(f => f.seatId)).toEqual(['deepseek']);
+    expect(units[0].models).toEqual(['deepseek', 'deepseek']);   // TWO paid legs, not one
+    expect(units[0].seats).toEqual([null, null]);                // and neither seat is guessed
+    expect(units[0].firstFailures.map(f => f.reason)).toEqual(['a', 'b']); // the second is KEPT
+    // ⚠️ seatId stays ALIAS-valued on BOTH entries and that is deliberate: it is rendered
+    // (data.firstFailure.seatId), so minting one here would put a fabricated seat identity
+    // on screen. The distinguisher rides the ROW key (run-stage1-rows.js), not this one.
+    expect(units[0].firstFailures.map(f => f.seatId)).toEqual(['deepseek', 'deepseek']);
+  });
+
+  test('T2.2 control: two UNIDENTIFIED losses on a UNIQUE alias still collapse — one seat', () => {
+    // The half of the old H4 that was right, kept by name. Two spellings of "the roster
+    // does not prove a repeat": no `o.seats` at all (also the buildSeats-fallback shape —
+    // run-stage1-launch.js re-derives the table locally and never writes it back), and a
+    // roster that names exactly one seat for the alias. Both must stay ONE slot.
+    const l1 = { modelInput: 'a', status: 'error', error: 'boom' };
+    const l2 = { modelInput: 'a', status: 'timeout', error: null };
+    const [noRoster] = groupStage1Losses(O, [], [l1, l2], new Map());
+    expect(noRoster.models).toEqual(['a']);
+    expect(noRoster.firstFailures.map(f => f.seatId)).toEqual(['a']);
+    const uniq = { runId: 'r1', models: ['a', 'b'], critic: null, lenses: null,
+      seats: buildSeats(['a', 'b'], null, null) };
+    const [withRoster] = groupStage1Losses(uniq, [], [l1, l2], new Map());
+    expect(withRoster.models).toEqual(['a']);
+    expect(withRoster.firstFailures.map(f => f.seatId)).toEqual(['a']);
   });
 
   test('H4: twin LENS seats get separate units — lensIndexOf must not use indexOf', () => {

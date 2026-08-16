@@ -24,7 +24,8 @@ const { bindSeats } = require('./seats');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
 // groupStage1Losses is re-exported below — run-retry.test.js imports it
 // from here.
-const { groupStage1Losses, planStillDeadSources, seatKey } = require('./run-retry-group');
+const { groupStage1Losses, planStillDeadSources, seatKey, twinAliases, legLossKey,
+  srcLegClaimer } = require('./run-retry-group');
 
 /** The briefing a retry unit re-issues — same builders Stage 1 used. */
 function briefingFor(o, unit) {
@@ -43,6 +44,7 @@ function briefingFor(o, unit) {
 async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   counts = { reviewed: 0, total: 0 }, seatOf = new Map() } = {}) {
   const { o, launchers } = ctx;
+  const twins = twinAliases(o.seats);   // the roster's repeated aliases (v4.8 T2.2)
   // `seatOf`/`orphanLegs` are part of the CONTRACT, not a debugging aid: a
   // recovered leg is a RETRY-wave object Stage-1's seatOf has never seen, so
   // without publishing these bindings every healed seat re-materializes
@@ -160,6 +162,13 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     for (const l of unit.srcLegs) { addLaunched(seatOf.get(l) || null, l.modelInput || l.model); }
     // A Stage-1 source leg's key, from the binding Stage 1 published for it.
     const srcLegKey = l => seatKey(seatOf.get(l) || null, l.modelInput || l.model);
+    // v4.8 T2.2: ONE source per still-dead outcome (srcLegs.find handed the first one
+    // out twice, so the second orphaned twin left no record), and the ROW key that seat
+    // will be looked up by downstream. Both move with recordFailure's dedup or a retried
+    // twin re-acquires its own first leg — which already has a `superseded` row, so that
+    // leg's cost lands in runStats twice while its retry leg lands nowhere.
+    const claimSrc = srcLegClaimer(unit.srcLegs, srcLegKey);
+    const srcRowKey = l => legLossKey(seatOf.get(l) || null, l.modelInput || l.model, l, twins);
     if (legs.length === 0) {
       // The retry wave itself died wholesale — final failure keeps each
       // source's granularity (D5): wave-origin stays a dead-wave, leg-origin
@@ -233,8 +242,8 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
           if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
           lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: bound || (launched.get(key) || {}).seat || null });
         } else {
-          const src = unit.srcLegs.find(l => srcLegKey(l) === key);
-          if (src) { out.stillDeadLegs.push(src); }
+          const src = claimSrc(key);
+          if (src) { out.stillDeadLegs.push(src); out.attemptedSeats.add(srcRowKey(src)); }
         }
       }
     }
@@ -258,8 +267,8 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
         if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
         lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
       } else {
-        const src = unit.srcLegs.find(l => srcLegKey(l) === key);
-        if (src) { out.stillDeadLegs.push(src); }
+        const src = claimSrc(key);
+        if (src) { out.stillDeadLegs.push(src); out.attemptedSeats.add(srcRowKey(src)); }
       }
     }
     // Wave-origin seats still lost: the return-contract wave entry carries only
