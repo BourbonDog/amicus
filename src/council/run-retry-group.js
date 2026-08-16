@@ -45,8 +45,9 @@ function lensIndexOf(o, waveId, model, seatObj = null) {
  */
 /**
  * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
- * Exported so run-retry.js consumes it rather than re-spelling it — two readers of one
- * rule that drift apart is how the alias/seat-id keyspace splits in the first place.
+ * Exported so recordFailure below and run-retry.js both consume it rather than
+ * re-spelling it — two readers of one rule that drift apart is how the alias/seat-id
+ * keyspace splits in the first place.
  */
 const seatKey = (s, alias) => (s ? s.id : alias);
 
@@ -111,7 +112,7 @@ function planStillDeadSources(unit, seatOf, roster) {
 }
 
 function recordFailure(unit, seat, ff, trackModel = true, seatObj = null) {
-  const key = seatObj ? seatObj.id : seat;
+  const key = seatKey(seatObj, seat);
   if (unit.firstFailures.some(f => f.seatId === key)) { return; }
   unit.firstFailures.push({ ...ff, seatId: key });
   if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }
