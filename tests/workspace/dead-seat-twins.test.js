@@ -115,3 +115,69 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
       [{ model: 'd', seat: 'd#1', role: 'critic' }], { critic: 'd' })).toHaveLength(0);
   });
 });
+
+/**
+ * T3 — the dead row's DOM key.
+ *
+ * Task 2 makes two dead twins render as TWO rows. `renderDeadSeatRows` keys each row
+ * `'dead:' + seat.model` — the ALIAS — so on a twin bench both rows carry ONE key.
+ * `renderSeats`' leaver-removal (workspace-render.js) snapshots `existing` by dataset.key
+ * before its loop, so two rows sharing a key collapse to the last one: only one is removed
+ * per repaint and the other LEAKS, accumulating a stale ghost every tick. That is the same
+ * frozen-row/leaver-removal class PR5b fixed on the live path, re-created on the dead path.
+ *
+ * A single render cannot see it. Every case here paints at least twice.
+ */
+describe('T3 — two dead twins survive repaints without accumulating', () => {
+  const { makeFakeDom } = require('./helpers/fake-workspace-page');
+  let AmicusLive; let AmicusRender; let AmicusSeats; let document;
+
+  beforeEach(() => {
+    jest.resetModules();
+    const fake = makeFakeDom();
+    document = fake.document;
+    global.window = fake.window;
+    global.document = document;
+    global.NodeFilter = fake.NodeFilter;
+    require('../../electron/workspace-ui/live-model');
+    require('../../electron/workspace-ui/workspace-render');
+    require('../../electron/workspace-ui/workspace-seats');
+    AmicusLive = global.window.AmicusLive;
+    AmicusRender = global.window.AmicusRender;
+    AmicusSeats = global.window.AmicusSeats;
+  });
+  afterEach(() => {
+    delete global.window; delete global.document; delete global.NodeFilter;
+  });
+
+  const twinDegrades = [deadLeg('d', 'd#1'), deadLeg('d', 'd#2')];
+
+  function paintTwice(costRows, degrades) {
+    const tbody = document.createElement('tbody');
+    const liveSeats = AmicusLive.seatsFromRunStats(costRows);
+    for (let i = 0; i < 2; i += 1) {
+      AmicusRender.renderSeats(tbody, liveSeats, false, () => null);
+      AmicusSeats.renderDeadSeatRows(
+        tbody, AmicusLive.deadSeats(degrades, null, liveSeats, null), false, () => null);
+    }
+    return tbody.children.filter(r => r.classList.contains('seat-dead'));
+  }
+
+  test('two dead twins render TWO rows and do not accumulate across two ticks', () => {
+    expect(paintTwice([], twinDegrades)).toHaveLength(2);
+  });
+
+  test('each dead twin row carries a DISTINCT dataset.key', () => {
+    const rowsOut = paintTwice([], twinDegrades);
+    const keys = rowsOut.map(r => r.dataset.key);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  test('CONTROL — a unique bench dead row keeps its alias-shaped key and does not accumulate', () => {
+    const rowsOut = paintTwice(
+      [{ model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.10' }],
+      [deadLeg('bravo', null)]);
+    expect(rowsOut).toHaveLength(1);
+    expect(rowsOut[0].dataset.key).toBe('dead:bravo');
+  });
+});

@@ -126,10 +126,24 @@ not a measurement.
 { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } }
 ```
 
-Alias space. Once M3 is fixed and two dead twins render, both rows carry `dead:deepseek` —
-re-creating the frozen-row/leaver-removal class PR5b just fixed (`:229-231` documents that
-`renderSeats` wipes `dead:`-keyed rows by that key every tick). **M3 and the dead-row key are one
-shippable unit.**
+Alias space. Once M3 is fixed and two dead twins render, both rows carry `dead:deepseek`.
+
+⛔ **REV-1 AND REV-2 BOTH CLAIMED THIS RE-CREATES THE FROZEN-ROW CLASS. MEASURED: IT DOES NOT.**
+The claim was reasoned from the live path and never run. Two probes at implementation time:
+
+| pin | result |
+|---|---|
+| two dead twins, painted twice — do rows accumulate? | **no, 2 rows** — passes at HEAD |
+| two dead twins — distinct `dataset.key`? | **no, 1 key for 2 rows** — the only real failure |
+
+`renderSeats` removes leavers **per ROW** (`workspace-render.js:231` tests each child's own key),
+so colliding rows are both removed rather than one leaking; and dead rows are always appended
+fresh, so the reuse path at `:197` — where last-wins froze a live row in PR5b — is never reached.
+
+**The collision is a latent hazard, not a live defect**, and the plan must not claim otherwise.
+It is still fixed: `:188` builds a last-wins `existing` map that any future reuse would hit, and
+two rows for different seats sharing one key is a landmine. But **Task 3 is a cheap hardening, not
+the required companion this plan called it** — the "one shippable unit" framing was wrong.
 
 ## 0.5 The defects, re-measured at `cd02e451` `[MEASURED]`
 

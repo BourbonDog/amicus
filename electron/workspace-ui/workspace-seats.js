@@ -215,8 +215,19 @@
       // a label that DOES resolve (possible in principle) still wins via seatCells' own cell.
       if (blindOn && !(labelOf && labelOf(seat.model))) { cells[0] = '(masked)'; }
       cells[6] = '';
+      // v4.8 PR5c: key on the SEAT, not the alias — two dead twins are two rows and must
+      // not share a dataset.key. ⚠️ Honest scope: unlike the live path, this collision has
+      // NO measured symptom today. renderSeats removes leavers per ROW
+      // (workspace-render.js:231 tests each child's own key), so colliding rows are both
+      // removed rather than one leaking, and dead rows are always appended fresh so the
+      // reuse path at :197 — where last-wins froze a live row in PR5b — is never reached.
+      // It is fixed because :188 still builds a last-wins `existing` map that any future
+      // reuse would hit, and because rows for different seats having one key is a landmine.
+      // Plain concatenation is injective here (ONE field, and 'dead:' cannot collide with a
+      // live key, which is a JSON array starting '['); the live path needs JSON.stringify
+      // only because it joins TWO fields.
       var row = window.AmicusRender.el('tr',
-        { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } },
+        { className: 'seat-dead', dataset: { key: 'dead:' + (seat.seat || seat.model) } },
         cells.map(function (c, i) {
           return window.AmicusRender.el('td',
             { className: window.AmicusRender.seatCellClass(i) }, [c]);
