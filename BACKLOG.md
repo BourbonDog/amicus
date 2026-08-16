@@ -2432,21 +2432,90 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   `assignLabels(['a','a','b'])` yields `{"Review A":"a","Review B":"a","Review C":"b"}`, whose keys
   are labels and are unique by construction. Delete `letterByModel`, or give it a seat key before
   something starts using it.
-- [ ] **The roster-padding block is duplicated three times, and the prior refusal was INVERTED.**
-  `src/council/run-retry.js:121-131`, `src/council/run-stage2.js:91-107` and
-  `src/council/run-debate-revote.js:115-126` each build the same `__unbound-<waveId>-<n>` placeholder
-  roster before `bindSeats` and then filter the placeholders back out — ~11 lines apiece, and all
-  three already `require('./seats')`, so the consolidation costs no new dependency. ⚠️ The v4.8 PR4
-  draft refused this as *"a near-copy, not a win"* while **endorsing** a `seatKey` consolidation;
-  measured, that is exactly backwards. `seatKey` is net-flat: `run.js:228` and `run-retry.js:149` are
-  byte-identical (54 B) but `run.js`'s copy has exactly **one** caller (`:229`);
-  `run-debate-revote.js:64` is a *different* form — a named `function seatKey(seat, alias)` with
-  different parameter names — and also has one caller (`:132`); and `run.js:231` is a **third,
-  hand-inlined** copy that must stay, because its `|| byJudge.get(r.model)` fallback is load-bearing
-  (an orphaned Stage-2 leg's conformance becomes unreachable without it). Only `run-retry.js`'s copy
-  earns its keep, with five call sites (`:152`, `:163`, `:180`, `:196`, `:201`). Recorded so the
-  wrong endorsement is not re-inherited. Still
-  **not** urgent; it is a tidy-up, not a defect.
+- [ ] **SI-DUP · the duplication filing (merges SI-15 + SI-27 + PR5c-SEATKEY, 2026-08-16).** Three
+  filings described this one duplication and gave three different counts, **all wrong** — SI-15 said
+  3, SI-27 enumerated 4 and missed 5, PR5c-SEATKEY said 3 "+ a fourth". Both true counts come to
+  **nine**, but over **disjoint sets**, and PR5c-SEATKEY's "fourth" was a member of the *other* set
+  — which is why nobody noticed. Every number below states the rule by which it was counted.
+  Re-measured 2026-08-16 at `0080e372` over `src/` and `electron/` only (tests excluded), by
+  execution — no number here is inherited from a prior filing.
+  - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
+    `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
+    an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
+    do not**. → **9 spellings, all in `src/council/`, 0 in `electron/`.** Sites:
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:51`
+    (the exported one, PR5c), `run-retry-group.js:114` (`recordFailure`, hand-inlined),
+    `run-stage1-rows.js:42`, `run-stage1-rows.js:85`, `run-stages.js:96`, `run-stages.js:106`,
+    `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined). **Excluded, and why:**
+    `run-retry-group.js:108` and `run-retry-notes.js:58` fall back to `null`, not an alias — "seat
+    id or nothing" is a different value space; `run.js:198` and `run-assemble.js:89`/`:215` are the
+    emit-when-**different** stamp, which `run.js:190` explicitly contrasts with *"the naive
+    `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no alias fallback; and the eight
+    `seatKey(...)` call sites (`run-debate-revote.js:132`, `run-retry-group.js:92`/`:100`,
+    `run-retry.js:151`/`:162`/`:192`/`:197`, `run.js:229`) are consumers, not spellings.
+  - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
+    **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
+    field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
+    5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
+    `report.js:152` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
+    ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
+    `council/debate.js:178`, `council/report.js:152` (×2), `council/run-debate.js:258`,
+    `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
+    `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:242`. **Adjacent forms
+    deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
+    *different* emitted field pair); the four seat-space-**gated** reads `report.js:91`/`:97` and
+    `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
+    be folded into the bare form — `report.js:24-40` records that independent fallbacks would blank
+    every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
+    queries *both* keys, so it is not a key derivation); `workspace-seats.js:85`'s `seatId` chain;
+    and `workspace-render.js:195`/`:225`'s `seat.id || seat.model` over `seatsFromRunStats`'
+    synthesised `model:role` id.
+  - ⚠️ **Counts 1 and 2 are DISJOINT sets** — no `file:line` appears in both, and both happen to
+    total nine. Any number quoted about this duplication is meaningless without saying which
+    population it counts: PR5c-SEATKEY's *"the renderer spells the same rule a fourth time as
+    `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
+    the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
+    boundary and a **string** after it, so one property name reads as two different rules
+    (`run.js:231` vs `report.js:152`).
+  - ⚠️ **The `electron/` re-spellings are structural, not sloppiness.** The Workspace renderer loads
+    every module as a plain `<script src>` (`electron/workspace-ui/index.html:101-124`) under
+    `contextIsolation: true, nodeIntegration: false, sandbox: true` (`electron/main.js:137`) and a
+    `default-src 'none'` CSP — there is no module system in the renderer at all, so it cannot
+    `require()` from `src/`. (The only two `require()` calls under `electron/workspace-ui/` —
+    `live-model.js:58`, `live-seats.js:113` — are same-directory and guarded by
+    `typeof module !== 'undefined'`, i.e. jest-only.)
+  - **Disposition (a) — roster-padding core → v4.8, ruling R14.** `src/council/run-retry.js:121-131`,
+    `src/council/run-stage2.js:91-107` and `src/council/run-debate-revote.js:115-126` each build the
+    same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filter the
+    placeholders back out — ~11 lines apiece, and all three already `require('./seats')` (as does
+    the proposed home), so the consolidation costs no new dependency. All three citations re-derived
+    2026-08-16; none had rotted. ⚠️ These are a **different set of three files** from Count 1's —
+    overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:115-126`, a
+    `seatKey` spelling at `:64`), while `run.js` carries no padding (it consumes `s2.judgeResults`,
+    already padded by Stage 2) and `run-stage2.js` spells no `seatKey`. Read "three files" in either
+    filing as naming a set, never a count of the whole. Home is `stage1-bind.js`, parameterised on
+    `(waveId, rosterSource, aliasAt, legs)`, returning both the filtered `seatOf` Map and the raw
+    `bindRes`. **The orphan tail differs at all three sites (push / degrade.note / nothing) and stays
+    at the call site.** Own PR, **after Phase 2** — consolidation must not ride a defect PR.
+  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
+    draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
+    `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**: `run.js:228`
+    and `run-retry-group.js:51` are byte-identical modulo indentation (49 chars each, re-measured)
+    but `run.js`'s copy has exactly **one** caller (`:229`); `run-debate-revote.js:64` is a
+    *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
+    also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
+    because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
+    conformance becomes unreachable without it). Only the **exported** copy earns its keep, with six
+    callers — `run-retry-group.js:92`/`:100` internally and `run-retry.js:151`/`:162`/`:192`/`:197`.
+    ⚠️ **Citation rot corrected:** SI-27 credited *"`run-retry.js`'s copy … five call sites (`:152`,
+    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:51` and made
+    it the exported one so `run-retry.js` consumes it rather than keeping a fourth copy — every one
+    of those five line numbers is now wrong, and the count was four in that file. Recorded so the
+    wrong endorsement is not re-inherited. **Do not add another `src/` spelling in the meantime**
+    (PR5c-SEATKEY's "do not add a fourth"): a rule needing another spelling is the plan-authoring
+    failure mode **"THE WRONG LEVER"** — the defect is in a *consumer*. PR5c deliberately did not
+    unify them; that is a refactor with its own blast radius, and mixing it into a defect PR is what
+    made PR5a's review expensive. Still **not** urgent; it is a tidy-up, not a defect.
 
 ### Bench adaptation — closes #135, finishes #129
 
@@ -2715,14 +2784,17 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - Do it if the reuse path at `workspace-render.js:188` ever gains a consumer, which is the only
     thing that would turn this into a real defect.
 
-- [ ] **`seatKey` is spelled three times in `src/`.** `run-debate-revote.js:64`, `run.js:228`, and
-  (now) `run-retry-group.js`, which PR5c made the exported one so `run-retry.js` consumes it rather
-  than keeping a fourth copy. The renderer spells the same rule a fourth time as
-  `r.seat || r.model`, which it must — renderer modules cannot `require()` from `src/`.
-  - This is the plan-authoring failure mode "THE WRONG LEVER": a rule needing another spelling means
-    the defect is in a consumer. PR5c deliberately did **not** unify them — that is a refactor with
-    its own blast radius, and mixing it into a defect PR is what made PR5a's review expensive.
-  - Unify the three `src/` copies when that area is next touched. Do not add a fourth.
+- [x] **MERGED into SI-DUP (2026-08-16)** — ~~`seatKey` is spelled three times in `src/`.~~ The
+  count was wrong: re-measured, the object-form rule is spelled **nine** times, all in
+  `src/council/` — and this entry's *"the renderer spells the same rule a fourth time as
+  `r.seat || r.model`"* counted a member of a **disjoint** population as the fourth. See **SI-DUP**
+  in the v4.8.0 seat-identity section for both populations with their counting rules stated. Still
+  true and carried there: PR5c made `run-retry-group.js:51` the exported copy so
+  `run-retry.js` consumes it rather than keeping a fourth; the renderer must spell the rule again
+  (`r.seat || r.model`) because renderer modules cannot `require()` from `src/`; and the "THE WRONG
+  LEVER" reading — a rule needing another spelling means the defect is in a consumer. The "unify
+  when next touched, **do not add a fourth**" guidance carries there as **disposition (b)** (→ v4.9,
+  ruling R14).
 
 ### Standing note for the next reviewer of this area
 
