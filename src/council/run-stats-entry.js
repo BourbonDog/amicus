@@ -11,7 +11,11 @@
  *
  * ⚠️ This module is REQUIRE-FREE by design, like ./seats. Consumers that cannot
  * take run-assemble's graph (./debate.js is dependency-injection-free) must be
- * able to import it. Do not add a `require` call here.
+ * able to import it. Do not add a `require` call here — the pin (P3,
+ * tests/council/run-stats-entry.test.js) scans this file's raw text for the
+ * word `require` immediately followed by an opening parenthesis, so it fires
+ * on that sequence ANYWHERE, including inside a comment, not only inside a
+ * real statement.
  */
 
 /**
