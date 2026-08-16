@@ -61,6 +61,22 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // (cost ceiling / unmappable — never got a second leg) keeps NO superseded
   // row: nothing replaced it. Wave-origin seats never had a first leg at all,
   // so they can never appear here regardless of healed/dead outcome (E4).
+  // ⚠️ v4.8 T2.2 — this is the ONE join in this function still in the ALIAS-granular
+  // keyspace, and it stays safe only while a twin alias cannot produce one RETRIED and one
+  // SKIPPED leg. Both sides of the join are LEG-origin (`deadLegs0` below, and retry's
+  // recovered/still-dead LEG arrays above — a wave-origin seat has no first leg at all and
+  // reaches neither), so the shape to rule out is two UNBOUND LEG-origin twins in different
+  // retry units. Two facts, read off run-retry.js and run-retry-group.js rather than
+  // inferred: (1) skipping is all-or-nothing per UNIT — every skip branch pushes
+  // `...unit.srcWaves`/`...unit.srcLegs` wholesale and `continue`s; (2) such twins always
+  // share a unit — bench and critic are one unit each, and the deadLegs loop calls
+  // `lensIndexOf(o, null, alias, seatObj)` with `seatObj` null when unbound, falling through
+  // to `o.models.indexOf(alias)`, first-match, so both resolve to the SAME lens index.
+  // (BOUND twins never needed this: their `keyOf` values already differ. And a wave-origin
+  // twin CAN land in a different lens unit than its leg-origin sibling — that split is real,
+  // it just cannot reach this join.) Break either fact and the skipped twin takes its own
+  // first leg as a primary row AND gets a superseded row for it: one billed leg counted
+  // twice. Recorded so the next reader need not re-derive it.
   const supersededKeys = new Set([
     ...retry.recoveredLegs.map(keyOf),
     ...retry.stillDeadLegs.map(keyOf),

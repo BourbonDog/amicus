@@ -1881,7 +1881,11 @@ sized and deferred rather than carried half-done.
    counting rule stated beside it. Merged 2026-08-16 into **SI-DUP**, which states both rules; plan
    from that entry, not from this summary.
 5. **PR5c's commit title (`16fbad16`) misleads.** It fixed the dead-seat **consumer**; the runStats
-   **producer** still collapses two orphaned twins to one row on both arms.
+   **producer** still collapsed two orphaned twins to one row on both arms. ✅ **The producer half
+   SHIPPED 2026-08-16 — T2.2, `33e2ecf7`.** `pushDeadSeatRows` now emits one row per orphaned twin
+   on **both** arms and `recordFailure` buys one retry slot per twin. The trap is kept, not deleted,
+   because its *reason* still holds: a reader arriving from `16fbad16`'s title will mis-date what
+   closed when, and one end-to-end sub-case is still open — see SI-22.3 below.
 
 ### Owner rulings (2026-08-16)
 
@@ -1904,16 +1908,57 @@ sized and deferred rather than carried half-done.
 | R15 | SI-25 chair packet: **sites (1)+(2) now**, site (3) rides the street-cred PR |
 | R16 | `sessions-index` leak: **pin all 13 unpinned rails** |
 
-### The durable finding is CONFIRMED, and it is the release's centre
+### The durable finding was the release's centre — ✅ FIXED (T2.2), with one sub-case open
 
-`run-retry-group.js :: recordFailure` keys through `seatKey(seatObj, seat)` (T2.1, 2026-08-16,
-`511cf43e` — was hand-inlined as `const key = seatObj ? seatObj.id : seat` before that refactor;
-same rule, behaviour-preserving over 75 measured inputs, so this finding is UNCHANGED and still
-open). Measured on `['deepseek','deepseek','gpt']` with two **unbound** dead twin legs: `models=["deepseek"],
-seats=[null], firstFailures.seatId=["deepseek"]` — **one retry slot for two dead seats.** Controls:
-both bound → two; unique alias → unaffected. Pairs with SI-22.3, where `pushDeadSeatRows` collapses
-two orphaned twins to one row on **both** arms. Fix either alone and the run's spend and its record
-disagree.
+✅ **FIXED 2026-08-16 — T2.2, `33e2ecf7`** (branch `v48p2-producer-identity`). Both halves shipped in
+one commit, as R2 required: `recordFailure` now dedups only where identity is EXACT, so N orphaned
+twins buy N retry slots, and `pushDeadSeatRows` emits N rows on **both** arms. Re-measured on the
+same bench through the real `groupStage1Losses`: `models=["deepseek","deepseek"]`,
+`seats=[null,null]` — neither guessed — and two dead-seat rows, each carrying **no** seat. Controls
+unmoved: both bound → two; unique alias → one.
+
+**What the finding said, kept for the record.** `run-retry-group.js :: recordFailure` keyed through
+`seatKey(seatObj, seat)` (T2.1, 2026-08-16, `511cf43e` — hand-inlined as
+`const key = seatObj ? seatObj.id : seat` before that refactor). Measured at `cc56f678` on
+`['deepseek','deepseek','gpt']` with two **unbound** dead twin legs: `models=["deepseek"],
+seats=[null], firstFailures.seatId=["deepseek"]` — **one retry slot for two dead seats**, while
+`planStillDeadSources` already emitted 2 notes and 2 `stillDeadLegs`. It paired with SI-22.3, where
+`pushDeadSeatRows` collapsed the same twins to one row on **both** arms; fixing either alone would
+have left the run's spend and its record disagreeing.
+
+⚠️ **NOT closed — the reconcile in `run-retry.js` is still alias-granular, which is why SI-22.3 is
+PARTIAL.** `launched` is a first-wins Map keyed by `seatKey`, and no first-attempt distinguisher can
+enter that keyspace (a retry leg's `taskId` belongs to the retry wave), so two unattributable twins
+share ONE entry. Two consequences, both re-measured 2026-08-16 through the real `runStage1` at
+`33e2ecf7`:
+
+1. **A partial retry return under-counts.** 2 slots launched, 1 leg back ⇒ 1 still-dead note and 1
+   dead-seat row where two are owed. Control, the same shape with BOUND twins ⇒ **2 notes / 2 rows**.
+2. **Both still-dead notes read slot 0's `firstFailure`.** On a FULL return (2 legs back, 2 notes)
+   `data.reason` correctly differs per retry leg (`"retry-boom-1"` / `"retry-boom-2"`) while BOTH
+   notes carry `firstFailure.reason: "boom-orphan-a"` — the second twin's first-failure reason
+   reaches no announcement at all. Control with BOUND twins ⇒ `"boom-bound-1"` / `"boom-bound-2"`,
+   correctly distinct, so it is the first-wins key and nothing else.
+
+Neither is a regression: `cc56f678` emitted one note for shape 1, and shape 2's twin note did not
+exist there at all. No billed leg is lost in either.
+
+⚠️ **EXTRACTION PREREQUISITE — the fix does not fit, and that is the whole reason it is unshipped.**
+The cure is a per-key slot count: `launched` entries gain `slots`, `seenSeats` becomes a count Map,
+and the reconcile emits `max(slots,1) − seen` notes instead of testing presence. **T2.2 measured the
+cost at +7 lines** with this file's comment conventions; `run-retry.js` has **5** free (295/300) and
+its only helper-hosting sibling `run-retry-group.js` has **1** (299/300). Extract one of the two
+first. Do not shave comments to make room.
+
+⚠️ **A stated invariant for whoever extracts `run-retry-group.js`.** The rule T2.2 shipped is *"never
+dedup on a proven twin alias"* — it is **NOT** *"at most N slots for N roster seats"*, and no code
+says so. Measured 2026-08-16 through the real `groupStage1Losses` on `['deepseek','deepseek','gpt']`:
+**3** unbound legs on that 2-seat twin alias ⇒ **3** slots; a null-seat dead wave naming the alias
+twice **plus** 2 unbound legs ⇒ **4** slots for 2 seats. Controls: 2 legs ⇒ 2 slots, unique alias ⇒
+1 slot. Neither over-count is reachable today — a first-pass dead wave always carries real seats,
+and a wave cannot return more legs than it launched — but the safety rests entirely on those two
+facts, which the code never states or checks. Assert them, or state them, in whatever replaces this
+file.
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.
@@ -2497,12 +2542,25 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
      separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
      fixes the bug it re-arms.
-  3. **Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.** `deadSeats`
-     (`src/council/run-stage1-rows.js:76-89`) is a **Map** whose key falls back to the alias when
-     `seatOf.get(l)` is null, so two dead twins produce one entry. Measured through the real
+  3. ✅ **PARTIAL — the producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`).**
+     ~~Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.~~ `deadSeats`
+     (`src/council/run-stage1-rows.js :: pushDeadSeatRows` — anchored BY SYMBOL; the old `:76-89`
+     has moved and now points at unrelated lines) was a **Map** whose key fell back to the alias
+     when `seatOf.get(l)` was null, so two dead twins produced one entry. Measured through the real
      `pushDeadSeatRows` + real `bindSeats`: two orphaned twin legs ⇒ `[{"model":"deepseek",
-     "role":"seat"}]` — one row, no seat, for two paid seats. Pre-existing; PR4c's stamp is simply
-     inert there.
+     "role":"seat"}]` — one row, no seat, for two paid seats. It now keys through `legLossKey`,
+     which mints from the leg's own `taskId` on a proven twin alias, so N orphaned twin legs give N
+     rows; the wave arm marks each unidentified slot with a `Symbol`. Every row still carries **no**
+     seat — the count moved, the attribution deliberately did not.
+     ⚠️ **Why this is PARTIAL and not DONE.** A retry wave that returns FEWER legs than it launched
+     still yields **1** note and **1** row for two unattributable twins: `run-retry.js`'s `launched`
+     Map is `seatKey`-first-wins, and it needs an extraction (+7 lines wanted, 5 free) before the
+     fix can be written. A second consequence of the same key: both still-dead notes read slot 0's
+     `firstFailure`. Both re-measured with controls under "The durable finding" above.
+     ⚠️ **The R2 floor is deliberate, not a gap.** A leg with NO `taskId` has genuinely nothing to
+     mint from and still collapses to one row — inventing an id there is the guess this module
+     exists to reject. Pinned by name: `run-stages.test.js` :: *"T12: two orphaned twins the
+     producer cannot tell apart still collapse (R2 floor)"*.
   4. **A `--council` preset with a whitespace-padded member is functionally a twin bench that
      `buildSeats` treats as two distinct aliases.** `classifyCouncilMembers`
      (`src/utils/config.js:438-460`) pushes `member` **raw** where `parseModelsList` would trim, and
@@ -2567,9 +2625,22 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   execution — no number here is inherited from a prior filing.
   ⚠️ **Count 1 corrected 2026-08-16, T2.1 (`511cf43e`):** the "both counts come to nine" coincidence
   above held only at the `0080e372` measurement. T2.1 routed `recordFailure`'s spelling — hand-
-  inlined at what was `:114` — through the exported `seatKey`; that code is now a call site at
-  `:115`, excluded by Count 1's own counting rule, not a spelling. **Count 1 is eight, Count 2 is
+  inlined at what was `:114` — through the exported `seatKey`; that code became a call site at
+  `:115` (**now `:185`** — T2.2 moved it, see the next note), excluded by Count 1's own counting
+  rule, not a spelling. **Count 1 is eight, Count 2 is
   still nine; they are no longer both nine.** Detail and re-derived sites are under Count 1 below.
+  ⚠️ **Citations re-derived against the FINAL T2.2 tree, 2026-08-16 (`33e2ecf7`):** T2.2 rewrote
+  `run-retry-group.js` (226→299 lines) and `run-stage1-rows.js` (116→171), so **every** citation
+  into those two files moved. **Neither COUNT changed** — Count 1 is still eight and Count 2 still
+  nine; T2.2 added no spelling of the rule, only a ninth and tenth *call site* of the exported one.
+  Moved: `run-retry-group.js` `:52`→**`:29`** (the definition), `:93`→**`:128`**, `:101`→**`:136`**,
+  `:115`→**`:185`**, `:109`→**`:151`** (excluded, null-fallback); `run-stage1-rows.js`
+  `:42`→**`:45`**, `:85`→**`:129`**; `run-retry.js` `:151`→**`:153`**, `:162`→**`:164`**,
+  `:192`→**`:201`**, `:197`→**`:206`**. New: `run-retry-group.js:66` (`legLossKey`'s call).
+  Unmoved and re-confirmed at their stated lines: `run-debate-revote.js:64`/`:132`,
+  `run-stages.js:96`/`:106`, `run.js:228`/`:229`/`:231`, `run-retry-notes.js:58`,
+  `seats.js:165`/`:179`. Each value was produced by grep against the working tree and re-opened at
+  its stated line, not adjusted by arithmetic from the old one.
   ⚠️ **`report.js` citations re-derived against the FINAL tree, total shift +7** (2026-08-16,
   measured at the shipped commit, not at an intermediate one): `:152`→**`:159`** (three places
   here) and `:91`/`:97`→**`:98`**/**`:104`**. Two edits stacked, and the first pass published the
@@ -2587,17 +2658,25 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
     measurement — see the correction note above.) Sites:
-    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:52`
-    (the exported one, PR5c), `run-stage1-rows.js:42`, `run-stage1-rows.js:85`, `run-stages.js:96`,
+    Sites, **all re-derived by execution against the final T2.2 tree (2026-08-16, `33e2ecf7`)** —
+    T2.2 rewrote `run-retry-group.js` (226→299) and `run-stage1-rows.js` (116→171), moving four of
+    the numbers below and adding a tenth call site:
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:29`
+    (the exported one, PR5c; **was `:52`**), `run-stage1-rows.js:45` (**was `:42`**),
+    `run-stage1-rows.js:129` (**was `:85`**), `run-stages.js:96`,
     `run-stages.js:106`, `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined).
-    **Excluded, and why:** `run-retry-group.js:109` and `run-retry-notes.js:58` fall back to
+    **The count is still EIGHT** — T2.2 added no spelling, only call sites.
+    **Excluded, and why:** `run-retry-group.js:151` (**was `:109`**) and `run-retry-notes.js:58`
+    fall back to
     `null`, not an alias — "seat id or nothing" is a different value space; `run.js:198` and
     `run-assemble.js:89`/`:215` are the emit-when-**different** stamp, which `run.js:190` explicitly
     contrasts with *"the naive `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no
-    alias fallback; and the nine `seatKey(...)` call sites (`run-debate-revote.js:132`,
-    `run-retry-group.js:93`/`:101`/`:115`, `run-retry.js:151`/`:162`/`:192`/`:197`, `run.js:229`)
-    are consumers, not spellings — `:115` (T2.1) is `recordFailure`'s former hand-inlined spelling,
-    now a call site.
+    alias fallback; and the **ten** `seatKey(...)` call sites (`run-debate-revote.js:132`,
+    `run-retry-group.js:66`/`:128`/`:136`/`:185`, `run-retry.js:153`/`:164`/`:201`/`:206`,
+    `run.js:229`) are consumers, not spellings — `run-retry-group.js:185` (T2.1, **was `:115`**) is
+    `recordFailure`'s former hand-inlined spelling, now a call site, and
+    `run-retry-group.js:66` is **new with T2.2**: `legLossKey` computes the plain seat key first and
+    only then decides whether to mint onto it.
   - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
@@ -2647,18 +2726,21 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**: `run.js:228`
-    and `run-retry-group.js:52` are byte-identical modulo indentation (49 chars each, re-measured)
+    and `run-retry-group.js:29` are byte-identical modulo indentation (49 chars each, re-measured)
     but `run.js`'s copy has exactly **one** caller (`:229`); `run-debate-revote.js:64` is a
     *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
     also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
     conformance becomes unreachable without it). Only the **exported** copy earns its keep, with
-    seven callers — `run-retry-group.js:93`/`:101`/`:115` internally and
-    `run-retry.js:151`/`:162`/`:192`/`:197`. (Was six / `:92`/`:100` before T2.1, 2026-08-16,
-    `511cf43e`: `recordFailure`'s hand-inlined spelling became a seventh caller at `:115` — the
-    same change that drops Count 1 above from nine to eight.)
+    **eight** callers — `run-retry-group.js:66`/`:128`/`:136`/`:185` internally and
+    `run-retry.js:153`/`:164`/`:201`/`:206`. (Was six before T2.1, 2026-08-16, `511cf43e`, which
+    made `recordFailure`'s hand-inlined spelling a seventh caller — the same change that dropped
+    Count 1 above from nine to eight. T2.2, `33e2ecf7`, added the eighth — `:66`, inside
+    `legLossKey` — and moved the other seven; **all re-derived by execution against the final
+    tree**, not adjusted by arithmetic.)
     ⚠️ **Citation rot corrected:** SI-27 credited *"`run-retry.js`'s copy … five call sites (`:152`,
-    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:52` and made
+    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:29` (it was
+    at `:52` until T2.2 grew the file's header, 2026-08-16, `33e2ecf7`) and made
     it the exported one so `run-retry.js` consumes it rather than keeping a fourth copy — every one
     of those five line numbers is now wrong, and the count was four in that file. Recorded so the
     wrong endorsement is not re-inherited. **Do not add another `src/` spelling in the meantime**
@@ -2940,7 +3022,7 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   `src/council/` — and this entry's *"the renderer spells the same rule a fourth time as
   `r.seat || r.model`"* counted a member of a **disjoint** population as the fourth. See **SI-DUP**
   in the v4.8.0 seat-identity section for both populations with their counting rules stated. Still
-  true and carried there: PR5c made `run-retry-group.js:52` the exported copy so
+  true and carried there: PR5c made `run-retry-group.js:29` (was `:52`; moved by T2.2) the exported copy so
   `run-retry.js` consumes it rather than keeping a fourth; the renderer must spell the rule again
   (`r.seat || r.model`) because renderer modules cannot `require()` from `src/`; and the "THE WRONG
   LEVER" reading — a rule needing another spelling means the defect is in a consumer. The "unify

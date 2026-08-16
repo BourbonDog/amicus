@@ -242,7 +242,9 @@ T12 fixture spelling  o:{}          HEAD rows= 1   roster-fix rows= 1
 PRODUCTION spelling   o:{seats:...} HEAD rows= 1   roster-fix rows= 2
 ```
 
-Production passes the real `ctx.o` (`run-stages.js:279`, populated at `run.js:132`). **As written,
+Production passes the real `ctx.o` (`run-stages.js:279`, populated at `run.js:133` — **corrected
+2026-08-16**: this read `:132`, which is the `seatPre.error` guard; `:133` is
+`o.seats = seatPre.seats`, and the PR4c plan `:385` already had it right). **As written,
 T12 reports success both for a change that does nothing and for a change that works.** Re-fixture it
 to `o: { seats: SEATS }` **before** using it as a pin or a proof.
 

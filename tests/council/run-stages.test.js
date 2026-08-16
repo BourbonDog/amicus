@@ -1174,6 +1174,13 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 
   test('T2.2 control: a UNIQUE-alias bench with two orphaned legs is byte-unchanged', async () => {
     // The rule is roster-gated, so nothing on a bench without a repeated alias may move.
+    // ⚠️ The WHOLE extraRows array is asserted, not a projection of it. "byte-unchanged" is a
+    // claim about every field of every row — count, order, role, status, usage, durationMs,
+    // resolvedModel and the ABSENCE of a `seat` key — and this file's earlier revision claimed
+    // it while checking only `model` and `waveId`. A title that outruns its assertions is the
+    // failure mode this release keeps paying for, so the title is made TRUE rather than
+    // narrowed. Every value below is fixture-determined (mkLeg's fixed durationMs/usage and
+    // the two literal waveIds), so the expectation is a stable literal, not a snapshot.
     const ctx = makeCtx({ models: ['gemini', 'gpt'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
@@ -1183,9 +1190,15 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
         legs: [deadLeg('gemini', 'timed-out', null, 'abc123-s1r1', 1),
           deadLeg('gpt', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
     const r = await runStage1(ctx);
-    const primary = primaryRows(r);
-    expect(primary.map(x => x.model)).toEqual(['gemini', 'gpt']);
-    expect(primary.map(x => x.waveId)).toEqual(['abc123-s1r1', 'abc123-s1r1']);
+    const usage = { cost: { amount: 0.01, source: 'reported' } };
+    const row = (model, role, waveId, status) => ({ model, role, wasChair: false,
+      conformance: 'clean', waveId, resolvedModel: model, status, durationMs: 1000, usage });
+    expect(r.extraRows).toEqual([
+      row('gemini', 'superseded', 'abc123-s1', 'error'),
+      row('gpt', 'superseded', 'abc123-s1', 'error'),
+      row('gemini', 'seat', 'abc123-s1r1', 'timed-out'),
+      row('gpt', 'seat', 'abc123-s1r1', 'timed-out'),
+    ]);
   });
 
   test('a partially healed dead wave yields exactly ONE dead-seat row, for the seat that stayed lost', async () => {
@@ -1240,7 +1253,10 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 });
 
 // ---- v4.8 PR4c Task 1 (plan §3.1): dead-seat rows name their SEAT ----
-// pushDeadSeatRows is exported (run-stage1-rows.js:111), so both shapes are
+// pushDeadSeatRows is exported (run-stage1-rows.js's `module.exports` — anchored by SYMBOL,
+// and carrying NO line number on purpose: this citation read `:111` from the day it was
+// written and the export has never once been on that line, having moved twice more since.
+// A number here rots faster than anyone re-reads it), so both shapes are
 // three-line fixtures over the REAL bindSeats/buildSeats rather than a scripted
 // run. The two shapes are NOT symmetric and that asymmetry is the point:
 //   bound   -> one row per seat, each stamped with its own seat id
