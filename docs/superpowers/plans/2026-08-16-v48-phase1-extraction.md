@@ -60,6 +60,20 @@ re-measured size table this plan's numbers come from.
   it. After each move, re-read **every** comment in both touched files — module docblocks
   especially — and correct any the move made false. `src/council/report.js:49` currently describes
   its own import set; T1.2 changes that set.
+- ⚠️ **"Both touched files" scopes the SWEEP, not the DUTY — and it is not sufficient.** Learned by
+  measurement in T1.2, which shipped three falsified comments in files it never touched, and whose
+  whole-branch review then found a fourth: `tests/council/seat-matrix.test.js` carried the **twin**
+  of the very sentence T1.2 had already corrected in `report.js` ("six first-party modules"). No
+  same-file sweep could have found it. **The rule that works: `grep` the distinctive phrase of any
+  comment you edit, repo-wide, and fix every copy.**
+- ⚠️ **Re-derive citations against the FINAL tree, never an intermediate one.** T1.2's fix wave
+  corrected four `report.js` citations, then added a 6-line docblock **earlier in that same file in
+  the same commit** — shipping all four freshly wrong by exactly 6, plus a size-table row reading
+  188 when the commit made it 197. **Sequence it: make every edit to the cited file FIRST, then
+  re-derive every citation and line count, then re-open each one at its stated line and read what is
+  actually there, then commit.** A citation corrected to a new wrong value is worse than the rot it
+  replaced. Where a symbol anchor will do, prefer it — SI-DUP's `file:line` site list rotted twice
+  in one day.
 - **New modules must not grow the gate's problem.** Each new file must be well under 300 lines.
 - Hooks live in `.husky` (core.hooksPath). `pre-push` runs the full unit suite and BLOCKS; it skips
   only when `.test-passed` matches **HEAD exactly**. Run `npm test` **after** your final commit, or
