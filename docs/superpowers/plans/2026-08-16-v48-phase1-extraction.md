@@ -26,8 +26,14 @@ re-measured size table this plan's numbers come from.
 
 - **T1.1 gates three separate things** — Phase 3's `rankings[]` seat, #135's TTFT field, and
   carried PR1F-2. One extraction, three consumers.
-- **T1.2 gates two** — Phase 2's T2.4 (SI-22.5 adds an "unattributed" column to `toModel`) and
-  SI-25.
+- **T1.2 gates one** — Phase 2's T2.4 (SI-22.5 adds an "unattributed" column to `toModel`).
+  ⚠️ Corrected 2026-08-16: this bullet also claimed SI-25, and so did the governing memo in two
+  places. All three were wrong. SI-25's anchor is `briefings-chair.js :: buildChairPacket` (182
+  lines) with its second site at `run-assemble.js :: buildChairPacketFile` — `report.js` never
+  carried a chair packet, so T1.2 cannot gate it. The gate SI-25 really had was **T1.1**
+  (`run-assemble.js` was at 297/300); T1.1 shipped and left it at 252, so nothing now blocks
+  SI-25 sites (1)+(2). Site (3) still rides Phase 3 (R15), unchanged. **T1.2 is fully justified
+  by T2.4 alone** — this was a plan error, not a reason to re-scope the PR.
 - `src/council/report.js` is at **298/300 — two lines of headroom.** The 300-line gate blocks the
   COMMIT, not the edit. When it fires the answer is to EXTRACT; shaving comments to fit is the
   documented failure tell in this project.

@@ -395,9 +395,13 @@ describe('a malformed seats table falls back to alias space instead of throwing'
  * ⚠️ This is NOT `ledger.js:61-69`'s documented-copy situation. That copy is
  * paid for because `ledger.js` requires only fs/path/utils-config while its
  * sibling pulls findings → anonymize → seats. MEASURED here instead: a fresh
- * `require('src/workspace/matrix-model')` already loads six first-party
- * modules and `src/council/report.js` is one of them — matrix-model has
- * imported SYMBOL from it since v4.4, for this very "single source" reason.
+ * `require('src/workspace/matrix-model')` already loads four first-party
+ * modules (v4.8 Phase 1 T1.2 moved renderMd's own pricing/format-duration/
+ * degrade requires out to report-md.js, which this path never reaches —
+ * report-md is required lazily from inside buildReport, not at module load,
+ * so the count fell from six to four) and `src/council/report.js` is one of
+ * them — matrix-model has imported SYMBOL from it since v4.4, for this very
+ * "single source" reason.
  * Sharing therefore costs ZERO new require edges, so the copy bought nothing
  * and `isSeatSpace` is exported and shared.
  *

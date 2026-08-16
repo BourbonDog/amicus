@@ -283,9 +283,15 @@ describe('What was lost (v4.6 Plan 2)', () => {
     // change to renderMd's body moves both sides of this comparison identically
     // and can never turn it red — measured, not assumed: MUTANT "DRIFT" (a
     // one-character change inside report-md.js's renderMd body) left this pin
-    // green. Content drift is caught instead by report-debate.test.js:69 and
-    // report-claude-column.test.js:142 (both toMatchSnapshot() on md output,
-    // and both pinned .snap files carry the mutated line). What this pin DOES
+    // green. Content drift is caught instead by the rest of the suite, which is
+    // wider than one mechanism: (a) the two md toMatchSnapshot() pins —
+    // report-debate.test.js's "matches the pinned v4.0 snapshot exactly" and
+    // report-claude-column.test.js's "matches the pinned snapshot exactly" —
+    // which DID carry the mutated line, but ⚠️ measured 2026-08-16 the two .snap
+    // bodies are BYTE-IDENTICAL (4255 chars each), so together they are one
+    // document, not two; and (b) seat-matrix.test.js's exact `toBe` pins on
+    // rendered md header and row strings over twin-bench documents the
+    // snapshots never exercise. Neither alone is the net. What this pin DOES
     // catch: MUTANT "STALE" (buildReport's md branch stops routing through
     // report-md.js) — confirmed RED.
     const { renderMd } = require('../../src/council/report-md');

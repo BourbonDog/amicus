@@ -161,7 +161,11 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
 ### Phase 1 · Extraction — 2 PRs, pure moves pinned by function identity
 - **T1.1** `buildRunStatsEntry` (`:46-95`) out of `run-assemble.js` → **297 → 247**.
   **Hard prereq of three things:** Phase 3's `rankings[]` seat, #135's TTFT field, carried PR1F-2
-- **T1.2** Extract from `report.js` (**298/300**) — hard prereq of T2.4 and SI-25
+- **T1.2** Extract from `report.js` (**298/300**) — hard prereq of **T2.4**.
+  ⚠️ Corrected 2026-08-16: this line and §6 previously also claimed SI-25. They were wrong —
+  SI-25's sites are `briefings-chair.js :: buildChairPacket` (182 lines) and
+  `run-assemble.js :: buildChairPacketFile`; `report.js` never carried a chair packet. T1.1 is
+  what mechanically gated SI-25 site (1) (`run-assemble.js` was at 297/300); at 252 it is clear
 
 > Use the PR5b shape: byte-for-byte move, re-exported so no caller changes, pinned by function
 > **identity** (`toBe`) across import paths. That PR earned the sequence's only clean verdict.
@@ -241,7 +245,10 @@ at the call site.** Own PR — consolidation must not ride a defect PR.
 
 **Genuinely gating (mechanical):**
 - T1.1 → Phase 3 + #135 C2 + carried PR1F-2 (one extraction, three consumers)
-- T1.2 → T2.4, SI-25
+- T1.2 → T2.4 (**not** SI-25 — corrected 2026-08-16; see the Phase 1 task list. SI-25's sites are
+  in `briefings-chair.js` and `run-assemble.js`, never `report.js`. Its one mechanical gate was
+  T1.1, which has shipped: `run-assemble.js` 297 → 252, and `briefings-chair.js` is 182 — both
+  clear of the 300-line gate, so nothing now blocks SI-25 sites (1)+(2))
 - T2.1 → T2.2
 - R2's ruling → T2.2, T2.3, T2.4
 - Phase 3's internal order, and `ledger.js:106` in the same PR

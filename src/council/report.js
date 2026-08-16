@@ -7,6 +7,12 @@
  * verdict.json (+ optional wave.json for the cost total) and produces a single
  * self-contained Markdown or HTML string. Renders deterministic data only — no
  * scoring, anonymization, or synthesis (that stays in Claude).
+ *
+ * Since v4.8 Phase 1 T1.2 this file renders NOTHING itself: it builds the
+ * neutral model (`toModel`) and `buildReport` dispatches to `./report-md` or
+ * `./report-html`, which own the two string formats. That description of
+ * `buildReport`'s API above is still exactly true from the outside — it is the
+ * file's own job that narrowed.
  */
 
 const { sumWaveUsage } = require('../utils/pricing');
@@ -181,6 +187,9 @@ function toModel(verdict, wave) {
  */
 function buildReport(sources, opts = {}) {
   const model = toModel(sources.verdict, sources.wave);
+  // ⚠️ Both requires MUST stay lazy — nothing lints this. Each renderer requires ./report back at
+  // load for TIER_ORDER/SYMBOL; hoisting either resolves that back-require against THIS file's
+  // not-yet-assigned module.exports, so the sibling gets undefined and renders a TypeError.
   if (opts.format === 'html') { return require('./report-html').renderHtml(model); }
   return require('./report-md').renderMd(model);
 }

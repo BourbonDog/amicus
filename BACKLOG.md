@@ -1275,8 +1275,10 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   conformance failure (old benches must not degrade).
 - [ ] **GOA-4 · Feature · Output/report impact: relevance + efficiency surfaces** — [M]
   Make the run's selection/weighting story visible. Report + workspace: seat rail ordered by
-  street-cred with high/moderate/low badges (`council/report.js`, `council/report-html.js`,
-  `workspace/matrix-model.js` + seat painters); an efficiency panel — calls/tokens/cost vs what
+  street-cred with high/moderate/low badges — **four** surfaces now, not three: `council/report.js`
+  (the neutral model), `council/report-md.js` (**new** — v4.8 Phase 1 T1.2 moved `renderMd` out of
+  `report.js`; the Markdown street-cred table lives here), `council/report-html.js`, and
+  `workspace/matrix-model.js` + seat painters; an efficiency panel — calls/tokens/cost vs what
   the full static bench would have cost (paper Table 2 as a per-run artifact) — from data already
   in tally `runStats`/spend ledger. When GOA-1 lands, the report also names WHY each seat was
   picked (card match vs ledger evidence vs scout), reusing the picker's own output.
@@ -1917,10 +1919,13 @@ reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-ident
 ### Size gate — re-measured 2026-08-16
 
 Measured with `scripts/check-file-sizes.js`'s own `listTrackedFiles` + `matchesPattern` +
-`CONFIG`, so the population is exactly what the gate scans: **277 gated files** (`src/**/*.js` +
-`electron/**/*.js`, minus `CONFIG.exclude`'s 12-file grandfathered list). **14 at ≥291 · exactly 2
-at 300/300 · 0 over the limit** — the gate passes today and the first added line to either
-300-line file blocks the commit.
+`CONFIG`, so the population is exactly what the gate scans. **First measured 2026-08-16 (Phase 0):
+277 gated files · 14 at ≥291 · exactly 2 at 300/300 · 0 over the limit. Re-measured 2026-08-16
+after Phase 1: 279 gated files · 12 at ≥291 · exactly 2 at 300/300 · 0 over the limit.**
+(`src/**/*.js` + `electron/**/*.js`, minus `CONFIG.exclude`'s 12-file grandfathered list. The
+population grew by the two files Phase 1 created; the ≥291 band shrank by the two Phase 1 emptied.)
+The gate passes today and the first added line to either 300-line file blocks the commit. The two
+struck rows below are kept — not deleted — so the Phase 1 before/after stays legible.
 
 ⚠️ **This replaces the 2026-08-09 v4.7 table under *Next-rev hard gates*** (~1,080 lines earlier in
 this file — a Phase 1 implementer grepping for a size table hits that one first). Its **"three
@@ -1932,9 +1937,9 @@ files now sit at exactly 300/300"** warning is measurably wrong today: re-measur
 |-------|------|------|
 | **300** | `src/pack/pack-resolve.js` | AT CEILING — zero headroom |
 | **300** | `src/sidecar/electron-install.js` | AT CEILING — zero headroom |
-| 298 | `src/council/report.js` | **Phase 1 T1.2 target — 2 lines of headroom** |
+| ~~298~~ **188** | `src/council/report.js` | ✅ **T1.2 SHIPPED** — `renderMd` moved to `report-md.js` (130). 112 lines of headroom |
 | 297 | `electron/workspace-ui/workspace-render.js` | — |
-| 297 | `src/council/run-assemble.js` | **Phase 1 T1.1 target — extracts `buildRunStatsEntry` (297 → 247)** |
+| ~~297~~ **252** | `src/council/run-assemble.js` | ✅ **T1.1 SHIPPED** — `buildRunStatsEntry` moved to `run-stats-entry.js` (71). Landed at 252, not the projected 247. 48 lines of headroom |
 | 297 | `src/sidecar/context-builder.js` | — |
 | 296 | `src/sidecar/session-utils.js` | — |
 | 294 | `electron/workspace-ui/workspace-verbs.js` | — |
@@ -1945,11 +1950,14 @@ files now sit at exactly 300/300"** warning is measurably wrong today: re-measur
 | 292 | `src/sidecar/models.js` | — |
 | 291 | `src/mcp-council-run.js` | — |
 
-⚠️ **`src/council/report.js` (298) and `src/council/run-assemble.js` (297) appear in NO prior size
-note in this file** and both gate Phase 1: T1.1 extracts `buildRunStatsEntry` out of
-`run-assemble.js` (297 → 247), and T1.2 extracts from `report.js`, which has **two lines of
-headroom**. The 300-line gate blocks the COMMIT, not the edit — when it fires, EXTRACT. Shaving
-comments to fit is the documented tell.
+⚠️ **`src/council/report.js` and `src/council/run-assemble.js` appeared in NO prior size note in
+this file** and both gated Phase 1. **Both have now shipped — re-measured 2026-08-16 after
+Phase 1:** T1.1 extracted `buildRunStatsEntry` out of `run-assemble.js` into
+`src/council/run-stats-entry.js` (71), leaving it at **252** (the plan projected 247); T1.2
+extracted `renderMd` out of `report.js` into `src/council/report-md.js` (130), leaving it at
+**188**. Neither is a size-gate concern any more, and **a T2.4 or SI-25 implementer does not need
+to extract anything before editing them.** The 300-line gate blocks the COMMIT, not the edit —
+when it fires, EXTRACT. Shaving comments to fit is the documented tell.
 
 ### Deferred to v4.9.0
 
@@ -2393,8 +2401,14 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   is **overwritten**, not averaged, yielding `{a:2, b:3}`. (2) `computeStreetCred`
   (`src/council/tally.js:49-67`) maps over `meta.models` at `:51`, which is still `['a','a','b']`, so the
   record carries **two byte-identical `streetCred` rows**, and both reach the user — the Markdown
-  street-cred table at `src/council/report.js:181` and the HTML one at
-  `src/council/report-html.js:49`. (3) The ledger's
+  street-cred table at `src/council/report-md.js :: renderMd` and the HTML one at
+  `src/council/report-html.js :: renderHtml`. ⚠️ **Re-anchored BY SYMBOL 2026-08-16** (v4.8 Phase 1
+  T1.2): the Markdown table used to be cited as `report.js:181`, but `renderMd` has moved out of
+  `report.js` entirely into `report-md.js` — the **file** was falsified by T1.2, and the line
+  number was already stale before it. The HTML citation `report-html.js:49` was **also** already
+  wrong (pre-existing, not T1.2's doing): re-measured, `:49` is a `<td>` in the findings-table row
+  builder; the street-cred rows are built two lines later. Both now anchor to the enclosing
+  function, per this release's re-anchoring rule. (3) The ledger's
   join `new Map(streetCred.map(s => [s.model, s]))` (`src/council/ledger.js:106`) is **last-wins**
   into an append-only file. R4c-2 re-confirmed R4-3 on this evidence: fixing (3) alone was measured
   to flip the launched chair name from the short alias to the raw executable id, so this needs to be
@@ -2546,6 +2560,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   — which is why nobody noticed. Every number below states the rule by which it was counted.
   Re-measured 2026-08-16 at `0080e372` over `src/` and `electron/` only (tests excluded), by
   execution — no number here is inherited from a prior filing.
+  ⚠️ **`report.js` citations re-verified and shifted +1 after v4.8 Phase 1 T1.2** (2026-08-16):
+  T1.2 dropped two requires and expanded `isSeatSpace`'s docblock by three lines, so everything
+  below that docblock moved down one. `:152`→`:153` (three places here), `:91`/`:97`→`:92`/`:98`.
+  Each was re-opened at the new line and confirmed to carry what the citation claims. **The counts
+  themselves are unchanged** — T1.2 was a pure move of `renderMd`, which holds no Count-1 or
+  Count-2 site. `report.js:24-40` and `matrix-model.js:84`/`:88` were re-checked and still land.
   - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
     `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
@@ -2564,13 +2584,13 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
     5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
-    `report.js:152` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
+    `report.js:153` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
-    `council/debate.js:178`, `council/report.js:152` (×2), `council/run-debate.js:258`,
+    `council/debate.js:178`, `council/report.js:153` (×2), `council/run-debate.js:258`,
     `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
     `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:242`. **Adjacent forms
     deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
-    *different* emitted field pair); the four seat-space-**gated** reads `report.js:91`/`:97` and
+    *different* emitted field pair); the four seat-space-**gated** reads `report.js:92`/`:98` and
     `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
     be folded into the bare form — `report.js:24-40` records that independent fallbacks would blank
     every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
@@ -2583,7 +2603,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
     the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
     boundary and a **string** after it, so one property name reads as two different rules
-    (`run.js:231` vs `report.js:152`).
+    (`run.js:231` vs `report.js:153`).
   - ⚠️ **The `electron/` re-spellings are structural, not sloppiness.** The Workspace renderer loads
     every module as a plain `<script src>` (`electron/workspace-ui/index.html:101-124`) under
     `contextIsolation: true, nodeIntegration: false, sandbox: true` (`electron/main.js:137`) and a
