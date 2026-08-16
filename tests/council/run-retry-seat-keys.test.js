@@ -135,9 +135,12 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
     expect(deadNotes(out)).toHaveLength(2);
   });
 
-  test('PIGEONHOLE: both twin slots unnamed leaves no room, so a bound leg is suppressed', async () => {
-    // K = 2 and the wave already announced TWO unnamed seats of this alias — every seat is
-    // accounted for, so the leg MUST be one of them. Suppress, on evidence rather than guess.
+  test('both twin slots unnamed: a bound leg is still ANNOUNCED (disclosed duplicate)', async () => {
+    // Under the pigeonhole this was suppressed: K=2 with two unnamed slots "left no room".
+    // Owner ruling after the round-3 blocker: stop inferring. The arithmetic silently assumed
+    // the unnamed slots and the identified legs were disjoint seats, and when they were not it
+    // dropped a real one. Nothing here PROVES this leg is a repeat, so it speaks.
+    // ⚠️ Accepted cost: one dead seat may be announced twice. Visible beats silent.
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
     const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
     const out = await retryStage1Losses(ctx, {
@@ -147,10 +150,10 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
       seatOf: new Map([[leg, ctx.o.seats[0]]]),
       counts: COUNTS,
     });
-    expect(deadNotes(out)).toHaveLength(1);
+    expect(deadNotes(out)).toHaveLength(2);
   });
 
-  test('a wave that NAMES one twin and leaves one unnamed absorbs a leg for the other', async () => {
+  test('a wave naming one twin plus an unnamed slot does NOT absorb a leg for the other', async () => {
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
     const seats = ctx.o.seats;
     const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
@@ -165,7 +168,7 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
     });
     // The wave already announced both of this alias's seats (one by name, one not),
     // so the leg must not add a third.
-    expect(deadNotes(out)).toHaveLength(1);
+    expect(deadNotes(out)).toHaveLength(2);
   });
 
   // Kills the mutant `seatId: alias` at the run-retry-group call site. The T1b tests above
@@ -187,21 +190,22 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
 
   // Kills the mutant that lets the budget swallow EVERY leg on the alias. The control
   // below uses two DIFFERENT aliases, so it never exercises over-suppression.
-  test('the budget claims exactly ONE leg per unnamed slot — the second twin still speaks', async () => {
+  test('two bound legs on one alias BOTH speak — no slot-claiming', async () => {
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
     const seats = ctx.o.seats;
     const legA = { modelInput: 'deepseek', status: 'error', error: 'a' };
     const legB = { modelInput: 'deepseek', status: 'error', error: 'b' };
     const out = await retryStage1Losses(ctx, {
-      // ONE unnamed slot, TWO bound legs on that alias: the slot accounts for one of them,
-      // the other is a genuinely distinct dead seat and must get its own note.
+      // ONE unnamed slot, TWO bound legs on that alias. Neither leg is PROVABLY the unnamed
+      // slot, so both speak. The removed pigeonhole suppressed the second — which is exactly
+      // how a real dead seat went missing when its arithmetic mis-attributed the slot.
       deadWaves: [{ waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x' }],
       deadLegs: [legA, legB],
       seatOf: new Map([[legA, seats[0]], [legB, seats[1]]]),
       counts: COUNTS,
     });
-    expect(deadNotes(out)).toHaveLength(2);            // 1 wave note + 1 leg note
-    expect(deadNotes(out).filter(n => n.channel === 'dead-leg')).toHaveLength(1);
+    expect(deadNotes(out)).toHaveLength(3);   // 1 wave note + 2 leg notes
+    expect(deadNotes(out).filter(n => n.channel === 'dead-leg')).toHaveLength(2);
   });
 
   test('CONTROL — a distinct alias is never absorbed by another alias budget', async () => {

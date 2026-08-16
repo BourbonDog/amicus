@@ -30,6 +30,13 @@ All notable changes to Amicus are documented here. Format follows
   A seat the producer could *not* name is **not** among them: it is never hidden by a live seat
   sharing its alias, because "unidentified" and "the alias" are different statements and a
   degrade record means that seat stayed dead after its retry.
+  ⚠️ The trade this makes, stated plainly: still-dead notes are deduplicated only where seat
+  identity is **exact** — the leg was bound to a seat, or its alias holds exactly one seat, where
+  the alias *is* the id. Where identity is unknown the seat is announced rather than assumed to be
+  a repeat, so on a bench that repeats an alias **one dead seat can be announced twice**. Two
+  earlier designs inferred the answer instead (a per-alias budget, then a roster pigeonhole) and
+  both hid a real dead seat when the inference was wrong. A duplicate a reader can see is
+  preferred to a loss they cannot.
 
 ### Changed
 

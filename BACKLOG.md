@@ -2514,6 +2514,20 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
 
 ## v4.8 PR5c — filed, not fixed (2026-08-15)
 
+- [ ] **The dead-seat surface reconciles identity in the CONSUMER, which it structurally cannot
+  do.** The durable finding from three code-council rounds, recorded because the instances are
+  symptoms of it. `deadSeats` has no roster, so every attempt to decide "are these two records
+  the same seat?" downstream has been inference: an alias-keyed dedup (the original defect), a
+  per-alias budget (round-2 blocker), a roster pigeonhole (round-3 blocker). Each was rated a
+  blocker, and each failed the same way — SILENTLY, by hiding a real dead seat.
+  - PR5c's ruling was to stop inferring: dedup only on exact identity, announce otherwise, accept
+    a visible duplicate. That is correct but it is containment, not a cure.
+  - The cure is producer-side: emit unambiguous seat identity on every dead record, so no
+    consumer ever has to guess. The two items below (R4's role vocabulary, R5's live payload) are
+    the remaining places it is missing — they are not two odd jobs, they are the same job.
+  - ⚠️ Blocker counts across the code rounds went 1 → 1 → 2. They did not converge, which is the
+    documented "wrong lever" signature: the instances were being fixed, not the cause.
+
 - [ ] **R4 · The dead-seat CRITIC path is still alias-keyed, and its role is inferred from the
   ALIAS.** Measured (`scratchpad/probe-critic-twin.js`, and independently raised by two council
   seats): on a bench where one alias holds both a critic seat and a bench seat, a dead BENCH twin

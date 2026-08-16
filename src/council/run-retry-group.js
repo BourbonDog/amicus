@@ -60,25 +60,22 @@ const seatKey = (s, alias) => (s ? s.id : alias);
  * dead-row dedup is alias-keyed too and both collapse into one row; seat-keying that
  * consumer (PR5c Task 2) turns it into a visible duplicate row.
  *
- * ⛔ An earlier fix used a per-alias BUDGET — "the wave announced N unnamed seats, so the next
- * N legs on that alias are re-announcements". The council rated that a BLOCKER and was right:
- * it is an assumption, not evidence, and when the leg is a genuinely different seat it drops a
- * dead seat SILENTLY — the exact failure direction this whole change exists to reject.
+ * ⛔ TWO earlier attempts inferred identity here and both were rated blockers. A per-alias
+ * BUDGET assumed the next leg on an alias was the wave's unnamed slot. A roster PIGEONHOLE
+ * (`I + U + 1 > K`) replaced the assumption with arithmetic — but silently assumed `I` and `U`
+ * were disjoint, so when an unnamed slot and an identified leg were the same seat it overcounted
+ * and dropped a genuinely distinct one. Both failures were SILENT, which is the direction this
+ * module exists to reject.
  *
- * Replaced by the roster, which is evidence. `roster` is the run's seat table, so it says how
- * many seats (K) an alias actually holds. With I distinct seats already named for that alias
- * and U unnamed wave slots, a leg bound to a NEW seat can only be one already covered if the
- * unnamed slots have nowhere else to go — pigeonhole:
+ * Owner ruling: stop inferring. Dedup ONLY where identity is exact, and announce otherwise.
+ * Exact means: the leg was bound to a seat (a real id), OR its alias holds exactly one seat in
+ * the roster, where the alias IS the seat id (`seats.js` mints `alias#N` only for repeats).
+ * Everything else is announced, because nothing proves it is a repeat.
  *
- *     suppress  iff  U > K - (I + 1)
- *
- * So a twin bench with one unnamed slot and one bound leg announces BOTH (the unnamed slot can
- * be the other twin), while a wave that left both twin slots unnamed absorbs the leg (every
- * seat is already accounted for). A unique alias needs no arithmetic at all: its seat id equals
- * its alias, so the plain `noted` test already catches it.
- *
- * An absent or empty roster means K is unknown; treat it as unbounded and ANNOUNCE, which is
- * the loud direction.
+ * ⚠️ The accepted cost, disclosed: on a bench that repeats an alias, an unnamed wave slot and a
+ * leg for the same seat can each produce a note, so one dead seat may be announced twice. That
+ * is a VISIBLE duplicate. The alternative — the two inferences above — hid a dead seat instead,
+ * and a duplicate that a reader can see beats a loss they cannot.
  *
  * @param {Array<{id: string, alias: string}>} roster  the run's seat table (`o.seats`)
  * @returns {{attempted: Set<string>, legs: Array<{leg: object, seatId: ?string}>}}
@@ -88,21 +85,12 @@ function planStillDeadSources(unit, seatOf, roster) {
   for (const seat of roster || []) {
     if (seat && seat.alias) { seatsPerAlias.set(seat.alias, (seatsPerAlias.get(seat.alias) || 0) + 1); }
   }
-  const identifiedByAlias = new Map();   // alias -> Set of seat ids already named
-  const unnamedByAlias = new Map();      // alias -> count of unnamed wave slots
-  const idsFor = (a) => {
-    if (!identifiedByAlias.has(a)) { identifiedByAlias.set(a, new Set()); }
-    return identifiedByAlias.get(a);
-  };
   const noted = new Set();
   const attempted = new Set();
   for (const w of unit.srcWaves) {
     (w.models || []).forEach((m, i) => {
-      const seatObj = (w.seats || [])[i] || null;
-      const k = seatKey(seatObj, m);
+      const k = seatKey((w.seats || [])[i] || null, m);
       noted.add(k); attempted.add(k);
-      if (seatObj) { idsFor(m).add(seatObj.id); }
-      else { unnamedByAlias.set(m, (unnamedByAlias.get(m) || 0) + 1); }
     });
   }
   const legs = [];
@@ -111,21 +99,12 @@ function planStillDeadSources(unit, seatOf, roster) {
     const alias = l.modelInput || l.model;
     const key = seatKey(bound, alias);
     attempted.add(key);
-    // `noted` is an EXACT-identity test, so it only settles a leg we can actually name. An
-    // unbound leg keys by its ALIAS, which matches any unnamed wave slot on that alias without
-    // proving they are the same seat — letting this short-circuit run for unbound legs
-    // collapsed two distinct dead seats into one note.
-    if (bound && noted.has(key)) { continue; }
-    const K = seatsPerAlias.has(alias) ? seatsPerAlias.get(alias) : Infinity;
-    // Room for one more seat on this alias beside everything already named for it? `I` counts
-    // the seats named by identity, `U` the ones named only as "some seat of this alias". If
-    // adding this leg would exceed the roster, the pigeonhole says it is already among them.
-    if (idsFor(alias).size + (unnamedByAlias.get(alias) || 0) + 1 > K) { continue; }
+    // `key` names a specific seat only when the leg was bound, or when the alias holds exactly
+    // one seat (then the alias IS the id). Otherwise it is an alias standing in for "some seat",
+    // and matching it against a wave's unnamed slot would be a guess, not a repeat.
+    const identityIsExact = !!bound || seatsPerAlias.get(alias) === 1;
+    if (identityIsExact && noted.has(key)) { continue; }
     noted.add(key);
-    if (bound) { idsFor(alias).add(bound.id); }
-    // An admitted UNBOUND leg is one more seat we could not name — it consumes roster room
-    // exactly like an unnamed wave slot, or two of them would each think there was space.
-    else { unnamedByAlias.set(alias, (unnamedByAlias.get(alias) || 0) + 1); }
     legs.push({ leg: l, seatId: bound ? bound.id : null });
   }
   return { attempted, legs };
