@@ -231,9 +231,16 @@ describe('run-stats-entry — extraction pins (v4.8 Phase 1 T1.1)', () => {
     expect(asm.buildRunStatsEntry).toBe(rse.buildRunStatsEntry);
   });
 
+  // ⚠️ SUPERSEDED AS IMPLEMENTED (2026-08-16). This P2 was written and then
+  // DELETED, its content folded into P1's comment. Two review rounds proved it
+  // could never fail independently: CommonJS keeps ONE cache entry per resolved
+  // absolute path, so "every consumer import path resolves to the same object"
+  // is guaranteed by the module system once P1 holds — it is not pinnable by our
+  // code, and a title claiming otherwise is the same overclaim defect this phase
+  // exists to remove. Routing the assertion through a real consumer does NOT fix
+  // it: the require's value is discarded and resolves to the same cache entry.
+  // Ship two pins (P1 identity, P3 require-free), not three.
   test('P2 — every consumer import path resolves to that same object', () => {
-    // Each consumer requires './run-assemble'; identity through that path is
-    // what makes the re-export a move rather than a fork.
     expect(require('../../src/council/run-assemble').buildRunStatsEntry)
       .toBe(require('../../src/council/run-stats-entry').buildRunStatsEntry);
   });
