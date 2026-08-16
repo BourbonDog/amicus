@@ -88,7 +88,8 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
 4. **Three filings, three different counts of the same duplication, all wrong.** SI-15 says 3;
    SI-27 enumerates 4 and misses 5; PR5c-SEATKEY says 3 + "a fourth". Measured: **9 object-form
    spellings, all in `src/`, zero in `electron/`**, plus 9 string-form post-emit reads (5 `src/`,
-   4 `electron/`). SI-15 and PR5c-SEATKEY both say "nine" about **disjoint sets**. Any number here
+   4 `electron/`). ⚠️ Corrected 2026-08-16: **no filing ever said "nine"** — it is the two **TRUE**
+   counts that both come to nine, over **disjoint sets**. Any number here
    needs its counting rule stated beside it.
 5. **Citation rot is per-citation, not per-item.** SI-02's `live-seats.js:188` rotted to
    `live-dead-seats.js:144`, but `verdict.js:68/:71` did **not** — both still land exactly on the

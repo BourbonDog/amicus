@@ -829,6 +829,11 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   Those are already far over and are NOT cliffs — `mcp-server.js` is 1490 lines. Only **gated**
   files can trip the gate.
 
+  ⚠️ **SUPERSEDED 2026-08-16 — this table is now STALE. Use *"Size gate — re-measured 2026-08-16"*
+  in the v4.8.0 section below** (re-measured today: `fanout.js` **294**, not 300; `continue.js`
+  **282**, not 297; `run.js` **281**, not 295 — so the "three files at exactly 300/300" warning
+  below is wrong; it is **two**).
+
   **Gated files at ≥291/300 — RE-MEASURED 2026-08-09 against `main` @ `caf4d7e` (v4.7.0).**
   This replaces the 2026-08-02 v4.6 table, which had gone stale exactly as this section warns.
   Counted with the gate's own arithmetic (`check-file-sizes.js:53-54`: `split('\n').length`, minus
@@ -1859,12 +1864,20 @@ sized and deferred rather than carried half-done.
 2. **`tally.test.js:329` (T1) and `:341` (T2) pin the WRONG behaviour as disclosed.** The peer-split
    fix must **replace** them. It cannot be written "keeping the suite green"; pin the replacement
    with a **named mutant**.
-3. **`position`/`lens` ARE recoverable on twin benches.** `run-assemble.js:190` and
-   `run-assemble.test.js:102` both say otherwise and both are false — measured by executing
-   `buildSeats` + `buildTallyInput`.
+3. **`position`/`lens` ARE recoverable on twin benches** — measured by executing `buildSeats` +
+   `buildTallyInput` (re-measured 2026-08-16: on `['deepseek','deepseek','gpt']` every `meta.seats`
+   element carries `position` `[1,2,3]`, and the lensed twin keeps `lens` verbatim). ✅ **CORRECTED
+   2026-08-16** in `run-assemble.js`, `run-assemble.test.js` and SI-21 — all three carried the false
+   universal *"`position` is unrecoverable on every bench"*. **Those two source comments now read
+   TRUE; do not "re-fix" them.** Recorded so the false universal is not re-introduced.
 4. **The three duplication filings give three different counts, all wrong.** Measured: **9
    object-form `seatKey` spellings, all in `src/`, zero in `electron/`**, plus 9 string-form
-   post-emit reads. Two filings say "nine" about **disjoint sets** — state the counting rule.
+   post-emit reads. ⚠️ **No filing ever said "nine"** (measured: `git show 17b6b6f2:BACKLOG.md |
+   grep -n nine` returns no hit inside any of them — SI-15 said **3**, SI-27 enumerated **4** and
+   missed 5, PR5c-SEATKEY said **3 "+ a fourth"**). It is the two **TRUE** counts that both come to
+   nine, over **disjoint sets** — which is why a bare "9" is ambiguous and every number needs its
+   counting rule stated beside it. Merged 2026-08-16 into **SI-DUP**, which states both rules; plan
+   from that entry, not from this summary.
 5. **PR5c's commit title (`16fbad16`) misleads.** It fixed the dead-seat **consumer**; the runStats
    **producer** still collapses two orphaned twins to one row on both arms.
 
@@ -1908,6 +1921,12 @@ Measured with `scripts/check-file-sizes.js`'s own `listTrackedFiles` + `matchesP
 `electron/**/*.js`, minus `CONFIG.exclude`'s 12-file grandfathered list). **14 at ≥291 · exactly 2
 at 300/300 · 0 over the limit** — the gate passes today and the first added line to either
 300-line file blocks the commit.
+
+⚠️ **This replaces the 2026-08-09 v4.7 table under *Next-rev hard gates*** (~1,080 lines earlier in
+this file — a Phase 1 implementer grepping for a size table hits that one first). Its **"three
+files now sit at exactly 300/300"** warning is measurably wrong today: re-measured 2026-08-16,
+`src/sidecar/fanout.js` is **294**, `src/sidecar/continue.js` **282** and `src/council/run.js`
+**281**. Only `pack-resolve.js` and `electron-install.js` are still at the ceiling.
 
 | Lines | File | Note |
 |-------|------|------|
@@ -2124,7 +2143,11 @@ deliberately left alone:
   is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
   the seat-exact form was not expressible inside `tally()`; it is now: every vote carries
   `v.seat` (`tally.js:89`, from `adjudications[].seat`) and every finding carries `f.raiserSeat`
-  (`tally.js:106`), both emit-when-different.
+  (**produced** at `src/council/anonymize.js:68`; **read** in `tally.js` at `:111`, `:139` and
+  `:141`), both emit-when-different. ⚠️ **Citation corrected 2026-08-16:** this sentence cited
+  `tally.js:106` for `f.raiserSeat` — that line is a **comment**, not an executing line. Re-measured
+  with `grep -n raiserSeat src/council/tally.js`: `:101`/`:103` are comment, `:111`/`:139`/`:141`
+  are code.
 
   **What shipped is NOT what this item prescribed.** The prescribed form
   `(v.seat || v.judge) !== (f.raiserSeat || f.raiser)` was measured in both orphan directions and
@@ -2286,7 +2309,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
   dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
   survive to leg construction."
-- [x] **SUPERSEDED by SI-DUP** — ~~A maintainability note (from the auto-review).~~ `seatKey(seat, alias) => seat ? seat.id : alias`
+- [x] **SI-15 · SUPERSEDED by SI-DUP** — ~~A maintainability note (from the auto-review).~~ `seatKey(seat, alias) => seat ? seat.id : alias`
   (or the arrow-function equivalent) is independently redefined in **three files**:
   `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
   note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
@@ -2295,11 +2318,15 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `run-stage2.js:89-106`, `run-debate-revote.js:106-117` — this time `run.js` is the one that does
   NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
-  above. Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
-  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.
+  above. ~~Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
+  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.~~
   - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
     note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
     halves survive there; neither was dropped.
+  - ⚠️ **The struck `seats.js` home is SUPERSEDED — do not send the work there.** SI-DUP
+    **disposition (a)** and ruling **R14** both put the padding consolidation in **`stage1-bind.js`**
+    (parameterised on `(waveId, rosterSource, aliasAt, legs)`, own PR, **after Phase 2**), and
+    disposition (b) defers the `seatKey` half to **v4.9**. Read those, not this clause.
 - [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
   `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
   (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
@@ -2372,10 +2399,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   into an append-only file. R4c-2 re-confirmed R4-3 on this evidence: fixing (3) alone was measured
   to flip the launched chair name from the short alias to the raw executable id, so this needs to be
   taken as one seat-keyed change, in its own PR, not piecemeal.
-- [ ] **`lens` and `position` are unrecoverable from the tally artifacts on any bench that does not
-  repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias, which is
-  a **different question** from "does anything else in the document carry the seat's lens". Measured
-  on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
+- [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
+  does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
+  which is a **different question** from "does anything else in the document carry the seat's lens".
+  Measured on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
   `runStats[].role` carries only the slug `lens:security-review`, and the raw lens text
   `"Security Review"` appears **nowhere** in the tally input. ~~`position` is unrecoverable on every
   bench.~~ R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
@@ -2391,9 +2418,15 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     The struck "on every bench" is the false universal. The struck replacement is wrong too: when
     the table ships it carries the WHOLE seat row — `id`, `alias`, `role`, `lens`, `position` — so
     it is not "seat ids, and only there"; `role`/`lens`/`position` are resolvable on a twin bench
-    as well. Only this item's **title** stands as written: both facts are absent on a unique-alias
-    bench (confirmed on `['deepseek','gpt','gemini']` and on a unique-alias lensed bench, where
-    `meta.seats` is absent entirely) — **by design, not by defect**. The same false universal was
+    as well. ⚠️ **Even the title overclaims** — read it as the `position`/`lens` **FIELDS** being
+    **ABSENT**, not as the facts being unrecoverable. Both fields are absent on a unique-alias bench
+    (confirmed on `['deepseek','gpt','gemini']` and on a unique-alias lensed bench, where
+    `meta.seats` is absent entirely) — **by design, not by defect** — but the seat **ordinal** is
+    still derivable there from `meta.models` order: measured 2026-08-16 by executing `buildSeats` +
+    `buildTallyInput`, `meta.models.indexOf(s.alias) + 1` reproduces `position` exactly on all four
+    unique-alias shapes tried (plain, lensed, and with a real `claudeReview`, whose `CLAUDE_SEAT` is
+    pushed **last** at `run-assemble.js:226` and so shifts no bench index). Only `lens`'s raw text
+    is genuinely lost (`runStats[].role` keeps only the slug). The same false universal was
     corrected in `run-assemble.js` and `run-assemble.test.js` in the same PR.
     **Remains a HOLD — not work, do not re-scope.**
 - [ ] **Five seat shapes the #137 peer fix does not close.** All measured, all disclosed in the
@@ -2407,6 +2440,20 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
      **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
      not a preservation test.
+
+     **THIS shape's own fixture is T2 (`:341`) — the mapping is the REVERSE of the ordinal guess.**
+     Measured 2026-08-16 by reading the fixtures: T2's finding carries **no** `raiserSeat` while the
+     adjudication carries `seat: 'deepseek#2'`, i.e. the **raiser's own** leg is the orphaned one
+     (its in-test comment: *"only ONE unbound Stage-1 twin review"*). T1 is **SI-22.2's** shape
+     (below), not this one. Pair them backwards and the replacement pins the wrong direction.
+
+     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
+     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
+     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
+     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
+     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
+     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
+     fixes the bug it re-arms.
   2. **A peer twin's leg orphans** — the fallback drops that twin's legitimate agree, and the
      `sameModelCorroboration` stamp does not fire either, so the corroboration is silently absent
      rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
@@ -2418,6 +2465,21 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
      **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
      not a preservation test.
+
+     **THIS shape's own fixture is T1 (`:329`) — the mapping is the REVERSE of the ordinal guess.**
+     Measured 2026-08-16 by reading the fixtures: T1's finding **has** `raiserSeat: 'deepseek#1'`
+     and it is the twin **judge's** vote that carries no seat, i.e. the **peer's** leg is the
+     orphaned one (its in-test comment: *"the twin judge's Stage-2 seat orphaned"*). T2 is
+     **SI-22.1's** shape (above), not this one. Pair them backwards and the replacement pins the
+     wrong direction.
+
+     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
+     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
+     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
+     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
+     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
+     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
+     fixes the bug it re-arms.
   3. **Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.** `deadSeats`
      (`src/council/run-stage1-rows.js:76-89`) is a **Map** whose key falls back to the alias when
      `seatOf.get(l)` is null, so two dead twins produce one entry. Measured through the real

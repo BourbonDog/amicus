@@ -659,8 +659,12 @@ git add BACKLOG.md && git commit -m "docs: commit the re-measured size-gate tabl
 ## Done criteria for the PR
 
 - All six tasks committed; four gates exit 0 on the final tree.
-- `git diff main --stat` touches **exactly three files**: `BACKLOG.md`,
-  `src/council/run-assemble.js`, `tests/council/run-assemble.test.js` — plus this plan file.
+- `git diff main --stat` touches **exactly four files**: `BACKLOG.md`,
+  `src/council/run-assemble.js`, `tests/council/run-assemble.test.js`, and
+  `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md` — plus this plan file. *(Amended
+  2026-08-16 by the whole-branch-review fix wave: the memo carries the same false "both say 'nine'"
+  provenance sentence the branch corrected in `BACKLOG.md`, and Phases 1–3 are planned from it, so
+  that one measured sentence had to be corrected there too.)*
 - `src/council/run-assemble.js` is **≤ 297 lines**.
 - Suite unchanged from baseline: 529 suites / 7472 passed / 8 skipped / 0 failed.
 - No `council-review` label — Phase 0 is doc-only (labelling starts at Phase 2).
