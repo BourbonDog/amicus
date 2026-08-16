@@ -1901,6 +1901,37 @@ disagree.
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.
 
+### Size gate — re-measured 2026-08-16
+
+Measured with `scripts/check-file-sizes.js`'s own `listTrackedFiles` + `matchesPattern` +
+`CONFIG`, so the population is exactly what the gate scans: **277 gated files** (`src/**/*.js` +
+`electron/**/*.js`, minus `CONFIG.exclude`'s 12-file grandfathered list). **14 at ≥291 · exactly 2
+at 300/300 · 0 over the limit** — the gate passes today and the first added line to either
+300-line file blocks the commit.
+
+| Lines | File | Note |
+|-------|------|------|
+| **300** | `src/pack/pack-resolve.js` | AT CEILING — zero headroom |
+| **300** | `src/sidecar/electron-install.js` | AT CEILING — zero headroom |
+| 298 | `src/council/report.js` | **Phase 1 T1.2 target — 2 lines of headroom** |
+| 297 | `electron/workspace-ui/workspace-render.js` | — |
+| 297 | `src/council/run-assemble.js` | **Phase 1 T1.1 target — extracts `buildRunStatsEntry` (297 → 247)** |
+| 297 | `src/sidecar/context-builder.js` | — |
+| 296 | `src/sidecar/session-utils.js` | — |
+| 294 | `electron/workspace-ui/workspace-verbs.js` | — |
+| 294 | `src/council/run-chair.js` | — |
+| 294 | `src/sidecar/fanout.js` | — |
+| 292 | `src/cli-handlers-doctor.js` | — |
+| 292 | `src/council/run-stages.js` | — |
+| 292 | `src/sidecar/models.js` | — |
+| 291 | `src/mcp-council-run.js` | — |
+
+⚠️ **`src/council/report.js` (298) and `src/council/run-assemble.js` (297) appear in NO prior size
+note in this file** and both gate Phase 1: T1.1 extracts `buildRunStatsEntry` out of
+`run-assemble.js` (297 → 247), and T1.2 extracts from `report.js`, which has **two lines of
+headroom**. The 300-line gate blocks the COMMIT, not the edit — when it fires, EXTRACT. Shaving
+comments to fit is the documented tell.
+
 ### Deferred to v4.9.0
 
 Task mode + #146 · the Workspace dead-seat surface (SI-02, R4, PR5b-1) · SI-16 splits · seatKey
