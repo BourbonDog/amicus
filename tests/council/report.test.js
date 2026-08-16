@@ -276,11 +276,18 @@ describe('What was lost (v4.6 Plan 2)', () => {
   // lostVerdict/twinCostVerdict are const-scoped to this describe block's closure,
   // so only a test declared inside it can call them; verdictFixture is file-level
   // and available everywhere, but the other two are not.
-  test('P1 — buildReport(md) routes through the extracted renderer, byte-identical', () => {
-    // Pins that buildReport's md branch produces exactly what the extracted
-    // renderer produces on the same model — the move is a route change, not a
-    // rewrite. Named mutant: change one character in report-md's renderMd body
-    // and this goes RED.
+  test('P1 — buildReport(md) routes through the extracted renderer, byte-identical to the extracted renderer\'s own output', () => {
+    // P1 is a ROUTING pin, not a content pin. buildReport's md branch and this
+    // test's own `renderMd` both resolve `require('../../src/council/report-md')`
+    // to the same cached module object (CommonJS caches by resolved path), so a
+    // change to renderMd's body moves both sides of this comparison identically
+    // and can never turn it red — measured, not assumed: MUTANT "DRIFT" (a
+    // one-character change inside report-md.js's renderMd body) left this pin
+    // green. Content drift is caught instead by report-debate.test.js:69 and
+    // report-claude-column.test.js:142 (both toMatchSnapshot() on md output,
+    // and both pinned .snap files carry the mutated line). What this pin DOES
+    // catch: MUTANT "STALE" (buildReport's md branch stops routing through
+    // report-md.js) — confirmed RED.
     const { renderMd } = require('../../src/council/report-md');
     for (const v of [verdictFixture(), lostVerdict(), twinCostVerdict()]) {
       expect(buildReport({ verdict: v }, { format: 'md' })).toBe(renderMd(toModel(v)));

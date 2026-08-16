@@ -66,7 +66,7 @@ function renderHtml(m) {
   // Heading-over-nothing, same guard idiom as debateSection below: absent or
   // empty degrades ⇒ no section at all, so a clean verdict's HTML stays
   // byte-identical to before this section existed. Losses are headline news,
-  // so the section sits directly after the Verdict-summary table (report.js's
+  // so the section sits directly after the Verdict-summary table (report-md.js's
   // renderMd mirrors this placement immediately after the tier loop).
   const lostSection = lostRows
     ? `<h2>What was lost</h2><table><tr><th>Channel</th><th>Notice</th></tr>${lostRows}</table>`
@@ -76,7 +76,7 @@ function renderHtml(m) {
   // renderHtml directly with no debate key) — the guard must tolerate that, and
   // absent/empty ⇒ no section at all so a no-debate report stays byte-identical
   // to v4.0's HTML output. no-response findings get their own list (same
-  // reasoning as report.js's renderMd) so the heading never dangles over
+  // reasoning as report-md.js's renderMd) so the heading never dangles over
   // nothing when a run's only debating raiser never responded.
   let debateSection = '';
   if (m.debate && m.debate.present) {
