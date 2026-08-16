@@ -106,6 +106,7 @@ src/
 │   ├── parse-stage2.js
 │   ├── presets-cli.js
 │   ├── report-html.js
+│   ├── report-md.js
 │   ├── report.js
 │   ├── run-assemble.js
 │   ├── run-budget.js
@@ -510,6 +511,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseDebateDefense()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-html.js` |  | `renderHtml()` |
+| `council/report-md.js` |  | `renderMd()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |

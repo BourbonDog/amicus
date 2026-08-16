@@ -1,7 +1,7 @@
 'use strict';
 const { tally } = require('../../src/council/tally');
 const { buildVerdict } = require('../../src/council/verdict');
-const { buildReport } = require('../../src/council/report');
+const { buildReport, toModel } = require('../../src/council/report');
 const avInput = require('./fixtures/av-receiver-input');
 
 function verdictFixture() {
@@ -270,5 +270,20 @@ describe('What was lost (v4.6 Plan 2)', () => {
     expect(table).toMatch(/\|\s*alpha\s*\|/);
     expect(table).toContain('alpha (judge)');
     expect(table).not.toContain('undefined');
+  });
+
+  // v4.8 Phase 1 T1.2: renderMd moved to ./report-md. Lives HERE, not top-level —
+  // lostVerdict/twinCostVerdict are const-scoped to this describe block's closure,
+  // so only a test declared inside it can call them; verdictFixture is file-level
+  // and available everywhere, but the other two are not.
+  test('P1 — buildReport(md) routes through the extracted renderer, byte-identical', () => {
+    // Pins that buildReport's md branch produces exactly what the extracted
+    // renderer produces on the same model — the move is a route change, not a
+    // rewrite. Named mutant: change one character in report-md's renderMd body
+    // and this goes RED.
+    const { renderMd } = require('../../src/council/report-md');
+    for (const v of [verdictFixture(), lostVerdict(), twinCostVerdict()]) {
+      expect(buildReport({ verdict: v }, { format: 'md' })).toBe(renderMd(toModel(v)));
+    }
   });
 });
