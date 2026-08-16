@@ -359,6 +359,75 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     expect(tbody.children.length).toBe(3);
     expect(badged(tbody)).toBe(0);
   });
+
+  /**
+   * v4.8 PR5c Task 4 — restore the retriedSeats mirror.
+   *
+   * workspace-seats.js:49-54 said, verbatim, to "restore the full mirror rather than letting
+   * the two drift silently" WHEN the deferred M3/M4 PR landed. This is that PR: Task 1 gave
+   * srcLeg records `data.seatId` and dead-wave records `data.seats[]`, so the two comments
+   * claiming "exactly one arm supplies it" and "dead-wave carries models[] — ALIASES, with no
+   * seat and no firstFailure anywhere" both became false the moment it shipped.
+   */
+  describe('T4 — retriedSeats reads the new seat keys from Task 1', () => {
+    const twinRows = [
+      { model: 'd', seat: 'd#1', role: 'seat', status: 'ok', costDisplay: '$0.01' },
+      { model: 'd', seat: 'd#2', role: 'seat', status: 'error', costDisplay: '$0.02' },
+    ];
+    const badged = (tbody) => tbody.children.filter(
+      (r) => r.children[8] && r.children[8].textContent === '↻ retried once').length;
+
+    test('a srcLeg record naming data.seatId badges ONLY that seat, not its live twin', () => {
+      // Before Task 4 this keyed on data.seat (the alias) and badged BOTH twins — putting
+      // "retried once" on a seat that was never retried.
+      const tbody = paint(twinRows, [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat d did not review',
+        why: 'x', effect: 'y',
+        data: { seat: 'd', seatId: 'd#2', status: 'error', reason: null, retryWaveId: 'w1' },
+      }]);
+      expect(badged(tbody)).toBe(1);
+      expect(tbody.children[1].children[8].textContent).toBe('↻ retried once');
+    });
+
+    test('a dead-wave record naming data.seats[] badges exactly those seats', () => {
+      const tbody = paint(twinRows, [{
+        kind: 'degrade', channel: 'dead-wave', what: 'wave died', why: 'x', effect: 'y',
+        data: { waveId: 'r1-s1', models: ['d'], seats: ['d#2'], reason: 'x', retryWaveId: 'w1' },
+      }]);
+      expect(badged(tbody)).toBe(1);
+    });
+
+    test('an UNIDENTIFIED dead-wave slot falls back to the alias and badges BOTH twins', () => {
+      // Disclosed imprecision, and the LOUD direction on purpose: the record does not say
+      // which seat it was, so over-badging is visible and self-correcting where a missing
+      // badge would be silent.
+      const tbody = paint(twinRows, [{
+        kind: 'degrade', channel: 'dead-wave', what: 'wave died', why: 'x', effect: 'y',
+        data: { waveId: 'r1-s1', models: ['d'], seats: [null], reason: 'x', retryWaveId: 'w1' },
+      }]);
+      expect(badged(tbody)).toBe(2);
+    });
+
+    // The deferred BACKLOG item: dead-wave on a TWIN bench had no test at all. Paired with
+    // the distinct-alias case (test (4)) so the asymmetry is visible in one place.
+    test('a LEGACY dead-wave (models[] only) on a twin bench badges both — the alias arm', () => {
+      const tbody = paint(twinRows, [{
+        kind: 'degrade', channel: 'dead-wave', what: 'wave died', why: 'x', effect: 'y',
+        data: { waveId: 'r1-s1', models: ['d'], reason: 'x', retryWaveId: 'w1' },
+      }]);
+      expect(badged(tbody)).toBe(2);
+    });
+
+    // R6 — the sixth residual, absent from the plan's R1-R5 taxonomy until round 2 (D7).
+    test('R6 (known-wrong): a LEGACY srcLeg with no seatId still badges both twins', () => {
+      const tbody = paint(twinRows, [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat d did not review',
+        why: 'x', effect: 'y',
+        data: { seat: 'd', status: 'error', reason: null, retryWaveId: 'w1' },
+      }]);
+      expect(badged(tbody)).toBe(2);
+    });
+  });
 });
 
 /**
@@ -512,4 +581,5 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-model
       expect(marked).toBe(retried);
     });
   });
+
 });

@@ -40,21 +40,42 @@ function waveStillDeadNote(w, unit) {
     // degrade-channels.test.js's exact toEqual on a real dead wave. It stays the
     // ALIAS because verdict.js:72 compares data.seat against o.critic, an alias,
     // and because it is the same key the dead-leg shape uses — one vocabulary
-    // for one field. ⚠️ It is NOT read by the Workspace today: live-seats.js:188,
-    // workspace-seats.js:61 and verdict.js:68 and :71 all filter to channels that
-    // are dead-leg/dead-wave, so no surface consumes `seat-unbound` yet (PR4).
+    // for one field. ⚠️ It is NOT read by the Workspace today: the kind/channel filters in
+    // live-dead-seats.js (deadSeats) and workspace-seats.js (retriedSeats), and verdict.js's
+    // own two, all admit only dead-leg/dead-wave — so nothing consumes `seat-unbound` yet.
+    // Cited by SYMBOL, not line: these three references rotted twice during v4.8 PR5c alone.
     data: { waveId: w.waveId, models: w.models, reason: w.reason, retryWaveId: unit.waveId,
-      ...(partial ? { seat: (w.models || [])[0] } : {}) } };
+      // v4.8 PR5c: seat identity, index-parallel with `models`, on the dead-wave arm only
+      // (the partial arm names ONE seat and rides `seat` above; `seat-unbound` has no
+      // consumer, so an array there would be unpinned surface for no gain).
+      // ⚠️ An unidentified slot emits `null`, NEVER the alias. Collapsing it onto the alias
+      // makes it indistinguishable from a second reference to that alias, and no consumer
+      // can recover the difference — deadSeats has no per-alias seat count. That collapse
+      // is what made two distinct dead twins render as a single row.
+      ...(partial ? { seat: (w.models || [])[0] } : {
+        seats: (w.models || []).map((m, i) => {
+          const so = (w.seats || [])[i];
+          return so ? so.id : null;
+        }),
+      }) } };
 }
 
-/** Leg-origin, retry wave died wholesale (bench-batch case). */
-function srcLegStillDeadNote(leg, unit, counts) {
+/**
+ * Leg-origin, retry wave died wholesale (bench-batch case).
+ *
+ * v4.8 PR5c: `seatId` is the caller's Stage-1 leg->seat binding, or null when the leg was
+ * never bound. It is a SEPARATE key from `seat`, which stays the ALIAS — verdict.js:72
+ * compares `data.seat` against `o.critic`, an alias, so re-pointing it breaks critic-loss
+ * detection. Add a key; never repurpose that one.
+ */
+function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
   const seat = leg.modelInput || leg.model;
   return { channel: 'dead-leg', what: `seat ${seat} did not review`,
     why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output; `
       + 'its once-only retry wave produced no legs',
     effect: legEffect(counts),
-    data: { seat, status: leg.status, reason: leg.error || null, retryWaveId: unit.waveId } };
+    data: { seat, seatId: seatId || null, status: leg.status, reason: leg.error || null,
+      retryWaveId: unit.waveId } };
 }
 
 /**

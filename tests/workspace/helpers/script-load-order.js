@@ -22,9 +22,13 @@
  * ⚠️ v4.8 PR5a fix-wave 3 extraction: added 'workspace-banners' between 'workspace-verbs' and
  * 'workspace-app' — app.js's renderBanners now delegates to it, so it must load first. Third
  * time this list has absorbed a 300-line-gate extraction without either consumer being edited.
+ *
+ * ⚠️ v4.8 PR5c: added 'live-dead-seats' before 'live-seats' — deadSeats moved out when
+ * seat-keying its dedup pushed live-seats.js past the gate. Fourth such extraction.
  */
 const SCRIPT_LOAD_ORDER = [
   'md-lite',
+  'live-dead-seats',
   'live-seats',
   'live-model',
   'workspace-render',

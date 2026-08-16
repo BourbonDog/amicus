@@ -46,12 +46,17 @@
    * says they were retried. PR1F-4 (v4.7 PR7); re-keyed in v4.8 PR5b, renamed from
    * `retriedAliases` because the keys are no longer uniformly aliases.
    *
-   * ⚠️ THE MIRROR IS NOW PARTIAL — it was "EXACTLY" until v4.8 PR5b, and the change is
-   * deliberate. The kind/channel FILTER still mirrors window.AmicusLive.deadSeats
-   * (live-seats.js:186-200) and must keep doing so; the KEY does not. deadSeats still dedups on
-   * the alias (`seen[model]`), which is the deferred M3/M4 work in BACKLOG.md — when that PR
-   * lands, re-read this note and restore the full mirror rather than letting the two drift
-   * silently. Two spellings of one rule is the defect class PR5a's council raised as B1.
+   * ⚠️ THE MIRROR IS RESTORED (v4.8 PR5c). It went partial in PR5b, when this side was
+   * seat-keyed and deadSeats still dedup'd on the alias; PR5c seat-keyed the other side too,
+   * so both now key on "seat id where the record supplies one, alias otherwise". The
+   * kind/channel FILTER still mirrors window.AmicusLive.deadSeats — now at
+   * live-dead-seats.js, which PR5c split out of live-seats.js for the 300-line gate — and
+   * must keep doing so. Two spellings of one rule is PR5a council finding B1.
+   *
+   * ⚠️ The two sides are NOT identical, and the difference is deliberate: deadSeats decides
+   * whether a seat is RENDERED, so it fails toward showing a row; this decides whether a
+   * badge is PAINTED, so an unidentified record falls back to the alias and marks every seat
+   * sharing it. Over-badging is visible and self-correcting; a missing badge is silent.
    *
    * The kind/channel filter is load-bearing: run.degrades[] also carries
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
@@ -70,25 +75,32 @@
       var data = d.data || {};
       if (!(data.retryWaveId || data.firstFailure)) { return; }
       if (d.channel === 'dead-leg') {
-        // ⚠️ v4.8 PR5b: prefer the SEAT ID when the record names one. Of the five emitter arms
-        // in run-retry-notes.js, exactly one supplies it — retryLegStillDeadNote (:67) and
-        // missingLegStillDeadNote (:92) on their `dead-leg` branch, via firstFailure.seatId
-        // (pinned by tests/council/run-retry.test.js:628, which shows deepseek-hash-1 /
-        // deepseek-hash-2 on a twin bench). srcLegStillDeadNote (:51) emits no firstFailure at
-        // all, so `data.seat` — an ALIAS — is the only key available for it. The DUAL lookup
-        // below is what reconciles the two; do not "simplify" either side.
-        var key = (data.firstFailure && data.firstFailure.seatId) || data.seat;
+        // ⚠️ Prefer the SEAT ID when the record names one. TWO mechanisms now supply it, not
+        // one: retryLegStillDeadNote and missingLegStillDeadNote via `firstFailure.seatId`
+        // (pinned by tests/council/run-retry.test.js:628 on a twin bench), and — since
+        // v4.8 PR5c — srcLegStillDeadNote via its own `data.seatId`. Reading only the first
+        // meant a srcLeg record keyed by ALIAS and badged the live twin "retried once" while
+        // the seat that was actually retried showed nothing.
+        // `data.seat` remains the last fallback for pre-PR5c records (residual R6).
+        var key = (data.firstFailure && data.firstFailure.seatId) || data.seatId || data.seat;
         if (key) { out[key] = true; }
       } else {
-        // dead-wave carries `models[]` — ALIASES, with no seat and no firstFailure anywhere
-        // (run-retry-notes.js:28-47). Alias keys only; the lookup's `s.model` arm matches them.
-        (data.models || []).forEach(function (m) { if (m) { out[m] = true; } });
+        // v4.8 PR5c: dead-wave now carries `seats[]`, index-parallel with `models[]`, whose
+        // elements are seat ids or `null` for a slot the producer could not identify. A null
+        // slot falls back to the alias and therefore badges every seat sharing it — the loud
+        // direction, disclosed. A pre-PR5c record has no `seats` at all and is alias-only.
+        var ws = data.seats;
+        (data.models || []).forEach(function (m, i) {
+          var k = (Array.isArray(ws) ? ws[i] : null) || m;
+          if (k) { out[k] = true; }
+        });
       }
     });
     return out;
   }
 
-  // Mirrors isReviewing at live-seats.js:220-223 — a chair/judge/rebuttal/revote row must not
+  // Mirrors isReviewing at live-dead-seats.js (moved there by PR5c's size-gate split) —
+  // a chair/judge/rebuttal/revote row must not
   // carry a reviewer's retry marker.
   function isReviewingRole(role) {
     return role === 'seat' || role === 'critic' ||
@@ -123,7 +135,7 @@
       if (!row || !row.children[8]) { return; }
       // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>).
       // It carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats
-      // hardcodes stalled:false (live-seats.js:87), so it is always empty here and free to use.
+      // hardcodes stalled:false (live-seats.js, seatsFromRunStats), so it is always empty here and free to use.
       // If that ever changes, this is the collision site.
       // Fix wave (whole-branch review, finding 2): this pass must be SYMMETRIC. renderSeats
       // reuses rows keyed on `model:role` across calls — including across two different
@@ -159,7 +171,7 @@
       // bare `retried[s.seat]` coerces null to the STRING key 'null' — so a seat with no seat id
       // would match a degrade record whose alias is literally `null`. Measured: with
       // `m = Object.create(null); m['null'] = true`, `m[null]` is `true`. Contrived, but this
-      // module already guards the same class elsewhere — live-seats.js:170-174 records a model
+      // module already guards the same class elsewhere — live-dead-seats.js, deadSeats' Object.create(null) note, records a model
       // named `toString` crashing the seats repaint, which is why Object.create(null) is used
       // throughout. The guard costs nothing and closes it.
       //
@@ -215,8 +227,19 @@
       // a label that DOES resolve (possible in principle) still wins via seatCells' own cell.
       if (blindOn && !(labelOf && labelOf(seat.model))) { cells[0] = '(masked)'; }
       cells[6] = '';
+      // v4.8 PR5c: key on the SEAT, not the alias — two dead twins are two rows and must
+      // not share a dataset.key. ⚠️ Honest scope: unlike the live path, this collision has
+      // NO measured symptom today. renderSeats removes leavers per ROW
+      // (workspace-render.js:231 tests each child's own key), so colliding rows are both
+      // removed rather than one leaking, and dead rows are always appended fresh so the
+      // reuse path at :197 — where last-wins froze a live row in PR5b — is never reached.
+      // It is fixed because :188 still builds a last-wins `existing` map that any future
+      // reuse would hit, and because rows for different seats having one key is a landmine.
+      // Plain concatenation is injective here (ONE field, and 'dead:' cannot collide with a
+      // live key, which is a JSON array starting '['); the live path needs JSON.stringify
+      // only because it joins TWO fields.
       var row = window.AmicusRender.el('tr',
-        { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } },
+        { className: 'seat-dead', dataset: { key: 'dead:' + (seat.seat || seat.model) } },
         cells.map(function (c, i) {
           return window.AmicusRender.el('td',
             { className: window.AmicusRender.seatCellClass(i) }, [c]);

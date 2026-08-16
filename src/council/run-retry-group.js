@@ -43,6 +43,73 @@ function lensIndexOf(o, waveId, model, seatObj = null) {
  * compares against `o.critic` (an alias) and the Workspace seat views render.
  * Seat-keying `ff.seat` silently breaks critic-loss detection.
  */
+/**
+ * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
+ * Exported so run-retry.js consumes it rather than re-spelling it — two readers of one
+ * rule that drift apart is how the alias/seat-id keyspace splits in the first place.
+ */
+const seatKey = (s, alias) => (s ? s.id : alias);
+
+/**
+ * Which of a unit's srcLegs still need their own still-dead note once its srcWaves have
+ * emitted theirs, plus every seat key those announcements cover.
+ *
+ * v4.8 PR5c: an UNIDENTIFIED wave slot keys by ALIAS (seatKey's fallback) while a leg that
+ * WAS bound keys by its seat id, so a plain `noted.has(key)` test misses and the same seat
+ * is announced TWICE, once per keyspace. HEAD hides this downstream because the Workspace's
+ * dead-row dedup is alias-keyed too and both collapse into one row; seat-keying that
+ * consumer (PR5c Task 2) turns it into a visible duplicate row.
+ *
+ * ⛔ TWO earlier attempts inferred identity here and both were rated blockers. A per-alias
+ * BUDGET assumed the next leg on an alias was the wave's unnamed slot. A roster PIGEONHOLE
+ * (`I + U + 1 > K`) replaced the assumption with arithmetic — but silently assumed `I` and `U`
+ * were disjoint, so when an unnamed slot and an identified leg were the same seat it overcounted
+ * and dropped a genuinely distinct one. Both failures were SILENT, which is the direction this
+ * module exists to reject.
+ *
+ * Owner ruling: stop inferring. Dedup ONLY where identity is exact, and announce otherwise.
+ * Exact means: the leg was bound to a seat (a real id), OR its alias holds exactly one seat in
+ * the roster, where the alias IS the seat id (`seats.js` mints `alias#N` only for repeats).
+ * Everything else is announced, because nothing proves it is a repeat.
+ *
+ * ⚠️ The accepted cost, disclosed: on a bench that repeats an alias, an unnamed wave slot and a
+ * leg for the same seat can each produce a note, so one dead seat may be announced twice. That
+ * is a VISIBLE duplicate. The alternative — the two inferences above — hid a dead seat instead,
+ * and a duplicate that a reader can see beats a loss they cannot.
+ *
+ * @param {Array<{id: string, alias: string}>} roster  the run's seat table (`o.seats`)
+ * @returns {{attempted: Set<string>, legs: Array<{leg: object, seatId: ?string}>}}
+ */
+function planStillDeadSources(unit, seatOf, roster) {
+  const seatsPerAlias = new Map();
+  for (const seat of roster || []) {
+    if (seat && seat.alias) { seatsPerAlias.set(seat.alias, (seatsPerAlias.get(seat.alias) || 0) + 1); }
+  }
+  const noted = new Set();
+  const attempted = new Set();
+  for (const w of unit.srcWaves) {
+    (w.models || []).forEach((m, i) => {
+      const k = seatKey((w.seats || [])[i] || null, m);
+      noted.add(k); attempted.add(k);
+    });
+  }
+  const legs = [];
+  for (const l of unit.srcLegs) {
+    const bound = seatOf.get(l) || null;
+    const alias = l.modelInput || l.model;
+    const key = seatKey(bound, alias);
+    attempted.add(key);
+    // `key` names a specific seat only when the leg was bound, or when the alias holds exactly
+    // one seat (then the alias IS the id). Otherwise it is an alias standing in for "some seat",
+    // and matching it against a wave's unnamed slot would be a guess, not a repeat.
+    const identityIsExact = !!bound || seatsPerAlias.get(alias) === 1;
+    if (identityIsExact && noted.has(key)) { continue; }
+    noted.add(key);
+    legs.push({ leg: l, seatId: bound ? bound.id : null });
+  }
+  return { attempted, legs };
+}
+
 function recordFailure(unit, seat, ff, trackModel = true, seatObj = null) {
   const key = seatObj ? seatObj.id : seat;
   if (unit.firstFailures.some(f => f.seatId === key)) { return; }
@@ -155,4 +222,4 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map())
   return out;
 }
 
-module.exports = { lensIndexOf, recordFailure, groupStage1Losses };
+module.exports = { lensIndexOf, recordFailure, groupStage1Losses, planStillDeadSources, seatKey };

@@ -101,6 +101,9 @@
   <script src="./md-lite.js"></script>
   <!-- v4.8 PR0: live-seats.js must load BEFORE live-model.js, whose bridge
        reads window.AmicusLiveSeats in the browser. -->
+  <!-- v4.8 PR5c: live-dead-seats.js must load BEFORE live-seats.js, which re-exports
+       its deadSeats on window.AmicusLiveSeats. -->
+  <script src="./live-dead-seats.js"></script>
   <script src="./live-seats.js"></script>
   <script src="./live-model.js"></script>
   <script src="./workspace-render.js"></script>

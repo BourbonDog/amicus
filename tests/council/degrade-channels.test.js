@@ -270,8 +270,14 @@ describe('dead-wave channel', () => {
     // and the wave stays lost. A retried-and-still-dead wave record carries
     // retryWaveId on top of the pre-SL-2 {waveId, models, reason} — D7
     // byte-identity applies only to budget-skipped records, not retried ones.
+    // v4.8 PR5c: `seats` is index-parallel with `models` and carries seat IDENTITY.
+    // These are seat ids, not aliases — they merely look identical because this is a
+    // unique-alias bench, where seats.js:67 mints a seat id equal to its alias
+    // byte-for-byte. That is the emit-when-set invariant the whole PR rests on: a bench
+    // with no repeated alias is unchanged. An UNidentified slot would emit `null` here,
+    // never the alias, because "unidentified" and "the alias" are different statements.
     expect(dead.data).toEqual({ waveId: 'r1-s1', models: ['alpha', 'beta'], reason: 'database is locked',
-      retryWaveId: 'r1-s1r1' });
+      retryWaveId: 'r1-s1r1', seats: ['alpha', 'beta'] });
   });
 });
 
