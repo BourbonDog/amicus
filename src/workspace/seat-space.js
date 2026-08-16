@@ -17,7 +17,7 @@
  *
  * ⚠️ The workspace -> council import lives here now (isSeatSpace, src/council/report.js).
  * That direction is deliberate and predates this split: ONE seat-space predicate for the
- * whole tree, never re-spelled — report.js:53-56 exports it and
+ * whole tree, never re-spelled — report.js:54-57 exports it and
  * src/workspace/matrix-model.js:25 already imports it the same way. Council-4's B3 called the
  * layering an inversion; it is not fixed here, and moving it OUT of the security-critical
  * name-derivation file is a side effect of this split, not a response to that finding.

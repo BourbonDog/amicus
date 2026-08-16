@@ -791,7 +791,8 @@ amicus council report <verdict.json> [--wave <wave.json>] [--md|--html]
 Pure renderer — reads `verdict.json` (+ optional `wave.json`, used only to source the wave's total
 cost) and produces **one self-contained string**: Markdown (default) or a self-contained HTML page
 (`--html`). No scoring, no anonymization, no synthesis — those already happened upstream. Thin CLI
-wrapper over `buildReport()` (`src/council/report.js` / `report-html.js`).
+wrapper over `buildReport()` (`src/council/report.js`, which builds the neutral model and
+dispatches to `report-md.js` / `report-html.js` — the two renderers that own the string formats).
 
 **What it renders**, in this order: a header (run type, id, date, chair, council members), a
 verdict-summary tier-count table, the **adjudication matrix** (finding × judge, `✓`/`✗`/`–` with

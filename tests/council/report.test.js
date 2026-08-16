@@ -1,7 +1,7 @@
 'use strict';
 const { tally } = require('../../src/council/tally');
 const { buildVerdict } = require('../../src/council/verdict');
-const { buildReport } = require('../../src/council/report');
+const { buildReport, toModel } = require('../../src/council/report');
 const avInput = require('./fixtures/av-receiver-input');
 
 function verdictFixture() {
@@ -270,5 +270,33 @@ describe('What was lost (v4.6 Plan 2)', () => {
     expect(table).toMatch(/\|\s*alpha\s*\|/);
     expect(table).toContain('alpha (judge)');
     expect(table).not.toContain('undefined');
+  });
+
+  // v4.8 Phase 1 T1.2: renderMd moved to ./report-md. Lives HERE, not top-level —
+  // lostVerdict/twinCostVerdict are const-scoped to this describe block's closure,
+  // so only a test declared inside it can call them; verdictFixture is file-level
+  // and available everywhere, but the other two are not.
+  test('P1 — buildReport(md) routes through the extracted renderer, byte-identical to the extracted renderer\'s own output', () => {
+    // P1 is a ROUTING pin, not a content pin. buildReport's md branch and this
+    // test's own `renderMd` both resolve `require('../../src/council/report-md')`
+    // to the same cached module object (CommonJS caches by resolved path), so a
+    // change to renderMd's body moves both sides of this comparison identically
+    // and can never turn it red — measured, not assumed: MUTANT "DRIFT" (a
+    // one-character change inside report-md.js's renderMd body) left this pin
+    // green. Content drift is caught instead by the rest of the suite, which is
+    // wider than one mechanism: (a) the two md toMatchSnapshot() pins —
+    // report-debate.test.js's "matches the pinned v4.0 snapshot exactly" and
+    // report-claude-column.test.js's "matches the pinned snapshot exactly" —
+    // which DID carry the mutated line, but ⚠️ measured 2026-08-16 the two .snap
+    // bodies are BYTE-IDENTICAL (4255 chars each), so together they are one
+    // document, not two; and (b) seat-matrix.test.js's exact `toBe` pins on
+    // rendered md header and row strings over twin-bench documents the
+    // snapshots never exercise. Neither alone is the net. What this pin DOES
+    // catch: MUTANT "STALE" (buildReport's md branch stops routing through
+    // report-md.js) — confirmed RED.
+    const { renderMd } = require('../../src/council/report-md');
+    for (const v of [verdictFixture(), lostVerdict(), twinCostVerdict()]) {
+      expect(buildReport({ verdict: v }, { format: 'md' })).toBe(renderMd(toModel(v)));
+    }
   });
 });

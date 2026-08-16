@@ -26,8 +26,14 @@ re-measured size table this plan's numbers come from.
 
 - **T1.1 gates three separate things** — Phase 3's `rankings[]` seat, #135's TTFT field, and
   carried PR1F-2. One extraction, three consumers.
-- **T1.2 gates two** — Phase 2's T2.4 (SI-22.5 adds an "unattributed" column to `toModel`) and
-  SI-25.
+- **T1.2 gates one** — Phase 2's T2.4 (SI-22.5 adds an "unattributed" column to `toModel`).
+  ⚠️ Corrected 2026-08-16: this bullet also claimed SI-25, and so did the governing memo in two
+  places. All three were wrong. SI-25's anchor is `briefings-chair.js :: buildChairPacket` (182
+  lines) with its second site at `run-assemble.js :: buildChairPacketFile` — `report.js` never
+  carried a chair packet, so T1.2 cannot gate it. The gate SI-25 really had was **T1.1**
+  (`run-assemble.js` was at 297/300); T1.1 shipped and left it at 252, so nothing now blocks
+  SI-25 sites (1)+(2). Site (3) still rides Phase 3 (R15), unchanged. **T1.2 is fully justified
+  by T2.4 alone** — this was a plan error, not a reason to re-scope the PR.
 - `src/council/report.js` is at **298/300 — two lines of headroom.** The 300-line gate blocks the
   COMMIT, not the edit. When it fires the answer is to EXTRACT; shaving comments to fit is the
   documented failure tell in this project.
@@ -54,6 +60,20 @@ re-measured size table this plan's numbers come from.
   it. After each move, re-read **every** comment in both touched files — module docblocks
   especially — and correct any the move made false. `src/council/report.js:49` currently describes
   its own import set; T1.2 changes that set.
+- ⚠️ **"Both touched files" scopes the SWEEP, not the DUTY — and it is not sufficient.** Learned by
+  measurement in T1.2, which shipped three falsified comments in files it never touched, and whose
+  whole-branch review then found a fourth: `tests/council/seat-matrix.test.js` carried the **twin**
+  of the very sentence T1.2 had already corrected in `report.js` ("six first-party modules"). No
+  same-file sweep could have found it. **The rule that works: `grep` the distinctive phrase of any
+  comment you edit, repo-wide, and fix every copy.**
+- ⚠️ **Re-derive citations against the FINAL tree, never an intermediate one.** T1.2's fix wave
+  corrected four `report.js` citations, then added a 6-line docblock **earlier in that same file in
+  the same commit** — shipping all four freshly wrong by exactly 6, plus a size-table row reading
+  188 when the commit made it 197. **Sequence it: make every edit to the cited file FIRST, then
+  re-derive every citation and line count, then re-open each one at its stated line and read what is
+  actually there, then commit.** A citation corrected to a new wrong value is worse than the rot it
+  replaced. Where a symbol anchor will do, prefer it — SI-DUP's `file:line` site list rotted twice
+  in one day.
 - **New modules must not grow the gate's problem.** Each new file must be well under 300 lines.
 - Hooks live in `.husky` (core.hooksPath). `pre-push` runs the full unit suite and BLOCKS; it skips
   only when `.test-passed` matches **HEAD exactly**. Run `npm test` **after** your final commit, or
