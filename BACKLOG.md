@@ -1977,7 +1977,7 @@ as two, and an unbound seat (a launched leg that never returns) is retried and, 
 announced on a new `seat-unbound` degrade channel. Three items surfaced by that work belong to
 the PRs still ahead in this stack; recorded here so they do not have to be re-derived.
 
-- [ ] **[SHIPPED v4.8.0 PR5a — see the note below] Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
+- [x] **[SHIPPED v4.8.0 PR5a — see the note below] DONE (v4.8 — verified by execution 2026-08-16) · Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
   `o.seats`, not a de-duplicated bench, before PR5's workspace flip.** `const uniqueModels =
   [...new Set(bench)]` still allowlists one `review-<alias>.md` per distinct alias, but a bench
   that repeats an alias now writes `review-<seat>-1.md` / `review-<seat>-2.md` (PR2b Task 3), so
@@ -2009,6 +2009,13 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   > between them. What it does instead is refuse to *attribute* it: an orphan-written name belongs
   > to no seat, so no panel renders it under a model, which is the user-visible half this entry
   > was really about. A surface for genuinely unattributed artifacts is filed, not built.
+  - **Verified by execution (2026-08-16):** `src/workspace/artifact-names.js :: artifactAllowlist` —
+    the allowlist's entity list derives from `run.seats`, not a de-duplicated bench, at
+    `artifact-names.js:73-75`: `isSeatTable(run && run.seats) ? [...new Set(run.seats.map(s =>
+    s.id))] : [...new Set(bench)]`. The memo's `artifact-guard.js:87` `uniqueModels` citation has
+    rotted onto this symbol: `uniqueModels` no longer exists anywhere in `src/` (confirmed by
+    `grep -rn uniqueModels src/` — no hits); `artifact-guard.js:101` now gates every artifact read
+    through this same `artifactAllowlist`, imported at `artifact-guard.js:25`.
 
 - [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
@@ -2080,7 +2087,7 @@ through the single `aliasOf` built at `run-debate.js:116-117`. `runRevoteWave` m
 `src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
 deliberately left alone:
 
-- [ ] **PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
   `const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;` still compares
   aliases, so on a bench that repeats an alias a twin's legitimate peer vote on its twin's finding
   is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
@@ -2089,6 +2096,9 @@ deliberately left alone:
   (`tally.js:106`), both emit-when-different, so the fix is `(v.seat || v.judge) !== (f.raiserSeat
   || f.raiser)` with **no new inputs threaded**. ⚠️ Both fields are absent on a unique-alias
   bench by design, so the `||` fallbacks are load-bearing — do not "simplify" them away.
+  - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the peer filter
+    compares seats when both sides carry one, aliases otherwise, at `tally.js:111`:
+    `votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)`.
 - [ ] **PR4 · `src/council/debate.js:200` is a SECOND copy of that same filter and must move with
   it.** `peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser)` builds the peer
   split a raiser sees in its defense briefing. Fixing `tally.js:96` alone would make the brief the
@@ -2100,19 +2110,26 @@ deliberately left alone:
   one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
   `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
   cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
-- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
   rulings table) is still unwritten.** Spec
   §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
   corroboration has to be *labelled* on the finding rather than silently folded into the basis.
   Listed in the spec's artifact table (`tally.json`, per finding, optional in schema) and in no
   shipped code.
-- [ ] **PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
+  - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the
+    `sameModelCorroboration` stamp is emitted at `tally.js:140-142`: `...(f.raiser &&
+    peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge ===
+    f.raiser) ? { sameModelCorroboration: true } : {})`.
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
   (`run-assemble.js:154-159`) carries `models` and nothing that names a seat, so a consumer
   holding only `tally.json`/`verdict.json` cannot map `adjudications[].seat` back to a bench
   position — `run.json`'s `seats[]` (seeded `null` at `run-state.js:99`, filled by
   `preflightSeats`) is the only place the table exists. Every seat-aware renderer therefore has to
   read two documents.
-- [ ] **PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
+  - **Verified by execution (2026-08-16):** `src/council/run-assemble.js :: buildTallyInput` —
+    `meta` carries `seats` (emitted only when the bench repeats an alias) at `run-assemble.js:203`:
+    `...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {})`.
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
   verdict-only consumer cannot tell which twin raised a finding.** `buildVerdict`
   (`src/council/verdict.js:113-127`) rebuilds every finding from an explicit field list — `id`,
   `raiser`, `severity`, `tier`, `basis`, `confidence`, `tierOverride`, `duplicateOf`,
@@ -2125,6 +2142,9 @@ deliberately left alone:
   CHANGELOG describes what shipped, and threading it through is a code change PR3 did not make.
   Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
   document" gap.
+  - **Verified by execution (2026-08-16):** `src/council/verdict.js :: buildVerdict` —
+    `findings[].raiserSeat` is emitted at `verdict.js:141`: `...(f.raiserSeat ? { raiserSeat:
+    f.raiserSeat } : {})`.
 - [ ] **PR4 · an `-rv` leg that binds to NO seat makes `applyDebate` invent an adjudication row —
   fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js:124`)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
@@ -2148,7 +2168,7 @@ deliberately left alone:
   `orphanLegNote`/`seat-unbound` notes. That classification was wrong — corrected by the final
   whole-branch review, F3. That ledger is a local working note and is not committed to this repo,
   so the measured evidence is restated above rather than cited.)*
-- [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
   bench holds the same alias twice; `votes[adj.judge] = adj.verdict` (`:55`) is last-wins, so both
@@ -2156,6 +2176,12 @@ deliberately left alone:
   columns as the raiser. The Workspace adjudication matrix is therefore wrong in the same three
   ways `report.html` is. Fix them together, keyed on `(adj.seat || adj.judge)` against a
   seat-valued column list — the data is already on the document as of PR3.
+  - **Verified by execution (2026-08-16):** `src/workspace/matrix-model.js :: buildMatrixModel` —
+    the join is seat-aware, not alias-only: `seatSpace` is computed at `matrix-model.js:58`,
+    columns key on the seat id at `:74` (`meta.seats.map(s => ({key: s.id, ...`), votes key on
+    `adj.seat` in seat space at `:84` (`votes[(seatSpace && adj.seat) || adj.judge] =
+    adj.verdict;`), and the raiser key uses `f.raiserSeat` in seat space at `:88`
+    (`seatSpace ? (f.raiserSeat || f.raiser) : f.raiser`).
 - Minor, noticed while re-deriving citations and **not** fixed: `src/council/seats.js:97` cites
   `run-retry.js:93` for "a retry wave is the loss subset"; the current anchor is `run-retry.js:67`
   (`groupStage1Losses`). Left alone rather than guessed at mid-PR.
@@ -2219,7 +2245,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
   dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
   survive to leg construction."
-- [ ] **A maintainability note (from the auto-review).** `seatKey(seat, alias) => seat ? seat.id : alias`
+- [x] **SUPERSEDED by SI-DUP** — ~~A maintainability note (from the auto-review).~~ `seatKey(seat, alias) => seat ? seat.id : alias`
   (or the arrow-function equivalent) is independently redefined in **three files**:
   `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
   note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
@@ -2230,6 +2256,9 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
   above. Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
   `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.
+  - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
+    note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
+    halves survive there; neither was dropped.
 - [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
   `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
   (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
@@ -2618,13 +2647,23 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     tag lands on the wrong candidate *before* any lookup happens. Critic candidates then suppress
     through `byRole`, a different map from `reviewing`, which PR5c's fix never reaches.
   - **Seat-keying `byRole` is therefore NOT sufficient.** The role must derive from seat identity,
-    which is producer-side vocabulary — the same class of change as PR5c Task 1.
+    which is producer-side vocabulary — ~~the same class of change as PR5c Task 1~~ **(false —
+    struck 2026-08-16; see below)**.
   - Also measured: with both twins dead, two rows render and **both are labelled `critic`** on a
     bench with one critic seat.
   - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (R4).
   - ⚠️ Negative result, recorded so it is not re-reported: the `alias + '|' + role` concatenation
     was probed for an injectivity collision on both reachable paths. **Neither fires.** Latent
     hazard, not a live defect.
+  - ⚠️ **RE-FILED 2026-08-16 — hand-edit-only latent hazard, → v4.9 (ruling R5).** No producer
+    emission closes this. Measured in both directions: with a keyed dead `deepseek#2` on the critic
+    alias and a live critic-role leg for `deepseek#1`, `deadSeats` returns `[]` **both with and
+    without** a `seat` field on the live row — the critic arm never reads `s.seat`.
+  - **Nothing in v4.8 can cure it.** Its bench has no seat-identity critic answer: `criticSeat` is
+    null there and `roleAt` calls both twins `'critic'`. The shape is unreachable by any run v4.8
+    creates; reaching it needs a hand-edited artifact.
+  - **R4 and R5 are NOT one job.** R5's payload change neither fixes nor worsens R4, and R4's fix
+    touches no file R5 touches. R5 ships in v4.8 (ruling R7); R4 does not.
 
 - [ ] **R5 · The live tick cannot suppress a seat-keyed dead record, because the live payload
   carries no seat identity.** `live-normalize.js`'s `seatOf` emits `{id: leg.taskId, model,
