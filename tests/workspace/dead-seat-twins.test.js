@@ -108,6 +108,19 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
     expect(rows([deadLeg('d', null), deadLeg('d', null)])).toHaveLength(1);
   });
 
+  test('R3: a NEW-run record whose seatId is ALIAS-valued behaves exactly as a legacy one', () => {
+    // run-retry-group.js:47 keys firstFailures as `seatObj ? seatObj.id : seat`, so a seat the
+    // producer could not identify yields an ALIAS-valued seatId on a brand-new run. Nothing
+    // structurally distinguishes it from a pre-PR5c record — which is why the residual can NOT
+    // be scoped to "legacy runs", the claim round 2 refuted (A1/C2).
+    const aliasValued = { kind: 'degrade', channel: 'dead-leg',
+      data: { seat: 'd', retryWaveId: 'w1',
+        firstFailure: { seat: 'd', seatId: 'd', class: 'leg' } } };
+    expect(rows([aliasValued, aliasValued])).toHaveLength(1);              // collapses, like R2
+    expect(rows([aliasValued], null, [{ model: 'd', seat: 'd#1', role: 'seat' }]))
+      .toHaveLength(0);                                                     // suppressed, like R1
+  });
+
   test('R4: the CRITIC path is not seat-keyed — a dead bench twin beside a live critic twin', () => {
     // role is inferred from ALIAS equality (live-seats.js:209) and critics suppress through
     // byRole, a different map. Filed to BACKLOG; not fixed here.
@@ -180,4 +193,52 @@ describe('T3 — two dead twins survive repaints without accumulating', () => {
     expect(rowsOut).toHaveLength(1);
     expect(rowsOut[0].dataset.key).toBe('dead:bravo');
   });
+
+  /**
+   * R5 — the live tick. `appendDeadRows` passes `live.seats`, whose entries come from
+   * live-normalize.js's seatOf: `{id: leg.taskId, model, modelInput, role, ...}`. `id` is a
+   * per-LEG task id, NOT a seat identity, and there is no `seat` field at all — so the seat-id
+   * arm of `reviewing` is inert on this path.
+   *
+   * ⚠️ Round 2 (gpt C3, kimi D5) corrected what this residual IS. It is NOT "M3 and M4 persist
+   * live": the CANDIDATES carry seat ids from Task 1, so dead twins do separate correctly. The
+   * residual is on the SUPPRESSION side — a seat-keyed dead record cannot be matched against a
+   * live payload that has no seat identity, so a stale record naming a seat that is ALIVE
+   * renders a dead row for it until the terminal refresh.
+   */
+  describe('T6 — R5: the live tick, suppression-side only', () => {
+    beforeEach(() => {
+      global.window.AmicusApp = {
+        $: (id) => document.getElementById(id),
+        labelOf: () => null,
+        state: { detail: null, blind: false },
+      };
+    });
+    const livePayloadSeat = (model) => ({
+      id: 'task-' + model, model, modelInput: model, role: 'seat', status: 'complete',
+      stage: null, messages: null, tokensIn: null, tokensOut: null,
+      costDisplay: '$0.10', lastActivity: null, latestPreview: null, stalled: false,
+    });
+    const deadRowsIn = (tbody) => tbody.children.filter(r => r.classList.contains('seat-dead'));
+
+    test('dead twins DO separate on the live path — M3 does not persist', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [livePayloadSeat('other')];
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades: twinDegrades });
+      expect(deadRowsIn(tbody)).toHaveLength(2);
+    });
+
+    test('KNOWN-WRONG: a stale seat-keyed record naming a LIVE seat still renders a dead row', () => {
+      // Terminally this is suppressed (see "a seat-keyed record naming a LIVE seat is
+      // suppressed" above). Live it is not, because the payload carries no seat identity to
+      // match against. Clears on the terminal refresh. Filed to BACKLOG.
+      const tbody = document.getElementById('seats-body');
+      const seats = [livePayloadSeat('d')];
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades: [deadLeg('d', 'd#1')] });
+      expect(deadRowsIn(tbody)).toHaveLength(1);
+    });
+  });
+
 });

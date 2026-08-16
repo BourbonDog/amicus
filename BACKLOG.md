@@ -2414,8 +2414,14 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
 
 ## v4.8 PR5b — owner ruling (2026-08-15)
 
-- [ ] **⚠️ SILENT DATA LOSS · The Workspace's dead-seat rows collapse, and can erase a dead seat
-  entirely, on a bench that repeats an alias.** Deferred out of PR5b by owner ruling so that PR
+- [x] **DONE (v4.8 PR5c) · ⚠️ SILENT DATA LOSS · The Workspace's dead-seat rows collapse, and
+  can erase a dead seat entirely, on a bench that repeats an alias.**
+  ✅ Closed on the bench path for records that name a seat. Six residuals remain, each pinned
+  by a known-wrong test and listed in the CHANGELOG; two are filed separately below (R4 the
+  critic path, R5 the live tick). ⚠️ Every line citation in the analysis below had ROTTED by
+  the time the work started — `add()` was at `:192`, not `:177`; the suppression at `:249`,
+  not `:234` — and `deadSeats` has since moved to `live-dead-seats.js` entirely. Read the
+  entry for its reasoning, not its line numbers. Deferred out of PR5b by owner ruling so that PR
   stays renderer-only; **deferred on blast radius, NOT on severity**. Both measured at `ccb0551d`,
   not reasoned — probes and expected values are in
   `docs/superpowers/plans/2026-08-15-v48-pr5b-live-seat-path.md` §0.2, §0.3, §0.7.
@@ -2460,7 +2466,9 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     rejected: it leaves a silent erasure in place on one emitter while appearing to close the
     class. Either close it on every emitter or disclose the residual case explicitly.
 
-- [ ] **The `dead-wave` arm of `retriedSeats` has no twin-bench test.** Raised by the adjudicated
+- [x] **DONE (v4.8 PR5c Task 4) · The `dead-wave` arm of `retriedSeats` has no twin-bench
+  test.** Covered at the intersection, paired with the distinct-alias case. The arm also now
+  reads `data.seats[]`, so it badges precisely where the producer names the seats. Raised by the adjudicated
   council on [PR #162] as finding A2 (minor, glm, Confirmed a3/d0, solid) against a `Ship it`
   verdict, and filed rather than fixed in that PR — it is a coverage gap, not a defect.
   - **What exists:** `tests/workspace/workspace-seats.test.js` test (4) covers dead-wave on
@@ -2503,6 +2511,44 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     together. Verify against the banner's own semantics before assuming that is right — the
     banner says the table was rejected, which may or may not mean the cost rows' seats are
     untrustworthy. **Measure which document is authoritative before choosing.**
+
+## v4.8 PR5c — filed, not fixed (2026-08-15)
+
+- [ ] **R4 · The dead-seat CRITIC path is still alias-keyed, and its role is inferred from the
+  ALIAS.** Measured (`scratchpad/probe-critic-twin.js`, and independently raised by two council
+  seats): on a bench where one alias holds both a critic seat and a bench seat, a dead BENCH twin
+  beside a live CRITIC twin renders **0 rows** — the same silent erasure M4 was.
+  - `deadSeats` tags a candidate `role: 'critic'` by **alias equality** with `run.critic`, so the
+    tag lands on the wrong candidate *before* any lookup happens. Critic candidates then suppress
+    through `byRole`, a different map from `reviewing`, which PR5c's fix never reaches.
+  - **Seat-keying `byRole` is therefore NOT sufficient.** The role must derive from seat identity,
+    which is producer-side vocabulary — the same class of change as PR5c Task 1.
+  - Also measured: with both twins dead, two rows render and **both are labelled `critic`** on a
+    bench with one critic seat.
+  - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (R4).
+  - ⚠️ Negative result, recorded so it is not re-reported: the `alias + '|' + role` concatenation
+    was probed for an injectivity collision on both reachable paths. **Neither fires.** Latent
+    hazard, not a live defect.
+
+- [ ] **R5 · The live tick cannot suppress a seat-keyed dead record, because the live payload
+  carries no seat identity.** `live-normalize.js`'s `seatOf` emits `{id: leg.taskId, model,
+  modelInput, role, ...}` — `id` is a per-LEG task id, and there is no seat field at all.
+  - Consequence, measured: dead twins DO separate correctly on the live path (the candidates carry
+    seat ids from PR5c Task 1), but a **stale record naming a seat that is alive renders a dead row
+    for it** until the terminal refresh. ⚠️ An earlier draft claimed "M3 and M4 persist live"; that
+    is wrong, and the correction came from the council (gpt C3, kimi D5).
+  - Closing it needs a seat id on the live leg rows — a producer change to `council-legs.js` /
+    `live-normalize.js`, not a renderer fix.
+  - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (T6).
+
+- [ ] **`seatKey` is spelled three times in `src/`.** `run-debate-revote.js:64`, `run.js:228`, and
+  (now) `run-retry-group.js`, which PR5c made the exported one so `run-retry.js` consumes it rather
+  than keeping a fourth copy. The renderer spells the same rule a fourth time as
+  `r.seat || r.model`, which it must — renderer modules cannot `require()` from `src/`.
+  - This is the plan-authoring failure mode "THE WRONG LEVER": a rule needing another spelling means
+    the defect is in a consumer. PR5c deliberately did **not** unify them — that is a refactor with
+    its own blast radius, and mixing it into a defect PR is what made PR5a's review expensive.
+  - Unify the three `src/` copies when that area is next touched. Do not add a fourth.
 
 ### Standing note for the next reviewer of this area
 

@@ -5,6 +5,29 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Workspace's dead-seat rows no longer collapse, and a live seat no longer erases its dead
+  twin, on a bench that repeats an alias.** Two measured defects. Two dead twins rendered as a
+  single row (`deadSeats` dedup'd on the alias); and with one twin alive and the other genuinely
+  dead, the dead seat produced **no output anywhere in the panel** — silent data loss, which this
+  project's product principle rates as severely as a crash. Dead-seat rows, their retry badges and
+  their DOM keys are now keyed on the seat. The retry badge also lands on the seat that was
+  actually retried instead of on its live twin.
+  The producer carries the identity that makes this possible: still-dead notes now record a seat
+  id on every dead arm, and — deliberately — emit `null` rather than the alias for a seat the run
+  could not identify, because "unidentified" and "the alias" are different statements and
+  collapsing them is what merged two dead seats into one row. Unique-alias benches are unchanged:
+  a seat id there equals its alias byte-for-byte.
+  ⚠️ **Disclosed residuals.** Where a degrade record does not name *which* seat died, no consumer
+  can attribute it, so on a bench that repeats an alias: two such records still collapse to one
+  row; a dead seat beside a live twin is still hidden; and a retry badge still marks every seat
+  sharing the alias. This is **not** limited to runs recorded before this release — a seat the
+  producer could not identify yields the same alias-valued key on a new run. Two further cases are
+  filed and unfixed: the **critic** path is still alias-keyed, and during a **live run** a stale
+  record naming a seat that is alive can show a dead row for it until the terminal refresh. Every
+  one of these is pinned by a test asserting the known-wrong behaviour so it cannot rot silently.
+
 ### Changed
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per
