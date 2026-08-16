@@ -5,15 +5,16 @@
 // calling the exported `seatKey` a few lines above it, even though the docblock above
 // `seatKey` already claimed the rule was centralised. Two spellings in one file meant T2.2
 // (which changes what the rule *means* at the dedup site) could update one and miss the
-// other. These two pins guard that it now can't: P1 pins the OBSERVABLE behavior (recordFailure
-// keys through seatKey), P2 pins the SOURCE shape (the rule's `X ? X.id : alias` pattern
-// appears exactly once, and it's seatKey's own definition).
+// other. These two pins guard that it now can't: P1 pins recordFailure's OBSERVABLE OUTPUT (the
+// correct seatId, bound and unbound), P2 pins the SOURCE shape (the rule's `X ? X.id : alias`
+// pattern appears exactly once, and it's seatKey's own definition) — together they cover
+// "keys through"; neither alone claims it.
 const fs = require('fs');
 const path = require('path');
 const { recordFailure, seatKey } = require('../../src/council/run-retry-group');
 
 describe('T2.1 — recordFailure keys through the one exported seatKey rule', () => {
-  test('P1 — recordFailure keys through the exported seatKey rule', () => {
+  test('P1 — recordFailure emits the correct seatId, for a bound seat and for an unbound one', () => {
     // Named mutant: swap the argument order to seatKey(seat, seatObj) and this goes RED.
     // Measured: a plain alias string has no `.id` property, so under the swap BOTH
     // branches below collapse to `undefined` instead of the values asserted here — see
@@ -43,8 +44,9 @@ describe('T2.1 — recordFailure keys through the one exported seatKey rule', ()
     expect(matches).toHaveLength(1);
     expect(matches[0]).toBe('s ? s.id : alias'); // seatKey's own definition, the only occurrence
 
-    // Control: :108's null-fallback rule is a genuinely different rule and is untouched —
-    // still present verbatim, and correctly NOT swept up by the regex above.
+    // Control: planStillDeadSources's `legs.push({ ..., seatId: bound ? bound.id : null })` is
+    // a genuinely different rule (null fallback, not alias) and is untouched — still present
+    // verbatim, and correctly NOT swept up by the regex above.
     expect(src).toMatch(/bound \? bound\.id : null/);
   });
 
