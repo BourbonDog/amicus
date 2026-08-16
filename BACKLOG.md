@@ -2093,9 +2093,16 @@ deliberately left alone:
   is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
   the seat-exact form was not expressible inside `tally()`; it is now: every vote carries
   `v.seat` (`tally.js:89`, from `adjudications[].seat`) and every finding carries `f.raiserSeat`
-  (`tally.js:106`), both emit-when-different, so the fix is `(v.seat || v.judge) !== (f.raiserSeat
-  || f.raiser)` with **no new inputs threaded**. ⚠️ Both fields are absent on a unique-alias
-  bench by design, so the `||` fallbacks are load-bearing — do not "simplify" them away.
+  (`tally.js:106`), both emit-when-different.
+
+  **What shipped is NOT what this item prescribed.** The prescribed form
+  `(v.seat || v.judge) !== (f.raiserSeat || f.raiser)` was measured in both orphan directions and
+  **re-arms #137** — it admits the raiser's own vote as its own peer. It was deleted from this
+  filing on 2026-08-16. The executing filter is `tally.js:111`:
+
+  ```js
+  votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
+  ```
   - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the peer filter
     compares seats when both sides carry one, aliases otherwise, at `tally.js:111`:
     `votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)`.
