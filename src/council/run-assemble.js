@@ -31,6 +31,11 @@ const { preflightSeats } = require('./seats');
 // sole consumer of — and is re-exported here so the asm.writeVerdictFiles(...)
 // call spelling and every existing test survive the move untouched.
 const { writeVerdictFiles } = require('./run-verdict-files');
+// Same precedent (v4.8 Phase 1 T1.1): buildRunStatsEntry's body lives in
+// ./run-stats-entry — which is require-free so consumers outside this file's
+// graph can use it — and is re-exported here so every existing call spelling
+// survives the move untouched.
+const { buildRunStatsEntry } = require('./run-stats-entry');
 
 const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
 
@@ -41,56 +46,6 @@ const CLAUDE_REVIEW_ERROR = 'COUNCIL_CLAUDE_REVIEW_INVALID';
 /** Worst-wins merge of Stage-1 findings conformance and Stage-2 judge conformance. */
 function worseConformance(a, b) {
   return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;
-}
-
-/**
- * One runStats row from a leg run document. Verbatim copies only — a missing
- * leg doc yields durationMs/usage null (never invent a value). `model` (the
- * council alias) overrides leg.model (the resolved executable id) so ledger
- * rows join meta.models by exact string (ledger.js:20-24).
- * `resolvedModel` (v4.7 GOA-7) preserves leg.model — the executable id that
- * actually served, post-fallback-substitution — emit-only-when-set and never
- * sourced from modelInput (an alias must never masquerade as a resolved id).
- *
- * ⚠️ LC-11 / review F1: `findingsUnverified` and `repairRefused` are the same
- * class of fact as `conformance` and ride the same row. They are the two halves
- * of the repair contract's outcome: `findingsUnverified` marks a 'repaired' seat
- * whose contract could NOT be checked (the original block was absent or
- * unparseable, so there was no finding count to compare), and `repairRefused`
- * ({code, detail}) marks the stronger case — the contract WAS checked and broken,
- * which is otherwise indistinguishable from a seat that never emitted JSON at
- * all. Both are additive and present only when set, so a run without either is
- * byte-for-byte unchanged.
- *
- * `seat` (v4.8 PR4c §3.1) is the seat OBJECT — {id, alias, role, lens, position}
- * or null — never an id string. Callers pass `r.seat` / the dead-seat loop's own
- * `seat` verbatim, so the object IS the contract instead of a prose one.
- */
-function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
-  repairRefused, seat }) {
-  return {
-    model: model !== undefined ? model : (leg ? leg.model : null),
-    role,
-    wasChair: !!wasChair,
-    conformance: conformance || 'clean',
-    ...(findingsUnverified ? { findingsUnverified: true } : {}),
-    ...(repairRefused ? { repairRefused } : {}),
-    ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
-    ...(leg && leg.model ? { resolvedModel: leg.model } : {}),
-    // v4.8 PR4c §3.1 / R4c-9: emit-when-DIFFERENT, compared against the seat's
-    // OWN alias — never against `model`. buildSeats mints `alias#N` only when
-    // an alias repeats (seats.js:67), so `id !== alias` IS "the bench repeats
-    // this alias": the single predicate all four seat-emit producers now share,
-    // which is what stops them disagreeing. `model` is the LEG's modelInput,
-    // which is NOT the alias when a leg reports none (it falls back to the
-    // RESOLVED id, run-launch.js:205) or when a --council preset carries a
-    // padded member — either would ship a seat id with no seat table behind it,
-    // on a bench with no twin at all.
-    ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
-    status: leg ? leg.status : 'error',
-    durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
-    usage: (leg && leg.usage) || null,
-  };
 }
 
 /**
