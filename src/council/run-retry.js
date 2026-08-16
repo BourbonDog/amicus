@@ -174,7 +174,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       // v4.8 PR5c: the srcWave/srcLeg dedup lives in run-retry-group.planStillDeadSources —
       // an unidentified wave slot and a bound leg for the same seat key in DIFFERENT
       // spaces, so a naive test announces one seat twice. See that helper for the budget.
-      const plan = planStillDeadSources(unit, seatOf);
+      const plan = planStillDeadSources(unit, seatOf, o.seats);
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);

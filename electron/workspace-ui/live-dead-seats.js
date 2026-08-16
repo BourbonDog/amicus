@@ -102,15 +102,23 @@
     // function, killing the seats repaint and every tick after it.
     var seen = Object.create(null);
     var covered = Object.create(null);
+    var seenUnid = Object.create(null);
     var order = [];
     // `src` is the candidate's identity flavour — see the four-flavour table in the
     // docblock above, which is what decides the key and the absorb rule.
-    function add(key, alias, retried, role, src) {
+    function add(key, alias, retried, role, src, slotOf) {
       if (!alias) { return; }
-      // An 'unid' candidate needs no dedup key at all: it is ONE wave slot, distinct by
-      // construction, and nothing else can name it. A synthetic key would invent a
-      // collision surface against a real alias for no benefit — the seat literally named
-      // `toString` is why this family refuses invented keys.
+      // ⛔ An 'unid' candidate was originally given NO dedup at all, on the grounds that it is
+      // one wave slot and distinct by construction. That holds WITHIN a record's seats[]; it
+      // does NOT hold across records, and the same dead-wave record appearing twice rendered
+      // four rows for two seats. Deduped on (waveId, slot) instead — its own namespace, never
+      // `seen`, so an invented key can never collide with a real alias. (The seat literally
+      // named `toString` is why this family refuses keys that share the alias keyspace.)
+      if (src === 'unid') {
+        var uk = ((slotOf && slotOf.waveId) || '') + '#' + (slotOf ? slotOf.i : 0);
+        if (seenUnid[uk]) { return; }
+        seenUnid[uk] = true;
+      }
       if (src !== 'unid') {
         var k = src === 'keyed' ? key : alias;
         if (seen[k]) { return; }
@@ -145,7 +153,7 @@
         (data.models || []).forEach(function (m, i) {
           var wk = hasSeats ? data.seats[i] : null;
           add(wk, m, retried, critic && m === critic ? 'critic' : null,
-            wk ? 'keyed' : (hasSeats ? 'unid' : 'legacy'));
+            wk ? 'keyed' : (hasSeats ? 'unid' : 'legacy'), { waveId: data.waveId, i: i });
         });
       }
     });

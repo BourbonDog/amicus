@@ -60,23 +60,49 @@ const seatKey = (s, alias) => (s ? s.id : alias);
  * dead-row dedup is alias-keyed too and both collapse into one row; seat-keying that
  * consumer (PR5c Task 2) turns it into a visible duplicate row.
  *
- * A per-alias BUDGET of unnamed slots, not a second alias Set: the wave announced N seats of
- * this alias without naming them, so at most N later legs on that alias are re-announcements
- * of seats already covered. Blanket alias suppression would silently drop a genuinely
- * distinct twin — a miss, which is the worse failure direction.
+ * ⛔ An earlier fix used a per-alias BUDGET — "the wave announced N unnamed seats, so the next
+ * N legs on that alias are re-announcements". The council rated that a BLOCKER and was right:
+ * it is an assumption, not evidence, and when the leg is a genuinely different seat it drops a
+ * dead seat SILENTLY — the exact failure direction this whole change exists to reject.
  *
+ * Replaced by the roster, which is evidence. `roster` is the run's seat table, so it says how
+ * many seats (K) an alias actually holds. With I distinct seats already named for that alias
+ * and U unnamed wave slots, a leg bound to a NEW seat can only be one already covered if the
+ * unnamed slots have nowhere else to go — pigeonhole:
+ *
+ *     suppress  iff  U > K - (I + 1)
+ *
+ * So a twin bench with one unnamed slot and one bound leg announces BOTH (the unnamed slot can
+ * be the other twin), while a wave that left both twin slots unnamed absorbs the leg (every
+ * seat is already accounted for). A unique alias needs no arithmetic at all: its seat id equals
+ * its alias, so the plain `noted` test already catches it.
+ *
+ * An absent or empty roster means K is unknown; treat it as unbounded and ANNOUNCE, which is
+ * the loud direction.
+ *
+ * @param {Array<{id: string, alias: string}>} roster  the run's seat table (`o.seats`)
  * @returns {{attempted: Set<string>, legs: Array<{leg: object, seatId: ?string}>}}
  */
-function planStillDeadSources(unit, seatOf) {
+function planStillDeadSources(unit, seatOf, roster) {
+  const seatsPerAlias = new Map();
+  for (const seat of roster || []) {
+    if (seat && seat.alias) { seatsPerAlias.set(seat.alias, (seatsPerAlias.get(seat.alias) || 0) + 1); }
+  }
+  const identifiedByAlias = new Map();   // alias -> Set of seat ids already named
+  const unnamedByAlias = new Map();      // alias -> count of unnamed wave slots
+  const idsFor = (a) => {
+    if (!identifiedByAlias.has(a)) { identifiedByAlias.set(a, new Set()); }
+    return identifiedByAlias.get(a);
+  };
   const noted = new Set();
   const attempted = new Set();
-  const unnamedByAlias = new Map();
   for (const w of unit.srcWaves) {
     (w.models || []).forEach((m, i) => {
       const seatObj = (w.seats || [])[i] || null;
       const k = seatKey(seatObj, m);
       noted.add(k); attempted.add(k);
-      if (!seatObj) { unnamedByAlias.set(m, (unnamedByAlias.get(m) || 0) + 1); }
+      if (seatObj) { idsFor(m).add(seatObj.id); }
+      else { unnamedByAlias.set(m, (unnamedByAlias.get(m) || 0) + 1); }
     });
   }
   const legs = [];
@@ -86,11 +112,13 @@ function planStillDeadSources(unit, seatOf) {
     const key = seatKey(bound, alias);
     attempted.add(key);
     if (noted.has(key)) { continue; }
+    const K = seatsPerAlias.has(alias) ? seatsPerAlias.get(alias) : Infinity;
     const unnamed = unnamedByAlias.get(alias) || 0;
-    // This leg IS one of the seats the wave already announced unnamed. Claim that slot
-    // and stay silent — the wave's note covers it. Still an ATTEMPTED seat.
-    if (unnamed > 0) { unnamedByAlias.set(alias, unnamed - 1); continue; }
+    // Pigeonhole: room for this seat BESIDE every unnamed slot? If not, the unnamed slots
+    // must already include it, so the wave's note covers it and this one would double-count.
+    if (unnamed > K - (idsFor(alias).size + 1)) { continue; }
     noted.add(key);
+    if (bound) { idsFor(alias).add(bound.id); }
     legs.push({ leg: l, seatId: bound ? bound.id : null });
   }
   return { attempted, legs };

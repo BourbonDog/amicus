@@ -94,6 +94,21 @@ describe('T2 — controls that must not move', () => {
     expect(rows([deadLeg('d', 'd#1')], null, [{ model: 'd', seat: 'd#1', role: 'seat' }]))
       .toHaveLength(0);
   });
+
+  test('B2: the SAME dead-wave record twice renders TWO rows, not four', () => {
+    // `unid` candidates skip the alias-keyed `seen` map, so before this they had no defence
+    // against a repeated record. Deduped on (waveId, slot) in their own namespace.
+    const w = deadWave(['d', 'd'], [null, null]);
+    expect(rows([w, w])).toHaveLength(2);
+  });
+
+  test('B2 control: two DIFFERENT waves with unnamed slots stay distinct', () => {
+    const w1 = deadWave(['d', 'd'], [null, null]);
+    const w2 = { kind: 'degrade', channel: 'dead-wave',
+      data: { waveId: 'r1-s2', models: ['d', 'd'], seats: [null, null],
+        reason: 'x', retryWaveId: 'w1' } };
+    expect(rows([w1, w2])).toHaveLength(4);
+  });
 });
 
 describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', () => {
@@ -119,6 +134,15 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
     expect(rows([aliasValued, aliasValued])).toHaveLength(1);              // collapses, like R2
     expect(rows([aliasValued], null, [{ model: 'd', seat: 'd#1', role: 'seat' }]))
       .toHaveLength(0);                                                     // suppressed, like R1
+  });
+
+  test('R7 (known-wrong): an UNIDENTIFIED dead seat is hidden by any live seat on its alias', () => {
+    // An unid candidate has no seat id, so the filter falls back to the alias and any live
+    // reviewing seat sharing it suppresses the row. Distinct from R1 (a legacy record) and R3
+    // (an alias-valued seatId) — this is a NEW-format record whose slot the producer could not
+    // name. Raised by the code council as A2; disclosed here rather than silently carried.
+    expect(rows([deadWave(['d', 'd'], [null, null])], null,
+      [{ model: 'd', seat: 'd#1', role: 'seat' }])).toHaveLength(0);
   });
 
   test('R4: the CRITIC path is not seat-keyed — a dead bench twin beside a live critic twin', () => {

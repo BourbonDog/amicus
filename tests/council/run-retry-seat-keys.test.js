@@ -103,24 +103,54 @@ describe('T1c — notedSeats does not double-announce one seat across keyspaces 
   const deadNotes = (out) => out.stillDeadNotes.filter(
     n => n.channel === 'dead-leg' || n.channel === 'dead-wave');
 
-  test('an unidentified wave slot and a BOUND leg on the same alias produce ONE note, not two', async () => {
-    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
-    const seats = ctx.o.seats;                       // deepseek#1, deepseek#2
-    const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
+  test('a UNIQUE alias: the wave slot and the leg ARE the same seat -> ONE note', async () => {
+    // K = 1, so seats.js gives the seat an id equal to its alias and srcLegKey lands on the
+    // key the wave already noted. The plain notedSeats test catches it; no roster math needed.
+    const ctx = fakeCtx({ models: ['alpha', 'beta'] });
+    const leg = { modelInput: 'alpha', status: 'error', error: 'boom' };
     const out = await retryStage1Losses(ctx, {
-      // the wave names ONE seat of this alias and could not identify it;
-      // the leg IS (very likely) that same seat, and this time it was bound.
-      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x' }],
+      deadWaves: [{ waveId: 'r1-s1', models: ['alpha'], seats: [null], reason: 'x' }],
       deadLegs: [leg],
-      seatOf: new Map([[leg, seats[0]]]),
+      seatOf: new Map([[leg, ctx.o.seats[0]]]),
       counts: COUNTS,
     });
-    // At HEAD: seatKey(null,'deepseek') = 'deepseek' but srcLegKey = 'deepseek#1',
-    // so notedSeats misses and BOTH emit — one seat, two notes.
     expect(deadNotes(out)).toHaveLength(1);
   });
 
-  test('a leg for a genuinely DIFFERENT seat still gets its own note', async () => {
+  test('a TWIN alias with room to spare: the leg is a DISTINCT seat and gets its own note', async () => {
+    // K = 2, one unnamed wave slot, one bound leg. The unnamed slot can be the OTHER twin, so
+    // nothing proves the leg is already covered. Announce it.
+    // ⚠️ This assertion was 1 until the council's C1 (blocker): the earlier alias-wide budget
+    // assumed the leg WAS the unnamed slot and suppressed it — trading a visible duplicate for
+    // a SILENT LOSS, the direction this whole PR exists to reject. The roster count replaces
+    // the assumption with a pigeonhole test: suppress only when U > K - (I+1).
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
+    const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x' }],
+      deadLegs: [leg],
+      seatOf: new Map([[leg, ctx.o.seats[0]]]),
+      counts: COUNTS,
+    });
+    expect(deadNotes(out)).toHaveLength(2);
+  });
+
+  test('PIGEONHOLE: both twin slots unnamed leaves no room, so a bound leg is suppressed', async () => {
+    // K = 2 and the wave already announced TWO unnamed seats of this alias — every seat is
+    // accounted for, so the leg MUST be one of them. Suppress, on evidence rather than guess.
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
+    const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+        seats: [null, null], reason: 'x' }],
+      deadLegs: [leg],
+      seatOf: new Map([[leg, ctx.o.seats[0]]]),
+      counts: COUNTS,
+    });
+    expect(deadNotes(out)).toHaveLength(1);
+  });
+
+  test('a wave that NAMES one twin and leaves one unnamed absorbs a leg for the other', async () => {
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'] });
     const seats = ctx.o.seats;
     const leg = { modelInput: 'deepseek', status: 'error', error: 'boom' };

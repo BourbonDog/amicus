@@ -2541,6 +2541,20 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `live-normalize.js`, not a renderer fix.
   - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (T6).
 
+- [ ] **Unidentified dead rows share a DOM `dataset.key`.** Raised by the code council on
+  [PR #164] as A1 (major). ⚠️ **Its stated consequence is wrong and was measured so**: A1 says the
+  collision "causes the same row-accumulation class T3 fixes", but two unidentified dead twins
+  painted across two ticks render `2 rows, keys ["dead:d","dead:d"]` — colliding keys, **no
+  accumulation**. `renderSeats` removes leavers per ROW (`workspace-render.js:231`), and dead rows
+  are appended fresh so the reuse path is never reached. This is the same wrong inference PR5c's
+  own plan made about keyed twins.
+  - Left unfixed deliberately: a row with no seat id has no natural distinct key, and every
+    attempt to synthesise one in this PR (the NUL sentinel, the alias-keyed budget) became a
+    defect. A positional key would work but changes the DOM key of every alias-only dead row —
+    too wide for a latent hazard with no measured symptom.
+  - Do it if the reuse path at `workspace-render.js:188` ever gains a consumer, which is the only
+    thing that would turn this into a real defect.
+
 - [ ] **`seatKey` is spelled three times in `src/`.** `run-debate-revote.js:64`, `run.js:228`, and
   (now) `run-retry-group.js`, which PR5c made the exported one so `run-retry.js` consumes it rather
   than keeping a fourth copy. The renderer spells the same rule a fourth time as
