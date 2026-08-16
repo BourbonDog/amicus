@@ -1906,8 +1906,10 @@ sized and deferred rather than carried half-done.
 
 ### The durable finding is CONFIRMED, and it is the release's centre
 
-`run-retry-group.js :: recordFailure` writes `const key = seatObj ? seatObj.id : seat`. Measured on
-`['deepseek','deepseek','gpt']` with two **unbound** dead twin legs: `models=["deepseek"],
+`run-retry-group.js :: recordFailure` keys through `seatKey(seatObj, seat)` (T2.1, 2026-08-16,
+`511cf43e` — was hand-inlined as `const key = seatObj ? seatObj.id : seat` before that refactor;
+same rule, behaviour-preserving over 75 measured inputs, so this finding is UNCHANGED and still
+open). Measured on `['deepseek','deepseek','gpt']` with two **unbound** dead twin legs: `models=["deepseek"],
 seats=[null], firstFailures.seatId=["deepseek"]` — **one retry slot for two dead seats.** Controls:
 both bound → two; unique alias → unaffected. Pairs with SI-22.3, where `pushDeadSeatRows` collapses
 two orphaned twins to one row on **both** arms. Fix either alone and the run's spend and its record
@@ -2563,6 +2565,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   — which is why nobody noticed. Every number below states the rule by which it was counted.
   Re-measured 2026-08-16 at `0080e372` over `src/` and `electron/` only (tests excluded), by
   execution — no number here is inherited from a prior filing.
+  ⚠️ **Count 1 corrected 2026-08-16, T2.1 (`511cf43e`):** the "both counts come to nine" coincidence
+  above held only at the `0080e372` measurement. T2.1 routed `recordFailure`'s spelling — hand-
+  inlined at what was `:114` — through the exported `seatKey`; that code is now a call site at
+  `:115`, excluded by Count 1's own counting rule, not a spelling. **Count 1 is eight, Count 2 is
+  still nine; they are no longer both nine.** Detail and re-derived sites are under Count 1 below.
   ⚠️ **`report.js` citations re-derived against the FINAL tree, total shift +7** (2026-08-16,
   measured at the shipped commit, not at an intermediate one): `:152`→**`:159`** (three places
   here) and `:91`/`:97`→**`:98`**/**`:104`**. Two edits stacked, and the first pass published the
@@ -2578,17 +2585,19 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
     `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
-    do not**. → **9 spellings, all in `src/council/`, 0 in `electron/`.** Sites:
-    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:51`
-    (the exported one, PR5c), `run-retry-group.js:114` (`recordFailure`, hand-inlined),
-    `run-stage1-rows.js:42`, `run-stage1-rows.js:85`, `run-stages.js:96`, `run-stages.js:106`,
-    `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined). **Excluded, and why:**
-    `run-retry-group.js:108` and `run-retry-notes.js:58` fall back to `null`, not an alias — "seat
-    id or nothing" is a different value space; `run.js:198` and `run-assemble.js:89`/`:215` are the
-    emit-when-**different** stamp, which `run.js:190` explicitly contrasts with *"the naive
-    `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no alias fallback; and the eight
-    `seatKey(...)` call sites (`run-debate-revote.js:132`, `run-retry-group.js:92`/`:100`,
-    `run-retry.js:151`/`:162`/`:192`/`:197`, `run.js:229`) are consumers, not spellings.
+    do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
+    measurement — see the correction note above.) Sites:
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:52`
+    (the exported one, PR5c), `run-stage1-rows.js:42`, `run-stage1-rows.js:85`, `run-stages.js:96`,
+    `run-stages.js:106`, `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined).
+    **Excluded, and why:** `run-retry-group.js:109` and `run-retry-notes.js:58` fall back to
+    `null`, not an alias — "seat id or nothing" is a different value space; `run.js:198` and
+    `run-assemble.js:89`/`:215` are the emit-when-**different** stamp, which `run.js:190` explicitly
+    contrasts with *"the naive `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no
+    alias fallback; and the nine `seatKey(...)` call sites (`run-debate-revote.js:132`,
+    `run-retry-group.js:93`/`:101`/`:115`, `run-retry.js:151`/`:162`/`:192`/`:197`, `run.js:229`)
+    are consumers, not spellings — `:115` (T2.1) is `recordFailure`'s former hand-inlined spelling,
+    now a call site.
   - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
@@ -2606,8 +2615,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     queries *both* keys, so it is not a key derivation); `workspace-seats.js:85`'s `seatId` chain;
     and `workspace-render.js:195`/`:225`'s `seat.id || seat.model` over `seatsFromRunStats`'
     synthesised `model:role` id.
-  - ⚠️ **Counts 1 and 2 are DISJOINT sets** — no `file:line` appears in both, and both happen to
-    total nine. Any number quoted about this duplication is meaningless without saying which
+  - ⚠️ **Counts 1 and 2 are DISJOINT sets** — no `file:line` appears in both. (They totalled nine
+    apiece at the `0080e372` measurement; T2.1 dropped Count 1 to **eight** — see the note above —
+    so the coincidence no longer holds, but disjointness never depended on it.) Any number quoted
+    about this duplication is meaningless without saying which
     population it counts: PR5c-SEATKEY's *"the renderer spells the same rule a fourth time as
     `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
     the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
@@ -2636,15 +2647,18 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**: `run.js:228`
-    and `run-retry-group.js:51` are byte-identical modulo indentation (49 chars each, re-measured)
+    and `run-retry-group.js:52` are byte-identical modulo indentation (49 chars each, re-measured)
     but `run.js`'s copy has exactly **one** caller (`:229`); `run-debate-revote.js:64` is a
     *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
     also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
-    conformance becomes unreachable without it). Only the **exported** copy earns its keep, with six
-    callers — `run-retry-group.js:92`/`:100` internally and `run-retry.js:151`/`:162`/`:192`/`:197`.
+    conformance becomes unreachable without it). Only the **exported** copy earns its keep, with
+    seven callers — `run-retry-group.js:93`/`:101`/`:115` internally and
+    `run-retry.js:151`/`:162`/`:192`/`:197`. (Was six / `:92`/`:100` before T2.1, 2026-08-16,
+    `511cf43e`: `recordFailure`'s hand-inlined spelling became a seventh caller at `:115` — the
+    same change that drops Count 1 above from nine to eight.)
     ⚠️ **Citation rot corrected:** SI-27 credited *"`run-retry.js`'s copy … five call sites (`:152`,
-    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:51` and made
+    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:52` and made
     it the exported one so `run-retry.js` consumes it rather than keeping a fourth copy — every one
     of those five line numbers is now wrong, and the count was four in that file. Recorded so the
     wrong endorsement is not re-inherited. **Do not add another `src/` spelling in the meantime**
@@ -2921,11 +2935,12 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     thing that would turn this into a real defect.
 
 - [x] **MERGED into SI-DUP (2026-08-16)** — ~~`seatKey` is spelled three times in `src/`.~~ The
-  count was wrong: re-measured, the object-form rule is spelled **nine** times, all in
+  count was wrong: re-measured, the object-form rule was spelled **nine** times at merge, **now
+  eight** (T2.1, 2026-08-16, `511cf43e` — see SI-DUP's Count 1), all in
   `src/council/` — and this entry's *"the renderer spells the same rule a fourth time as
   `r.seat || r.model`"* counted a member of a **disjoint** population as the fourth. See **SI-DUP**
   in the v4.8.0 seat-identity section for both populations with their counting rules stated. Still
-  true and carried there: PR5c made `run-retry-group.js:51` the exported copy so
+  true and carried there: PR5c made `run-retry-group.js:52` the exported copy so
   `run-retry.js` consumes it rather than keeping a fourth; the renderer must spell the rule again
   (`r.seat || r.model`) because renderer modules cannot `require()` from `src/`; and the "THE WRONG
   LEVER" reading — a rule needing another spelling means the defect is in a consumer. The "unify
