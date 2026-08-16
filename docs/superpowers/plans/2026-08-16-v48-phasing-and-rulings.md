@@ -159,7 +159,9 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
 - **T0.6** Commit the re-measured size-gate table
 
 ### Phase 1 · Extraction — 2 PRs, pure moves pinned by function identity
-- **T1.1** `buildRunStatsEntry` (`:46-95`) out of `run-assemble.js` → **297 → 247**.
+- **T1.1** `buildRunStatsEntry` out of `run-assemble.js` → **SHIPPED: 297 → 252 measured**
+  (the 247 here was a projection; the 5-line gap is real and the measured value is the one Phases
+  2–3 should plan against). `buildChairPacketFile` now opens at `run-assemble.js:223`.
   **Hard prereq of three things:** Phase 3's `rankings[]` seat, #135's TTFT field, carried PR1F-2
 - **T1.2** Extract from `report.js` (**298/300**) — hard prereq of **T2.4**.
   ⚠️ Corrected 2026-08-16: this line and §6 previously also claimed SI-25. They were wrong —

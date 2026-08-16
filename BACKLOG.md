@@ -1937,7 +1937,7 @@ files now sit at exactly 300/300"** warning is measurably wrong today: re-measur
 |-------|------|------|
 | **300** | `src/pack/pack-resolve.js` | AT CEILING — zero headroom |
 | **300** | `src/sidecar/electron-install.js` | AT CEILING — zero headroom |
-| ~~298~~ **188** | `src/council/report.js` | ✅ **T1.2 SHIPPED** — `renderMd` moved to `report-md.js` (130). 112 lines of headroom |
+| ~~298~~ **197** | `src/council/report.js` | ✅ **T1.2 SHIPPED** — `renderMd` moved to `report-md.js` (130), leaving 188; the record-correction commit then added 9 comment lines. 103 lines of headroom |
 | 297 | `electron/workspace-ui/workspace-render.js` | — |
 | ~~297~~ **252** | `src/council/run-assemble.js` | ✅ **T1.1 SHIPPED** — `buildRunStatsEntry` moved to `run-stats-entry.js` (71). Landed at 252, not the projected 247. 48 lines of headroom |
 | 297 | `src/sidecar/context-builder.js` | — |
@@ -1954,9 +1954,10 @@ files now sit at exactly 300/300"** warning is measurably wrong today: re-measur
 this file** and both gated Phase 1. **Both have now shipped — re-measured 2026-08-16 after
 Phase 1:** T1.1 extracted `buildRunStatsEntry` out of `run-assemble.js` into
 `src/council/run-stats-entry.js` (71), leaving it at **252** (the plan projected 247); T1.2
-extracted `renderMd` out of `report.js` into `src/council/report-md.js` (130), leaving it at
-**188**. Neither is a size-gate concern any more, and **a T2.4 or SI-25 implementer does not need
-to extract anything before editing them.** The 300-line gate blocks the COMMIT, not the edit —
+extracted `renderMd` out of `report.js` into `src/council/report-md.js` (130), leaving it at 188 —
+and the follow-up record-correction commit added 9 comment lines, so `report.js` stands at
+**197/300** today. Neither is a size-gate concern any more, and **a T2.4 or SI-25 implementer does
+not need to extract anything before editing them.** The 300-line gate blocks the COMMIT, not the edit —
 when it fires, EXTRACT. Shaving comments to fit is the documented tell.
 
 ### Deferred to v4.9.0
@@ -2532,8 +2533,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   but it changes `basis` on a document that currently produces a `null`, so it needs a decision
   about whether that is a fix or a shape change.
 - [ ] **The chair packet is assembled entirely in alias space, so on a twin bench it is internally
-  unreconcilable.** `buildChairPacketFile` (`src/council/run-assemble.js:263-277`) passes the chair
-  only `reviews`, `rankings`, `adjudications` and `record.tierCounts` (`:266-273`);
+  unreconcilable.** `src/council/run-assemble.js :: buildChairPacketFile` (re-anchored BY SYMBOL
+  2026-08-16 — it was cited as `run-assemble.js:263-277`, but v4.8 Phase 1 T1.1 lifted
+  `buildRunStatsEntry` out of the lines above it and the function now opens at `:223`) passes the
+  chair only `reviews`, `rankings`, `adjudications` and `record.tierCounts`;
   `src/council/briefings-chair.js:88`
   renders `--- Review by ${r.model} ---` and `:93` renders `${a.findingId} — ${a.judge}:
   ${a.verdict}` — every one of them alias-keyed. The chair is therefore handed *"Deterministic tier
@@ -2560,12 +2563,18 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   — which is why nobody noticed. Every number below states the rule by which it was counted.
   Re-measured 2026-08-16 at `0080e372` over `src/` and `electron/` only (tests excluded), by
   execution — no number here is inherited from a prior filing.
-  ⚠️ **`report.js` citations re-verified and shifted +1 after v4.8 Phase 1 T1.2** (2026-08-16):
-  T1.2 dropped two requires and expanded `isSeatSpace`'s docblock by three lines, so everything
-  below that docblock moved down one. `:152`→`:153` (three places here), `:91`/`:97`→`:92`/`:98`.
-  Each was re-opened at the new line and confirmed to carry what the citation claims. **The counts
+  ⚠️ **`report.js` citations re-derived against the FINAL tree, total shift +7** (2026-08-16,
+  measured at the shipped commit, not at an intermediate one): `:152`→**`:159`** (three places
+  here) and `:91`/`:97`→**`:98`**/**`:104`**. Two edits stacked, and the first pass published the
+  arithmetic of only one of them: T1.2 dropped two requires and expanded `isSeatSpace`'s docblock
+  by three (**+1**), then the record-correction commit added a six-line clause to the *module*
+  docblock at the top of the same file (**+6**). Citations were measured between the two, so the
+  published `:153`/`:92`/`:98` were each 6 short. Each value above was re-opened at its stated line
+  in the final working tree and confirmed to carry what the citation claims. **The counts
   themselves are unchanged** — T1.2 was a pure move of `renderMd`, which holds no Count-1 or
-  Count-2 site. `report.js:24-40` and `matrix-model.js:84`/`:88` were re-checked and still land.
+  Count-2 site. `matrix-model.js:84`/`:88` re-checked, unaffected, still land. The former
+  `report.js:24-40` range is retired in favour of a symbol anchor: line ranges in this file have now
+  rotted twice in one day, and `isSeatSpace`'s docblock does not move when the file above it grows.
   - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
     `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
@@ -2584,16 +2593,16 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
     5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
-    `report.js:153` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
+    `report.js:159` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
-    `council/debate.js:178`, `council/report.js:153` (×2), `council/run-debate.js:258`,
+    `council/debate.js:178`, `council/report.js:159` (×2), `council/run-debate.js:258`,
     `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
     `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:242`. **Adjacent forms
     deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
-    *different* emitted field pair); the four seat-space-**gated** reads `report.js:92`/`:98` and
+    *different* emitted field pair); the four seat-space-**gated** reads `report.js:98`/`:104` and
     `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
-    be folded into the bare form — `report.js:24-40` records that independent fallbacks would blank
-    every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
+    be folded into the bare form — `report.js :: isSeatSpace`'s docblock records that independent
+    fallbacks would blank every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
     queries *both* keys, so it is not a key derivation); `workspace-seats.js:85`'s `seatId` chain;
     and `workspace-render.js:195`/`:225`'s `seat.id || seat.model` over `seatsFromRunStats`'
     synthesised `model:role` id.
@@ -2603,7 +2612,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
     the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
     boundary and a **string** after it, so one property name reads as two different rules
-    (`run.js:231` vs `report.js:153`).
+    (`run.js:231` vs `report.js:159`).
   - ⚠️ **The `electron/` re-spellings are structural, not sloppiness.** The Workspace renderer loads
     every module as a plain `<script src>` (`electron/workspace-ui/index.html:101-124`) under
     `contextIsolation: true, nodeIntegration: false, sandbox: true` (`electron/main.js:137`) and a
