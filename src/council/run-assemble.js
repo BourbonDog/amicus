@@ -187,10 +187,10 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // tally.json AND verdict.json on every unique-alias bench.
     // ⚠️ NARROW BY RULING, not by oversight. The guard asks "does the bench
     // repeat an alias?", which is a DIFFERENT question from "is anything in
-    // seats[] unrecoverable?": `position` is unrecoverable everywhere and a
-    // --lenses bench keeps its raw lens text nowhere else (runStats[].role
-    // carries only the slug). R4c-7 took byte-identity on lens/critic benches
-    // over a table PR5 can request when it needs one; the gap is in BACKLOG.
+    // seats[] unrecoverable?" — they part on a UNIQUE-alias lens/critic bench.
+    // `position` and the raw lens text (runStats[].role has only the slug) ride
+    // in meta.seats EXACTLY when it ships, i.e. on a repeated-alias bench, and
+    // are absent BY DESIGN otherwise (measured 2026-08-16; BACKLOG SI-21, HOLD).
     // ⚠️ Consumers: absence means "no seat table available", NEVER "the bench was
     // unique" — two of appendRun's three call sites feed hand-assembled input no
     // seat machinery touches. And seats[] is BENCH-ONLY, so it must never be

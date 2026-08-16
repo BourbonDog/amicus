@@ -829,6 +829,11 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   Those are already far over and are NOT cliffs — `mcp-server.js` is 1490 lines. Only **gated**
   files can trip the gate.
 
+  ⚠️ **SUPERSEDED 2026-08-16 — this table is now STALE. Use *"Size gate — re-measured 2026-08-16"*
+  in the v4.8.0 section below** (re-measured today: `fanout.js` **294**, not 300; `continue.js`
+  **282**, not 297; `run.js` **281**, not 295 — so the "three files at exactly 300/300" warning
+  below is wrong; it is **two**).
+
   **Gated files at ≥291/300 — RE-MEASURED 2026-08-09 against `main` @ `caf4d7e` (v4.7.0).**
   This replaces the 2026-08-02 v4.6 table, which had gone stale exactly as this section warns.
   Counted with the gate's own arithmetic (`check-file-sizes.js:53-54`: `split('\n').length`, minus
@@ -1859,12 +1864,20 @@ sized and deferred rather than carried half-done.
 2. **`tally.test.js:329` (T1) and `:341` (T2) pin the WRONG behaviour as disclosed.** The peer-split
    fix must **replace** them. It cannot be written "keeping the suite green"; pin the replacement
    with a **named mutant**.
-3. **`position`/`lens` ARE recoverable on twin benches.** `run-assemble.js:190` and
-   `run-assemble.test.js:102` both say otherwise and both are false — measured by executing
-   `buildSeats` + `buildTallyInput`.
+3. **`position`/`lens` ARE recoverable on twin benches** — measured by executing `buildSeats` +
+   `buildTallyInput` (re-measured 2026-08-16: on `['deepseek','deepseek','gpt']` every `meta.seats`
+   element carries `position` `[1,2,3]`, and the lensed twin keeps `lens` verbatim). ✅ **CORRECTED
+   2026-08-16** in `run-assemble.js`, `run-assemble.test.js` and SI-21 — all three carried the false
+   universal *"`position` is unrecoverable on every bench"*. **Those two source comments now read
+   TRUE; do not "re-fix" them.** Recorded so the false universal is not re-introduced.
 4. **The three duplication filings give three different counts, all wrong.** Measured: **9
    object-form `seatKey` spellings, all in `src/`, zero in `electron/`**, plus 9 string-form
-   post-emit reads. Two filings say "nine" about **disjoint sets** — state the counting rule.
+   post-emit reads. ⚠️ **No filing ever said "nine"** (measured: `git show 17b6b6f2:BACKLOG.md |
+   grep -n nine` returns no hit inside any of them — SI-15 said **3**, SI-27 enumerated **4** and
+   missed 5, PR5c-SEATKEY said **3 "+ a fourth"**). It is the two **TRUE** counts that both come to
+   nine, over **disjoint sets** — which is why a bare "9" is ambiguous and every number needs its
+   counting rule stated beside it. Merged 2026-08-16 into **SI-DUP**, which states both rules; plan
+   from that entry, not from this summary.
 5. **PR5c's commit title (`16fbad16`) misleads.** It fixed the dead-seat **consumer**; the runStats
    **producer** still collapses two orphaned twins to one row on both arms.
 
@@ -1900,6 +1913,43 @@ disagree.
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.
+
+### Size gate — re-measured 2026-08-16
+
+Measured with `scripts/check-file-sizes.js`'s own `listTrackedFiles` + `matchesPattern` +
+`CONFIG`, so the population is exactly what the gate scans: **277 gated files** (`src/**/*.js` +
+`electron/**/*.js`, minus `CONFIG.exclude`'s 12-file grandfathered list). **14 at ≥291 · exactly 2
+at 300/300 · 0 over the limit** — the gate passes today and the first added line to either
+300-line file blocks the commit.
+
+⚠️ **This replaces the 2026-08-09 v4.7 table under *Next-rev hard gates*** (~1,080 lines earlier in
+this file — a Phase 1 implementer grepping for a size table hits that one first). Its **"three
+files now sit at exactly 300/300"** warning is measurably wrong today: re-measured 2026-08-16,
+`src/sidecar/fanout.js` is **294**, `src/sidecar/continue.js` **282** and `src/council/run.js`
+**281**. Only `pack-resolve.js` and `electron-install.js` are still at the ceiling.
+
+| Lines | File | Note |
+|-------|------|------|
+| **300** | `src/pack/pack-resolve.js` | AT CEILING — zero headroom |
+| **300** | `src/sidecar/electron-install.js` | AT CEILING — zero headroom |
+| 298 | `src/council/report.js` | **Phase 1 T1.2 target — 2 lines of headroom** |
+| 297 | `electron/workspace-ui/workspace-render.js` | — |
+| 297 | `src/council/run-assemble.js` | **Phase 1 T1.1 target — extracts `buildRunStatsEntry` (297 → 247)** |
+| 297 | `src/sidecar/context-builder.js` | — |
+| 296 | `src/sidecar/session-utils.js` | — |
+| 294 | `electron/workspace-ui/workspace-verbs.js` | — |
+| 294 | `src/council/run-chair.js` | — |
+| 294 | `src/sidecar/fanout.js` | — |
+| 292 | `src/cli-handlers-doctor.js` | — |
+| 292 | `src/council/run-stages.js` | — |
+| 292 | `src/sidecar/models.js` | — |
+| 291 | `src/mcp-council-run.js` | — |
+
+⚠️ **`src/council/report.js` (298) and `src/council/run-assemble.js` (297) appear in NO prior size
+note in this file** and both gate Phase 1: T1.1 extracts `buildRunStatsEntry` out of
+`run-assemble.js` (297 → 247), and T1.2 extracts from `report.js`, which has **two lines of
+headroom**. The 300-line gate blocks the COMMIT, not the edit — when it fires, EXTRACT. Shaving
+comments to fit is the documented tell.
 
 ### Deferred to v4.9.0
 
@@ -1977,7 +2027,7 @@ as two, and an unbound seat (a launched leg that never returns) is retried and, 
 announced on a new `seat-unbound` degrade channel. Three items surfaced by that work belong to
 the PRs still ahead in this stack; recorded here so they do not have to be re-derived.
 
-- [ ] **[SHIPPED v4.8.0 PR5a — see the note below] Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
+- [x] **[SHIPPED v4.8.0 PR5a — see the note below] DONE (v4.8 — verified by execution 2026-08-16) · Hard prerequisite for PR5 · `artifact-guard.js:87`'s `uniqueModels` must build from
   `o.seats`, not a de-duplicated bench, before PR5's workspace flip.** `const uniqueModels =
   [...new Set(bench)]` still allowlists one `review-<alias>.md` per distinct alias, but a bench
   that repeats an alias now writes `review-<seat>-1.md` / `review-<seat>-2.md` (PR2b Task 3), so
@@ -2009,6 +2059,13 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   > between them. What it does instead is refuse to *attribute* it: an orphan-written name belongs
   > to no seat, so no panel renders it under a model, which is the user-visible half this entry
   > was really about. A surface for genuinely unattributed artifacts is filed, not built.
+  - **Verified by execution (2026-08-16):** `src/workspace/artifact-names.js :: artifactAllowlist` —
+    the allowlist's entity list derives from `run.seats`, not a de-duplicated bench, at
+    `artifact-names.js:73-75`: `isSeatTable(run && run.seats) ? [...new Set(run.seats.map(s =>
+    s.id))] : [...new Set(bench)]`. The memo's `artifact-guard.js:87` `uniqueModels` citation has
+    rotted onto this symbol: `uniqueModels` no longer exists anywhere in `src/` (confirmed by
+    `grep -rn uniqueModels src/` — no hits); `artifact-guard.js:101` now gates every artifact read
+    through this same `artifactAllowlist`, imported at `artifact-guard.js:25`.
 
 - [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
@@ -2080,15 +2137,29 @@ through the single `aliasOf` built at `run-debate.js:116-117`. `runRevoteWave` m
 `src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
 deliberately left alone:
 
-- [ ] **PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
   `const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;` still compares
   aliases, so on a bench that repeats an alias a twin's legitimate peer vote on its twin's finding
   is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
   the seat-exact form was not expressible inside `tally()`; it is now: every vote carries
   `v.seat` (`tally.js:89`, from `adjudications[].seat`) and every finding carries `f.raiserSeat`
-  (`tally.js:106`), both emit-when-different, so the fix is `(v.seat || v.judge) !== (f.raiserSeat
-  || f.raiser)` with **no new inputs threaded**. ⚠️ Both fields are absent on a unique-alias
-  bench by design, so the `||` fallbacks are load-bearing — do not "simplify" them away.
+  (**produced** at `src/council/anonymize.js:68`; **read** in `tally.js` at `:111`, `:139` and
+  `:141`), both emit-when-different. ⚠️ **Citation corrected 2026-08-16:** this sentence cited
+  `tally.js:106` for `f.raiserSeat` — that line is a **comment**, not an executing line. Re-measured
+  with `grep -n raiserSeat src/council/tally.js`: `:101`/`:103` are comment, `:111`/`:139`/`:141`
+  are code.
+
+  **What shipped is NOT what this item prescribed.** The prescribed form
+  `(v.seat || v.judge) !== (f.raiserSeat || f.raiser)` was measured in both orphan directions and
+  **re-arms #137** — it admits the raiser's own vote as its own peer. It was deleted from this
+  filing on 2026-08-16. The executing filter is `tally.js:111`:
+
+  ```js
+  votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
+  ```
+  - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the peer filter
+    compares seats when both sides carry one, aliases otherwise, at `tally.js:111`:
+    `votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)`.
 - [ ] **PR4 · `src/council/debate.js:200` is a SECOND copy of that same filter and must move with
   it.** `peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser)` builds the peer
   split a raiser sees in its defense briefing. Fixing `tally.js:96` alone would make the brief the
@@ -2100,19 +2171,29 @@ deliberately left alone:
   one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
   `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
   cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
-- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
   rulings table) is still unwritten.** Spec
   §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
   corroboration has to be *labelled* on the finding rather than silently folded into the basis.
   Listed in the spec's artifact table (`tally.json`, per finding, optional in schema) and in no
   shipped code.
-- [ ] **PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
+  - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the
+    `sameModelCorroboration` stamp is emitted at `tally.js:140-142`: `...(f.raiser &&
+    peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge ===
+    f.raiser) ? { sameModelCorroboration: true } : {})`.
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
   (`run-assemble.js:154-159`) carries `models` and nothing that names a seat, so a consumer
   holding only `tally.json`/`verdict.json` cannot map `adjudications[].seat` back to a bench
   position — `run.json`'s `seats[]` (seeded `null` at `run-state.js:99`, filled by
   `preflightSeats`) is the only place the table exists. Every seat-aware renderer therefore has to
   read two documents.
-- [ ] **PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
+  - **Verified by execution (2026-08-16):** `src/council/run-assemble.js :: buildTallyInput` —
+    `meta` carries `seats` (emitted only when the bench repeats an alias) at `run-assemble.js:203`:
+    `...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {})`.
+  - **Note (2026-08-16):** this item's DONE does **not** endorse the "`position` is unrecoverable
+    on every bench" claim that `run-assemble.js` and `run-assemble.test.js` carried. That claim was
+    measured false and corrected in the same PR. See SI-21.
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
   verdict-only consumer cannot tell which twin raised a finding.** `buildVerdict`
   (`src/council/verdict.js:113-127`) rebuilds every finding from an explicit field list — `id`,
   `raiser`, `severity`, `tier`, `basis`, `confidence`, `tierOverride`, `duplicateOf`,
@@ -2125,6 +2206,9 @@ deliberately left alone:
   CHANGELOG describes what shipped, and threading it through is a code change PR3 did not make.
   Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
   document" gap.
+  - **Verified by execution (2026-08-16):** `src/council/verdict.js :: buildVerdict` —
+    `findings[].raiserSeat` is emitted at `verdict.js:141`: `...(f.raiserSeat ? { raiserSeat:
+    f.raiserSeat } : {})`.
 - [ ] **PR4 · an `-rv` leg that binds to NO seat makes `applyDebate` invent an adjudication row —
   fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js:124`)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
@@ -2148,7 +2232,7 @@ deliberately left alone:
   `orphanLegNote`/`seat-unbound` notes. That classification was wrong — corrected by the final
   whole-branch review, F3. That ledger is a local working note and is not committed to this repo,
   so the measured evidence is restated above rather than cited.)*
-- [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
+- [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
   bench holds the same alias twice; `votes[adj.judge] = adj.verdict` (`:55`) is last-wins, so both
@@ -2156,6 +2240,12 @@ deliberately left alone:
   columns as the raiser. The Workspace adjudication matrix is therefore wrong in the same three
   ways `report.html` is. Fix them together, keyed on `(adj.seat || adj.judge)` against a
   seat-valued column list — the data is already on the document as of PR3.
+  - **Verified by execution (2026-08-16):** `src/workspace/matrix-model.js :: buildMatrixModel` —
+    the join is seat-aware, not alias-only: `seatSpace` is computed at `matrix-model.js:58`,
+    columns key on the seat id at `:74` (`meta.seats.map(s => ({key: s.id, ...`), votes key on
+    `adj.seat` in seat space at `:84` (`votes[(seatSpace && adj.seat) || adj.judge] =
+    adj.verdict;`), and the raiser key uses `f.raiserSeat` in seat space at `:88`
+    (`seatSpace ? (f.raiserSeat || f.raiser) : f.raiser`).
 - Minor, noticed while re-deriving citations and **not** fixed: `src/council/seats.js:97` cites
   `run-retry.js:93` for "a retry wave is the loss subset"; the current anchor is `run-retry.js:67`
   (`groupStage1Losses`). Left alone rather than guessed at mid-PR.
@@ -2219,7 +2309,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
   dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
   survive to leg construction."
-- [ ] **A maintainability note (from the auto-review).** `seatKey(seat, alias) => seat ? seat.id : alias`
+- [x] **SI-15 · SUPERSEDED by SI-DUP** — ~~A maintainability note (from the auto-review).~~ `seatKey(seat, alias) => seat ? seat.id : alias`
   (or the arrow-function equivalent) is independently redefined in **three files**:
   `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
   note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
@@ -2228,8 +2318,15 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `run-stage2.js:89-106`, `run-debate-revote.js:106-117` — this time `run.js` is the one that does
   NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
-  above. Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
-  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.
+  above. ~~Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
+  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.~~
+  - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
+    note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
+    halves survive there; neither was dropped.
+  - ⚠️ **The struck `seats.js` home is SUPERSEDED — do not send the work there.** SI-DUP
+    **disposition (a)** and ruling **R14** both put the padding consolidation in **`stage1-bind.js`**
+    (parameterised on `(waveId, rosterSource, aliasAt, legs)`, own PR, **after Phase 2**), and
+    disposition (b) defers the `seatKey` half to **v4.9**. Read those, not this clause.
 - [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
   `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
   (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
@@ -2302,25 +2399,87 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   into an append-only file. R4c-2 re-confirmed R4-3 on this evidence: fixing (3) alone was measured
   to flip the launched chair name from the short alias to the raw executable id, so this needs to be
   taken as one seat-keyed change, in its own PR, not piecemeal.
-- [ ] **`lens` and `position` are unrecoverable from the tally artifacts on any bench that does not
-  repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias, which is
-  a **different question** from "does anything else in the document carry the seat's lens". Measured
-  on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
+- [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
+  does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
+  which is a **different question** from "does anything else in the document carry the seat's lens".
+  Measured on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
   `runStats[].role` carries only the slug `lens:security-review`, and the raw lens text
-  `"Security Review"` appears **nowhere** in the tally input. `position` is unrecoverable on every
-  bench. R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
-  nowhere else"*; that reason is **withdrawn** — the honest claim is "seat ids are resolvable on
-  twin benches, and only there". The owner chose byte-identity on lens/critic benches (measured
+  `"Security Review"` appears **nowhere** in the tally input. ~~`position` is unrecoverable on every
+  bench.~~ R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
+  nowhere else"*; that reason is **withdrawn** — ~~the honest claim is "seat ids are resolvable on
+  twin benches, and only there"~~. The owner chose byte-identity on lens/critic benches (measured
   identical across eight configurations) over a table PR5 can ask for when it needs one. Revisit
   when a consumer actually needs `lens`/`position`, and widen the predicate then.
+  - ⚠️ **This item's prose is FALSE, and so is its own proposed correction (measured 2026-08-16).**
+    `position` and `lens` ARE recoverable from `meta.seats` — exactly when the bench repeats an
+    alias. Measured by executing `buildSeats` + `buildTallyInput`: on `['deepseek','deepseek','gpt']`
+    every `meta.seats` element carries `position` (`[1,2,3]`), and on the lensed twin bench `lens`
+    survives verbatim (`"Security Review"`, while `role` keeps only the slug `lens:security-review`).
+    The struck "on every bench" is the false universal. The struck replacement is wrong too: when
+    the table ships it carries the WHOLE seat row — `id`, `alias`, `role`, `lens`, `position` — so
+    it is not "seat ids, and only there"; `role`/`lens`/`position` are resolvable on a twin bench
+    as well. ⚠️ **Even the title overclaims** — read it as the `position`/`lens` **FIELDS** being
+    **ABSENT**, not as the facts being unrecoverable. Both fields are absent on a unique-alias bench
+    (confirmed on `['deepseek','gpt','gemini']` and on a unique-alias lensed bench, where
+    `meta.seats` is absent entirely) — **by design, not by defect** — but the seat **ordinal** is
+    still derivable there from `meta.models` order: measured 2026-08-16 by executing `buildSeats` +
+    `buildTallyInput`, `meta.models.indexOf(s.alias) + 1` reproduces `position` exactly on all four
+    unique-alias shapes tried (plain, lensed, and with a real `claudeReview`, whose `CLAUDE_SEAT` is
+    pushed **last** at `run-assemble.js:226` and so shifts no bench index). Only `lens`'s raw text
+    is genuinely lost (`runStats[].role` keeps only the slug). The same false universal was
+    corrected in `run-assemble.js` and `run-assemble.test.js` in the same PR.
+    **Remains a HOLD — not work, do not re-scope.**
 - [ ] **Five seat shapes the #137 peer fix does not close.** All measured, all disclosed in the
   CHANGELOG rather than hidden:
   1. **The raiser's own Stage-1 leg orphans** — `findings[].raiserSeat` and that seat's vote-seat
      vanish *together*, the filter falls back to the alias compare, and the undercount survives.
+
+     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
+     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
+     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
+     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
+     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
+     not a preservation test.
+
+     **THIS shape's own fixture is T2 (`:341`) — the mapping is the REVERSE of the ordinal guess.**
+     Measured 2026-08-16 by reading the fixtures: T2's finding carries **no** `raiserSeat` while the
+     adjudication carries `seat: 'deepseek#2'`, i.e. the **raiser's own** leg is the orphaned one
+     (its in-test comment: *"only ONE unbound Stage-1 twin review"*). T1 is **SI-22.2's** shape
+     (below), not this one. Pair them backwards and the replacement pins the wrong direction.
+
+     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
+     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
+     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
+     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
+     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
+     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
+     fixes the bug it re-arms.
   2. **A peer twin's leg orphans** — the fallback drops that twin's legitimate agree, and the
      `sameModelCorroboration` stamp does not fire either, so the corroboration is silently absent
      rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
      vote cannot be told apart from the raiser's own.
+
+     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
+     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
+     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
+     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
+     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
+     not a preservation test.
+
+     **THIS shape's own fixture is T1 (`:329`) — the mapping is the REVERSE of the ordinal guess.**
+     Measured 2026-08-16 by reading the fixtures: T1's finding **has** `raiserSeat: 'deepseek#1'`
+     and it is the twin **judge's** vote that carries no seat, i.e. the **peer's** leg is the
+     orphaned one (its in-test comment: *"the twin judge's Stage-2 seat orphaned"*). T2 is
+     **SI-22.1's** shape (above), not this one. Pair them backwards and the replacement pins the
+     wrong direction.
+
+     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
+     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
+     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
+     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
+     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
+     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
+     fixes the bug it re-arms.
   3. **Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.** `deadSeats`
      (`src/council/run-stage1-rows.js:76-89`) is a **Map** whose key falls back to the alias when
      `seatOf.get(l)` is null, so two dead twins produce one entry. Measured through the real
@@ -2380,21 +2539,90 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   `assignLabels(['a','a','b'])` yields `{"Review A":"a","Review B":"a","Review C":"b"}`, whose keys
   are labels and are unique by construction. Delete `letterByModel`, or give it a seat key before
   something starts using it.
-- [ ] **The roster-padding block is duplicated three times, and the prior refusal was INVERTED.**
-  `src/council/run-retry.js:121-131`, `src/council/run-stage2.js:91-107` and
-  `src/council/run-debate-revote.js:115-126` each build the same `__unbound-<waveId>-<n>` placeholder
-  roster before `bindSeats` and then filter the placeholders back out — ~11 lines apiece, and all
-  three already `require('./seats')`, so the consolidation costs no new dependency. ⚠️ The v4.8 PR4
-  draft refused this as *"a near-copy, not a win"* while **endorsing** a `seatKey` consolidation;
-  measured, that is exactly backwards. `seatKey` is net-flat: `run.js:228` and `run-retry.js:149` are
-  byte-identical (54 B) but `run.js`'s copy has exactly **one** caller (`:229`);
-  `run-debate-revote.js:64` is a *different* form — a named `function seatKey(seat, alias)` with
-  different parameter names — and also has one caller (`:132`); and `run.js:231` is a **third,
-  hand-inlined** copy that must stay, because its `|| byJudge.get(r.model)` fallback is load-bearing
-  (an orphaned Stage-2 leg's conformance becomes unreachable without it). Only `run-retry.js`'s copy
-  earns its keep, with five call sites (`:152`, `:163`, `:180`, `:196`, `:201`). Recorded so the
-  wrong endorsement is not re-inherited. Still
-  **not** urgent; it is a tidy-up, not a defect.
+- [ ] **SI-DUP · the duplication filing (merges SI-15 + SI-27 + PR5c-SEATKEY, 2026-08-16).** Three
+  filings described this one duplication and gave three different counts, **all wrong** — SI-15 said
+  3, SI-27 enumerated 4 and missed 5, PR5c-SEATKEY said 3 "+ a fourth". Both true counts come to
+  **nine**, but over **disjoint sets**, and PR5c-SEATKEY's "fourth" was a member of the *other* set
+  — which is why nobody noticed. Every number below states the rule by which it was counted.
+  Re-measured 2026-08-16 at `0080e372` over `src/` and `electron/` only (tests excluded), by
+  execution — no number here is inherited from a prior filing.
+  - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
+    `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
+    an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
+    do not**. → **9 spellings, all in `src/council/`, 0 in `electron/`.** Sites:
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:51`
+    (the exported one, PR5c), `run-retry-group.js:114` (`recordFailure`, hand-inlined),
+    `run-stage1-rows.js:42`, `run-stage1-rows.js:85`, `run-stages.js:96`, `run-stages.js:106`,
+    `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined). **Excluded, and why:**
+    `run-retry-group.js:108` and `run-retry-notes.js:58` fall back to `null`, not an alias — "seat
+    id or nothing" is a different value space; `run.js:198` and `run-assemble.js:89`/`:215` are the
+    emit-when-**different** stamp, which `run.js:190` explicitly contrasts with *"the naive
+    `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no alias fallback; and the eight
+    `seatKey(...)` call sites (`run-debate-revote.js:132`, `run-retry-group.js:92`/`:100`,
+    `run-retry.js:151`/`:162`/`:192`/`:197`, `run.js:229`) are consumers, not spellings.
+  - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
+    **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
+    field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
+    5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
+    `report.js:152` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
+    ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
+    `council/debate.js:178`, `council/report.js:152` (×2), `council/run-debate.js:258`,
+    `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
+    `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:242`. **Adjacent forms
+    deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
+    *different* emitted field pair); the four seat-space-**gated** reads `report.js:91`/`:97` and
+    `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
+    be folded into the bare form — `report.js:24-40` records that independent fallbacks would blank
+    every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
+    queries *both* keys, so it is not a key derivation); `workspace-seats.js:85`'s `seatId` chain;
+    and `workspace-render.js:195`/`:225`'s `seat.id || seat.model` over `seatsFromRunStats`'
+    synthesised `model:role` id.
+  - ⚠️ **Counts 1 and 2 are DISJOINT sets** — no `file:line` appears in both, and both happen to
+    total nine. Any number quoted about this duplication is meaningless without saying which
+    population it counts: PR5c-SEATKEY's *"the renderer spells the same rule a fourth time as
+    `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
+    the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
+    boundary and a **string** after it, so one property name reads as two different rules
+    (`run.js:231` vs `report.js:152`).
+  - ⚠️ **The `electron/` re-spellings are structural, not sloppiness.** The Workspace renderer loads
+    every module as a plain `<script src>` (`electron/workspace-ui/index.html:101-124`) under
+    `contextIsolation: true, nodeIntegration: false, sandbox: true` (`electron/main.js:137`) and a
+    `default-src 'none'` CSP — there is no module system in the renderer at all, so it cannot
+    `require()` from `src/`. (The only two `require()` calls under `electron/workspace-ui/` —
+    `live-model.js:58`, `live-seats.js:113` — are same-directory and guarded by
+    `typeof module !== 'undefined'`, i.e. jest-only.)
+  - **Disposition (a) — roster-padding core → v4.8, ruling R14.** `src/council/run-retry.js:121-131`,
+    `src/council/run-stage2.js:91-107` and `src/council/run-debate-revote.js:115-126` each build the
+    same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filter the
+    placeholders back out — ~11 lines apiece, and all three already `require('./seats')` (as does
+    the proposed home), so the consolidation costs no new dependency. All three citations re-derived
+    2026-08-16; none had rotted. ⚠️ These are a **different set of three files** from Count 1's —
+    overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:115-126`, a
+    `seatKey` spelling at `:64`), while `run.js` carries no padding (it consumes `s2.judgeResults`,
+    already padded by Stage 2) and `run-stage2.js` spells no `seatKey`. Read "three files" in either
+    filing as naming a set, never a count of the whole. Home is `stage1-bind.js`, parameterised on
+    `(waveId, rosterSource, aliasAt, legs)`, returning both the filtered `seatOf` Map and the raw
+    `bindRes`. **The orphan tail differs at all three sites (push / degrade.note / nothing) and stays
+    at the call site.** Own PR, **after Phase 2** — consolidation must not ride a defect PR.
+  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
+    draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
+    `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**: `run.js:228`
+    and `run-retry-group.js:51` are byte-identical modulo indentation (49 chars each, re-measured)
+    but `run.js`'s copy has exactly **one** caller (`:229`); `run-debate-revote.js:64` is a
+    *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
+    also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
+    because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
+    conformance becomes unreachable without it). Only the **exported** copy earns its keep, with six
+    callers — `run-retry-group.js:92`/`:100` internally and `run-retry.js:151`/`:162`/`:192`/`:197`.
+    ⚠️ **Citation rot corrected:** SI-27 credited *"`run-retry.js`'s copy … five call sites (`:152`,
+    `:163`, `:180`, `:196`, `:201`)"*; PR5c moved the definition to `run-retry-group.js:51` and made
+    it the exported one so `run-retry.js` consumes it rather than keeping a fourth copy — every one
+    of those five line numbers is now wrong, and the count was four in that file. Recorded so the
+    wrong endorsement is not re-inherited. **Do not add another `src/` spelling in the meantime**
+    (PR5c-SEATKEY's "do not add a fourth"): a rule needing another spelling is the plan-authoring
+    failure mode **"THE WRONG LEVER"** — the defect is in a *consumer*. PR5c deliberately did not
+    unify them; that is a refactor with its own blast radius, and mixing it into a defect PR is what
+    made PR5a's review expensive. Still **not** urgent; it is a tidy-up, not a defect.
 
 ### Bench adaptation — closes #135, finishes #129
 
@@ -2618,13 +2846,23 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     tag lands on the wrong candidate *before* any lookup happens. Critic candidates then suppress
     through `byRole`, a different map from `reviewing`, which PR5c's fix never reaches.
   - **Seat-keying `byRole` is therefore NOT sufficient.** The role must derive from seat identity,
-    which is producer-side vocabulary — the same class of change as PR5c Task 1.
+    which is producer-side vocabulary — ~~the same class of change as PR5c Task 1~~ **(false —
+    struck 2026-08-16; see below)**.
   - Also measured: with both twins dead, two rows render and **both are labelled `critic`** on a
     bench with one critic seat.
   - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (R4).
   - ⚠️ Negative result, recorded so it is not re-reported: the `alias + '|' + role` concatenation
     was probed for an injectivity collision on both reachable paths. **Neither fires.** Latent
     hazard, not a live defect.
+  - ⚠️ **RE-FILED 2026-08-16 — hand-edit-only latent hazard, → v4.9 (ruling R5).** No producer
+    emission closes this. Measured in both directions: with a keyed dead `deepseek#2` on the critic
+    alias and a live critic-role leg for `deepseek#1`, `deadSeats` returns `[]` **both with and
+    without** a `seat` field on the live row — the critic arm never reads `s.seat`.
+  - **Nothing in v4.8 can cure it.** Its bench has no seat-identity critic answer: `criticSeat` is
+    null there and `roleAt` calls both twins `'critic'`. The shape is unreachable by any run v4.8
+    creates; reaching it needs a hand-edited artifact.
+  - **R4 and R5 are NOT one job.** R5's payload change neither fixes nor worsens R4, and R4's fix
+    touches no file R5 touches. R5 ships in v4.8 (ruling R7); R4 does not.
 
 - [ ] **R5 · The live tick cannot suppress a seat-keyed dead record, because the live payload
   carries no seat identity.** `live-normalize.js`'s `seatOf` emits `{id: leg.taskId, model,
@@ -2653,14 +2891,17 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - Do it if the reuse path at `workspace-render.js:188` ever gains a consumer, which is the only
     thing that would turn this into a real defect.
 
-- [ ] **`seatKey` is spelled three times in `src/`.** `run-debate-revote.js:64`, `run.js:228`, and
-  (now) `run-retry-group.js`, which PR5c made the exported one so `run-retry.js` consumes it rather
-  than keeping a fourth copy. The renderer spells the same rule a fourth time as
-  `r.seat || r.model`, which it must — renderer modules cannot `require()` from `src/`.
-  - This is the plan-authoring failure mode "THE WRONG LEVER": a rule needing another spelling means
-    the defect is in a consumer. PR5c deliberately did **not** unify them — that is a refactor with
-    its own blast radius, and mixing it into a defect PR is what made PR5a's review expensive.
-  - Unify the three `src/` copies when that area is next touched. Do not add a fourth.
+- [x] **MERGED into SI-DUP (2026-08-16)** — ~~`seatKey` is spelled three times in `src/`.~~ The
+  count was wrong: re-measured, the object-form rule is spelled **nine** times, all in
+  `src/council/` — and this entry's *"the renderer spells the same rule a fourth time as
+  `r.seat || r.model`"* counted a member of a **disjoint** population as the fourth. See **SI-DUP**
+  in the v4.8.0 seat-identity section for both populations with their counting rules stated. Still
+  true and carried there: PR5c made `run-retry-group.js:51` the exported copy so
+  `run-retry.js` consumes it rather than keeping a fourth; the renderer must spell the rule again
+  (`r.seat || r.model`) because renderer modules cannot `require()` from `src/`; and the "THE WRONG
+  LEVER" reading — a rule needing another spelling means the defect is in a consumer. The "unify
+  when next touched, **do not add a fourth**" guidance carries there as **disposition (b)** (→ v4.9,
+  ruling R14).
 
 ### Standing note for the next reviewer of this area
 
