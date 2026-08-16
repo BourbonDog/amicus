@@ -146,7 +146,9 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
   });
 
   test('R3: a NEW-run record whose seatId is ALIAS-valued behaves exactly as a legacy one', () => {
-    // run-retry-group.js:47 keys firstFailures as `seatObj ? seatObj.id : seat`, so a seat the
+    // run-retry-group.js :: recordFailure keys firstFailures through seatKey(seatObj, seat)
+    // (T2.1, 2026-08-16, `511cf43e` — was hand-inlined as `seatObj ? seatObj.id : seat` before
+    // that refactor; same rule, behaviour-preserving), so a seat the
     // producer could not identify yields an ALIAS-valued seatId on a brand-new run. Nothing
     // structurally distinguishes it from a pre-PR5c record — which is why the residual can NOT
     // be scoped to "legacy runs", the claim round 2 refuted (A1/C2).
