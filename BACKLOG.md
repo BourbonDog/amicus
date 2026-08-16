@@ -2369,10 +2369,24 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   CHANGELOG rather than hidden:
   1. **The raiser's own Stage-1 leg orphans** — `findings[].raiserSeat` and that seat's vote-seat
      vanish *together*, the filter falls back to the alias compare, and the undercount survives.
+
+     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
+     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
+     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
+     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
+     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
+     not a preservation test.
   2. **A peer twin's leg orphans** — the fallback drops that twin's legitimate agree, and the
      `sameModelCorroboration` stamp does not fire either, so the corroboration is silently absent
      rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
      vote cannot be told apart from the raiser's own.
+
+     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
+     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
+     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
+     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
+     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
+     not a preservation test.
   3. **Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.** `deadSeats`
      (`src/council/run-stage1-rows.js:76-89`) is a **Map** whose key falls back to the alias when
      `seatOf.get(l)` is null, so two dead twins produce one entry. Measured through the real
