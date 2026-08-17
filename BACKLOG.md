@@ -2227,11 +2227,13 @@ mechanism from this section's other two C1s (see the map above and its "THIRD co
 **Verdict: reachable at the function boundary, unreachable end-to-end, pre-existing at `main`. Not
 fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is not met.
 
-- **The mechanism.** `run-retry.js :: retryStage1Losses` pads an unidentified retry-roster slot with
-  a placeholder carrying a unique synthetic id (`run-retry.js:126`), then builds `retrySeatOf` by
-  dropping every placeholder bind: `.filter(b => !placeholders.has(b.seat))` (`run-retry.js:132`).
+- **The mechanism.** `run-retry-launch.js :: bindRetryWave` (called by `run-retry.js ::
+  retryStage1Losses`; lifted out of it verbatim by T-A2, 2026-08-17) pads an unidentified
+  retry-roster slot with a placeholder carrying a unique synthetic id (`run-retry-launch.js:53`),
+  then builds `retrySeatOf` by dropping every placeholder bind:
+  `.filter(b => !placeholders.has(b.seat))` (`run-retry-launch.js:59`).
   So `retrySeatOf.get(leg)` is always either `undefined` or a REAL `unit.seats` entry, with a
-  backstop at `run-retry.js:216` (`if (!ff) { continue; }`) dropping anything that still can't find
+  backstop at `run-retry.js:184` (`if (!ff) { continue; }`) dropping anything that still can't find
   its `launched` entry. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
   (`run-stage1-rows.js:146` legs, `:163` waves) — which is the condition
@@ -2241,8 +2243,8 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   `retryLegBySeat` — because nothing on the path to `stillDeadRetryLegs` can produce a bound leg
   without also producing the seat that makes its row `exact`.
 - **Earned, not asserted.** Two mutants, scratchpad-applied and reverse-edited byte-exactly (never
-  `git checkout --`): **NOPLACEHOLDERFILTER** (drop `run-retry.js:132` alone) does NOT reach this
-  shape — the leg's `launched` lookup resolves differently and the `:216` backstop drops it instead,
+  `git checkout --`): **NOPLACEHOLDERFILTER** (drop `run-retry-launch.js:59` alone) does NOT reach
+  this shape — the leg's `launched` lookup resolves differently and the backstop drops it instead,
   `stillDeadRetryLegs = 0`, a DIFFERENT loss that happens to total the same 0.1600. **FAKEBIND**
   (drop `:132` AND give the placeholder the alias as its own id — a two-line change) reaches it
   exactly: 1 bound still-dead retry leg, `GAP = 0.0700`, precisely that leg's own `usage` sitting
@@ -2272,14 +2274,17 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   `stillDeadLegs` are deliberately the SAME bound legs, so those rows are already `exact`). No
   fixture anywhere pairs a BOUND still-dead retry leg with a `!exact` row, and per the fuzz above, no
   real input the retry path can produce does either.
-- **The comment this measurement earned.** `run-stage1-rows.js:174` (inside `pushDeadSeatRows`'s
-  row-building loop, this commit) now names `run-retry.js:126`/`:132` as the reason its `exact` gate
+- **The comment this measurement earned.** `run-stage1-rows.js:171-175` (inside `pushDeadSeatRows`'s
+  row-building loop) now names `run-retry-launch.js:53`/`:59` as the reason its `exact` gate
   is safe — the cross-file half of the invariant nothing previously enforced or documented.
-- **Concern for whoever extracts `run-retry.js` next** (the round-2 B1/B2/B3 work above):
-  `run-retry.js` is at 295/300, one FAKEBIND-sized change away from opening this hole for real, and
-  nothing in either file's test suite would go red if it did. That extraction should carry a named
-  mutant on this conjunction (or a pin that a bound still-dead retry leg always resolves `exact`),
-  not just the B1–B3 fixes it already owes.
+- **~~Concern for whoever extracts `run-retry.js` next~~ — DISCHARGED by T-A2 (2026-08-17).** The
+  concern was that `run-retry.js` sat at 295/300, one FAKEBIND-sized change away from opening this
+  hole for real, with nothing in either file's test suite going red if it did. The extraction landed
+  (`run-retry.js` 295 ⇒ 263; the conjunction now lives in `run-retry-launch.js :: bindRetryWave`)
+  and it carried the asked-for pins: `tests/council/run-retry-launch.test.js` pins both halves
+  directly — unique placeholder ids (named mutant **COLLIDEID**) and placeholder binds never
+  reaching `retrySeatOf` (named mutant **NOPLACEHOLDERFILTER**) — plus identity-by-object pins on
+  the move itself. The B1–B3 fixes remain owed; only this rider is closed.
 
 ⚠️ **A second, unrelated gap the same fuzz run surfaced (98/1200 runs) — recorded because it was
 found in passing, not because it belongs to this PR.** The mirror image of the finding above: on a
@@ -2290,9 +2295,11 @@ an identified bench, and the stray's own alias-based key misses. The SAME leg IS
 `seat-unbound` degrade channel (`orphanLegNote`, `stage1-bind.js:53`, called from
 `run-stages.js:140`) — so this is a disclosed orphan-leg class, not a silent one, but its `usage`
 reaches no runStats row at all. Measured instance: `BOUGHT 0.1000` vs `ON ROWS 0.0600`, the 0.0400
-gap being the stray's own usage. **All three deciding lines — `run-retry.js:132`, `:216`, and
-`run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this predates T2.2 and predates
-this PR, and cannot be fixed here: the drop is in `run-retry.js`, which is at 295/300.
+gap being the stray's own usage. **All three deciding lines — the placeholder-bind filter (then
+`run-retry.js:132`, now `run-retry-launch.js:59`), the `!ff` backstop (then `:216`, now
+`run-retry.js:184`), and `run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this
+predates T2.2 and predates this PR. It is still not fixed here (out of this PR's scope), though the
+size argument for deferring it has lapsed: T-A2 took `run-retry.js` from 295/300 to 263/300.
 
 ### Size gate — re-measured 2026-08-16
 
@@ -2717,7 +2724,8 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
   note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
   roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
-  is duplicated near-verbatim in a **different** set of three files: `run-retry.js:118-130`,
+  is duplicated near-verbatim in a **different** set of three files: `run-retry-launch.js:50-60`
+  (was `run-retry.js:118-130`; lifted verbatim by T-A2, 2026-08-17),
   `run-stage2.js:89-106`, `run-debate-revote.js:106-117` — this time `run.js` is the one that does
   NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
@@ -3078,12 +3086,15 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `require()` from `src/`. (The only two `require()` calls under `electron/workspace-ui/` —
     `live-model.js:58`, `live-seats.js:113` — are same-directory and guarded by
     `typeof module !== 'undefined'`, i.e. jest-only.)
-  - **Disposition (a) — roster-padding core → v4.8, ruling R14.** `src/council/run-retry.js:121-131`,
+  - **Disposition (a) — roster-padding core → v4.8, ruling R14.**
+    `src/council/run-retry-launch.js:50-60` (`:: bindRetryWave` — the block T-A2, 2026-08-17, lifted
+    out of `run-retry.js` unchanged; **it is still ONE of the three sites, not a consolidation**),
     `src/council/run-stage2.js:91-107` and `src/council/run-debate-revote.js:115-126` each build the
     same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filter the
     placeholders back out — ~11 lines apiece, and all three already `require('./seats')` (as does
     the proposed home), so the consolidation costs no new dependency. All three citations re-derived
-    2026-08-16; none had rotted. ⚠️ These are a **different set of three files** from Count 1's —
+    2026-08-16; the first re-derived again 2026-08-17 after the lift. ⚠️ These are a **different set
+    of three files** from Count 1's —
     overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:115-126`, a
     `seatKey` spelling at `:64`), while `run.js` carries no padding (it consumes `s2.judgeResults`,
     already padded by Stage 2) and `run-stage2.js` spells no `seatKey`. Read "three files" in either

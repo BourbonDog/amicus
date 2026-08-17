@@ -82,7 +82,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
   // are appended, run-stages.js:153, so `reviews` order is no longer seat order
   // — both arrays still derive from the same `reviews`).
-  // §3.4's padding pattern (run-retry.js:121-127): bindSeats filters falsy
+  // §3.4's padding pattern (run-retry-launch.js :: bindRetryWave): bindSeats filters falsy
   // roster entries internally, so a `null` hole would slide every later slot,
   // and two `{id:null}` sentinels would collide on its id-keyed dedup.
   // Placeholders are tracked by IDENTITY, never an id-name prefix test — a

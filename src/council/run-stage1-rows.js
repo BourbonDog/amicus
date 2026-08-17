@@ -168,11 +168,11 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   }
 
   for (const [, { seat, alias, exact, join }] of deadSeats) {
-    // ⚠️ Safe only because run-retry.js DROPS every placeholder bind (:132) and keeps
-    // placeholder ids unique (:126) — together they guarantee a BOUND still-dead retry
-    // leg always resolves `exact` here, never the branch below. Break that conjunction
-    // and a bound retry leg's usage is lost silently. Measured unreachable today — see
-    // BACKLOG.md's PR #170 T2.2 section (the retry-leg-drop finding).
+    // ⚠️ Safe only because `run-retry-launch.js :: bindRetryWave` DROPS every placeholder
+    // bind (:59) and keeps placeholder ids unique (:53) — together they guarantee a BOUND
+    // still-dead retry leg always resolves `exact` here, never the branch below. Break that
+    // conjunction and a bound retry leg's usage is lost silently. Measured unreachable
+    // today — see BACKLOG.md's PR #170 T2.2 section (the retry-leg-drop finding).
     let finalLeg = exact ? retryLegBySeat.get(join) : undefined;
     // v4.8 council A1: claim the spare HERE, and never as `finalLeg`. It is consumed exactly
     // as before — same pool, same `shift()`, same one-apiece hand-out, so the SET of billed

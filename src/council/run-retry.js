@@ -14,27 +14,18 @@
  * only.
  */
 
-const briefings = require('./briefings');
 const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
 const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
 const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
   = require('./run-retry-notes');
-const { bindSeats } = require('./seats');
+// briefingFor + the retry roster pad/bind step live in ./run-retry-launch (v4.8 T-A2 split).
+const { briefingFor, bindRetryWave } = require('./run-retry-launch');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
 // groupStage1Losses is re-exported below — run-retry.test.js imports it
 // from here.
 const { groupStage1Losses, planStillDeadSources, seatKey, twinAliases, legLossKey,
   srcLegClaimer } = require('./run-retry-group');
-
-/** The briefing a retry unit re-issues — same builders Stage 1 used. */
-function briefingFor(o, unit) {
-  if (unit.unit === 'critic') { return briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }); }
-  if (unit.unit === 'lens') {
-    return briefings.buildLensBriefing({ lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date });
-  }
-  return briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date });
-}
 
 /**
  * The retry pass. Serial by design (spec D-order: bench, critic, lenses) —
@@ -71,7 +62,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // unmappable lens loss (no carrier resolved an index), a lens index
     // outside the run's actual lens roster (coordinator-review MINOR-7b: a
     // malformed waveId like "...-l99" must not become an out-of-range
-    // `o.lenses[98]` access inside briefingFor), or a unit whose sources
+    // `o.lenses[98]` access inside run-retry-launch.js's briefingFor), or a unit whose sources
     // named zero models — is never launched. Its sources fall back to the
     // ordinary skipped-loss path so the caller's normal degrade notes still
     // fire; being unmappable is not an exemption from the record.
@@ -107,36 +98,13 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     if (isAbortExit(res.exitCode)) { out.aborted = res.exitCode; return out; }
 
     const legs = (res.wave && Array.isArray(res.wave.legs)) ? res.wave.legs : [];
-    // The retry wave's roster IS unit.seats — recordFailure pushes models and
-    // seats in lockstep, and the legId `-N` suffix slot-indexes that same
-    // launch plan. A null entry means "we could not identify this seat"; pad it
-    // with a position-stable placeholder carrying a UNIQUE id so no slot
-    // shifts, then drop the placeholder binds so nothing is guessed.
-    // ⚠️ Never pass unit.seats raw and never use a null-id sentinel: seats.js
-    // filters falsy roster entries internally (so raw === filtered, and both
-    // slide every later slot into a hole), and two `{id: null}` sentinels
-    // collide on the id-keyed dedup.
-    // Placeholders are tracked by IDENTITY, never by an id-name prefix test: a
-    // bench alias that literally began `__unbound-` would make a name test drop
-    // a REAL seat's binding — a name-collision channel inside the one mechanism
-    // whose whole contract is "never guess".
-    const placeholders = new Set();
-    const retryRoster = unit.seats.map((s, i) => {
-      if (s) { return s; }
-      const p = { id: `__unbound-${unit.waveId}-${i + 1}`, alias: unit.models[i], role: 'seat', lens: null, position: i + 1 };
-      placeholders.add(p);
-      return p;
-    });
-    const bindRes = bindSeats(unit.waveId, retryRoster, legs);
-    const retrySeatOf = new Map(bindRes.bound
-      .filter(b => !placeholders.has(b.seat))
-      .map(b => [b.leg, b.seat]));
+    const { retrySeatOf, orphanLegs } = bindRetryWave(unit, legs);
     for (const [l, s] of retrySeatOf) { out.seatOf.set(l, s); }
     // A retry leg that matches no roster slot is the same attribution failure
     // Stage-1 announces — but this module emits heals ONLY and never notes a
     // degrade (see the @module docblock), so it is REPORTED here and emitted by
     // the caller, exactly as stillDeadNotes already are.
-    for (const leg of bindRes.orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
+    for (const leg of orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
     // Every seat this unit LAUNCHED for, keyed exactly the way recordFailure
     // keyed it: the identified seat's id, else the alias. Keys are unique by
     // construction — recordFailure dedups on this same key, so two slots can
