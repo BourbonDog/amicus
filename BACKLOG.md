@@ -2160,11 +2160,24 @@ this table exists to prevent.
       but two of its sentences are no longer true of the code. `pushDeadSeatRows` CAN now verify the
       statement both invariants exist to make ("no first leg is SKIPPED while its alias key is
       superseded"): it tests `retry.skippedDeadLegs` by leg-object identity where the alias key is
-      relied on, and where a violation would otherwise double-count it REFUSES the second row and
-      announces on channel `internal` instead of throwing (on R2's taskId-less floor there is no
-      second count to refuse, and refusing there would LOSE the leg's spend, so it does not).
-      Either way, breaking an invariant no longer double-counts a billed leg. Both
-      mutants were re-run and re-observed RED at `2abbeefa`; neither pin was weakened.
+      relied on, and where refusing the row actually repairs the count it REFUSES it and announces
+      on channel `internal` instead of throwing. On the shape the pins cover — twins whose row key
+      TELLS THEM APART — that closes the double count. Both mutants were re-run and re-observed RED
+      at `2abbeefa`; neither pin was weakened.
+    - ⚠️ **RESIDUAL R1 — MEASURED, not argued (T-A5 fix round 2). OPEN.** The refusal repairs the
+      count only for the leg `deadLegs0.find` would hand back, and `find` returns ONE leg per row
+      key. On R2's taskId-less floor, where twins share a row key, refusing drops the others'
+      `usage`. **Reachable by breaking invariant 2 ALONE**, not by a second break: `supersededKeys`
+      also draws from `retry.recoveredLegs`, and no `attemptedSeats` writer sits on run-retry.js's
+      HEAL branch — they are all on still-dead paths — so a healed twin supersedes the alias while
+      `attemptedSeats` stays empty. Measured end to end (3 taskId-less unbound twins, one lens,
+      mutant GUESSPOS applied, wired exactly as `run-stages.js` wires it): billed 0.60; recorded
+      **0.20** with the refusal and **0.70** without it, with `attemptedSeats` observed empty. So on
+      THIS shape the refusal is a REGRESSION — it turns a +0.10 over-count into a −0.40 under-count
+      that loses two billed legs outright. Left unfixed in T-A5 by owner instruction (scope). The
+      narrowing it needs is ONE conjunct — `deadLegs0.find(l => rowKeyOf(l) === rowKeyOf(dead))
+      === dead`, i.e. "the leg the fallback will hand back is THIS one" — which is the property
+      `pushDeadSeatRows`' own comment already claims.
 
 ✅ **CLOSED by v4.8 Phase 2 T-A1** (commit `955bd7c9`) — the extraction commit this note asked for
 corrected the docblock in place, net zero lines, scoping the masking to pre-PR5c HEAD and stating
@@ -3072,7 +3085,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `:153` — all three falsified by T-A1 moving `seatKey`/`legLossKey` into `run-retry-keys.js` and
     by `run-stage1-rows.js` growing. A rigour claim is only as current as its date, so this one
     carries the date and the method: each site below was opened at its stated line and read.
-    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**284**) and moved BOTH of its spellings a FIFTH
+    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**289**) and moved BOTH of its spellings a FIFTH
     time; rather than restate two numbers that rot on the next edit, they are now anchored BY
     SYMBOL — which is why those two entries alone carry no line)
     — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and

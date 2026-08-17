@@ -1468,7 +1468,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
 describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   // Required HERE, not at the file head, deliberately: this file's top is cited by LINE from
   // `seat-fixtures.test.js` and `BACKLOG.md`, and a require added up there would silently falsify
-  // both. The PRODUCTION reader of a degrade's `data.seat`, so the channel-inertness pin below runs
+  // both. ONE of the four PRODUCTION readers of a degrade's `data.seat`, so the pin below runs
   // through the real consumer instead of re-checking a literal channel list against itself.
   const { deriveSeatLoss } = require('../../src/council/verdict');
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);

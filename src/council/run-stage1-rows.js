@@ -117,7 +117,8 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     ...retry.recoveredLegs.map(keyOf),
     ...retry.stillDeadLegs.map(keyOf),
   ]);
-  // Refusing the row IS the repair, and `willTakeItsOwnLeg` is what makes the repair EXACT. The
+  // Refusing the row is the repair wherever the row key TELLS THE TWINS APART — see the measured
+  // ⚠️ below for where it does not, which is the honest bound on this whole paragraph. The
   // double count needs BOTH halves: a skipped leg whose alias key is superseded, AND the dead-seat
   // loop below handing that same leg back as its own primary row. run-stages.js merges
   // `skippedDeadLegs` into the `stillDeadLegs` handed in here, so the leg is a still-dead seat
@@ -126,12 +127,16 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // indistinguishable twins collapsing onto one leg-less row — the superseded row is the only
   // place that leg's `usage` survives at all, and refusing it would trade a double count for a
   // LOST billed leg. So refuse the first shape and leave the second exactly as it was.
-  // ⚠️ The scope of "exact", stated because the code does not check it: `deadLegs0.find` returns
-  // ONE leg per row key, so the refused legs' row keys must be DISTINCT for each to get a primary
-  // row back. Two refused legs sharing a key would leave one row serving both and lose a leg's
-  // `usage`. That needs a SECOND, different break — `supersededKeys` non-empty for a key
-  // `attemptedSeats` does not hold, and those two move in lockstep (run-retry.js adds both
-  // spellings) — so it is not reachable by breaking either invariant above alone.
+  // ⚠️ The scope of "exact" — MEASURED end to end (T-A5 fix round 2), not argued. `deadLegs0.find`
+  // returns ONE leg per row key, so a refusal only repairs the leg that fallback would actually
+  // hand back. Two refused legs SHARING a key (R2's taskId-less floor again) leave one row serving
+  // both, and the other's `usage` is dropped. ⚠️ This is reachable by breaking invariant 2 ALONE:
+  // `supersededKeys` also draws from `retry.recoveredLegs` just above, and NO writer of
+  // `attemptedSeats` sits on run-retry.js's heal branch — they are all on still-dead paths — so a
+  // healed twin can supersede the alias while `attemptedSeats` stays empty. Measured on 3
+  // taskId-less unbound twins, one lens, GUESSPOS applied: billed 0.60, recorded 0.20 with this
+  // refusal against 0.70 without it. Filed as `RESIDUAL R1` in BACKLOG.md, with the one conjunct
+  // that closes it (`deadLegs0.find(…) === dead`) — deliberately NOT applied here: scope ruling.
   // It is announced either way, because a silently corrected number is the failure mode this join
   // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
   // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR
