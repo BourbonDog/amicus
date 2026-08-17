@@ -110,6 +110,16 @@ function planStillDeadSources(unit, seatOf, roster) {
  * claimed that collapse was correct "because nothing distinguishes them". The ROW does
  * have a distinguisher — see `run-retry-keys.js :: legLossKey` — and the SLOT does not need one.)
  *
+ * v4.8 T-A3: …and NO FURTHER than the roster proves. On the inexact arm the alias's roster
+ * COUNT is the only upper bound there is, so mint up to it and stop: without it, N
+ * unattributable losses on a 2-seat alias minted N slots, each buying a real, billed retry
+ * leg for a seat that may not exist. (Not reachable end-to-end today — a first-pass dead
+ * wave carries real seats, and a wave cannot return more legs than it launched — but the
+ * safety rested entirely on those two facts, which nothing here stated or checked.)
+ * ⚠️ Scope, stated because the code cannot: this bounds SLOTS, i.e. `unit.models`, so a
+ * `trackModel: false` unit is unaffected — the critic's `.models` is fixed at creation
+ * (first paragraph above) and never grows here.
+ *
  * ⚠️ The key is ADDED as `seatId`, and on the inexact branch it stays ALIAS-valued
  * for BOTH entries. `ff.seat`/`ff.seatId` become `data.seat` /
  * `data.firstFailure.seatId` on every emitted note, which verdict.js compares against
@@ -120,7 +130,12 @@ function planStillDeadSources(unit, seatOf, roster) {
 function recordFailure(unit, seat, ff, trackModel = true, seatObj = null, twins = null) {
   const key = seatKey(seatObj, seat);
   const identityIsExact = !!seatObj || !(twins && twins.has(seat));
-  if (identityIsExact && unit.firstFailures.some(f => f.seatId === key)) { return; }
+  // Exact identity: one seat is one entry. Inexact: `twins.get(seat)` is defined and >1
+  // exactly when this arm is taken, and it is the roster's whole claim about the alias.
+  const alreadyCovered = identityIsExact
+    ? unit.firstFailures.some(f => f.seatId === key)
+    : unit.models.filter(m => m === seat).length >= twins.get(seat);
+  if (alreadyCovered) { return; }
   unit.firstFailures.push({ ...ff, seatId: key });
   if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }
 }

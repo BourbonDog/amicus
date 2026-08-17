@@ -2125,7 +2125,7 @@ this table exists to prevent.
       changed and must say so) and +8 on the guard (7 comment lines + a 1 ⇒ 2-line expression; one
       line is impossible — the merged ternary is ~146 chars against this repo's 119 maximum).
       **8 over.** Shaving a comment to reach it is the documented failure tell and was refused;
-      even a comment-free version leaves `twinAliases`' docblock saying *"the answer is the empty
+      even a comment-free version left `twinAliases`' docblock saying *"the answer is the empty
       set"* about a function returning a Map, which is precisely the falsified-record class this
       release keeps paying for.
     - **Done criteria:** a named mutant that REMOVES the bound goes RED, plus controls proving the
@@ -2534,7 +2534,7 @@ carry forward rather than fix in-flight:
   it can no longer be cited as consistency for anything.
   **What actually governs the collapse now is the ROSTER, not `w.seats`.** Measured on the same
   probe: a `seats`-less wave with **no `o.seats` at all** still gives **1 row** — `twinAliases`
-  returns the empty set with no roster, which is its deliberate "no proof, err toward collapsing"
+  returns an empty Map with no roster, which is its deliberate "no proof, err toward collapsing"
   design. Controls held: `seats:[null,null]` on a twin alias → 2 rows; `seats`-less on unique
   aliases → 2 rows, one per model; identified seats → 2 rows that carry their seat ids.
 
@@ -3082,9 +3082,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     contrasts with *"the naive `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no
     alias fallback; and the **ten** `seatKey(...)` call sites (`run-debate-revote.js:132`
     `:: runRevoteWave`, `run-retry-keys.js:52 :: legLossKey`, `run-retry-group.js:64`/`:72`
-    `:: planStillDeadSources` and `:121 :: recordFailure`, `run-retry.js:121`/`:132`/`:169`/`:174`
+    `:: planStillDeadSources` and `:: recordFailure`, `run-retry.js:121`/`:132`/`:169`/`:174`
     `:: retryStage1Losses`, `run.js:229 :: runCouncil`) are consumers, not spellings —
-    `run-retry-group.js:121` (T2.1, **was `:115`, then `:185`**) is
+    `run-retry-group.js :: recordFailure` (T2.1, **was `:115`, `:185`, `:121`**) is
     `recordFailure`'s former hand-inlined spelling, now a call site, and
     `run-retry-keys.js:52` (**was `run-retry-group.js:66`**, moved by T-A1) is **new with T2.2**:
     `legLossKey` computes the plain seat key first and
@@ -3151,7 +3151,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
     conformance becomes unreachable without it). Only the **exported** copy earns its keep, with
     **eight** callers — `run-retry-keys.js:52 :: legLossKey`, `run-retry-group.js:64`/`:72`
-    (`:: planStillDeadSources`) and `:121` (`:: recordFailure`), and
+    (`:: planStillDeadSources`) and `:: recordFailure`, and
     `run-retry.js:121`/`:132`/`:169`/`:174` (all `:: retryStage1Losses`).
     (Was six before T2.1, 2026-08-16, `511cf43e`, which
     made `recordFailure`'s hand-inlined spelling a seventh caller — the same change that dropped
@@ -3313,7 +3313,7 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `['deepseek#1','deepseek#2']` on a twin bench and `degrade-channels.test.js:126` shows a
     shipped degrade carrying `seatId` — but it covers one arm, not the family.
     `srcLegStillDeadNote`'s call site does have `unit`, carrying `unit.seats` (index-parallel with
-    `unit.models`, pushed in lockstep at `run-retry-group.js:125 :: recordFailure` —
+    `unit.models`, pushed in lockstep at `run-retry-group.js :: recordFailure` —
     `if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }`; this entry said
     `:33`, a docblock line, before the 2026-08-17 re-derivation) and
     `unit.firstFailures[].seatId`, so the id is

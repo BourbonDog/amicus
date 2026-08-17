@@ -15,9 +15,9 @@
 const seatKey = (s, alias) => (s ? s.id : alias);
 
 /**
- * The aliases this run's roster proves are REPEATED — the only evidence that two
- * losses naming one alias are two seats and not one seat losing twice. No roster
- * means no proof, so the answer is the empty set.
+ * The aliases this run's roster proves are REPEATED, mapped to the COUNT of seats holding
+ * each — the only evidence that two losses on one alias are two seats and not one seat
+ * losing twice, and the BOUND on the slots they mint. No roster means no proof: empty Map.
  *
  * ⚠️ Deliberately NOT `run-retry-group.js :: planStillDeadSources`' own
  * `seatsPerAlias.get(alias) === 1`, and the difference is load-bearing. That rule gates an
@@ -30,7 +30,7 @@ const seatKey = (s, alias) => (s ? s.id : alias);
 function twinAliases(roster) {
   const n = new Map();
   for (const s of roster || []) { if (s && s.alias) { n.set(s.alias, (n.get(s.alias) || 0) + 1); } }
-  return new Set([...n.keys()].filter(a => n.get(a) > 1));
+  return new Map([...n].filter(([, c]) => c > 1));
 }
 
 /**
