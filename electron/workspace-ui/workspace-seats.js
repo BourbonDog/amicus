@@ -62,13 +62,13 @@
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
    * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
    *
-   * ⚠️ firstFailure is TRUTHINESS ONLY. It has two shapes, both built in
-   * run-retry-group.js :: groupStage1Losses — its deadLegs loop emits
-   * {seat, class:'leg', status, reason} (:205); its deadWaves loop emits
-   * {seat, class: lossClass(w), waveId, reason} (:189/:196/:200) with NO status key,
-   * where lossClass (:182) is 'wave' or, on a partial return, 'missing' — so any read
-   * of firstFailure.status is undefined on every wave-origin seat. Numbers re-derived
-   * 2026-08-17: right at b8fe2db6, they drifted ~+120 as that file grew 113→299.
+   * ⚠️ firstFailure is TRUTHINESS ONLY. Two shapes, both built in
+   * run-retry-group.js :: groupStage1Losses — deadLegs emits {seat, class:'leg',
+   * status, reason} (:205); deadWaves emits {seat, class: lossClass(w), waveId,
+   * reason} (:189/:196/:200) with NO status key (lossClass, :182, is 'wave' or
+   * 'missing' on a partial return) — so firstFailure.status is undefined on every
+   * wave-origin seat. Re-derived 2026-08-17: right at b8fe2db6 (:72/:76/:79/:84,
+   * file 113); net +117..+121 = growth 113→299 (+181..+185) less T-A1's −64 (now 235).
    */
   function retriedSeats(degrades) {
     var out = Object.create(null);
