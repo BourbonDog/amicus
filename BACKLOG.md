@@ -2134,7 +2134,8 @@ this table exists to prevent.
       two unbounded shapes above now cap at 2 and that the no-roster and unique-alias benches did
       not move.
   - **ROUND-2 A2 / C1 [major] — make `supersededKeys`' cross-keyspace join enforce its own safety.**
-    `supersededKeys` (`run-stage1-rows.js :: pushDeadSeatRows`) is the ONE join left in the
+    `supersededKeys` (`run-stage1-superseded.js :: supersededRows` since the v4.8 T-A6 split;
+    it was `run-stage1-rows.js :: pushDeadSeatRows` when this was filed) is the ONE join left in the
     alias-granular keyspace after rows and `attemptedSeats` moved to minted keys. The council does
     **not** dispute that it is safe today; the objection is that its safety is **emergent, not
     enforced** — the function cannot verify either invariant it stands on, so a change elsewhere can

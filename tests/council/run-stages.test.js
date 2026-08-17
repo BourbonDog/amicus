@@ -1496,7 +1496,8 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     // unbound `keyOf` is the same string 'deepseek', so before this guard (base `2abbeefa`) A's own
     // first leg was pushed as a `superseded` row AND handed straight back as A's primary row: one
     // billed leg, two rows carrying its usage. Mutant TRUSTALIAS — delete the `skippedLegs.has(dead)`
-    // arm in run-stage1-rows.js so the join trusts the alias key alone — reds the first assertion.
+    // arm in `run-stage1-superseded.js :: supersededRows` (it was in run-stage1-rows.js until the
+    // v4.8 T-A6 split) so the join trusts the alias key alone — reds the first assertion.
     const legA = legFor(1, usageA);
     const legB = legFor(2, usageB);
     const notes = [];

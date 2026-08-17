@@ -10,7 +10,9 @@ const rse = require('../../src/council/run-stats-entry');
 describe('run-stats-entry — extraction pins (v4.8 Phase 1 T1.1)', () => {
   test('P1 — re-export is the SAME function object, not a copy', () => {
     // Every production consumer (run-chair.js:23, run-stage1-rows.js:9,
-    // run-stage2.js:26, run-stages.js:27, run-finish.js via `asm.`) writes
+    // run-stage2.js:26, run-stages.js:27, run-stage1-superseded.js — added by the v4.8 T-A6
+    // split, and deliberately carrying NO line number so it cannot rot — run-finish.js
+    // via `asm.`) writes
     // require('./run-assemble') — a different specifier string than `asm`
     // above, but CommonJS resolves both to the same absolute path and
     // caches by resolved path: one entry, shared by every requirer, no

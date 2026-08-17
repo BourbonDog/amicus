@@ -974,7 +974,8 @@ describe('v4.8 T2.2 review A2: srcLegClaimer\'s single-use-per-leg contract', ()
 });
 
 describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', () => {
-  // `supersededKeys` (run-stage1-rows.js :: pushDeadSeatRows) is the ONE join left in the
+  // `supersededKeys` (run-stage1-superseded.js :: supersededRows — it was in
+  // `run-stage1-rows.js :: pushDeadSeatRows` until the v4.8 T-A6 split) is the ONE join left in the
   // ALIAS-granular keyspace while the dead-seat rows and `attemptedSeats` moved to `rowKeyOf`.
   // Two independent reviewers said the comment ARGUING it safe — (1) skipping is all-or-nothing
   // per UNIT, (2) two UNBOUND LEG-origin twins always share a unit — was not enough, so since v4.8
