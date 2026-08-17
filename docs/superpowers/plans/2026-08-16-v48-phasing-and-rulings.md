@@ -60,7 +60,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 21 | **HOLD** | lens/position unrecoverable | owner-deferred; its own prose is false (§3) |
 | 22.1 | OPEN | raiser's own leg orphans | `tally.js :: tally` |
 | 22.2 | OPEN | peer twin's leg orphans | `tally.js :: tally` |
-| 22.3 | **PARTIAL** (T2.2, `33e2ecf7`) | ~~two orphaned twins → ONE dead row~~ producer fixed, N→N on both arms **for every twin it is handed**; open: a PARTIAL retry return still under-counts (B1) and both notes read slot 0's `firstFailure` (B2) | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (open, needs an extraction) |
+| 22.3 | **DONE** (T2.2 `33e2ecf7` + T-A4 `1e385895`, 2026-08-17) | ~~two orphaned twins → ONE dead row~~ producer fixed, and the reconcile half too: a PARTIAL retry return now gives 2 notes / 2 stillDeadLegs (B1) and each note reads its OWN slot's `firstFailure` (B2), output-identical to the BOUND control. ⚠️ Row/note half closed in **four of four** retry shapes; the SLOT half is closed **and bounded** — `min(N, roster count)` since T-A3 `4413eb25`, never an unqualified N→N | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (done — slot COUNT, not first-wins) |
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
 | 22.5 | OPEN | orphaned Stage-2 judge rendered nowhere | `report.js :: toModel` · `matrix-model.js` · `report-html.js` |
 | 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |

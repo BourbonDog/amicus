@@ -3150,7 +3150,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
      separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
      fixes the bug it re-arms.
-  3. ✅ **PARTIAL — the producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`).**
+  3. ✅ **DONE — producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`); reconcile half 2026-08-17 (T-A4, `1e385895`).**
      ~~Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.~~ `deadSeats`
      (`src/council/run-stage1-rows.js :: pushDeadSeatRows` — anchored BY SYMBOL; the old `:76-89`
      has moved and now points at unrelated lines) was a **Map** whose key fell back to the alias
@@ -3160,19 +3160,29 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      which mints from the leg's own `taskId` on a proven twin alias, so N orphaned twin legs that
      REACH this producer give N rows; the wave arm marks each unidentified slot with a `Symbol`.
      Every row still carries **no** seat — the count moved, the attribution deliberately did not.
-     ⚠️ **Why this is PARTIAL and not DONE, and why the scope clause above is load-bearing.** The
-     producer cannot emit a row for a seat that never reaches it. A retry wave that returns FEWER
-     legs than it launched still yields **1** note and **1** row for two unattributable twins:
-     `run-retry.js`'s `launched` Map is `seatKey`-first-wins, and it needs an extraction (+7 lines
-     wanted, 5 free) before the fix can be written. A second consequence of the same key: both
-     still-dead notes read slot 0's `firstFailure`. These are the code council's **B1** and **B2**
-     on PR #170; both re-measured with controls, and the whole per-retry-outcome table, live under
-     "The durable finding" above, together with the **NEXT TASK** entry that closes them.
+     ✅ **THE RECONCILE HALF IS CLOSED (T-A4, `1e385895`, 2026-08-17).** The filing is kept below,
+     struck, because its scope clause is still the reason the count is what it is.
+     ~~Why this is PARTIAL and not DONE: a retry wave that returns FEWER legs than it launched still
+     yields **1** note and **1** row for two unattributable twins; `run-retry.js`'s `launched` Map is
+     `seatKey`-first-wins, and it needs an extraction (+7 lines wanted, 5 free) before the fix can be
+     written. A second consequence of the same key: both still-dead notes read slot 0's
+     `firstFailure`.~~ **Every clause of that is now false.** The extraction landed first
+     (T-A1 `955bd7c9`, T-A2 `2517a947`), `launched` is no longer a first-wins presence Map — an entry
+     carries a slot COUNT and its OWN per-slot `firstFailure`s — and a partial return yields **2**
+     notes and **2** `stillDeadLegs`, output IDENTICAL to the BOUND control in both the partial- and
+     full-return shapes. These were the code council's **B1** and **B2** on PR #170; both are fixed,
+     and the per-retry-outcome table lives under "The durable finding" above.
+     ⚠️ **The scope clause SURVIVES the fix**: the producer still cannot emit a row for a seat that
+     never reaches it — `pushDeadSeatRows` emits one row per still-dead input it is HANDED.
      ⚠️ **Never restate this as the unqualified "N orphans → N retry slots and N rows, both arms".**
-     The retry-SLOT half is closed in every shape; the ROW/NOTE half is closed for a wholesale retry
-     death, a FULL retry return and a skipped unit, and open for a PARTIAL return.
+     The ROW/NOTE half is now closed in **all four** retry shapes — wholesale retry death, FULL
+     return, skipped unit, and (since T-A4) PARTIAL return. The retry-SLOT half is closed in every
+     shape **and BOUNDED by the roster since T-A3 (`4413eb25`)**: N orphans buy
+     `min(N, roster count)` slots, not N — shape A 3 ⇒ **2**, shape B 4 ⇒ **2**, controls 2 / 1 / 1
+     unmoved. That bound is the fix, not a residual, and it is precisely why the headline stays
+     banned even now that B1/B2 are closed.
      ⚠️ **The R2 floor is deliberate, not a gap.** A leg with NO `taskId` has genuinely nothing to
-     mint from and still collapses to one row — inventing an id there is the guess this module
+     mint from and still collapses to one row — inventing an id there is the guess that keyspace
      exists to reject. Pinned by name: `run-stages.test.js` :: *"T12: two orphaned twins the
      producer cannot tell apart still collapse (R2 floor)"*.
   4. **A `--council` preset with a whitespace-padded member is functionally a twin bench that
