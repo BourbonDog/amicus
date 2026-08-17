@@ -92,11 +92,12 @@ Accurate at base: `run-retry.js:126` (unique placeholder id), `:132` (drop place
 
 ### 0.6 ⚠️ A claim in the record that does NOT hold — verify before relying on it
 
-`BACKLOG.md:2208` (SI-TWINS) states the desync risk is *"Pinned today by the named mutants
+**`BACKLOG.md` :: SI-TWINS** — the sentence beginning *"Pinned today by the named mutants"*
+(`:2219` as of `1988df54`) — states the desync risk is *"Pinned today by the named mutants
 `DESYNCLEG` and `DESYNCPLAN`."* Measured across the whole repo:
 
-- **`DESYNCPLAN` appears in exactly one place: `BACKLOG.md:2208`.** No test, no comment, no pin.
-- `DESYNCLEG` appears only at `BACKLOG.md:2208` and as a *retrospective* mention in
+- **`DESYNCPLAN` appears in exactly one place: that sentence.** No test, no comment, no pin.
+- `DESYNCLEG` appears only in that sentence and as a *retrospective* mention in
   `tests/council/run-stages.test.js:1142`, inside the test at `:1132`.
 
 So one half of that safety claim is real and the other is **unverified**. T-A6 must settle it by
@@ -355,11 +356,11 @@ collection. If one site's differs, a retried twin re-acquires its own FIRST-atte
 already carries a `superseded` row — and that leg's cost lands in runStats **twice** while its retry
 leg lands nowhere.
 
-**⚠️ First, settle §0.6 by execution.** `BACKLOG.md:2208` claims this is *"Pinned today by the named
+**⚠️ First, settle §0.6 by execution.** `BACKLOG.md` :: SI-TWINS claims this is *"Pinned today by the named
 mutants `DESYNCLEG` and `DESYNCPLAN`"*. `DESYNCPLAN` exists nowhere but that line.
 1. Apply a DESYNCPLAN-shaped mutation (desynchronise `planStillDeadSources`' `twins` from the
    producers') and determine whether **any** test goes RED.
-2. If none does, **add the pin before consolidating**, and correct `BACKLOG.md:2208` — do not restate
+2. If none does, **add the pin before consolidating**, and correct that SI-TWINS sentence — do not restate
    an unverified claim.
 3. Same for `DESYNCLEG`: verify the pin at `run-stages.test.js:1132` actually reds under it.
 
@@ -392,8 +393,8 @@ then re-open each at its stated line and read it before writing it down.
 - Tick what shipped; move SI-22.3 from PARTIAL to its true post-PR verdict, stated with its scope.
 - Correct the stale-docblock citation `94-95` ⇒ **94–96** (measured, §0.5).
 - Record the new measured sizes in the size-gate table, including the two new files.
-- Correct `BACKLOG.md:2208` per T-A6's finding.
-- Note that `BACKLOG.md:2213` is LIVE-WRONG about `buildVerdict` (called at
+- Correct `BACKLOG.md` :: SI-TWINS's *"Pinned today by the named mutants"* sentence per T-A6's finding.
+- Note that `BACKLOG.md` :: the SI-09 `buildVerdict` entry (`:2616` as of `1988df54`) is LIVE-WRONG about `buildVerdict` (called at
   `run-verdict-files.js:41`, not `run-assemble.js`) and now collides numerically with SI-25's correct
   `run-assemble.js:223`. Fix or explicitly re-file it.
 - ⚠️ Do not restate the unqualified headline *"N orphans → N retry slots AND N rows"* in either
