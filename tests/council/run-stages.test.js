@@ -1254,9 +1254,10 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 
 // ---- v4.8 PR4c Task 1 (plan §3.1): dead-seat rows name their SEAT ----
 // pushDeadSeatRows is exported (run-stage1-rows.js's `module.exports` — anchored by SYMBOL,
-// and carrying NO line number on purpose: this citation read `:111` from the day it was
-// written and the export has never once been on that line, having moved twice more since.
-// A number here rots faster than anyone re-reads it), so both shapes are
+// and carrying NO line number on purpose. This citation read `:111`, which was correct at
+// 76f0a3f8 — but the very commit that WROTE it, c05da0a8, grew the file and moved the export
+// to `:116` in the same breath, so it shipped already stale. It has moved twice more since
+// (`:160`, then `:176`). A number here rots faster than anyone re-reads it), so both shapes are
 // three-line fixtures over the REAL bindSeats/buildSeats rather than a scripted
 // run. The two shapes are NOT symmetric and that asymmetry is the point:
 //   bound   -> one row per seat, each stamped with its own seat id

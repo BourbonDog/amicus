@@ -2171,9 +2171,22 @@ carry forward rather than fix in-flight:
   test — `run-stages.test.js`'s "CARRY (Task 6 minor): a twin bench retry with ONE seat bound and
   one not heals exactly one twin". The `run-stages.js` ABORT-branch half is the one still verified
   by hand-probe only, with no pinned test.
-- A hypothetical `seats`-less dead-wave record would collapse twins to one row. Unreachable today
+- ~~A hypothetical `seats`-less dead-wave record would collapse twins to one row. Unreachable today
   — all four dead-wave producers carry `seats` — and consistent with the existing "two
-  unidentifiable losses collapse to one" rule elsewhere, but worth a note if that ever changes.
+  unidentifiable losses collapse to one" rule elsewhere, but worth a note if that ever changes.~~
+  ⚠️ **BOTH clauses are FALSE since T2.2 (`33e2ecf7`, 2026-08-16); corrected in `27febfb8`.** The
+  *unreachable today* half still holds — all four dead-wave producers carry `seats` — but the
+  consequence and the justification do not. Measured through the real `pushDeadSeatRows` with the
+  `seats` key entirely **absent** on a twin alias: **2 rows**, not one. `s` is `null` either way, so
+  `exact = !!s || !twins.has(alias)` is **false** on a repeated alias and the slot keys by a unique
+  `Symbol` — the R2 MARK branch. And the *"two unidentifiable losses collapse to one" rule
+  elsewhere* is precisely the rule T2.2 abolished (see SI-22.3 and "The durable finding" above), so
+  it can no longer be cited as consistency for anything.
+  **What actually governs the collapse now is the ROSTER, not `w.seats`.** Measured on the same
+  probe: a `seats`-less wave with **no `o.seats` at all** still gives **1 row** — `twinAliases`
+  returns the empty set with no roster, which is its deliberate "no proof, err toward collapsing"
+  design. Controls held: `seats:[null,null]` on a twin alias → 2 rows; `seats`-less on unique
+  aliases → 2 rows, one per model; identified seats → 2 rows that carry their seat ids.
 
 **Size note:** `src/council/run-stages.js` is at 292/300 lines and `src/council/run-retry.js` at
 290/300 — the next task touching either file must extract before adding, not squeeze in more.
@@ -2629,13 +2642,18 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   `:115` (**now `:185`** — T2.2 moved it, see the next note), excluded by Count 1's own counting
   rule, not a spelling. **Count 1 is eight, Count 2 is
   still nine; they are no longer both nine.** Detail and re-derived sites are under Count 1 below.
-  ⚠️ **Citations re-derived against the FINAL T2.2 tree, 2026-08-16 (`33e2ecf7`):** T2.2 rewrote
-  `run-retry-group.js` (226→299 lines) and `run-stage1-rows.js` (116→171), so **every** citation
+  ⚠️ **Citations re-derived against the FINAL tree, 2026-08-16 (`27febfb8`):** T2.2 (`33e2ecf7`)
+  rewrote `run-retry-group.js` (226→**299** lines) and `run-stage1-rows.js` (116→**160**); the
+  records commit `27febfb8` then added a 16-line comment to `run-stage1-rows.js` (160→**176**) and
+  touched no other source file. So **every** citation
   into those two files moved. **Neither COUNT changed** — Count 1 is still eight and Count 2 still
   nine; T2.2 added no spelling of the rule, only a ninth and tenth *call site* of the exported one.
   Moved: `run-retry-group.js` `:52`→**`:29`** (the definition), `:93`→**`:128`**, `:101`→**`:136`**,
-  `:115`→**`:185`**, `:109`→**`:151`** (excluded, null-fallback); `run-stage1-rows.js`
-  `:42`→**`:45`**, `:85`→**`:129`**; `run-retry.js` `:151`→**`:153`**, `:162`→**`:164`**,
+  `:115`→**`:185`**, `:109`→**`:151`** (excluded, null-fallback — all four final at `33e2ecf7`,
+  since `27febfb8` did not touch this file); `run-stage1-rows.js`
+  `:42`→**`:45`**, `:85`→**`:129`** (that one via `:113` at `33e2ecf7`, then +16 from the comment —
+  `:124` was never this spelling, it was the `deadSeats.set(...)` line);
+  `run-retry.js` `:151`→**`:153`**, `:162`→**`:164`**,
   `:192`→**`:201`**, `:197`→**`:206`**. New: `run-retry-group.js:66` (`legLossKey`'s call).
   Unmoved and re-confirmed at their stated lines: `run-debate-revote.js:64`/`:132`,
   `run-stages.js:96`/`:106`, `run.js:228`/`:229`/`:231`, `run-retry-notes.js:58`,
@@ -2658,9 +2676,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
     measurement — see the correction note above.) Sites:
-    Sites, **all re-derived by execution against the final T2.2 tree (2026-08-16, `33e2ecf7`)** —
-    T2.2 rewrote `run-retry-group.js` (226→299) and `run-stage1-rows.js` (116→171), moving four of
-    the numbers below and adding a tenth call site:
+    Sites, **all re-derived by execution against the final tree (2026-08-16, `27febfb8`)** —
+    T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and `run-stage1-rows.js`
+    (116→**160**), and `27febfb8` added a 16-line comment to the latter (160→**176**), moving four
+    of the numbers below and adding a tenth call site:
     `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:29`
     (the exported one, PR5c; **was `:52`**), `run-stage1-rows.js:45` (**was `:42`**),
     `run-stage1-rows.js:129` (**was `:85`**), `run-stages.js:96`,
