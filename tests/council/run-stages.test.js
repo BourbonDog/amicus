@@ -1144,6 +1144,13 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // 1000, so the separator is the leg-LESS shape below, and the mutant reds on it. `usage`
     // is what keeps this distinct from the wholesale-death control two tests down: same
     // shape, but that one's rows carry usage null because no spare existed to claim.
+    // ⚠️ MUTANT DESYNCLEG, defined here at v4.8 T-A6 because the name lived in BACKLOG.md prose
+    // and in no test — "pinned by DESYNCLEG" was a claim to re-run, not a fact to inherit.
+    // The mutation: desynchronise `run-retry.js :: retryStage1Losses`' `twins` from the rest of
+    // the run's, so `srcRowKey` files the UNMINTED key into `attemptedSeats` at both `claimSrc`
+    // sites while the row side still asks with the minted one. RE-RUN against the FULL suite at
+    // `9f460526`: RED on this test ALONE — 1 failed / 7522 passed / 8 skipped, 534 of 535 suites
+    // green — at the `!('waveId' in x) && !('resolvedModel' in x)` assertion below.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
@@ -1172,6 +1179,19 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
   });
 
   test('T2.2 control: two orphaned twins whose retry wave dies wholesale get TWO leg-less rows', async () => {
+    // ⚠️ MUTANT DESYNCPLAN, defined here at v4.8 T-A6. The name appeared in exactly ONE sentence
+    // of BACKLOG.md and nowhere else in the repo — no test, no comment — so half of SI-TWINS'
+    // safety claim was unverified, and it was the half guarding the consolidation. The mutation:
+    // desynchronise `run-retry-group.js :: planStillDeadSources`' `twins` from the rest of the
+    // run's, so its `attempted` Set gains the UNMINTED key. This shape is the ONLY one that
+    // reaches that function — the retry wave comes back with zero legs, which is
+    // `retryStage1Losses`' wholesale-death branch. Under it each row's
+    // `retry.attemptedSeats.has(join)` goes false, `deadLegs0.find` hands the row its OWN first
+    // leg back, and that leg — which already carries a `superseded` row — is billed twice.
+    // RE-RUN against the FULL suite at `9f460526`: RED on exactly TWO tests, 533 of 535 suites
+    // green — this one at the `!('waveId' in x)` assertion, and run-retry.test.js ::
+    // *"attemptedSeats carries the minted key; no emitted still-dead note does"*. So the claim
+    // held; what was missing was the NAME, not the pin.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',

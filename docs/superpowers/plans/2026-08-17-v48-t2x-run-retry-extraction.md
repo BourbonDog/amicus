@@ -76,8 +76,12 @@ and re-derive before use:
 `run-retry.js :: retryStage1Losses`, and `run-stage1-rows.js :: pushDeadSeatRows` (which calls
 `.has()` directly at **three** sites, not the two originally recorded here).
 
-⚠️ **`legLossKey` must STAY on `.has()`.** `tests/council/run-stages.test.js:1357` constructs a bare
-`new Set(['deepseek'])` *itself* and passes it in. That is a test-authored Set, not a `twinAliases`
+⚠️ **`legLossKey` must STAY on `.has()`.** `tests/council/run-stages.test.js` ::
+*"T2.2 review A1/D3: the NUL-joined row key is CONTAINED — it reaches no emitted row"* constructs a
+bare `new Set(['deepseek'])` *itself* and passes it in. (Read `:1357` at base; re-anchored by test
+title at T-A6, per rule 5b, after T-A6's own comments moved it to `:1377`. ⚠️ The enclosing test was
+derived by opening `:1377` and walking UP to its `test(` — reading `:1357` in the post-T-A6 tree
+instead names a different test entirely, which is the trap rule 5b exists to close.) That is a test-authored Set, not a `twinAliases`
 return — so it is not a counterexample to the Map swap, but changing `legLossKey` to `.get()` would
 break it. Keep the predicate `.has()`-shaped.
 
@@ -105,11 +109,24 @@ execution, not restate it.
 
 Related: of the twelve named mutants the record refers to, only **FIND** (`run-retry.test.js:946`),
 **INLINE** (`run-retry-group-seatkey.test.js:39`), **NOBILL** and **BORROWALL**
-(`run-stages.test.js:1409`/`:1410`) exist as literal tokens in tests. `GUESSPOS`, `PARTIALSKIP`,
+(`run-stages.test.js` :: *"T2.2 review A1: a borrowed spare is BILLING ONLY — the row asserts no
+execution it cannot own"*, read `:1409`/`:1410` at base) exist as literal tokens in tests. `GUESSPOS`, `PARTIALSKIP`,
 `LEAK`, `NOTEMINT`, `FAKEBIND`, `NOPLACEHOLDERFILTER` and `DESYNCPLAN` live only in `BACKLOG.md`
-prose. **The pins they name mostly DO exist** — `GUESSPOS` → `run-retry.test.js:987`,
-`PARTIALSKIP` → `:1019` — the token simply is not written in the test. Treat "mutant X is RED" as a
-claim to re-run, never as a fact to inherit.
+prose. **The pins they name mostly DO exist** — `GUESSPOS` → `run-retry.test.js` ::
+*"invariant 2: two UNBOUND leg-origin twins group into ONE unit — bench AND lens mode"*,
+`PARTIALSKIP` → :: *"invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped
+or NEITHER"* (read `:987`/`:1019` at base) — the token simply is not written in the test. Treat
+"mutant X is RED" as a claim to re-run, never as a fact to inherit.
+
+⚠️ **UPDATE — T-A6 (2026-08-17) settled the `DESYNCLEG`/`DESYNCPLAN` half of this by execution and
+CHANGED it.** Both were run against the full suite at `9f460526` and both are RED, so the record's
+substance held; what was missing was the name, not the pin. Both tokens are now written into the
+tests that red them, with their mutations and measured red sets, so the sentence above ("live only
+in `BACKLOG.md` prose") no longer covers `DESYNCPLAN`. See `BACKLOG.md` :: SI-TWINS. Every line
+number in this paragraph and the one above is a *base* reading, kept for provenance and re-anchored
+by test title, because T-A6's own comments moved `run-retry.test.js:987/1007/1019` and
+`run-stages.test.js:1357/1409/1410` down by one and twenty lines respectively — each re-derived by
+opening the line, never by arithmetic.
 
 ---
 
@@ -348,8 +365,11 @@ The two invariants and their existing pins:
   (*"invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER"*).
   Mutant **PARTIALSKIP** (a skip branch pushing a subset of `unit.srcLegs`).
 - **Invariant 2 — two UNBOUND leg-origin twins always share ONE unit**, bench and lens. Pinned by
-  `run-retry.test.js:987`, with the scope control at `:1007` showing BOUND twins DO split across lens
-  units safely. Mutant **GUESSPOS** (guess an unbound leg's seat by ordinal).
+  `run-retry.test.js` (*"invariant 2: two UNBOUND leg-origin twins group into ONE unit — bench AND
+  lens mode"*), with the scope control (*"invariant 2, scope: BOUND twins DO split across lens
+  units — and that is safe"*) showing BOUND twins DO split across lens
+  units safely. Mutant **GUESSPOS** (guess an unbound leg's seat by ordinal). (Read `:987`/`:1007`
+  when this task was written; re-anchored by title at T-A6, which moved both down one line.)
 
 **Do not weaken or remove those pins** — the refactor's job is to make the invariants checkable, not
 to replace the tests carrying them. **Re-run both mutants and observe RED yourself**; neither token

@@ -2247,8 +2247,24 @@ still the correct description of what HEAD does; what changed is that the remedy
     SAME `twins` set. If one site's `twins` ever differs (a different roster argument, a cached Set,
     a re-derived one), a retried twin re-acquires its own FIRST-attempt leg — which already carries
     a `superseded` row — and that leg's cost lands in runStats **twice** while its retry leg lands
-    nowhere. Pinned today by the named mutants `DESYNCLEG` and `DESYNCPLAN`. Any consolidation must
-    keep those two RED, and should be sequenced with (or after) the `run-retry.js` extraction above,
+    nowhere. **SETTLED BY EXECUTION at v4.8 T-A6 (2026-08-17).** This sentence used to read
+    *"Pinned today by the named mutants `DESYNCLEG` and `DESYNCPLAN`"*, and half of it was
+    unverified when it was written: `DESYNCPLAN` appeared in this line and **nowhere else in the
+    repo** — no test, no comment — while `DESYNCLEG` appeared here plus one *retrospective*
+    mention in a test comment. Both were then run against the FULL suite at `9f460526`, and both
+    are RED, so the substance held; what was missing was the **name**, not the pin:
+    - **DESYNCLEG** — desynchronise `run-retry.js :: retryStage1Losses`' `twins` from the rest of
+      the run's, so `srcRowKey` files the UNMINTED key at both `claimSrc` sites. RED on ONE test,
+      `run-stages.test.js` :: *"T2.2: two ORPHANED twins get TWO dead-seat rows, and neither
+      borrows its own first leg"*; 534 of 535 suites green.
+    - **DESYNCPLAN** — same, for `run-retry-group.js :: planStillDeadSources`' `twins`. RED on
+      TWO, `run-stages.test.js` :: *"T2.2 control: two orphaned twins whose retry wave dies
+      wholesale get TWO leg-less rows"* and `run-retry.test.js` :: *"attemptedSeats carries the
+      minted key; no emitted still-dead note does"*; 533 of 535 suites green.
+
+    Both names are now written into those tests **with their mutations and their measured red
+    sets**, so the next reader inherits a measurement instead of a claim. Any consolidation must
+    keep both RED, and should be sequenced with (or after) the `run-retry.js` extraction above,
     since both touch the same call graph.
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
