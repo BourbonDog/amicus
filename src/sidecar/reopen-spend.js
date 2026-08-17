@@ -10,7 +10,7 @@
 /**
  * Resolve a reopened session's usage, write it onto metadata, and append one
  * attributed ledger row. Mirrors start.js's finalize (the only sites that
- * dropped usage - BACKLOG.md:280). Best-effort ledger append; never throws.
+ * dropped usage - BACKLOG.md :: "continue/resume never compute per-run usage" — ⚠️ cited `BACKLOG.md:280` until T-A8 re-opened it 2026-08-17: `:280` is a docs/usage.md line, the entry is `:289`). Best-effort ledger append; never throws.
  * @returns {{usage: object|null}}
  */
 function finalizeSpendForReopen({ taskId, model, mode, op, result, status, project, metadata }, ctx = {}) {

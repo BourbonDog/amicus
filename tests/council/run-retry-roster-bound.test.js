@@ -57,8 +57,13 @@ describe('T-A3 — the retry-slot mint is bounded by the roster count for the al
 
   test('control: 2 unbound legs on the 2-seat twin alias still mint 2 slots — at the bound, not over it',
     () => {
-      // The bound is `>=`, so this is the exact boundary case: unmoved at 2, and it is the
-      // shape T2.2 shipped for. If this moved, the fix would have re-collapsed real twins.
+      // The bound is `>=`, so this is the boundary case in the direction that matters here:
+      // unmoved at 2, the shape T2.2 shipped for. If this moved, the fix would have re-collapsed
+      // real twins.
+      // ⚠️ It does NOT discriminate `>=` from `>` — measured 2026-08-17 (T-A8). Named mutant
+      // OFFBYONE (spell the guard `> twins.get(seat)`) reds shape A and shape B above and leaves
+      // THIS test green: with only 2 legs for a 2-seat alias the third mint never happens, so both
+      // spellings agree. Shape A is what kills the off-by-one; this is the no-regression control.
       const [bench] = groupStage1Losses(twinO(), [], [deadTwinLeg('a'), deadTwinLeg('b')],
         new Map());
       expect(bench.models).toEqual(['deepseek', 'deepseek']);

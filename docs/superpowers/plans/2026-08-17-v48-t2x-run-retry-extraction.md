@@ -368,9 +368,13 @@ its safety is **emergent, not enforced** — the function cannot verify either i
 so a change elsewhere can break it silently. Make the invariants checkable **by the code**.
 
 The two invariants and their existing pins:
-- **Invariant 1 — skipping is all-or-nothing per unit.** Pinned by `run-retry.test.js:1019`
-  (*"invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER"*).
+- **Invariant 1 — skipping is all-or-nothing per unit.** Pinned by `run-retry.test.js` ::
+  *"invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER"*.
   Mutant **PARTIALSKIP** (a skip branch pushing a subset of `unit.srcLegs`).
+  ⚠️ **This read `:1019`, which is a BLANK line — the `test(` is `:1020`. Re-anchored by TITLE at
+  T-A8, 2026-08-17. And PARTIALSKIP is BRANCH-SPECIFIC, measured at T-A8: on the over-budget branch
+  it reds this pin alone; on the unmappable branch it reds NOTHING repo-wide (537 suites green).
+  Filed in `BACKLOG.md` :: the T-A8 entry.**
 - **Invariant 2 — two UNBOUND leg-origin twins always share ONE unit**, bench and lens. Pinned by
   `run-retry.test.js` (*"invariant 2: two UNBOUND leg-origin twins group into ONE unit — bench AND
   lens mode"*), with the scope control (*"invariant 2, scope: BOUND twins DO split across lens
@@ -430,6 +434,22 @@ FAKEBIND — and the finding fires exactly, `GAP = 0.0700`.
 Do **not** attempt to fix C1. It is measured-unreachable end-to-end and pre-existing at `main`
 (Global Constraint 11). This task adds the guard rail only.
 
+✅ **DONE 2026-08-17, commit `1d31d77e`** (test-only; C1 not fixed, not re-litigated). Both mutants
+were RE-MEASURED against the final tree rather than inherited, and **both reproduce the numbers
+above**: NOPLACEHOLDERFILTER ⇒ `stillDeadRetryLegs` 0, zero bound-and-lost legs, 0.1600 of 0.1600
+billed reaching no row; FAKEBIND ⇒ 1 bound still-dead retry leg, no row carrying it, `GAP = 0.0700`.
+The pin — `run-retry-launch.test.js` :: *"C1 — the conjunction END TO END: a BOUND still-dead retry
+leg always resolves `exact`"* — drives the real `retryStage1Losses` + `pushDeadSeatRows` on both
+roster shapes and **discriminates the two mutants by which assertion block reds**: FAKEBIND the
+bound-and-lost block, NOPLACEHOLDERFILTER the non-vacuity block. The identified-roster shape is the
+non-vacuity witness and FAKEBIND is inert there. The area's existing mutants were re-run **against
+`run-retry-launch.test.js`** (that scope, not repo-wide) and each still reds its own pin: COLLIDEID
+1 test, PREFIXID 1, RAWROSTER 2, COPYBRIEF 2 (P1+P2), NOPLACEHOLDERFILTER 3 pre-existing pins plus
+the new one, FAKEBIND the same 3 plus the new one. **No pin was weakened** — Step A is test-only and
+changed no source byte; the battery is the measurement that says so rather than the argument.
+⚠️ COPYBIND was NOT re-run: it needs a ~25-line re-inline into a file at 295/300 with a hand revert
+as the only exit, and the risk exceeds the information given that no source byte moved.
+
 ---
 
 ### T-A8 — Truth pass on the record
@@ -447,6 +467,35 @@ then re-open each at its stated line and read it before writing it down.
 - ⚠️ Do not restate the unqualified headline *"N orphans → N retry slots AND N rows"* in either
   wording unless this PR has actually made it true in every retry shape — and if it has, say so with
   the per-shape table, not the slogan.
+
+✅ **DONE 2026-08-17** (doc-only, run against the FINAL tree). Every citation below was re-derived
+and **re-opened at its stated location** before being written down, and every correction was
+converted to a SYMBOL or TITLE anchor rather than to a new line number:
+- **SI-22.3 moved from PARTIAL to CLOSED** at four sites (`BACKLOG.md` ×2, the ask-anything design
+  spec, the phasing plan ×3), each stated **per shape** — row/note half now four of four; slot half
+  closed **and bounded** at `min(N, roster count)`; three by-design scope limits named. The
+  unqualified headline is restated NOWHERE and the ban is re-affirmed at every site.
+- **`BACKLOG.md:1820`'s "215/283" headroom is not rot** — measured against the tags, it is exactly
+  `v4.7.0`'s reading, i.e. TRUE when planned and merely undated. Annotated, not overwritten; today's
+  244 / 295 recorded beside it. (Same treatment for the PR3-era "292/290" size note.)
+- **`run-retry.test.js`'s *"mutate ANY skip branch"* is FALSE and the gap is repo-wide** —
+  PARTIALSKIP on the unmappable branch reds NOTHING (537 suites / 7531 passed). Sentence corrected
+  at the test, gap filed in BACKLOG.
+- **`run-retry-keys.js`'s "spelling this one `=== 1` reds `run-retry.test.js:284` and `:295`" is
+  FALSE on the final tree** — measured, that spelling reds 25 tests across 6 suites and leaves both
+  named tests GREEN, because with no roster BOTH spellings give an empty Map. The polarity lives in
+  the consumer. False certification removed; the property restated with a real pin.
+- Also corrected by re-opening: `workspace-seats.js:61` (docblock, not the filter) and
+  `live-seats.js:188` (out of range — the file is 125 lines) at two BACKLOG sites;
+  `workspace-seats.js:29-38` in `dead-seat-rows.test.js`; `BACKLOG.md:280` at its two live citers;
+  `run-assemble.js:223` in the SI-09 `buildVerdict` entry (that file does not call `buildVerdict` at
+  all); `run-retry-group.js:64`/`:72` in two counted seatKey site lists; and this plan's own
+  `run-retry.test.js:1019`, which is a blank line.
+- **Size table re-measured with the gate's own rule** and recorded prominently: `run-retry.js`
+  **295/300** and `run-stages.js` **294/300** are both at the cliff — the next PR touching either
+  needs an extraction first. Three new modules recorded (74 / 64 / 140).
+- Every `minor (deferred)` line in the ledger was triaged: fixed, filed in BACKLOG's T-A8 entry, or
+  dropped **with its reason stated**. None was dropped silently.
 
 ---
 

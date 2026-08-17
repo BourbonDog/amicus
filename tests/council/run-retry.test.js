@@ -1019,8 +1019,19 @@ describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', (
 
   test('invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER', () => {
     // The property `supersededKeys` actually needs, asserted directly at the retry boundary
-    // rather than derived from the two facts. Mutate any skip branch to push a subset of
-    // `unit.srcLegs` and this goes RED on the first shape.
+    // rather than derived from the two facts.
+    // ⚠️ SCOPE, MEASURED 2026-08-17 (T-A8) — the earlier wording here said "mutate ANY skip branch
+    // … and this goes RED", and that is FALSE. run-retry.js has TWO wholesale-skip branches and the
+    // three shapes below reach only one of them. Mutant PARTIALSKIP (`...unit.srcLegs.slice(0, 1)`),
+    // applied to each branch separately and reverse-edited byte-exactly:
+    //   OVER-BUDGET branch  -> RED on this test alone (shape (a)); 1 failed of 1289 council tests.
+    //   UNMAPPABLE branch (lensIndex null / lens out of range / zero models)
+    //                       -> RED on NOTHING. Run against the FULL suite: 537 suites / 7531 passed
+    //                          / 8 skipped, entire repo green. No shape here builds an unmappable
+    //                          unit, and no other suite covers that branch either.
+    // Both branches are load-bearing for `run-stage1-superseded.js :: supersededRows`' invariant 1,
+    // so the uncovered half is a real gap — filed in BACKLOG.md's T-A8 entry. Closing it needs a
+    // fourth shape (an unmappable lens unit with two unbound twins), not a change to this one.
     const bothOrNeither = (out, d1, d2) => {
       const skipped = new Set(out.skippedDeadLegs);
       expect([skipped.has(d1), skipped.has(d2)]).toEqual(

@@ -1370,7 +1370,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
 
   test('T12: two orphaned twins the producer cannot tell apart still collapse (R2 floor)', () => {
     // legLossKey mints from the leg's OWN taskId. A leg with none has genuinely nothing,
-    // and inventing an id would be the guess this module exists to reject — so ONE row
+    // and inventing an id would be the guess that keyspace exists to reject — so ONE row
     // is the correct answer here, and the count is not a free-floating goal.
     const rows = run({ stillDeadLegs: [twinLeg(), twinLeg()], seatOf: new Map() });
     expect(rows).toHaveLength(1);

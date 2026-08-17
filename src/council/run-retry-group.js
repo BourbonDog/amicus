@@ -121,8 +121,8 @@ function planStillDeadSources(unit, seatOf, roster, twins = twinAliases(roster))
  * claimed that collapse was correct "because nothing distinguishes them". The ROW does
  * have a distinguisher — see `run-retry-keys.js :: legLossKey` — and the SLOT does not need one.)
  *
- * v4.8 T-A3: …and NO FURTHER than the roster proves. On the inexact arm the alias's roster
- * COUNT is the only upper bound there is, so mint up to it and stop: without it, N
+ * v4.8 T-A3: …and, ON THE INEXACT ARM AND PER UNIT, no further than the roster proves. There
+ * the alias's roster COUNT is the only upper bound there is, so mint up to it and stop: without it, N
  * unattributable losses on a 2-seat alias minted N slots, each buying a real, billed retry
  * leg for a seat that may not exist. (Not reachable end-to-end today — a first-pass dead
  * wave carries real seats, and a wave cannot return more legs than it launched — but the

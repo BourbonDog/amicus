@@ -45,7 +45,7 @@ function seedSession(projectDir, taskId, overrides = {}) {
   return dir;
 }
 
-describe('continue/resume finalize writes usage + ledger row (BACKLOG.md:280)', () => {
+describe('continue/resume finalize writes usage + ledger row (BACKLOG.md :: "continue/resume never compute per-run usage" — ⚠️ cited `BACKLOG.md:280` until T-A8 re-opened it 2026-08-17: `:280` is a docs/usage.md line, the entry is `:289` and will move again)', () => {
   const result = { summary: 'x', completed: true, usage: { tokens: { input: 100, output: 40 }, costReported: 0.03 } };
 
   test('resolves usage into metadata and appends a row with the given op', () => {

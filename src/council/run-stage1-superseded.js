@@ -84,8 +84,8 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade = STDERR_NO
   ]);
   // Refusing the row is the repair — but ONLY for a leg the dead-seat loop would hand back as its
   // own primary row, which is what `willTakeItsOwnLeg` decides. Since v4.8 T-A6 that loop is the
-  // CALLER's (`run-stage1-rows.js :: pushDeadSeatRows`), not this file's — every "below" in the
-  // paragraphs around it now points across that boundary. run-stages.js merges `skippedDeadLegs`
+  // CALLER's (`run-stage1-rows.js :: pushDeadSeatRows`), not this file's — so any "below" naming
+  // THAT LOOP points across the boundary (the other two still point inside). run-stages.js merges `skippedDeadLegs`
   // into the `stillDeadLegs` it hands that caller, so a skipped leg IS a still-dead seat there,
   // and that loop's `deadLegs0.find` fallback runs for exactly the keys `attemptedSeats` does NOT
   // hold — and returns ONE leg per key.

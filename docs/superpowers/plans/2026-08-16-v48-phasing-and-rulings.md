@@ -106,10 +106,16 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    both arms **for every twin the producer is handed**. Kept as a trap because the mis-dating hazard
    is unchanged, and because SI-22.3 is **PARTIAL**, not closed: a PARTIAL retry return still hands
    the producer only ONE of two unattributable twins. See §3 and the table row above.
+   ✅ **UPDATE 2026-08-17 — SI-22.3 is no longer PARTIAL.** v4.8 Phase 2 T-A4 (`1e385895`) closed the
+   partial-return under-count (2 notes / 2 `stillDeadLegs` where it gave 1 and 1) and the slot-0
+   first-failure provenance together; measured, the UNBOUND case is now output-IDENTICAL to the
+   BOUND control in both the partial- and full-return shapes. The mis-dating trap stands. ⚠️ So does
+   the ban on the unqualified headline — T-A3 (`4413eb25`) BOUNDED the slot mint by the roster, so
+   N orphans buy `min(N, roster count)` slots. Per-shape statement at `BACKLOG.md` :: SI-22.3.
 
 ---
 
-## 3. The durable finding, confirmed — ✅ FIXED by T2.2 for three retry shapes of four
+## 3. The durable finding, confirmed — ✅ FIXED by T2.2 for three retry shapes of four, and by T-A4 (2026-08-17) for the fourth
 
 PR5c's ruling was containment: stop inferring, dedup only on exact identity, accept a visible
 duplicate. The cure named was producer-side identity starting at `run-retry-group.js`'s
@@ -126,6 +132,14 @@ its record disagree.
 ✅ **BOTH SHIPPED TOGETHER 2026-08-16 — T2.2, `33e2ecf7`**, exactly as that last sentence required.
 Re-measured on the same bench: `models=["deepseek","deepseek"]`, `seats=[null,null]` (neither
 guessed) and two dead-seat rows, each carrying no seat; controls unmoved.
+
+✅ **UPDATE 2026-08-17 (v4.8 Phase 2 T-A4, `1e385895`): the sub-case below is CLOSED.** The whole
+paragraph is kept verbatim as the filing that scoped the fix — but read *"OPEN for a partial
+return"*, the *"1 note and 1 row"* measurement and the *"+7 lines / 5 free"* costing as HISTORY.
+Measured on the final tree: a partial return now gives **2** notes and **2** `stillDeadLegs`, each
+note carrying its own slot's `firstFailure`, output-IDENTICAL to the BOUND control; the extraction
+that unblocked it landed first, as R14 required. ⚠️ **The headline ban in the first sentence below
+SURVIVES** — T-A3 bounded the mint at `min(N, roster count)`.
 
 ⚠️ **One sub-case remains, which is why the table above reads PARTIAL, not DONE — and why the
 unqualified headline "N orphans → N retry slots and N rows, both arms" must not be restated in
@@ -208,7 +222,11 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
   N orphans → N retry slots and N rows, **both arms**. MUST ship together.
   ⚠️ **SHIPPED PARTIAL 2026-08-16 (`33e2ecf7`)** — the slot half closed in every shape, the row/note
   half in three retry shapes of four. The goal line above is what was *planned*, not what holds;
-  see §3 and BACKLOG's "The durable finding" for the scoped result and the B1/B2 follow-up
+  see §3 and BACKLOG's "The durable finding" for the scoped result and the B1/B2 follow-up.
+  ✅ **COMPLETED 2026-08-17 by Phase 2 T-A3/T-A4** — the row/note half now holds in **four of four**
+  retry shapes (T-A4 closed the partial return), and the slot half is additionally **bounded by the
+  roster** (T-A3). ⚠️ The goal line above is STILL not what holds: `min(N, roster count)` slots, not
+  N. Read `BACKLOG.md` :: SI-22.3 per-shape
   ⚠️ measure the interaction with `deriveSeatLoss`'s channel gates — SI-02 is deferred but the
   degrade notes `recordFailure` produces are what `deriveSeatLoss` reads
 - **T2.3** Peer split: `tally.js` + `debate.js` in **one commit** — they already disagree today

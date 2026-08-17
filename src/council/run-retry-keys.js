@@ -1,8 +1,8 @@
 // src/council/run-retry-keys.js
 'use strict';
 // The Stage-1 loss KEYSPACE: seatKey + twinAliases + legLossKey + srcLegClaimer.
-// Moved verbatim from run-retry-group.js:23-86 (v4.8 Phase 2 T-A1 size-gate split,
-// zero behavior). REQUIRE-FREE by design, like ./seats and ./run-stats-entry — it is
+// Moved verbatim from run-retry-group.js:23-86 AT 3d8f9d38 (v4.8 Phase 2 T-A1 size-gate
+// split, zero behavior). REQUIRE-FREE by design, like ./seats and ./run-stats-entry — it is
 // the leaf the loss keyspace hangs from, so no consumer can land on an import cycle.
 // run-retry-group.js re-exports all four, so no import path in the tree moved.
 
@@ -24,8 +24,8 @@ const seatKey = (s, alias) => (s ? s.id : alias);
  * ANNOUNCEMENT — being wrong costs a duplicate note a reader can see — so with no roster it
  * errs toward announcing. This one gates a RETRY SLOT and a runStats row — being wrong buys
  * a leg for a seat that may not exist — so with no roster it errs toward collapsing, as HEAD
- * always did. Measured: spelling this one `=== 1` reds run-retry.test.js:284 and :295,
- * unique-alias benches with no `o.seats` where two losses ARE one seat.
+ * always did. ⚠️ That default is the CONSUMER's, not this filter's — with NO roster BOTH spellings
+ * give an empty Map. Pinned: run-retry-roster-bound.test.js :: "control: NO roster at all…".
  */
 function twinAliases(roster) {
   const n = new Map();
@@ -41,7 +41,7 @@ function twinAliases(roster) {
  * routed (`fanout-leg.js:61`), surviving the disk round-trip, distinct through three
  * of the four ways a leg is orphaned. The fourth — NO `taskId` at all — has genuinely
  * nothing and keeps the collapsing key: that is the honest floor, and inventing one
- * would be the guess this module exists to reject.
+ * would be the guess this keyspace exists to reject.
  *
  * ⚠️ INTERNAL, never rendered: it joins the dead-seat rows, `attemptedSeats` and
  * `deadLegs0`, nothing else. `ff.seat`/`ff.seatId` stay ALIAS-valued — they become
