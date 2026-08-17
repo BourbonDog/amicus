@@ -16,7 +16,14 @@ describe('run-stage1-superseded — extraction pins (v4.8 Phase 2 T-A6)', () => 
     // `require('./run-stage1-superseded')` and paste the function body back in as a local
     // `supersededRows`. Every behaviour suite in this repo stays green under it — a
     // byte-identical copy is exactly what an identity pin catches and a
-    // `typeof === 'function'` check does not. Measured RED on this test alone.
+    // `typeof === 'function'` check does not. RUN, not asserted: RED on this test alone over
+    // `tests/council` (1 failed / 1287 passed / 75 of 76 suites green), reverse-edited by hand
+    // and byte-verified against `git show HEAD:src/council/run-stage1-rows.js`.
+    //
+    // The T-A5 battery was re-run against the MOVED code in the same way, because a lift can
+    // silently disarm the guard it carries. All five still RED, each on its own pins, over
+    // `tests/council`: TRUSTALIAS 8 tests / 3 suites, WIDEGUARD 2, KEYNOTLEG 1 (the SPEND
+    // assertion), MUTESINK 2, NOSAFEEMIT 1 — the same red sets T-A5 recorded before the move.
     expect(rows.supersededRows).toBe(sup.supersededRows);
   });
 

@@ -2281,9 +2281,12 @@ still the correct description of what HEAD does; what changed is that the remedy
 
     Both names are now written into those tests **with their mutations and their measured red
     sets**, so the next reader inherits a measurement instead of a claim. The consolidation was
-    sequenced after the extraction above, as this entry asked. Both mutants must be **re-run
-    against the consolidated tree** and stay RED; that re-run is recorded at the tests themselves,
-    not here, so there is one place to read it rather than two that can disagree.
+    sequenced after the extraction above, as this entry asked, and both mutants were **re-run
+    against the consolidated tree over the FULL suite** and are still RED. ⚠️ The consolidation
+    MOVED where each mutation has to be made — emptying the one threaded `twins` now gives every
+    site the same wrong answer instead of desynchronising two, which is the safety it buys — so
+    the recipes and red sets are recorded at the tests, not here: one place to read rather than
+    two that can disagree.
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.

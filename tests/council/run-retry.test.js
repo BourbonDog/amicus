@@ -1069,7 +1069,9 @@ describe('v4.8 T2.2 review A1/D3: the minted key is internal — it reaches no N
     // run-stages.test.js :: *"T2.2 control: two orphaned twins whose retry wave dies wholesale
     // get TWO leg-less rows"*, which is its other red. Emptying
     // `run-retry-group.js :: planStillDeadSources`' `twins` puts the UNMINTED key into
-    // `attemptedSeats`, so `has(minted)` below goes false. Measured at `9f460526`.
+    // `attemptedSeats`, so `has(minted)` below goes false. Measured at `9f460526` (RED on two
+    // tests) and re-measured on the consolidated tree (RED on three — the third is T-A6's own
+    // threading pin, so the red set only grew).
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null },
       { launchWave: jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 }) });
     const d1 = { ...deadLeg('deepseek', undefined, undefined, 'r1-s1', 1), taskId: 'orphan-a' };

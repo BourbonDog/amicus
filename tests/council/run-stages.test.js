@@ -1151,6 +1151,12 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // sites while the row side still asks with the minted one. RE-RUN against the FULL suite at
     // `9f460526`: RED on this test ALONE — 1 failed / 7522 passed / 8 skipped, 534 of 535 suites
     // green — at the `!('waveId' in x) && !('resolvedModel' in x)` assertion below.
+    // ⚠️ The T-A6 consolidation MOVED where this mutation has to be made, which is the point of
+    // it: emptying `retryStage1Losses`' `twins` now propagates to every site through the single
+    // threaded value, so all four AGREE (on the wrong answer) and nothing desynchronises. To
+    // desync, `srcRowKey` must be given a collection of its own — `legLossKey(…, new Map())`.
+    // RE-RUN in that form against the FULL suite at the consolidated tree: RED on this test
+    // alone again, 1 failed / 7529 passed / 8 skipped, 536 of 537 suites green.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
@@ -1192,6 +1198,14 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // green — this one at the `!('waveId' in x)` assertion, and run-retry.test.js ::
     // *"attemptedSeats carries the minted key; no emitted still-dead note does"*. So the claim
     // held; what was missing was the NAME, not the pin.
+    // ⚠️ Post-consolidation the mutation is made at the `legLossKey` CALL inside
+    // `planStillDeadSources` (`legLossKey(bound, alias, l, new Map())`) rather than at its
+    // `twins` binding, which is now a threaded parameter — emptying that would desync nothing,
+    // it would just give the whole run one wrong answer. RE-RUN in that form against the FULL
+    // suite at the consolidated tree: RED on THREE, 3 failed / 7527 passed / 8 skipped, 534 of
+    // 537 suites green. The third is T-A6's own
+    // run-retry-twins-threading.test.js :: *"planStillDeadSources USES the twins it is handed…"*,
+    // so the consolidation ADDED a pin here rather than weakening one.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',

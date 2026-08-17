@@ -12,6 +12,12 @@
 // `o.seats`, which is exactly the desync shape mutants DESYNCLEG and DESYNCPLAN produce from the
 // producer side (defined in run-stages.test.js). A consumer that re-derives ignores the argument
 // and its behaviour does not move; a consumer that threads follows the argument.
+//
+// Every mutant named below was RUN over `tests/council` (76 suites / 1288 tests) at the
+// consolidated tree, each reverse-edited by hand and byte-verified against `git show HEAD:<path>`.
+// Each reds ONE test — its own — and nothing else:
+//   THREADDROP 1, THREADDROP-GROUP 1, THREADDROP-PLAN 1, MERGERULE 1.
+// None of them disarms another's pin, and no pre-existing pin went green under any of them.
 const { runStage1 } = require('../../src/council/run-stages');
 const { retryStage1Losses } = require('../../src/council/run-retry');
 const { groupStage1Losses, planStillDeadSources } = require('../../src/council/run-retry-group');

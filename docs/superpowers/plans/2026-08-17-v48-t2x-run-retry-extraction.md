@@ -79,9 +79,9 @@ and re-derive before use:
 ⚠️ **`legLossKey` must STAY on `.has()`.** `tests/council/run-stages.test.js` ::
 *"T2.2 review A1/D3: the NUL-joined row key is CONTAINED — it reaches no emitted row"* constructs a
 bare `new Set(['deepseek'])` *itself* and passes it in. (Read `:1357` at base; re-anchored by test
-title at T-A6, per rule 5b, after T-A6's own comments moved it to `:1377`. ⚠️ The enclosing test was
-derived by opening `:1377` and walking UP to its `test(` — reading `:1357` in the post-T-A6 tree
-instead names a different test entirely, which is the trap rule 5b exists to close.) That is a test-authored Set, not a `twinAliases`
+title at T-A6, per rule 5b, after T-A6's own comments moved it down. ⚠️ The enclosing test was
+derived by opening the MOVED line and walking UP to its `test(` — reading `:1357` in the post-T-A6
+tree instead names a different test entirely, which is the trap rule 5b exists to close.) That is a test-authored Set, not a `twinAliases`
 return — so it is not a counterexample to the Map swap, but changing `legLossKey` to `.get()` would
 break it. Keep the predicate `.has()`-shaped.
 
@@ -125,8 +125,10 @@ tests that red them, with their mutations and measured red sets, so the sentence
 in `BACKLOG.md` prose") no longer covers `DESYNCPLAN`. See `BACKLOG.md` :: SI-TWINS. Every line
 number in this paragraph and the one above is a *base* reading, kept for provenance and re-anchored
 by test title, because T-A6's own comments moved `run-retry.test.js:987/1007/1019` and
-`run-stages.test.js:1357/1409/1410` down by one and twenty lines respectively — each re-derived by
-opening the line, never by arithmetic.
+`run-stages.test.js:1357/1409/1410` down. No delta is stated on purpose: T-A6 grew both files in
+more than one commit, so any number written here would be true only until the next one — which is
+exactly why the anchors above are titles. Each was re-derived by opening the line, never by
+arithmetic.
 
 ---
 
