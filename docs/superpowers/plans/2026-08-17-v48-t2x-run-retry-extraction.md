@@ -126,6 +126,20 @@ These bind every task. A reviewer should read them as the attention lens.
    new wrong value is worse than the rot it replaced. This has shipped wrong three times this release.
 5. **`grep` the distinctive PHRASE of any comment you edit, repo-wide.** A same-file sweep cannot find
    a twin — that was Phase 1's Critical.
+5a. **Sweep citations of every file your commit TOUCHES, not just the files whose citations you are
+   fixing.** A comment-only edit still moves line numbers, and a doc-only commit can falsify a source
+   citation as easily as a refactor can. Measured in this PR: the round-3 commit fixed one file's
+   citations and, by shifting that file +3 lines, falsified three *previously true* citations of it
+   elsewhere — one of them inside a counted site list. Rounds 2 and 3 each missed exactly this step.
+5b. **When you correct a cross-file citation, convert it to a SYMBOL anchor
+   (`file.js :: functionName`) rather than to a new line number.** This is the only form that
+   terminates the cascade: a corrected line number is true until the next edit and then silently
+   false, whereas a symbol anchor survives every move. Measured: re-anchoring
+   `electron/workspace-ui/workspace-seats.js:65` by symbol removed that file from the citation grep
+   class entirely. A corrected line number is a deferral; a symbol anchor is a fix.
+   ⚠️ **Never derive a corrected line by OFFSET ARITHMETIC.** Extractions do not shift a file
+   uniformly — this PR measured offsets of 0 / −1 / −9 / −10 / −32 within a single commit, and
+   applying a single offset shipped fresh wrong values twice. Open the line.
 6. **The 300-line gate blocks the COMMIT, not the edit. When it fires, EXTRACT — never shave
    comments.** Shaving is the documented failure tell.
 7. **Do not write a test whose title claims more than its assertion executes.** That has cost this
