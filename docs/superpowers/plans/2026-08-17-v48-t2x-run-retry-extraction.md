@@ -140,7 +140,22 @@ These bind every task. A reviewer should read them as the attention lens.
    class entirely. A corrected line number is a deferral; a symbol anchor is a fix.
    ⚠️ **Never derive a corrected line by OFFSET ARITHMETIC.** Extractions do not shift a file
    uniformly — this PR measured offsets of 0 / −1 / −9 / −10 / −32 within a single commit, and
-   applying a single offset shipped fresh wrong values twice. Open the line.
+   0 / +10 / +15 *within a single file* in another. Applying one offset shipped fresh wrong values
+   twice, once from the controller's own instruction. Open the line.
+5c. **After a BEHAVIOUR change, sweep for prose describing the BEHAVIOUR — not only for the phrase
+   of the comment you edited, and not only for citations.** Both of those sweeps can pass while
+   prose elsewhere still describes the old behaviour. Measured in this PR: the commit that closed
+   B1/B2 left two near-verbatim twins asserting the defect was still open — one of them in `src/`,
+   in the very file the next task works in — and neither was a citation, so the citation sweep could
+   not reach them. A behavioural sweep then found a **third** site in `docs/council.md`, which is
+   user-facing and covered by **no gate at all** (outside the size gate, the lint gate, and
+   `validate-docs`' marker checks). Grep the claims your change falsified, not the words you typed.
+5d. **Read every NEW sentence you write against the code.** Rules 5–5c catch *stale* prose — true
+   when written, falsified later. They cannot catch a sentence that was **born false**. This PR
+   shipped one: a fresh parenthetical claiming the `usage: null` row identified *which* twin the
+   retry answered, when the borrowed leg is handed out by `shift()` in row order and the same table
+   cell already said the leg "cannot be attributed to either twin". Nothing sweeps for that — only
+   reading the new claim against the executing code does.
 6. **The 300-line gate blocks the COMMIT, not the edit. When it fires, EXTRACT — never shave
    comments.** Shaving is the documented failure tell.
 7. **Do not write a test whose title claims more than its assertion executes.** That has cost this
@@ -149,8 +164,11 @@ These bind every task. A reviewer should read them as the attention lens.
    all-green run. Use `moduleNameMapper` and assert the mutated bytes actually loaded.
 9. **Never restore a `waveId` on a borrowed dead-seat row** to resolve a red in
    `run-cost-bijection.test.js` — that is the exact misattribution council A1 removed. The correct
-   adaptation is `r => r.waveId || r.usage` (the filter is `run-cost-bijection.test.js:176`; that
-   file's docblock at `:26-48` already carries this warning). **This PR should not need to touch that
+   adaptation is `r => r.waveId || r.usage` (the filter lives in
+   `tests/council/run-cost-bijection.test.js :: driveAndAssertBijection`; that file's leading module
+   docblock already carries this warning). ⚠️ This constraint originally cited the filter as `:176`,
+   which was true at base `30e17df9` and rotted +5 during this PR — an implementer copied the stale
+   number straight out of this document. Anchored by symbol per rule 5b. **This PR should not need to touch that
    suite at all** — it adds no twin scenario there. If you find yourself editing it, stop and report.
 10. **Findings ids are per-round and the council RENUMBERS between rounds.** Anchor by commit +
     mechanism, never by a bare id.
