@@ -48,11 +48,22 @@ function lensIndexOf(o, waveId, model, seatObj = null) {
  * is a VISIBLE duplicate. The alternative — the two inferences above — hid a dead seat instead,
  * and a duplicate that a reader can see beats a loss they cannot.
  *
+ * ⚠️ v4.8 T-A6 (SI-TWINS): `twins` is THREADED IN — one derivation per run, made by
+ * `run-retry.js :: retryStage1Losses` and handed to every producer and consumer of a
+ * `legLossKey`. It is NOT the same thing as `seatsPerAlias` below, and merging them would be a
+ * silent behaviour change: `twins` is `> 1` (an alias the roster PROVES repeated) while
+ * `seatsPerAlias.get(alias) === 1` is `=== 1` (an alias the roster proves UNIQUE). They differ
+ * on the alias the roster does not mention at all — count 0 — where `!twins.has(alias)` is true
+ * but `=== 1` is false. That gap is the whole point of this function's rule: with no proof of
+ * identity it ANNOUNCES, because a duplicate note a reader can see beats a dead seat they
+ * cannot. `twinAliases`' own docblock states the opposite default for the same reason.
+ * The parameter default exists for direct callers only; the production path always passes.
+ *
  * @param {Array<{id: string, alias: string}>} roster  the run's seat table (`o.seats`)
+ * @param {Map<string, number>} [twins]  the run's ONE `twinAliases(roster)` (see above)
  * @returns {{attempted: Set<string>, legs: Array<{leg: object, seatId: ?string}>}}
  */
-function planStillDeadSources(unit, seatOf, roster) {
-  const twins = twinAliases(roster);
+function planStillDeadSources(unit, seatOf, roster, twins = twinAliases(roster)) {
   const seatsPerAlias = new Map();
   for (const seat of roster || []) {
     if (seat && seat.alias) { seatsPerAlias.set(seat.alias, (seatsPerAlias.get(seat.alias) || 0) + 1); }
@@ -152,9 +163,14 @@ function recordFailure(unit, seat, ff, trackModel = true, seatObj = null, twins 
  * identity: it is how a dead LEG contributes the seat it was actually bound to
  * rather than one guessed from its alias. A wave-origin loss carries its own
  * roster on `w.seats`, positionally parallel to `w.models`.
+ *
+ * `twins` (v4.8 T-A6, SI-TWINS) is THREADED IN rather than derived here — one
+ * `twinAliases` per run, shared by every site that mints or asks a `legLossKey`. The
+ * default is for direct callers (this function is exported and several suites drive it
+ * with four arguments); the production path always passes.
  */
-function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map()) {
-  const twins = twinAliases(o.seats);
+function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map(),
+  twins = twinAliases(o.seats)) {
   const isCriticWave = (w) =>
     w.waveId === `${o.runId}-c1` || (!!o.critic && (w.models || []).includes(o.critic));
   const bench = { unit: 'bench', waveId: `${o.runId}-s1r1`, retryOfWaveId: `${o.runId}-s1`,

@@ -2224,27 +2224,44 @@ every control unmoved) and costed (299 ⇒ 308, **8 over** the 300-line gate). T
 still the correct description of what HEAD does; what changed is that the remedy is a bound in
 `recordFailure`, not a sentence in this file.
 
-- [ ] **SI-TWINS · `twinAliases(o.seats)` is recomputed at FOUR sites across THREE files, and the
-  `legLossKey` / `twinAliases` / `attemptedSeats` trio can desynchronise silently.** Filed, not
-  fixed: consolidating is a refactor and **R14 says consolidation must not ride a defect PR**. Code
+- [x] **SI-TWINS · `twinAliases(o.seats)` WAS recomputed at FOUR sites across THREE files, and the
+  `legLossKey` / `twinAliases` / `attemptedSeats` trio could desynchronise silently.**
+  **CLOSED by v4.8 T-A6 (2026-08-17)** — one derivation, threaded. It was filed, not fixed, because
+  consolidating is a refactor and **R14 says consolidation must not ride a defect PR**; it rides
+  the extraction PR instead, as this entry's last paragraph asked. Code
   council on PR #170 **round 1**, findings **C3** (nit) and **D2** (minor); **RE-RAISED in round 2
   as A3** (a1/d0/n1 — thin, and the same subject). ⚠️ **A3 is THIS entry — do not file it a second
   time.** Round 2 added no site and no new mechanism; it re-raised the four-site duplication that
   the list below already names by symbol. Every site anchored **by symbol** —
   line numbers into these two files have rotted three times in this release alone:
-  - `src/council/run-retry-group.js :: groupStage1Losses` — `const twins = twinAliases(o.seats)`,
-    handed to every `recordFailure` call in the wave and leg loops.
-  - `src/council/run-retry-group.js :: planStillDeadSources` — `twinAliases(roster)`, where `roster`
-    is the caller's `o.seats`. Note this function ALSO derives its own `seatsPerAlias` map with a
-    **deliberately different** rule (`=== 1` vs `> 1`), so a naive "just pass one Set in" merge
-    would silently change which losses are announced. See that function's docblock before touching.
-  - `src/council/run-retry.js :: retryStage1Losses` — `const twins = twinAliases(o.seats)`, used for
-    `srcRowKey` at both `claimSrc` sites.
-  - `src/council/run-stage1-rows.js :: pushDeadSeatRows` — `const twins = twinAliases(o.seats)`,
-    used for `rowKeyOf` and for the `spareRetryLegs` / `exact` predicates on both arms.
+  - `src/council/run-retry.js :: retryStage1Losses` — **now the ONE derivation.** It made its own
+    for `srcRowKey` at both `claimSrc` sites; it now makes the run's only one, passes it to both
+    `run-retry-group.js` consumers as an argument, and publishes it on the return as `out.twins`.
+  - `src/council/run-retry-group.js :: groupStage1Losses` — was `const twins = twinAliases(o.seats)`,
+    handed to every `recordFailure` call in the wave and leg loops. Now a threaded parameter, with a
+    default for the suites that drive it directly with four arguments.
+  - `src/council/run-retry-group.js :: planStillDeadSources` — was `twinAliases(roster)`, where
+    `roster` is the caller's `o.seats`. Now a threaded parameter with the same kind of default.
+    ⚠️ **Its own `seatsPerAlias` map is UNTOUCHED and stays a deliberately different rule
+    (`=== 1` vs `> 1`)** — a naive "just pass one collection in" merge would silently change which
+    losses are announced, because the two rules disagree on an alias the roster does not mention at
+    all (count 0): `!twins.has(alias)` is true there and `=== 1` is false. That gap is now pinned —
+    `run-retry-twins-threading.test.js` :: *"the `=== 1` announce rule is NOT the `> 1` twins rule
+    — an off-roster alias still announces"*, mutant **MERGERULE**.
+  - `src/council/run-stage1-rows.js :: pushDeadSeatRows` — was `const twins = twinAliases(o.seats)`,
+    used for `rowKeyOf` and for the `spareRetryLegs` / `exact` predicates on both arms. Now a
+    threaded parameter: `run-stages.js` passes `retry.twins`. The default is for the several suites
+    that hand this function a fixture `retry` with no `twins` at all.
+  - **What is pinned, and what is not.** Three consumer pins hand each site a `twins` that
+    DISAGREES with `o.seats` and assert the site follows the argument (mutants **THREADDROP**,
+    **THREADDROP-GROUP**, **THREADDROP-PLAN**). The last hop — `run-stages.js` passing
+    `retry.twins` rather than a fresh derivation — is a SOURCE pin, disclosed as such: a
+    re-derivation from the same roster is *equal* to `retry.twins`, so no fixture can separate
+    them from outside.
   - **The desync risk that makes this more than duplication.** `legLossKey`'s minted key must be
     added to `attemptedSeats` at every producer site and asked for at every consumer site with the
-    SAME `twins` set. If one site's `twins` ever differs (a different roster argument, a cached Set,
+    SAME `twins` collection — a **Map** (alias ⇒ roster count) since T-A3, not the Set this entry
+    originally said. If one site's `twins` ever differs (a different roster argument, a cached one,
     a re-derived one), a retried twin re-acquires its own FIRST-attempt leg — which already carries
     a `superseded` row — and that leg's cost lands in runStats **twice** while its retry leg lands
     nowhere. **SETTLED BY EXECUTION at v4.8 T-A6 (2026-08-17).** This sentence used to read
@@ -2263,9 +2280,10 @@ still the correct description of what HEAD does; what changed is that the remedy
       minted key; no emitted still-dead note does"*; 533 of 535 suites green.
 
     Both names are now written into those tests **with their mutations and their measured red
-    sets**, so the next reader inherits a measurement instead of a claim. Any consolidation must
-    keep both RED, and should be sequenced with (or after) the `run-retry.js` extraction above,
-    since both touch the same call graph.
+    sets**, so the next reader inherits a measurement instead of a claim. The consolidation was
+    sequenced after the extraction above, as this entry asked. Both mutants must be **re-run
+    against the consolidated tree** and stay RED; that re-run is recorded at the tests themselves,
+    not here, so there is one place to read it rather than two that can disagree.
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.

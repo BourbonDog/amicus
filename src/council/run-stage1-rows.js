@@ -59,7 +59,7 @@ const { supersededRows } = require('./run-stage1-superseded');
  * ledger loses is an executable split that `shift()` assigned by arrival order.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-  roleFor, seatOf, degrade }) {
+  roleFor, seatOf, degrade, twins = twinAliases(o.seats) }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
   // run-retry.js's `seatKey` uses for a roster slot it could not identify, so
   // the two sides of every lookup below agree by construction.
@@ -73,7 +73,11 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // those join FIRST-attempt legs against RETRY legs, two different leg populations
   // whose taskIds can never match, and minting there would silently drop the
   // superseded row of every twin whose retry healed.
-  const twins = twinAliases(o.seats);
+  // v4.8 T-A6 (SI-TWINS): `twins` is the run's ONE `twinAliases`, threaded in — run-stages.js
+  // passes `retry.twins`, the very collection `run-retry.js :: retryStage1Losses` minted every
+  // `attemptedSeats` key with. The default is for direct callers (several suites hand this
+  // function a fixture `retry` with no `twins` at all), and it re-derives from the SAME roster,
+  // so it agrees by construction — but only the threaded value agrees by IDENTITY.
   const rowKeyOf = (l) => legLossKey(seatOf.get(l) || null, l.modelInput || l.model, l, twins);
 
   // v4.7 D2/E4 superseded rows + the T-A5 invariant guard: ./run-stage1-superseded (T-A6 split).

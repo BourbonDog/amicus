@@ -35,6 +35,12 @@ const { groupStage1Losses, planStillDeadSources, seatKey, twinAliases, legLossKe
 async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   counts = { reviewed: 0, total: 0 }, seatOf = new Map() } = {}) {
   const { o, launchers } = ctx;
+  // v4.8 T-A6 (SI-TWINS): THE run's one `twinAliases`. It was derived independently at four
+  // sites across three files; now it is made here and threaded to all of them — the two
+  // run-retry-group.js consumers below by argument, and run-stage1-rows.js through `out.twins`,
+  // which run-stages.js hands straight to `pushDeadSeatRows`. Two collections that disagree is
+  // the desync mutants DESYNCLEG and DESYNCPLAN pin: a retried twin re-acquires its own FIRST
+  // leg, which already carries a `superseded` row, so that leg is billed twice.
   const twins = twinAliases(o.seats);   // the roster's repeated aliases (v4.8 T2.2)
   // `seatOf`/`orphanLegs` are part of the CONTRACT, not a debugging aid: a
   // recovered leg is a RETRY-wave object Stage-1's seatOf has never seen, so
@@ -43,7 +49,9 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   // `attemptedSeats` (v4.8 PR2b Task 8): the seat-keyed "was this seat actually
   // retried?" gate. Structured data, never a scan of stillDeadNotes — the full
   // rationale sits at run-stage1-rows.js's fallback, its only consumer.
-  const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
+  // `twins` rides on the return for the same reason `seatOf` does: the consumer must ask with
+  // the collection this pass minted with, not one it re-derives (v4.8 T-A6).
+  const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [], twins,
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
     stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [], attemptedSeats: new Set() };
   // Task 5 (#129): SL-2 retries the SAME model under the SAME conditions, so a
@@ -57,7 +65,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     legTimeoutMs,
   );
 
-  for (const unit of groupStage1Losses(o, deadWaves, deadLegs, seatOf)) {
+  for (const unit of groupStage1Losses(o, deadWaves, deadLegs, seatOf, twins)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
     // unmappable lens loss (no carrier resolved an index), a lens index
     // outside the run's actual lens roster (coordinator-review MINOR-7b: a
@@ -158,7 +166,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       // v4.8 PR5c: the srcWave/srcLeg dedup lives in run-retry-group.planStillDeadSources —
       // an unidentified wave slot and a bound leg for the same seat key in DIFFERENT
       // spaces, so a naive test announces one seat twice. See that helper for the budget.
-      const plan = planStillDeadSources(unit, seatOf, o.seats);
+      const plan = planStillDeadSources(unit, seatOf, o.seats, twins);
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);
