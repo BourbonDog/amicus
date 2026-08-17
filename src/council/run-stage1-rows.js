@@ -12,6 +12,15 @@ const { buildRunStatsEntry } = require('./run-assemble');
 // terminates at a leaf and cannot re-create the parent-child cycle the header above
 // documents eliminating.
 const { twinAliases, legLossKey } = require('./run-retry-group');
+// v4.8 T-A5: the ONE voice, for the one thing this file can now detect and refuse (below).
+// ../utils/degrade requires nothing at all, so this is a leaf import as well and the cycle the
+// header above documents eliminating stays eliminated.
+const { formatDegrade } = require('../utils/degrade');
+// The announcement must not be defeatable by omitting a parameter, so `degrade` defaults to the
+// same sentence on stderr. `formatDegrade` is pure interpolation and — unlike the sink's
+// `makeDegrade`, which validates and THROWS — cannot fail: nothing on this path may throw, because
+// it runs after a whole council has already been paid for.
+const STDERR_NOTICE = { note: (r) => process.stderr.write(formatDegrade({ ...r, kind: 'degrade' })) };
 
 /**
  * Push superseded-seat and primary-error dead-seat rows onto extraRows.
@@ -50,7 +59,7 @@ const { twinAliases, legLossKey } = require('./run-retry-group');
  * ledger loses is an executable split that `shift()` assigned by arrival order.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-  roleFor, seatOf }) {
+  roleFor, seatOf, degrade = STDERR_NOTICE }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
   // run-retry.js's `seatKey` uses for a roster slot it could not identify, so
   // the two sides of every lookup below agree by construction.
@@ -88,16 +97,52 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // twin CAN land in a different lens unit than its leg-origin sibling — that split is real,
   // it just cannot reach this join.) Break either fact and the skipped twin takes its own
   // first leg as a primary row AND gets a superseded row for it: one billed leg counted
-  // twice. Recorded so the next reader need not re-derive it.
+  // twice.
+  // ⚠️ v4.8 T-A5 — and the paragraph above is now the DERIVATION, not the safety. Both facts
+  // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
+  // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
+  // `deadLegs0` the retry declined to attempt — so the test below asks IDENTITY, which no
+  // keyspace can blur, at the one place the alias key is relied on. Unreachable while either
+  // fact holds (measured: 4000 fuzzed retry runs, 993 with skips, 0 hits; the same fuzz under
+  // mutant GUESSPOS hits 85), so every correct input is byte-identical — and the double count the
+  // paragraph above ends on no longer FOLLOWS from breaking a fact: it is refused and announced.
+  const skippedLegs = new Set(retry.skippedDeadLegs || []);
   const supersededKeys = new Set([
     ...retry.recoveredLegs.map(keyOf),
     ...retry.stillDeadLegs.map(keyOf),
   ]);
+  // Refusing the row IS the repair, and `willTakeItsOwnLeg` is what makes the repair EXACT. The
+  // double count needs BOTH halves: a skipped leg whose alias key is superseded, AND the dead-seat
+  // loop below handing that same leg back as its own primary row. run-stages.js merges
+  // `skippedDeadLegs` into the `stillDeadLegs` handed in here, so the leg is a still-dead seat
+  // there too, and the loop's `deadLegs0.find` fallback runs for exactly the keys
+  // `attemptedSeats` does NOT hold. Where it DOES hold the key — R2's taskId-less floor, two
+  // indistinguishable twins collapsing onto one leg-less row — the superseded row is the only
+  // place that leg's `usage` survives at all, and refusing it would trade a double count for a
+  // LOST billed leg. So refuse the first shape and leave the second exactly as it was.
+  // It is announced either way, because a silently corrected number is the failure mode this join
+  // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
+  // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. Every
+  // reader of a note's `data.seat` (verdict.js, workspace-seats.js, live-dead-seats.js) gates on
+  // dead-leg/dead-wave/seat-unbound first, so this record reaches none of them, and it cannot
+  // move the exit code either: run-stages.js notes a `dead-leg` degrade for every skipped leg
+  // before this function is called, so the run is already degraded whenever this can fire.
+  const willTakeItsOwnLeg = (dead) => !retry.attemptedSeats.has(rowKeyOf(dead));
+  const refuseSupersede = (dead) => {
+    const alias = dead.modelInput || dead.model;
+    degrade.note({ channel: 'internal',
+      what: `a superseded row for seat ${alias} was refused`,
+      why: 'the retry both SKIPPED this first-attempt leg and superseded its alias key, which the '
+        + 'two invariants above forbid — so that key no longer names one outcome',
+      effect: 'the leg keeps its primary row and is counted once; the run continues, but the '
+        + `superseded/primary split for '${alias}' is no longer trustworthy`,
+      data: { seat: alias, taskId: dead.taskId || null } });
+  };
   for (const dead of deadLegs0) {
-    if (supersededKeys.has(keyOf(dead))) {
-      extraRows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
-        role: 'superseded', wasChair: false }));
-    }
+    if (!supersededKeys.has(keyOf(dead))) { continue; }
+    if (skippedLegs.has(dead) && willTakeItsOwnLeg(dead)) { refuseSupersede(dead); continue; }
+    extraRows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
+      role: 'superseded', wasChair: false }));
   }
 
   // v4.7 D2/E4 — primary error rows: one per SEAT with NO surviving review

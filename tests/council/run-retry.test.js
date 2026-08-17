@@ -976,10 +976,10 @@ describe('v4.8 T2.2 review A2: srcLegClaimer\'s single-use-per-leg contract', ()
 describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', () => {
   // `supersededKeys` (run-stage1-rows.js :: pushDeadSeatRows) is the ONE join left in the
   // ALIAS-granular keyspace while the dead-seat rows and `attemptedSeats` moved to `rowKeyOf`.
-  // Its own comment argues it is safe because (1) skipping is all-or-nothing per UNIT and
-  // (2) two UNBOUND LEG-origin twins always share a unit. Two independent reviewers said an
-  // argument in a comment is not enough. Break either invariant and a skipped twin takes its own
-  // first leg as a PRIMARY row and gets a SUPERSEDED row for it — one billed leg counted twice.
+  // Two independent reviewers said the comment ARGUING it safe — (1) skipping is all-or-nothing
+  // per UNIT, (2) two UNBOUND LEG-origin twins always share a unit — was not enough, so since v4.8
+  // T-A5 that join also CHECKS the one statement both facts exist to make true. These two pins
+  // stay: they are WHY the check never fires, and run-stages.test.js pins the check itself.
   const TWIN_MODELS = ['deepseek', 'deepseek'];
   const unboundTwinLegs = () => [deadLeg('deepseek', undefined, undefined, 'r1-s1', 1),
     deadLeg('deepseek', undefined, undefined, 'r1-s1', 2)];

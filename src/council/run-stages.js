@@ -277,7 +277,7 @@ async function runStage1(ctx) {
   // ⚠️ allSeatOf, never the Stage-1 `seatOf`: retry.recoveredLegs and
   // retry.stillDeadRetryLegs are retry-wave objects that map has never seen.
   pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-    roleFor, seatOf: allSeatOf });
+    roleFor, seatOf: allSeatOf, degrade: ctx.degrade });
 
   return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
     degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0, extraRows };

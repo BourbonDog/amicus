@@ -174,8 +174,10 @@ These bind every task. A reviewer should read them as the attention lens.
     mechanism, never by a bare id.
 11. **Do not re-litigate C1** (the bound-retry-leg drop). It is filed as measured-UNREACHABLE
     (fuzz: 1200 runs / 697 bound legs / 0 violations) and its own stated mechanism is wrong — a
-    keyspace bridge, not a one-line lookup. The guard comment at `run-stage1-rows.js:169-173` names
-    the cross-file invariant that keeps it unreachable.
+    keyspace bridge, not a one-line lookup. The ⚠️ guard comment immediately above
+    `run-stage1-rows.js :: pushDeadSeatRows`' `let finalLeg = exact ? …` assignment names the
+    cross-file invariant that keeps it unreachable. (Anchored BY SYMBOL at T-A5, per rule 5b: this
+    read `:169-173`, which was accurate at base and rotted twice — T-A1 and T-A5 both grew the file.)
 
 ### Gates — all four must exit 0 before the PR is opened
 

@@ -82,7 +82,7 @@ function isSeatTable(seats) {
  *   - a Stage-1 note exonerates NOTHING, not even judge-: that orphan is re-admitted to
  *     Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that `judgeSeatOf` filters out
  *     (:105-107), so its judge leg takes the alias branch too — and emits no -s2 note,
- *     because it BOUND. Measured: run-stages.test.js:1757.
+ *     because it BOUND. Measured: run-stages.test.js :: "M2: the placeholder never becomes…".
  *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser key names no seat
  *     takes materializeDebate's alias branch (run-debate.js:151-152,
  *     run-debate-revote.js:169-171 pass `seatById.get(key) || null`) and NO note records it.

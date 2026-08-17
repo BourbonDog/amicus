@@ -96,8 +96,8 @@ describe('the orphan intersection — where four designs died', () => {
   // EXACTLY (run-stage2.js:67/69/90 build it as `${runId}-s2`), not by prefix guess.
   //
   // ⚠️ Council-1 B2's rationale ("the orphan may have only written a review") is measured
-  // FALSE for a STAGE-1 orphan and is disputed on the PR: run-stages.test.js:1757 shows its
-  // judge file is alias-named too (placeholder re-bind, and no -s2 note because it BOUND).
+  // FALSE for a STAGE-1 orphan and is disputed on the PR: run-stages.test.js's F1 pin "M2: the
+  // placeholder never becomes…" shows an alias-named judge file (re-bind, no -s2 note: it BOUND).
   // Every direction below is pinned so none can be "fixed" into another.
   const S2_RUN = 'abc123';
   const s2Orphan = (alias) => orphanNote(alias, `${S2_RUN}-s2`);

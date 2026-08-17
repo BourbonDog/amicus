@@ -2013,12 +2013,14 @@ reader can find them and so nobody re-argues them in prose:
   helper is stateful and exported; three pins cover at-most-once, cross-key consumption, and
   one-claimer-per-unit. Mutant **FIND** (drop `pool.delete(l)`) observed RED on the first two.
 - `run-retry.test.js` :: *"v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on"* —
-  `supersededKeys` is the ONE join still in the alias-granular keyspace, and until now its safety
-  argument existed only as a comment. Invariant 2 (two UNBOUND leg-origin twins share ONE unit,
+  `supersededKeys` is the ONE join still in the alias-granular keyspace, and when these pins landed
+  its safety argument existed only as a comment (T-A5 later added the CHECK — see that entry).
+  Invariant 2 (two UNBOUND leg-origin twins share ONE unit,
   bench AND lens) and invariant 1 (skipping is all-or-nothing, so the pair is BOTH skipped or
   NEITHER) each have a pin, plus a scope control showing BOUND twins DO split across lens units and
   why that is safe. Mutants **GUESSPOS** (guess an unbound leg's seat by ordinal) and
-  **PARTIALSKIP** (a skip branch pushing a subset of `unit.srcLegs`) observed RED.
+  **PARTIALSKIP** (a skip branch pushing a subset of `unit.srcLegs`) observed RED — and
+  **re-observed RED at `2abbeefa`** by T-A5, which measured the claim rather than inheriting it.
 
 **What the finding said, kept for the record.** `run-retry-group.js :: recordFailure` keyed through
 `seatKey(seatObj, seat)` (T2.1, 2026-08-16, `511cf43e` — hand-inlined as
@@ -2154,6 +2156,15 @@ this table exists to prevent.
       superseded row for it: **one billed leg counted twice**, the defect class this release exists
       to close.
     - Provenance: code council on PR #170 **round 2**, findings **A2** (major) and **C1** (major).
+    - ⚠️ **PAST TENSE as of v4.8 Phase 2 T-A5** — this entry is left standing for T-A8's truth pass,
+      but two of its sentences are no longer true of the code. `pushDeadSeatRows` CAN now verify the
+      statement both invariants exist to make ("no first leg is SKIPPED while its alias key is
+      superseded"): it tests `retry.skippedDeadLegs` by leg-object identity where the alias key is
+      relied on, and where a violation would otherwise double-count it REFUSES the second row and
+      announces on channel `internal` instead of throwing (on R2's taskId-less floor there is no
+      second count to refuse, and refusing there would LOSE the leg's spend, so it does not).
+      Either way, breaking an invariant no longer double-counts a billed leg. Both
+      mutants were re-run and re-observed RED at `2abbeefa`; neither pin was weakened.
 
 ✅ **CLOSED by v4.8 Phase 2 T-A1** (commit `955bd7c9`) — the extraction commit this note asked for
 corrected the docblock in place, net zero lines, scoping the masking to pre-PR5c HEAD and stating
@@ -2239,11 +2250,12 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping anything that
   can't find its `launched` entry — or, since T-A4, any leg past its key's LAST minted slot. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
-  (`run-stage1-rows.js:148` legs, `:165` waves — both the `!!seat || !twins.has(alias)` expression
-  itself, not the `alias`/comment lines `:146`/`:163` this entry cited before 2026-08-17) — which is
-  the condition (`run-stage1-rows.js:176`, `let finalLeg = exact ? retryLegBySeat.get(join) :
-  undefined;`, this commit's comment) that hands a bound retry leg its row. A BOUND still-dead retry
-  leg can therefore never reach the `!exact` branch below `:176` — the one branch that does NOT consult
+  (the `!!seat || !twins.has(alias)` expression itself, in EACH of `pushDeadSeatRows`' two
+  `deadSeats` feeders — legs then waves; not the `alias`/comment lines this entry cited before
+  2026-08-17. Re-anchored BY SYMBOL at T-A5, having read `:148`/`:165` and before that `:146`/`:163`)
+  — which is the condition (`pushDeadSeatRows`' `let finalLeg = exact ? retryLegBySeat.get(join) :
+  undefined;`) that hands a bound retry leg its row. A BOUND still-dead retry
+  leg can therefore never reach the `!exact` branch below it — the one branch that does NOT consult
   `retryLegBySeat` — because nothing on the path to `stillDeadRetryLegs` can produce a bound leg
   without also producing the seat that makes its row `exact`.
 - **Earned, not asserted.** Two mutants, scratchpad-applied and reverse-edited byte-exactly (never
@@ -2280,9 +2292,10 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   `stillDeadLegs` are deliberately the SAME bound legs, so those rows are already `exact`). No
   fixture anywhere pairs a BOUND still-dead retry leg with a `!exact` row, and per the fuzz above, no
   real input the retry path can produce does either.
-- **The comment this measurement earned.** `run-stage1-rows.js:171-175` (inside `pushDeadSeatRows`'s
-  row-building loop) now names `run-retry-launch.js:53`/`:59` as the reason its `exact` gate
-  is safe — the cross-file half of the invariant nothing previously enforced or documented.
+- **The comment this measurement earned.** The ⚠️ block immediately above `pushDeadSeatRows`'
+  `let finalLeg = exact ? …` assignment (anchored BY SYMBOL at T-A5, having read
+  `run-stage1-rows.js:171-175`) now names `run-retry-launch.js:53`/`:59` as the reason its `exact`
+  gate is safe — the cross-file half of the invariant nothing previously enforced or documented.
 - **~~Concern for whoever extracts `run-retry.js` next~~ — DISCHARGED by T-A2 (2026-08-17).** The
   concern was that `run-retry.js` sat at 295/300, one FAKEBIND-sized change away from opening this
   hole for real, with nothing in either file's test suite going red if it did. The extraction landed
@@ -3057,7 +3070,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     eight were stale by then or became so** — `run-retry-group.js:29`, `run-stage1-rows.js:55` and
     `:153` — all three falsified by T-A1 moving `seatKey`/`legLossKey` into `run-retry-keys.js` and
     by `run-stage1-rows.js` growing. A rigour claim is only as current as its date, so this one
-    carries the date and the method: each site below was opened at its stated line and read)
+    carries the date and the method: each site below was opened at its stated line and read.
+    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**272**) and moved BOTH of its spellings a FIFTH
+    time; rather than restate two numbers that rot on the next edit, they are now anchored BY
+    SYMBOL — which is why those two entries alone carry no line)
     — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and
     `run-stage1-rows.js` (116→**160**); `27febfb8` added a 16-line comment to the latter
     (160→**176**); the review-fix commit added 14 more (176→**190**), which moved **one** of the
@@ -3069,8 +3085,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     (`run-retry-group.js:109`) — and added a tenth call site:
     `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-keys.js:15`
     (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
-    `run-stage1-rows.js:57 :: keyOf` (**was `:42`, then `:45`, then `:55`**),
-    `run-stage1-rows.js:155` (`const join = s ? s.id : alias;`; **was `:85`/`:129`/`:138`/`:153`**),
+    `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` (**was `:42`/`:45`/`:55`/`:57`**),
+    `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias;`
+    (**was `:85`/`:129`/`:138`/`:153`/`:155`**),
     `run-stages.js:96 :: keyOf`, `run-stages.js:106`, `run.js:228` (one caller, `:229`),
     `run.js:231` (hand-inlined).
     **The count is still EIGHT** — T2.2 added no spelling, only call sites.
