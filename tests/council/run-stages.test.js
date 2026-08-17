@@ -1135,9 +1135,15 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // `attemptedSeats` did NOT gain the same keys, `retry.attemptedSeats.has(join)` goes
     // false and each row re-acquires its own FIRST-attempt leg — which already has a
     // `superseded` row below, so that leg's cost would land in runStats twice while both
-    // retry legs landed nowhere. Measured under exactly that mutant: all four rows read
-    // waveId 'abc123-s1'. The assertion that separates the two worlds is which waveId
-    // the PRIMARY rows carry.
+    // retry legs landed nowhere.
+    // ⚠️ v4.8 council A1 MOVED this test's separator. The sentence that stood here — "the
+    // assertion that separates the two worlds is which waveId the PRIMARY rows carry" — is
+    // now FALSE: a borrowed leg no longer stamps its waveId, so a correct primary row here
+    // carries none at all. Re-measured under DESYNCLEG against the final tree: a re-attached
+    // first leg still stamps waveId 'abc123-s1', resolvedModel 'deepseek' and durationMs
+    // 1000, so the separator is the leg-LESS shape below, and the mutant reds on it. `usage`
+    // is what keeps this distinct from the wholesale-death control two tests down: same
+    // shape, but that one's rows carry usage null because no spare existed to claim.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
@@ -1153,7 +1159,11 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     const primary = primaryRows(r);
     expect(primary).toHaveLength(2);                              // TWO paid seats, TWO rows
     expect(primary.every(x => !('seat' in x))).toBe(true);        // attributing NOTHING
-    expect(primary.map(x => x.waveId)).toEqual(['abc123-s1r1', 'abc123-s1r1']);
+    expect(primary.every(x => !('waveId' in x) && !('resolvedModel' in x))).toBe(true);
+    expect(primary.every(x => x.status === 'error' && x.durationMs === null)).toBe(true);
+    // …and the retry legs ARE still claimed: both costs on the record, one per row.
+    expect(primary.map(x => x.usage))
+      .toEqual([{ cost: { amount: 0.01, source: 'reported' } }, { cost: { amount: 0.01, source: 'reported' } }]);
     const superseded = r.extraRows.filter(x => x.role === 'superseded');
     expect(superseded.map(x => x.waveId)).toEqual(['abc123-s1', 'abc123-s1']);
     // Every billed leg on the record exactly once: two first legs superseded, two retry
@@ -1372,6 +1382,41 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
       seats: [null, null], reason: 'died' }] });
     expect(rows).toHaveLength(2);
     for (const r of rows) { expect('seat' in r).toBe(false); }
+  });
+
+  test('T2.2 review A1: a borrowed spare is BILLING ONLY — the row asserts no execution it cannot own', () => {
+    // The finding: `spareRetryLegs.shift()` hands a still-dead retry leg to a row on a twin
+    // alias, and the row then carried that leg's waveId/resolvedModel/status/durationMs —
+    // one seat's execution presented as another's. The sharpest shape is CROSS-ARM, and it is
+    // the one below: a WAVE-origin seat that produced NO LEG AT ALL. Measured at 42738592
+    // before the fix, that row read {"waveId":"r1-s1r1","resolvedModel":"deepseek-r1-turbo",
+    // "status":"timed-out","durationMs":4242,…} — an attempt it never made.
+    const spare = { taskId: 'r1-s1r1-1', waveId: 'r1-s1r1', model: 'deepseek-r1-turbo',
+      modelInput: 'deepseek', status: 'timed-out', durationMs: 4242,
+      usage: { cost: { amount: 0.07, source: 'reported' } } };
+    const wave = { waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'died' };
+    const withSpare = (stillDeadRetryLegs, seat) => ({ recoveredLegs: [], stillDeadLegs: [],
+      stillDeadRetryLegs, attemptedSeats: new Set([seat]) });
+    const borrowed = run({ stillDeadWaves: [wave], retry: withSpare([spare], 'deepseek') })[0];
+    // The CONTROL is the SAME seat with an empty spare pool — buildRunStatsEntry's one
+    // definition of "a dead seat with nothing to report". The pin is whole-object equality
+    // against it, not a field checklist: any FUTURE field stamped off a borrowed leg fails
+    // here without anyone remembering to extend this test.
+    const control = run({ stillDeadWaves: [wave], retry: withSpare([], 'deepseek') })[0];
+    expect(control.usage).toBeNull();                          // non-vacuity: nothing to report
+    expect(borrowed).toEqual({ ...control, usage: spare.usage });
+    // …and the spend the borrow exists to preserve IS still on the record. Deleting the
+    // `row.usage` assignment (mutant NOBILL) reds this line; restoring the whole leg as the
+    // row's own (mutant BORROWALL, HEAD's shape) reds the equality above.
+    expect(borrowed.usage).toEqual(spare.usage);
+    // SCOPE control — an EXACT row genuinely OWNS its leg (retryLegBySeat, never the spare
+    // pool), so every execution fact stays stamped. A unique alias has no twin proof, so it
+    // neither mints nor borrows; this is the boundary the fix must not cross.
+    const uniq = run({ stillDeadWaves: [{ ...wave, models: ['gpt'] }],
+      retry: withSpare([{ ...spare, model: 'gpt-x', modelInput: 'gpt' }], 'gpt') })[0];
+    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+      waveId: 'r1-s1r1', resolvedModel: 'gpt-x', status: 'timed-out', durationMs: 4242,
+      usage: spare.usage });
   });
 
   test('T12 control: a still-dead WAVE whose slots ARE identified is untouched', () => {

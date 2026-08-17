@@ -36,6 +36,16 @@ const { twinAliases, legLossKey } = require('./run-retry-group');
  * DIFFERENTLY still produce TWO, keyed by executable: retryLegBySeat (below)
  * surfaces a real leg, and buildRunStatsEntry stamps `resolvedModel` from
  * `leg.model` whether that leg succeeded or not. Either way runStats keeps two rows.
+ * ⚠️ v4.8 council A1 NARROWED that second sentence: it holds for a twin whose retry leg
+ * was IDENTIFIED (the retryLegBySeat path). An UNATTRIBUTED twin's row now takes only a
+ * borrowed leg's `usage` and NO `resolvedModel`, so two of those share the empty resolved
+ * key and collapse into ONE ledger row — the same outcome as the no-leg classes above.
+ * MEASURED against buildLedgerRows, not reasoned: two such rows whose borrowed legs
+ * resolved DIFFERENTLY gave 2 ledger rows before and give 1 now; two that resolved the
+ * SAME gave 1 either way. Nothing about spend moves — a ledger row carries no cost field
+ * at all (`buildLedgerRows`' keys are stats, not usage), and runStats, which IS what the
+ * run total is summed from, still keeps two rows carrying both legs' `usage`. What the
+ * ledger loses is an executable split that `shift()` assigned by arrival order.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
   roleFor, seatOf }) {
@@ -104,15 +114,20 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // whole change exists to record. Every unattributed row on that alias is equally
   // dead, so they are handed out one apiece below: the SET of billed legs on the
   // record is exact, and no row claims a seat identity (all carry seat: null).
-  // ⚠️ The FULL cost of that hand-out, disclosed (council review D1): the pairing is arbitrary in
-  // BOTH directions. `shift()` takes the next spare in arrival order, and the rows it feeds are
-  // the `!exact` rows of BOTH arms — so a LEG-origin retry leg can be handed to a WAVE-origin row
-  // (a `Symbol('unattributed-seat')` slot below) on the same alias, and two leg-origin rows can
-  // swap legs with each other. A row can therefore carry a real leg's waveId/status/usage/
-  // durationMs belonging to a DIFFERENT seat of that alias. Accepted, not overlooked: the row
-  // asserts no seat at all, every candidate row on that alias is equally dead, and the SET and
-  // COUNT of billed legs stay exact. The alternative — key rows by the mint alone — drops a
-  // billed leg from runStats entirely, which is the spend hole this change exists to close.
+  // ⚠️ Which row gets which spare is arbitrary in BOTH directions, and stays arbitrary:
+  // `shift()` takes the next spare in arrival order, and the rows it feeds are the `!exact`
+  // rows of BOTH arms — so a LEG-origin retry leg can be claimed by a WAVE-origin row (a
+  // `Symbol('unattributed-seat')` slot below) whose seat produced no leg at all, and two
+  // leg-origin rows can swap. v4.8 council A1 bounds what that arbitrariness can SAY: a
+  // claimed spare is BILLING ONLY. Its `usage` rides the row, because the run paid for it
+  // and dropping it re-opens the spend hole this change exists to close; its `waveId`,
+  // `resolvedModel`, `status` and `durationMs` do NOT, because those are one seat's
+  // execution and the row is another's — a row that produced no leg would otherwise be
+  // emitted with a real attempt's duration and outcome. What remains, disclosed: the SPLIT
+  // of a known alias total across its anonymous rows is still arbitrary (row order, not
+  // identity). The SET, COUNT and SUM of billed legs are exact, and no row now asserts an
+  // execution it cannot own. Pinned by BORROWALL (a row must never differ from the leg-less
+  // row by anything but `usage`) — deleting the `usage` line reds the spend half instead.
   const retryLegBySeat = new Map();
   const spareRetryLegs = new Map();   // alias -> still-dead retry legs naming no seat
   for (const leg of retry.stillDeadRetryLegs) {
@@ -152,6 +167,14 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
 
   for (const [, { seat, alias, exact, join }] of deadSeats) {
     let finalLeg = exact ? retryLegBySeat.get(join) : undefined;
+    // v4.8 council A1: claim the spare HERE, and never as `finalLeg`. It is consumed exactly
+    // as before — same pool, same `shift()`, same one-apiece hand-out, so the SET of billed
+    // legs on the record is unchanged — but it reaches the row through `usage` alone below.
+    // Mutually exclusive with the `deadLegs0` fallback: that branch runs only when
+    // `attemptedSeats` does NOT hold `join`, which is the condition this one requires.
+    const borrowed = !finalLeg && !exact && retry.attemptedSeats.has(join)
+      ? (spareRetryLegs.get(alias) || []).shift() || null
+      : null;
     if (!finalLeg) {
       // `retry.attemptedSeats` — never a scan of stillDeadNotes. Those notes'
       // `data.seat` is ALIAS-valued by contract, so no twin's seat id could
@@ -165,7 +188,7 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
       // retried twin re-acquires its own first-attempt leg — which already has its
       // own `superseded` row above, so that leg's cost lands in runStats twice.
       finalLeg = retry.attemptedSeats.has(join)
-        ? (exact ? null : (spareRetryLegs.get(alias) || []).shift() || null)
+        ? null
         : (deadLegs0.find(l => rowKeyOf(l) === join) || null);    // never retried
     }
     // Seat-space role (spec §4.5), matching the review push in run-stages.js:
@@ -182,8 +205,15 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // it launched, `run-retry.js`'s alias-granular `launched` reconcile passes only ONE of two
     // unattributable twins, so the run still shows one row. That half of SI-22.3 is open (it
     // needs a `run-retry.js` extraction first) and nothing in this file can close it.
-    extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
-      role: seat ? seat.role : roleFor(o, alias), wasChair: false }));
+    const row = buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
+      role: seat ? seat.role : roleFor(o, alias), wasChair: false });
+    // Overwrite rather than synthesize a leg: `buildRunStatsEntry({leg: null})` is the ONE
+    // definition of "a dead seat with nothing to report", so a borrowed row is that row plus
+    // one field, and it stays that way if the leg-less defaults ever change. A synthetic
+    // `{usage, status}` stub would fork them silently — and a bare `{usage}` stub is worse,
+    // because `leg ? leg.status : 'error'` would then stamp `status: undefined`.
+    if (borrowed) { row.usage = borrowed.usage || null; }
+    extraRows.push(row);
   }
 }
 
