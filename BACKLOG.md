@@ -1950,6 +1950,19 @@ cost at +7 lines** with this file's comment conventions; `run-retry.js` has **5*
 its only helper-hosting sibling `run-retry-group.js` has **1** (299/300). Extract one of the two
 first. Do not shave comments to make room.
 
+⚠️ **A second, already-incurred cost of shipping at 299/300: `run-retry-group.js` now carries a
+STALE docblock that cannot be corrected until the file is extracted.** `planStillDeadSources`'
+docblock (`run-retry-group.js:94-95`) still reads *"HEAD hides this downstream because the
+Workspace's dead-row dedup is alias-keyed too and both collapse into one row"*. That "HEAD" means
+**pre-PR5c** HEAD, and the sentence has been stale framing since PR5c; T2.2 then abolished the
+producer-side collapse it leans on. It is **not** wrong about PR5c's own history, so it misleads
+rather than lies — but a reader arriving at that function today will read it as current. Any repair
+is constrained to be **net zero lines or shorter** — the gate blocks the commit on a single added
+line — which is a needle no one should thread under time pressure for a comment. **Correct it in
+the same change that extracts the file**, where the constraint is gone; it belongs on the
+extraction's checklist, not in a separate task. Recorded because "the size ceiling deferred a
+documentation repair" is a real cost that is otherwise invisible.
+
 ⚠️ **A stated invariant for whoever extracts `run-retry-group.js`.** The rule T2.2 shipped is *"never
 dedup on a proven twin alias"* — it is **NOT** *"at most N slots for N roster seats"*, and no code
 says so. Measured 2026-08-16 through the real `groupStage1Losses` on `['deepseek','deepseek','gpt']`:
@@ -2675,11 +2688,13 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `<seatObj> ? <seatObj>.id : <alias>` **written out** over a seat *object*, whose else-branch is
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
-    measurement — see the correction note above.) Sites:
+    measurement — see the correction note above.)
     Sites, **all re-derived by execution against the final tree (2026-08-16, `27febfb8`)** —
     T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and `run-stage1-rows.js`
-    (116→**160**), and `27febfb8` added a 16-line comment to the latter (160→**176**), moving four
-    of the numbers below and adding a tenth call site:
+    (116→**160**), and `27febfb8` added a 16-line comment to the latter (160→**176**). That moved
+    **four** citations into those two files — **three** of the eight spellings below
+    (`run-retry-group.js:52`, `run-stage1-rows.js:42` and `:85`) plus **one** excluded site
+    (`run-retry-group.js:109`) — and added a tenth call site:
     `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:29`
     (the exported one, PR5c; **was `:52`**), `run-stage1-rows.js:45` (**was `:42`**),
     `run-stage1-rows.js:129` (**was `:85`**), `run-stages.js:96`,
