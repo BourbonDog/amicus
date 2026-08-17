@@ -204,6 +204,15 @@ Reverse-edit each, confirm GREEN, confirm `git status --short` is clean. Then re
 
 ## Task 2: T2.2 — N orphans produce N retry slots and N rows, on both arms
 
+> ⚠️ **STATUS 2026-08-16 — SHIPPED PARTIAL (`33e2ecf7`). This heading is the task's GOAL, not a
+> statement of what holds.** The retry-SLOT half closed in every retry shape; the ROW/NOTE half
+> closed for a wholesale retry death, a FULL retry return and a skipped unit, and is **open for a
+> PARTIAL retry return** (code council finding **B1** on PR #170), where two unattributable twins
+> still yield one note and one row. A second consequence of the same key: on a FULL return both
+> notes read slot 0's `firstFailure` (**B2**). Both are blocked on a `run-retry.js` extraction
+> (+7 lines needed, 5 free) and are filed as one scoped NEXT TASK under `BACKLOG.md`'s "The durable
+> finding". **Do not restate this heading's claim unqualified, in either wording.**
+
 **PR: branch `v48p2-producer-identity` off `main`, after T2.1 merges.**
 
 **Files (measured headroom in parentheses):**
@@ -320,5 +329,9 @@ and account for every changed count.
 **T2.2:** N orphans → N retry slots **and** N rows on **both** arms; `attemptedSeats` in lockstep;
 T12 re-fixtured and observing the change; H4 replaced; `deriveSeatLoss` interaction measured and
 reported; `run-retry.js` still under 300 or an extraction prerequisite reported.
+⚠️ **Met as scoped, not as written** (2026-08-16, `33e2ecf7`): slots yes in every shape, rows on
+both arms for every twin the producer is HANDED, and the extraction prerequisite was reported —
+a PARTIAL retry return hands it only one of two (B1), and both notes on a FULL return read slot 0's
+`firstFailure` (B2). See the STATUS block on Task 2's heading.
 
 **Both:** four gates exit 0; `council-review` label applied; checks watched explicitly before merge.

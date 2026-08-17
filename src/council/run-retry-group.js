@@ -69,18 +69,18 @@ function legLossKey(seatObj, alias, leg, twins) {
 }
 
 /**
- * Hand out ONE unclaimed source leg per still-dead outcome. `srcLegs.find(...)`
- * returned the FIRST match every time, so once two unattributable twins produced two
- * outcomes on one alias both recorded the SAME source, and the second seat — a leg
- * the run paid for — vanished from stillDeadLegs entirely. Which dead source pairs
- * with which dead outcome is unknowable AND immaterial: every candidate is still dead
- * after its retry, so consuming one apiece yields the exact SET, attributes nothing
- * (the rows these feed carry no seat), and records each source exactly once.
+ * A STATEFUL claimer over `srcLegs` — build ONE per unit, never reuse it: each call CONSUMES
+ * and returns one leg whose key matches, never hands the same leg out twice, and returns null
+ * once that key is exhausted (`(key) => leg | null`). It replaces `srcLegs.find(...)`, which
+ * returned the FIRST match every time, so two unattributable twins on one alias both recorded
+ * the SAME source and the second seat — a leg the run paid for — vanished from stillDeadLegs.
+ * Which dead source pairs with which dead outcome is unknowable AND immaterial: every candidate
+ * is still dead after its retry, so one apiece yields the exact SET (their rows carry no seat).
  */
 function srcLegClaimer(srcLegs, keyOfSrc) {
   const pool = new Set(srcLegs);
   return (key) => {
-    for (const l of pool) { if (keyOfSrc(l) === key) { pool.delete(l); return l; } }
+    for (const l of pool) { if (keyOfSrc(l) === key) { pool.delete(l); return l; } }  // exits on the delete
     return null;
   };
 }

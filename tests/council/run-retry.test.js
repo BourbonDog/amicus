@@ -928,3 +928,160 @@ describe('v4.8 PR2b Task 8: retryStage1Losses publishes attemptedSeats, seat-key
     expect([...out.attemptedSeats]).toEqual(['deepseek#2']);   // #1 healed — nothing to gate
   });
 });
+
+// ---- v4.8 T2.2 council review: the contracts a COMMENT was not enough for ----
+// Two findings, both "a future change that breaks this must go RED, not merely disagree with a
+// paragraph". Nothing below changes behaviour; every assertion holds at the commit that shipped
+// T2.2 and is pinned against a named mutant instead of a RED-before-GREEN cycle.
+const { srcLegClaimer, legLossKey, twinAliases } = require('../../src/council/run-retry-group');
+
+describe('v4.8 T2.2 review A2: srcLegClaimer\'s single-use-per-leg contract', () => {
+  // The finding: the helper is STATEFUL and EXPORTED, and `srcLegClaimer(srcLegs, keyOfSrc)`
+  // returning a bare `(key) => …` shows none of that at the call site. The docblock now leads
+  // with the contract; these pin it, so the next reader can check the claim rather than trust it.
+  const legs = [{ id: 'L1', k: 'deepseek' }, { id: 'L2', k: 'deepseek' }, { id: 'L3', k: 'gpt' }];
+  const keyOf = l => l.k;
+
+  test('each leg is handed out AT MOST ONCE, then the key is exhausted', () => {
+    // Named mutant "FIND": drop the `pool.delete(l)` (i.e. go back to `srcLegs.find(...)`) and the
+    // second call returns L1 again — the exact defect T2.2 shipped this helper to fix: two
+    // unattributable twins recorded the SAME source and the second billed leg left no record.
+    const claim = srcLegClaimer(legs, keyOf);
+    expect(claim('deepseek').id).toBe('L1');
+    expect(claim('deepseek').id).toBe('L2');   // a DIFFERENT leg, not L1 again
+    expect(claim('deepseek')).toBeNull();      // and then nothing is left to claim
+  });
+
+  test('a claim consumes the leg for EVERY later call, not just for its own key', () => {
+    // The pool is one shared set, so a leg claimed under one key can never resurface under
+    // another. Pinned because `keyOfSrc` is a caller-supplied function: two spellings of the
+    // same leg's key must still yield one hand-out.
+    const claim = srcLegClaimer(legs, l => (l.id === 'L1' ? 'x' : keyOf(l)));
+    expect(claim('x').id).toBe('L1');
+    expect(claim('x')).toBeNull();
+    expect(claim('deepseek').id).toBe('L2');   // L1 is gone from the pool entirely
+    expect(claim('gpt').id).toBe('L3');
+  });
+
+  test('one claimer per unit: a fresh claimer starts from a FULL pool', () => {
+    // "build ONE per unit, never reuse it" is only safe because the state is per-claimer. A
+    // module-level or memoised pool would make the second unit's first claim return null.
+    const first = srcLegClaimer(legs, keyOf);
+    expect(first('deepseek').id).toBe('L1');
+    expect(srcLegClaimer(legs, keyOf)('deepseek').id).toBe('L1');
+    expect(legs.map(l => l.id)).toEqual(['L1', 'L2', 'L3']);   // and the caller's array is untouched
+  });
+});
+
+describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', () => {
+  // `supersededKeys` (run-stage1-rows.js :: pushDeadSeatRows) is the ONE join left in the
+  // ALIAS-granular keyspace while the dead-seat rows and `attemptedSeats` moved to `rowKeyOf`.
+  // Its own comment argues it is safe because (1) skipping is all-or-nothing per UNIT and
+  // (2) two UNBOUND LEG-origin twins always share a unit. Two independent reviewers said an
+  // argument in a comment is not enough. Break either invariant and a skipped twin takes its own
+  // first leg as a PRIMARY row and gets a SUPERSEDED row for it — one billed leg counted twice.
+  const TWIN_MODELS = ['deepseek', 'deepseek'];
+  const unboundTwinLegs = () => [deadLeg('deepseek', undefined, undefined, 'r1-s1', 1),
+    deadLeg('deepseek', undefined, undefined, 'r1-s1', 2)];
+
+  test('invariant 2: two UNBOUND leg-origin twins group into ONE unit — bench AND lens mode', () => {
+    // Lens mode is the load-bearing half: `lensIndexOf(o, null, alias, null)` finds no waveId and
+    // no seat object, so it falls through to `o.models.indexOf(alias)` — first-match — and both
+    // unbound twins resolve to the SAME lens index. Give an unbound leg a per-leg lens index and
+    // this goes RED.
+    const seats = buildSeats(TWIN_MODELS, null, null);
+    const bench = { runId: 'r1', models: TWIN_MODELS, critic: null, lenses: null, seats };
+    const [d1, d2] = unboundTwinLegs();
+    const benchUnits = groupStage1Losses(bench, [], [d1, d2], new Map());
+    expect(benchUnits).toHaveLength(1);
+    expect(benchUnits[0].srcLegs).toEqual([d1, d2]);
+
+    const lensSeats = buildSeats(TWIN_MODELS, null, ['risk', 'cost']);
+    const lens = { runId: 'r1', models: TWIN_MODELS, critic: null, lenses: ['risk', 'cost'],
+      seats: lensSeats };
+    const lensUnits = groupStage1Losses(lens, [], [d1, d2], new Map());
+    expect(lensUnits).toHaveLength(1);
+    expect(lensUnits[0].srcLegs).toEqual([d1, d2]);
+  });
+
+  test('invariant 2, scope: BOUND twins DO split across lens units — and that is safe', () => {
+    // The comment's scope is exact and this pins the exact boundary. Bound twins take
+    // `seatObj.position`, so they land in DIFFERENT lens units — but they never needed the
+    // invariant, because `supersededKeys`' own `keyOf` already tells them apart by seat id.
+    const seats = buildSeats(TWIN_MODELS, null, ['risk', 'cost']);
+    const o = { runId: 'r1', models: TWIN_MODELS, critic: null, lenses: ['risk', 'cost'], seats };
+    const [d1, d2] = unboundTwinLegs();
+    const units = groupStage1Losses(o, [], [d1, d2], new Map([[d1, seats[0]], [d2, seats[1]]]));
+    expect(units).toHaveLength(2);                                   // the split is REAL
+    expect(seats[0].id).not.toBe(seats[1].id);                       // …and keyOf separates them
+  });
+
+  test('invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER', () => {
+    // The property `supersededKeys` actually needs, asserted directly at the retry boundary
+    // rather than derived from the two facts. Mutate any skip branch to push a subset of
+    // `unit.srcLegs` and this goes RED on the first shape.
+    const bothOrNeither = (out, d1, d2) => {
+      const skipped = new Set(out.skippedDeadLegs);
+      expect([skipped.has(d1), skipped.has(d2)]).toEqual(
+        skipped.size > 0 ? [true, true] : [false, false]);
+    };
+
+    // (a) over budget -> the whole unit is skipped, both legs together
+    const overCtx = fakeCtx({ models: TWIN_MODELS, critic: null }, { overBudget: () => true });
+    const [a1, a2] = unboundTwinLegs();
+    return retryStage1Losses(overCtx, { deadWaves: [], deadLegs: [a1, a2], counts: COUNTS })
+      .then(async (over) => {
+        expect(over.skippedDeadLegs).toEqual([a1, a2]);
+        expect(over.stillDeadLegs).toEqual([]);
+        expect(over.recoveredLegs).toEqual([]);
+        bothOrNeither(over, a1, a2);
+
+        // (b) retried and still dead wholesale -> neither is skipped, both are recorded
+        const deadCtx = fakeCtx({ models: TWIN_MODELS, critic: null },
+          { launchWave: jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 }) });
+        const [b1, b2] = unboundTwinLegs();
+        const dead = await retryStage1Losses(deadCtx, { deadWaves: [], deadLegs: [b1, b2], counts: COUNTS });
+        expect(dead.skippedDeadLegs).toEqual([]);
+        expect(dead.stillDeadLegs).toEqual([b1, b2]);
+        bothOrNeither(dead, b1, b2);
+
+        // (c) retried and both healed -> neither skipped, neither still dead
+        const healCtx = fakeCtx({ models: TWIN_MODELS, critic: null },
+          { launchWave: jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+            legs: [usableLeg('deepseek', 'r1-s1r1', 1), usableLeg('deepseek', 'r1-s1r1', 2)] }, exitCode: 0 }) });
+        const [c1, c2] = unboundTwinLegs();
+        const healed = await retryStage1Losses(healCtx, { deadWaves: [], deadLegs: [c1, c2], counts: COUNTS });
+        expect(healed.skippedDeadLegs).toEqual([]);
+        expect(healed.recoveredLegs).toHaveLength(2);
+        bothOrNeither(healed, c1, c2);
+      });
+  });
+});
+
+describe('v4.8 T2.2 review A1/D3: the minted key is internal — it reaches no NOTE', () => {
+  test('attemptedSeats carries the minted key; no emitted still-dead note does', () => {
+    // The row half of this pin lives in run-stages.test.js. This is the other serialized
+    // surface: degrade notes are what a consumer parses, and `legLossKey`'s docblock claims the
+    // key "joins the dead-seat rows, attemptedSeats and deadLegs0, nothing else".
+    // Non-vacuity: attemptedSeats MUST contain a minted key, or the absence below proves nothing.
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null },
+      { launchWave: jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 }) });
+    const d1 = { ...deadLeg('deepseek', undefined, undefined, 'r1-s1', 1), taskId: 'orphan-a' };
+    const d2 = { ...deadLeg('deepseek', undefined, undefined, 'r1-s1', 2), taskId: 'orphan-b' };
+    return retryStage1Losses(ctx, { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS })
+      .then((out) => {
+        const twins = twinAliases(ctx.o.seats);
+        const minted = legLossKey(null, 'deepseek', d1, twins);
+        expect(minted).toContain('\u0000');                     // the mint fired
+        expect(out.attemptedSeats.has(minted)).toBe(true);      // …and it IS the lockstep key
+        const json = JSON.stringify(out.stillDeadNotes);
+        expect(json).not.toContain('\u0000');
+        expect(json).not.toContain('\\u0000');
+        expect(json).not.toContain('orphan-a');
+        // Every note still names the ALIAS, never a minted key — the contract verdict.js and
+        // the Workspace read (`data.seat` compared against `o.critic`, an alias).
+        expect(out.stillDeadNotes.map(n => n.data.seat)).toEqual(['deepseek', 'deepseek']);
+        expect(out.stillDeadNotes.map(n => n.data.seatId)).toEqual([null, null]);
+      });
+  });
+});

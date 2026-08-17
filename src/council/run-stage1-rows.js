@@ -104,6 +104,15 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // whole change exists to record. Every unattributed row on that alias is equally
   // dead, so they are handed out one apiece below: the SET of billed legs on the
   // record is exact, and no row claims a seat identity (all carry seat: null).
+  // ⚠️ The FULL cost of that hand-out, disclosed (council review D1): the pairing is arbitrary in
+  // BOTH directions. `shift()` takes the next spare in arrival order, and the rows it feeds are
+  // the `!exact` rows of BOTH arms — so a LEG-origin retry leg can be handed to a WAVE-origin row
+  // (a `Symbol('unattributed-seat')` slot below) on the same alias, and two leg-origin rows can
+  // swap legs with each other. A row can therefore carry a real leg's waveId/status/usage/
+  // durationMs belonging to a DIFFERENT seat of that alias. Accepted, not overlooked: the row
+  // asserts no seat at all, every candidate row on that alias is equally dead, and the SET and
+  // COUNT of billed legs stay exact. The alternative — key rows by the mint alone — drops a
+  // billed leg from runStats entirely, which is the spend hole this change exists to close.
   const retryLegBySeat = new Map();
   const spareRetryLegs = new Map();   // alias -> still-dead retry legs naming no seat
   for (const leg of retry.stillDeadRetryLegs) {
@@ -166,8 +175,13 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // v4.8 PR4c §3.1: `seat` is the seat OBJECT (buildRunStatsEntry compares
     // its id to its own alias) — never `seat.id`, which would make both sides
     // of that comparison undefined and the stamp silently inert. Null here is an
-    // orphaned seat: since v4.8 T2.2 two orphaned twins get TWO rows (they are two
-    // seats the run paid for), and each correctly carries no seat at all.
+    // orphaned seat: since v4.8 T2.2 two orphaned twins that BOTH reach this loop get
+    // TWO rows (they are two seats the run paid for), each carrying no seat at all.
+    // ⚠️ Scoped on purpose — this function emits one row per still-dead input it is GIVEN, and
+    // cannot emit a row for a seat that never arrives. When a retry wave returns FEWER legs than
+    // it launched, `run-retry.js`'s alias-granular `launched` reconcile passes only ONE of two
+    // unattributable twins, so the run still shows one row. That half of SI-22.3 is open (it
+    // needs a `run-retry.js` extraction first) and nothing in this file can close it.
     extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
       role: seat ? seat.role : roleFor(o, alias), wasChair: false }));
   }

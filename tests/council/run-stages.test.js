@@ -15,6 +15,9 @@ const { buildTallyInput } = require('../../src/council/run-assemble');
 // v4.8 PR4c: the dead-seat row producer is exported, so its two seat shapes are
 // pinnable with no runCouncil, no launchers and no disk.
 const { pushDeadSeatRows } = require('../../src/council/run-stage1-rows');
+// v4.8 T2.2 review (A1/D3): the row key itself, so the NUL-separator pin below can prove the
+// mint FIRES on the shape it asserts containment for, rather than passing vacuously.
+const { legLossKey } = require('../../src/council/run-retry-group');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -1264,10 +1267,16 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 //   orphaned-> one row per seat too, but the stamp is inert on every one of them:
 //              the run knows N seats died and cannot say WHICH. v4.8 T2.2 closed
 //              the collapse PR4c §4.6 disclosed (deadSeats was keyed by keyOf's
-//              ALIAS fallback, so two dead twins became ONE row); the asymmetry
-//              that remains is attribution, not count. Revision 1's T12 was
-//              satisfiable on the bound path alone, which is precisely the false
-//              confidence this pins away.
+//              ALIAS fallback, so two dead twins became ONE row). Revision 1's T12
+//              was satisfiable on the bound path alone, which is precisely the
+//              false confidence this pins away.
+// ⚠️ SCOPE — these fixtures call pushDeadSeatRows DIRECTLY, so they measure what it does with the
+// still-dead seats it is HANDED. "The asymmetry that remains is attribution, not count" was the
+// earlier wording here and it is FALSE end to end: when a retry wave returns fewer legs than it
+// launched, run-retry.js's alias-granular `launched` reconcile hands this function only ONE of two
+// unattributable twins, so the RUN still shows one row (SI-22.3 is PARTIAL, blocked on a
+// run-retry.js extraction). Nothing in this describe can observe that — the end-to-end T2.2 tests
+// earlier in this file drive the real runStage1 and pin the shapes that ARE closed.
 describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinLeg = (waveId, slot) => ({
@@ -1322,6 +1331,36 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     const rows = run({ stillDeadLegs: [twinLeg(), twinLeg()], seatOf: new Map() });
     expect(rows).toHaveLength(1);
     expect('seat' in rows[0]).toBe(false);
+  });
+
+  test('T2.2 review A1/D3: the NUL-joined row key is CONTAINED — it reaches no emitted row', () => {
+    // `legLossKey` joins on `\u0000` and the source calls that byte "impossible in an alias, id
+    // or taskId". That is an assumption about producers this module cannot enforce, so what is
+    // pinned here is the property that makes the assumption SAFE rather than the assumption
+    // itself: the key is internal, and nothing it is built from escapes into a row.
+    // ⚠️ Every NUL below is written as the six-character escape, never as a raw byte: one raw NUL
+    // turns the whole file into "Binary file … matches" for `grep -r`, which is exactly how a
+    // repo-wide phrase sweep was lost earlier in this release.
+    //
+    // Non-vacuity first — the mint must actually fire on this shape, or every assertion below
+    // would hold for the trivial reason that no NUL was ever created.
+    const twins = new Set(['deepseek']);
+    expect(legLossKey(null, 'deepseek', { taskId: 'orphan-a' }, twins)).toContain('\u0000');
+    // Now VIOLATE the assumption on purpose: a taskId that already contains a NUL. Internally the
+    // key becomes ambiguous (the disclosed floor — two such legs could collide); the emitted rows
+    // must still be clean, which is what bounds the blast radius to "one row too few", never a
+    // NUL in an artifact a consumer parses.
+    const legs = [{ ...twinLeg(), taskId: 'orphan-a' }, { ...twinLeg(), taskId: 'bad\u0000id' }];
+    const rows = run({ stillDeadLegs: legs, seatOf: new Map() });
+    expect(rows).toHaveLength(2);
+    const json = JSON.stringify(rows);
+    // BOTH spellings: a raw NUL, and the `\u0000` escape JSON.stringify would emit for one.
+    // Checking only the raw byte would pass for a row that really did carry a NUL.
+    expect(json).not.toContain('\u0000');
+    expect(json).not.toContain('\\u0000');
+    // …and neither half of the key reaches a row either: no taskId, no joined form.
+    for (const t of ['orphan-a', 'bad', 'deepseek\u0000']) { expect(json).not.toContain(t); }
+    expect(JSON.parse(json)).toEqual(rows);   // the rows round-trip byte-clean
   });
 
   test('T12: two UNIDENTIFIED slots of a still-dead WAVE get TWO rows (R2 mark branch)', () => {
