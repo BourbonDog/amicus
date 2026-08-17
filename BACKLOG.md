@@ -3028,6 +3028,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   `run-stages.js:96`/`:106`, `run.js:228`/`:229`/`:231`, `run-retry-notes.js:58`,
   `seats.js:165`/`:179`. Each value was produced by grep against the working tree and re-opened at
   its stated line, not adjusted by arithmetic from the old one.
+  ⚠️ **That was true when written and is a DATED SNAPSHOT, not a live index.** Superseded
+  2026-08-17 by T-A1 (−64 in `run-retry-group.js`) and T-A2 (−32 in `run-retry.js` below its moved
+  block): `run-retry-group.js:66` is now `run-retry-keys.js:52`, and `run-retry.js`
+  `:153`/`:164`/`:201`/`:206` are `:121`/`:132`/`:169`/`:174`. The "unmoved and re-confirmed" list
+  above was re-opened again on 2026-08-17 and all of it still holds. Live values live in SI-DUP.
   ⚠️ **`report.js` citations re-derived against the FINAL tree, total shift +7** (2026-08-16,
   measured at the shipped commit, not at an intermediate one): `:152`→**`:159`** (three places
   here) and `:91`/`:97`→**`:98`**/**`:104`**. Two edits stacked, and the first pass published the
@@ -3045,8 +3050,13 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
     measurement — see the correction note above.)
-    Sites, **all re-derived by execution against the final tree (2026-08-16, the T2.2 review-fix
-    commit)** — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and
+    Sites, **re-derived by opening each line, 2026-08-17** (T-A2 fix round 3; the list previously
+    read "all re-derived by execution against the final tree" as of 2026-08-16 and **three of the
+    eight were stale by then or became so** — `run-retry-group.js:29`, `run-stage1-rows.js:55` and
+    `:153` — all three falsified by T-A1 moving `seatKey`/`legLossKey` into `run-retry-keys.js` and
+    by `run-stage1-rows.js` growing. A rigour claim is only as current as its date, so this one
+    carries the date and the method: each site below was opened at its stated line and read)
+    — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and
     `run-stage1-rows.js` (116→**160**); `27febfb8` added a 16-line comment to the latter
     (160→**176**); the review-fix commit added 14 more (176→**190**), which moved **one** of the
     spellings below AGAIN (`run-stage1-rows.js` `:129`→**`:138`**); the council round-2 A1 fix added
@@ -3055,13 +3065,16 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     **four** citations into these two files — **three** of the eight spellings below
     (`run-retry-group.js:52`, `run-stage1-rows.js:42` and `:85`) plus **one** excluded site
     (`run-retry-group.js:109`) — and added a tenth call site:
-    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-group.js:29`
-    (the exported one, PR5c; **was `:52`**), `run-stage1-rows.js:55` (**was `:42`, then `:45`**),
-    `run-stage1-rows.js:153` (**was `:85`, then `:129`, then `:138`**), `run-stages.js:96`,
-    `run-stages.js:106`, `run.js:228` (one caller, `:229`), `run.js:231` (hand-inlined).
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:132`), `run-retry-keys.js:15`
+    (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
+    `run-stage1-rows.js:57 :: keyOf` (**was `:42`, then `:45`, then `:55`**),
+    `run-stage1-rows.js:155` (`const join = s ? s.id : alias;`; **was `:85`/`:129`/`:138`/`:153`**),
+    `run-stages.js:96 :: keyOf`, `run-stages.js:106`, `run.js:228` (one caller, `:229`),
+    `run.js:231` (hand-inlined).
     **The count is still EIGHT** — T2.2 added no spelling, only call sites.
-    **Excluded, and why:** `run-retry-group.js:151` (**was `:109`**) and `run-retry-notes.js:58`
-    fall back to
+    **Excluded, and why:** `run-retry-group.js:87` (`legs.push({ leg: l, seatId: bound ? bound.id :
+    null })`, **was `:109`, then `:151`; −64 from T-A1, the same shift as `:128`→`:64` below**) and
+    `run-retry-notes.js:58` fall back to
     `null`, not an alias — "seat id or nothing" is a different value space; `run.js:198` and
     `run-assemble.js:89`/`:215` are the emit-when-**different** stamp, which `run.js:190` explicitly
     contrasts with *"the naive `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no
@@ -3126,8 +3139,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**: `run.js:228`
-    and `run-retry-group.js:29` are byte-identical modulo indentation (49 chars each, re-measured)
-    but `run.js`'s copy has exactly **one** caller (`:229`); `run-debate-revote.js:64` is a
+    and `run-retry-keys.js:15` (**was `run-retry-group.js:29`; T-A1 moved it, 2026-08-17**) are
+    byte-identical modulo indentation — re-measured 2026-08-17, both trim to the same 49 chars,
+    `const seatKey = (s, alias) => (s ? s.id : alias);` — but `run.js`'s copy has exactly **one**
+    caller (`:229`); `run-debate-revote.js:64` is a
     *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
     also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
@@ -3295,7 +3310,10 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `['deepseek#1','deepseek#2']` on a twin bench and `degrade-channels.test.js:126` shows a
     shipped degrade carrying `seatId` — but it covers one arm, not the family.
     `srcLegStillDeadNote`'s call site does have `unit`, carrying `unit.seats` (index-parallel with
-    `unit.models`, `run-retry-group.js:33`) and `unit.firstFailures[].seatId`, so the id is
+    `unit.models`, pushed in lockstep at `run-retry-group.js:125 :: recordFailure` —
+    `if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }`; this entry said
+    `:33`, a docblock line, before the 2026-08-17 re-derivation) and
+    `unit.firstFailures[].seatId`, so the id is
     reachable there — just not emitted. **Design the producer change against all five arms.**
   - ⚠️ **`data.seat` must stay the ALIAS.** `run-retry-notes.js:39-45` explains why
     (`verdict.js:72` compares it against `o.critic`). Add a key; never repurpose that one.
@@ -3432,7 +3450,8 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   `src/council/` — and this entry's *"the renderer spells the same rule a fourth time as
   `r.seat || r.model`"* counted a member of a **disjoint** population as the fourth. See **SI-DUP**
   in the v4.8.0 seat-identity section for both populations with their counting rules stated. Still
-  true and carried there: PR5c made `run-retry-group.js:29` (was `:52`; moved by T2.2) the exported copy so
+  true and carried there: PR5c made the shared `seatKey` (`run-retry-group.js:52`, then `:29` after
+  T2.2; **`run-retry-keys.js:15` since T-A1, 2026-08-17**) the exported copy so
   `run-retry.js` consumes it rather than keeping a fourth; the renderer must spell the rule again
   (`r.seat || r.model`) because renderer modules cannot `require()` from `src/`; and the "THE WRONG
   LEVER" reading — a rule needing another spelling means the defect is in a consumer. The "unify

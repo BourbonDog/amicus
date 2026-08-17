@@ -62,10 +62,13 @@
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
    * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
    *
-   * ⚠️ firstFailure is TRUTHINESS ONLY. It has two shapes — run-retry-group.js:84 emits
-   * {seat, class:'leg', status, reason}; :72/:76/:79 emit {seat, class:'wave', waveId, reason}
-   * with NO status key — so any read of firstFailure.status is undefined on every wave-origin
-   * seat.
+   * ⚠️ firstFailure is TRUTHINESS ONLY. It has two shapes, both built in
+   * run-retry-group.js :: groupStage1Losses — :205 emits {seat, class:'leg', status, reason};
+   * :189/:196/:200 emit {seat, class: lossClass(w), waveId, reason} with NO status key, where
+   * lossClass (:182) is 'wave' or, for a partial return, 'missing' — so any read of
+   * firstFailure.status is undefined on every wave-origin seat.
+   * (Line numbers re-derived 2026-08-17: this comment said :84 and :72/:76/:79, which were
+   * −64 stale after T-A1 moved four functions out into run-retry-keys.js.)
    */
   function retriedSeats(degrades) {
     var out = Object.create(null);
