@@ -117,26 +117,26 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     ...retry.recoveredLegs.map(keyOf),
     ...retry.stillDeadLegs.map(keyOf),
   ]);
-  // Refusing the row is the repair wherever the row key TELLS THE TWINS APART — see the measured
-  // ⚠️ below for where it does not, which is the honest bound on this whole paragraph. The
-  // double count needs BOTH halves: a skipped leg whose alias key is superseded, AND the dead-seat
-  // loop below handing that same leg back as its own primary row. run-stages.js merges
-  // `skippedDeadLegs` into the `stillDeadLegs` handed in here, so the leg is a still-dead seat
-  // there too, and the loop's `deadLegs0.find` fallback runs for exactly the keys
-  // `attemptedSeats` does NOT hold. Where it DOES hold the key — R2's taskId-less floor, two
-  // indistinguishable twins collapsing onto one leg-less row — the superseded row is the only
-  // place that leg's `usage` survives at all, and refusing it would trade a double count for a
-  // LOST billed leg. So refuse the first shape and leave the second exactly as it was.
-  // ⚠️ The scope of "exact" — MEASURED end to end (T-A5 fix round 2), not argued. `deadLegs0.find`
-  // returns ONE leg per row key, so a refusal only repairs the leg that fallback would actually
-  // hand back. Two refused legs SHARING a key (R2's taskId-less floor again) leave one row serving
-  // both, and the other's `usage` is dropped. ⚠️ This is reachable by breaking invariant 2 ALONE:
-  // `supersededKeys` also draws from `retry.recoveredLegs` just above, and NO writer of
-  // `attemptedSeats` sits on run-retry.js's heal branch — they are all on still-dead paths — so a
-  // healed twin can supersede the alias while `attemptedSeats` stays empty. Measured on 3
-  // taskId-less unbound twins, one lens, GUESSPOS applied: billed 0.60, recorded 0.20 with this
-  // refusal against 0.70 without it. Filed as `RESIDUAL R1` in BACKLOG.md, with the one conjunct
-  // that closes it (`deadLegs0.find(…) === dead`) — deliberately NOT applied here: scope ruling.
+  // Refusing the row is the repair — but ONLY for a leg the dead-seat loop below would hand back
+  // as its own primary row, which is what `willTakeItsOwnLeg` decides. run-stages.js merges
+  // `skippedDeadLegs` into the `stillDeadLegs` handed in here, so a skipped leg IS a still-dead
+  // seat there, and that loop's `deadLegs0.find` fallback runs for exactly the keys
+  // `attemptedSeats` does NOT hold — and returns ONE leg per key.
+  // ⚠️ BOTH conjuncts are load-bearing and BOTH were learned by MEASUREMENT, not argument. The
+  // first version of this comment argued the second was unreachable; it was wrong, and the guard
+  // built on it lost billed spend (T-A5 rounds 1-3).
+  //   `attemptedSeats` half: where the key IS held, R2's taskId-less floor has collapsed the twins
+  //   onto one LEG-LESS row, so the superseded row is the only place that leg's `usage` survives.
+  //   `=== dead` half: where the key is free but `find` would hand the row a DIFFERENT leg, this
+  //   leg gets no row of its own and refusing drops its `usage` entirely. Reachable by breaking
+  //   invariant 2 ALONE — `supersededKeys` also draws from `retry.recoveredLegs` just above, and NO
+  //   writer of `attemptedSeats` sits on run-retry.js's HEAL branch (they are all on still-dead
+  //   paths), so a healed twin supersedes the alias while `attemptedSeats` stays empty.
+  // Measured end to end, 3 unbound twins in one lens with invariant 2 broken: row keys COLLIDING —
+  // billed 0.60, recorded 0.70 both with this guard and without any guard (nothing lost, and the
+  // 0.10 is the pre-existing floor where the leg-less row borrows the healed leg); row keys
+  // DISTINCT — 1.10 without the guard against 0.60 with it, the whole 0.50 double count removed
+  // and nothing lost. Dropping either conjunct is a named mutant: WIDEGUARD and KEYNOTLEG.
   // It is announced either way, because a silently corrected number is the failure mode this join
   // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
   // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR
@@ -144,7 +144,8 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // workspace/seat-space.js) gate on dead-leg/dead-wave/seat-unbound first, so it reaches none, and it cannot
   // move the exit code either: run-stages.js notes a `dead-leg` degrade for every skipped leg
   // before this function is called, so the run is already degraded whenever this can fire.
-  const willTakeItsOwnLeg = (dead) => !retry.attemptedSeats.has(rowKeyOf(dead));
+  const willTakeItsOwnLeg = (dead) => !retry.attemptedSeats.has(rowKeyOf(dead))
+    && deadLegs0.find(l => rowKeyOf(l) === rowKeyOf(dead)) === dead;
   const refuseSupersede = (dead) => {
     const alias = dead.modelInput || dead.model;
     degrade.note({ channel: 'internal',

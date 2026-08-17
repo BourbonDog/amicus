@@ -1479,6 +1479,7 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   const rowKey = (leg) => legLossKey(null, 'deepseek', leg, new Set(['deepseek']));
   const usageA = { cost: { amount: 0.03, source: 'reported' } };
   const usageB = { cost: { amount: 0.05, source: 'reported' } };
+  const usageC = { cost: { amount: 0.07, source: 'reported' } };
   const legFor = (slot, usage) => ({ taskId: `r1-s1-${slot}`, waveId: 'r1-s1', model: 'deepseek',
     modelInput: 'deepseek', status: 'error', summary: '', durationMs: null, usage });
   // `stillDeadLegs` carries BOTH because run-stages.js merges `skippedDeadLegs` into it before
@@ -1576,6 +1577,35 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     expect(rows.filter(r => r.role === 'superseded').map(r => r.usage)).toEqual([usageA, usageB]);
     expect(rows.filter(r => r.role === 'seat').map(r => r.usage)).toEqual([null]);
     expect(notes).toEqual([]);
+  });
+
+  test('SCOPE 2: a refusal that would not get its OWN leg back is never taken — the spend survives', () => {
+    // Residual R1, measured in fix round 2 and closed in round 3. `deadLegs0.find` hands back ONE
+    // leg per row key, so refusing a leg that fallback would NOT return drops that leg's `usage`
+    // outright. Reachable by breaking invariant 2 ALONE: `supersededKeys` also draws from
+    // `retry.recoveredLegs`, and no `attemptedSeats` writer sits on run-retry.js's HEAL branch, so
+    // a healed twin supersedes the alias while `attemptedSeats` stays empty. Here legC healed and
+    // is FIRST in `deadLegs0`; legA and legB were skipped and collide with its row key.
+    // Mutant KEYNOTLEG — drop `&& deadLegs0.find(…) === dead` so the guard asks whether the
+    // fallback RUNS for the key rather than whether it returns THIS leg — reds the spend assertion
+    // below with `[usageC]`. Measured end to end at the same time: billed 0.60, recorded 0.20 under
+    // KEYNOTLEG against 0.70 both with this conjunct and with no guard at all.
+    const bare = (usage) => ({ model: 'deepseek', modelInput: 'deepseek', status: 'error',
+      summary: '', durationMs: null, usage });
+    const [legC, legA, legB] = [bare(usageC), bare(usageA), bare(usageB)];
+    expect(rowKey(legA)).toBe(rowKey(legC));          // non-vacuity: the keys really do collide
+    const notes = [];
+    const extraRows = [];
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [legC, legA, legB],
+      stillDeadLegs: [legA, legB], stillDeadWaves: [], seatOf: new Map(), roleFor, extraRows,
+      degrade: { note: (r) => notes.push(r) },
+      retry: { recoveredLegs: [bare(null)], stillDeadLegs: [], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA, legB], attemptedSeats: new Set() } });
+    // SPEND, not row count: every billed first leg is still somewhere on the record. The old
+    // predicate passed every other test in this file, which is why it survived to a second review.
+    expect([usageA, usageB, usageC].filter(u => extraRows.some(r => r.usage === u)))
+      .toEqual([usageA, usageB, usageC]);
+    expect(notes).toEqual([]);   // …and nothing was refused: on a shared key a refusal can only destroy
   });
 
   test('CONTROL: both twins retried, and both SKIPPED, are untouched and silent', () => {
