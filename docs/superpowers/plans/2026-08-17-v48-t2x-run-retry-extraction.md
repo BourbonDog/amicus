@@ -357,6 +357,11 @@ counts against every control in §0.3 before claiming this.
 
 ### T-A5 — Round-2 A2/C1: make `supersededKeys` enforce its own safety
 
+> ⚠️ **Anchor updated after the fact (T-A6, `fb261dcc`), task text otherwise left as issued.**
+> `supersededKeys` and its guard now live in **`src/council/run-stage1-superseded.js :: supersededRows`**,
+> lifted out of `pushDeadSeatRows` so T-A6 could edit that function without breaching the 300-line
+> gate. Read every `run-stage1-rows.js :: pushDeadSeatRows` reference below as that symbol.
+
 `supersededKeys` (`run-stage1-rows.js :: pushDeadSeatRows`) is the ONE join left in the
 alias-granular keyspace. The council does **not** dispute that it is safe today; the objection is that
 its safety is **emergent, not enforced** — the function cannot verify either invariant it stands on,
