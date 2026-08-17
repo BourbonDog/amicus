@@ -2236,8 +2236,8 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   then builds `retrySeatOf` by dropping every placeholder bind:
   `.filter(b => !placeholders.has(b.seat))` (`run-retry-launch.js:59`).
   So `retrySeatOf.get(leg)` is always either `undefined` or a REAL `unit.seats` entry, with a
-  backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping what can't find
-  its `launched` entry. The same real seat object that survives both gates is exactly what
+  backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping anything that
+  can't find its `launched` entry — or, since T-A4, any leg past its key's LAST minted slot. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
   (`run-stage1-rows.js:148` legs, `:165` waves — both the `!!seat || !twins.has(alias)` expression
   itself, not the `alias`/comment lines `:146`/`:163` this entry cited before 2026-08-17) — which is
@@ -2303,7 +2303,7 @@ an identified bench, and the stray's own alias-based key misses. The SAME leg IS
 reaches no runStats row at all. Measured instance: `BOUGHT 0.1000` vs `ON ROWS 0.0600`, the 0.0400
 gap being the stray's own usage. **All three deciding lines — the placeholder-bind filter (then
 `run-retry.js:132`, now `run-retry-launch.js:59`), the `!ff` backstop (then `:216`, now
-`run-retry.js :: retryStage1Losses`), and `run-stages.js:140` — byte-identical at `main` (`cc56f678`)**, so this
+`run-retry.js :: retryStage1Losses`), and `run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this
 predates T2.2 and predates this PR. It is still not fixed here (out of this PR's scope), though the
 size argument for deferring it has lapsed: T-A2 took `run-retry.js` from 295/300 to 263/300.
 

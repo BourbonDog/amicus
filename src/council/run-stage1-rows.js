@@ -208,10 +208,10 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // orphaned seat: since v4.8 T2.2 two orphaned twins that BOTH reach this loop get
     // TWO rows (they are two seats the run paid for), each carrying no seat at all.
     // ⚠️ Scoped on purpose — this function emits one row per still-dead input it is GIVEN, and
-    // cannot emit a row for a seat that never arrives. When a retry wave returns FEWER legs than
-    // it launched, `run-retry.js`'s alias-granular `launched` reconcile passes only ONE of two
-    // unattributable twins, so the run still shows one row. That half of SI-22.3 is open (it
-    // needs a `run-retry.js` extraction first) and nothing in this file can close it.
+    // cannot emit a row for a seat that never arrives. When a retry wave returned FEWER legs than
+    // it launched, `run-retry.js`'s alias-granular `launched` reconcile passed only ONE of two
+    // unattributable twins, so the run showed one row. v4.8 T-A4 closed that half in the PRODUCER:
+    // it emits `max(slots, 1) - seen` notes now, so both twins arrive here. Nothing here changed.
     const row = buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
       role: seat ? seat.role : roleFor(o, alias), wasChair: false });
     // Overwrite rather than synthesize a leg: `buildRunStatsEntry({leg: null})` is the ONE

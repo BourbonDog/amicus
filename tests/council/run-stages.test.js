@@ -1282,11 +1282,11 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 //              false confidence this pins away.
 // ⚠️ SCOPE — these fixtures call pushDeadSeatRows DIRECTLY, so they measure what it does with the
 // still-dead seats it is HANDED. "The asymmetry that remains is attribution, not count" was the
-// earlier wording here and it is FALSE end to end: when a retry wave returns fewer legs than it
-// launched, run-retry.js's alias-granular `launched` reconcile hands this function only ONE of two
-// unattributable twins, so the RUN still shows one row (SI-22.3 is PARTIAL, blocked on a
-// run-retry.js extraction). Nothing in this describe can observe that — the end-to-end T2.2 tests
-// earlier in this file drive the real runStage1 and pin the shapes that ARE closed.
+// earlier wording here and it was FALSE end to end: when a retry wave returned fewer legs than it
+// launched, run-retry.js's alias-granular `launched` reconcile handed this function only ONE of two
+// unattributable twins, so the RUN showed one row. v4.8 T-A4 closed that half in the producer — it
+// emits `max(slots, 1) - seen` notes, so both twins arrive and get two rows. Nothing in this
+// describe can observe either state; the T2.2 tests earlier in this file pin the shapes that ARE closed.
 describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinLeg = (waveId, slot) => ({
