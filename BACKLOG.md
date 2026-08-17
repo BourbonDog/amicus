@@ -2065,6 +2065,16 @@ different defects in the two rounds:
 Every reference below is tagged with its round. The two round-1 items above keep their round-1 names
 because that is what the text already shipped with; the extraction task carries both spellings.
 
+⚠️ **A THIRD collision, found while filing a later measurement.** A council pass reviewing HEAD
+(`1677095f` — i.e. *after* round 2's A1 fix above had already shipped) raised its own finding also
+labeled **C1** [major, a3/d0/n0]. It is a DIFFERENT mechanism from both C1 rows above (one subject,
+`supersededKeys`) — council letters restart every round, and this collision is coincidental, not a
+re-opening. Filed at the end of this section, just before *Size gate*: "bound retry legs on unbound
+twin aliases are dropped from their rows." Anchored there by commit and mechanism rather than an
+asserted round number — this task could not verify against a transcript whether the originating
+process calls it round 2 or round 3, and guessing wrong would repeat the exact citation-rot class
+this table exists to prevent.
+
 - [ ] **NEXT TASK — extract `run-retry.js`, then close B1 and B2 in the same PR.** Blocked on the
   extraction and on nothing else; sized, not estimated.
   - **Step 1 — the extraction (its own commit, byte-for-byte move, re-exported).** `run-retry.js` is
@@ -2201,6 +2211,80 @@ still the correct description of what HEAD does; what changed is that the remedy
 
 ⚠️ **R4 and R5 are NOT one job** — measured independent in both directions; the critic arm never
 reads `s.seat`. And **nothing in v4.8 can cure R4**: its bench has no seat-identity critic answer.
+
+⚠️ **Measured, not an open defect — PR #170 round-2 C1 [major, a3/d0/n0]: "bound retry legs on
+unbound twin aliases are dropped from their rows … losing the retry leg's billed usage."** Raised in
+review of HEAD (`1677095f`, i.e. after round 2's A1 fix above had already shipped) — a DIFFERENT
+mechanism from this section's other two C1s (see the map above and its "THIRD collision" note).
+**Verdict: reachable at the function boundary, unreachable end-to-end, pre-existing at `main`. Not
+fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is not met.
+
+- **The mechanism.** `run-retry.js :: retryStage1Losses` pads an unidentified retry-roster slot with
+  a placeholder carrying a unique synthetic id (`run-retry.js:126`), then builds `retrySeatOf` by
+  dropping every placeholder bind: `.filter(b => !placeholders.has(b.seat))` (`run-retry.js:132`).
+  So `retrySeatOf.get(leg)` is always either `undefined` or a REAL `unit.seats` entry, with a
+  backstop at `run-retry.js:216` (`if (!ff) { continue; }`) dropping anything that still can't find
+  its `launched` entry. The same real seat object that survives both gates is exactly what
+  `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
+  (`run-stage1-rows.js:146` legs, `:163` waves) — which is the condition
+  (`run-stage1-rows.js:174`, `let finalLeg = exact ? retryLegBySeat.get(join) : undefined;`, this
+  commit's comment) that hands a bound retry leg its row. A BOUND still-dead retry leg can therefore
+  never reach the `!exact` branch below `:174` — the one branch that does NOT consult
+  `retryLegBySeat` — because nothing on the path to `stillDeadRetryLegs` can produce a bound leg
+  without also producing the seat that makes its row `exact`.
+- **Earned, not asserted.** Two mutants, scratchpad-applied and reverse-edited byte-exactly (never
+  `git checkout --`): **NOPLACEHOLDERFILTER** (drop `run-retry.js:132` alone) does NOT reach this
+  shape — the leg's `launched` lookup resolves differently and the `:216` backstop drops it instead,
+  `stillDeadRetryLegs = 0`, a DIFFERENT loss that happens to total the same 0.1600. **FAKEBIND**
+  (drop `:132` AND give the placeholder the alias as its own id — a two-line change) reaches it
+  exactly: 1 bound still-dead retry leg, `GAP = 0.0700`, precisely that leg's own `usage` sitting
+  unconsumed in `retryLegBySeat`. The invariant is a CONJUNCTION — placeholder ids stay unique, and
+  placeholder binds get dropped — break one alone and the loss lands somewhere else; break both and
+  this finding fires.
+- **Fuzz, at HEAD:** 1200 seeded runs (2–4 seat rosters, twins/triplets, partial returns, lens
+  units, three leg-id shapes, heal/dead mixes) — 966 twin-roster runs, 697 BOUND still-dead retry
+  legs observed, **0 violations** of "a bound still-dead retry leg always has an exact row."
+- **Fed directly (bypassing the retry path, the shape built by hand), the loss is real and it is
+  `usage`, not metadata.** `pushDeadSeatRows` loses 0.1600 of 0.1900 billed; both primary rows come
+  out `{"status":"error","durationMs":null,"usage":null}`, the leg-less shape — confirming the
+  council's structural read is right, IF the input could ever arrive.
+- **Pre-existing, not introduced by this phase.** The identical fixture through `pushDeadSeatRows`
+  loses the same 0.1600 at `42738592` (pre-A1) and at `main` (`cc56f678`) — `42738592`'s own
+  `run-stage1-rows.js` already has the same `finalLeg = exact ? retryLegBySeat.get(join) : undefined`
+  structure and the same `!exact` fallback. Nothing T2.2 shipped opened or closed this path.
+- **The finding's own wording understates the fix.** Even if the `!exact` branch DID consult
+  `retryLegBySeat`, a plain `.get(join)` would still miss: the row asks with the MINTED key
+  (`legLossKey`'s alias-plus-taskId form, e.g. `"deepseek orphan-a"`) while the leg is filed under
+  its bound seat id (e.g. `"deepseek#1"`) — different keyspaces. Closing this defensively would need
+  a keyspace BRIDGE between the two, not a one-line lookup.
+- **No test covers this, and none legitimately could.** `stillDeadRetryLegs` appears three times in
+  `tests/council/run-stages.test.js`'s T2.2/T12/T14 block — empty in the `noRetry` fixture, unbound
+  in *"T2.2 review A1: a borrowed spare is BILLING ONLY"*, and bound-but-incidental in *"T14: a
+  superseded row carries NO seat, even on a twin bench"* (there `stillDeadRetryLegs` and
+  `stillDeadLegs` are deliberately the SAME bound legs, so those rows are already `exact`). No
+  fixture anywhere pairs a BOUND still-dead retry leg with a `!exact` row, and per the fuzz above, no
+  real input the retry path can produce does either.
+- **The comment this measurement earned.** `run-stage1-rows.js:174` (inside `pushDeadSeatRows`'s
+  row-building loop, this commit) now names `run-retry.js:126`/`:132` as the reason its `exact` gate
+  is safe — the cross-file half of the invariant nothing previously enforced or documented.
+- **Concern for whoever extracts `run-retry.js` next** (the round-2 B1/B2/B3 work above):
+  `run-retry.js` is at 295/300, one FAKEBIND-sized change away from opening this hole for real, and
+  nothing in either file's test suite would go red if it did. That extraction should carry a named
+  mutant on this conjunction (or a pin that a bound still-dead retry leg always resolves `exact`),
+  not just the B1–B3 fixes it already owes.
+
+⚠️ **A second, unrelated gap the same fuzz run surfaced (98/1200 runs) — recorded because it was
+found in passing, not because it belongs to this PR.** The mirror image of the finding above: on a
+bench whose seats WERE identified (real seat objects, not placeholders), a retry leg that binds to
+NOTHING (matches no roster slot at all, a true stray — not merely unbound) is dropped by the `:216`
+backstop before it ever reaches `stillDeadRetryLegs`: `launched` there is keyed by real seat id for
+an identified bench, and the stray's own alias-based key misses. The SAME leg IS announced — on the
+`seat-unbound` degrade channel (`orphanLegNote`, `stage1-bind.js:53`, called from
+`run-stages.js:140`) — so this is a disclosed orphan-leg class, not a silent one, but its `usage`
+reaches no runStats row at all. Measured instance: `BOUGHT 0.1000` vs `ON ROWS 0.0600`, the 0.0400
+gap being the stray's own usage. **All three deciding lines — `run-retry.js:132`, `:216`, and
+`run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this predates T2.2 and predates
+this PR, and cannot be fixed here: the drop is in `run-retry.js`, which is at 295/300.
 
 ### Size gate — re-measured 2026-08-16
 
