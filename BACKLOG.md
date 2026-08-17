@@ -2152,23 +2152,26 @@ this table exists to prevent.
       to close.
     - Provenance: code council on PR #170 **round 2**, findings **A2** (major) and **C1** (major).
 
-✅ **CLOSED by v4.8 Phase 2 T-A1** — the extraction commit this note asked for rewrote the docblock
-in place, net zero lines, scoping the masking to pre-PR5c HEAD and stating that T2.2 removed it.
-Kept below for the record.
+✅ **CLOSED by v4.8 Phase 2 T-A1** (commit `955bd7c9`) — the extraction commit this note asked for
+corrected the docblock in place, net zero lines, scoping the masking to pre-PR5c HEAD and stating
+that T2.2 removed it. The record below is past-tensed to match: nothing in it describes the tree as
+it stands.
 
-⚠️ **A second, already-incurred cost of shipping at 299/300: `run-retry-group.js` now carries a
-STALE docblock that cannot be corrected until the file is extracted.** `planStillDeadSources`'
-docblock (`run-retry-group.js:94-96`, not `:94-95` as first recorded) read *"HEAD hides this
-downstream because the Workspace's dead-row dedup is alias-keyed too and both collapse into one
-row"*. That "HEAD" means
-**pre-PR5c** HEAD, and the sentence has been stale framing since PR5c; T2.2 then abolished the
-producer-side collapse it leans on. It is **not** wrong about PR5c's own history, so it misleads
-rather than lies — but a reader arriving at that function today will read it as current. Any repair
-is constrained to be **net zero lines or shorter** — the gate blocks the commit on a single added
-line — which is a needle no one should thread under time pressure for a comment. **Correct it in
-the same change that extracts the file**, where the constraint is gone; it belongs on the
-extraction's checklist, not in a separate task. Recorded because "the size ceiling deferred a
-documentation repair" is a real cost that is otherwise invisible.
+⚠️ **A second, already-incurred cost of shipping at 299/300: `run-retry-group.js` CARRIED a STALE
+docblock that could not be corrected until the file was extracted.** `planStillDeadSources`'
+docblock — anchored **by symbol**, because T-A1 moved it: `run-retry-group.js:94-96` at base
+`3d8f9d38`, `:30-32` after (`:94-96` in the post-T-A1 tree is `recordFailure`'s dedup-helper
+docblock, an unrelated function) — read *"HEAD hides this downstream because the Workspace's
+dead-row dedup is alias-keyed too and both collapse into one row"*. That "HEAD" meant
+**pre-PR5c** HEAD, and the sentence had been stale framing since PR5c; T2.2 then abolished the
+producer-side collapse it leaned on. It was **not** wrong about PR5c's own history, so it misled
+rather than lied — but a reader arriving at that function would have read it as current. Any repair
+was constrained to be **net zero lines or shorter** — the gate blocked the commit on a single added
+line — which is a needle no one should thread under time pressure for a comment. **Corrected in the
+same change that extracted the file**, where that constraint was gone, on the extraction's
+checklist rather than in a separate task: T-A1 left the file at **235/300**, 65 free, and the repair
+landed net zero anyway. Recorded because "the size ceiling deferred a documentation repair" is a
+real cost that is otherwise invisible.
 
 ⚠️ **A stated invariant for whoever extracts `run-retry-group.js`.** The rule T2.2 shipped is *"never
 dedup on a proven twin alias"* — it is **NOT** *"at most N slots for N roster seats"*, and no code
