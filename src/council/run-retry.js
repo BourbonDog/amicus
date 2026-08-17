@@ -106,9 +106,14 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // the caller, exactly as stillDeadNotes already are.
     for (const leg of orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
     // Every seat this unit LAUNCHED for, keyed exactly the way recordFailure
-    // keyed it: the identified seat's id, else the alias. Keys are unique by
-    // construction — recordFailure dedups on this same key, so two slots can
-    // never share one.
+    // keyed it: the identified seat's id, else the alias.
+    // ⚠️ v4.8 T-A4: a key is NOT one slot. Since T2.2 two UNATTRIBUTABLE twins on one alias
+    // mint two slots that both key by that alias, and a first-wins entry collapsed them —
+    // announcing ONE dead seat where two died (B1) while every note built from it read slot
+    // 0's firstFailure (B2). So an entry carries a slot COUNT and its OWN per-slot
+    // firstFailures. Only `unit.models` — the launch PLAN — mints: srcWaves/srcLegs are the
+    // union safety net the reconcile below rests on, and must leave a key at >=1 without
+    // inflating one that arrives through both. Inflating it manufactures a phantom dead seat.
     // ⚠️ v4.8 H4: an alias is no longer a seat identity. A `new Map(unit.models
     // .map(...))` lookup overwrites the duplicate key, so a twin bench resolves
     // BOTH still-lost seats to the LAST twin — an affirmative mis-attribution,
@@ -116,14 +121,16 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // below must be seat-keyed for the same reason: a MIX (['x#1','x#2','x'])
     // can never match `seenSeats`, so a run where both twins healed would emit
     // a phantom dead-leg degrade and exit 2.
-    const launched = new Map(); // key -> {alias, seat, ff}; alias is what notes render
-    const addLaunched = (s, alias, ff) => {
+    const launched = new Map(); // key -> {alias, seat, slots, ffs}; alias is what notes render
+    const addLaunched = (s, alias, ff, mint = false) => {
       const k = seatKey(s, alias);
-      if (!launched.has(k)) { launched.set(k, { alias, seat: s || null, ff: ff || null }); }
+      if (!launched.has(k)) { launched.set(k, { alias, seat: s || null, slots: 0, ffs: [] }); }
+      if (mint) { const rec = launched.get(k); rec.slots += 1; rec.ffs.push(ff || null); }
     };
     // firstFailures grows in LOCKSTEP with models/seats (recordFailure pushes
-    // all three together), so slot i is one seat's whole record.
-    unit.models.forEach((m, i) => addLaunched(unit.seats[i] || null, m, unit.firstFailures[i]));
+    // all three together), so slot i is one seat's whole record — and `mint` is
+    // true here ONLY: this feeder is the launch plan, the other two are the net.
+    unit.models.forEach((m, i) => addLaunched(unit.seats[i] || null, m, unit.firstFailures[i], true));
     for (const w of unit.srcWaves) {
       (w.models || []).forEach((m, i) => addLaunched((w.seats || [])[i] || null, m));
     }
@@ -166,18 +173,28 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     const usable = new Set(materializeReviews(o.runDir, legs, retrySeatOf).map(m => m.leg));
     // Seat-keyed off THIS wave's own bindings (an unbound leg keys by alias,
     // matching how its unidentified roster slot was keyed above).
-    const seenSeats = new Set(legs.map(l => seatKey(retrySeatOf.get(l) || null, l.modelInput || l.model)));
+    // v4.8 T-A4: a COUNT, not a presence Set — two unattributable twins share one key, so
+    // "was it seen at all?" cannot tell one returned leg from two. Filled by the loop below,
+    // which visits every leg (including one skipped for having no slot, as `legs.map` did).
+    const seenSeats = new Map(); // key -> legs this wave returned for it
     const lostWaveSeats = new Map(); // waveId -> [{alias, seat}] still lost from a wave-origin
     for (const leg of legs) {
       const seat = leg.modelInput || leg.model; // ALIAS — what every note renders
       const bound = retrySeatOf.get(leg) || null;
       const key = seatKey(bound, seat);
-      const ff = (launched.get(key) || {}).ff || null;
+      // This leg answers the key's NEXT unanswered slot, and reads THAT slot's own
+      // firstFailure (T-A4 B2). Counted BEFORE the `!ff` skip below, so the tally the
+      // reconcile reads still means "legs this wave returned for the key".
+      const slot = seenSeats.get(key) || 0;
+      seenSeats.set(key, slot + 1);
+      const ff = (launched.get(key) || { ffs: [] }).ffs[slot] || null;
       // SL-2 fix-wave: a retry response should only ever name seats THIS unit
       // launched for (unit.models is built in lockstep with firstFailures via
       // groupStage1Losses's recordFailure) — but if a leg turns up for a seat
-      // with no firstFailures entry, that seat never lost its seat in the
-      // first place. Skip it entirely: no heal (it would fabricate an "ended
+      // with no firstFailures entry, or (v4.8 T-A4) beyond the LAST slot its key
+      // minted, that seat never lost its seat in the first place. `slots` is an
+      // upper bound as well as a lower one, and this is where the upper half is
+      // spent. Skip it entirely: no heal (it would fabricate an "ended
       // 'unknown'" why for a seat that never failed) and no still-dead note —
       // the seat's first-attempt review stands untouched, rather than this
       // stray leg doubling it into a duplicate bench entry alongside the real one.
@@ -222,21 +239,28 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // vanish from every array. Reconcile against `launched` — the union of
     // unit.models, every srcWave's models and every srcLeg's seat, not
     // unit.models alone, so this holds even if some future change to the
-    // grouping made unit.models an incomplete union — so every launched seat
+    // grouping made unit.models an incomplete union — so every launched SLOT
     // lands in exactly one of recovered / still-dead / skipped. Slot-indexed:
     // there is no leg here to read a binding off, so the seat comes from the
     // roster slot itself, never from an alias lookup.
     for (const [key, rec] of launched) {
-      if (seenSeats.has(key)) { continue; } // already handled above (healed or still-dead)
-      const ff = rec.ff;
-      out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
-      out.attemptedSeats.add(key);
-      if (ff && ff.class !== 'leg') {   // wave-origin, incl. a 'missing' seat
-        if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-        lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
-      } else {
-        const src = claimSrc(key);
-        if (src) { out.stillDeadLegs.push(src); out.attemptedSeats.add(srcRowKey(src)); }
+      // v4.8 T-A4: `max(slots, 1) - seen` notes, not a presence test. `max(…, 1)` is what
+      // keeps the union net a net: feeders 2 and 3 mint no slot, so a key only THEY know
+      // still reconciles exactly ONCE, and a seat that arrives through both the launch plan
+      // and a srcLeg is counted by the plan alone. `rec.seat` is shared across a key's slots
+      // and that is sound: two slots can only share a key when NEITHER was identified (an
+      // identified slot keys by its own seat id), so every slot of such a key has seat null.
+      for (let i = seenSeats.get(key) || 0; i < Math.max(rec.slots, 1); i++) {
+        const ff = rec.ffs[i] || null;
+        out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
+        out.attemptedSeats.add(key);
+        if (ff && ff.class !== 'leg') {   // wave-origin, incl. a 'missing' seat
+          if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
+          lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
+        } else {
+          const src = claimSrc(key);
+          if (src) { out.stillDeadLegs.push(src); out.attemptedSeats.add(srcRowKey(src)); }
+        }
       }
     }
     // Wave-origin seats still lost: the return-contract wave entry carries only

@@ -2236,7 +2236,7 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   then builds `retrySeatOf` by dropping every placeholder bind:
   `.filter(b => !placeholders.has(b.seat))` (`run-retry-launch.js:59`).
   So `retrySeatOf.get(leg)` is always either `undefined` or a REAL `unit.seats` entry, with a
-  backstop at `run-retry.js:184` (`if (!ff) { continue; }`) dropping anything that still can't find
+  backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping what can't find
   its `launched` entry. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
   (`run-stage1-rows.js:148` legs, `:165` waves — both the `!!seat || !twins.has(alias)` expression
@@ -2303,7 +2303,7 @@ an identified bench, and the stray's own alias-based key misses. The SAME leg IS
 reaches no runStats row at all. Measured instance: `BOUGHT 0.1000` vs `ON ROWS 0.0600`, the 0.0400
 gap being the stray's own usage. **All three deciding lines — the placeholder-bind filter (then
 `run-retry.js:132`, now `run-retry-launch.js:59`), the `!ff` backstop (then `:216`, now
-`run-retry.js:184`), and `run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this
+`run-retry.js :: retryStage1Losses`), and `run-stages.js:140` — byte-identical at `main` (`cc56f678`)**, so this
 predates T2.2 and predates this PR. It is still not fixed here (out of this PR's scope), though the
 size argument for deferring it has lapsed: T-A2 took `run-retry.js` from 295/300 to 263/300.
 
@@ -2442,8 +2442,8 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   "twin" only as a test-naming convention for a paired/counterpart test, not a duplicated-alias
   bench. Nothing currently pins this gap or would catch a fix.
   **The same allowlist rebuild also closes a second, sharper case: a DISCARDED retry leg can be
-  the only review file the Workspace shows.** `run-retry.js:166` (`:: retryStage1Losses`; was
-  cited `:193`, which was already 5 lines stale before T-A2 and is 32 more now) calls
+  the only review file the Workspace shows.** `run-retry.js :: retryStage1Losses` (was cited
+  `:193`, then `:166`; T-A4 moved it again, so it is anchored by SYMBOL and not re-numbered) calls
   `materializeReviews` purely
   to compute `usable`, but that helper WRITES a file for every complete leg — including legs the
   loop below then discards (`if (!ff) { continue; }`) and legs that bound to nothing. Concretely,
@@ -3080,10 +3080,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `null`, not an alias — "seat id or nothing" is a different value space; `run.js:198` and
     `run-assemble.js:89`/`:215` are the emit-when-**different** stamp, which `run.js:190` explicitly
     contrasts with *"the naive `r.seat ? r.seat.id : null` form"*; `seats.js:165`/`:179` carry no
-    alias fallback; and the **ten** `seatKey(...)` call sites (`run-debate-revote.js:132`
+    alias fallback; and the **nine** `seatKey(...)` call sites (`run-debate-revote.js:132`
     `:: runRevoteWave`, `run-retry-keys.js:52 :: legLossKey`, `run-retry-group.js:64`/`:72`
-    `:: planStillDeadSources` and `:: recordFailure`, `run-retry.js:121`/`:132`/`:169`/`:174`
-    `:: retryStage1Losses`, `run.js:229 :: runCouncil`) are consumers, not spellings —
+    `:: planStillDeadSources` and `:: recordFailure`, **three** inside `run-retry.js ::
+    retryStage1Losses` (was four; T-A4), `run.js:229 :: runCouncil`) are consumers, not spellings —
     `run-retry-group.js :: recordFailure` (T2.1, **was `:115`, `:185`, `:121`**) is
     `recordFailure`'s former hand-inlined spelling, now a call site, and
     `run-retry-keys.js:52` (**was `run-retry-group.js:66`**, moved by T-A1) is **new with T2.2**:
@@ -3150,12 +3150,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     also has one caller (`:132`); and `run.js:231` is a **third, hand-inlined** copy that must stay,
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
     conformance becomes unreachable without it). Only the **exported** copy earns its keep, with
-    **eight** callers — `run-retry-keys.js:52 :: legLossKey`, `run-retry-group.js:64`/`:72`
-    (`:: planStillDeadSources`) and `:: recordFailure`, and
-    `run-retry.js:121`/`:132`/`:169`/`:174` (all `:: retryStage1Losses`).
+    **seven** callers — `run-retry-keys.js:52 :: legLossKey`, `run-retry-group.js:64`/`:72`
+    (`:: planStillDeadSources`) and `:: recordFailure`, and **three**
+    inside `run-retry.js :: retryStage1Losses` (anchored by symbol — T-A4 moved them again).
     (Was six before T2.1, 2026-08-16, `511cf43e`, which
     made `recordFailure`'s hand-inlined spelling a seventh caller — the same change that dropped
-    Count 1 above from nine to eight. T2.2, `33e2ecf7`, added the eighth, inside `legLossKey`.)
+    Count 1 above from nine to eight. T2.2, `33e2ecf7`, added the eighth, inside `legLossKey`; T-A4, 2026-08-17, removed one — `seenSeats` became a count Map filled inside the leg loop, so its own `seatKey(...)` call went away — leaving **seven**.)
     ⚠️ **This paragraph previously ended "all re-derived by execution against the final tree, not
     adjusted by arithmetic" while listing `run-retry-group.js:66`/`:128`/`:136`/`:185` and
     `run-retry.js:153`/`:164`/`:201`/`:206` — every one of those eight stale.** T-A1 moved

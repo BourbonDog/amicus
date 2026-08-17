@@ -33,7 +33,7 @@ function fakeCtx(oOverrides = {}, opts = {}) {
     o,
     launchers: {
       // A retry wave that produces NO legs — drives the "retry wave died wholesale" branch:
-      // `run-retry.js :: retryStage1Losses`'s `if (legs.length === 0)` guard, run-retry.js:140-165.
+      // `run-retry.js :: retryStage1Losses`'s `if (legs.length === 0)` guard (SYMBOL only: T-A4 moved it).
       // ⚠️ `notedSeats` (this suite's shorthand, incl. the T1c title below) is not a variable of
       // that name anywhere under src/ — measured, at this commit and at T-A2's base. The
       // announce-once-per-seat dedup it names lives in `run-retry-group.js :: planStillDeadSources`,

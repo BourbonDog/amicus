@@ -75,7 +75,7 @@
  *
  * ---- The one acknowledged residual D1 hole (out of scope, review-adjudicated) ----
  * `run-retry.js :: retryStage1Losses`'s per-leg `if (!ff) { continue; }` guard
- * (run-retry.js:184) silently drops a retry response that names a seat which
+ * (anchored by SYMBOL above — T-A4 moved it) drops a retry response that names a seat which
  * never lost its seat in the first place (transport misbehavior — a bogus or
  * duplicate leg riding a retry wave's response for a seat nobody retried).
  * That leg was still `ctx.addWave`'d by the same function, immediately after
