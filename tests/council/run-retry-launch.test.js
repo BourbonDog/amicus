@@ -46,16 +46,22 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     expect(calls).toEqual(['briefingFor', 'bindRetryWave']);
   });
 
-  test('P2 — run-retry.js redeclares neither symbol, so no second copy can drift in', () => {
+  test('P2 — run-retry.js requires run-retry-launch and declares no `function briefingFor`, no `function bindRetryWave` and no `placeholders` Set of its own', () => {
     // A source-level backstop for the same two mutants, independent of the module
-    // graph: the requirer must name this module and must not define its own
-    // `briefingFor` or its own `placeholders` Set.
+    // graph: the requirer must name this module and must not redeclare either
+    // helper in the form COPYBRIEF/COPYBIND would restore it in.
+    // ⚠️ Scope, stated exactly: these are LITERAL-FORM checks, not a proof that no
+    // second copy can exist. A re-inline spelled `const briefingFor = (o, unit) =>`
+    // or a bind block whose Set is named something else passes all four. P1 above
+    // is the general pin — it observes which module actually RAN — and this test is
+    // only its cheap, module-graph-independent companion.
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/council/run-retry.js'), 'utf8');
     expect(src).toContain('} = require(\'./run-retry-launch\');');
     expect(src).not.toMatch(/function briefingFor\s*\(/);
+    expect(src).not.toMatch(/function bindRetryWave\s*\(/);
     expect(src).not.toMatch(/const placeholders = new Set\(\)/);
   });
 

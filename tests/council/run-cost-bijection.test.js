@@ -74,14 +74,18 @@
  *     full-driver fixture here to be true.
  *
  * ---- The one acknowledged residual D1 hole (out of scope, review-adjudicated) ----
- * run-retry.js:226's `if (!ff) { continue; }` silently drops a retry response
- * that names a seat which never lost its seat in the first place (transport
- * misbehavior — a bogus/duplicate leg riding a retry wave's response for a
- * seat nobody retried). That leg was still `ctx.addWave`'d by the caller
- * (run-retry.js:182, before this per-leg loop runs) and would count toward
- * run.json's usage total, but there is no ff/firstFailure to key a row off,
- * so it produces no row at all — a genuine, deliberately-not-fixed rowless
- * leg. No fixture for it here: reproducing it would require a scripted
+ * `run-retry.js :: retryStage1Losses`'s per-leg `if (!ff) { continue; }` guard
+ * (run-retry.js:184) silently drops a retry response that names a seat which
+ * never lost its seat in the first place (transport misbehavior — a bogus or
+ * duplicate leg riding a retry wave's response for a seat nobody retried).
+ * That leg was still `ctx.addWave`'d by the same function, immediately after
+ * the retry launch (`ctx.addWave(res.wave)`, run-retry.js:97, before this
+ * per-leg loop runs) and would count toward run.json's usage total, but there
+ * is no ff/firstFailure to key a row off, so it produces no row at all — a
+ * genuine, deliberately-not-fixed rowless leg. Both line numbers rotted twice
+ * before (`:226`/`:182` were already ~10 and ~85 lines stale at v4.8 T-A2);
+ * they are anchored to the SYMBOL here so the next relocation is greppable.
+ * No fixture for it here: reproducing it would require a scripted
  * launcher lying about which seats a retry wave covers, which is a
  * transport-honesty assumption every other fixture in this file (and the
  * other ~19 driver suites) already relies on holding.

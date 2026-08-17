@@ -2236,17 +2236,19 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   backstop at `run-retry.js:184` (`if (!ff) { continue; }`) dropping anything that still can't find
   its `launched` entry. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
-  (`run-stage1-rows.js:146` legs, `:163` waves) — which is the condition
-  (`run-stage1-rows.js:174`, `let finalLeg = exact ? retryLegBySeat.get(join) : undefined;`, this
-  commit's comment) that hands a bound retry leg its row. A BOUND still-dead retry leg can therefore
-  never reach the `!exact` branch below `:174` — the one branch that does NOT consult
+  (`run-stage1-rows.js:148` legs, `:165` waves — both the `!!seat || !twins.has(alias)` expression
+  itself, not the `alias`/comment lines `:146`/`:163` this entry cited before 2026-08-17) — which is
+  the condition (`run-stage1-rows.js:176`, `let finalLeg = exact ? retryLegBySeat.get(join) :
+  undefined;`, this commit's comment) that hands a bound retry leg its row. A BOUND still-dead retry
+  leg can therefore never reach the `!exact` branch below `:176` — the one branch that does NOT consult
   `retryLegBySeat` — because nothing on the path to `stillDeadRetryLegs` can produce a bound leg
   without also producing the seat that makes its row `exact`.
 - **Earned, not asserted.** Two mutants, scratchpad-applied and reverse-edited byte-exactly (never
   `git checkout --`): **NOPLACEHOLDERFILTER** (drop `run-retry-launch.js:59` alone) does NOT reach
   this shape — the leg's `launched` lookup resolves differently and the backstop drops it instead,
   `stillDeadRetryLegs = 0`, a DIFFERENT loss that happens to total the same 0.1600. **FAKEBIND**
-  (drop `:132` AND give the placeholder the alias as its own id — a two-line change) reaches it
+  (drop `run-retry-launch.js:59` AND give the placeholder the alias as its own id — a two-line
+  change; both lines were `run-retry.js:132`/`:126` when the mutants were run) reaches it
   exactly: 1 bound still-dead retry leg, `GAP = 0.0700`, precisely that leg's own `usage` sitting
   unconsumed in `retryLegBySeat`. The invariant is a CONJUNCTION — placeholder ids stay unique, and
   placeholder binds get dropped — break one alone and the loss lands somewhere else; break both and
