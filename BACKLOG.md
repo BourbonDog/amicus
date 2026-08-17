@@ -1497,7 +1497,9 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   — recon 2026-08-07: filed as PR1F-4 for v4.7 PR5. The proposed `r.status === 'error'` gate is
   **too narrow**: the leg-status vocabulary includes `'timed-out'`, a primary retry trigger, so the
   gate would never fire for the very case the retry text exists for. Also there is exactly **one**
-  production call site (`workspace-seats.js:47`), not two, and the live-tick path never goes
+  production call site (`workspace-seats.js:127`, `var retried = retriedSeats(deg);` — **was
+  cited `:47`, which is a docblock line; the function itself is `:73`**), not two, and the
+  live-tick path never goes
   through `seatsFromRunStats` at all — so the fix is terminal-path-only. Line budget:
   `live-model.js` is 284/300 and the honest implementation is +20-30, so it needs the helper to
   land in `workspace-seats.js` (132) instead. Deferred to PR6.
@@ -1549,7 +1551,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   (mid-run polling) never goes through `seatsFromRunStats` at all, so a seat retried while its run
   is still in progress shows no marker until the run finishes and the panel re-renders from the
   terminal doc. Accepted as terminal-path-only for PR7 (recon 2026-08-07/08 already established
-  there is exactly one production call site, `workspace-seats.js:47`); threading the retry set
+  there is exactly one production call site, `workspace-seats.js:127` — **was `:47`**); threading the retry set
   through the composed live doc so the live path can see it too is a data-layer change, not a
   render-layer one — a different task. Found during the v4.7 PR7 final-review consolidated wave,
   2026-08-08.
@@ -3095,13 +3097,14 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
     `council/debate.js:178`, `council/report.js:159` (×2), `council/run-debate.js:258`,
     `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
-    `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:242`. **Adjacent forms
+    `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:245 :: renderDeadSeatRows` (**was `:242`**). **Adjacent forms
     deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
     *different* emitted field pair); the four seat-space-**gated** reads `report.js:98`/`:104` and
     `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
     be folded into the bare form — `report.js :: isSeatSpace`'s docblock records that independent
-    fallbacks would blank every vote cell on twin verdicts already on disk; `workspace-seats.js:185`'s dual lookup (it
-    queries *both* keys, so it is not a key derivation); `workspace-seats.js:85`'s `seatId` chain;
+    fallbacks would blank every vote cell on twin verdicts already on disk; `workspace-seats.js:188`'s dual lookup (**was `:185`**; it
+    queries *both* keys, so it is not a key derivation); `workspace-seats.js:88`'s `seatId` chain
+    (**was `:85`**);
     and `workspace-render.js:195`/`:225`'s `seat.id || seat.model` over `seatsFromRunStats`'
     synthesised `model:role` id.
   - ⚠️ **Counts 1 and 2 are DISJOINT sets** — no `file:line` appears in both. (They totalled nine
@@ -3338,7 +3341,8 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     **distinct aliases**, and tests (9)–(11) cover twin benches on the **dead-leg** arm. Nothing
     sits at the intersection.
   - **Why it matters:** dead-wave is one of the four alias-only emitter arms the dual lookup
-    (`retried[s.seat] || retried[s.model]`, `workspace-seats.js:117`) exists to serve — it emits
+    (`retried[s.seat] || retried[s.model]`, `workspace-seats.js:188` — **was `:117`, long stale;
+    this is the SAME expression cited in SI-DUP's Count-2 exclusions, and the two now agree**) exists to serve — it emits
     `data.models[]` with no `seat` and no `firstFailure` (`run-retry-notes.js:28-47`). On a twin
     bench it should badge **both** seats sharing the alias, which is the disclosed imprecision in
     the plan's §0.8 and in the CHANGELOG, and nothing currently pins that it does.
@@ -3355,7 +3359,7 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
 - [ ] **The seats panel and the artifact panels can disagree about which SPACE they are in,
   because they read the decision from two different documents.** Found while investigating PR5b's
   scope boundary (2026-08-15); reported at the time and, in an oversight, never filed until now.
-  - `renderSeatsPanel` (`workspace-seats.js:101`) keys its rows on `r.seat`, which arrives from
+  - `renderSeatsPanel` (`workspace-seats.js:113`; **was `:101`, stale before 2026-08-17**) keys its rows on `r.seat`, which arrives from
     **`tally.json`** via `derived.cost.rows` (`run-detail.js:73` reads `tally.runStats`).
   - `workspace-lazy.js:189` gates the three artifact panels on `derived.seatSpace`, which is
     `isSeatTable(run.seats)` — from **`run.json`** (`run-detail.js`, via `seat-space.js`).
