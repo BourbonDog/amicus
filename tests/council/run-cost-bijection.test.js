@@ -82,10 +82,11 @@
  * the retry launch (`ctx.addWave(res.wave)`, run-retry.js:97, before this
  * per-leg loop runs) and would count toward run.json's usage total, but there
  * is no ff/firstFailure to key a row off, so it produces no row at all — a
- * genuine, deliberately-not-fixed rowless leg. Both line numbers rotted twice
- * before (`:226`/`:182` were already ~10 and ~85 lines stale at v4.8 T-A2);
- * they are anchored to the SYMBOL here so the next relocation is greppable.
- * No fixture for it here: reproducing it would require a scripted
+ * genuine, deliberately-not-fixed rowless leg. ⚠️ Both numbers above are
+ * re-derived, and both were stale before v4.8 T-A2's fix round: this docblock
+ * said `:226` and `:182` while the lines sat at `:216` and `:106` at that
+ * commit's base (measured) and at `:184`/`:97` after it. Grep the SYMBOL, not
+ * the number. No fixture for it here: reproducing it would require a scripted
  * launcher lying about which seats a retry wave covers, which is a
  * transport-honesty assumption every other fixture in this file (and the
  * other ~19 driver suites) already relies on holding.
