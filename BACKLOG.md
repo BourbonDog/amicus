@@ -2250,9 +2250,10 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping anything that
   can't find its `launched` entry — or, since T-A4, any leg past its key's LAST minted slot. The same real seat object that survives both gates is exactly what
   `run-stage1-rows.js :: pushDeadSeatRows` finds via `seatOf` when computing `exact`
-  (the `!!seat || !twins.has(alias)` expression itself, in EACH of `pushDeadSeatRows`' two
-  `deadSeats` feeders — legs then waves; not the `alias`/comment lines this entry cited before
-  2026-08-17. Re-anchored BY SYMBOL at T-A5, having read `:148`/`:165` and before that `:146`/`:163`)
+  (the `exact` expression itself in EACH of `pushDeadSeatRows`' two `deadSeats` feeders — ⚠️ the two
+  arms SPELL it differently, `!!seat || !twins.has(alias)` on the legs arm and `!!s ||
+  !twins.has(alias)` on the waves arm, so grep both; not the `alias`/comment lines this entry cited
+  before 2026-08-17. Re-anchored BY SYMBOL at T-A5, having read `:148`/`:165`, before that `:146`/`:163`)
   — which is the condition (`pushDeadSeatRows`' `let finalLeg = exact ? retryLegBySeat.get(join) :
   undefined;`) that hands a bound retry leg its row. A BOUND still-dead retry
   leg can therefore never reach the `!exact` branch below it — the one branch that does NOT consult
@@ -3071,7 +3072,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `:153` — all three falsified by T-A1 moving `seatKey`/`legLossKey` into `run-retry-keys.js` and
     by `run-stage1-rows.js` growing. A rigour claim is only as current as its date, so this one
     carries the date and the method: each site below was opened at its stated line and read.
-    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**272**) and moved BOTH of its spellings a FIFTH
+    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**284**) and moved BOTH of its spellings a FIFTH
     time; rather than restate two numbers that rot on the next edit, they are now anchored BY
     SYMBOL — which is why those two entries alone carry no line)
     — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and

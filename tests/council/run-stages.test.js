@@ -1466,6 +1466,11 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
 // do from here — hand `pushDeadSeatRows` the state a BROKEN invariant would produce — and pin
 // that the alias-granular join refuses the second count and says so.
 describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
+  // Required HERE, not at the file head, deliberately: this file's top is cited by LINE from
+  // `seat-fixtures.test.js` and `BACKLOG.md`, and a require added up there would silently falsify
+  // both. The PRODUCTION reader of a degrade's `data.seat`, so the channel-inertness pin below runs
+  // through the real consumer instead of re-checking a literal channel list against itself.
+  const { deriveSeatLoss } = require('../../src/council/verdict');
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const roleFor = () => 'seat';
   // A test-authored Set, exactly as the NUL-containment pin above builds one: `legLossKey`'s
@@ -1487,10 +1492,10 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
 
   test('the broken shape: one billed leg lands in exactly ONE row, and the refusal is announced', () => {
     // Twin A was SKIPPED while twin B was retried — the shape both invariants forbid. Their
-    // unbound `keyOf` is the same string 'deepseek', so at HEAD A's own first leg was pushed as a
-    // `superseded` row AND handed straight back as A's primary row: one billed leg, two rows
-    // carrying its usage. Mutant TRUSTALIAS — delete the `skippedLegs.has(dead)` arm in
-    // run-stage1-rows.js so the join trusts the alias key alone — reds the first assertion with 2.
+    // unbound `keyOf` is the same string 'deepseek', so before this guard (base `2abbeefa`) A's own
+    // first leg was pushed as a `superseded` row AND handed straight back as A's primary row: one
+    // billed leg, two rows carrying its usage. Mutant TRUSTALIAS — delete the `skippedLegs.has(dead)`
+    // arm in run-stage1-rows.js so the join trusts the alias key alone — reds the first assertion.
     const legA = legFor(1, usageA);
     const legB = legFor(2, usageB);
     const notes = [];
@@ -1505,9 +1510,15 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({ channel: 'internal',
       data: { seat: 'deepseek', taskId: 'r1-s1-1' } });
-    // `internal` is inert to every reader of a note's `data.seat` — verdict.js, and the two
-    // Workspace projections — all gate on dead-leg/dead-wave/seat-unbound before reading it.
-    expect(['dead-leg', 'dead-wave', 'seat-unbound']).not.toContain(notes[0].channel);
+    // `internal` is inert to the four readers of a note's `data.seat` — verdict.js, the two
+    // Workspace projections, and workspace/seat-space.js — because each gates on
+    // dead-leg/dead-wave/seat-unbound first. Asserted through a REAL consumer rather than by
+    // comparing the channel to a literal list, which could not fail: `deriveSeatLoss` is the
+    // production reader, and the SAME record on a seat-loss channel DOES move it, so the equality
+    // is a property of the channel and not of an inert consumer.
+    const seatLoss = (ds) => deriveSeatLoss({ runId: 'r1', critic: 'gpt', degrades: ds });
+    expect(seatLoss([notes[0]])).toEqual(seatLoss([]));
+    expect(seatLoss([{ ...notes[0], channel: 'dead-leg' }]).deadBenchSeats).toEqual(['deepseek']);
   });
 
   test('the announcement cannot be defeated by omitting the sink', () => {
@@ -1523,6 +1534,27 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
       const said = spy.mock.calls.map(c => String(c[0])).join('');
       expect(said).toContain('Notice: a superseded row for seat deepseek was refused');
     } finally { spy.mockRestore(); }
+  });
+
+  test('…and the default sink cannot take the run down: a throwing stream is swallowed', () => {
+    // The invariant the whole channel choice rests on is "nothing on this path may throw, because
+    // it runs after a whole council has been paid for". `formatDegrade` covers the string; this
+    // covers the STREAM, which can fail (EPIPE) even when the string cannot — the same guard the
+    // real sink applies at `run-degrade.js :: createDegradeSink`'s `safeEmit`. Mutant NOSAFEEMIT —
+    // unwrap the try/catch around `process.stderr.write` — reds this.
+    const boom = jest.spyOn(process.stderr, 'write')
+      .mockImplementation(() => { throw new Error('EPIPE'); });
+    try {
+      const legA = legFor(1, usageA);
+      const legB = legFor(2, usageB);
+      const run = () => drive({ recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) }, legA, legB, null);
+      expect(run).not.toThrow();
+      // Non-vacuity: the write really was attempted, so this is not passing because nothing ran.
+      expect(boom).toHaveBeenCalled();
+      // …and the rows are still correct — a failed announcement never costs the repair.
+      expect(run().filter(r => r.usage === usageA).map(r => r.role)).toEqual(['seat']);
+    } finally { boom.mockRestore(); }
   });
 
   test('SCOPE: on R2\'s taskId-less floor the superseded row STAYS — refusing it would lose spend', () => {

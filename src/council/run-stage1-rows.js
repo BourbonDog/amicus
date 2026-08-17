@@ -17,10 +17,14 @@ const { twinAliases, legLossKey } = require('./run-retry-group');
 // header above documents eliminating stays eliminated.
 const { formatDegrade } = require('../utils/degrade');
 // The announcement must not be defeatable by omitting a parameter, so `degrade` defaults to the
-// same sentence on stderr. `formatDegrade` is pure interpolation and — unlike the sink's
-// `makeDegrade`, which validates and THROWS — cannot fail: nothing on this path may throw, because
-// it runs after a whole council has already been paid for.
-const STDERR_NOTICE = { note: (r) => process.stderr.write(formatDegrade({ ...r, kind: 'degrade' })) };
+// same sentence on stderr. Nothing on this path may throw — it runs after a whole council has
+// already been paid for — so BOTH halves are covered: `formatDegrade` is pure interpolation, and
+// the sink's validating `makeDegrade` is deliberately not called; and the write itself is wrapped,
+// because a stream can fail even when the string cannot. Same guard, same reason, as the real sink
+// (`run-degrade.js :: createDegradeSink`'s `safeEmit` — anchored by symbol; it is the only one).
+const STDERR_NOTICE = { note: (r) => {
+  try { process.stderr.write(formatDegrade({ ...r, kind: 'degrade' })); } catch { /* EPIPE etc */ }
+} };
 
 /**
  * Push superseded-seat and primary-error dead-seat rows onto extraRows.
@@ -102,10 +106,12 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // exist to make ONE statement true: no first leg is SKIPPED while its alias key is superseded.
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
   // `deadLegs0` the retry declined to attempt — so the test below asks IDENTITY, which no
-  // keyspace can blur, at the one place the alias key is relied on. Unreachable while either
-  // fact holds (measured: 4000 fuzzed retry runs, 993 with skips, 0 hits; the same fuzz under
-  // mutant GUESSPOS hits 85), so every correct input is byte-identical — and the double count the
-  // paragraph above ends on no longer FOLLOWS from breaking a fact: it is refused and announced.
+  // keyspace can blur, at the one place the alias key is relied on. Unreachable while either fact
+  // holds (measured over 4000 fuzzed retry runs, 993 of them with skips: 0 hits on the first
+  // conjunct below AND 0 on the whole shipped condition), so every correct input is byte-identical
+  // — and the double count the paragraph above ends on no longer FOLLOWS from breaking a fact: it
+  // is refused and announced. The same fuzz under mutant GUESSPOS hits 85 on BOTH, so what fires
+  // when a fact breaks is the shipped condition, not merely its first half.
   const skippedLegs = new Set(retry.skippedDeadLegs || []);
   const supersededKeys = new Set([
     ...retry.recoveredLegs.map(keyOf),
@@ -120,11 +126,17 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // indistinguishable twins collapsing onto one leg-less row — the superseded row is the only
   // place that leg's `usage` survives at all, and refusing it would trade a double count for a
   // LOST billed leg. So refuse the first shape and leave the second exactly as it was.
+  // ⚠️ The scope of "exact", stated because the code does not check it: `deadLegs0.find` returns
+  // ONE leg per row key, so the refused legs' row keys must be DISTINCT for each to get a primary
+  // row back. Two refused legs sharing a key would leave one row serving both and lose a leg's
+  // `usage`. That needs a SECOND, different break — `supersededKeys` non-empty for a key
+  // `attemptedSeats` does not hold, and those two move in lockstep (run-retry.js adds both
+  // spellings) — so it is not reachable by breaking either invariant above alone.
   // It is announced either way, because a silently corrected number is the failure mode this join
   // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
-  // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. Every
-  // reader of a note's `data.seat` (verdict.js, workspace-seats.js, live-dead-seats.js) gates on
-  // dead-leg/dead-wave/seat-unbound first, so this record reaches none of them, and it cannot
+  // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR
+  // readers of a note's `data.seat` (verdict.js, workspace-seats.js, live-dead-seats.js,
+  // workspace/seat-space.js) gate on dead-leg/dead-wave/seat-unbound first, so it reaches none, and it cannot
   // move the exit code either: run-stages.js notes a `dead-leg` degrade for every skipped leg
   // before this function is called, so the run is already degraded whenever this can fire.
   const willTakeItsOwnLeg = (dead) => !retry.attemptedSeats.has(rowKeyOf(dead));
