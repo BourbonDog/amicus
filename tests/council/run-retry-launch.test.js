@@ -16,8 +16,12 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // Named mutant "COPYBRIEF": in run-retry.js drop briefingFor from the require and
     // re-inline the moved definition (restoring `const briefings = require('./briefings')`)
     // — RED here, `calls` loses 'briefingFor'. Named mutant "COPYBIND": re-inline the
-    // pad/bind block at the call site — RED here, `calls` loses 'bindRetryWave'. Both
-    // mutants leave every behaviour suite in the repo green, which is the whole point.
+    // pad/bind block at the call site — RED here, `calls` loses 'bindRetryWave'.
+    // MEASURED 2026-08-17, and stated at the scope actually run: each mutant was RED on
+    // this test and on P2, and green across the rest of
+    // run-retry-launch/run-retry/run-stages — 164 of 166 tests, 3 suites. That is the
+    // point (nothing but these pins sees a re-inline), but it is NOT a repo-wide claim:
+    // only COLLIDEID below was run against all 534 suites.
     //
     // Driven with a retry wave that returns ZERO legs: that path reaches both calls and
     // touches no filesystem (materializeReviews is never entered).
@@ -74,7 +78,10 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // distinct ids -> {bound: 2, orphans: 0}; one shared id -> {bound: 1, orphans: 1}.
     // Named mutant "COLLIDEID": in run-retry-launch.js make the placeholder id
     // `__unbound-${unit.waveId}` (drop the `-${i + 1}` slot suffix) and this goes RED
-    // with one orphan; every behaviour suite in the repo stays green.
+    // with one orphan (leg `w-2`). RUN 2026-08-17 against the FULL suite, which is why
+    // the repo-wide half of this claim is stated: `npm test` gave
+    // 1 failed / 7504 passed / 8 skipped, 533 of 534 suites green — this test was the
+    // only failure in the repo.
     const legs = [
       { legId: 'w-1', modelInput: 'deepseek' },
       { legId: 'w-2', modelInput: 'deepseek' },
@@ -126,8 +133,10 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // A real seat whose id begins `__unbound-` is adversarial but legal, and dropping
     // its bind would be a name-collision channel inside the one mechanism whose whole
     // contract is "never guess". Mutant: swap the filter for
-    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — RED here, green
-    // everywhere else.
+    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — named "PREFIXID",
+    // measured 2026-08-17: RED here and green on the other 171 tests of
+    // run-retry-launch/run-retry/run-stages/run-cost-bijection (4 suites). Not run
+    // repo-wide, so "green everywhere else" is stated only for that set.
     const real = { id: '__unbound-x#1', alias: '__unbound-x', role: 'seat', lens: null, position: 1 };
     const legs = [{ legId: 'w-1', modelInput: '__unbound-x' }];
     const { retrySeatOf } = launch.bindRetryWave(

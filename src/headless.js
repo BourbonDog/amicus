@@ -174,11 +174,11 @@ function withTimeout(promise, ms, label) {
  *     because raising the env var changes exactly this window.
  *   - fromEnv=false: `ms` arrived as a direct, caller-set numeric option.
  *     Task 6 review (Important finding): this is NOT synonymous with "the
- *     env var doesn't apply" — src/council/run-retry.js:54 computes a
+ *     env var doesn't apply" — src/council/run-retry.js:56 computes a
  *     Stage-1 retry's escalated window as
  *     `2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs :
  *     resolveNoOutputBackstopMs())` and forwards that as a direct
- *     `noOutputBackstopMs` (line 86) — so a 240s retry-fired backstop is
+ *     `noOutputBackstopMs` (line 88) — so a 240s retry-fired backstop is
  *     "caller-set" by this predicate while still being *derived from* the
  *     env default doubled. Only src/sidecar/models-probe.js:79's hardcoded,
  *     non-tunable 30s (PROBE_WINDOW_MS; docs/usage.md:406 promises it's "not
