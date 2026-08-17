@@ -30,6 +30,11 @@ item-by-item, each verdict then independently re-measured by a second pass instr
 **6 DONE · 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 16 OPEN.** SI-22 is a roll-up of five independent
 shapes, so the true open work-item count is **20**, not 16.
 
+> **These are the recon's counts at `53cd689c` and are not re-derived as work lands** — the table
+> below is the live record; read a verdict there, not here. One change since: **SI-22.3 moved
+> OPEN → PARTIAL** (T2.2, 2026-08-16, `33e2ecf7`), which makes it 4 PARTIAL / 15 OPEN and 19 open
+> work items on the same counting rule.
+
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
 | 01 | **DONE** | artifact allowlist from `o.seats` | `workspace/artifact-names.js :: artifactAllowlist` |
@@ -55,7 +60,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 21 | **HOLD** | lens/position unrecoverable | owner-deferred; its own prose is false (§3) |
 | 22.1 | OPEN | raiser's own leg orphans | `tally.js :: tally` |
 | 22.2 | OPEN | peer twin's leg orphans | `tally.js :: tally` |
-| 22.3 | OPEN | two orphaned twins → ONE dead row | `run-stage1-rows.js :: pushDeadSeatRows` |
+| 22.3 | **PARTIAL** (T2.2, `33e2ecf7`) | ~~two orphaned twins → ONE dead row~~ producer fixed, N→N on both arms **for every twin it is handed**; open: a PARTIAL retry return still under-counts (B1) and both notes read slot 0's `firstFailure` (B2) | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (open, needs an extraction) |
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
 | 22.5 | OPEN | orphaned Stage-2 judge rendered nowhere | `report.js :: toModel` · `matrix-model.js` · `report-html.js` |
 | 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |
@@ -96,23 +101,47 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    two filters. Treating the whole list as rotten throws away good anchors.
 6. **PR5c's commit title misleads on SI-22.3.** `16fbad16` is titled "stop inferring seat identity
    in the consumer" and describes N-orphans-become-N-rows. It fixed the **consumer**; the runStats
-   **producer** still collapses. A reader arriving from the commit title will believe this closed.
+   **producer** still collapsed. A reader arriving from the commit title will believe this closed.
+   ✅ **The producer SHIPPED 2026-08-16 (T2.2, `33e2ecf7`)** — N orphaned twins now give N rows on
+   both arms **for every twin the producer is handed**. Kept as a trap because the mis-dating hazard
+   is unchanged, and because SI-22.3 is **PARTIAL**, not closed: a PARTIAL retry return still hands
+   the producer only ONE of two unattributable twins. See §3 and the table row above.
 
 ---
 
-## 3. The durable finding, confirmed
+## 3. The durable finding, confirmed — ✅ FIXED by T2.2 for three retry shapes of four
 
 PR5c's ruling was containment: stop inferring, dedup only on exact identity, accept a visible
 duplicate. The cure named was producer-side identity starting at `run-retry-group.js`'s
-`recordFailure`. **That is confirmed by measurement.**
+`recordFailure`. **That was confirmed by measurement.**
 
-`recordFailure` writes `const key = seatObj ? seatObj.id : seat`. Measured on
+`recordFailure` wrote `const key = seatObj ? seatObj.id : seat`. Measured on
 `['deepseek','deepseek','gpt']` with two **unbound** dead twin legs:
 `models=["deepseek"], seats=[null], firstFailures.seatId=["deepseek"]` — **one retry slot for two
 dead seats.** Controls: both bound → `models=["deepseek","deepseek"]`; unique alias → unaffected.
-That is a spend-affecting producer defect. It pairs with SI-22.3, where `pushDeadSeatRows`
-collapses two orphaned twins to one row on **both** arms. Fix either alone and the run's spend and
+That is a spend-affecting producer defect. It paired with SI-22.3, where `pushDeadSeatRows`
+collapsed two orphaned twins to one row on **both** arms. Fix either alone and the run's spend and
 its record disagree.
+
+✅ **BOTH SHIPPED TOGETHER 2026-08-16 — T2.2, `33e2ecf7`**, exactly as that last sentence required.
+Re-measured on the same bench: `models=["deepseek","deepseek"]`, `seats=[null,null]` (neither
+guessed) and two dead-seat rows, each carrying no seat; controls unmoved.
+
+⚠️ **One sub-case remains, which is why the table above reads PARTIAL, not DONE — and why the
+unqualified headline "N orphans → N retry slots and N rows, both arms" must not be restated in
+either wording.** The retry-SLOT half is closed in every shape (`recordFailure` runs before any
+retry outcome exists). The ROW/NOTE half is closed for a wholesale retry death, a FULL retry return
+and a skipped unit, and OPEN for a partial return. `run-retry.js`'s `launched` Map is
+`seatKey`-first-wins, a keyspace no first-attempt distinguisher can enter, so a retry wave returning
+FEWER legs than it launched still gives 1 note and 1 row for two unattributable twins (control,
+BOUND twins: 2 and 2) — code council finding **B1** on PR #170 — and both still-dead notes read
+slot 0's `firstFailure` — finding **B2**. The fix is a per-key slot count measured at **+7 lines**;
+`run-retry.js` has **5** free and `run-retry-group.js` has **1**, so it is an extraction
+prerequisite, not a shave, and R14 forbids riding that refactor on a defect PR.
+**BACKLOG.md's "The durable finding" section carries the full per-retry-outcome table, both
+measurements with their controls, the scoped NEXT TASK entry that closes B1 and B2 together, the
+two accepted R2 costs, the SI-TWINS consolidation filing, and one further stated invariant for
+whoever extracts that file.**
 
 **R4 and R5 are NOT one job.** The instinct that both are producer-side seat identity was tested
 and does not hold. Measured in both directions: with a keyed dead `deepseek#2` on the critic alias
@@ -177,6 +206,9 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
   Hard prereq of T2.2 — two independent spellings in one file, and T2.2 changes that vocabulary
 - **T2.2** Producer: `recordFailure` + `pushDeadSeatRows` key on roster slot / leg id.
   N orphans → N retry slots and N rows, **both arms**. MUST ship together.
+  ⚠️ **SHIPPED PARTIAL 2026-08-16 (`33e2ecf7`)** — the slot half closed in every shape, the row/note
+  half in three retry shapes of four. The goal line above is what was *planned*, not what holds;
+  see §3 and BACKLOG's "The durable finding" for the scoped result and the B1/B2 follow-up
   ⚠️ measure the interaction with `deriveSeatLoss`'s channel gates — SI-02 is deferred but the
   degrade notes `recordFailure` produces are what `deriveSeatLoss` reads
 - **T2.3** Peer split: `tally.js` + `debate.js` in **one commit** — they already disagree today

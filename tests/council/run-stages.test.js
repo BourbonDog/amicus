@@ -15,6 +15,9 @@ const { buildTallyInput } = require('../../src/council/run-assemble');
 // v4.8 PR4c: the dead-seat row producer is exported, so its two seat shapes are
 // pinnable with no runCouncil, no launchers and no disk.
 const { pushDeadSeatRows } = require('../../src/council/run-stage1-rows');
+// v4.8 T2.2 review (A1/D3): the row key itself, so the NUL-separator pin below can prove the
+// mint FIRES on the shape it asserts containment for, rather than passing vacuously.
+const { legLossKey } = require('../../src/council/run-retry-group');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -1122,6 +1125,95 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     expect(r.extraRows.filter(x => x.role === 'superseded')).toHaveLength(2);
   });
 
+  // ---- v4.8 T2.2: the ORPHANED twins, end to end through the real runStage1 ----
+  // The three tests above are BOUND twins: bindSeats resolves each first leg to its own
+  // seat, so the alias never had to carry two identities. These drive the shape the
+  // producer actually collapsed on — twins whose legs no binding could attribute.
+  test('T2.2: two ORPHANED twins get TWO dead-seat rows, and neither borrows its own first leg', async () => {
+    // The lockstep pin. `recordFailure` now mints two retry slots for these two seats,
+    // and run-stage1-rows.js keys their rows by each leg's own taskId. If
+    // `attemptedSeats` did NOT gain the same keys, `retry.attemptedSeats.has(join)` goes
+    // false and each row re-acquires its own FIRST-attempt leg — which already has a
+    // `superseded` row below, so that leg's cost would land in runStats twice while both
+    // retry legs landed nowhere.
+    // ⚠️ v4.8 council A1 MOVED this test's separator. The sentence that stood here — "the
+    // assertion that separates the two worlds is which waveId the PRIMARY rows carry" — is
+    // now FALSE: a borrowed leg no longer stamps its waveId, so a correct primary row here
+    // carries none at all. Re-measured under DESYNCLEG against the final tree: a re-attached
+    // first leg still stamps waveId 'abc123-s1', resolvedModel 'deepseek' and durationMs
+    // 1000, so the separator is the leg-LESS shape below, and the mutant reds on it. `usage`
+    // is what keeps this distinct from the wholesale-death control two tests down: same
+    // shape, but that one's rows carry usage null because no spare existed to claim.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
+      // hits.length === 1, so on a twin alias BOTH first legs come back orphaned.
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1),
+          deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek', 'deepseek']);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);                              // TWO paid seats, TWO rows
+    expect(primary.every(x => !('seat' in x))).toBe(true);        // attributing NOTHING
+    expect(primary.every(x => !('waveId' in x) && !('resolvedModel' in x))).toBe(true);
+    expect(primary.every(x => x.status === 'error' && x.durationMs === null)).toBe(true);
+    // …and the retry legs ARE still claimed: both costs on the record, one per row.
+    expect(primary.map(x => x.usage))
+      .toEqual([{ cost: { amount: 0.01, source: 'reported' } }, { cost: { amount: 0.01, source: 'reported' } }]);
+    const superseded = r.extraRows.filter(x => x.role === 'superseded');
+    expect(superseded.map(x => x.waveId)).toEqual(['abc123-s1', 'abc123-s1']);
+    // Every billed leg on the record exactly once: two first legs superseded, two retry
+    // legs primary, and no leg appearing on two rows.
+    expect(r.extraRows.filter(x => x.role !== 'repair')).toHaveLength(4);
+  });
+
+  test('T2.2 control: two orphaned twins whose retry wave dies wholesale get TWO leg-less rows', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);
+    expect(primary.every(x => !('waveId' in x))).toBe(true);      // no phantom first-leg id
+    expect(primary.every(x => x.usage === null)).toBe(true);
+  });
+
+  test('T2.2 control: a UNIQUE-alias bench with two orphaned legs is byte-unchanged', async () => {
+    // The rule is roster-gated, so nothing on a bench without a repeated alias may move.
+    // ⚠️ The WHOLE extraRows array is asserted, not a projection of it. "byte-unchanged" is a
+    // claim about every field of every row — count, order, role, status, usage, durationMs,
+    // resolvedModel and the ABSENCE of a `seat` key — and this file's earlier revision claimed
+    // it while checking only `model` and `waveId`. A title that outruns its assertions is the
+    // failure mode this release keeps paying for, so the title is made TRUE rather than
+    // narrowed. Every value below is fixture-determined (mkLeg's fixed durationMs/usage and
+    // the two literal waveIds), so the expectation is a stable literal, not a snapshot.
+    const ctx = makeCtx({ models: ['gemini', 'gpt'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [{ ...deadLeg('gemini', undefined, undefined, 'abc123-s1', 1), taskId: 'orphan-a' },
+          { ...deadLeg('gpt', undefined, undefined, 'abc123-s1', 2), taskId: 'orphan-b' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('gemini', 'timed-out', null, 'abc123-s1r1', 1),
+          deadLeg('gpt', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const usage = { cost: { amount: 0.01, source: 'reported' } };
+    const row = (model, role, waveId, status) => ({ model, role, wasChair: false,
+      conformance: 'clean', waveId, resolvedModel: model, status, durationMs: 1000, usage });
+    expect(r.extraRows).toEqual([
+      row('gemini', 'superseded', 'abc123-s1', 'error'),
+      row('gpt', 'superseded', 'abc123-s1', 'error'),
+      row('gemini', 'seat', 'abc123-s1r1', 'timed-out'),
+      row('gpt', 'seat', 'abc123-s1r1', 'timed-out'),
+    ]);
+  });
+
   test('a partially healed dead wave yields exactly ONE dead-seat row, for the seat that stayed lost', async () => {
     const ctx = makeCtx({ models: ['a', 'b'] });
     // The whole -s1 wave dies; the retry names only 'a', so 'b' stays lost.
@@ -1174,15 +1266,27 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 });
 
 // ---- v4.8 PR4c Task 1 (plan §3.1): dead-seat rows name their SEAT ----
-// pushDeadSeatRows is exported (run-stage1-rows.js:111), so both shapes are
+// pushDeadSeatRows is exported (run-stage1-rows.js's `module.exports` — anchored by SYMBOL,
+// and carrying NO line number on purpose. This citation read `:111`, which was correct at
+// 76f0a3f8 — but the very commit that WROTE it, c05da0a8, grew the file and moved the export
+// to `:116` in the same breath, so it shipped already stale. It has moved twice more since
+// (`:160`, then `:176`). A number here rots faster than anyone re-reads it), so both shapes are
 // three-line fixtures over the REAL bindSeats/buildSeats rather than a scripted
 // run. The two shapes are NOT symmetric and that asymmetry is the point:
 //   bound   -> one row per seat, each stamped with its own seat id
-//   orphaned-> deadSeats is a Map keyed by keyOf's ALIAS fallback, so two dead
-//              twins collapse into ONE row and the stamp is inert there
-//              (pre-existing collapse; plan §4.6 lists it as a shape PR4c does
-//              NOT close). Revision 1's T12 was satisfiable on the bound path
-//              alone, which is precisely the false confidence this pins away.
+//   orphaned-> one row per seat too, but the stamp is inert on every one of them:
+//              the run knows N seats died and cannot say WHICH. v4.8 T2.2 closed
+//              the collapse PR4c §4.6 disclosed (deadSeats was keyed by keyOf's
+//              ALIAS fallback, so two dead twins became ONE row). Revision 1's T12
+//              was satisfiable on the bound path alone, which is precisely the
+//              false confidence this pins away.
+// ⚠️ SCOPE — these fixtures call pushDeadSeatRows DIRECTLY, so they measure what it does with the
+// still-dead seats it is HANDED. "The asymmetry that remains is attribution, not count" was the
+// earlier wording here and it is FALSE end to end: when a retry wave returns fewer legs than it
+// launched, run-retry.js's alias-granular `launched` reconcile hands this function only ONE of two
+// unattributable twins, so the RUN still shows one row (SI-22.3 is PARTIAL, blocked on a
+// run-retry.js extraction). Nothing in this describe can observe that — the end-to-end T2.2 tests
+// earlier in this file drive the real runStage1 and pin the shapes that ARE closed.
 describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinLeg = (waveId, slot) => ({
@@ -1193,10 +1297,15 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
   const noRetry = () => ({ recoveredLegs: [], stillDeadLegs: [], stillDeadRetryLegs: [],
     attemptedSeats: new Set() });
   const roleFor = () => 'seat';
+  // ⚠️ v4.8 T2.2: `o` carries the REAL roster, never `{}`. run-stages.js's call site
+  // passes `ctx.o`, which run.js populates with `o.seats = seatPre.seats`, and the
+  // roster is the only evidence that two losses on one alias are two seats. Measured
+  // with `o: {}` these fixtures reported success both for a change that does nothing
+  // and for a change that works — they could not express the twin case at all.
   const run = (args) => {
     const extraRows = [];
-    pushDeadSeatRows({ o: {}, deadLegs0: [], stillDeadWaves: [], roleFor, extraRows,
-      retry: noRetry(), ...args });
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [], stillDeadLegs: [], stillDeadWaves: [],
+      seatOf: new Map(), roleFor, extraRows, retry: noRetry(), ...args });
     return extraRows;
   };
 
@@ -1209,14 +1318,116 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     expect(rows.map(r => r.seat)).toEqual(['deepseek#1', 'deepseek#2']);
   });
 
-  test('T12: two ORPHANED twin seats collapse to ONE row that carries NO seat (§4.6, pre-existing)', () => {
-    const legs = [twinLeg(), twinLeg()];             // no `${waveId}-${n}` id, no waveId
+  test('T12: two ORPHANED twin seats get TWO rows, each carrying NO seat (v4.8 T2.2)', () => {
+    // Two DISTINCT non-conforming ids, not one shared literal. Production mints a
+    // unique taskId per launched slot (src/sidecar/leg-ids.js), so a shared id was a
+    // shape the producer cannot emit — and it hid the one distinguisher these legs
+    // actually carry. Measured: both spellings leave bindSeats with bound=[] and two
+    // orphan legs, so the fixture still pins the ORPHANED path it was written for.
+    const legs = [{ ...twinLeg(), taskId: 'orphan-a' }, { ...twinLeg(), taskId: 'orphan-b' }];
     const { bound, unbound } = bindSeats('w', SEATS.slice(0, 2), legs);
     expect(bound).toEqual([]);                        // the alias fallback needs hits.length === 1
     expect(unbound.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2']);
     const rows = run({ stillDeadLegs: legs, seatOf: new Map() });
-    expect(rows).toHaveLength(1);                     // ONE row for TWO paid seats
-    expect('seat' in rows[0]).toBe(false);            // …and the stamp is inert, not wrong
+    expect(rows).toHaveLength(2);                     // TWO paid seats, TWO rows
+    expect(rows.map(r => r.model)).toEqual(['deepseek', 'deepseek']);  // §4.7: the alias stays routable
+    for (const r of rows) { expect('seat' in r).toBe(false); }         // attributing NOTHING
+  });
+
+  test('T12: two orphaned twins the producer cannot tell apart still collapse (R2 floor)', () => {
+    // legLossKey mints from the leg's OWN taskId. A leg with none has genuinely nothing,
+    // and inventing an id would be the guess this module exists to reject — so ONE row
+    // is the correct answer here, and the count is not a free-floating goal.
+    const rows = run({ stillDeadLegs: [twinLeg(), twinLeg()], seatOf: new Map() });
+    expect(rows).toHaveLength(1);
+    expect('seat' in rows[0]).toBe(false);
+  });
+
+  test('T2.2 review A1/D3: the NUL-joined row key is CONTAINED — it reaches no emitted row', () => {
+    // `legLossKey` joins on `\u0000` and the source calls that byte "impossible in an alias, id
+    // or taskId". That is an assumption about producers this module cannot enforce, so what is
+    // pinned here is the property that makes the assumption SAFE rather than the assumption
+    // itself: the key is internal, and nothing it is built from escapes into a row.
+    // ⚠️ Every NUL below is written as the six-character escape, never as a raw byte: one raw NUL
+    // turns the whole file into "Binary file … matches" for `grep -r`, which is exactly how a
+    // repo-wide phrase sweep was lost earlier in this release.
+    //
+    // Non-vacuity first — the mint must actually fire on this shape, or every assertion below
+    // would hold for the trivial reason that no NUL was ever created.
+    const twins = new Set(['deepseek']);
+    expect(legLossKey(null, 'deepseek', { taskId: 'orphan-a' }, twins)).toContain('\u0000');
+    // Now VIOLATE the assumption on purpose: a taskId that already contains a NUL. Internally the
+    // key becomes ambiguous (the disclosed floor — two such legs could collide); the emitted rows
+    // must still be clean, which is what bounds the blast radius to "one row too few", never a
+    // NUL in an artifact a consumer parses.
+    const legs = [{ ...twinLeg(), taskId: 'orphan-a' }, { ...twinLeg(), taskId: 'bad\u0000id' }];
+    const rows = run({ stillDeadLegs: legs, seatOf: new Map() });
+    expect(rows).toHaveLength(2);
+    const json = JSON.stringify(rows);
+    // BOTH spellings: a raw NUL, and the `\u0000` escape JSON.stringify would emit for one.
+    // Checking only the raw byte would pass for a row that really did carry a NUL.
+    expect(json).not.toContain('\u0000');
+    expect(json).not.toContain('\\u0000');
+    // …and neither half of the key reaches a row either: no taskId, no joined form.
+    for (const t of ['orphan-a', 'bad', 'deepseek\u0000']) { expect(json).not.toContain(t); }
+    expect(JSON.parse(json)).toEqual(rows);   // the rows round-trip byte-clean
+  });
+
+  test('T12: two UNIDENTIFIED slots of a still-dead WAVE get TWO rows (R2 mark branch)', () => {
+    // The wave arm has no leg to mint from and `(waveId, i)` is measurably NOT unique,
+    // so the row is MARKED (an unjoinable key) and attributes nothing. The announcement
+    // is the wave's own dead-wave note, whose data.seats already carries one entry per
+    // slot with null for the unnamed ones.
+    const rows = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [null, null], reason: 'died' }] });
+    expect(rows).toHaveLength(2);
+    for (const r of rows) { expect('seat' in r).toBe(false); }
+  });
+
+  test('T2.2 review A1: a borrowed spare is BILLING ONLY — the row asserts no execution it cannot own', () => {
+    // The finding: `spareRetryLegs.shift()` hands a still-dead retry leg to a row on a twin
+    // alias, and the row then carried that leg's waveId/resolvedModel/status/durationMs —
+    // one seat's execution presented as another's. The sharpest shape is CROSS-ARM, and it is
+    // the one below: a WAVE-origin seat that produced NO LEG AT ALL. Measured at 42738592
+    // before the fix, that row read {"waveId":"r1-s1r1","resolvedModel":"deepseek-r1-turbo",
+    // "status":"timed-out","durationMs":4242,…} — an attempt it never made.
+    const spare = { taskId: 'r1-s1r1-1', waveId: 'r1-s1r1', model: 'deepseek-r1-turbo',
+      modelInput: 'deepseek', status: 'timed-out', durationMs: 4242,
+      usage: { cost: { amount: 0.07, source: 'reported' } } };
+    const wave = { waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'died' };
+    const withSpare = (stillDeadRetryLegs, seat) => ({ recoveredLegs: [], stillDeadLegs: [],
+      stillDeadRetryLegs, attemptedSeats: new Set([seat]) });
+    const borrowed = run({ stillDeadWaves: [wave], retry: withSpare([spare], 'deepseek') })[0];
+    // The CONTROL is the SAME seat with an empty spare pool — buildRunStatsEntry's one
+    // definition of "a dead seat with nothing to report". The pin is whole-object equality
+    // against it, not a field checklist: any FUTURE field stamped off a borrowed leg fails
+    // here without anyone remembering to extend this test.
+    const control = run({ stillDeadWaves: [wave], retry: withSpare([], 'deepseek') })[0];
+    expect(control.usage).toBeNull();                          // non-vacuity: nothing to report
+    expect(borrowed).toEqual({ ...control, usage: spare.usage });
+    // …and the spend the borrow exists to preserve IS still on the record. Deleting the
+    // `row.usage` assignment (mutant NOBILL) reds this line; restoring the whole leg as the
+    // row's own (mutant BORROWALL, HEAD's shape) reds the equality above.
+    expect(borrowed.usage).toEqual(spare.usage);
+    // SCOPE control — an EXACT row genuinely OWNS its leg (retryLegBySeat, never the spare
+    // pool), so every execution fact stays stamped. A unique alias has no twin proof, so it
+    // neither mints nor borrows; this is the boundary the fix must not cross.
+    const uniq = run({ stillDeadWaves: [{ ...wave, models: ['gpt'] }],
+      retry: withSpare([{ ...spare, model: 'gpt-x', modelInput: 'gpt' }], 'gpt') })[0];
+    expect(uniq).toEqual({ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+      waveId: 'r1-s1r1', resolvedModel: 'gpt-x', status: 'timed-out', durationMs: 4242,
+      usage: spare.usage });
+  });
+
+  test('T12 control: a still-dead WAVE whose slots ARE identified is untouched', () => {
+    const named = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [SEATS[0], SEATS[1]], reason: 'died' }] });
+    expect(named.map(r => r.seat)).toEqual(['deepseek#1', 'deepseek#2']);
+    // …and a UNIQUE-alias wave with unidentified slots still gets one row per model,
+    // exactly as before: nothing about a unique alias needs the roster's permission.
+    const uniq = run({ stillDeadWaves: [{ waveId: 'r1-s1', models: ['gpt', 'other'],
+      seats: [null, null], reason: 'died' }] });
+    expect(uniq.map(r => r.model)).toEqual(['gpt', 'other']);
   });
 
   test('T12: a bound seat on a UNIQUE-alias bench emits no seat key (byte parity)', () => {

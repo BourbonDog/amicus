@@ -29,6 +29,24 @@
  * they were never going to appear in run.json's usage total in the first
  * place, so excluding them from `legged` is not a gap in the invariant, it is
  * the invariant's other (correct) half:
+ *
+ * ⚠️ v4.8 council A1 ADDED AN EXCEPTION to the paragraph above, and it is a
+ * TRAP for whoever first adds a twin-alias scenario here. A dead seat on a
+ * repeated alias can now carry a borrowed retry leg's `usage` with NO waveId
+ * (the leg is real and billed, but belongs to a seat the row cannot claim to
+ * be, so every per-seat field is withheld). Such a row is NOT leg-less in the
+ * accounting sense, yet `filter(r => r.waveId)` drops it. Measured on the two
+ * real row shapes: BEFORE A1 the row was in `legged` (amount 0.07); AFTER it
+ * is not (0 rows, amount null), so the cross-foot below would come up short by
+ * exactly that leg. Nothing is red today only because this suite deliberately
+ * does not model twins (see the `${waveId}::${model}` collision note in the
+ * bijection helper). ⚠️ **Adding a twin scenario requires changing the filter
+ * to `r => r.waveId || r.usage` FIRST** — measured a no-op on every other row
+ * class, because the leg-less and `claude` rows carry `usage: null` — and
+ * reworking the (waveId, model) key, which cannot separate two seats of one
+ * alias. Do not "fix" the resulting red by putting a waveId back on the row:
+ * that is the misattribution A1 removed.
+ *
  *   - the synthesized `claude` row (run-assemble.js claudeRunStatsRow) — a
  *     file-sourced review with no leg ever launched for it (v4.1 §4.4);
  *   - the give-up chair's error row (errata E3) — `wasChair:false`, and it
