@@ -8,9 +8,9 @@
 
 /**
  * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
- * Exported so recordFailure below and run-retry.js both consume it rather than
- * re-spelling it — two readers of one rule that drift apart is how the alias/seat-id
- * keyspace splits in the first place.
+ * Exported so `run-retry-group.js :: recordFailure` and run-retry.js both consume it
+ * rather than re-spelling it — two readers of one rule that drift apart is how the
+ * alias/seat-id keyspace splits in the first place.
  */
 const seatKey = (s, alias) => (s ? s.id : alias);
 
@@ -19,13 +19,13 @@ const seatKey = (s, alias) => (s ? s.id : alias);
  * losses naming one alias are two seats and not one seat losing twice. No roster
  * means no proof, so the answer is the empty set.
  *
- * ⚠️ Deliberately NOT planStillDeadSources' `seatsPerAlias.get(alias) === 1` below,
- * and the difference is load-bearing. That rule gates an ANNOUNCEMENT — being wrong
- * costs a duplicate note a reader can see — so with no roster it errs toward
- * announcing. This one gates a RETRY SLOT and a runStats row — being wrong buys a leg
- * for a seat that may not exist — so with no roster it errs toward collapsing, as
- * HEAD always did. Measured: spelling this one `=== 1` reds run-retry.test.js:284 and
- * :295, unique-alias benches with no `o.seats` where two losses ARE one seat.
+ * ⚠️ Deliberately NOT `run-retry-group.js :: planStillDeadSources`' own
+ * `seatsPerAlias.get(alias) === 1`, and the difference is load-bearing. That rule gates an
+ * ANNOUNCEMENT — being wrong costs a duplicate note a reader can see — so with no roster it
+ * errs toward announcing. This one gates a RETRY SLOT and a runStats row — being wrong buys
+ * a leg for a seat that may not exist — so with no roster it errs toward collapsing, as HEAD
+ * always did. Measured: spelling this one `=== 1` reds run-retry.test.js:284 and :295,
+ * unique-alias benches with no `o.seats` where two losses ARE one seat.
  */
 function twinAliases(roster) {
   const n = new Map();

@@ -107,8 +107,8 @@ function planStillDeadSources(unit, seatOf, roster) {
  * does not repeat its alias. On a twin alias with no binding `key` names BOTH twins,
  * and this early return then DISCARDED the second one BEFORE `models`/`seats` were
  * ever pushed: one retry slot for two seats the run had already paid for. (PR2b H4
- * claimed that collapse was correct "because nothing distinguishes them". The ROW
- * does have a distinguisher — see legLossKey — and the SLOT does not need one.)
+ * claimed that collapse was correct "because nothing distinguishes them". The ROW does
+ * have a distinguisher — see `run-retry-keys.js :: legLossKey` — and the SLOT does not need one.)
  *
  * ⚠️ The key is ADDED as `seatId`, and on the inexact branch it stays ALIAS-valued
  * for BOTH entries. `ff.seat`/`ff.seatId` become `data.seat` /
