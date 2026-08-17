@@ -65,11 +65,21 @@ must survive this PR untouched.
 
 ### 0.4 Set⇒Map safety — verified, no counterexample
 
-Every consumer of a `twins` collection uses `.has()` only:
-`run-retry-group.js:67`, `:186`; `run-stage1-rows.js:135`, `:146`, `:163`.
-No test anywhere asserts `Set`-ness (no `.size`, spread, `instanceof Set`, or `toEqual(new Set(...))`
-on a `twins` value). The one direct test call, `tests/council/run-retry.test.js:1073`, only feeds the
-result to `legLossKey`. **A `Map` swap is safe.**
+Every consumer of a `twins` collection uses `.has()` only — verified twice, independently. No
+`.size`, no spread, no `instanceof Set`, no `for…of`, no `.get()`, no snapshot or `toEqual` against a
+`twinAliases` result anywhere in `src/`, `tests/` or `electron/`. **A `Map` swap is safe.**
+
+⚠️ Call sites are cited **at base `30e17df9`** and have since MOVED — T-A1 grew
+`run-stage1-rows.js` by 2 lines and relocated the helpers into `run-retry-keys.js`. Anchor by symbol
+and re-derive before use:
+`run-retry-keys.js :: legLossKey`, `run-retry-group.js :: recordFailure`,
+`run-retry.js :: retryStage1Losses`, and `run-stage1-rows.js :: pushDeadSeatRows` (which calls
+`.has()` directly at **three** sites, not the two originally recorded here).
+
+⚠️ **`legLossKey` must STAY on `.has()`.** `tests/council/run-stages.test.js:1357` constructs a bare
+`new Set(['deepseek'])` *itself* and passes it in. That is a test-authored Set, not a `twinAliases`
+return — so it is not a counterexample to the Map swap, but changing `legLossKey` to `.get()` would
+break it. Keep the predicate `.has()`-shaped.
 
 ### 0.5 Citations re-derived against the live tree
 
@@ -239,7 +249,13 @@ citations in `run-stage1-rows.js` re-derived and re-read at their stated lines.
      ? unit.firstFailures.some(f => f.seatId === key)
      : unit.models.filter(m => m === seat).length >= twins.get(seat)
    ```
-   One line is impossible — the merged ternary is ~146 chars against this repo's 119 maximum.
+   BACKLOG argues this must be two lines because the merged ternary runs ~146 chars "against this
+   repo's 119 maximum". ⚠️ **Measured: the 119 maximum is a CONVENTION, not a gate.** `.eslintrc.js`
+   has no `max-len` rule, there is no prettier or editorconfig, **107 of 250** files under `src/`
+   already exceed 119, and `run-retry.js:126` is 126 chars today. `run-retry-group.js`'s own maximum
+   is exactly 119, which is a real per-file discipline worth keeping — so still write it as two
+   lines, but know that nothing goes red either way, and do NOT let the old "+8 doesn't fit"
+   arithmetic drive any decision: at 235/300 the file has ~65 free lines and the +9 lands at 244.
 
 **Update `twinAliases`' docblock**: it currently says *"No roster means no proof, so the answer is
 the empty set."* That becomes false under a Map. Correct it in this commit (Global Constraint 5:
