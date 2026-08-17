@@ -2502,7 +2502,7 @@ population grew by the three modules this PR created.
 | `src/council/run-retry.js` | 295 | **295** | **5** | ⚠️ **AT THE CLIFF.** T-A2 took it to 263; T-A4 (+24) and T-A6 (+8) spent every line of that. **The next PR touching this file needs an EXTRACTION first, not an edit.** |
 | `src/council/run-stages.js` | 292 | **294** | **6** | ⚠️ **AT THE CLIFF**, same rule. |
 | `src/council/run-retry-group.js` | 299 | **266** | 34 | T-A1 −64, T-A3 +15, T-A6 +16 |
-| `src/council/run-stage1-rows.js` | 225 | **212** | 88 | grew to 295 across T-A4/T-A5, then T-A6 split 83 lines out |
+| `src/council/run-stage1-rows.js` | 225 | **212** | 88 | T-A1 +2, T-A5 +68 to 295, then T-A6 split 83 out. (T-A4 touched it +N/−N, contributing zero — measured per commit, not attributed by eye) |
 | *new* `src/council/run-retry-keys.js` | — | **74** | 226 | T-A1 |
 | *new* `src/council/run-retry-launch.js` | — | **64** | 236 | T-A2 |
 | *new* `src/council/run-stage1-superseded.js` | — | **140** | 160 | T-A6 |
