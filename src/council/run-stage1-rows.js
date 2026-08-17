@@ -107,11 +107,11 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   // `retry.skippedDeadLegs` states that directly, in leg OBJECTS — the very members of
   // `deadLegs0` the retry declined to attempt — so the test below asks IDENTITY, which no
   // keyspace can blur, at the one place the alias key is relied on. Unreachable while either fact
-  // holds (measured over 4000 fuzzed retry runs, 993 of them with skips: 0 hits on the first
-  // conjunct below AND 0 on the whole shipped condition), so every correct input is byte-identical
-  // — and the double count the paragraph above ends on no longer FOLLOWS from breaking a fact: it
-  // is refused and announced. The same fuzz under mutant GUESSPOS hits 85 on BOTH, so what fires
-  // when a fact breaks is the shipped condition, not merely its first half.
+  // holds (measured over 4000 fuzzed retry runs, 993 of them with skips: 0 hits on the whole
+  // shipped condition, all three conjuncts, and 0 on the SKIPPED-and-superseded test alone), so
+  // every correct input is byte-identical — and the double count the paragraph above ends on no
+  // longer FOLLOWS from breaking a fact: it is refused and announced. Under mutant GUESSPOS the
+  // same fuzz hits 85 on both counts; its legs carry taskIds, so row keys are distinct there.
   const skippedLegs = new Set(retry.skippedDeadLegs || []);
   const supersededKeys = new Set([
     ...retry.recoveredLegs.map(keyOf),
@@ -133,10 +133,15 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   //   writer of `attemptedSeats` sits on run-retry.js's HEAL branch (they are all on still-dead
   //   paths), so a healed twin supersedes the alias while `attemptedSeats` stays empty.
   // Measured end to end, 3 unbound twins in one lens with invariant 2 broken: row keys COLLIDING —
-  // billed 0.60, recorded 0.70 both with this guard and without any guard (nothing lost, and the
-  // 0.10 is the pre-existing floor where the leg-less row borrows the healed leg); row keys
+  // billed 0.60, recorded 0.70 both with this guard and without any guard, nothing lost; row keys
   // DISTINCT — 1.10 without the guard against 0.60 with it, the whole 0.50 double count removed
   // and nothing lost. Dropping either conjunct is a named mutant: WIDEGUARD and KEYNOTLEG.
+  // ⚠️ The 0.10 surviving on the COLLIDING shape is the R2 collapse floor, NOT a borrow —
+  // INSTRUMENTED, because two earlier versions of this sentence named a path that cannot execute
+  // here. The twins share ONE `deadSeats` entry and `attemptedSeats` is empty, so `deadLegs0.find`
+  // hands that row the HEALED twin's first leg, which already carries a superseded row: one leg,
+  // two rows. Probed at the push site — `finalLeg` is that leg (not null), `borrowed` null, spare
+  // pool empty. A borrow needs `attemptedSeats.has(join)` TRUE: the negation of this shape.
   // It is announced either way, because a silently corrected number is the failure mode this join
   // is watched for; a THROW would be wrong here, aborting a paid-for council over a row miscount.
   // Channel `internal` — the runtime disagreed with itself, which is not a seat loss. All FOUR

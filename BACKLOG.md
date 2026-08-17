@@ -2171,8 +2171,13 @@ this table exists to prevent.
       invariant 2 broken (mutant GUESSPOS, wired exactly as `run-stages.js` wires it), billed 0.60
       recorded **0.20**, losing two billed legs. Round 3 added `=== dead` per owner ruling and
       re-measured the same fixtures: keys COLLIDING ⇒ **0.70** both with the guard and with no
-      guard at all — nothing lost, the residual 0.10 being the pre-existing floor where a leg-less
-      row borrows the healed leg; keys DISTINCT ⇒ **1.10** without the guard against **0.60** with
+      guard at all — nothing lost, the residual 0.10 being the R2 collapse floor (INSTRUMENTED in
+      round 4: the twins share one `deadSeats` entry, `attemptedSeats` is empty, so the
+      `deadLegs0.find` fallback hands that one row the HEALED twin's first leg, which already has a
+      superseded row — one leg on two rows. `finalLeg` is that leg, NOT null, and `borrowed` is
+      null; a borrow is impossible here, it needs `attemptedSeats.has(join)` TRUE. Two earlier
+      versions of this sentence named the borrow path, which cannot execute on this shape);
+      keys DISTINCT ⇒ **1.10** without the guard against **0.60** with
       it, the whole 0.50 double count removed and nothing lost; and both controls with no invariant
       break stay at 0.60 = billed. The reachability that made this matter is measured, not argued:
       `supersededKeys` also draws from `retry.recoveredLegs`, and NO `attemptedSeats` writer sits on
@@ -3086,7 +3091,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `:153` — all three falsified by T-A1 moving `seatKey`/`legLossKey` into `run-retry-keys.js` and
     by `run-stage1-rows.js` growing. A rigour claim is only as current as its date, so this one
     carries the date and the method: each site below was opened at its stated line and read.
-    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**290**) and moved BOTH of its spellings a FIFTH
+    ⚠️ T-A5 grew `run-stage1-rows.js` again (227→**295**, 5 free) and moved BOTH of its spellings a FIFTH
     time; rather than restate two numbers that rot on the next edit, they are now anchored BY
     SYMBOL — which is why those two entries alone carry no line)
     — T2.2 (`33e2ecf7`) rewrote `run-retry-group.js` (226→**299**) and
