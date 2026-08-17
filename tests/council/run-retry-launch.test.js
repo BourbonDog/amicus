@@ -144,6 +144,116 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     expect(retrySeatOf.get(legs[0])).toBe(real);
   });
 
+  test('C1 — the conjunction END TO END: a BOUND still-dead retry leg always resolves `exact`', async () => {
+    // C1a and C1b above pin each half at this function's own boundary. This pins the property
+    // the two halves BUY, measured where it is actually spent: `run-stage1-rows.js ::
+    // pushDeadSeatRows` consults `retryLegBySeat` on its `exact` arm ONLY, so a still-dead
+    // retry leg that reaches the record BOUND while its row is `!exact` has its billed `usage`
+    // dropped silently (BACKLOG.md's PR #170 round-2 C1 — verdict: reachable at the function
+    // boundary, measured UNREACHABLE end to end, pre-existing at `main`. This is a GUARD RAIL,
+    // not a fix; do not read it as closing that finding).
+    //
+    // Both roster shapes are driven, and the PAIR is the point:
+    //   BOUND roster   — 2 still-dead retry legs, BOTH bound, each row carrying its OWN leg's
+    //                    resolvedModel. That is the non-vacuity witness: the implication in (1)
+    //                    ranges over real bound legs somewhere, and `exact` is how they land.
+    //   UNBOUND roster — the conjunction keeps every placeholder out of `retrySeatOf`, so ZERO
+    //                    still-dead retry legs are bound and both usages arrive BORROWED.
+    //                    Nothing is bound, so nothing can be bound-and-lost.
+    //
+    // MEASURED 2026-08-17 against this tree — both mutants applied to run-retry-launch.js and
+    // reverse-edited by hand, byte-verified against `git show HEAD:` (never `git checkout --`).
+    // Each reds exactly ONE of the two numbered blocks, which is how they stay distinguishable:
+    //   "FAKEBIND" (BOTH halves broken — drop the `.filter(b => !placeholders.has(b.seat))`
+    //     line AND spell the placeholder id `unit.models[i]`): reds (1) on the UNBOUND shape.
+    //     1 bound still-dead retry leg, no row carries it, GAP 0.0700 — precisely that leg's
+    //     own usage sitting unconsumed in `retryLegBySeat`. The BOUND shape stays GREEN: a
+    //     real roster mints no placeholder, so the mutant cannot reach it.
+    //   "NOPLACEHOLDERFILTER" (one half — drop the filter line alone): leaves (1) green and
+    //     reds (2). The placeholder's still-unique id keys the leg out of `launched`, the
+    //     `!ff` backstop in run-retry.js drops it, and `stillDeadRetryLegs` is 0 — a DIFFERENT
+    //     loss (0.1600 of 0.1600 billed reaching no row) that (1) cannot see, because a leg
+    //     that never reaches the record cannot be bound-and-lost either. Break ONE half and
+    //     the loss moves; break BOTH and C1 fires. That is what makes it a conjunction.
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('../../src/council/run-state', () => ({ appendStageWave: jest.fn() }));
+      const { retryStage1Losses } = require('../../src/council/run-retry');
+      const { pushDeadSeatRows } = require('../../src/council/run-stage1-rows');
+      const { buildSeats } = require('../../src/council/seats');
+      const amt = (u) => (u && u.cost && typeof u.cost.amount === 'number') ? u.cost.amount : 0;
+      // Every leg is dead, so materializeReviews writes nothing and `runDir` is never touched.
+      // The two retry legs resolve DIFFERENTLY on purpose: `resolvedModel` is stamped only off
+      // a row's own `finalLeg`, so it is the observable that says "this row took THIS leg".
+      const drive = async (identified) => {
+        const o = { runId: 'r1', runDir: '/nonexistent-by-design', critic: null, lenses: null,
+          models: ['deepseek', 'deepseek', 'gpt'], briefing: 'B', date: 'D', timeout: 5 };
+        o.seats = buildSeats(o.models, null, null);
+        const dead = [
+          { modelInput: 'deepseek', status: 'error', error: 'boom-A', taskId: 'orphan-a', waveId: 'r1-s1' },
+          { modelInput: 'deepseek', status: 'error', error: 'boom-B', taskId: 'orphan-b', waveId: 'r1-s1' },
+        ];
+        const retryLegs = [
+          { modelInput: 'deepseek', model: 'deepseek-A', status: 'error', error: 'again',
+            taskId: 'r1-s1r1-1', waveId: 'r1-s1r1', durationMs: 11,
+            usage: { cost: { amount: 0.07, source: 'reported' } } },
+          { modelInput: 'deepseek', model: 'deepseek-B', status: 'error', error: 'again',
+            taskId: 'r1-s1r1-2', waveId: 'r1-s1r1', durationMs: 22,
+            usage: { cost: { amount: 0.09, source: 'reported' } } },
+        ];
+        const seatOf = identified
+          ? new Map([[dead[0], o.seats[0]], [dead[1], o.seats[1]]]) : new Map();
+        const ctx = { o, degrade: { note: () => {} }, addWave: () => {}, overBudget: () => false,
+          launchers: {
+            launchWave: async () => ({ wave: { waveId: 'r1-s1r1', legs: retryLegs }, exitCode: 0 }),
+            launchSolo: async () => ({ wave: { legs: [] }, exitCode: 0 }) } };
+        const retry = await retryStage1Losses(ctx,
+          { deadWaves: [], deadLegs: dead, counts: { reviewed: 1, total: 3 }, seatOf });
+        // Wired exactly as run-stages.js wires it: the Stage-1 ∪ retry seat union (never the
+        // Stage-1 map alone — retry legs are objects it has never seen), the merged still-dead
+        // arrays, and `retry.twins` rather than a second `twinAliases` derivation.
+        const rows = [];
+        const allSeatOf = new Map([...seatOf, ...retry.seatOf]);
+        pushDeadSeatRows({ o, retry, deadLegs0: dead,
+          stillDeadLegs: [...retry.skippedDeadLegs, ...retry.stillDeadLegs],
+          stillDeadWaves: [...retry.skippedDeadWaves, ...retry.stillDeadWaves],
+          extraRows: rows, roleFor: () => 'seat', seatOf: allSeatOf,
+          degrade: { note: () => {} }, twins: retry.twins });
+        const legs = retry.stillDeadRetryLegs;
+        const boundLegs = legs.filter(l => allSeatOf.has(l));
+        return { legs, boundCount: boundLegs.length,
+          boundAndLost: boundLegs.filter(l => !rows.some(r => r.resolvedModel === l.model))
+            .map(l => l.model),
+          billed: legs.reduce((s, l) => s + amt(l.usage), 0),
+          onRows: rows.reduce((s, r) => s + amt(r.usage), 0),
+          stamped: rows.filter(r => r.resolvedModel).map(r => r.resolvedModel) };
+      };
+      const unbound = await drive(false);
+      const identified = await drive(true);
+
+      // (1) THE CONJUNCTION. No still-dead retry leg reaches the record BOUND while no row
+      //     took it as its own — the `!exact` arm being the one branch that never asks
+      //     `retryLegBySeat`, and the arm a bound leg must therefore never land on.
+      expect(unbound.boundAndLost).toEqual([]);
+      expect(identified.boundAndLost).toEqual([]);
+      // (2) NON-VACUITY, both directions — (1) is an implication and this is what stops it
+      //     from being satisfied by an empty record. The fixture really produced two billed
+      //     still-dead retry legs on EACH shape; on the identified shape both are genuinely
+      //     bound and each took its own leg through the `exact` arm; on the unbound shape the
+      //     placeholder filter is why the bound count is zero rather than two.
+      expect(unbound.legs).toHaveLength(2);
+      expect(identified.legs).toHaveLength(2);
+      expect(identified.boundCount).toBe(2);
+      expect(identified.stamped).toEqual(['deepseek-A', 'deepseek-B']);
+      expect(unbound.boundCount).toBe(0);
+      // (3) …and the spend both shapes exist to keep: every billed still-dead retry leg's
+      //     usage is on the record either way — stamped on its own row when the seat was
+      //     identified, borrowed as `usage` alone when it was not (0.07 + 0.09 is exact in
+      //     IEEE-754 doubles; measured, not assumed).
+      expect([unbound.billed, unbound.onRows]).toEqual([0.16, 0.16]);
+      expect([identified.billed, identified.onRows]).toEqual([0.16, 0.16]);
+    });
+  });
+
   test('bindRetryWave returns orphan legs instead of mutating a caller accumulator', () => {
     // The signature constraint, pinned: a leg matching no roster slot comes back on the
     // return value, un-wrapped. run-retry.js is what attaches the waveId and pushes.
