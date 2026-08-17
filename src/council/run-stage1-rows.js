@@ -7,8 +7,10 @@
 // run-stages would recreate the parent-child cycle that file's tail comment
 // documents eliminating (v4.4.1 F5).
 const { buildRunStatsEntry } = require('./run-assemble');
-// The one keyspace. run-retry-group.js is require-free, so this is a leaf import and
-// cannot re-create the parent-child cycle the header above documents eliminating.
+// The one keyspace. It lives in ./run-retry-keys (v4.8 Phase 2 T-A1), which IS require-free;
+// run-retry-group.js re-exports it and requires nothing else, so this import still reaches
+// only a leaf and cannot re-create the parent-child cycle the header above documents
+// eliminating.
 const { twinAliases, legLossKey } = require('./run-retry-group');
 
 /**

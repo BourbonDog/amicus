@@ -2,9 +2,10 @@
 'use strict';
 // Stage-1 loss grouping: lensIndexOf + recordFailure + groupStage1Losses.
 // Moved verbatim from run-retry.js:24-126 (v4.8 PR0 size-gate split, zero
-// behavior). Pure — parameters and builtins only, no requires.
+// behavior). Pure but for ONE leaf require: ./run-retry-keys, itself require-free.
 // run-retry.js re-exports groupStage1Losses so existing import paths
 // (tests/council/run-retry.test.js) stay stable.
+const { seatKey, twinAliases, legLossKey, srcLegClaimer } = require('./run-retry-keys');
 
 /** 1-based lens index for a loss: the waveId convention, else the seat's own
  *  bench position, else the alias's first bench index. v4.8 PR2b H4: the old
@@ -21,79 +22,14 @@ function lensIndexOf(o, waveId, model, seatObj = null) {
 }
 
 /**
- * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
- * Exported so recordFailure below and run-retry.js both consume it rather than
- * re-spelling it — two readers of one rule that drift apart is how the alias/seat-id
- * keyspace splits in the first place.
- */
-const seatKey = (s, alias) => (s ? s.id : alias);
-
-/**
- * The aliases this run's roster proves are REPEATED — the only evidence that two
- * losses naming one alias are two seats and not one seat losing twice. No roster
- * means no proof, so the answer is the empty set.
- *
- * ⚠️ Deliberately NOT planStillDeadSources' `seatsPerAlias.get(alias) === 1` below,
- * and the difference is load-bearing. That rule gates an ANNOUNCEMENT — being wrong
- * costs a duplicate note a reader can see — so with no roster it errs toward
- * announcing. This one gates a RETRY SLOT and a runStats row — being wrong buys a leg
- * for a seat that may not exist — so with no roster it errs toward collapsing, as
- * HEAD always did. Measured: spelling this one `=== 1` reds run-retry.test.js:284 and
- * :295, unique-alias benches with no `o.seats` where two losses ARE one seat.
- */
-function twinAliases(roster) {
-  const n = new Map();
-  for (const s of roster || []) { if (s && s.alias) { n.set(s.alias, (n.get(s.alias) || 0) + 1); } }
-  return new Set([...n.keys()].filter(a => n.get(a) > 1));
-}
-
-/**
- * A dead LEG's key where `seatKey` alone names N seats at once: an alias the roster
- * repeats, on a leg no binding could identify. v4.8 T2.2 ruling R2 — MINT a
- * distinguisher where one exists, and the leg arms have one: the leg's own `taskId`
- * (`${waveId}-${n}`, src/sidecar/leg-ids.js:15), stamped even on a leg that never
- * routed (`fanout-leg.js:61`), surviving the disk round-trip, distinct through three
- * of the four ways a leg is orphaned. The fourth — NO `taskId` at all — has genuinely
- * nothing and keeps the collapsing key: that is the honest floor, and inventing one
- * would be the guess this module exists to reject.
- *
- * ⚠️ INTERNAL, never rendered: it joins the dead-seat rows, `attemptedSeats` and
- * `deadLegs0`, nothing else. `ff.seat`/`ff.seatId` stay ALIAS-valued — they become
- * `data.seat` / `data.firstFailure.seatId`, which verdict.js compares to `o.critic`
- * and the Workspace renders as a seat id.
- */
-function legLossKey(seatObj, alias, leg, twins) {
-  const key = seatKey(seatObj, alias);
-  if (seatObj || !twins || !twins.has(alias) || !leg || !leg.taskId) { return key; }
-  return `${key}\u0000${leg.taskId}`;   // NUL: impossible in an alias, id or taskId
-}
-
-/**
- * A STATEFUL claimer over `srcLegs` — build ONE per unit, never reuse it: each call CONSUMES
- * and returns one leg whose key matches, never hands the same leg out twice, and returns null
- * once that key is exhausted (`(key) => leg | null`). It replaces `srcLegs.find(...)`, which
- * returned the FIRST match every time, so two unattributable twins on one alias both recorded
- * the SAME source and the second seat — a leg the run paid for — vanished from stillDeadLegs.
- * Which dead source pairs with which dead outcome is unknowable AND immaterial: every candidate
- * is still dead after its retry, so one apiece yields the exact SET (their rows carry no seat).
- */
-function srcLegClaimer(srcLegs, keyOfSrc) {
-  const pool = new Set(srcLegs);
-  return (key) => {
-    for (const l of pool) { if (keyOfSrc(l) === key) { pool.delete(l); return l; } }  // exits on the delete
-    return null;
-  };
-}
-
-/**
  * Which of a unit's srcLegs still need their own still-dead note once its srcWaves have
  * emitted theirs, plus every seat key those announcements cover.
  *
  * v4.8 PR5c: an UNIDENTIFIED wave slot keys by ALIAS (seatKey's fallback) while a leg that
  * WAS bound keys by its seat id, so a plain `noted.has(key)` test misses and the same seat
- * is announced TWICE, once per keyspace. HEAD hides this downstream because the Workspace's
- * dead-row dedup is alias-keyed too and both collapse into one row; seat-keying that
- * consumer (PR5c Task 2) turns it into a visible duplicate row.
+ * is announced TWICE, once per keyspace. HISTORY, not the present: at pre-PR5c HEAD the
+ * Workspace's alias-keyed dead-row dedup hid this by collapsing both into one row; PR5c Task 2
+ * seat-keyed that consumer, and T2.2 abolished the producer-side collapse — nothing masks it now.
  *
  * ⛔ TWO earlier attempts inferred identity here and both were rated blockers. A per-alias
  * BUDGET assumed the next leg on an alias was the wave's unnamed slot. A roster PIGEONHOLE

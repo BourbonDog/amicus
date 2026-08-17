@@ -2152,10 +2152,15 @@ this table exists to prevent.
       to close.
     - Provenance: code council on PR #170 **round 2**, findings **A2** (major) and **C1** (major).
 
+✅ **CLOSED by v4.8 Phase 2 T-A1** — the extraction commit this note asked for rewrote the docblock
+in place, net zero lines, scoping the masking to pre-PR5c HEAD and stating that T2.2 removed it.
+Kept below for the record.
+
 ⚠️ **A second, already-incurred cost of shipping at 299/300: `run-retry-group.js` now carries a
 STALE docblock that cannot be corrected until the file is extracted.** `planStillDeadSources`'
-docblock (`run-retry-group.js:94-95`) still reads *"HEAD hides this downstream because the
-Workspace's dead-row dedup is alias-keyed too and both collapse into one row"*. That "HEAD" means
+docblock (`run-retry-group.js:94-96`, not `:94-95` as first recorded) read *"HEAD hides this
+downstream because the Workspace's dead-row dedup is alias-keyed too and both collapse into one
+row"*. That "HEAD" means
 **pre-PR5c** HEAD, and the sentence has been stale framing since PR5c; T2.2 then abolished the
 producer-side collapse it leans on. It is **not** wrong about PR5c's own history, so it misleads
 rather than lies — but a reader arriving at that function today will read it as current. Any repair
