@@ -24,7 +24,7 @@ const { makeFakeDom } = require('./helpers/fake-workspace-page');
  *
  * Fix wave (task review): every case here reaches the derivation/paint
  * functions directly via the local paint() helper below, bypassing
- * renderSeatsPanel() itself (workspace-seats.js:29-38) — a typo in its
+ * renderSeatsPanel() itself (workspace-seats.js :: renderSeatsPanel — ⚠️ cited `:29-38` until T-A8 re-opened it 2026-08-17: that span is the PR4b HISTORY docblock; the function is `:113-199`) — a typo in its
  * field-access chain (e.g. `d.run.degrade`, a swapped deadSeats() argument
  * order, `d.verdict.seatloss`) would have shipped a feature that never
  * renders while every test here stayed green. The positive-path coverage for

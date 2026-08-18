@@ -7,9 +7,22 @@
 // run-stages would recreate the parent-child cycle that file's tail comment
 // documents eliminating (v4.4.1 F5).
 const { buildRunStatsEntry } = require('./run-assemble');
-// The one keyspace. run-retry-group.js is require-free, so this is a leaf import and
-// cannot re-create the parent-child cycle the header above documents eliminating.
+// The one keyspace. It lives in ./run-retry-keys (v4.8 Phase 2 T-A1), which IS require-free;
+// run-retry-group.js re-exports it and requires nothing else, so this import's closure
+// terminates at a leaf and cannot re-create the parent-child cycle the header above
+// documents eliminating.
 const { twinAliases, legLossKey } = require('./run-retry-group');
+// v4.8 T-A6 size-gate split: the SUPERSEDED half of these rows moved to
+// ./run-stage1-superseded, taking `../utils/degrade` and the default stderr sink with it.
+// `degrade` is still a parameter HERE, forwarded unchanged, so a caller that omits it still
+// gets that stderr sink — and since council C1 so does one that passes `null` or a `.note`-less
+// object, because that module now resolves the sink by testing the method rather than by a
+// destructuring default. That module requires exactly the two modules the moved block already
+// required from this file — ./run-assemble and ../utils/degrade — so the split adds no import
+// edge the tree did not already carry, and the parent-child cycle the header above documents
+// eliminating stays eliminated. Re-exported at the foot of this file, which is what gives the
+// extraction a second import path to pin function identity across.
+const { supersededRows } = require('./run-stage1-superseded');
 
 /**
  * Push superseded-seat and primary-error dead-seat rows onto extraRows.
@@ -48,55 +61,31 @@ const { twinAliases, legLossKey } = require('./run-retry-group');
  * ledger loses is an executable split that `shift()` assigned by arrival order.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-  roleFor, seatOf }) {
+  roleFor, seatOf, degrade, twins = twinAliases(o.seats) }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
-  // run-retry.js's `seatKey` uses for a roster slot it could not identify, so
-  // the two sides of every lookup below agree by construction.
+  // `run-retry-keys.js :: seatKey` (imported by run-retry.js since v4.8 T-A1) uses
+  // for a roster slot it could not identify, so both sides of every lookup agree.
   const keyOf = (leg) => { const s = seatOf.get(leg); return s ? s.id : (leg.modelInput || leg.model); };
   // v4.8 T2.2 ruling R2, the LEG arms' MINT branch: on an alias the roster repeats, an
   // unbound leg's `keyOf` names BOTH twins, so N dead legs collapsed into ONE row.
   // `legLossKey` falls back to the leg's own taskId there — a real per-leg id, not an
   // inferred seat. It is identical to `keyOf` everywhere else, so only the twin case
-  // moves. Deliberately NOT used for supersededKeys or retryLegBySeat above/below:
+  // moves. Deliberately NOT used for `supersededKeys` — which since v4.8 T-A6 lives in
+  // `run-stage1-superseded.js :: supersededRows` — nor for `retryLegBySeat` below:
   // those join FIRST-attempt legs against RETRY legs, two different leg populations
   // whose taskIds can never match, and minting there would silently drop the
   // superseded row of every twin whose retry healed.
-  const twins = twinAliases(o.seats);
+  // v4.8 T-A6 (SI-TWINS): `twins` is the run's ONE `twinAliases`, threaded in — run-stages.js
+  // passes `retry.twins`, the very collection `run-retry.js :: retryStage1Losses` minted every
+  // `attemptedSeats` key with. The default is for direct callers (several suites hand this
+  // function a fixture `retry` with no `twins` at all), and it re-derives from the SAME roster,
+  // so it agrees by construction — but only the threaded value agrees by IDENTITY.
   const rowKeyOf = (l) => legLossKey(seatOf.get(l) || null, l.modelInput || l.model, l, twins);
 
-  // v4.7 D2/E4 — superseded rows: a leg-origin seat's FIRST leg stops being
-  // primary the moment a retry was actually attempted for it, healed or not
-  // (deadLegs0 × recovered-or-still-dead seats — mirrors the healed-set idiom
-  // above, extended to the still-dead half E4 also requires). A skipped seat
-  // (cost ceiling / unmappable — never got a second leg) keeps NO superseded
-  // row: nothing replaced it. Wave-origin seats never had a first leg at all,
-  // so they can never appear here regardless of healed/dead outcome (E4).
-  // ⚠️ v4.8 T2.2 — this is the ONE join in this function still in the ALIAS-granular
-  // keyspace, and it stays safe only while a twin alias cannot produce one RETRIED and one
-  // SKIPPED leg. Both sides of the join are LEG-origin (`deadLegs0` below, and retry's
-  // recovered/still-dead LEG arrays above — a wave-origin seat has no first leg at all and
-  // reaches neither), so the shape to rule out is two UNBOUND LEG-origin twins in different
-  // retry units. Two facts, read off run-retry.js and run-retry-group.js rather than
-  // inferred: (1) skipping is all-or-nothing per UNIT — every skip branch pushes
-  // `...unit.srcWaves`/`...unit.srcLegs` wholesale and `continue`s; (2) such twins always
-  // share a unit — bench and critic are one unit each, and the deadLegs loop calls
-  // `lensIndexOf(o, null, alias, seatObj)` with `seatObj` null when unbound, falling through
-  // to `o.models.indexOf(alias)`, first-match, so both resolve to the SAME lens index.
-  // (BOUND twins never needed this: their `keyOf` values already differ. And a wave-origin
-  // twin CAN land in a different lens unit than its leg-origin sibling — that split is real,
-  // it just cannot reach this join.) Break either fact and the skipped twin takes its own
-  // first leg as a primary row AND gets a superseded row for it: one billed leg counted
-  // twice. Recorded so the next reader need not re-derive it.
-  const supersededKeys = new Set([
-    ...retry.recoveredLegs.map(keyOf),
-    ...retry.stillDeadLegs.map(keyOf),
-  ]);
-  for (const dead of deadLegs0) {
-    if (supersededKeys.has(keyOf(dead))) {
-      extraRows.push(buildRunStatsEntry({ leg: dead, model: dead.modelInput || dead.model,
-        role: 'superseded', wasChair: false }));
-    }
-  }
+  // v4.7 D2/E4 superseded rows + the T-A5 invariant guard: ./run-stage1-superseded (T-A6 split).
+  // Appended HERE, before the dead-seat loop, exactly where the moved loop stood — and handed the
+  // SAME `keyOf`/`rowKeyOf` this function built, never a second derivation of either.
+  extraRows.push(...supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }));
 
   // v4.7 D2/E4 — primary error rows: one per SEAT with NO surviving review
   // (every seat still in stillDeadLegs/stillDeadWaves after retry). E5 amended
@@ -166,11 +155,11 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   }
 
   for (const [, { seat, alias, exact, join }] of deadSeats) {
-    // ⚠️ Safe only because run-retry.js DROPS every placeholder bind (:132) and keeps
-    // placeholder ids unique (:126) — together they guarantee a BOUND still-dead retry
-    // leg always resolves `exact` here, never the branch below. Break that conjunction
-    // and a bound retry leg's usage is lost silently. Measured unreachable today — see
-    // BACKLOG.md's PR #170 T2.2 section (the retry-leg-drop finding).
+    // ⚠️ Safe only because `run-retry-launch.js :: bindRetryWave` DROPS every placeholder
+    // bind (:59) and keeps placeholder ids unique (:53) — together they guarantee a BOUND
+    // still-dead retry leg always resolves `exact` here, never the branch below. Break that
+    // conjunction and a bound retry leg's usage is lost silently. Measured unreachable
+    // today — see BACKLOG.md's PR #170 T2.2 section (the retry-leg-drop finding).
     let finalLeg = exact ? retryLegBySeat.get(join) : undefined;
     // v4.8 council A1: claim the spare HERE, and never as `finalLeg`. It is consumed exactly
     // as before — same pool, same `shift()`, same one-apiece hand-out, so the SET of billed
@@ -206,10 +195,10 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // orphaned seat: since v4.8 T2.2 two orphaned twins that BOTH reach this loop get
     // TWO rows (they are two seats the run paid for), each carrying no seat at all.
     // ⚠️ Scoped on purpose — this function emits one row per still-dead input it is GIVEN, and
-    // cannot emit a row for a seat that never arrives. When a retry wave returns FEWER legs than
-    // it launched, `run-retry.js`'s alias-granular `launched` reconcile passes only ONE of two
-    // unattributable twins, so the run still shows one row. That half of SI-22.3 is open (it
-    // needs a `run-retry.js` extraction first) and nothing in this file can close it.
+    // cannot emit a row for a seat that never arrives. When a retry wave returned FEWER legs than
+    // it launched, `run-retry.js`'s alias-granular `launched` reconcile passed only ONE of two
+    // unattributable twins, so the run showed one row. v4.8 T-A4 closed that half in the PRODUCER:
+    // it emits `max(slots, 1) - seen` notes now, so both twins arrive here. Nothing here changed.
     const row = buildRunStatsEntry({ leg: finalLeg, model: alias, seat,
       role: seat ? seat.role : roleFor(o, alias), wasChair: false });
     // Overwrite rather than synthesize a leg: `buildRunStatsEntry({leg: null})` is the ONE
@@ -222,4 +211,4 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   }
 }
 
-module.exports = { pushDeadSeatRows };
+module.exports = { pushDeadSeatRows, supersededRows };

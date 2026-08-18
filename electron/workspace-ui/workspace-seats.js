@@ -62,10 +62,13 @@
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
    * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
    *
-   * ⚠️ firstFailure is TRUTHINESS ONLY. It has two shapes — run-retry-group.js:84 emits
-   * {seat, class:'leg', status, reason}; :72/:76/:79 emit {seat, class:'wave', waveId, reason}
-   * with NO status key — so any read of firstFailure.status is undefined on every wave-origin
-   * seat.
+   * ⚠️ firstFailure is TRUTHINESS ONLY. Two shapes, both built in
+   * run-retry-group.js :: groupStage1Losses — its deadLegs loop emits {seat, class:'leg',
+   * status, reason}; its deadWaves loop emits {seat, class: lossClass(w), waveId, reason}
+   * at THREE sites (lens/critic/bench), none carrying a status key, where
+   * `const lossClass = w => (w.partial ? 'missing' : 'wave')` — so firstFailure.status is
+   * undefined on every wave-origin seat. ⚠️ T-A8 DROPPED five line numbers here: re-opened
+   * 2026-08-17 they had all rotted a uniform +31 (T-A3 +15, T-A6 +16), and "now 235" is 266.
    */
   function retriedSeats(degrades) {
     var out = Object.create(null);

@@ -276,8 +276,10 @@ async function runStage1(ctx) {
   // Superseded + dead-seat rows live in ./run-stage1-rows (v4.8 PR0 size-gate split).
   // ⚠️ allSeatOf, never the Stage-1 `seatOf`: retry.recoveredLegs and
   // retry.stillDeadRetryLegs are retry-wave objects that map has never seen.
+  // ⚠️ `retry.twins`, never a fresh `twinAliases(o.seats)`: the row keys asked for here must be
+  // minted from the SAME collection the retry pass filled `attemptedSeats` with (v4.8 T-A6).
   pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-    roleFor, seatOf: allSeatOf });
+    roleFor, seatOf: allSeatOf, degrade: ctx.degrade, twins: retry.twins });
 
   return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
     degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0, extraRows };

@@ -107,7 +107,7 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
   // accumulated across every judge in this wave (most judges contribute neither).
   const supersededLegs = [], repairLegs = [];
   const rawLegs = (res.wave && res.wave.legs) || [];
-  // §3.4's roster-padding pattern (run-retry.js:117-132): bindSeats filters
+  // §3.4's roster-padding pattern (run-retry-launch.js :: bindRetryWave): bindSeats filters
   // falsy roster entries internally, so a `null` hole would slide every later
   // slot, and two `{id:null}` sentinels would collide on its id-keyed dedup.
   // Placeholders are tracked by IDENTITY, never an id-name prefix test — a bench

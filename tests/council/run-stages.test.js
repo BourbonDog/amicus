@@ -1144,6 +1144,19 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // 1000, so the separator is the leg-LESS shape below, and the mutant reds on it. `usage`
     // is what keeps this distinct from the wholesale-death control two tests down: same
     // shape, but that one's rows carry usage null because no spare existed to claim.
+    // ⚠️ MUTANT DESYNCLEG, defined here at v4.8 T-A6 because the name lived in BACKLOG.md prose
+    // and in no test — "pinned by DESYNCLEG" was a claim to re-run, not a fact to inherit.
+    // The mutation: desynchronise `run-retry.js :: retryStage1Losses`' `twins` from the rest of
+    // the run's, so `srcRowKey` files the UNMINTED key into `attemptedSeats` at both `claimSrc`
+    // sites while the row side still asks with the minted one. RE-RUN against the FULL suite at
+    // `9f460526`: RED on this test ALONE — 1 failed / 7522 passed / 8 skipped, 534 of 535 suites
+    // green — at the `!('waveId' in x) && !('resolvedModel' in x)` assertion below.
+    // ⚠️ The T-A6 consolidation MOVED where this mutation has to be made, which is the point of
+    // it: emptying `retryStage1Losses`' `twins` now propagates to every site through the single
+    // threaded value, so all four AGREE (on the wrong answer) and nothing desynchronises. To
+    // desync, `srcRowKey` must be given a collection of its own — `legLossKey(…, new Map())`.
+    // RE-RUN in that form against the FULL suite at the consolidated tree: RED on this test
+    // alone again, 1 failed / 7529 passed / 8 skipped, 536 of 537 suites green.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       // Non-conforming ids: bindSeats cannot slot them, and its alias fallback needs
@@ -1172,6 +1185,27 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
   });
 
   test('T2.2 control: two orphaned twins whose retry wave dies wholesale get TWO leg-less rows', async () => {
+    // ⚠️ MUTANT DESYNCPLAN, defined here at v4.8 T-A6. The name appeared in exactly ONE sentence
+    // of BACKLOG.md and nowhere else in the repo — no test, no comment — so half of SI-TWINS'
+    // safety claim was unverified, and it was the half guarding the consolidation. The mutation:
+    // desynchronise `run-retry-group.js :: planStillDeadSources`' `twins` from the rest of the
+    // run's, so its `attempted` Set gains the UNMINTED key. This shape is the ONLY one that
+    // reaches that function — the retry wave comes back with zero legs, which is
+    // `retryStage1Losses`' wholesale-death branch. Under it each row's
+    // `retry.attemptedSeats.has(join)` goes false, `deadLegs0.find` hands the row its OWN first
+    // leg back, and that leg — which already carries a `superseded` row — is billed twice.
+    // RE-RUN against the FULL suite at `9f460526`: RED on exactly TWO tests, 533 of 535 suites
+    // green — this one at the `!('waveId' in x)` assertion, and run-retry.test.js ::
+    // *"attemptedSeats carries the minted key; no emitted still-dead note does"*. So the claim
+    // held; what was missing was the NAME, not the pin.
+    // ⚠️ Post-consolidation the mutation is made at the `legLossKey` CALL inside
+    // `planStillDeadSources` (`legLossKey(bound, alias, l, new Map())`) rather than at its
+    // `twins` binding, which is now a threaded parameter — emptying that would desync nothing,
+    // it would just give the whole run one wrong answer. RE-RUN in that form against the FULL
+    // suite at the consolidated tree: RED on THREE, 3 failed / 7527 passed / 8 skipped, 534 of
+    // 537 suites green. The third is T-A6's own
+    // run-retry-twins-threading.test.js :: *"planStillDeadSources USES the twins it is handed…"*,
+    // so the consolidation ADDED a pin here rather than weakening one.
     const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
@@ -1282,11 +1316,11 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 //              false confidence this pins away.
 // ⚠️ SCOPE — these fixtures call pushDeadSeatRows DIRECTLY, so they measure what it does with the
 // still-dead seats it is HANDED. "The asymmetry that remains is attribution, not count" was the
-// earlier wording here and it is FALSE end to end: when a retry wave returns fewer legs than it
-// launched, run-retry.js's alias-granular `launched` reconcile hands this function only ONE of two
-// unattributable twins, so the RUN still shows one row (SI-22.3 is PARTIAL, blocked on a
-// run-retry.js extraction). Nothing in this describe can observe that — the end-to-end T2.2 tests
-// earlier in this file drive the real runStage1 and pin the shapes that ARE closed.
+// earlier wording here and it was FALSE end to end: when a retry wave returned fewer legs than it
+// launched, run-retry.js's alias-granular `launched` reconcile handed this function only ONE of two
+// unattributable twins, so the RUN showed one row. v4.8 T-A4 closed that half in the producer — it
+// emits `max(slots, 1) - seen` notes, so both twins arrive and get two rows. Nothing in this
+// describe can observe either state; the T2.2 tests earlier in this file pin the shapes that ARE closed.
 describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', () => {
   const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinLeg = (waveId, slot) => ({
@@ -1336,7 +1370,7 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
 
   test('T12: two orphaned twins the producer cannot tell apart still collapse (R2 floor)', () => {
     // legLossKey mints from the leg's OWN taskId. A leg with none has genuinely nothing,
-    // and inventing an id would be the guess this module exists to reject — so ONE row
+    // and inventing an id would be the guess that keyspace exists to reject — so ONE row
     // is the correct answer here, and the count is not a free-floating goal.
     const rows = run({ stillDeadLegs: [twinLeg(), twinLeg()], seatOf: new Map() });
     expect(rows).toHaveLength(1);
@@ -1455,6 +1489,181 @@ describe('v4.8 PR4c: runStats[].seat on the dead-seat rows (§3.1, T12/T14)', ()
     for (const r of superseded) { expect('seat' in r).toBe(false); }
     expect(rows.filter(r => r.role === 'seat').map(r => r.seat))
       .toEqual(['deepseek#1', 'deepseek#2']);
+  });
+});
+
+// ---- v4.8 T-A5: `supersededKeys` CHECKS the invariant it used to argue ----
+// The two invariants (run-retry.test.js :: "invariant 1: skipping is all-or-nothing…" and
+// "invariant 2: two UNBOUND leg-origin twins group into ONE unit…", mutants PARTIALSKIP and
+// GUESSPOS, both re-observed RED at 2abbeefa) exist to make ONE statement true: no first leg is
+// SKIPPED while its alias key is superseded. These fixtures do what no mutation of the retry can
+// do from here — hand `pushDeadSeatRows` the state a BROKEN invariant would produce — and pin
+// that the alias-granular join refuses the second count and says so.
+describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
+  // Required HERE, not at the file head, deliberately: this file's top is cited by LINE from
+  // `seat-fixtures.test.js` and `BACKLOG.md`, and a require added up there would silently falsify
+  // both. ONE of the four PRODUCTION readers of a degrade's `data.seat`, so the pin below runs
+  // through the real consumer instead of re-checking a literal channel list against itself.
+  const { deriveSeatLoss } = require('../../src/council/verdict');
+  const SEATS = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
+  const roleFor = () => 'seat';
+  // A test-authored Set, exactly as the NUL-containment pin above builds one: `legLossKey`'s
+  // predicate is `.has()`-shaped, so this is the row key production would compute for an
+  // unattributable twin leg — not a `twinAliases` return, and not a counterexample to it.
+  const rowKey = (leg) => legLossKey(null, 'deepseek', leg, new Set(['deepseek']));
+  const usageA = { cost: { amount: 0.03, source: 'reported' } };
+  const usageB = { cost: { amount: 0.05, source: 'reported' } };
+  const usageC = { cost: { amount: 0.07, source: 'reported' } };
+  const legFor = (slot, usage) => ({ taskId: `r1-s1-${slot}`, waveId: 'r1-s1', model: 'deepseek',
+    modelInput: 'deepseek', status: 'error', summary: '', durationMs: null, usage });
+  // `stillDeadLegs` carries BOTH because run-stages.js merges `skippedDeadLegs` into it before
+  // this call — the skipped leg is a still-dead seat too, which is why it also gets a primary row.
+  const drive = (retry, legA, legB, degrade) => {
+    const extraRows = [];
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [legA, legB], stillDeadLegs: [legA, legB],
+      stillDeadWaves: [], seatOf: new Map(), roleFor, extraRows, retry, ...(degrade ? { degrade } : {}) });
+    return extraRows;
+  };
+
+  test('the broken shape: one billed leg lands in exactly ONE row, and the refusal is announced', () => {
+    // Twin A was SKIPPED while twin B was retried — the shape both invariants forbid. Their
+    // unbound `keyOf` is the same string 'deepseek', so before this guard (base `2abbeefa`) A's own
+    // first leg was pushed as a `superseded` row AND handed straight back as A's primary row: one
+    // billed leg, two rows carrying its usage. Mutant TRUSTALIAS — delete the `skippedLegs.has(dead)`
+    // arm in `run-stage1-superseded.js :: supersededRows` (it was in run-stage1-rows.js until the
+    // v4.8 T-A6 split) so the join trusts the alias key alone — reds the first assertion.
+    const legA = legFor(1, usageA);
+    const legB = legFor(2, usageB);
+    const notes = [];
+    const rows = drive({ recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+      skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) },
+    legA, legB, { note: (r) => notes.push(r) });
+    const billedA = rows.filter(r => r.usage === usageA);
+    expect(billedA).toHaveLength(1);
+    expect(billedA[0].role).toBe('seat');            // the PRIMARY row, not a superseded one
+    // …and the guard is not a blanket veto: the twin that WAS retried keeps its superseded row.
+    expect(rows.filter(r => r.role === 'superseded').map(r => r.usage)).toEqual([usageB]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ channel: 'internal',
+      data: { seat: 'deepseek', taskId: 'r1-s1-1' } });
+    // `internal` is inert to the four readers of a note's `data.seat` — verdict.js, the two
+    // Workspace projections, and workspace/seat-space.js — because each gates on
+    // dead-leg/dead-wave/seat-unbound first. Asserted through a REAL consumer rather than by
+    // comparing the channel to a literal list, which could not fail: `deriveSeatLoss` is the
+    // production reader, and the SAME record on a seat-loss channel DOES move it, so the equality
+    // is a property of the channel and not of an inert consumer.
+    const seatLoss = (ds) => deriveSeatLoss({ runId: 'r1', critic: 'gpt', degrades: ds });
+    expect(seatLoss([notes[0]])).toEqual(seatLoss([]));
+    expect(seatLoss([{ ...notes[0], channel: 'dead-leg' }]).deadBenchSeats).toEqual(['deepseek']);
+  });
+
+  test('the announcement cannot be defeated by omitting the sink', () => {
+    // With no `degrade` the notice still goes to stderr in the project's one voice, so a caller
+    // that forgets to wire the sink degrades the CHANNEL, never the loudness. Mutant MUTESINK —
+    // replace `run-stage1-superseded.js :: STDERR_NOTICE`'s body with a no-op — reds this.
+    // (Re-spelled by SYMBOL at council C1, which moved the fallback off the destructuring
+    // default this line used to name and into that file's `sink` resolution; the mutation
+    // target is the same constant either way.)
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const legA = legFor(1, usageA);
+      const legB = legFor(2, usageB);
+      drive({ recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) }, legA, legB, null);
+      const said = spy.mock.calls.map(c => String(c[0])).join('');
+      expect(said).toContain('Notice: a superseded row for seat deepseek was refused');
+    } finally { spy.mockRestore(); }
+  });
+
+  test('…and the default sink cannot take the run down: a throwing stream is swallowed', () => {
+    // The invariant the whole channel choice rests on is "nothing on this path may throw, because
+    // it runs after a whole council has been paid for". `formatDegrade` covers the string; this
+    // covers the STREAM, which can fail (EPIPE) even when the string cannot — the same guard the
+    // real sink applies at `run-degrade.js :: createDegradeSink`'s `safeEmit`. Mutant NOSAFEEMIT —
+    // unwrap the try/catch around `process.stderr.write` — reds this.
+    const boom = jest.spyOn(process.stderr, 'write')
+      .mockImplementation(() => { throw new Error('EPIPE'); });
+    try {
+      const legA = legFor(1, usageA);
+      const legB = legFor(2, usageB);
+      const run = () => drive({ recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) }, legA, legB, null);
+      expect(run).not.toThrow();
+      // Non-vacuity: the write really was attempted, so this is not passing because nothing ran.
+      expect(boom).toHaveBeenCalled();
+      // …and the rows are still correct — a failed announcement never costs the repair.
+      expect(run().filter(r => r.usage === usageA).map(r => r.role)).toEqual(['seat']);
+    } finally { boom.mockRestore(); }
+  });
+
+  test('SCOPE: on R2\'s taskId-less floor the superseded row STAYS — refusing it would lose spend', () => {
+    // The boundary the second clause draws. With no taskId `legLossKey` cannot mint, so both twins
+    // share one row key, `attemptedSeats` holds it, and the dead-seat loop emits ONE leg-less row.
+    // There the superseded row is the only place the skipped leg's `usage` survives — refusing it
+    // would trade a double count for a LOST billed leg, which is the hole this release exists to
+    // close. Mutant WIDEGUARD — drop `&& willTakeItsOwnLeg(dead)` — reds the first assertion.
+    const bare = (usage) => ({ model: 'deepseek', modelInput: 'deepseek', status: 'error',
+      summary: '', durationMs: null, usage });
+    const legA = bare(usageA);
+    const legB = bare(usageB);
+    expect(rowKey(legA)).toBe(rowKey(legB));          // non-vacuity: the keys really do collapse
+    const notes = [];
+    const rows = drive({ recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+      skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) },
+    legA, legB, { note: (r) => notes.push(r) });
+    // BOTH billed legs are still on the record, once each, and nothing was announced.
+    expect(rows.filter(r => r.role === 'superseded').map(r => r.usage)).toEqual([usageA, usageB]);
+    expect(rows.filter(r => r.role === 'seat').map(r => r.usage)).toEqual([null]);
+    expect(notes).toEqual([]);
+  });
+
+  test('SCOPE 2: a refusal that would not get its OWN leg back is never taken — the spend survives', () => {
+    // Residual R1, measured in fix round 2 and closed in round 3. `deadLegs0.find` hands back ONE
+    // leg per row key, so refusing a leg that fallback would NOT return drops that leg's `usage`
+    // outright. Reachable by breaking invariant 2 ALONE: `supersededKeys` also draws from
+    // `retry.recoveredLegs`, and no `attemptedSeats` writer sits on run-retry.js's HEAL branch, so
+    // a healed twin supersedes the alias while `attemptedSeats` stays empty. Here legC healed and
+    // is FIRST in `deadLegs0`; legA and legB were skipped and collide with its row key.
+    // Mutant KEYNOTLEG — drop `&& deadLegs0.find(…) === dead` so the guard asks whether the
+    // fallback RUNS for the key rather than whether it returns THIS leg — reds the spend assertion
+    // below with `[usageC]`. Measured end to end at the same time: billed 0.60, recorded 0.20 under
+    // KEYNOTLEG against 0.70 both with this conjunct and with no guard at all.
+    const bare = (usage) => ({ model: 'deepseek', modelInput: 'deepseek', status: 'error',
+      summary: '', durationMs: null, usage });
+    const [legC, legA, legB] = [bare(usageC), bare(usageA), bare(usageB)];
+    expect(rowKey(legA)).toBe(rowKey(legC));          // non-vacuity: the keys really do collide
+    const notes = [];
+    const extraRows = [];
+    pushDeadSeatRows({ o: { seats: SEATS }, deadLegs0: [legC, legA, legB],
+      stillDeadLegs: [legA, legB], stillDeadWaves: [], seatOf: new Map(), roleFor, extraRows,
+      degrade: { note: (r) => notes.push(r) },
+      retry: { recoveredLegs: [bare(null)], stillDeadLegs: [], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA, legB], attemptedSeats: new Set() } });
+    // SPEND, not row count: every billed first leg is still somewhere on the record. The old
+    // predicate passed every other test in this file, which is why it survived to a second review.
+    expect([usageA, usageB, usageC].filter(u => extraRows.some(r => r.usage === u)))
+      .toEqual([usageA, usageB, usageC]);
+    expect(notes).toEqual([]);   // …and nothing was refused: on a shared key a refusal can only destroy
+  });
+
+  test('CONTROL: both twins retried, and both SKIPPED, are untouched and silent', () => {
+    const legA = legFor(1, usageA);
+    const legB = legFor(2, usageB);
+    const notes = [];
+    const sink = { note: (r) => notes.push(r) };
+    // (a) NEITHER skipped — the ordinary retried-twin shape. Both first legs are superseded and
+    // both primary rows report nothing of their own, exactly as before this guard existed.
+    const retried = drive({ recoveredLegs: [], stillDeadLegs: [legA, legB], stillDeadRetryLegs: [],
+      skippedDeadLegs: [], attemptedSeats: new Set([rowKey(legA), rowKey(legB)]) }, legA, legB, sink);
+    expect(retried.filter(r => r.role === 'superseded').map(r => r.usage)).toEqual([usageA, usageB]);
+    expect(retried.filter(r => r.role === 'seat').map(r => r.usage)).toEqual([null, null]);
+    // (b) BOTH skipped — invariant 1 holding. Nothing was retried, so nothing supersedes anything
+    // and each leg keeps its own primary row: the guard is never even consulted.
+    const skipped = drive({ recoveredLegs: [], stillDeadLegs: [], stillDeadRetryLegs: [],
+      skippedDeadLegs: [legA, legB], attemptedSeats: new Set() }, legA, legB, sink);
+    expect(skipped.filter(r => r.role === 'superseded')).toEqual([]);
+    expect(skipped.map(r => r.usage)).toEqual([usageA, usageB]);
+    expect(notes).toEqual([]);                        // no correct shape says anything
   });
 });
 

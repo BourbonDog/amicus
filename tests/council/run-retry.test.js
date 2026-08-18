@@ -974,12 +974,13 @@ describe('v4.8 T2.2 review A2: srcLegClaimer\'s single-use-per-leg contract', ()
 });
 
 describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', () => {
-  // `supersededKeys` (run-stage1-rows.js :: pushDeadSeatRows) is the ONE join left in the
+  // `supersededKeys` (run-stage1-superseded.js :: supersededRows — it was in
+  // `run-stage1-rows.js :: pushDeadSeatRows` until the v4.8 T-A6 split) is the ONE join left in the
   // ALIAS-granular keyspace while the dead-seat rows and `attemptedSeats` moved to `rowKeyOf`.
-  // Its own comment argues it is safe because (1) skipping is all-or-nothing per UNIT and
-  // (2) two UNBOUND LEG-origin twins always share a unit. Two independent reviewers said an
-  // argument in a comment is not enough. Break either invariant and a skipped twin takes its own
-  // first leg as a PRIMARY row and gets a SUPERSEDED row for it — one billed leg counted twice.
+  // Two independent reviewers said the comment ARGUING it safe — (1) skipping is all-or-nothing
+  // per UNIT, (2) two UNBOUND LEG-origin twins always share a unit — was not enough, so since v4.8
+  // T-A5 that join also CHECKS the one statement both facts exist to make true. These two pins
+  // stay: they are WHY the check never fires, and run-stages.test.js pins the check itself.
   const TWIN_MODELS = ['deepseek', 'deepseek'];
   const unboundTwinLegs = () => [deadLeg('deepseek', undefined, undefined, 'r1-s1', 1),
     deadLeg('deepseek', undefined, undefined, 'r1-s1', 2)];
@@ -1018,8 +1019,23 @@ describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', (
 
   test('invariant 1: skipping is all-or-nothing — two unbound twins are BOTH skipped or NEITHER', () => {
     // The property `supersededKeys` actually needs, asserted directly at the retry boundary
-    // rather than derived from the two facts. Mutate any skip branch to push a subset of
-    // `unit.srcLegs` and this goes RED on the first shape.
+    // rather than derived from the two facts.
+    // ⚠️ SCOPE, MEASURED 2026-08-17 (T-A8) — the earlier wording here said "mutate ANY skip branch
+    // … and this goes RED", and that is FALSE. run-retry.js has TWO wholesale-skip branches and the
+    // three shapes below reach only one of them. Mutant PARTIALSKIP (`...unit.srcLegs.slice(0, 1)`),
+    // applied to each branch separately and reverse-edited byte-exactly:
+    //   OVER-BUDGET branch  -> RED on this test alone (shape (a)); 1 failed of 1289 council tests.
+    //   UNMAPPABLE branch (lensIndex null / lens out of range / zero models)
+    //                       -> RED on NOTHING. Run against the FULL suite: 537 suites / 7531 passed
+    //                          / 8 skipped, entire repo green. No shape HERE builds an unmappable
+    //                          unit, so nothing pins the ALL-OR-NOTHING property on that branch.
+    // ⚠️ That is a gap in THIS pin, not in the branch's coverage: all three unmappable triggers
+    // have behavioural coverage in this same file — zero models, `lensIndex === null` and an
+    // out-of-range lensIndex each have their own "is skipped: no launch" test above. What no
+    // test builds is an unmappable unit with >=2 `srcLegs`, which is what PARTIALSKIP needs to bite.
+    // Both branches are load-bearing for `run-stage1-superseded.js :: supersededRows`' invariant 1,
+    // so the uncovered half is a real gap — filed in BACKLOG.md's T-A8 entry. Closing it needs a
+    // fourth shape (an unmappable lens unit with two unbound twins), not a change to this one.
     const bothOrNeither = (out, d1, d2) => {
       const skipped = new Set(out.skippedDeadLegs);
       expect([skipped.has(d1), skipped.has(d2)]).toEqual(
@@ -1064,6 +1080,13 @@ describe('v4.8 T2.2 review A1/D3: the minted key is internal — it reaches no N
     // surface: degrade notes are what a consumer parses, and `legLossKey`'s docblock claims the
     // key "joins the dead-seat rows, attemptedSeats and deadLegs0, nothing else".
     // Non-vacuity: attemptedSeats MUST contain a minted key, or the absence below proves nothing.
+    // ⚠️ This is also the PRODUCER-side red of MUTANT DESYNCPLAN — defined in full at
+    // run-stages.test.js :: *"T2.2 control: two orphaned twins whose retry wave dies wholesale
+    // get TWO leg-less rows"*, which is its other red. Emptying
+    // `run-retry-group.js :: planStillDeadSources`' `twins` puts the UNMINTED key into
+    // `attemptedSeats`, so `has(minted)` below goes false. Measured at `9f460526` (RED on two
+    // tests) and re-measured on the consolidated tree (RED on three — the third is T-A6's own
+    // threading pin, so the red set only grew).
     const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null },
       { launchWave: jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 }) });
     const d1 = { ...deadLeg('deepseek', undefined, undefined, 'r1-s1', 1), taskId: 'orphan-a' };
@@ -1083,5 +1106,104 @@ describe('v4.8 T2.2 review A1/D3: the minted key is internal — it reaches no N
         expect(out.stillDeadNotes.map(n => n.data.seat)).toEqual(['deepseek', 'deepseek']);
         expect(out.stillDeadNotes.map(n => n.data.seatId)).toEqual([null, null]);
       });
+  });
+});
+
+// ---- v4.8 T-A4 (round-1 B1 + B2): a launched KEY is a slot COUNT, not a presence ----
+// Both halves ship together on purpose. Closing B1 alone would emit TWO notes that both read
+// slot 0's firstFailure, and a duplicate that looks authoritative is worse than the one note
+// it replaced. Every number below was measured against the real retryStage1Losses at the
+// commit before the fix (roster ['deepseek','deepseek','gpt'], two UNATTRIBUTABLE dead twin
+// legs `orphan-a`/`orphan-b`, reasons `boom-A`/`boom-B`).
+describe('v4.8 T-A4: two unattributable twins are TWO slots on ONE key', () => {
+  const TWIN3 = { models: ['deepseek', 'deepseek', 'gpt'], critic: null };
+  // taskIds are overridden to the orphan ids the row keyspace mints from (legLossKey), so
+  // these are the same fixtures the T2.2 A1/D3 pin above uses.
+  const srcTwins = () => [
+    { ...deadLeg('deepseek', 'error', 'boom-A', 'r1-s1', 1), taskId: 'orphan-a' },
+    { ...deadLeg('deepseek', 'error', 'boom-B', 'r1-s1', 2), taskId: 'orphan-b' },
+  ];
+  const retryWave = (...legs) => jest.fn().mockResolvedValue(
+    { wave: { waveId: 'r1-s1r1', legs }, exitCode: 0 });
+  const firstFailureReasons = (out) => out.stillDeadNotes.map(n => (n.data.firstFailure || {}).reason);
+  const runTwins = async (bound, ...legs) => {
+    const ctx = fakeCtx(TWIN3, { launchWave: retryWave(...legs) });
+    const [d1, d2] = srcTwins();
+    const seatOf = bound ? new Map([[d1, ctx.o.seats[0]], [d2, ctx.o.seats[1]]]) : new Map();
+    const out = await retryStage1Losses(ctx,
+      { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS, seatOf });
+    return { ctx, d1, d2, out };
+  };
+
+  test('B1: a PARTIAL return announces both dead twins and returns both source legs', async () => {
+    // ⚠️ Named mutant SLOTCOLLAPSE — revert the slot COUNT: spell the reconcile's upper bound
+    // `1` in place of `Math.max(rec.slots, 1)`. That bound IS the presence test it replaced —
+    // a key seen at all yields no note, a key never seen yields exactly one. Measured RED at
+    // 1 note and 1 stillDeadLeg, which is exactly the base this fix closes: the run paid for
+    // two retry legs and a reader was told ONE seat died.
+    const { out, d1, d2 } = await runTwins(false, deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1));
+    expect(out.stillDeadNotes).toHaveLength(2);
+    expect(out.stillDeadLegs).toEqual([d1, d2]);   // the SET of sources, one apiece
+    // The alias is still all any note names — no minted key, no guessed seat id.
+    expect(out.stillDeadNotes.map(n => n.data.seat)).toEqual(['deepseek', 'deepseek']);
+  });
+
+  test('B2: on a FULL return each note carries its OWN slot\'s first-failure, not slot 0\'s', async () => {
+    // ⚠️ Named mutant SLOTZERO — revert the per-slot firstFailure: spell the leg loop's lookup
+    // `.ffs[0]` instead of `.ffs[slot]`. Measured RED at ['boom-A','boom-A'], the base where
+    // the second twin's own failure reason reached no announcement anywhere.
+    const { out } = await runTwins(false,
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1),
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 2));
+    expect(firstFailureReasons(out)).toEqual(['boom-A', 'boom-B']);
+  });
+
+  test('B1 + B2 control: BOUND twins are UNMOVED — 2 and 2 on a partial, own reasons on a full', async () => {
+    // Both halves were already correct here (two seat ids are two keys), and the fix must not
+    // disturb it: this is the shape that proves the change is about the KEYSPACE collapse.
+    const partial = await runTwins(true, deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1));
+    expect(partial.out.stillDeadNotes).toHaveLength(2);
+    expect(partial.out.stillDeadLegs).toEqual([partial.d1, partial.d2]);
+    const full = await runTwins(true,
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1),
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 2));
+    expect(firstFailureReasons(full.out)).toEqual(['boom-A', 'boom-B']);
+  });
+
+  test('B1, heal half: the twin a partial return never named is announced even when its twin HEALED', async () => {
+    // The same lost seat, in the direction that is easiest to miss: at base this returned
+    // 1 recovered / 0 notes / 0 stillDeadLegs, so the second twin vanished from EVERY array —
+    // the exact invariant the fix-wave reconcile exists to hold. Its note reads slot 1's
+    // reason, which is B2's half of the fix doing the work on the reconcile side.
+    const { out } = await runTwins(false, usableLeg('deepseek', 'r1-s1r1', 1));
+    expect(out.recoveredLegs).toHaveLength(1);
+    expect(out.stillDeadNotes).toHaveLength(1);
+    expect(out.stillDeadLegs).toHaveLength(1);
+    expect(firstFailureReasons(out)).toEqual(['boom-B']);
+  });
+
+  test('wave-origin twins with NO seat identity: both slots reconcile, and neither seat is guessed', async () => {
+    // The wave-origin flavour of B1 (base: 1 note, `models:['deepseek']`, `seats:[null]`).
+    // It also pins that a multi-slot key's `seat` may be shared across its slots: a key can
+    // only hold two slots when NEITHER was identified, so both are null here by construction.
+    const ctx = fakeCtx(TWIN3, { launchWave: retryWave(deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1)) });
+    const w = { waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: [null, null], reason: 'died' };
+    const out = await retryStage1Losses(ctx, { deadWaves: [w], deadLegs: [], counts: COUNTS });
+    expect(out.stillDeadNotes).toHaveLength(2);
+    expect(out.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [null, null], reason: 'died' }]);
+  });
+
+  test('a retry leg beyond the key\'s LAST slot is skipped, not announced as a third dead seat', async () => {
+    // The other side of the count: `slots` is an upper bound as well as a lower one. Three
+    // legs came back for a two-slot key, and at base the third read slot 0's firstFailure and
+    // announced a seat this unit never launched for — the module's own `if (!ff) continue`
+    // rationale, now reachable per SLOT rather than only per key.
+    const { out } = await runTwins(false,
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1),
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 2),
+      deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 3));
+    expect(out.stillDeadNotes).toHaveLength(2);
+    expect(firstFailureReasons(out)).toEqual(['boom-A', 'boom-B']);
   });
 });
