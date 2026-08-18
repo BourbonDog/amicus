@@ -77,8 +77,13 @@ describe('run-stage1-superseded — extraction pins (v4.8 Phase 2 T-A6)', () => 
     //
     // Named mutant "NULLSINK": in `run-stage1-superseded.js`, delete the `sink` line, put
     // `degrade = STDERR_NOTICE` back in the destructuring default, and restore `degrade.note(`
-    // in `refuseSupersede`. RUN, not asserted — RED numbers recorded in this PR's council-c1
-    // report; reverse-edited by hand and byte-verified against `git show HEAD:<path>`.
+    // in `refuseSupersede`. RUN, not asserted: RED on this test alone over `tests/council`
+    // (1 failed / 1295 passed / 76 of 77 suites green), failing on `TypeError: Cannot read
+    // properties of null (reading 'note')` at the `refuseSupersede` call — reverse-edited by hand
+    // and byte-verified against `git show HEAD:src/council/run-stage1-superseded.js`.
+    // MUTESINK was re-run against this same tree while its prescription was being re-spelled by
+    // symbol: 3 failed / 1293 passed — the two T-A5 sink tests plus THIS one, because the stderr
+    // half below is exactly what a muted `STDERR_NOTICE` destroys.
     const rowKey = (leg) => legLossKey(null, 'deepseek', leg, new Set(['deepseek']));
     const keyOf = (leg) => leg.modelInput || leg.model;
     const usageA = { cost: { amount: 0.03, source: 'reported' } };

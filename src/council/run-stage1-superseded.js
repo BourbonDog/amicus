@@ -52,11 +52,12 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
   // the refusal shape below before this line existed: omitted and a real sink returned 1 row,
   // null and a `.note`-less object threw. That was the SECOND throw path in this one guard
   // (round 1 closed the first, an EPIPE from the sink's own write) and it is the one the
-  // channel choice at the loop below rules out in words: a throw here aborts a council that
-  // has already been paid for, over a row miscount. Not reachable in production — run-stages.js
-  // passes `ctx.degrade`, which `run.js` builds with `createDegradeSink`, PROBED to be a
-  // `{note, all}` object with a callable `note` — but reachable from any fixture or future
-  // caller, which is the only reason a fallback sink exists at all.
+  // `Channel internal` paragraph below already rules out in words: a throw here aborts a council
+  // that has already been paid for, over a row miscount. Not reachable in production —
+  // run-stages.js hands `ctx.degrade` to `pushDeadSeatRows`, which forwards it here, and `run.js`
+  // builds that sink with `createDegradeSink`, PROBED to return a `{note, all}` object whose
+  // `note` is callable — but reachable from any fixture or future caller, which is the
+  // population a fallback sink exists for at all.
   const sink = degrade && typeof degrade.note === 'function' ? degrade : STDERR_NOTICE;
   const rows = [];
   // v4.7 D2/E4 — superseded rows: a leg-origin seat's FIRST leg stops being
