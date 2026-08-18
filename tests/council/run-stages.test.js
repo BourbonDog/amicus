@@ -1560,7 +1560,10 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
   test('the announcement cannot be defeated by omitting the sink', () => {
     // With no `degrade` the notice still goes to stderr in the project's one voice, so a caller
     // that forgets to wire the sink degrades the CHANNEL, never the loudness. Mutant MUTESINK —
-    // default `degrade` to `{ note: () => {} }` — reds this.
+    // replace `run-stage1-superseded.js :: STDERR_NOTICE`'s body with a no-op — reds this.
+    // (Re-spelled by SYMBOL at council C1, which moved the fallback off the destructuring
+    // default this line used to name and into that file's `sink` resolution; the mutation
+    // target is the same constant either way.)
     const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
       const legA = legFor(1, usageA);

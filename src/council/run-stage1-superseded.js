@@ -17,8 +17,10 @@ const { buildRunStatsEntry } = require('./run-assemble');
 // ../utils/degrade requires nothing at all, so this is a leaf import and the cycle the
 // header above documents eliminating stays eliminated.
 const { formatDegrade } = require('../utils/degrade');
-// The announcement must not be defeatable by omitting a parameter, so `degrade` defaults to the
-// same sentence on stderr. Nothing on this path may throw — it runs after a whole council has
+// The announcement must not be defeatable by the caller's sink, so anything that cannot carry it
+// falls back to the same sentence on stderr — resolved inside `supersededRows` (see `sink` there),
+// never by a parameter default, which substitutes only for `undefined`.
+// Nothing on this path may throw — it runs after a whole council has
 // already been paid for — so BOTH halves are covered: `formatDegrade` is pure interpolation, and
 // the sink's validating `makeDegrade` is deliberately not called; and the write itself is wrapped,
 // because a stream can fail even when the string cannot. Same guard, same reason, as the real sink
@@ -39,10 +41,23 @@ const STDERR_NOTICE = { note: (r) => {
  * @param {Array} a.deadLegs0   Stage-1's first-attempt dead legs, in their original order
  * @param {Function} a.keyOf    leg -> its bound seat's id, else its alias (the caller's)
  * @param {Function} a.rowKeyOf leg -> its ROW key, `legLossKey`-minted (the caller's)
- * @param {object} [a.degrade]  the one voice; defaults to the stderr notice above
+ * @param {object} [a.degrade]  the one voice; anything without a callable `.note` — omitted,
+ *   null, or malformed — falls back to the stderr notice above
  * @returns {Array<object>} rows for the caller to append — this function appends nothing.
  */
-function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade = STDERR_NOTICE }) {
+function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade }) {
+  // ⚠️ v4.8 council C1 — resolved HERE, by testing the METHOD, not by a destructuring default.
+  // A parameter default substitutes only for `undefined`, so `degrade: null` and `degrade: {}`
+  // both reached `degrade.note(...)` and threw a TypeError. MEASURED through this function in
+  // the refusal shape below before this line existed: omitted and a real sink returned 1 row,
+  // null and a `.note`-less object threw. That was the SECOND throw path in this one guard
+  // (round 1 closed the first, an EPIPE from the sink's own write) and it is the one the
+  // channel choice at the loop below rules out in words: a throw here aborts a council that
+  // has already been paid for, over a row miscount. Not reachable in production — run-stages.js
+  // passes `ctx.degrade`, which `run.js` builds with `createDegradeSink`, PROBED to be a
+  // `{note, all}` object with a callable `note` — but reachable from any fixture or future
+  // caller, which is the only reason a fallback sink exists at all.
+  const sink = degrade && typeof degrade.note === 'function' ? degrade : STDERR_NOTICE;
   const rows = [];
   // v4.7 D2/E4 — superseded rows: a leg-origin seat's FIRST leg stops being
   // primary the moment a retry was actually attempted for it, healed or not
@@ -120,7 +135,7 @@ function supersededRows({ retry, deadLegs0, keyOf, rowKeyOf, degrade = STDERR_NO
     && deadLegs0.find(l => rowKeyOf(l) === rowKeyOf(dead)) === dead;
   const refuseSupersede = (dead) => {
     const alias = dead.modelInput || dead.model;
-    degrade.note({ channel: 'internal',
+    sink.note({ channel: 'internal',
       what: `a superseded row for seat ${alias} was refused`,
       why: 'the retry both SKIPPED this first-attempt leg and superseded its alias key, which the '
         + 'two invariants above forbid — so that key no longer names one outcome',

@@ -63,4 +63,66 @@ describe('run-stage1-superseded — extraction pins (v4.8 Phase 2 T-A6)', () => 
     const direct = sup.supersededRows({ retry, deadLegs0: [legA, legB], keyOf, rowKeyOf: rowKey });
     expect(direct).toEqual(extraRows.slice(1, 3));
   });
+
+  test('P3 — a null or method-less `degrade` falls back to stderr instead of throwing', () => {
+    // Council C1. A destructuring default substitutes only for `undefined`, so `degrade: null`
+    // and `degrade: {}` both reached `degrade.note(...)`. MEASURED at 6709ac78 through this very
+    // function in the shape below, before the fix: `TypeError: Cannot read properties of null
+    // (reading 'note')` and `TypeError: degrade.note is not a function`, against `rows = 1` for
+    // an omitted sink and for a real one. A throw HERE is the outcome this guard's own channel
+    // choice exists to rule out — see the `internal` paragraph in run-stage1-superseded.js: it
+    // would abort a council that has already been paid for, over a row miscount. It was also the
+    // SECOND throw path in this one guard; round 1 closed the first (EPIPE from the sink's own
+    // write), pinned by NOSAFEEMIT in run-stages.test.js.
+    //
+    // Named mutant "NULLSINK": in `run-stage1-superseded.js`, delete the `sink` line, put
+    // `degrade = STDERR_NOTICE` back in the destructuring default, and restore `degrade.note(`
+    // in `refuseSupersede`. RUN, not asserted — RED numbers recorded in this PR's council-c1
+    // report; reverse-edited by hand and byte-verified against `git show HEAD:<path>`.
+    const rowKey = (leg) => legLossKey(null, 'deepseek', leg, new Set(['deepseek']));
+    const keyOf = (leg) => leg.modelInput || leg.model;
+    const usageA = { cost: { amount: 0.03, source: 'reported' } };
+    const usageB = { cost: { amount: 0.05, source: 'reported' } };
+    const legFor = (slot, usage) => ({ taskId: `r1-s1-${slot}`, waveId: 'r1-s1',
+      model: 'deepseek', modelInput: 'deepseek', status: 'error', summary: '', durationMs: null,
+      usage });
+    // The T-A5 refusal shape: twin A was SKIPPED while twin B was retried, so the loop refuses
+    // A's superseded row and ANNOUNCES — which is what makes `.note` reachable at all here.
+    const refusalShape = () => {
+      const legA = legFor(1, usageA);
+      const legB = legFor(2, usageB);
+      return { retry: { recoveredLegs: [], stillDeadLegs: [legB], stillDeadRetryLegs: [],
+        skippedDeadLegs: [legA], attemptedSeats: new Set([rowKey(legB)]) },
+      deadLegs0: [legA, legB], keyOf, rowKeyOf: rowKey };
+    };
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      // Non-vacuity for every case below: with a REAL sink the refusal really fires, so `.note`
+      // really is called on whatever the function resolved — this is not passing on a dead path.
+      const noted = [];
+      expect(sup.supersededRows({ ...refusalShape(), degrade: { note: (r) => noted.push(r) } })
+        .map(r => r.usage)).toEqual([usageB]);
+      expect(noted).toHaveLength(1);
+      for (const bad of [null, {}, { note: 'not a function' }]) {
+        spy.mockClear();
+        // The rows are unaffected — a caller's broken sink never costs the repair…
+        expect(sup.supersededRows({ ...refusalShape(), degrade: bad }).map(r => r.usage))
+          .toEqual([usageB]);
+        // …and the announcement is not merely swallowed: it lands in the project's one voice.
+        expect(spy.mock.calls.map(c => String(c[0])).join(''))
+          .toContain('Notice: a superseded row for seat deepseek was refused');
+      }
+      // …and the same holds through the CALLER, which forwards `degrade` unchanged — the
+      // property run-stage1-rows.js's import comment now claims for a null.
+      spy.mockClear();
+      const extraRows = [];
+      const shape = refusalShape();
+      rows.pushDeadSeatRows({ o: { seats: buildSeats(['deepseek', 'deepseek'], null, null) },
+        deadLegs0: shape.deadLegs0, stillDeadLegs: shape.deadLegs0, stillDeadWaves: [],
+        seatOf: new Map(), roleFor: () => 'seat', extraRows, retry: shape.retry, degrade: null });
+      expect(extraRows.filter(r => r.role === 'superseded').map(r => r.usage)).toEqual([usageB]);
+      expect(spy.mock.calls.map(c => String(c[0])).join(''))
+        .toContain('Notice: a superseded row for seat deepseek was refused');
+    } finally { spy.mockRestore(); }
+  });
 });

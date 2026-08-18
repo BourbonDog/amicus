@@ -15,7 +15,9 @@ const { twinAliases, legLossKey } = require('./run-retry-group');
 // v4.8 T-A6 size-gate split: the SUPERSEDED half of these rows moved to
 // ./run-stage1-superseded, taking `../utils/degrade` and the default stderr sink with it.
 // `degrade` is still a parameter HERE, forwarded unchanged, so a caller that omits it still
-// gets that default. That module requires exactly the two modules the moved block already
+// gets that stderr sink — and since council C1 so does one that passes `null` or a `.note`-less
+// object, because that module now resolves the sink by testing the method rather than by a
+// destructuring default. That module requires exactly the two modules the moved block already
 // required from this file — ./run-assemble and ../utils/degrade — so the split adds no import
 // edge the tree did not already carry, and the parent-child cycle the header above documents
 // eliminating stays eliminated. Re-exported at the foot of this file, which is what gives the
