@@ -1920,7 +1920,7 @@ sized and deferred rather than carried half-done.
 | R15 | SI-25 chair packet: **sites (1)+(2) now**, site (3) rides the street-cred PR |
 | R16 | `sessions-index` leak: **pin all 13 unpinned rails** |
 
-### The durable finding was the release's centre — ✅ PARTLY FIXED (T2.2): slots fully, rows in 3 retry shapes of 4
+### The durable finding was the release's centre — ✅ FIXED: slots (T2.2) and rows in ALL FOUR retry shapes (T2.2 for three, T-A4 `1e385895` for the partial return, 2026-08-17)
 
 ✅ **FIXED 2026-08-16 — T2.2, `33e2ecf7`** (branch `v48p2-producer-identity`). Both halves shipped in
 one commit, as R2 required: `recordFailure` now dedups only where identity is EXACT, so N orphaned
@@ -2467,6 +2467,36 @@ above were updated in place; these are the items it could not close, filed rathe
   7531 passed, the whole repo green**. That pin's three shapes are over-budget, wholesale death and
   both-healed, and none of them constructs an unmappable unit. The gap is in the PIN, not the guard —
   `supersededRows`' invariant 1 rests on both branches. Sentence corrected at the test.
+- ⚠️ **DURABLE LESSON, earned three times in this task — A FIX MARKS A SITE, NOT A SENTENCE.**
+  Every miss across T-A8's three rounds had the same shape: a site whose **symbol** anchor had
+  already been corrected, so it read as done while the prose beside it was never re-read.
+  Reconstructed: `e38ae801`, `47dbb52a` and `9169c00b` each touched the `workspace-seats.js`
+  sentence — three consecutive fix rounds — and none dropped the five line numbers riding in it,
+  which were still TRUE at 235 and were falsified afterwards by T-A3 (+15) and T-A6 (+16). The same
+  held for the two SI-22.3 misses, where the column is literally headed *"Current anchor (by
+  symbol)"* and the **verdict prose beside it** was never re-read.
+  **Operational form, which is what to actually enforce: a ledger row saying "re-verified" MUST
+  name WHAT was verified.** The row that carried this forward said *"re-anchored by symbol;
+  re-verified"* — true about the symbol, and silently silent about the five numbers. That silence
+  is the carrier, not the staleness.
+  ⚠️ **And this is NOT the only live class.** Fix round 2's own findings were the FALSIFIED-RECORD
+  class — a correct edit turning someone else's true sentence false (a status-table flip 81 lines
+  away falsified *"the table above reads PARTIAL"*, and an affirmative *"one change since"*
+  enumeration became incomplete). Stating the symbol lesson as *the* durable finding would
+  under-cover exactly what recurred. ⚠️ A HISTORY guard that ENUMERATES what it supersedes does not
+  cover a cross-reference to a live artifact; write such guards to cover the whole paragraph.
+- ⚠️ **DEFERRED, recorded not fixed — the per-shape table under "The durable finding" (this file,
+  the `| retry outcome | retry slots | …` table) still carries TWO stale cells**: the PARTIAL row
+  reads `2 | **1** | **1** | 2 | ❌ open (B1)` and the FULL row's status still says both notes read
+  `firstFailure.reason` from slot 0. Both are superseded ~110 lines later in the same section, by
+  the ✅ CLOSED verdict and its per-shape statement. Left as-is on purpose this round: the table is
+  the release's most-cited measurement artifact and re-deriving all four rows deserves its own pass
+  with a fresh probe, not a hand-edit at the end of a doc-only task. **Read the verdict prose, not
+  this table, until that pass happens.**
+- ⚠️ **DEFERRED, recorded not fixed — pre-existing `seedSession` rot** at
+  `docs/superpowers/plans/2026-08-09-v471-diagnostics.md:72` and `:1267`: both cite
+  `tests/continue-resume-spend.test.js:34-43`; opened at T-A8, the helper is `:36-46`. A dated
+  release-plan snapshot, and it predates this PR.
 - **Filed: a lint gate for cross-file line-number citations.** Every extraction in this release
   falsified a citation class, and the class was only ever closed by opening each line. A gate that
   flags `file.js:<N>` citations whose target line no longer matches a recorded token would have

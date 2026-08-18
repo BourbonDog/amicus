@@ -31,9 +31,16 @@ item-by-item, each verdict then independently re-measured by a second pass instr
 shapes, so the true open work-item count is **20**, not 16.
 
 > **These are the recon's counts at `53cd689c` and are not re-derived as work lands** — the table
-> below is the live record; read a verdict there, not here. One change since: **SI-22.3 moved
-> OPEN → PARTIAL** (T2.2, 2026-08-16, `33e2ecf7`), which makes it 4 PARTIAL / 15 OPEN and 19 open
-> work items on the same counting rule.
+> below is the live record; read a verdict there, not here. ⚠️ **This "changes since" list is
+> affirmative and enumerative, so it must be extended whenever a verdict moves — it is not covered
+> by the "not re-derived" caveat above.** TWO changes since, not one: **SI-22.3 moved OPEN →
+> PARTIAL** (T2.2, 2026-08-16, `33e2ecf7`) and then **PARTIAL → DONE** (T-A4, 2026-08-17,
+> `1e385895`). Re-counted directly off the live table at T-A8 fix round 2: **7 DONE · 3 PARTIAL ·
+> 1 SUPERSEDED · 1 HOLD · 19 OPEN** across its 31 rows (SI-22 already expanded into 22.1–22.5).
+> ⚠️ The derived "open work items" total is deliberately NOT restated: the recon's rule counts the
+> SI-22 roll-up as one OPEN row expanded to five, and the table counts the five directly, so the two
+> disagree about whether a shape that passed through PARTIAL is decremented once or twice. Count off
+> the table with the rule you need and state the rule, rather than inheriting a number.
 
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
@@ -104,8 +111,10 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    **producer** still collapsed. A reader arriving from the commit title will believe this closed.
    ✅ **The producer SHIPPED 2026-08-16 (T2.2, `33e2ecf7`)** — N orphaned twins now give N rows on
    both arms **for every twin the producer is handed**. Kept as a trap because the mis-dating hazard
-   is unchanged, and because SI-22.3 is **PARTIAL**, not closed: a PARTIAL retry return still hands
-   the producer only ONE of two unattributable twins. See §3 and the table row above.
+   is unchanged ~~, and because SI-22.3 is **PARTIAL**, not closed: a PARTIAL retry return still
+   hands the producer only ONE of two unattributable twins~~ (STRUCK at T-A8 fix round 2: this
+   clause was left standing and resolved only by the banner below — being adjacent to a correction
+   is not the same as being corrected). See §3 and the table row above.
    ✅ **UPDATE 2026-08-17 — SI-22.3 is no longer PARTIAL.** v4.8 Phase 2 T-A4 (`1e385895`) closed the
    partial-return under-count (2 notes / 2 `stillDeadLegs` where it gave 1 and 1) and the slot-0
    first-failure provenance together; measured, the UNBOUND case is now output-IDENTICAL to the
@@ -134,8 +143,12 @@ Re-measured on the same bench: `models=["deepseek","deepseek"]`, `seats=[null,nu
 guessed) and two dead-seat rows, each carrying no seat; controls unmoved.
 
 ✅ **UPDATE 2026-08-17 (v4.8 Phase 2 T-A4, `1e385895`): the sub-case below is CLOSED.** The whole
-paragraph is kept verbatim as the filing that scoped the fix — but read *"OPEN for a partial
-return"*, the *"1 note and 1 row"* measurement and the *"+7 lines / 5 free"* costing as HISTORY.
+paragraph is kept verbatim as the filing that scoped the fix. ⚠️ **Read EVERY verdict, measurement,
+costing AND CROSS-REFERENCE in it as HISTORY — not only the ones named here.** That explicitly
+includes *"the table above reads PARTIAL, not DONE"*: the status-table row for 22.3 was changed to
+**DONE** in this same commit, so that clause is a pointer at a live artifact which no longer says
+what it claims. (Named for convenience, not as the limit of the guard: the *"OPEN for a partial
+return"* clause, the *"1 note and 1 row"* measurement, the *"+7 lines / 5 free"* costing.)
 Measured on the final tree: a partial return now gives **2** notes and **2** `stillDeadLegs`, each
 note carrying its own slot's `firstFailure`, output-IDENTICAL to the BOUND control; the extraction
 that unblocked it landed first, as R14 required. ⚠️ **The headline ban in the first sentence below

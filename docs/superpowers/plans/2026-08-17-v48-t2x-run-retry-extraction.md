@@ -471,10 +471,18 @@ then re-open each at its stated line and read it before writing it down.
 ✅ **DONE 2026-08-17** (doc-only, run against the FINAL tree). Every citation below was re-derived
 and **re-opened at its stated location** before being written down, and every correction was
 converted to a SYMBOL or TITLE anchor rather than to a new line number:
-- **SI-22.3 moved from PARTIAL to CLOSED** at four sites (`BACKLOG.md` ×2, the ask-anything design
-  spec, the phasing plan ×3), each stated **per shape** — row/note half now four of four; slot half
-  closed **and bounded** at `min(N, roster count)`; three by-design scope limits named. The
-  unqualified headline is restated NOWHERE and the ban is re-affirmed at every site.
+- **SI-22.3 moved from PARTIAL to CLOSED** at **six** sites — `BACKLOG.md` ×3 (the SI-22 roll-up
+  trap, the verdict paragraph with both B1/B2 items struck, and the "Five seat shapes" sub-item),
+  the `### The durable finding …` section heading, the ask-anything design spec, and the phasing
+  plan (status-table row 22.3, its §3 heading, the "one sub-case remains" filing, and the T2.2 row).
+  Each stated **per shape** — row/note half now four of four; slot half closed **and bounded** at
+  `min(N, roster count)`; three by-design scope limits named. The unqualified headline is restated
+  NOWHERE and the ban is re-affirmed at every site.
+  ⚠️ **This line said "four sites (`BACKLOG.md` ×2, …)" until fix round 2.** It was wrong twice over,
+  and both errors are worth keeping: the count was low because two more sites were found in later
+  rounds, and the parenthetical it carried already **summed to six while the sentence said four** —
+  a self-contradiction inside one sentence that neither the writer nor round 1 read. `03172595`'s
+  commit message carries the same wrong count and is unamendable; it belongs in the PR body.
 - **`BACKLOG.md:1820`'s "215/283" headroom is not rot** — measured against the tags, it is exactly
   `v4.7.0`'s reading, i.e. TRUE when planned and merely undated. Annotated, not overwritten; today's
   244 / 295 recorded beside it. (Same treatment for the PR3-era "292/290" size note.)
