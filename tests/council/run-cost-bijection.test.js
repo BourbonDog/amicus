@@ -79,17 +79,17 @@
  * first place — or, since T-A4, a leg past its key's LAST minted slot (transport
  * misbehavior: a bogus or duplicate leg riding a retry wave's response for a seat nobody retried).
  * That leg was still `ctx.addWave`'d by the same function, immediately after
- * the retry launch (`ctx.addWave(res.wave)`, run-retry.js:97, before this
- * per-leg loop runs) and would count toward run.json's usage total, but there
- * is no ff/firstFailure to key a row off, so it produces no row at all — a
- * genuine, deliberately-not-fixed rowless leg. ⚠️ Both numbers above are
- * re-derived, and both were stale before v4.8 T-A2's fix round: this docblock
- * said `:226` and `:182` while the lines sat at `:216` and `:106` at that
- * commit's base (measured) and at `:184`/`:97` after it. Grep the SYMBOL, not
- * the number. No fixture for it here: reproducing it would require a scripted
- * launcher lying about which seats a retry wave covers, which is a
- * transport-honesty assumption every other fixture in this file (and the
- * other ~19 driver suites) already relies on holding.
+ * the retry launch — `ctx.addWave(res.wave)` in `retryStage1Losses`, before
+ * this per-leg loop runs — and would count toward run.json's usage total, but
+ * there is no ff/firstFailure to key a row off, so it produces no row at all — a
+ * genuine, deliberately-not-fixed rowless leg. ⚠️ Both anchors above were once
+ * LINE numbers and both rotted: this docblock said `:226` and `:182` while the
+ * lines sat at `:216` and `:106` at v4.8 T-A2's base (measured) and `:184`/`:97`
+ * after it — then T-A6 grew the file and `:97` rotted again. Both are SYMBOL
+ * anchors now: grep the symbol, never the number. No fixture for it here:
+ * reproducing it would require a scripted launcher lying about which seats a
+ * retry wave covers, which is a transport-honesty assumption every other
+ * fixture in this file (and the other ~19 driver suites) already relies on holding.
  */
 
 const fs = require('fs');

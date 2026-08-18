@@ -1027,8 +1027,12 @@ describe('v4.8 T2.2 review C1/D4: the two invariants supersededKeys rests on', (
     //   OVER-BUDGET branch  -> RED on this test alone (shape (a)); 1 failed of 1289 council tests.
     //   UNMAPPABLE branch (lensIndex null / lens out of range / zero models)
     //                       -> RED on NOTHING. Run against the FULL suite: 537 suites / 7531 passed
-    //                          / 8 skipped, entire repo green. No shape here builds an unmappable
-    //                          unit, and no other suite covers that branch either.
+    //                          / 8 skipped, entire repo green. No shape HERE builds an unmappable
+    //                          unit, so nothing pins the ALL-OR-NOTHING property on that branch.
+    // ⚠️ That is a gap in THIS pin, not in the branch's coverage: all three unmappable triggers
+    // have behavioural coverage in this same file — zero models, `lensIndex === null` and an
+    // out-of-range lensIndex each have their own "is skipped: no launch" test above. What no
+    // test builds is an unmappable unit with >=2 `srcLegs`, which is what PARTIALSKIP needs to bite.
     // Both branches are load-bearing for `run-stage1-superseded.js :: supersededRows`' invariant 1,
     // so the uncovered half is a real gap — filed in BACKLOG.md's T-A8 entry. Closing it needs a
     // fourth shape (an unmappable lens unit with two unbound twins), not a change to this one.

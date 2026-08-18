@@ -378,8 +378,8 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
  * Task 6 REVIEW (Important finding, superseding this suite's original
  * contract): `fromEnv` answers "did `ms` arrive as a direct numeric option",
  * not "does AMICUS_NO_OUTPUT_BACKSTOP_MS influence this window" — those
- * diverge on a Stage-1 retry (src/council/run-retry.js:55-56 `escalatedBackstopMs`
- * doubles the resolved/direct value and :88 forwards it as a direct option), so a
+ * diverge on a Stage-1 retry (`run-retry.js :: retryStage1Losses`'s `escalatedBackstopMs`
+ * doubles the resolved/direct value, and its `common` forwards it as a direct option), so a
  * retry-fired 240s backstop is `fromEnv: false` while still genuinely
  * governed by the env var. The original version of these tests asserted the
  * ABSENCE of the variable NAME on the caller-set branch; the real

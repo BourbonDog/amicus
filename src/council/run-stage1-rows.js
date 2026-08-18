@@ -61,8 +61,8 @@ const { supersededRows } = require('./run-stage1-superseded');
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
   roleFor, seatOf, degrade, twins = twinAliases(o.seats) }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
-  // run-retry.js's `seatKey` uses for a roster slot it could not identify, so
-  // the two sides of every lookup below agree by construction.
+  // `run-retry-keys.js :: seatKey` (imported by run-retry.js since v4.8 T-A1) uses
+  // for a roster slot it could not identify, so both sides of every lookup agree.
   const keyOf = (leg) => { const s = seatOf.get(leg); return s ? s.id : (leg.modelInput || leg.model); };
   // v4.8 T2.2 ruling R2, the LEG arms' MINT branch: on an alias the roster repeats, an
   // unbound leg's `keyOf` names BOTH twins, so N dead legs collapsed into ONE row.

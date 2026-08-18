@@ -91,9 +91,9 @@ function roleAt(seats, seatId) {
  * mechanism exists to kill (spec §4.4).
  *
  * `seats` is THE WAVE'S LAUNCH ROSTER, in launch order — not necessarily the
- * full seat table. The -s1 wave is critic-filtered (run-stage1-launch.js:54)
- * and a retry wave is the loss subset (run-retry.js:93), so a legId's `-N`
- * suffix indexes this roster, never bench position.
+ * full seat table. The -s1 wave is critic-filtered (run-stage1-launch.js:54) and
+ * a retry wave is the loss subset (`run-retry.js :: retryStage1Losses` launches
+ * `unit.models`), so a legId's `-N` suffix indexes this roster, never bench position.
  *
  * Callers legitimately hold legs from several waves at once, so a leg stamped
  * with a DIFFERENT waveId is ignored rather than reported — call once per wave

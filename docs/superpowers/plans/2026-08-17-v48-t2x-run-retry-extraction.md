@@ -426,8 +426,11 @@ and **nothing in either file's test suite would go red if it did**. Now that the
 add the pin the record asks for: a named mutant on the conjunction, or a direct pin that **a bound
 still-dead retry leg always resolves `exact`**.
 
-The conjunction is: placeholder ids stay unique (`run-retry.js:126`) **and** placeholder binds are
-dropped (`:132`). Break one alone and the loss lands elsewhere (mutant NOPLACEHOLDERFILTER measured
+The conjunction is: placeholder ids stay unique (`run-retry-launch.js :: bindRetryWave`'s
+`` `__unbound-${unit.waveId}-${i + 1}` ``) **and** placeholder binds are dropped (the same function's
+`.filter(b => !placeholders.has(b.seat))`). ⚠️ Written as `run-retry.js:126`/`:132`; T-A2 moved
+`bindRetryWave` into `run-retry-launch.js`, so the FILE was wrong, not just the numbers.
+Break one alone and the loss lands elsewhere (mutant NOPLACEHOLDERFILTER measured
 `stillDeadRetryLegs = 0`, a *different* loss that happens to total the same); break both — mutant
 FAKEBIND — and the finding fires exactly, `GAP = 0.0700`.
 

@@ -1931,15 +1931,15 @@ each carrying **no** seat. Controls unmoved: both bound → two; unique alias �
 
 ⚠️ **The unqualified claim "N orphans → N retry slots AND N rows" is NOT true. Do not restate it in
 either wording.** The RETRY-SLOT half **is** closed in every shape — that is `recordFailure`, which
-runs before any retry outcome exists. It is the ROW/NOTE half that is partial. Measured 2026-08-16
+runs before any retry outcome exists. The ROW/NOTE half WAS partial — ⚠️ **CLOSED by T-A4 (`1e385895`); the marked cells below are STALE, superseded by the ✅ CLOSED verdict later in this section.** Measured 2026-08-16
 against the branch tip through the **real `runStage1`**, two UNATTRIBUTABLE dead legs on a twin
 alias (`orphan-a` / `orphan-b`, first-failure reasons `boom-A` / `boom-B`):
 
 | retry outcome | retry slots | dead-seat notes | primary rows | superseded rows | status |
 |---|---:|---:|---:|---:|---|
 | retry wave dies **wholesale** | 2 | 2 | 2 | 2 | ✅ closed |
-| retry returns a leg **per slot** (FULL) | 2 | 2 | 2 | 2 | ✅ count closed — but **both notes read `firstFailure.reason: "boom-A"`**, slot 0's (B2) |
-| retry returns **FEWER** legs than launched (PARTIAL) | 2 | **1** | **1** | 2 | ❌ open (B1) |
+| retry returns a leg **per slot** (FULL) | 2 | 2 | 2 | 2 | ⚠️ **STALE CELL — B2 CLOSED by T-A4 (`1e385895`).** Read on 2026-08-16: "✅ count closed — but both notes read `firstFailure.reason: "boom-A"`, slot 0's (B2)" |
+| retry returns **FEWER** legs than launched (PARTIAL) | 2 | ⚠️ **1** | ⚠️ **1** | 2 | ⚠️ **STALE CELLS — B1 CLOSED by T-A4 (`1e385895`).** The 1s and the "❌ open (B1)" they carried are the 2026-08-16 measurement, not HEAD |
 | unit **skipped** (over budget / unmappable) | 2 minted, 0 launched | 2 | 2 | 0 | ✅ unchanged; skipping is all-or-nothing per unit, so no twin splits — pinned by test |
 
 **The PARTIAL row does not lose spend** — 2 superseded + 1 primary = 3 rows for the 3 legs actually
@@ -2485,14 +2485,14 @@ above were updated in place; these are the items it could not close, filed rathe
   enumeration became incomplete). Stating the symbol lesson as *the* durable finding would
   under-cover exactly what recurred. ⚠️ A HISTORY guard that ENUMERATES what it supersedes does not
   cover a cross-reference to a live artifact; write such guards to cover the whole paragraph.
-- ⚠️ **DEFERRED, recorded not fixed — the per-shape table under "The durable finding" (this file,
-  the `| retry outcome | retry slots | …` table) still carries TWO stale cells**: the PARTIAL row
-  reads `2 | **1** | **1** | 2 | ❌ open (B1)` and the FULL row's status still says both notes read
+- ⚠️ **STILL DEFERRED, but now MARKED IN PLACE — the per-shape table under "The durable finding" (this
+  file, the `| retry outcome | retry slots | …` table) carried TWO stale cells**: the PARTIAL row read
+  `2 | **1** | **1** | 2 | ❌ open (B1)` and the FULL row's status said both notes read
   `firstFailure.reason` from slot 0. Both are superseded ~110 lines later in the same section, by
-  the ✅ CLOSED verdict and its per-shape statement. Left as-is on purpose this round: the table is
-  the release's most-cited measurement artifact and re-deriving all four rows deserves its own pass
-  with a fresh probe, not a hand-edit at the end of a doc-only task. **Read the verdict prose, not
-  this table, until that pass happens.**
+  the ✅ CLOSED verdict and its per-shape statement. **T-A8 fix round 3 added a ⚠️ STALE marker to both
+  cells and to the sentence above the table, line-count neutral** — no cell was re-derived. The
+  RE-DERIVATION is still deferred: the table is the release's most-cited measurement artifact and all
+  four rows deserve a fresh probe. **Read the verdict prose, not these cells, until that pass happens.**
 - ⚠️ **DEFERRED, recorded not fixed — pre-existing `seedSession` rot** at
   `docs/superpowers/plans/2026-08-09-v471-diagnostics.md:72` and `:1267`: both cite
   `tests/continue-resume-spend.test.js:34-43`; opened at T-A8, the helper is `:36-46`. A dated
@@ -2928,13 +2928,13 @@ deliberately left alone:
     `adj.seat` in seat space at `:84` (`votes[(seatSpace && adj.seat) || adj.judge] =
     adj.verdict;`), and the raiser key uses `f.raiserSeat` in seat space at `:88`
     (`seatSpace ? (f.raiserSeat || f.raiser) : f.raiser`).
-- Minor, noticed while re-deriving citations and **not** fixed: `src/council/seats.js:95` (**this
-  entry said `:97`**) cites `run-retry.js:93` for "a retry wave is the loss subset". Re-measured
-  2026-08-17 against the post-T-A2 tree: `:93` names neither thing, the `groupStage1Losses(` call
-  is `run-retry.js:60` (**this entry said `:67`**; it was `:69` at T-A2's base `3b8cf781`, so `:67`
-  was wrong when written too), and the line that actually makes a retry wave the loss subset is
-  `run-retry.js:95`, `launchWave({ ...common, models: unit.models.slice() })`. Still left unfixed
-  in `seats.js` — but no longer recorded with three wrong numbers.
+- Minor, noticed while re-deriving citations — ✅ **FIXED at T-A8, by SYMBOL**: `src/council/seats.js`'s
+  `bindSeats` docblock cited `run-retry.js:93` for "a retry wave is the loss subset". Both the
+  `groupStage1Losses(` call and the `launchWave({ ...common, models: unit.models.slice() })` that
+  actually makes a retry wave the loss subset live in `run-retry.js :: retryStage1Losses`; `seats.js`
+  now names that symbol, and every number still written below is HISTORICAL, none of it a live anchor.
+  ⚠️ EVERY correction this entry made to a `run-retry.js` number was falsified within a day: `:67`→`:60`
+  and `:93`→`:95` were re-measured 2026-08-17, and T-A6's +8 lines rotted BOTH the same day.
 
 #### PR3 post-review adjudication (2026-08-13)
 
