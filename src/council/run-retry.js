@@ -135,9 +135,13 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       if (!launched.has(k)) { launched.set(k, { alias, seat: s || null, slots: 0, ffs: [] }); }
       if (mint) { const rec = launched.get(k); rec.slots += 1; rec.ffs.push(ff || null); }
     };
-    // firstFailures grows in LOCKSTEP with models/seats (recordFailure pushes
-    // all three together), so slot i is one seat's whole record — and `mint` is
-    // true here ONLY: this feeder is the launch plan, the other two are the net.
+    // NOT lockstep by construction — recordFailure pushes `firstFailures` always but models/seats
+    // only `if (trackModel)`. Slot i is one seat's whole record EMERGENTLY, on two measured facts:
+    // no unit MIXES the flag (bench/lens sites pass true, both critic sites false), so a tracking
+    // unit grows all three together; and the critic unit's `firstFailures` caps at 1 — its INEXACT
+    // arm needs `twins.has(o.critic)` with a null `criticSeatObj`, and `twins` IS `twinAliases(o.seats)`,
+    // so the first implies the second non-null. The one MEASURED break (a `-c1` wave, no `o.critic`:
+    // ff 1 / models 0) the `models.length === 0` skip above ate. Pinned: run-retry-lockstep.test.js.
     unit.models.forEach((m, i) => addLaunched(unit.seats[i] || null, m, unit.firstFailures[i], true));
     for (const w of unit.srcWaves) {
       (w.models || []).forEach((m, i) => addLaunched((w.seats || [])[i] || null, m));
@@ -197,8 +201,8 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       seenSeats.set(key, slot + 1);
       const ff = (launched.get(key) || { ffs: [] }).ffs[slot] || null;
       // SL-2 fix-wave: a retry response should only ever name seats THIS unit
-      // launched for (unit.models is built in lockstep with firstFailures via
-      // groupStage1Losses's recordFailure) — but if a leg turns up for a seat
+      // launched for (`unit.models` is index-parallel to `firstFailures` EMERGENTLY,
+      // for the two reasons the mint above states) — but if a leg turns up for a seat
       // with no firstFailures entry, or (v4.8 T-A4) beyond the LAST slot its key
       // minted, that seat never lost its seat in the first place. `slots` is an
       // upper bound as well as a lower one, and this is where the upper half is

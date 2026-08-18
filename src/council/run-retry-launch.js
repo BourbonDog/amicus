@@ -35,10 +35,13 @@ function briefingFor(o, unit) {
  */
 function bindRetryWave(unit, legs) {
   // The retry wave's roster IS unit.seats — run-retry-group.js :: recordFailure
-  // pushes models and seats in lockstep, and the legId `-N` suffix slot-indexes
-  // that same launch plan. A null entry means "we could not identify this seat";
-  // pad it with a position-stable placeholder carrying a UNIQUE id so no slot
-  // shifts, then drop the placeholder binds so nothing is guessed.
+  // pushes models and seats in lockstep (it pushes NEITHER for the critic unit,
+  // whose pair is seeded off one `o.critic` gate at creation and never grows), and
+  // the legId `-N` suffix slot-indexes that same launch plan. `firstFailures` is a
+  // WEAKER case and is not read here — see run-retry.js's mint.
+  // A null entry means "we could not identify this seat"; pad it with a
+  // position-stable placeholder carrying a UNIQUE id so no slot shifts, then
+  // drop the placeholder binds so nothing is guessed.
   // ⚠️ Never pass unit.seats raw and never use a null-id sentinel: seats.js
   // filters falsy roster entries internally (so raw === filtered, and both
   // slide every later slot into a hole), and two `{id: null}` sentinels
