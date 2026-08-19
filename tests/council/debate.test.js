@@ -151,7 +151,8 @@ describe('applyDebate — the re-vote join is SEAT-exact (v4.8 PR3 Task 6)', () 
   // disputed" case does NOT reach it (baseInput already carries {A2, gpt}), so
   // this branch is otherwise uncovered by the whole suite — and it is where a
   // missing `aliasOf` writes a SEAT ID into the alias-space `judge` field, which
-  // reaches tally.js's `v.judge !== f.raiser` and report.js's `byJudge[adj.judge]`.
+  // reaches peer-split.js :: peersOf's `v.judge !== f.raiser` and report.js's
+  // `byJudge[adj.judge]`.
   test('a genuinely new row carries the ALIAS in `judge` and the seat in `seat`', () => {
     const { input } = applyDebate({
       provisionalRecord: null, tallyInput: twinAdjInput(), defenseByRaiser: {},

@@ -2971,7 +2971,8 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   when `aliasOf` is absent.** `debate.js`'s fail-open branch (`const alias = aliasOf ? aliasOf(key) : key;`)
   falls back to the raw seat key when no `aliasOf` is supplied. Measured: without `aliasOf` the
   pushed row is `{judge: 'deepseek#1', ...}` and the tier moves Singleton → Confirmed (a seat id in
-  `judge` reaches `tally.js`'s `v.judge !== f.raiser` and `report.js`'s `byJudge[adj.judge]`, both
+  `judge` reaches `peer-split.js :: peersOf`'s `v.judge !== f.raiser` (required into `tally.js`
+  since v4.8 Phase 2 T-B1) and `report.js`'s `byJudge[adj.judge]`, both
   alias-space joins); with `aliasOf` supplied, the row is `{judge: 'deepseek', seat: 'deepseek#1'}`
   and the tier is correct. **Not reachable**: `grep -rn applyDebate src/` (excluding tests) finds
   exactly one non-test caller — `run-debate.js:202-203` — and it DOES pass `aliasOf` (the call site
