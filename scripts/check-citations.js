@@ -197,11 +197,24 @@ function checkCitation(cite, container, ctx) {
     return fail(`range runs backwards (${cite.start} > ${cite.end})`);
   }
 
+  // ONE resolution for BOTH forms. Resolving separately per branch is exactly
+  // what let an ambiguous basename through the @ref side after the plain side
+  // had started refusing it — fix one site, miss its twin, which is the failure
+  // this gate exists to catch. Ambiguity is settled here, before either branch.
+  const targets = resolveTarget(cite.path, ctx.tracked);
+  if (targets.length > 1) {
+    return fail(`'${cite.path}' is ambiguous (${targets.join(', ')}) — qualify the path`);
+  }
+
   // Historical form: resolve the file AT that ref and range-check there.
   if (cite.ref) {
+    // Zero targets is legitimate HERE AND ONLY HERE: a historical citation may
+    // name a file that no longer exists at HEAD, which is half the point of the
+    // form. Hand the cited path over and let `git show <ref>:<path>` decide.
+    const at = targets[0] || cite.path.replace(/^\.\//, '');
     let content;
     try {
-      content = ctx.readAtRef(cite.ref, cite.path);
+      content = ctx.readAtRef(cite.ref, at);
     } catch {
       // A shallow clone (actions/checkout defaults to fetch-depth 1) simply does
       // not HAVE the historical commit, which is indistinguishable from a bogus
@@ -230,13 +243,7 @@ function checkCitation(cite, container, ctx) {
     return null;
   }
 
-  const targets = resolveTarget(cite.path, ctx.tracked);
   if (targets.length === 0) return fail(`no tracked file matches '${cite.path}'`);
-  // An ambiguous basename is not verifiable: ONE candidate satisfying the check
-  // says nothing about the file the author meant, so a pass here is luck.
-  if (targets.length > 1) {
-    return fail(`'${cite.path}' is ambiguous (${targets.join(', ')}) — qualify the path`);
-  }
   const target = targets[0];
   const content = ctx.readFile(target);
 
@@ -340,11 +347,10 @@ function buildContext(tracked = listTrackedFiles(), config = CONFIG) {
       if (!cache.has(p)) cache.set(p, readFileSync(resolve(p), 'utf-8'));
       return cache.get(p);
     },
-    readAtRef(ref, p) {
-      const clean = p.replace(/^\.\//, '');
-      const candidates = tracked.filter(f => f === clean || f.endsWith('/' + clean));
-      const target = candidates[0] || clean;
-      return execFileSync('git', ['show', `${ref}:${target}`], {
+    // Pure IO: the caller has already resolved the path through resolveTarget,
+    // so this cannot disagree with the plain form about which file is meant.
+    readAtRef(ref, path) {
+      return execFileSync('git', ['show', `${ref}:${path}`], {
         encoding: 'utf-8', maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'ignore'],
       });
     },

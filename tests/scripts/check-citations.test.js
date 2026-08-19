@@ -28,13 +28,9 @@ function stubCtx(tree, refs = {}, config = CONFIG, shallow = false) {
     shallow,
     skippedRefs: [],
     readFile: p => tree[p],
-    readAtRef: (ref, p) => {
-      // Mirror the real reader: resolve the cited path against the tracked
-      // set first, so a basename citation finds its full-path ref entry.
-      const clean = p.replace(/^\.\//, '');
-      const tracked = Object.keys(tree);
-      const target = tracked.find(f => f === clean || f.endsWith('/' + clean)) || clean;
-      const key = `${ref}:${target}`;
+    // Pure IO, like the real one: checkCitation resolves the path before calling.
+    readAtRef: (ref, path) => {
+      const key = `${ref}:${path}`;
       if (!(key in refs)) throw new Error('bad ref');
       return refs[key];
     },
@@ -261,6 +257,44 @@ describe('check-citations', () => {
     it('keeps a sentence-ending period out of the symbol name', () => {
       expect(parseCitations('// see run-launch.js :: materializeDebate.')[0].symbol)
         .toBe('materializeDebate');
+    });
+  });
+
+  // Round 2 of the same council review: the round-1 fixes were PARTIAL. Ambiguity
+  // was refused on the plain path and waved through on the @ref path, and the two
+  // paths resolved cited names differently. Both are one root cause — two
+  // resolvers — so both are pinned against the SAME citation in both forms.
+  describe('checkCitation — both forms resolve identically', () => {
+    const tree = {
+      'src/council/run.js': 'x\n'.repeat(281),
+      'electron/ui/run.js': 'x\n'.repeat(20),
+    };
+    const refs = {
+      'old:src/council/run.js': 'x\n'.repeat(295),
+      'old:electron/ui/run.js': 'x\n'.repeat(20),
+    };
+
+    it('refuses an ambiguous basename in BOTH forms, not just the plain one', () => {
+      const ctx = stubCtx(tree, refs);
+      expect(one('// run.js:250', 'src/x.js', ctx).reason).toMatch(/ambiguous/);
+      expect(one('// run.js@old:250', 'src/x.js', ctx).reason).toMatch(/ambiguous/);
+    });
+
+    it('applies the same basename fallback in BOTH forms', () => {
+      // A prose prefix ("deriveSeatLoss/verdict.js") is not a real directory.
+      const t = { 'src/council/verdict.js': 'x\n'.repeat(231) };
+      const r = { 'old:src/council/verdict.js': 'x\n'.repeat(231) };
+      const ctx = stubCtx(t, r);
+      expect(one('// deriveSeatLoss/verdict.js:41', 'src/x.js', ctx)).toBeNull();
+      expect(one('// deriveSeatLoss/verdict.js@old:41', 'src/x.js', ctx)).toBeNull();
+    });
+
+    it('still accepts a historical citation naming a file GONE from HEAD', () => {
+      // The whole point of @ref: the file need not exist today. Resolution must
+      // not require a HEAD match, only refuse an ambiguous one.
+      const ctx = stubCtx({ 'src/council/run.js': 'x\n' },
+        { 'old:deleted-module.js': 'x\n'.repeat(50) });
+      expect(one('// deleted-module.js@old:1-50', 'src/x.js', ctx)).toBeNull();
     });
   });
 
