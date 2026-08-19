@@ -2124,8 +2124,14 @@ asserted round number — this task could not verify against a transcript whethe
 process calls it round 2 or round 3, and guessing wrong would repeat the exact citation-rot class
 this table exists to prevent.
 
-- [ ] **NEXT TASK — extract `run-retry.js`, then close B1 and B2 in the same PR.** Blocked on the
+- [x] **NEXT TASK — extract `run-retry.js`, then close B1 and B2 in the same PR.** Blocked on the
   extraction and on nothing else; sized, not estimated.
+  ✅ **SHIPPED as PR #171, v4.8 Phase 2 T-A1…T-A8, 2026-08-17 (re-confirmed 2026-08-19, v4.8
+  T-B3). This whole entry — Steps 0-2, both ROUND-2 items, and everything below through
+  "Tracker state" — is now HISTORICAL RECORD, kept for provenance. It is not a live resume
+  point; the checkbox above was never flipped when the work shipped, even though the content
+  already carries its own ✅ SHIPPED / DISCHARGED / CLOSED annotations throughout. The actual
+  current NEXT TASK is below.**
   - **Step 1 — the extraction (its own commit, byte-for-byte move, re-exported).** `run-retry.js` is
     **295/300** and the fix needs **+7**, so 5 free is not enough. `run-retry-group.js` (**299/300**)
     cannot host the helper either. Use the PR5b shape: move, re-export so no caller changes, pin by
@@ -2464,6 +2470,32 @@ size argument for deferring it is BACK.** T-A2 took `run-retry.js` from 295/300 
 T-A6 spent all of it: re-measured at the end of this PR the file is **295/300** again, five free
 lines. Whoever takes this on needs an extraction first, not an edit.
 
+- [ ] **NEXT TASK — T2.4 / PR C: the consumers.** Filed 2026-08-19 (v4.8 T-B3) as the correct
+  resume point, replacing the run-retry.js entry above. Scope is SI-12's unidentifying-key join
+  and SI-22.5's unattributed column across all three renderers with the vote still in `basis`
+  (ruling **R3**) — see the phasing doc's own T2.4 entry
+  (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:261`) for the two-item scope;
+  T2.3 changed nothing about it. ⚠️ **Needs a PRE-PASS, not a one-line insert**: `report.js`'s
+  `judges` array (`report.js:89`) is built BEFORE the per-finding loop where an orphaned seat
+  becomes detectable (`report.js:98`), so rendering the unattributed column is a two-phase build.
+  Same shape in `src/workspace/matrix-model.js` (not `src/council/`) — check it too, not only the
+  council renderers.
+  - **Also waiting here: `report.js`'s citation rot, pre-existing.** Three comments cite
+    `byJudge[adj.judge]` verbatim; the real expression (`report.js:98`) is
+    `byJudge[(seatSpace && adj.seat) || adj.judge]` — has been since the seat-space fix, so all
+    three were already stale when written. Re-derived current sites 2026-08-19 (v4.8 T-B3):
+    `src/council/debate.js:89`, `src/council/run-debate.js:202`,
+    `tests/council/debate.test.js:155`. NOT a fourth site:
+    `tests/council/seat-matrix.test.js:75` uses the same bare string DELIBERATELY, to name the
+    pre-fix behaviour the T17/T18 fixture exists to disprove — read in context, it is not a live
+    claim about `report.js` today.
+  - **The four named mutants this release's peer-split safety net stands on are all in the tree
+    now, not behind a report path.** `NAIVESPLIT`, `ZEROEMIT` and `SCHEMADROP` already were;
+    `SPLITDROP` joined them this round (measured 2026-08-19, v4.8 T-B3: 2 suites / 9 tests, out of
+    541 / 7655). Point at any of them by symbol — `peer-split.js :: peersOf` for the first and
+    last, `peer-split.js :: unattributedPeerDrops` for `ZEROEMIT`, and its own comment block in
+    `tests/council/run-schema-debate.test.js:199` for `SCHEMADROP` — never by report path.
+
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
 The `run-retry.js` extraction PR (T-A1…T-A8) closed with a doc-only pass over the record. Verdicts
@@ -2512,11 +2544,72 @@ above were updated in place; these are the items it could not close, filed rathe
   falsified a citation class, and the class was only ever closed by opening each line. A gate that
   flags `file.js:<N>` citations whose target line no longer matches a recorded token would have
   caught all of them. (T-A2's durable lesson; still unbuilt.)
+- [ ] **Filed: `check-citations.js` has two distinct blind spots on the SYMBOL anchor form, and
+  both produce the same false assurance — nothing parses, so the gate reports nothing wrong.**
+  Measured 2026-08-19 (v4.8 T-B3), re-deriving a set the controller measured earlier that same day;
+  T-B1/T-B2 had edited every carrier file since, so the old line numbers no longer applied. **State
+  the lever honestly**: both mechanisms below are arguably in the gate, not in the authors who wrote
+  a wrapped or quoted anchor in good faith — if people keep writing the same shape, the consumer is
+  what's wrong (failure mode #7). Filed here, **not fixed** — a gate change is its own concern.
+  - **Mechanism A — no cross-line joining.** `parseCitations` (`scripts/check-citations.js:110`)
+    splits file content on `\n` and runs its regex **per line**; a `file.js ::` / `symbol` token
+    that wraps onto the next physical comment line never appears as one match on either line, so it
+    parses to nothing. Candidate fix, **not implemented here**: join wrapped comment lines before
+    matching. Re-derived current set: **4 sites, all in the doc-tree** — `BACKLOG.md:2363`, `:2441`,
+    `:3415`, and the phasing doc `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:364`.
+    `check-citations.js --all` never scans `BACKLOG.md`/`docs/` for an unrelated, deliberate reason
+    (outside `CONFIG.include`), so these 4 don't produce a false gate PASS; they produce a false
+    negative for the informal `parseCitations` spot-check this PR has leaned on repeatedly against
+    `BACKLOG.md` itself — the same false-assurance shape, one level up from automation. Three more
+    wrapped sites were in gate scope (`tests/**`) when the controller measured "eight" earlier
+    2026-08-19; T-B3 rewrapped all three (see its commit) — two are now genuinely visible, and the
+    third turned out to belong to Mechanism B below, not this one (rewrapping did not restore its
+    visibility). ⚠️ The controller's "eight" does not itself add up against the sites it names (3
+    gate-scope + 3 `BACKLOG.md` + 1 phasing doc = 7); treat **4, doc-tree only, current** as the
+    re-measured fact, not "eight" carried forward.
+  - **Mechanism B — the SYMBOL grammar has no quoted-string form, on ANY line.** The regex's symbol
+    capture (`scripts/check-citations.js:89`, `[A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)*`) admits only
+    identifier characters. `file.js :: "quoted test title"` and `file.js :: *"quoted test title"*`
+    are an established convention in this codebase for citing one specific test by its description
+    rather than a symbol — and neither form can EVER match that grammar, wrapped or not. Confirmed
+    by control: 7 of 8 live sites are already on one physical line and are still invisible; the 8th
+    (`run-stages.test.js`'s `attemptedSeats` anchor, this PR's own §1) was rewrapped this round
+    specifically to test the hypothesis and REMAINED invisible after. Unlike Mechanism A, all 8
+    sites sit inside `CONFIG.include` (2 in `src/`, 6 in `tests/`), so `check-citations.js --all`
+    genuinely runs over every one of them today and still finds nothing to check — a live,
+    present-tense false assurance, not a doc-tree exclusion.
+    Current sites: `src/council/run-retry-keys.js:28`, `src/workspace/seat-space.js:85`,
+    `tests/council/run-retry-lockstep.test.js:35`,
+    `tests/council/run-retry-twins-threading.test.js:124`, `tests/council/run-retry.test.js:1084`,
+    `tests/council/run-stages.test.js:1199`, `:1207`, `:1496`. Candidate fix, **not implemented
+    here**: either give SYMBOL a quoted-string alternative, or define quoted-title as its own
+    citation form with its own check (does the quoted text occur as a test title in the resolved
+    target — a STRONGER claim than a symbol anchor makes today, which is checked by substring, not
+    exact match). ⚠️ **Not asked for by name** — found while re-deriving Mechanism A's set, using
+    the same tool the way the controller's own instructions asked it to be used. Filed here rather
+    than silently narrowed away, because it is the identical false-assurance shape and, at 8 live
+    gate-scope sites against Mechanism A's 4 doc-tree ones, the larger of the two.
 - **Filed: a rare, unexplained single-test red in the full suite.** One `npm test` run during T-A4
   reported 1 failed / 7516 with the identity lost to filtered output; seven further runs were green.
   A one-sentence docs change cannot cause it, so it is treated as a **pre-existing flake**, not
   something this PR introduced. It matters because `pre-push` runs the full suite and BLOCKS, so a
   rare flake fails pushes at random. ⚠️ Capture the full `●` block before re-running.
+  ⚠️ **IDENTITY NOW KNOWN, cause still not.** Sighted again 2026-08-19, v4.8 T-B1 fix round 3
+  (`8e97faaf`), this time with the full block captured:
+  ```
+  Test Suites: 1 failed, 540 passed, 541 total
+  Tests:       1 failed, 8 skipped, 7624 passed, 7633 total
+    ... at Object.readFileSync (tests/docs-plan-refs.test.js:27:23)
+  ```
+  It is **`tests/docs-plan-refs.test.js`**. Ruled out as caused by that round's commit: the test's
+  own `SCANNED` constant (`tests/docs-plan-refs.test.js:10`) walks only `src`, `docs`, `skills` —
+  never `BACKLOG.md`, the only file that commit touched. Re-ran the test in isolation: clean.
+  Re-ran the full suite twice more: both green, 541/541 suites, 7625/7625 passed. **This
+  identifies the 2026-08-19 sighting; the original T-A4 sighting's identity is still genuinely
+  unrecoverable** (its own trace was the thing filtered) — the two are being treated as the same
+  recurring flake by symptom (a single spurious full-suite red, clean on every retry), not by
+  matched trace. **The cause remains unknown. Do not read this as fixed**, and do not re-derive the
+  identity from scratch in a future task — this note is the record of it.
 - **Filed (test hardening, needs code):** `run-retry-keys.test.js`' require-scan uses `/require\(/`,
   which misses `require (` and dynamic `import()`; `run-stage1-rows.js` imports `twinAliases` /
   `legLossKey` through `run-retry-group.js` rather than the `run-retry-keys.js` leaf, so the
