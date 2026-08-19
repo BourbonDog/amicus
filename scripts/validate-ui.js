@@ -32,7 +32,7 @@ async function validateUI() {
 
         // 1. Initial state
         console.log('Opening model selector dropdown...');
-        await Runtime.evaluate({ expression: 'document.getElementById(\'model-selector-display\').click()' });
+        await Runtime.evaluate({ expression: `document.getElementById('model-selector-display').click()` });
         await new Promise(resolve => setTimeout(resolve, 500));
 
         const res1 = await Runtime.evaluate({
@@ -53,7 +53,7 @@ async function validateUI() {
 
         // 2. Click "More models"
         console.log('Clicking "More models"...');
-        await Runtime.evaluate({ expression: 'document.querySelector(\'.model-more-link\').click()' });
+        await Runtime.evaluate({ expression: `document.querySelector('.model-more-link').click()` });
         await new Promise(resolve => setTimeout(resolve, 500));
 
         const res2 = await Runtime.evaluate({
@@ -109,7 +109,7 @@ async function validateUI() {
     } catch (err) {
         console.error('Error:', err);
     } finally {
-        if (client) {await client.close();}
+        if (client) await client.close();
     }
 }
 

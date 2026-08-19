@@ -28,7 +28,7 @@ async function check() {
     } catch (err) {
         console.error(err);
     } finally {
-        if (client) {await client.close();}
+        if (client) await client.close();
     }
 }
 check();

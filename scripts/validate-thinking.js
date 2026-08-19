@@ -12,7 +12,7 @@ async function validateThinkingVisibility() {
         
         // Open dropdown and "More models"
         const setup = async () => {
-            await Runtime.evaluate({ expression: 'document.getElementById(\'model-selector-display\').click()' });
+            await Runtime.evaluate({ expression: `document.getElementById('model-selector-display').click()` });
             await new Promise(resolve => setTimeout(resolve, 300));
             await Runtime.evaluate({ expression: `
                 const more = document.querySelector('.model-more-link');
@@ -72,7 +72,7 @@ async function validateThinkingVisibility() {
     } catch (err) {
         console.error('Error:', err);
     } finally {
-        if (client) {await client.close();}
+        if (client) await client.close();
     }
 }
 
