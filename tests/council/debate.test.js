@@ -341,12 +341,21 @@ describe('debateRunStatsRows', () => {
   });
 });
 
-// v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the SECOND alias-space peer filter.
+// v4.8 PR4c Task 3 (plan §3.3, R4c-4) — what was then the SECOND alias-space
+// peer filter. ⚠️ Heading and history corrected in v4.8 Phase 2 T-B2: there is
+// no second filter any more, so nothing here is a claim about today's code.
 //
-// `debate.js`'s `peerVerdicts` moves to the same guard as `tally.js`'s `peers`,
-// in the same commit. debate.js :: applyDebate and :: disputingJudges are already
-// seat-space, so this was the last alias-space filter left; fixing one site without
-// the other makes the defense brief's peer split disagree with the tally the chair reads.
+// PR4c gave `debate.js`'s own copy of the filter the same seat/alias guard as
+// `tally.js`'s `peers`. T-B2 deleted the copy outright: `peerVerdicts` now CALLS
+// peer-split.js :: peersOf — the one predicate `tally.js` also calls — so it has
+// no guard of its own to keep in step, and the hazard that sentence was written
+// about (fixing one site and not the other) is closed by construction rather
+// than by two spellings maintained by hand. That move landed in T-B2's commit,
+// not PR4c's. debate.js :: applyDebate and debate.js :: disputingJudges were
+// already seat-space, so this was the last hand-rolled peer filter in the file.
+//
+// T4a/T4b below still pin the SEAT-vs-ALIAS behaviour, now through the shared
+// function; the T5 and T6 blocks at the end of this file pin what T-B2 changed.
 //
 // ⚠️ The trailing `.map(a => a.verdict)` is load-bearing: briefings-debate.js's
 // `verdictCounts` indexes its counter BY THE ELEMENT, so a list of adjudication

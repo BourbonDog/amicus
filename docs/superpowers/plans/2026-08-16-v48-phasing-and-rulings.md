@@ -91,6 +91,18 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    `:341` (T2) pin exactly SI-22.1's and SI-22.2's outcomes (`basis {a:0,d:0,n:0}`, `Singleton`).
    The peer-split fix must **replace** them, not pass them. Writing it "keeping the suite green" is
    impossible. Pin the replacement with a **named mutant**, not a preservation test.
+
+   ✅ **EXECUTED 2026-08-19 at `e23e56cd` (v4.8 Phase 2 T-B2).** Annotation only — the sentences
+   above stand exactly as written on 2026-08-16, per `docs/CITATIONS.md`'s preserved-record rule.
+   What actually happened: both tests were REPLACED, not passed; their titles now end
+   `⇒ excluded AND announced`; and the cited lines have moved — T1 `tally.test.js:331` (was
+   `:329`), T2 `tally.test.js:357` (was `:341`), both re-derived by opening the file. The
+   replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red), not by a
+   preservation test. ⚠️ Replacing the tests did **not** close SI-22.1 or SI-22.2: by owner ruling
+   R2 the vote is still dropped, `basis` still reads `{a:0,d:0,n:0}`, the tier is still
+   `Singleton`, and the undercount deliberately remains. Only the announcement —
+   `findings[].unattributedPeerDrops` — is new. Do not re-issue this instruction.
+
 3. **Three source comments are false, and SI-08's DONE endorses them.**
    `run-assemble.js:190` and `tests/council/run-assemble.test.js:102` both claim "`position` is
    unrecoverable on every bench." Measured by executing `buildSeats` + `buildTallyInput`: on

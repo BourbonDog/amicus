@@ -329,9 +329,11 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
   const base = { meta, rankings: [], runStats: [] };
 
   test('T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded AND announced', () => {
-    // SI-22.2 — the PEER's leg is the orphaned one: Stage-1 seat bound, the twin
-    // judge's Stage-2 seat orphaned. GUARDED takes the ALIAS branch and
+    // SI-22.2 — the PEER's leg is the orphaned one: Stage-1 seat bound, with
+    // the twin judge's Stage-2 seat orphaned. GUARDED takes the ALIAS branch and
     // excludes; NAIVE reads `undefined !== 'deepseek#1'`.
+    // ⚠️ Keep that phrase on ONE line — BACKLOG.md's SI-22.2 filing quotes it
+    // verbatim to identify this fixture, and a re-wrap silently voids the quote.
     //
     // ⚠️ `basis` and `tier` are UNCHANGED from this test's pre-T-B2 form. That
     // is an owner ruling, not an oversight: counting the ambiguous vote
@@ -353,9 +355,11 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
   });
 
   test('T2: direction B — finding has NO raiserSeat, the twin vote HAS a seat ⇒ excluded AND announced', () => {
-    // SI-22.1 — the RAISER's OWN leg is the orphaned one: only ONE unbound
-    // Stage-1 twin review, so that review's judge is a filtered placeholder
-    // while the other twin binds. The mirror of T1, not a restatement of it.
+    // SI-22.1 — the RAISER's OWN leg is the orphaned one. The mirror of T1, not
+    // a restatement of it: only ONE unbound Stage-1 twin review, so that
+    // review's judge is a filtered placeholder while the other twin binds.
+    // ⚠️ Keep that phrase on ONE line — BACKLOG.md's SI-22.1 filing quotes it
+    // verbatim to identify this fixture, and a re-wrap silently voids the quote.
     //
     // ⚠️ `basis` and `tier` are UNCHANGED here for the same ruling as T1:
     // measured on THIS fixture, counting the ambiguous vote gives {a:1,d:0,n:0}

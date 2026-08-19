@@ -64,6 +64,11 @@
             "const": true,
             "description": "v4.8, optional, TRUE ONLY (never emitted as false, so a document without it is byte-identical to a pre-v4.8 one). Set when, after the seat-aware raiser exclusion, at least one AGREEING peer of this finding shares the raiser's alias — corroboration that is real but came from another seat of the same model, so it is not independent. WRONG IN BOTH DIRECTIONS, by construction: the comparison is on the ALIAS only. It MISSES one model reached under two aliases (e.g. --models gpt-5,openai/gpt-5), because votes carry no resolved-executable id. And it FIRES FALSELY on a SPLIT alias — one alias whose two seats resolved to different executables — telling a reader to discount a genuinely independent cross-executable corroboration. The reliability ledger keys identity on (alias, resolvedModel) for the same run, so the two documents can disagree about what 'the same model' means. Treat this as 'worth a second look', never as proof."
           },
+          "unattributedPeerDrops": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "v4.8, optional, EMITTED ONLY WHEN NON-ZERO (never emitted as 0, so a run that does not orphan exactly one side of a twin pair produces a document byte-identical to a pre-T-B2 one; the minimum states that emit rule rather than merely describing it). How many of this finding adjudications the peer split excluded on its ALIAS branch while exactly ONE side of the pair carried a seat id - the finding has a raiserSeat and the vote has none, or the reverse. Such exclusions are safe but UNATTRIBUTABLE: a seat-less vote bearing the raiser own alias cannot be told apart from the raiser own vote, so it is dropped. WARNING - this is an ANNOUNCEMENT, not a repair. The vote stays excluded, basis does not count it, and tier/confidence are computed without it, by owner ruling (mark explicitly, attribute nothing). Read it as: this finding peer signal is undercounted by N votes. The defense brief computes the same number from the same function, so the two documents cannot disagree."
+          },
           "debate": {
             "type": "object",
             "properties": {

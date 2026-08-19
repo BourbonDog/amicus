@@ -1872,9 +1872,17 @@ sized and deferred rather than carried half-done.
 
 1. **SI-04's prescribed fix is measurably wrong.** `(v.seat || v.judge) !== (f.raiserSeat || f.raiser)`
    **re-arms #137** on both orphan directions — it admits the raiser's own vote as its own peer.
-2. **`tally.test.js:329` (T1) and `:341` (T2) pin the WRONG behaviour as disclosed.** The peer-split
-   fix must **replace** them. It cannot be written "keeping the suite green"; pin the replacement
-   with a **named mutant**.
+2. **T1 and T2 pinned the WRONG behaviour as disclosed** — `tally.test.js:331` (T1, **was
+   `:329`**) and `tally.test.js:357` (T2, **was `:341`**). The peer-split fix had to **replace**
+   them, not pass them; it could not be written "keeping the suite green", and the replacement had
+   to be pinned with a **named mutant**.
+   ✅ **EXECUTED 2026-08-19 — v4.8 Phase 2 T-B2, `e23e56cd`.** Both replaced; both titles now end
+   `⇒ excluded AND announced`; pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red),
+   not by a preservation test. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
+   explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
+   `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
+   describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+   **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0.
 3. **`position`/`lens` ARE recoverable on twin benches** — measured by executing `buildSeats` +
    `buildTallyInput` (re-measured 2026-08-16: on `['deepseek','deepseek','gpt']` every `meta.seats`
    element carries `position` `[1,2,3]`, and the lensed twin keeps `lens` verbatim). ✅ **CORRECTED
@@ -3149,14 +3157,25 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   1. **The raiser's own Stage-1 leg orphans** — `findings[].raiserSeat` and that seat's vote-seat
      vanish *together*, the filter falls back to the alias compare, and the undercount survives.
 
-     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
-     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
-     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
-     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
-     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
-     not a preservation test.
+     ✅ **THE TEST REPLACEMENT IS EXECUTED — 2026-08-19, v4.8 Phase 2 T-B2, `e23e56cd`.** The
+     instruction was to REPLACE `tests/council/tally.test.js` T1 and T2 rather than pass them,
+     because both pinned the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`),
+     so the fix could not be written "keeping the suite green". Both were replaced and the
+     replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red), not by a
+     preservation test. Both titles gained `AND announced`; current values, read from the tree
+     after the last edit to that file:
+     - T1 — `tally.test.js:331` (**was `:329`**)
+       `T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded AND announced`
+     - T2 — `tally.test.js:357` (**was `:341`**)
+       `T2: direction B — finding has NO raiserSeat, the twin vote HAS a seat ⇒ excluded AND announced`
 
-     **THIS shape's own fixture is T2 (`:341`) — the mapping is the REVERSE of the ordinal guess.**
+     ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
+     explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
+     `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
+     describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+     **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0.
+
+     **THIS shape's own fixture is T2 (`tally.test.js:357`, **was `:341`**) — the mapping is the REVERSE of the ordinal guess.**
      Measured 2026-08-16 by reading the fixtures: T2's finding carries **no** `raiserSeat` while the
      adjudication carries `seat: 'deepseek#2'`, i.e. the **raiser's own** leg is the orphaned one
      (its in-test comment: *"only ONE unbound Stage-1 twin review"*). T1 is **SI-22.2's** shape
@@ -3181,14 +3200,22 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
      vote cannot be told apart from the raiser's own.
 
-     ⚠️ **The fix must REPLACE `tests/council/tally.test.js` T1 (`T1: direction A — finding HAS
-     raiserSeat, the twin vote has NO seat ⇒ excluded`, `:329`) and T2 (`T2: direction B — finding
-     has NO raiserSeat, the twin vote HAS a seat ⇒ excluded`, `:341`) — not pass them.** Both
-     currently pin the WRONG behaviour *as disclosed* (`basis {a:0,d:0,n:0}`, `Singleton`). This fix
-     **cannot** be written "keeping the suite green". Pin the replacement with a **named mutant**,
-     not a preservation test.
+     ✅ **THE TEST REPLACEMENT IS EXECUTED — 2026-08-19, v4.8 Phase 2 T-B2, `e23e56cd`.** Identical
+     to the note under SI-22.1 above, and it applies to this shape for the same reason: T1 and T2
+     were REPLACED rather than passed, `basis {a:0,d:0,n:0}` / `Singleton` stand, and the
+     replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red). Both titles
+     gained `AND announced`; T1 is now `tally.test.js:331` (**was `:329`**) and T2
+     `tally.test.js:357` (**was `:341`**).
 
-     **THIS shape's own fixture is T1 (`:329`) — the mapping is the REVERSE of the ordinal guess.**
+     ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
+     explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
+     `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
+     describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+     **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0. In particular, the "deliberate safe-drop" above is still a DROP: a seat-less
+     `deepseek` vote still cannot be told apart from the raiser's own, and `sameModelCorroboration`
+     still does not fire on it. It is now counted, not recovered.
+
+     **THIS shape's own fixture is T1 (`tally.test.js:331`, **was `:329`**) — the mapping is the REVERSE of the ordinal guess.**
      Measured 2026-08-16 by reading the fixtures: T1's finding **has** `raiserSeat: 'deepseek#1'`
      and it is the twin **judge's** vote that carries no seat, i.e. the **peer's** leg is the
      orphaned one (its in-test comment: *"the twin judge's Stage-2 seat orphaned"*). T2 is
