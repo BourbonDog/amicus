@@ -2975,8 +2975,10 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   since v4.8 Phase 2 T-B1) and `report.js`'s `byJudge[adj.judge]`, both
   alias-space joins); with `aliasOf` supplied, the row is `{judge: 'deepseek', seat: 'deepseek#1'}`
   and the tier is correct. **Not reachable**: `grep -rn applyDebate src/` (excluding tests) finds
-  exactly one non-test caller — `run-debate.js:202-203` — and it DOES pass `aliasOf` (the call site
-  even carries a warning comment at `:198-201` explaining why). The package's `exports` map
+  exactly one non-test caller — `run-debate.js :: applyDebate` (a line-range citation here would
+  rot on the next comment edit; **was `:202-203`**) — and it DOES pass `aliasOf` (the call site even
+  carries a warning comment at `run-debate.js:198-202`, **was `:198-201`** — no symbol can carry a
+  claim about a comment's own span). The package's `exports` map
   (`package.json:34-36`) publishes only `./opencode-client`, which blocks a deep
   `require('amicus/src/council/debate')` from outside the package, closing off the obvious
   alternate call path. Two conditions must BOTH hold for this to fire — a caller omitting `aliasOf`
@@ -3023,7 +3025,8 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
     (parameterised on `(waveId, rosterSource, aliasAt, legs)`, own PR, **after Phase 2**), and
     disposition (b) defers the `seatKey` half to **v4.9**. Read those, not this clause.
 - [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
-  `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
+  `runDebate` (`run-debate.js:106-271`, 166 lines — re-measured by brace-matching against the
+  current tree, **was `:106-270`, 165 lines**), and `runRevoteWave`
   (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
   (`CLAUDE.md:793`; the limit is also named at `CLAUDE.md:705`). Nothing in CI enforces it —
   `scripts/check-file-sizes.js` is file-level only (300 lines/file; no per-function check exists
@@ -3377,8 +3380,8 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
     `report.js:159` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
-    `council/debate.js:178`, `council/report.js:159` (×2), `council/run-debate.js:258`,
-    `council/run-debate.js:264`; `electron/workspace-ui/`: `live-dead-seats.js:219`,
+    `council/debate.js:178`, `council/report.js:159` (×2), `council/run-debate.js:259` (**was
+    `:258`**), `council/run-debate.js:265` (**was `:264`**); `electron/workspace-ui/`: `live-dead-seats.js:219`,
     `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:245 :: renderDeadSeatRows` (**was `:242`**). **Adjacent forms
     deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
     *different* emitted field pair); the four seat-space-**gated** reads `report.js:98`/`:104` and
