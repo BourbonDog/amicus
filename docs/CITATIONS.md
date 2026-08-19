@@ -39,6 +39,16 @@ six test legs stay shallow and cheap.
 `scripts/check-citations.js` runs in `.husky/pre-commit` and in the `quality`
 CI job (`npm run check:citations`).
 
+**Pre-commit reads the git INDEX, not the working tree** — the index is what the
+commit will actually contain. This is true of all three pre-commit gates
+(`check-secrets`, `check-file-sizes`, `check-citations`), which share
+`scripts/git-index.js`. Reading the working copy meant staging a violation and
+then cleaning the working copy let the violation through, and — just as bad — a
+*valid staged fix* could be blocked by an unstaged edit that was never going to
+ship, which is how people learn to reach for `--no-verify`. `--all` deliberately
+still reads the working tree: it audits the checkout as it stands, and CI has no
+staging area to differ from.
+
 Per commit it checks the union of two scopes:
 
 - **IN** — citations living in the files the commit changed.

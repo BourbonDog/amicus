@@ -13,6 +13,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const { readIndexContent, stagedPaths } = require('./git-index');
 
 const CONFIG = {
   patterns: [
@@ -132,15 +133,14 @@ function main() {
     process.exit(0);
   }
 
-  // Existing staged-files (pre-commit) path — unchanged
   let stagedFiles;
   try {
-    const output = execFileSync(
-      'git',
-      ['diff', '--cached', '--name-only', '--diff-filter=ACM'],
-      { encoding: 'utf-8' }
-    );
-    stagedFiles = output.trim().split('\n').filter(Boolean);
+    // NUL-delimited, not --name-only: git QUOTES any path it thinks special
+    // (non-ASCII, quotes, control chars), and that quoted literal resolves to
+    // nothing — so the file reads as absent and this gate SKIPS it. Measured on
+    // main: an sk-ant- key in `wéird ünicode.js` passed the scan, while the
+    // identical key in `plain.js` was blocked.
+    stagedFiles = stagedPaths('ACM');
   } catch {
     console.error('Failed to get staged files. Are you in a git repo?');
     process.exit(1);
@@ -152,10 +152,16 @@ function main() {
 
   let foundSecrets = false;
 
+  // Read the INDEX, not the working tree: the index is what this commit will
+  // contain. Reading the working copy meant a secret could be STAGED, scrubbed
+  // from the working copy, and then committed with the gate never seeing it.
+  const stagedContent = readIndexContent(stagedFiles);
+
   for (const file of stagedFiles) {
     try {
-      const fullPath = resolve(file);
-      const content = readFileSync(fullPath, 'utf-8');
+      // Absent from the index = absent from the commit; nothing to scan.
+      if (!stagedContent.has(file)) { continue; }
+      const content = stagedContent.get(file);
       const secrets = scanForSecrets(content, file);
 
       if (secrets.length > 0) {
