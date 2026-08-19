@@ -45,7 +45,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { readIndexContent } = require('./git-index');
+const { readIndexContent, readIndexFile } = require('./git-index');
 
 const CONFIG = {
   // Live code whose citations are maintained and therefore enforced.
@@ -262,7 +262,15 @@ function checkCitation(cite, container, ctx) {
 
   if (targets.length === 0) {return fail(`no tracked file matches '${cite.path}'`);}
   const target = targets[0];
-  const content = ctx.readFile(target);
+  let content;
+  try {
+    content = ctx.readFile(target);
+  } catch {
+    // Tracked, but not in THIS commit — the target is staged for deletion.
+    // That is a finding, not a crash: citing a file the commit removes is
+    // exactly the rot this gate exists to catch, at the moment it is created.
+    return fail(`'${target}' is not in this commit (staged for deletion?)`);
+  }
 
   // Symbol anchor: every segment must appear in the target. Rot-immune form.
   if (cite.symbol) {
@@ -392,8 +400,15 @@ function buildContext(tracked = listTrackedFiles(), config = CONFIG, staged = nu
     skippedRefs: [],
     readFile(p) {
       if (staged) {
-        if (!staged.has(p)) {throw new Error(`not in index: ${p}`);}
-        return staged.get(p);
+        if (staged.has(p)) { return staged.get(p); }
+        // The prefetch covers the SCAN set, but a citation TARGET can be any
+        // tracked .js — scripts/, bin/ and evals/ are all cited from scanned
+        // files. Reading those lazily is what keeps the hook from throwing on a
+        // commit that merely touches a file citing scripts/postinstall.js.
+        const lazy = readIndexFile(p);
+        if (lazy === null) { throw new Error(`not in index: ${p}`); }
+        staged.set(p, lazy);
+        return lazy;
       }
       if (!cache.has(p)) {cache.set(p, readFileSync(resolve(p), 'utf-8'));}
       return cache.get(p);

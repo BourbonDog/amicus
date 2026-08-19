@@ -61,9 +61,36 @@ describe('git-index', () => {
       expect(got.get('b.js')).toBe('next\n');
     });
 
-    it('stops cleanly on truncated output rather than throwing', () => {
-      expect(parseBatch(Buffer.from('abc123 blob 99\nshort'), ['a.js']).get('a.js'))
-        .toBe('short');
+    it('THROWS on truncated output rather than returning a partial blob', () => {
+      // check-secrets scans this content. A truncated blob silently drops
+      // whatever came after the cut, so a secret in the tail would read as a
+      // clean file — a false PASS on the highest-consequence gate.
+      expect(() => parseBatch(Buffer.from('abc123 blob 99\nshort'), ['a.js']))
+        .toThrow(/truncated output for a\.js/);
+    });
+  });
+
+  describe('chunking', () => {
+    it('splits a large path list across calls, bounding each buffer', () => {
+      const calls = [];
+      const paths = Array.from({ length: 250 }, (_, i) => `f${i}.js`);
+      readIndexContent(paths, input => {
+        const want = input.trim().split('\n');
+        calls.push(want.length);
+        return batchOf(want.map(() => ({ content: 'x\n' })));
+      }, 100);
+      expect(calls).toEqual([100, 100, 50]);
+    });
+
+    it('returns every path across the chunk boundary', () => {
+      const paths = Array.from({ length: 30 }, (_, i) => `f${i}.js`);
+      const got = readIndexContent(paths, input => {
+        const want = input.trim().split('\n');
+        return batchOf(want.map(p => ({ content: `body-${p.slice(1)}\n` })));
+      }, 7);
+      expect(got.size).toBe(30);
+      expect(got.get('f0.js')).toBe('body-f0.js\n');
+      expect(got.get('f29.js')).toBe('body-f29.js\n');
     });
   });
 

@@ -20,6 +20,7 @@ const {
   stagedPaths,
   CONFIG,
 } = require('../../scripts/check-citations');
+const { readIndexContent } = require('../../scripts/git-index');
 
 /** A tree stub: tracked paths -> content. */
 function stubCtx(tree, refs = {}, config = CONFIG, shallow = false) {
@@ -426,6 +427,31 @@ describe('check-citations', () => {
 
     it('excludes this test file, which carries broken fixtures', () => {
       expect(scanSet(['tests/scripts/check-citations.test.js'])).toEqual([]);
+    });
+  });
+
+  // Council #173. Prefetching index content for the SCAN set alone meant
+  // ctx.readFile threw for any citation TARGET outside it — and a citation to a
+  // deleted target crashed the same way. Both aborted the hook with a stack
+  // trace instead of reporting anything.
+  describe('index-backed reads reach beyond the scan set', () => {
+    it('reports a target absent from the commit instead of throwing', () => {
+      const ctx = buildContext(['src/gone.js', 'src/x.js'], CONFIG,
+        new Map([['src/x.js', '// see gone.js:5\n']]));
+      // src/gone.js is tracked but has no index entry: staged for deletion.
+      const v = one('// see gone.js:5', 'src/x.js', ctx);
+      expect(v).not.toBeNull();
+      expect(v.reason).toMatch(/not in this commit/);
+    });
+
+    it('does not crash on a real citation whose target is outside scanSet', () => {
+      // tests/legacy-mcp-migration.test.js cites scripts/postinstall.js, which
+      // scanSet (src/, electron/, tests/) never covers.
+      const tracked = listTrackedFiles();
+      const scan = scanSet(tracked);
+      expect(scan).not.toContain('scripts/postinstall.js');
+      const ctx = buildContext(tracked, CONFIG, readIndexContent(scan));
+      expect(() => ctx.readFile('scripts/postinstall.js')).not.toThrow();
     });
   });
 

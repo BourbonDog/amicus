@@ -54,6 +54,15 @@ function parseBatch(buf, paths) {
     if (header.endsWith(' missing')) { i++; continue; }
     const size = Number(header.split(' ')[2]);
     if (!Number.isFinite(size)) { i++; continue; }
+    // Never hand back a partial blob. check-secrets scans this content, and
+    // truncation silently DROPS whatever came after the cut — a secret in the
+    // tail would read as a clean file. Fail loudly instead.
+    if (off + size > buf.length) {
+      throw new Error(
+        `git cat-file --batch: truncated output for ${paths[i]} ` +
+        `(declared ${size} bytes, ${buf.length - off} available)`
+      );
+    }
     out.set(paths[i], buf.toString('utf-8', off, off + size));
     off += size + 1; // content, then the newline the protocol appends
     i++;
@@ -61,15 +70,30 @@ function parseBatch(buf, paths) {
   return out;
 }
 
+/** Paths per `git cat-file` invocation, so one call's output stays bounded. */
+const BATCH_SIZE = 400;
+
 /**
- * Read many paths' index content in one git call.
+ * Read many paths' index content, in chunked git calls.
+ *
+ * Chunking bounds the buffer any single call has to hold. One call for the whole
+ * tree would make peak memory a function of repo size against a fixed maxBuffer,
+ * so a large enough repo would fail outright where per-file reads had degraded
+ * gracefully. A few calls cost a few milliseconds and remove that ceiling.
+ *
  * @param {string[]} paths
  * @param {(input: string) => Buffer} [batch] - injectable for tests
+ * @param {number} [chunkSize]
  * @returns {Map<string, string>} path -> staged content (absent if not in index)
  */
-function readIndexContent(paths, batch = runBatch) {
-  if (!paths.length) {return new Map();}
-  return parseBatch(batch(paths.map(p => `:${p}`).join('\n') + '\n'), paths);
+function readIndexContent(paths, batch = runBatch, chunkSize = BATCH_SIZE) {
+  const out = new Map();
+  for (let i = 0; i < paths.length; i += chunkSize) {
+    const slice = paths.slice(i, i + chunkSize);
+    const got = parseBatch(batch(slice.map(p => `:${p}`).join('\n') + '\n'), slice);
+    for (const [k, v] of got) { out.set(k, v); }
+  }
+  return out;
 }
 
 /**
