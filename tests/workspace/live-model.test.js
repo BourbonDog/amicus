@@ -92,8 +92,8 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
   });
 
   // ⚠️ DE-ROT (F37): v4.1 `--debate` appends EXTRA runStats rows for the SAME bench alias
-  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — src/council/debate.js ::
-  // debateRunStatsRows, merged at src/council/run-finish.js:43-48). renderSeats keys on
+  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — src/council/debate.js :: debateRunStatsRows,
+  // merged at src/council/run-finish.js:43-48). renderSeats keys on
   // `seat.id || seat.model`, and seatsFromRunStats set no id, so on any debate run the seat row
   // was silently overwritten by the re-vote leg. This case is the regression guard.
   //   ⚠️ The debate.js citation above read `:88-96` until v4.8 PR5b. That is the adjudication
