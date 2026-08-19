@@ -134,7 +134,7 @@ describe('check-citations', () => {
     });
 
     it('fails one line past EOF', () => {
-      expect(one('// tally.js:181', 'src/a.js', ctx).reason).toMatch(/past EOF/);
+      expect(one('// tally.js:181', 'src/a.js', ctx).reason).toMatch(/is outside/);
     });
 
     it('range-checks the high line, not the low one', () => {
@@ -173,11 +173,11 @@ describe('check-citations', () => {
       // 288 > 281 (HEAD) but <= 295 (at the ref). This is the whole point of
       // the form: provenance that stays checkable instead of reading as rot.
       expect(one('// run.js@old:242-288', 'src/a.js', ctx)).toBeNull();
-      expect(one('// run.js:242-288', 'src/a.js', ctx).reason).toMatch(/past EOF/);
+      expect(one('// run.js:242-288', 'src/a.js', ctx).reason).toMatch(/is outside/);
     });
 
     it('fails a line past EOF even at that ref', () => {
-      expect(one('// run.js@old:242-999', 'src/a.js', ctx).reason).toMatch(/past EOF.*at old/);
+      expect(one('// run.js@old:242-999', 'src/a.js', ctx).reason).toMatch(/is outside.*at old/);
     });
 
     it('fails an unresolvable ref', () => {
@@ -213,6 +213,54 @@ describe('check-citations', () => {
         { 'old:src/council/run.js': 'x\n'.repeat(295) }, CONFIG, true);
       expect(one('// run.js@old:242-999', 'src/a.js', c)).not.toBeNull();
       expect(c.skippedRefs).toHaveLength(0);
+    });
+  });
+
+  // Every case below was a FALSE PASS raised by the council review on PR #172,
+  // reproduced by execution before being fixed.
+  describe('checkCitation — council #172 false passes', () => {
+    it('checks EVERY segment of a dotted symbol, not just the head', () => {
+      const ctx = stubCtx({ 'src/a.js': 'const foo = { realBar: 1 };\n' });
+      expect(one('// a.js :: foo.realBar', 'src/x.js', ctx)).toBeNull();
+      const v = one('// a.js :: foo.NOPE', 'src/x.js', ctx);
+      expect(v).not.toBeNull();
+      expect(v.reason).toMatch(/missing: NOPE/);
+    });
+
+    it('refuses an ambiguous basename instead of passing on one lucky candidate', () => {
+      const ctx = stubCtx({
+        'src/council/run.js': 'x\n'.repeat(281),
+        'electron/ui/run.js': 'x\n'.repeat(20),
+      });
+      // 250 is in range for one candidate and past EOF for the other.
+      expect(one('// run.js:250', 'src/x.js', ctx).reason).toMatch(/ambiguous/);
+      // Qualifying the path resolves it.
+      expect(one('// src/council/run.js:250', 'src/x.js', ctx)).toBeNull();
+    });
+
+    it('rejects a backwards range, which would otherwise hide the start', () => {
+      const ctx = stubCtx({ 'src/a.js': 'x\n'.repeat(150) });
+      // Checking only the high line (100) would pass despite 200 > 150.
+      expect(one('// a.js:200-100', 'src/x.js', ctx).reason).toMatch(/runs backwards/);
+    });
+
+    it('rejects line 0, which is past no EOF but is not a line', () => {
+      const ctx = stubCtx({ 'src/a.js': 'x\n'.repeat(150) });
+      expect(one('// a.js:0', 'src/x.js', ctx)).not.toBeNull();
+    });
+
+    it('CHECKS the hybrid @ref :: symbol form, which previously bypassed the gate', () => {
+      const ctx = stubCtx({ 'src/council/run.js': 'x\n' },
+        { 'old:src/council/run.js': 'function realThing(){}\n' });
+      expect(one('// run.js@old :: realThing', 'src/x.js', ctx)).toBeNull();
+      // Before the fix this returned null: cite.end is null, so the range check
+      // fell straight through to pass with the symbol never looked at.
+      expect(one('// run.js@old :: madeUp', 'src/x.js', ctx).reason).toMatch(/madeUp/);
+    });
+
+    it('keeps a sentence-ending period out of the symbol name', () => {
+      expect(parseCitations('// see run-launch.js :: materializeDebate.')[0].symbol)
+        .toBe('materializeDebate');
     });
   });
 
@@ -274,6 +322,27 @@ describe('check-citations', () => {
       const t = { ...tree, 'src/headless.js': '// see src/council/run-retry.js:54\n' };
       expect(scopeForCommit(['src/council/run-retry.js'], Object.keys(t), p => t[p]))
         .toContain('src/headless.js');
+    });
+
+    // Council #172: scope matched on bare basenames, so touching one run.js
+    // dragged in every file citing a DIFFERENT run.js.
+    it('resolves the cited path before matching, not the bare basename', () => {
+      const t = {
+        'src/council/run.js': 'code\n',
+        'electron/ui/run.js': 'code\n',
+        'tests/cites-electron.test.js': '// see electron/ui/run.js:1\n',
+      };
+      const scope = scopeForCommit(['src/council/run.js'], Object.keys(t), p => t[p], Object.keys(t));
+      expect(scope).not.toContain('tests/cites-electron.test.js');
+    });
+
+    it('still scopes a citation of a DELETED target, whose path no longer resolves', () => {
+      // git ls-files drops a staged deletion, so the target resolves to nothing.
+      // Falling back to the basename is what keeps the deleting commit — the one
+      // that broke these citations — from being the one commit that never looks.
+      const t = { 'tests/cites-gone.test.js': '// see gone.js:12\n' };
+      const scope = scopeForCommit(['src/council/gone.js'], Object.keys(t), p => t[p], Object.keys(t));
+      expect(scope).toContain('tests/cites-gone.test.js');
     });
   });
 

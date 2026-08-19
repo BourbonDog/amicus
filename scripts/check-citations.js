@@ -9,12 +9,13 @@
  * produced ~30 review findings and NOT ONE was in the code — they were stale
  * statements ABOUT the code, mostly rotted citations.
  *
- * Three citation forms are understood:
+ * The citation forms understood, and what each is checked against:
  *
- *   file.js:NNN        line citation      — checked: target resolves, NNN in range
- *   file.js:NNN-MMM    range citation     — checked: target resolves, MMM in range
- *   file.js :: symbol  SYMBOL ANCHOR      — checked: symbol appears in target
- *   file.js@<ref>:NNN  HISTORICAL         — checked: NNN in range in the file AT <ref>
+ *   file.js:NNN            line citation  — target resolves unambiguously, NNN in range
+ *   file.js:NNN-MMM        range          — as above, and the range runs forwards
+ *   file.js :: symbol      SYMBOL ANCHOR  — every dotted segment appears in the target
+ *   file.js@<ref>:NNN      HISTORICAL     — NNN in range in the file AT <ref>
+ *   file.js@<ref> :: sym   HISTORICAL+    — the symbol existed in that file AT <ref>
  *
  * Prefer the SYMBOL ANCHOR. A corrected line number is true until the next
  * edit and then silently false; a symbol anchor survives every move. Use the
@@ -82,7 +83,9 @@ const CITATION = new RegExp(
   '(?<![A-Za-z0-9_./-])' +
   '([A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.js)' +
   '(?:@([A-Za-z0-9_./-]+))?' +
-  '(?:\\s*::\\s*([A-Za-z0-9_$.]+)|:(\\d+)(?:-(\\d+))?)',
+  // The symbol is dotted-but-not-dot-terminated, so a sentence-ending period
+  // ("… :: materializeDebate.") stays out of the captured name.
+  '(?:\\s*::\\s*([A-Za-z0-9_$]+(?:\\.[A-Za-z0-9_$]+)*)|:(\\d+)(?:-(\\d+))?)',
   'g'
 );
 
@@ -162,10 +165,23 @@ function matchesPattern(filePath, patterns) {
 }
 
 /**
+ * Which segments of a dotted symbol path are absent from the target.
+ * Checking only the head (`foo` of `foo.bar`) passes any tail at all, so a
+ * renamed member reads as verified when nothing verified it.
+ * @param {string} symbol
+ * @param {string} content
+ * @returns {string[]} the segments not found
+ */
+function missingSegments(symbol, content) {
+  return symbol.split('.').filter(Boolean).filter(seg =>
+    !new RegExp(`\\b${seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(content));
+}
+
+/**
  * Check one citation against the tree.
  * @param {object} cite - from parseCitations
  * @param {string} container - path of the file the citation lives in
- * @param {object} ctx - {tracked, readFile, readAtRef, config}
+ * @param {object} ctx - {tracked, readFile, readAtRef, config, shallow, skippedRefs}
  * @returns {null | {file: string, line: number, cite: string, reason: string}}
  */
 function checkCitation(cite, container, ctx) {
@@ -174,6 +190,12 @@ function checkCitation(cite, container, ctx) {
 
   if (config.grandfathered.some(g => g.file === container && g.cite === cite.raw)) return null;
   if (config.external.includes(cite.path.replace(/^\.\//, ''))) return null;
+
+  // A backwards range is malformed, and checking only its high line would HIDE an
+  // out-of-range start: `a.js:200-100` against a 150-line file passes on 100.
+  if (cite.start !== null && cite.end !== null && cite.start > cite.end) {
+    return fail(`range runs backwards (${cite.start} > ${cite.end})`);
+  }
 
   // Historical form: resolve the file AT that ref and range-check there.
   if (cite.ref) {
@@ -192,30 +214,44 @@ function checkCitation(cite, container, ctx) {
       }
       return fail(`historical ref '${cite.ref}' does not resolve to ${cite.path}`);
     }
+    // `file.js@<ref> :: symbol` means "this symbol existed at that ref". Without
+    // this branch the hybrid form parsed fine and was checked by NOTHING —
+    // cite.end is null, so the range check below fell straight through to pass.
+    if (cite.symbol) {
+      const missing = missingSegments(cite.symbol, content);
+      return missing.length
+        ? fail(`symbol '${cite.symbol}' not in ${cite.path} at ${cite.ref} (missing: ${missing.join(', ')})`)
+        : null;
+    }
     const max = countLines(content);
-    if (cite.end !== null && cite.end > max) {
-      return fail(`line ${cite.end} is past EOF (${max} lines) in ${cite.path} at ${cite.ref}`);
+    if (cite.end < 1 || cite.end > max) {
+      return fail(`line ${cite.end} is outside ${cite.path} at ${cite.ref} (${max} lines)`);
     }
     return null;
   }
 
   const targets = resolveTarget(cite.path, ctx.tracked);
   if (targets.length === 0) return fail(`no tracked file matches '${cite.path}'`);
+  // An ambiguous basename is not verifiable: ONE candidate satisfying the check
+  // says nothing about the file the author meant, so a pass here is luck.
+  if (targets.length > 1) {
+    return fail(`'${cite.path}' is ambiguous (${targets.join(', ')}) — qualify the path`);
+  }
+  const target = targets[0];
+  const content = ctx.readFile(target);
 
-  // Symbol anchor: the symbol must appear in the target. Rot-immune form.
+  // Symbol anchor: every segment must appear in the target. Rot-immune form.
   if (cite.symbol) {
-    const head = cite.symbol.split('.')[0];
-    const re = new RegExp(`\\b${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-    if (!targets.some(t => re.test(ctx.readFile(t)))) {
-      return fail(`symbol '${cite.symbol}' not found in ${targets.join(' | ')}`);
-    }
-    return null;
+    const missing = missingSegments(cite.symbol, content);
+    return missing.length
+      ? fail(`symbol '${cite.symbol}' not found in ${target} (missing: ${missing.join(', ')})`)
+      : null;
   }
 
   // Line/range citation: the highest cited line must exist in the target.
-  const maxes = targets.map(t => countLines(ctx.readFile(t)));
-  if (!targets.some((t, i) => cite.end >= 1 && cite.end <= maxes[i])) {
-    return fail(`line ${cite.end} is past EOF (${Math.max(...maxes)} lines) in ${targets[0]}`);
+  const max = countLines(content);
+  if (cite.end < 1 || cite.end > max) {
+    return fail(`line ${cite.end} is outside ${target} (${max} lines)`);
   }
   return null;
 }
@@ -240,22 +276,34 @@ function checkCitations(files, ctx) {
 /**
  * The commit's citation scope: files the commit changed (IN), plus every live
  * file holding a citation that points AT a changed file (TO).
- * @param {string[]} changed - paths the commit touched
+ * @param {string[]} changed - paths the commit touched (INCLUDING deletions)
  * @param {string[]} scanned - live files eligible for scanning
  * @param {(p: string) => string} readFile
+ * @param {string[]} [tracked] - full tracked set, for resolving cited paths
  * @returns {string[]} files to scan, sorted
  */
-function scopeForCommit(changed, scanned, readFile) {
+function scopeForCommit(changed, scanned, readFile, tracked = scanned) {
+  const changedSet = new Set(changed);
   const inScope = new Set(changed.filter(f => scanned.includes(f)));
   const changedBases = new Set(changed.map(f => f.split('/').pop()));
   for (const f of scanned) {
     if (inScope.has(f)) continue;
     let content;
+    // A staged deletion leaves the path unreadable; that file is gone, not in scope.
     try { content = readFile(f); } catch { continue; }
     // Cheap pre-filter before the regex: the basename must appear at all.
     if (![...changedBases].some(b => content.includes(b))) continue;
     for (const cite of parseCitations(content)) {
-      if (changedBases.has(cite.path.split('/').pop())) { inScope.add(f); break; }
+      const targets = resolveTarget(cite.path, tracked);
+      // Resolve before comparing, so touching src/council/run.js does not drag in
+      // every file citing electron/ui/run.js. A DELETED target resolves to
+      // nothing (git ls-files drops it from the index), so fall back to the
+      // basename — otherwise the commit that deletes a file is exactly the one
+      // that never checks the citations it just broke.
+      const hit = targets.length
+        ? targets.some(t => changedSet.has(t))
+        : changedBases.has(cite.path.split('/').pop());
+      if (hit) { inScope.add(f); break; }
     }
   }
   return [...inScope].sort();
@@ -358,7 +406,12 @@ function main() {
 
   let staged;
   try {
-    staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'],
+    // D (deletions) is deliberately included, unlike check-file-sizes.js and
+    // check-secrets.js which both use ACM. A deleted file needs no size or
+    // secret scan — there is nothing left to scan. But deleting a file is one of
+    // the surest ways to falsify OTHER files' citations, so it must enter the
+    // scope calculation or the breaking commit is the one commit that never looks.
+    staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMRD'],
       { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
   } catch {
     console.error('Failed to get staged files.');
@@ -366,7 +419,7 @@ function main() {
   }
   if (staged.length === 0) process.exit(0);
 
-  const scope = scopeForCommit(staged, scanSet(tracked), allCtx.readFile);
+  const scope = scopeForCommit(staged, scanSet(tracked), allCtx.readFile, tracked);
   if (scope.length === 0) process.exit(0);
 
   const violations = checkCitations(
@@ -381,7 +434,7 @@ if (process.argv[1] && process.argv[1].includes('check-citations')) {
 }
 
 module.exports = {
-  countLines, parseCitations, resolveTarget, matchesPattern, checkCitation,
+  countLines, parseCitations, resolveTarget, matchesPattern, checkCitation, missingSegments,
   checkCitations, scopeForCommit, scanSet, buildContext, checkAllTracked,
   listTrackedFiles, isShallowClone, noticeSkipped, CONFIG,
 };
