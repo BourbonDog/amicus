@@ -59,7 +59,15 @@ jobs:
     # seconds-scale static check, so 15 minutes is headroom, not a tight bound.
     timeout-minutes: 15
     steps:
+      # fetch-depth 0 (full history) is REQUIRED by check:citations. A
+      # `file.js@<ref>:NNN` provenance citation is verified by reading that file
+      # AT that commit, and checkout's default shallow clone does not have the
+      # commit at all. The gate skips those checks on a shallow clone rather
+      # than failing on them, so THIS is the one job where they are really
+      # verified — the test legs stay shallow and cheap on purpose.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: 22

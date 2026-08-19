@@ -26,6 +26,14 @@ statement. `run-finish.js` says its body was *moved verbatim from
 looks exactly like rot, but it is true at the pre-split commit, and the gate
 verifies it there. Pin the ref to a commit reachable from `main`.
 
+**`@ref` needs full history.** `actions/checkout` defaults to a shallow clone
+(`fetch-depth: 1`), where the historical commit is simply absent — which is
+indistinguishable from a bogus ref. On a shallow clone the gate SKIPS those
+checks and prints exactly which ones it skipped; it never fails them, and never
+passes them silently. The `quality` CI job checks out full history
+(`fetch-depth: 0`), so every `@ref` is really verified once per push, while the
+six test legs stay shallow and cheap.
+
 ## What the gate checks
 
 `scripts/check-citations.js` runs in `.husky/pre-commit` and in the `quality`

@@ -181,6 +181,15 @@ function checkCitation(cite, container, ctx) {
     try {
       content = ctx.readAtRef(cite.ref, cite.path);
     } catch {
+      // A shallow clone (actions/checkout defaults to fetch-depth 1) simply does
+      // not HAVE the historical commit, which is indistinguishable from a bogus
+      // ref. Skipping is the only correct call there — but never silently: main()
+      // prints what was skipped, and the `quality` CI job checks out full history
+      // so these are really verified exactly once per push.
+      if (ctx.shallow) {
+        ctx.skippedRefs.push(`${container}:${cite.line}  [${cite.raw}]`);
+        return null;
+      }
       return fail(`historical ref '${cite.ref}' does not resolve to ${cite.path}`);
     }
     const max = countLines(content);
@@ -258,12 +267,27 @@ function listTrackedFiles() {
     .trim().split('\n').filter(Boolean);
 }
 
+/**
+ * True when this clone lacks full history, so a historical ref may be absent
+ * for reasons that have nothing to do with the citation being wrong.
+ */
+function isShallowClone() {
+  try {
+    return execFileSync('git', ['rev-parse', '--is-shallow-repository'],
+      { encoding: 'utf-8' }).trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
 /** Build the IO context the pure checkers run against. */
 function buildContext(tracked = listTrackedFiles(), config = CONFIG) {
   const cache = new Map();
   return {
     tracked,
     config,
+    shallow: isShallowClone(),
+    skippedRefs: [],
     readFile(p) {
       if (!cache.has(p)) cache.set(p, readFileSync(resolve(p), 'utf-8'));
       return cache.get(p);
@@ -287,10 +311,23 @@ function scanSet(tracked, config = CONFIG) {
 }
 
 /** Whole-tree scan (CI / --all). */
-function checkAllTracked(tracked = listTrackedFiles(), config = CONFIG) {
-  const ctx = buildContext(tracked, config);
+function checkAllTracked(tracked = listTrackedFiles(), config = CONFIG,
+  ctx = buildContext(tracked, config)) {
   const files = scanSet(tracked, config).map(p => ({ path: p, content: ctx.readFile(p) }));
   return checkCitations(files, ctx);
+}
+
+/**
+ * Say out loud which historical refs went unverified. A skipped check that
+ * reports nothing is indistinguishable from a check that passed.
+ */
+function noticeSkipped(ctx) {
+  if (!ctx.skippedRefs.length) return;
+  console.error(
+    `\n  NOTE: ${ctx.skippedRefs.length} historical @ref citation(s) NOT verified — ` +
+    'this is a shallow clone.\n  The `quality` CI job checks out full history and verifies them.'
+  );
+  for (const s of ctx.skippedRefs) console.error(`    ${s}`);
 }
 
 /** Report violations and exit non-zero. */
@@ -310,9 +347,11 @@ function report(violations) {
 /** Main: staged scope (pre-commit) or whole tree (--all / CI). */
 function main() {
   const tracked = listTrackedFiles();
+  const allCtx = buildContext(tracked);
 
   if (process.argv.includes('--all')) {
-    const violations = checkAllTracked(tracked);
+    const violations = checkAllTracked(tracked, CONFIG, allCtx);
+    noticeSkipped(allCtx);
     if (violations.length > 0) report(violations);
     process.exit(0);
   }
@@ -327,13 +366,13 @@ function main() {
   }
   if (staged.length === 0) process.exit(0);
 
-  const ctx = buildContext(tracked);
-  const scope = scopeForCommit(staged, scanSet(tracked), ctx.readFile);
+  const scope = scopeForCommit(staged, scanSet(tracked), allCtx.readFile);
   if (scope.length === 0) process.exit(0);
 
   const violations = checkCitations(
-    scope.map(p => ({ path: p, content: ctx.readFile(p) })), ctx
+    scope.map(p => ({ path: p, content: allCtx.readFile(p) })), allCtx
   );
+  noticeSkipped(allCtx);
   if (violations.length > 0) report(violations);
 }
 
@@ -344,5 +383,5 @@ if (process.argv[1] && process.argv[1].includes('check-citations')) {
 module.exports = {
   countLines, parseCitations, resolveTarget, matchesPattern, checkCitation,
   checkCitations, scopeForCommit, scanSet, buildContext, checkAllTracked,
-  listTrackedFiles, CONFIG,
+  listTrackedFiles, isShallowClone, noticeSkipped, CONFIG,
 };

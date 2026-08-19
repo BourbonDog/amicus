@@ -21,10 +21,12 @@ const {
 } = require('../../scripts/check-citations');
 
 /** A tree stub: tracked paths -> content. */
-function stubCtx(tree, refs = {}, config = CONFIG) {
+function stubCtx(tree, refs = {}, config = CONFIG, shallow = false) {
   return {
     tracked: Object.keys(tree),
     config,
+    shallow,
+    skippedRefs: [],
     readFile: p => tree[p],
     readAtRef: (ref, p) => {
       // Mirror the real reader: resolve the cited path against the tracked
@@ -180,6 +182,37 @@ describe('check-citations', () => {
 
     it('fails an unresolvable ref', () => {
       expect(one('// run.js@nope:1', 'src/a.js', ctx).reason).toMatch(/does not resolve/);
+    });
+  });
+
+  describe('checkCitation — shallow clone', () => {
+    // actions/checkout defaults to fetch-depth 1, so a historical commit is
+    // simply ABSENT — indistinguishable from a bogus ref. Skipping is the only
+    // correct call, but it must be reported, never silent.
+    const shallow = stubCtx({ 'src/council/run.js': 'x\n' }, {}, CONFIG, true);
+
+    it('skips an unresolvable ref instead of failing', () => {
+      expect(one('// run.js@old:242-288', 'src/a.js', shallow)).toBeNull();
+    });
+
+    it('records what it skipped, so the skip can be reported', () => {
+      const c = stubCtx({ 'src/council/run.js': 'x\n' }, {}, CONFIG, true);
+      one('// run.js@old:242-288', 'src/a.js', c);
+      expect(c.skippedRefs).toHaveLength(1);
+      expect(c.skippedRefs[0]).toContain('run.js@old:242-288');
+    });
+
+    it('does NOT skip on a full clone — same input, opposite verdict', () => {
+      const full = stubCtx({ 'src/council/run.js': 'x\n' }, {}, CONFIG, false);
+      expect(one('// run.js@old:242-288', 'src/a.js', full)).not.toBeNull();
+      expect(full.skippedRefs).toHaveLength(0);
+    });
+
+    it('still range-checks a ref the shallow clone DOES have', () => {
+      const c = stubCtx({ 'src/council/run.js': 'x\n' },
+        { 'old:src/council/run.js': 'x\n'.repeat(295) }, CONFIG, true);
+      expect(one('// run.js@old:242-999', 'src/a.js', c)).not.toBeNull();
+      expect(c.skippedRefs).toHaveLength(0);
     });
   });
 
