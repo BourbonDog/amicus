@@ -45,6 +45,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const { readIndexContent } = require('./git-index');
 
 const CONFIG = {
   // Live code whose citations are maintained and therefore enforced.
@@ -137,9 +138,9 @@ function parseCitations(content) {
  */
 function resolveTarget(cited, tracked) {
   const clean = cited.replace(/^\.\//, '');
-  if (tracked.includes(clean)) return [clean];
+  if (tracked.includes(clean)) {return [clean];}
   const suffix = tracked.filter(f => f.endsWith('/' + clean));
-  if (suffix.length) return suffix;
+  if (suffix.length) {return suffix;}
   const base = clean.split('/').pop();
   return tracked.filter(f => f.endsWith('/' + base) || f === base);
 }
@@ -159,7 +160,7 @@ function matchesPattern(filePath, patterns) {
       .replace(/\*/g, '[^/]*')
       .replace(/<<GLOBSTAR_DIR>>/g, '(?:[^/]+/)*')
       .replace(/<<GLOBSTAR>>/g, '.*');
-    if (new RegExp(`^${regexStr}$`).test(filePath)) return true;
+    if (new RegExp(`^${regexStr}$`).test(filePath)) {return true;}
   }
   return false;
 }
@@ -200,8 +201,8 @@ function checkCitation(cite, container, ctx) {
   const config = ctx.config || CONFIG;
   const fail = reason => ({ file: container, line: cite.line, cite: cite.raw, reason });
 
-  if (config.grandfathered.some(g => g.file === container && g.cite === cite.raw)) return null;
-  if (config.external.includes(cite.path.replace(/^\.\//, ''))) return null;
+  if (config.grandfathered.some(g => g.file === container && g.cite === cite.raw)) {return null;}
+  if (config.external.includes(cite.path.replace(/^\.\//, ''))) {return null;}
 
   // A backwards range is malformed, and checking only its high line would HIDE an
   // out-of-range start: `a.js:200-100` against a 150-line file passes on 100.
@@ -259,7 +260,7 @@ function checkCitation(cite, container, ctx) {
     return null;
   }
 
-  if (targets.length === 0) return fail(`no tracked file matches '${cite.path}'`);
+  if (targets.length === 0) {return fail(`no tracked file matches '${cite.path}'`);}
   const target = targets[0];
   const content = ctx.readFile(target);
 
@@ -289,7 +290,7 @@ function checkCitations(files, ctx) {
   for (const { path, content } of files) {
     for (const cite of parseCitations(content)) {
       const v = checkCitation(cite, path, ctx);
-      if (v) violations.push(v);
+      if (v) {violations.push(v);}
     }
   }
   return violations;
@@ -309,12 +310,12 @@ function scopeForCommit(changed, scanned, readFile, tracked = scanned) {
   const inScope = new Set(changed.filter(f => scanned.includes(f)));
   const changedBases = new Set(changed.map(f => f.split('/').pop()));
   for (const f of scanned) {
-    if (inScope.has(f)) continue;
+    if (inScope.has(f)) {continue;}
     let content;
     // A staged deletion leaves the path unreadable; that file is gone, not in scope.
     try { content = readFile(f); } catch { continue; }
     // Cheap pre-filter before the regex: the basename must appear at all.
-    if (![...changedBases].some(b => content.includes(b))) continue;
+    if (![...changedBases].some(b => content.includes(b))) {continue;}
     for (const cite of parseCitations(content)) {
       const targets = resolveTarget(cite.path, tracked);
       // Resolve before comparing, so touching src/council/run.js does not drag in
@@ -373,8 +374,16 @@ function isShallowClone() {
   }
 }
 
-/** Build the IO context the pure checkers run against. */
-function buildContext(tracked = listTrackedFiles(), config = CONFIG) {
+/**
+ * Build the IO context the pure checkers run against.
+ * @param {string[]} [tracked]
+ * @param {object} [config]
+ * @param {Map<string,string>|null} [staged] - index content. When given, files
+ *   are read from the INDEX (what the commit will contain) instead of the
+ *   working tree. A path absent from the map is absent from the commit — a
+ *   staged deletion — and reading it throws, which callers treat as "skip".
+ */
+function buildContext(tracked = listTrackedFiles(), config = CONFIG, staged = null) {
   const cache = new Map();
   return {
     tracked,
@@ -382,7 +391,11 @@ function buildContext(tracked = listTrackedFiles(), config = CONFIG) {
     shallow: isShallowClone(),
     skippedRefs: [],
     readFile(p) {
-      if (!cache.has(p)) cache.set(p, readFileSync(resolve(p), 'utf-8'));
+      if (staged) {
+        if (!staged.has(p)) {throw new Error(`not in index: ${p}`);}
+        return staged.get(p);
+      }
+      if (!cache.has(p)) {cache.set(p, readFileSync(resolve(p), 'utf-8'));}
       return cache.get(p);
     },
     // Pure IO: the caller has already resolved the path through resolveTarget,
@@ -414,12 +427,12 @@ function checkAllTracked(tracked = listTrackedFiles(), config = CONFIG,
  * reports nothing is indistinguishable from a check that passed.
  */
 function noticeSkipped(ctx) {
-  if (!ctx.skippedRefs.length) return;
+  if (!ctx.skippedRefs.length) {return;}
   console.error(
     `\n  NOTE: ${ctx.skippedRefs.length} historical @ref citation(s) NOT verified — ` +
     'this is a shallow clone.\n  The `quality` CI job checks out full history and verifies them.'
   );
-  for (const s of ctx.skippedRefs) console.error(`    ${s}`);
+  for (const s of ctx.skippedRefs) {console.error(`    ${s}`);}
 }
 
 /** Report violations and exit non-zero. */
@@ -439,12 +452,15 @@ function report(violations) {
 /** Main: staged scope (pre-commit) or whole tree (--all / CI). */
 function main() {
   const tracked = listTrackedFiles();
-  const allCtx = buildContext(tracked);
 
   if (process.argv.includes('--all')) {
+    // Whole-tree mode reads the working tree on purpose: it audits the checkout
+    // as it stands (CI has no staging area to differ from), and it is also the
+    // mode people run by hand to see what a file says right now.
+    const allCtx = buildContext(tracked);
     const violations = checkAllTracked(tracked, CONFIG, allCtx);
     noticeSkipped(allCtx);
-    if (violations.length > 0) report(violations);
+    if (violations.length > 0) {report(violations);}
     process.exit(0);
   }
 
@@ -461,16 +477,25 @@ function main() {
     console.error('Failed to get staged files.');
     process.exit(1);
   }
-  if (staged.length === 0) process.exit(0);
+  if (staged.length === 0) {process.exit(0);}
 
-  const scope = scopeForCommit(staged, scanSet(tracked), allCtx.readFile, tracked);
-  if (scope.length === 0) process.exit(0);
+  // Read the INDEX, not the working tree: the index is what this commit will
+  // contain. One `git cat-file --batch` for the whole scan set — per-file
+  // `git show` would cost ~900 subprocesses and blow the hook's time budget.
+  const scan = scanSet(tracked);
+  const ctx = buildContext(tracked, CONFIG, readIndexContent(scan));
 
-  const violations = checkCitations(
-    scope.map(p => ({ path: p, content: allCtx.readFile(p) })), allCtx
-  );
-  noticeSkipped(allCtx);
-  if (violations.length > 0) report(violations);
+  const scope = scopeForCommit(staged, scan, ctx.readFile, tracked);
+  if (scope.length === 0) {process.exit(0);}
+
+  const files = [];
+  for (const p of scope) {
+    // Absent from the index = absent from the commit (a staged deletion).
+    try { files.push({ path: p, content: ctx.readFile(p) }); } catch { /* deleted */ }
+  }
+  const violations = checkCitations(files, ctx);
+  noticeSkipped(ctx);
+  if (violations.length > 0) {report(violations);}
 }
 
 if (process.argv[1] && process.argv[1].includes('check-citations')) {

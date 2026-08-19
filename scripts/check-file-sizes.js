@@ -13,6 +13,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const { readIndexContent } = require('./git-index');
 
 const CONFIG = {
   maxLines: 300,
@@ -162,10 +163,16 @@ function main() {
     process.exit(0);
   }
 
-  const files = targetFiles.map(f => ({
-    path: f,
-    content: readFileSync(resolve(f), 'utf-8'),
-  }));
+  // Read the INDEX, not the working tree: the index is what this commit will
+  // contain. Reading the working copy meant an oversized STAGED file could be
+  // committed whenever the working copy had since been trimmed, and a staged
+  // fix could be blocked by an unstaged edit that was never going to ship.
+  const staged = readIndexContent(targetFiles);
+  const files = [];
+  for (const f of targetFiles) {
+    // Absent from the index = absent from the commit; nothing to size.
+    if (staged.has(f)) {files.push({ path: f, content: staged.get(f) });}
+  }
 
   const violations = checkFiles(files, CONFIG.maxLines);
 

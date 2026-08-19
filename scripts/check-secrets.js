@@ -13,6 +13,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const { readIndexContent } = require('./git-index');
 
 const CONFIG = {
   patterns: [
@@ -152,10 +153,16 @@ function main() {
 
   let foundSecrets = false;
 
+  // Read the INDEX, not the working tree: the index is what this commit will
+  // contain. Reading the working copy meant a secret could be STAGED, scrubbed
+  // from the working copy, and then committed with the gate never seeing it.
+  const stagedContent = readIndexContent(stagedFiles);
+
   for (const file of stagedFiles) {
     try {
-      const fullPath = resolve(file);
-      const content = readFileSync(fullPath, 'utf-8');
+      // Absent from the index = absent from the commit; nothing to scan.
+      if (!stagedContent.has(file)) { continue; }
+      const content = stagedContent.get(file);
       const secrets = scanForSecrets(content, file);
 
       if (secrets.length > 0) {

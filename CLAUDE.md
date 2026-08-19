@@ -430,6 +430,7 @@ scripts/
 ├── generate-docs-helpers.js  # Helper functions for generate-docs.js.
 ├── generate-docs.js  # Auto-generate CLAUDE.md sections from source code.
 ├── generate-icon.js  # Generate app icon PNG from SVG source.
+├── git-index.js  # Read file content from the git INDEX rather than the working tree.
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
