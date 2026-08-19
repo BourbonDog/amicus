@@ -391,3 +391,162 @@ describe('debateTargets — peerVerdicts takes the guarded filter (v4.8 PR4c §3
     expect(byRaiser['deepseek#1'][0].peerVerdicts).toEqual(['dispute']);
   });
 });
+// v4.8 Phase 2 T-B2 (T5) — `debateTargets` CALLS peer-split.js :: peersOf.
+//
+// Until this commit `peerVerdicts` spelled its own copy of the filter with TWO
+// branches, while `peersOf` has THREE: its outer `f.raiser ? … : votes` was
+// missing here. On any finding whose raiser is falsy the two documents
+// therefore computed DIFFERENT peer splits — the tally counted those votes, the
+// defense brief did not. Both shapes are engine-reachable, not hypothetical:
+// `''` arrives through the MCP path (mcp-tools.js's raiser/judge are required
+// z.string(), which accepts the empty string) and `undefined` through the CLI
+// path (cli-handlers-council.js is a raw JSON.parse with no schema).
+//
+// Each test below asserts the peer split the TALLY computes and the split the
+// BRIEF renders, on one fixture, so "the two documents must agree" is an
+// assertion pair rather than prose. Every "measured at 8e97faaf" number in the
+// comments below was read off a run of that tree, not reasoned out.
+describe('debateTargets — the two documents must agree on the peer split (v4.8 T-B2, T5)', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+  const base = { meta, rankings: [], runStats: [] };
+
+  test('T5a: an EMPTY-STRING raiser (MCP path) — the tally counts 2 peers, so the brief must brief 2', () => {
+    // Measured at 8e97faaf: tally basis {a:0,d:2,n:0} ⇒ Disputed, but
+    // peerVerdicts was ['dispute'] — the brief dropped the '' judge on
+    // `'' !== ''`, a compare the tally never reached.
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: '', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', judge: '', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' }] };
+    const record = tally(input);
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 2, n: 0 });
+    const { byRaiser } = debateTargets(record, input);
+    // `f.raiserSeat || f.raiser` is '' here, so '' is the literal bucket key.
+    expect(byRaiser[''][0].peerVerdicts).toEqual(['dispute', 'dispute']);
+  });
+
+  test('T5b: an UNDEFINED raiser (CLI path) — the tally counts 2 peers, so the brief must brief 2', () => {
+    // Measured at 8e97faaf: tally basis {a:1,d:1,n:0} ⇒ Contested, but
+    // peerVerdicts was ['agree'] — `undefined !== undefined` is false.
+    const input = { ...base,
+      findings: [{ id: 'A1', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'agree' }] };
+    const record = tally(input);
+    expect(record.findings[0].basis).toEqual({ a: 1, d: 1, n: 0 });
+    const { byRaiser } = debateTargets(record, input);
+    // `f.raiserSeat || f.raiser` is `undefined`, which becomes the string key
+    // 'undefined' on the plain object — measured, not assumed.
+    expect(byRaiser.undefined[0].peerVerdicts).toEqual(['dispute', 'agree']);
+  });
+
+  test('T5c: every vote from an empty-string judge — the tally read Disputed while the brief read all-zero', () => {
+    // The sharpest case, and the one the trailing `.map(a => a.verdict)`
+    // comment describes from the other direction: measured at 8e97faaf,
+    // peerVerdicts was [] — so briefings-debate.js's verdictCounts rendered
+    // "0 dispute, 0 agree, 0 neutral", byte-identical to the no-data case, on a
+    // finding the chair's tally scored Disputed on two disputes. A paid defense
+    // brief telling the model nobody disputed it.
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: '', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', judge: '', verdict: 'dispute' },
+        { findingId: 'A1', judge: '', verdict: 'dispute' }] };
+    const record = tally(input);
+    expect(record.findings[0].tier).toBe('Disputed');
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 2, n: 0 });
+    const { byRaiser } = debateTargets(record, input);
+    expect(byRaiser[''][0].peerVerdicts).toEqual(['dispute', 'dispute']);
+  });
+
+  // Measured evidence for a correction, not a behaviour pin. T-B2's brief
+  // named an all-AGREE variant of T5c as its sharpest case — "the tally reads
+  // Confirmed while the defense brief renders the all-zero case". That cannot
+  // happen: `debateTargets` skips every finding that is not Contested or
+  // Disputed, so a Confirmed finding never reaches a defense brief at all and
+  // there is no row to disagree with. This test EXECUTES that reason instead
+  // of restating it, and is why T5c uses `dispute` rather than `agree`.
+  test('T5d: the all-AGREE variant is Confirmed, and a Confirmed finding gets NO bucket at all', () => {
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: '', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', judge: '', verdict: 'agree' },
+        { findingId: 'A1', judge: '', verdict: 'agree' }] };
+    const record = tally(input);
+    expect(record.findings[0].tier).toBe('Confirmed');
+    expect(Object.keys(debateTargets(record, input).byRaiser)).toEqual([]);
+  });
+
+  // The two controls. Both already agreed at 8e97faaf (1 and 2 respectively);
+  // they are here so a future edit that "fixes" the falsy-raiser cases by
+  // moving the ordinary ones goes red instead of silently trading one for the
+  // other.
+  test('T5e CONTROL: a real raiser on a unique-alias bench still briefs exactly its 1 peer', () => {
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', judge: 'gemini', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' }] };
+    const { byRaiser } = debateTargets(tally(input), input);
+    expect(byRaiser.gemini[0].peerVerdicts).toEqual(['dispute']);
+  });
+
+  test('T5f CONTROL: a twin bench with seats on BOTH sides still briefs exactly its 2 peers', () => {
+    const input = { ...base,
+      meta: { ...meta, models: ['deepseek', 'deepseek', 'gpt'] },
+      findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1',
+        severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#1' },
+        { findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#2' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute', seat: 'gpt' }] };
+    const { byRaiser } = debateTargets(tally(input), input);
+    expect(byRaiser['deepseek#1'][0].peerVerdicts).toEqual(['dispute', 'dispute']);
+  });
+});
+
+// v4.8 Phase 2 T-B2 (T6) — the `unattributedPeerDrops` mark on the BRIEF side.
+// Same function, same number and same emit rule as tally.js's: present only
+// when > 0, so any run that does not orphan exactly one side of a twin pair
+// produces a byte-identical byRaiser row.
+describe('debateTargets — the unattributable-drop mark rides beside peerVerdicts (v4.8 T-B2, T6)', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+  const base = { meta, rankings: [], runStats: [] };
+
+  test('T6a: one orphaned twin leg ⇒ the row carries unattributedPeerDrops: 1, and the tally row carries the SAME 1', () => {
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1',
+        severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'deepseek', verdict: 'agree' },        // Stage-2 seat orphaned
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute', seat: 'gpt' }] };
+    const record = tally(input);
+    const row = debateTargets(record, input).byRaiser['deepseek#1'][0];
+    expect(row.peerVerdicts).toEqual(['dispute']);
+    expect(row.unattributedPeerDrops).toBe(1);
+    // Both documents call peer-split.js :: unattributedPeerDrops, so the two
+    // marks cannot drift apart. Asserted, not assumed.
+    expect(record.findings[0].unattributedPeerDrops).toBe(1);
+  });
+
+  test('T6b: symmetric twin seats ⇒ the key is ABSENT from the row, not present-and-zero', () => {
+    const input = { ...base,
+      findings: [{ id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1',
+        severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#2' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute', seat: 'gpt' }] };
+    const row = debateTargets(tally(input), input).byRaiser['deepseek#1'][0];
+    expect(row.peerVerdicts).toEqual(['dispute', 'dispute']);
+    expect('unattributedPeerDrops' in row).toBe(false);
+  });
+
+  test('T6c: an ordinary unique-alias bench ⇒ the key is ABSENT from the row', () => {
+    const input = { ...base,
+      meta: { ...meta, models: ['gemini', 'gpt'] },
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [{ findingId: 'A1', judge: 'gpt', verdict: 'dispute' }] };
+    const row = debateTargets(tally(input), input).byRaiser.gemini[0];
+    expect(row.peerVerdicts).toEqual(['dispute']);
+    expect('unattributedPeerDrops' in row).toBe(false);
+  });
+});

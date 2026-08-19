@@ -515,7 +515,7 @@ evals/
 | `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()`, `countAttemptedFindings()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseDebateDefense()` |
-| `council/peer-split.js` |  | `peersOf()` |
+| `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-md.js` |  | `renderMd()` |

@@ -1,6 +1,6 @@
 // src/council/tally.js
 'use strict';
-const { peersOf } = require('./peer-split');
+const { peersOf, unattributedPeerDrops } = require('./peer-split');
 
 /**
  * Peers-only tier cascade. a/d are agree/dispute counts among PEER judges
@@ -92,6 +92,13 @@ function tally(input) {
   const outFindings = findings.map(f => {
     const votes = byFinding.get(f.id) || [];
     const peers = peersOf(f, votes);
+    // v4.8 T-B2: how many votes the one-sided alias fallback excluded. Same
+    // function and same emit rule (> 0 only) as debate.js :: debateTargets, so
+    // this document and the defense brief can never announce different numbers.
+    // ⚠️ `basis` deliberately does NOT move: counting the ambiguous vote
+    // reproduces the naive filter's outcome — measured Confirmed on both
+    // tally.test.js T1 and T2 — which re-arms #137. Announced, not counted.
+    const drops = unattributedPeerDrops(f, votes);
     const basis = { a: 0, d: 0, n: 0 };
     // Skip unknown verdict strings so a stray value can't corrupt the basis via
     // basis[undefined] = NaN (L9).
@@ -114,7 +121,8 @@ function tally(input) {
              tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
              ...(f.raiser
                && peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge === f.raiser)
-               ? { sameModelCorroboration: true } : {}) };
+               ? { sameModelCorroboration: true } : {}),
+             ...(drops > 0 ? { unattributedPeerDrops: drops } : {}) };
   });
   return {
     schemaVersion: COUNCIL_SCHEMA_VERSION,

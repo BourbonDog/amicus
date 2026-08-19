@@ -309,8 +309,9 @@ describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => 
 
 // v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the GUARDED peer filter and the R8 stamp.
 //
-// The peer filter (peer-split.js :: peersOf, required into tally.js since v4.8
-// Phase 2 T-B1) has THREE branches, and each test below names the one it
+// The peer filter (peer-split.js :: peersOf, called by tally.js since v4.8
+// Phase 2 T-B1 and by debate.js :: debateTargets since T-B2) has THREE
+// branches, and each test below names the one it
 // drives: the OUTER `f.raiser ? … : votes`, and inside it the seat branch and the
 // alias branch. Two spellings are being separated —
 //   GUARDED  (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser
@@ -327,9 +328,20 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
   const base = { meta, rankings: [], runStats: [] };
 
-  test('T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded', () => {
-    // Stage-1 seat bound, the twin judge's Stage-2 seat orphaned. GUARDED takes
-    // the ALIAS branch and excludes; NAIVE reads `undefined !== 'deepseek#1'`.
+  test('T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded AND announced', () => {
+    // SI-22.2 — the PEER's leg is the orphaned one: Stage-1 seat bound, the twin
+    // judge's Stage-2 seat orphaned. GUARDED takes the ALIAS branch and
+    // excludes; NAIVE reads `undefined !== 'deepseek#1'`.
+    //
+    // ⚠️ `basis` and `tier` are UNCHANGED from this test's pre-T-B2 form. That
+    // is an owner ruling, not an oversight: counting the ambiguous vote
+    // reproduces NAIVE's own outcome — measured on THIS fixture, {a:1,d:0,n:0}
+    // ⇒ Confirmed — which is exactly the "silently promotes a Singleton to
+    // Confirmed on the raiser's own vote" re-arm of #137, and it would leave
+    // the naive form unpinned in the very release that fixes the bug it re-arms.
+    //
+    // What v4.8 T-B2 changes is the third assertion, and only that: the drop is
+    // no longer SILENTLY correct. It is excluded AND announced.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
@@ -337,11 +349,17 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     });
     expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
     expect(record.findings[0].tier).toBe('Singleton');
+    expect(record.findings[0].unattributedPeerDrops).toBe(1);
   });
 
-  test('T2: direction B — finding has NO raiserSeat, the twin vote HAS a seat ⇒ excluded', () => {
-    // The mirror: only ONE unbound Stage-1 twin review, so that review's judge is
-    // a filtered placeholder while the other twin binds.
+  test('T2: direction B — finding has NO raiserSeat, the twin vote HAS a seat ⇒ excluded AND announced', () => {
+    // SI-22.1 — the RAISER's OWN leg is the orphaned one: only ONE unbound
+    // Stage-1 twin review, so that review's judge is a filtered placeholder
+    // while the other twin binds. The mirror of T1, not a restatement of it.
+    //
+    // ⚠️ `basis` and `tier` are UNCHANGED here for the same ruling as T1:
+    // measured on THIS fixture, counting the ambiguous vote gives {a:1,d:0,n:0}
+    // ⇒ Confirmed, i.e. NAIVE's outcome and #137's re-arm.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: 'deepseek', severity: 'major', claim: 'c' }],
@@ -349,12 +367,23 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     });
     expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
     expect(record.findings[0].tier).toBe('Singleton');
+    expect(record.findings[0].unattributedPeerDrops).toBe(1);
   });
 
   test('T3: symmetric seats, same alias, DIFFERENT seats ⇒ the twin is a peer (#137)', () => {
     // Row 8 of §1.3's truth table — the fix itself. ⚠️ This separates GUARDED
-    // from HEAD ONLY. NAIVE admits this vote too, so it does not separate GUARDED
-    // from NAIVE; T1 and T2 carry that.
+    // from HEAD ONLY. NAIVE admits this vote too, so it does not separate
+    // GUARDED from NAIVE.
+    //
+    // ⚠️ CORRECTED by measurement (v4.8 T-B2). This comment used to end "T1 and
+    // T2 carry that", and BACKLOG.md read that as "T1 and T2 are the ONLY tests
+    // separating GUARDED from NAIVE". They are not. Running the named mutant
+    // NAIVESPLIT (peer-split.js :: peersOf, inner ternary replaced by the
+    // unguarded `v.seat !== f.raiserSeat`) against the FULL suite turns 17
+    // suites and 97 tests red, 10 of them in THIS file — because NAIVE also
+    // breaks the ordinary unique-alias bench, where it reads
+    // `undefined !== undefined` and drops a real peer. What T1 and T2 alone
+    // carry is the one-side-seated TWIN pair, in both directions.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
@@ -369,6 +398,29 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     expect(f.confidence).toBe('solid');              // HEAD: 'thin'
     expect(f.tier).toBe('Confirmed');
     expect(f.adjudications).toHaveLength(3);         // every vote still travels on the record
+  });
+
+  test('T3b: the T-B2 mark is ABSENT — not 0 — on both shapes the predicate does not fire', () => {
+    // Emitted only when > 0, so any run that does not orphan exactly one side
+    // of a twin pair is byte-for-byte unchanged. Pinned as absence, because a
+    // `0` would change the shape of every document in the repo.
+    const symmetric = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [
+        { findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#1' },
+        { findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' },
+      ],
+    });
+    expect('unattributedPeerDrops' in symmetric.findings[0]).toBe(false);
+
+    const uniqueAlias = tally({
+      ...base,
+      meta: { ...meta, models: ['gemini', 'gpt'] },
+      findings: [{ id: 'F1', raiser: 'gemini', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'gpt', verdict: 'agree' }],
+    });
+    expect('unattributedPeerDrops' in uniqueAlias.findings[0]).toBe(false);
   });
 });
 

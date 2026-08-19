@@ -1257,8 +1257,9 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   bench (`src/utils/council-presets.js`), announced via the existing sink.
 - [ ] **GOA-2 · Feature · Relevance-weighted chair packet + labeled influence (edge weighting)** — [S]
   The score matrix already exists — Stage-2 judge rankings → `computeStreetCred()`
-  (`src/council/tally.js:49`) — but is descriptive only: tiers are unweighted counts
-  (`tally.js:84-107`) and the chair packet (`council/briefings-stage2.js`) presents seats
+  (`src/council/tally.js :: computeStreetCred`) — but is descriptive only: tiers are unweighted
+  counts (`tally.js :: tally`'s basis loop, feeding `tally.js :: assignTier`; **was
+  `tally.js:84-107`**) and the chair packet (`council/briefings-stage2.js`) presents seats
   symmetrically. Annotate each review in the chair packet with peer-derived credibility using the
   paper's label scheme (high/moderate/low; their A_ij=1 ablation costs −1.9/−2.6 points) plus
   per-seat "be critical" calibration extending `ANTI_SYCOPHANCY_CLAUSE`. Optional second step,
@@ -1321,7 +1322,9 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   tier bases and its findings are marked advisory in tally/report (never counted, never silently
   dropped — the announcement invariant applies). Costs one leg + marginally larger judge bundles;
   zero influence on the verdict. Design care: the tally already excludes a raiser's own votes
-  (`tally.js:91-107`) — shadow exclusion is the same shape, one filter earlier, and `runStats`
+  (`peer-split.js :: peersOf`, called from `tally.js :: tally`; **was `tally.js:91-107`**, before
+  v4.8 T-B1 lifted the predicate out) — shadow exclusion is the same shape, one filter earlier,
+  and `runStats`
   needs a distinguishing role so `ledger.js`'s role-keyed joins don't misfile it (same join
   hazard the judge rows hit — `ledger.js:21-25`).
 - 2026-08-05 release-gate finding (v4.6.2 cut): models --check flags curated gpt-pro STALE by deriving a DIRECT form (openai/gpt-5.6-sol-pro) from its openrouter-only route; the openrouter route SERVES (live probe d28cab32, $0.35, 'SMOKE OK', 8s). Exit 0. Audit gap: a gateway-only route with no direct sibling is a routing choice, not staleness — teach the auditor. Same family: 'fable has no direct form' divergence line.
@@ -1450,7 +1453,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   only fixed comment/test-armor items, not a producer-unification refactor. Found during the v4.7
   PR1 final-review consolidated wave, 2026-08-06.
   — recon 2026-08-07: filed as PR1F-2 for v4.7 PR5. There is a **fourth** builder the item never
-  names (`mk` in `debate.js:102-109`), and the real hazard is **key order** (not
+  names (`debate.js :: mk`, **was `debate.js:102-109`**), and the real hazard is **key order** (not
   `findingsUnverified`): `JSON.stringify` preserves insertion order, so unification changes
   `run.json` bytes for every debate row carrying a `waveId`, and the existing `toEqual`/
   `toMatchObject` pins are order-insensitive and would not catch it. Also `mk`'s
@@ -2804,8 +2807,9 @@ PR3 carried the seat through Stage 2 and the debate round: `judge-<seat>.md`
 (`run-stage2.js:145`), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
 (`run.js:224-228`), additive **emit-when-different** `adjudications[].seat`
 (`run-assemble.js:166`) and `findings[].raiserSeat` (`anonymize.js:60`), and a debate round that
-joins on the seat at every hop — `debateTargets` (`debate.js:201`), `disputingJudges`
-(`debate.js:175`), `applyDebate` (`debate.js:81`), the re-vote repair id
+joins on the seat at every hop — `debate.js :: debateTargets` (**was `:201`**),
+`debate.js :: disputingJudges` (**was `:175`**), `debate.js :: applyDebate` (**was `:81`**),
+the re-vote repair id
 (`run-debate-revote.js:139`) and all four launcher call sites, each projecting seat → alias
 through the single `aliasOf` built at `run-debate.js:116-117`. `runRevoteWave` moved to
 `src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
@@ -2834,11 +2838,17 @@ deliberately left alone:
   - **Verified by execution (2026-08-16):** `src/council/tally.js :: tally` — the peer filter
     compares seats when both sides carry one, aliases otherwise, at `tally.js:111`:
     `votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)`.
-- [ ] **PR4 · `src/council/debate.js:200` is a SECOND copy of that same filter and must move with
-  it.** `peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser)` builds the peer
-  split a raiser sees in its defense briefing. Fixing `tally.js:96` alone would make the brief the
-  models read disagree with the tally the chair reads. Deliberately left alias-space in PR3 for
-  exactly that reason (the in-file comment at `debate.js:186-190` says so).
+- [x] **DONE (v4.8 Phase 2 T-B2, 2026-08-19) · PR4 · `debate.js :: debateTargets` was a SECOND
+  copy of that same filter and has moved with it.** ~~`peerVerdicts = (f.adjudications ||
+  []).filter(a => a.judge !== f.raiser)` builds the peer split a raiser sees in its defense
+  briefing. Fixing the tally alone would make the brief the models read disagree with the tally the
+  chair reads. Deliberately left alias-space in PR3 for exactly that reason.~~ There is no second
+  copy now: `peerVerdicts` **calls** `peer-split.js :: peersOf`, the same function
+  `src/council/tally.js :: tally` calls, so the two documents agree by construction. Note the
+  quoted expression above was already PR3-era: by PR4c this site spelled a TWO-branch seat/alias
+  filter, and `peersOf` has THREE — the missing outer `f.raiser ? … : votes` is precisely what
+  made the brief and the tally disagree on any finding with a falsy raiser (`''` via the MCP path,
+  `undefined` via the CLI path). Measured at `8e97faaf` and pinned by `debate.test.js` T5a/T5b/T5c.
 - [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
   alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
   before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats
@@ -2895,8 +2905,9 @@ deliberately left alone:
   fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js:124`)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
   keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
-  seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:81`) matches
-  nothing, and the fail-open push at `:90` appends a NEW row instead of replacing one. **Measured**
+  seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:83`, **was
+  `:81`**) matches nothing, and the fail-open push at `debate.js:93` (**was `:90`**) appends a
+  NEW row instead of replacing one. **Measured**
   on `--models deepseek,deepseek,gpt` with one `-rv` leg left unattributable: 4 adjudications in,
   **7 out**; `B1` ends with **four votes on a three-seat bench** — `gpt` agree, `deepseek#2` agree,
   a seat-less `deepseek` agree that corresponds to no bench position, and `deepseek#1`'s **stale
@@ -3151,13 +3162,20 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      (its in-test comment: *"only ONE unbound Stage-1 twin review"*). T1 is **SI-22.2's** shape
      (below), not this one. Pair them backwards and the replacement pins the wrong direction.
 
-     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
-     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
-     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
-     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
-     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
-     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
-     fixes the bug it re-arms.
+     ⚠️ ~~**T1 and T2 are the ONLY tests separating GUARDED from NAIVE**~~ — **RETIRED BY
+     MEASUREMENT 2026-08-19 (T-B2).** The named mutant `NAIVESPLIT` (the inner ternary of
+     `peer-split.js :: peersOf` replaced by the unguarded `v.seat !== f.raiserSeat`) was run
+     against the FULL suite: **17 suites / 97 tests red**, of which 10 are in `tally.test.js` and
+     only 2 of those are T1/T2. NAIVE also breaks the ordinary unique-alias bench, reading
+     `undefined !== undefined` and dropping a real peer, which most of the council suite
+     exercises. The narrower TRUE statement, which is what mattered here: T1 and T2 are the only
+     tests pinning the **one-side-seated twin** directions. Both were REPLACED (not deleted) by
+     T-B2 — same `basis`/`Singleton` assertions plus `unattributedPeerDrops: 1` — so that
+     separation is carried forward, and NAIVE is now pinned by a named mutant recorded beside the
+     predicate itself. NAIVE remains the unguarded `v.seat !== f.raiserSeat`, spelled out in
+     `tests/council/tally.test.js`'s GUARDED/NAIVE preamble — structurally the same
+     admit-your-own-vote hazard trap #1 and SI-04 say **re-arms #137**. T3 separates GUARDED from
+     HEAD only.
   2. **A peer twin's leg orphans** — the fallback drops that twin's legitimate agree, and the
      `sameModelCorroboration` stamp does not fire either, so the corroboration is silently absent
      rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
@@ -3177,13 +3195,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      **SI-22.1's** shape (above), not this one. Pair them backwards and the replacement pins the
      wrong direction.
 
-     ⚠️ **T1 and T2 are the ONLY tests separating GUARDED from NAIVE** — stated at
-     `tally.test.js:355-356` (*"NAIVE admits this vote too, so it does not separate GUARDED from
-     NAIVE; T1 and T2 carry that"*), where NAIVE is the unguarded `v.seat !== f.raiserSeat`
-     (`tally.test.js:316`) — structurally the same admit-your-own-vote hazard trap #1 and SI-04 say
-     **re-arms #137**. T3 separates GUARDED from HEAD only. **The replacement must carry that
-     separation forward**, or deleting T1/T2 leaves the naive form unpinned in the very release that
-     fixes the bug it re-arms.
+     ⚠️ ~~**T1 and T2 are the ONLY tests separating GUARDED from NAIVE**~~ — **RETIRED BY
+     MEASUREMENT 2026-08-19 (T-B2).** See the identical note under SI-22.1 above: `NAIVESPLIT`
+     turns **17 suites / 97 tests** red, not 2. The narrower true statement is that T1 and T2 are
+     the only tests pinning the one-side-seated twin directions, and T-B2 REPLACED both rather
+     than deleting them, so that separation is carried forward.
   3. ✅ **DONE — producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`); reconcile half 2026-08-17 (T-A4, `1e385895`).**
      ~~Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.~~ `deadSeats`
      (`src/council/run-stage1-rows.js :: pushDeadSeatRows` — anchored BY SYMBOL; the old `:76-89`
@@ -3241,12 +3257,14 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   (`src/cli-handlers-council.js`, a raw `JSON.parse` with no schema) keeps it — so this is a live
   CLI/MCP fork. PR4c widened the same schema for the three seat keys (R4c-5) and deliberately did
   not widen it further; the fix is one more optional field, but it wants its own test.
-- [ ] **`VERDICTS[v.verdict]` resolves INHERITED keys.** `src/council/tally.js:114-115` claims
-  unknown verdict strings are skipped so a stray value cannot corrupt the basis — but `VERDICTS`
-  (`:71`) is a plain object literal, so `verdict: 'toString'` resolves through the prototype chain
+- [ ] **`VERDICTS[v.verdict]` resolves INHERITED keys.** `src/council/tally.js:103-104` (**was
+  `:114-115`, already stale at `8e97faaf` — it pointed at the return literal**) claims unknown
+  verdict strings are skipped so a stray value cannot corrupt the basis — but `VERDICTS`
+  (`tally.js:72`, **was `:71`**) is a plain object literal, so `verdict: 'toString'` resolves through the prototype chain
   and `basis["function toString() { [native code] }"] = NaN`, serialized as `null` in both
   `tally.json` and `verdict.json`. Reachable on the schema-free CLI path. Pre-existing, and PR4c's
-  `sameModelCorroboration` stamp (`:141`) reads the **same expression**, so it inherits the hole. The
+  `sameModelCorroboration` stamp (`tally.js:122-124`, **was `:141`, likewise already stale**) reads
+  the **same expression**, so it inherits the hole. The
   fix is an `Object.prototype.hasOwnProperty.call(VERDICTS, v.verdict)` guard at both sites — cheap,
   but it changes `basis` on a document that currently produces a `null`, so it needs a decision
   about whether that is a fix or a shape change.
@@ -3379,11 +3397,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
     5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
     `report.js:159` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
-    ambiguous even inside this population. Sites — `src/`: `council/debate.js:81`,
-    `council/debate.js:178`, `council/report.js:159` (×2), `council/run-debate.js:259` (**was
+    ambiguous even inside this population. Sites — `src/`: `council/debate.js:83` (**was `:81`**),
+    `council/debate.js:181` (**was `:178`**), `council/report.js:159` (×2), `council/run-debate.js:259` (**was
     `:258`**), `council/run-debate.js:265` (**was `:264`**); `electron/workspace-ui/`: `live-dead-seats.js:219`,
     `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:245 :: renderDeadSeatRows` (**was `:242`**). **Adjacent forms
-    deliberately outside Count 2:** `debate.js:211`'s `f.raiserSeat || f.raiser` (same shape, a
+    deliberately outside Count 2:** `debate.js:224`'s `f.raiserSeat || f.raiser` (**was `:211`**;
+    same shape, a
     *different* emitted field pair); the four seat-space-**gated** reads `report.js:98`/`:104` and
     `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
     be folded into the bare form — `report.js :: isSeatSpace`'s docblock records that independent
