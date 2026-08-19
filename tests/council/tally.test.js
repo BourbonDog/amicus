@@ -309,7 +309,8 @@ describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => 
 
 // v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the GUARDED peer filter and the R8 stamp.
 //
-// tally.js's peer filter has THREE branches, and each test below names the one it
+// The peer filter (peer-split.js :: peersOf, required into tally.js since v4.8
+// Phase 2 T-B1) has THREE branches, and each test below names the one it
 // drives: the OUTER `f.raiser ? … : votes`, and inside it the seat branch and the
 // alias branch. Two spellings are being separated —
 //   GUARDED  (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser
