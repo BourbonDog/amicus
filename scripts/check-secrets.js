@@ -13,7 +13,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { readIndexContent } = require('./git-index');
+const { readIndexContent, stagedPaths } = require('./git-index');
 
 const CONFIG = {
   patterns: [
@@ -133,15 +133,14 @@ function main() {
     process.exit(0);
   }
 
-  // Existing staged-files (pre-commit) path — unchanged
   let stagedFiles;
   try {
-    const output = execFileSync(
-      'git',
-      ['diff', '--cached', '--name-only', '--diff-filter=ACM'],
-      { encoding: 'utf-8' }
-    );
-    stagedFiles = output.trim().split('\n').filter(Boolean);
+    // NUL-delimited, not --name-only: git QUOTES any path it thinks special
+    // (non-ASCII, quotes, control chars), and that quoted literal resolves to
+    // nothing — so the file reads as absent and this gate SKIPS it. Measured on
+    // main: an sk-ant- key in `wéird ünicode.js` passed the scan, while the
+    // identical key in `plain.js` was blocked.
+    stagedFiles = stagedPaths('ACM');
   } catch {
     console.error('Failed to get staged files. Are you in a git repo?');
     process.exit(1);

@@ -16,7 +16,7 @@ async function checkHTML() {
     } catch (err) {
         console.error(err);
     } finally {
-        if (client) await client.close();
+        if (client) {await client.close();}
     }
 }
 checkHTML();

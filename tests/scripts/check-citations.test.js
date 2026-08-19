@@ -17,10 +17,9 @@ const {
   buildContext,
   checkAllTracked,
   listTrackedFiles,
-  stagedPaths,
   CONFIG,
 } = require('../../scripts/check-citations');
-const { readIndexContent } = require('../../scripts/git-index');
+const { readIndexContent, stagedPaths } = require('../../scripts/git-index');
 
 /** A tree stub: tracked paths -> content. */
 function stubCtx(tree, refs = {}, config = CONFIG, shallow = false) {
@@ -401,21 +400,30 @@ describe('check-citations', () => {
   });
 
   describe('stagedPaths', () => {
-    // `--name-only` reports a rename as its NEW path alone, so citations to the
-    // OLD path went unchecked at exactly the commit that broke them — the same
-    // hole deletions had.
+    const NUL = String.fromCharCode(0);
+
+    it('keeps a path git would otherwise QUOTE intact', () => {
+      // --name-only emits "w\303\251ird.js" for a non-ASCII name. That literal
+      // resolves to nothing, so the file reads as absent and gets SKIPPED —
+      // measured on main, an sk-ant- key in such a file passed check-secrets.
+      expect(stagedPaths('ACM', `A${NUL}wéird ünicode.js${NUL}`))
+        .toEqual(['wéird ünicode.js']);
+    });
+
     it('contributes BOTH halves of a rename', () => {
-      expect(stagedPaths('R100\told-name.js\tnew-name.js\n'))
+      // --name-only reports a rename as its NEW path alone, so citations to the
+      // OLD path went unchecked at exactly the commit that broke them.
+      expect(stagedPaths('ACMRD', `R100${NUL}old-name.js${NUL}new-name.js${NUL}`))
         .toEqual(['old-name.js', 'new-name.js']);
     });
 
     it('keeps single-path statuses intact, deletions included', () => {
-      expect(stagedPaths('M\ta.js\nA\tb.js\nD\tgone.js\n'))
+      expect(stagedPaths('ACMRD', `M${NUL}a.js${NUL}A${NUL}b.js${NUL}D${NUL}gone.js${NUL}`))
         .toEqual(['a.js', 'b.js', 'gone.js']);
     });
 
     it('is empty for an empty diff', () => {
-      expect(stagedPaths('')).toEqual([]);
+      expect(stagedPaths('ACMRD', '')).toEqual([]);
     });
   });
 
@@ -445,13 +453,14 @@ describe('check-citations', () => {
     });
 
     it('does not crash on a real citation whose target is outside scanSet', () => {
-      // tests/legacy-mcp-migration.test.js cites scripts/postinstall.js, which
-      // scanSet (src/, electron/, tests/) never covers.
+      // Derived, not hardcoded, so this keeps testing the real property even if
+      // the particular file that provoked it is renamed or deleted.
       const tracked = listTrackedFiles();
       const scan = scanSet(tracked);
-      expect(scan).not.toContain('scripts/postinstall.js');
+      const outside = tracked.find(f => f.endsWith('.js') && !scan.includes(f));
+      expect(outside).toBeDefined();
       const ctx = buildContext(tracked, CONFIG, readIndexContent(scan));
-      expect(() => ctx.readFile('scripts/postinstall.js')).not.toThrow();
+      expect(() => ctx.readFile(outside)).not.toThrow();
     });
   });
 

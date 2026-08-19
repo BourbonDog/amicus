@@ -23,6 +23,8 @@ function batchOf(entries) {
   return Buffer.concat(parts);
 }
 
+const NUL = String.fromCharCode(0);
+
 describe('git-index', () => {
   describe('parseBatch', () => {
     it('maps each response to its requested path, in order', () => {
@@ -79,7 +81,7 @@ describe('git-index', () => {
       // Skipping the entry without advancing past its body would read the NEXT
       // body as a header and corrupt everything after it.
       expect(() => parseBatch(Buffer.from('abc blob NOTANUMBER\nbody\n'), ['a.js']))
-        .toThrow(/unparseable header/);
+        .toThrow(/unparseable size in header/);
     });
 
     it('THROWS on an unterminated header', () => {
@@ -98,7 +100,7 @@ describe('git-index', () => {
       const calls = [];
       const paths = Array.from({ length: 250 }, (_, i) => `f${i}.js`);
       readIndexContent(paths, input => {
-        const want = input.trim().split('\n');
+        const want = input.split(NUL).filter(Boolean);
         calls.push(want.length);
         return batchOf(want.map(() => ({ content: 'x\n' })));
       }, 100);
@@ -108,7 +110,7 @@ describe('git-index', () => {
     it('returns every path across the chunk boundary', () => {
       const paths = Array.from({ length: 30 }, (_, i) => `f${i}.js`);
       const got = readIndexContent(paths, input => {
-        const want = input.trim().split('\n');
+        const want = input.split(NUL).filter(Boolean);
         return batchOf(want.map(p => ({ content: `body-${p.slice(1)}\n` })));
       }, 7);
       expect(got.size).toBe(30);
@@ -118,13 +120,16 @@ describe('git-index', () => {
   });
 
   describe('readIndexContent', () => {
-    it('asks git for :path, one line per file', () => {
+    it('asks git for :path, NUL-terminated per file', () => {
+      // NUL, not newline: a path may contain a newline, and `--batch -z` is what
+      // lets such a path round-trip instead of being quoted into something that
+      // resolves to nothing and gets silently skipped.
       let asked = null;
       readIndexContent(['src/a.js', 'b.js'], input => {
         asked = input;
         return batchOf([{ content: 'x' }, { content: 'y' }]);
       });
-      expect(asked).toBe(':src/a.js\n:b.js\n');
+      expect(asked).toBe(`:src/a.js${NUL}:b.js${NUL}`);
     });
 
     it('does not spawn git for an empty list', () => {

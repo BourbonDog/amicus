@@ -45,7 +45,7 @@
 const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
-const { readIndexContent, readIndexFile } = require('./git-index');
+const { readIndexContent, readIndexFile, stagedPaths, NotInIndex } = require('./git-index');
 
 const CONFIG = {
   // Live code whose citations are maintained and therefore enforced.
@@ -265,10 +265,14 @@ function checkCitation(cite, container, ctx) {
   let content;
   try {
     content = ctx.readFile(target);
-  } catch {
+  } catch (e) {
+    // ONLY a genuine absence becomes a finding. A protocol failure must keep
+    // propagating: swallowing it here would re-open the fail-open the batch
+    // reader was just hardened against, one layer up.
+    if (!(e instanceof NotInIndex)) { throw e; }
     // Tracked, but not in THIS commit — the target is staged for deletion.
-    // That is a finding, not a crash: citing a file the commit removes is
-    // exactly the rot this gate exists to catch, at the moment it is created.
+    // Citing a file the commit removes is exactly the rot this gate exists to
+    // catch, at the moment it is created.
     return fail(`'${target}' is not in this commit (staged for deletion?)`);
   }
 
@@ -340,29 +344,6 @@ function scopeForCommit(changed, scanned, readFile, tracked = scanned) {
   return [...inScope].sort();
 }
 
-/**
- * Every path a staged change touches, INCLUDING both halves of a rename.
- *
- * `--name-only` reports a rename as its NEW path alone, so the old path never
- * enters scope and the renaming commit is the one commit that cannot see the
- * citations it just broke — the same hole deletions had. `--name-status` gives
- * `R100<TAB>old<TAB>new`, and both halves matter: the old path is what other
- * files still cite, the new path is what they must be re-anchored to.
- * @param {string} [raw] - `git diff --cached --name-status` output, for testing
- * @returns {string[]}
- */
-function stagedPaths(raw = execFileSync(
-  'git', ['diff', '--cached', '--name-status', '--diff-filter=ACMRD'],
-  { encoding: 'utf-8' }
-)) {
-  const paths = [];
-  for (const line of raw.trim().split('\n').filter(Boolean)) {
-    // status, then 1 path (A/C/D/M) or 2 (R/C with a similarity score).
-    paths.push(...line.split('\t').slice(1).map(s => s.trim()).filter(Boolean));
-  }
-  return paths;
-}
-
 /** List git-tracked files. */
 function listTrackedFiles() {
   return execFileSync('git', ['ls-files'], { encoding: 'utf-8' })
@@ -406,7 +387,7 @@ function buildContext(tracked = listTrackedFiles(), config = CONFIG, staged = nu
         // files. Reading those lazily is what keeps the hook from throwing on a
         // commit that merely touches a file citing scripts/postinstall.js.
         const lazy = readIndexFile(p);
-        if (lazy === null) { throw new Error(`not in index: ${p}`); }
+        if (lazy === null) { throw new NotInIndex(p); }
         staged.set(p, lazy);
         return lazy;
       }
@@ -510,8 +491,14 @@ function main() {
 
   const files = [];
   for (const p of scope) {
-    // Absent from the index = absent from the commit (a staged deletion).
-    try { files.push({ path: p, content: ctx.readFile(p) }); } catch { /* deleted */ }
+    try {
+      files.push({ path: p, content: ctx.readFile(p) });
+    } catch (e) {
+      // Absent from the index = absent from the commit (a staged deletion), so
+      // there is nothing to check. Anything else is a real failure and must not
+      // be mistaken for one.
+      if (!(e instanceof NotInIndex)) { throw e; }
+    }
   }
   const violations = checkCitations(files, ctx);
   noticeSkipped(ctx);
@@ -524,7 +511,7 @@ if (process.argv[1] && process.argv[1].includes('check-citations')) {
 
 module.exports = {
   countLines, parseCitations, resolveTarget, matchesPattern, checkCitation,
-  identifierRegex, symbolPresent, stagedPaths,
+  identifierRegex, symbolPresent,
   checkCitations, scopeForCommit, scanSet, buildContext, checkAllTracked,
   listTrackedFiles, isShallowClone, noticeSkipped, CONFIG,
 };

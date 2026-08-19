@@ -149,7 +149,7 @@ function validateResults(_model, results) {
   );
 
   let passed = true;
-  let warnings = [];
+  const warnings = [];
 
   // Check 1: All requests succeeded
   const failedRequests = results.filter(r => !r.success);
