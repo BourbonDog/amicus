@@ -495,10 +495,15 @@ function main() {
   if (staged.length === 0) {process.exit(0);}
 
   // Read the INDEX, not the working tree: the index is what this commit will
-  // contain. One `git cat-file --batch` for the whole scan set — per-file
-  // `git show` would cost ~900 subprocesses and blow the hook's time budget.
+  // contain. Batched `git cat-file` reads, a few hundred paths per call —
+  // per-file `git show` would cost ~900 subprocesses and blow the time budget.
+  //
+  // Prefetch every tracked .js, not merely the scan set: a citation TARGET can
+  // be any of them (scripts/, bin/ and evals/ are all cited from scanned files),
+  // and leaving those to the lazy path spawns one process per target.
   const scan = scanSet(tracked);
-  const ctx = buildContext(tracked, CONFIG, readIndexContent(scan));
+  const prefetch = [...new Set([...scan, ...tracked.filter(f => f.endsWith('.js'))])];
+  const ctx = buildContext(tracked, CONFIG, readIndexContent(prefetch));
 
   const scope = scopeForCommit(staged, scan, ctx.readFile, tracked);
   if (scope.length === 0) {process.exit(0);}

@@ -45,27 +45,37 @@ function runBatch(input) {
 function parseBatch(buf, paths) {
   const out = new Map();
   let off = 0;
-  let i = 0;
-  while (off < buf.length && i < paths.length) {
+  const fail = (why) => { throw new Error(`git cat-file --batch: ${why}`); };
+
+  // FAIL CLOSED. Every requested path must be accounted for — either with
+  // content, or with git's explicit `missing`. Anything else throws.
+  //
+  // The alternative is worse than it looks: callers read an absent path as a
+  // staged deletion and SKIP it. So a short or malformed response would make
+  // check-secrets quietly not scan a file, which is a fail-OPEN on the highest
+  // consequence gate in the repo. A crashing hook is recoverable; a hook that
+  // silently stops checking is not.
+  for (let i = 0; i < paths.length; i++) {
+    if (off >= buf.length) {
+      fail(`output ended after ${i} of ${paths.length} entries (next: ${paths[i]})`);
+    }
     const nl = buf.indexOf(0x0a, off);
-    if (nl === -1) {break;}
+    if (nl === -1) { fail(`unterminated header for ${paths[i]}`); }
     const header = buf.toString('utf-8', off, nl);
     off = nl + 1;
-    if (header.endsWith(' missing')) { i++; continue; }
+    // The ONLY legitimate way for a requested path to carry no content.
+    if (header.endsWith(' missing')) { continue; }
     const size = Number(header.split(' ')[2]);
-    if (!Number.isFinite(size)) { i++; continue; }
-    // Never hand back a partial blob. check-secrets scans this content, and
-    // truncation silently DROPS whatever came after the cut — a secret in the
-    // tail would read as a clean file. Fail loudly instead.
+    // Skipping a bad header without advancing `off` would read the NEXT entry's
+    // body as a header and desync everything after it.
+    if (!Number.isFinite(size)) { fail(`unparseable header '${header}' for ${paths[i]}`); }
+    // A truncated blob silently drops whatever followed the cut — a secret in
+    // the tail would read as a clean file.
     if (off + size > buf.length) {
-      throw new Error(
-        `git cat-file --batch: truncated output for ${paths[i]} ` +
-        `(declared ${size} bytes, ${buf.length - off} available)`
-      );
+      fail(`truncated output for ${paths[i]} (declared ${size} bytes, ${buf.length - off} available)`);
     }
     out.set(paths[i], buf.toString('utf-8', off, off + size));
     off += size + 1; // content, then the newline the protocol appends
-    i++;
   }
   return out;
 }

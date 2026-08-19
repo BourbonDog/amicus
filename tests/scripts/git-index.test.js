@@ -61,12 +61,35 @@ describe('git-index', () => {
       expect(got.get('b.js')).toBe('next\n');
     });
 
+    // FAIL CLOSED. Callers read an absent path as a staged deletion and SKIP it,
+    // so any silently-dropped entry makes check-secrets quietly not scan a file
+    // — a fail-OPEN on the highest-consequence gate in the repo. Every protocol
+    // deviation must throw instead.
     it('THROWS on truncated output rather than returning a partial blob', () => {
-      // check-secrets scans this content. A truncated blob silently drops
-      // whatever came after the cut, so a secret in the tail would read as a
-      // clean file — a false PASS on the highest-consequence gate.
       expect(() => parseBatch(Buffer.from('abc123 blob 99\nshort'), ['a.js']))
         .toThrow(/truncated output for a\.js/);
+    });
+
+    it('THROWS when git returns fewer entries than were requested', () => {
+      expect(() => parseBatch(batchOf([{ content: 'hi\n' }]), ['a.js', 'b.js']))
+        .toThrow(/ended after 1 of 2 entries/);
+    });
+
+    it('THROWS on an unparseable size header instead of desyncing', () => {
+      // Skipping the entry without advancing past its body would read the NEXT
+      // body as a header and corrupt everything after it.
+      expect(() => parseBatch(Buffer.from('abc blob NOTANUMBER\nbody\n'), ['a.js']))
+        .toThrow(/unparseable header/);
+    });
+
+    it('THROWS on an unterminated header', () => {
+      expect(() => parseBatch(Buffer.from('abc blob'), ['a.js']))
+        .toThrow(/unterminated header/);
+    });
+
+    it('does NOT throw for an explicit `missing` — the one legitimate absence', () => {
+      const got = parseBatch(batchOf([{ path: 'gone.js', missing: true }]), ['gone.js']);
+      expect(got.size).toBe(0);
     });
   });
 
