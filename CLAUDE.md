@@ -870,6 +870,7 @@ GEMINI.md and AGENTS.md are symlinks to CLAUDE.md -- no sync needed.
 - [docs/architecture.md](docs/architecture.md) - Data flow, fold mechanism, Electron BrowserView
 - [docs/testing.md](docs/testing.md) - Testing strategy, tiers, CDP, UI testing
 - [docs/doc-system.md](docs/doc-system.md) - Auto-generation markers, cross-links
+- [docs/CITATIONS.md](docs/CITATIONS.md) - Citing one file from another; the citation gate
 - [docs/opencode-integration.md](docs/opencode-integration.md) - OpenCode SDK, agent mapping
 - [docs/configuration.md](docs/configuration.md) - Env vars, dependencies, model names
 - [docs/publishing.md](docs/publishing.md) - npm publishing
