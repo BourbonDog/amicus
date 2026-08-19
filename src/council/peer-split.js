@@ -9,9 +9,11 @@
  * change). BOTH consumers now call it: tally.js since T-B1, debate.js since
  * T-B2 — which is this module's whole reason to exist, because the tally the
  * chair reads and the defense brief the raiser reads must be ONE computation,
- * not two spellings of it. The exact tally.js comment split and the SPLITDROP
- * mutation record are in task-1-report.md
- * (.superpowers/sdd/2026-08-19-v48-t23-peer-split/).
+ * not two spellings of it. The exact tally.js comment split this extraction
+ * made is recorded in task-1-report.md
+ * (.superpowers/sdd/2026-08-19-v48-t23-peer-split/, gitignored). SPLITDROP's
+ * own mutation record no longer lives there — it is beside the predicate
+ * below, in the tree, the way NAIVESPLIT's and ZEROEMIT's already are.
  *
  * ⚠️ REQUIRE-FREE by design, like ./seats and ./run-stats-entry: debate.js's
  * own docblock declares it DI-free, so any module it requires must itself
@@ -51,8 +53,9 @@ function peersOf(f, votes) {
   //
   // Named mutant "SPLITDROP": delete this ternary's outer `f.raiser ? … :`
   // condition so the filter runs UNCONDITIONALLY on every finding, raiser or
-  // not. Never shipped — applied post-commit, measured, then reverted by
-  // hand; the measured red set is recorded in task-1-report.md.
+  // not. Never shipped — applied, run against the FULL suite, reverted by
+  // hand, byte-verified (v4.8 T-B3, 2026-08-19). MEASURED red set: 2 suites /
+  // 9 tests, out of 541 / 7655. By suite: peer-split 5 · debate 4.
   //
   // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole INNER ternary
   // with the unguarded, seat-valued `v.seat !== f.raiserSeat`, keeping the

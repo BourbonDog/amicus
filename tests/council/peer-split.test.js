@@ -43,13 +43,15 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
     expect(peersOf(f, votes)).toEqual(votes);
   });
 
-  // SPLITDROP witnesses (v4.8 Phase 2 T-B1, task-1-report.md). Named mutant
-  // "SPLITDROP": delete the outer `f.raiser ? … :` condition so the filter
-  // in peer-split.js runs UNCONDITIONALLY. Neither witness below goes through
-  // tally() — no test elsewhere in the suite happens to put a vote's `judge`
-  // or `seat` in a position that collides with a falsy `f.raiser`/`f.raiserSeat`,
-  // so these two are this module's OWN, direct pin on the outer branch. Both
-  // are RED under SPLITDROP — see task-1-report.md for the measured run.
+  // SPLITDROP witnesses (v4.8 Phase 2 T-B1). Named mutant "SPLITDROP": delete
+  // the outer `f.raiser ? … :` condition so the filter in peer-split.js runs
+  // UNCONDITIONALLY. Neither witness below goes through tally() — no test
+  // elsewhere in the suite happens to put a vote's `judge` or `seat` in a
+  // position that collides with a falsy `f.raiser`/`f.raiserSeat`, so these
+  // two are this module's OWN, direct pin on the outer branch. Both are RED
+  // under SPLITDROP — MEASURED red set (v4.8 T-B3, 2026-08-19): 2 suites / 9
+  // tests, out of 541 / 7655 — full by-suite breakdown beside the mutation
+  // itself, peer-split.js :: peersOf.
   test('SPLITDROP witness A: no raiser, a vote with no judge field, still survives', () => {
     // GUARDED: f.raiser is falsy, so peers = votes verbatim and the judge
     // compare never runs. SPLITDROP: the filter runs anyway, and
