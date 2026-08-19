@@ -2473,11 +2473,14 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 - [ ] **NEXT TASK — T2.4 / PR C: the consumers.** Filed 2026-08-19 (v4.8 T-B3) as the correct
   resume point, replacing the run-retry.js entry above. Scope is SI-12's unidentifying-key join
   and SI-22.5's unattributed column across all three renderers with the vote still in `basis`
-  (ruling **R3**) — see the phasing doc's own T2.4 entry
-  (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:261`) for the two-item scope;
-  T2.3 changed nothing about it. ⚠️ **Needs a PRE-PASS, not a one-line insert**: `report.js`'s
-  `judges` array (`report.js:89`) is built BEFORE the per-finding loop where an orphaned seat
-  becomes detectable (`report.js:98`), so rendering the unattributed column is a two-phase build.
+  (ruling **R3**) — see the phasing doc's own **T2.4** entry
+  (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, named rather than lined: this
+  task's own earlier commit cited that entry by line and the citation was stale before the
+  commit finished, because a hunk written earlier in the SAME edit had already moved it) for
+  the two-item scope; T2.3 changed nothing about it. ⚠️ **Needs a PRE-PASS, not a one-line
+  insert**: `report.js`'s `judges` array (`report.js:89`) is built BEFORE the per-finding loop
+  where an orphaned seat becomes detectable (`report.js:98`), so rendering the unattributed
+  column is a two-phase build.
   Same shape in `src/workspace/matrix-model.js` (not `src/council/`) — check it too, not only the
   council renderers.
   - **Also waiting here: `report.js`'s citation rot, pre-existing.** Three comments cite
@@ -2555,8 +2558,14 @@ above were updated in place; these are the items it could not close, filed rathe
     splits file content on `\n` and runs its regex **per line**; a `file.js ::` / `symbol` token
     that wraps onto the next physical comment line never appears as one match on either line, so it
     parses to nothing. Candidate fix, **not implemented here**: join wrapped comment lines before
-    matching. Re-derived current set: **4 sites, all in the doc-tree** — `BACKLOG.md:2363`, `:2441`,
-    `:3415`, and the phasing doc `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:364`.
+    matching. Re-derived current set: **4 sites, all in the doc-tree**, named by entry rather
+    than by line — this same filing carried three self-citations gone stale from its own
+    commit's later hunks (fix round 1 caught it; a named reference cannot rot the same way):
+    three in `BACKLOG.md` itself — the **"The mechanism."** bullet under the PR #170 round-2 C1
+    discussion, the **"Concern for whoever extracts `run-retry.js` next"** bullet (now
+    DISCHARGED), and `BACKLOG.md :: SI-DUP`; and one in the phasing doc's own **"#146 names a
+    third hard-frame"** bullet (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`,
+    under "Why task mode moved").
     `check-citations.js --all` never scans `BACKLOG.md`/`docs/` for an unrelated, deliberate reason
     (outside `CONFIG.include`), so these 4 don't produce a false gate PASS; they produce a false
     negative for the informal `parseCitations` spot-check this PR has leaned on repeatedly against
