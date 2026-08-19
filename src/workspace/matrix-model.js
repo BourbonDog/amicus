@@ -12,7 +12,7 @@
  * already excluded them (v4.0).
  *
  * ⚠️ DE-ROT (F07): `tally()` writes `tierOverride: null` on EVERY finding,
- * unconditionally (src/council/tally.js:139) — it is never a real source for
+ * unconditionally (src/council/tally.js :: tally) — it is never a real source for
  * either the override badge or the post-override tier. Only `buildVerdict`
  * materializes `{from,to,reason}` and rewrites `tier` to `tierOverride.to`
  * (src/council/verdict.js:122-126). So both fields are joined in from
@@ -94,7 +94,7 @@ function buildMatrixModel(tally, labelMap, verdict) {
       thin: f.confidence === 'thin',
       tierOverride: (vf && vf.tierOverride) || null,
       // ⚠️ DE-ROT (F29): v4.1 decorates tally.json findings in place with
-      // `debate: {action, previousTier}` (src/council/debate.js:71-75; action ∈
+      // `debate: {action, previousTier}` (src/council/debate.js :: decorateRecord; action ∈
       // defended|amended|withdrawn|no-response) and verdict.json carries it through
       // (src/council/verdict.js:43). Consumed by electron/workspace-ui/workspace-matrix.js's
       // renderMatrix, which renders a `.debate-badge` in the tier cell (alongside the

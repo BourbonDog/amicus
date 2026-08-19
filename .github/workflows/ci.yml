@@ -51,7 +51,7 @@ jobs:
       - run: npm test -- ${{ matrix.jest-flags }}
 
   quality:
-    name: quality (lint + secret-scan + size-gate + actionlint)
+    name: quality (lint + secret-scan + size-gate + citation-gate + actionlint)
     runs-on: ubuntu-latest
     # The actionlint step retries its download, so a sustained network outage
     # can keep this job busy for ~9 minutes instead of failing fast. Without a
@@ -67,6 +67,7 @@ jobs:
       - run: npm run lint
       - run: npm run check:secrets
       - run: npm run check:sizes
+      - run: npm run check:citations
       - run: npm run check:tarball
       # actionlint v1.7.12, fetched as a checksum-verified release asset.
       #

@@ -114,8 +114,8 @@
       ]));
     }
     // ⚠️ DE-ROT (F38): on `--debate` runs the re-vote rationale IS structured — debate.json
-    // `revotes[] {judge, id, verdict, reason}` (run-debate.js:257-262) — so the parenthetical must
-    // not claim "no structured field". Wording below is corrected to cover both cases.
+    // `revotes[] {judge, id, verdict, reason}` (run-debate.js :: runDebate's `revotesJson` push)
+    // — so the parenthetical must not claim "no structured field". Wording below covers both.
     container.appendChild(R.el('p', { className: 'empty-note' }, [
       'Legend: ✓ agree · ✗ dispute · – neutral · * raiser · click a dispute cell for the judge’s prose (rationale lives in prose; on --debate runs a re-voted cell also carries a structured reason from debate.json).',
     ]));

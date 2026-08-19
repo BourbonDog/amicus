@@ -84,7 +84,7 @@ function isSeatTable(seats) {
  *     (:105-107), so its judge leg takes the alias branch too — and emits no -s2 note,
  *     because it BOUND. Measured: run-stages.test.js :: "M2: the placeholder never becomes…".
  *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser key names no seat
- *     takes materializeDebate's alias branch (run-debate.js:151-152,
+ *     takes materializeDebate's alias branch (run-debate.js :: runDebate,
  *     run-debate-revote.js:169-171 pass `seatById.get(key) || null`) and NO note records it.
  *   - an unmatchable waveId exonerates nothing.
  * @returns {Map<string, Set<string>>} orphan alias -> the kinds it provably did NOT write,

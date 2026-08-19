@@ -27,9 +27,9 @@ const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md',
 // ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
 // allowlist never named, so the Workspace hard-refused every `--debate` output with
 // `artifact not allowed: <name>`. Writers (re-derived v4.8 PR3 — Task 1 moved runRevoteWave):
-// tally-provisional.json = src/council/run-debate-stage.js:45; revote-bundle.md =
-// run-debate-revote.js:81; debate.json = run-debate.js:221-222; the rebuttal-/revote- pair =
-// materializeDebate (run-launch.js:230-240).
+// tally-provisional.json = run-debate-stage.js :: runDebateStage; revote-bundle.md =
+// run-debate-revote.js :: runRevoteWave; debate.json = run-debate.js :: runDebate; the
+// rebuttal-/revote- pair = run-launch.js :: materializeDebate.
 // ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
 // holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
 // appended inside artifactAllowlist below, next to review-/judge-.

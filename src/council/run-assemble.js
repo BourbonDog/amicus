@@ -14,7 +14,7 @@
  * (preflightClaudeReview — the reserved-seat/chair/critic guards), its review-N+1
  * labelling (labelClaudeReview), and its synthesized null-usage runStats row
  * (claudeRunStatsRow). Raiser self-votes are INCLUDED in adjudications —
- * exclusion is tally's job (tally.js:110); judged is tally's job (tally.js:148).
+ * exclusion is tally's job (tally.js :: tally — its `peers` filter, and `judged`).
  */
 
 const fs = require('fs');

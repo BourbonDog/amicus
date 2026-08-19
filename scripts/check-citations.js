@@ -1,0 +1,348 @@
+#!/usr/bin/env node
+
+/**
+ * Cross-file citation enforcement for the pre-commit hook and the whole-tree
+ * CI gate (--all).
+ *
+ * Comments and tests in this repo cite other files as `path/file.js:NNN`.
+ * Those citations rot silently whenever the cited file changes: PR #171
+ * produced ~30 review findings and NOT ONE was in the code — they were stale
+ * statements ABOUT the code, mostly rotted citations.
+ *
+ * Three citation forms are understood:
+ *
+ *   file.js:NNN        line citation      — checked: target resolves, NNN in range
+ *   file.js:NNN-MMM    range citation     — checked: target resolves, MMM in range
+ *   file.js :: symbol  SYMBOL ANCHOR      — checked: symbol appears in target
+ *   file.js@<ref>:NNN  HISTORICAL         — checked: NNN in range in the file AT <ref>
+ *
+ * Prefer the SYMBOL ANCHOR. A corrected line number is true until the next
+ * edit and then silently false; a symbol anchor survives every move. Use the
+ * HISTORICAL form for provenance ("moved verbatim from X") so a statement
+ * about a past tree stays machine-checkable instead of reading as rot.
+ *
+ * SCOPE (the reason this is enforceable rather than a 486-violation backlog):
+ * a commit is checked against the union of
+ *   IN — citations living in the files the commit changed, and
+ *   TO — citations anywhere in live code that POINT AT a file the commit changed.
+ * TO is what catches extractions. Measured over PR #171's 38 commits, 119
+ * corrected-citation instances split 66 IN-scope / 18 TO-scope-only: a gate
+ * scoped to changed files ALONE would have shipped all 18, including every
+ * run-retry.js citation in src/headless.js and three test files that the
+ * extraction commit never had open.
+ *
+ * Doc-tree citations (BACKLOG.md, docs/) are deliberately NOT scanned — 3639
+ * of the repo's citations live there and are overwhelmingly dated historical
+ * record. See docs/CITATIONS.md for the convention that governs them.
+ *
+ * Usage:
+ *   node scripts/check-citations.js          # Scans git staged files (IN u TO)
+ *   node scripts/check-citations.js --all    # Scans all tracked live files (CI)
+ *   const { checkCitations } = require('./scripts/check-citations');
+ */
+
+const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+const { resolve } = require('node:path');
+
+const CONFIG = {
+  // Live code whose citations are maintained and therefore enforced.
+  include: ['src/**/*.js', 'electron/**/*.js', 'tests/**/*.js'],
+  exclude: [
+    // Carries deliberately-broken citations as test fixtures.
+    'tests/scripts/check-citations.test.js',
+  ],
+  // Cited paths that are real but live outside this repo, so no tracked file
+  // can ever resolve them. Keep this list short and justified.
+  external: [
+    // @opencode-ai/sdk's own build output, cited for its 5000ms default.
+    'dist/server.js',
+  ],
+  // Known-stale citations, grandfathered so the gate can block from day one.
+  // Every one of these rotted when v4.8 PR0 split its target file. Fix the
+  // citation (prefer a `file.js :: symbol` anchor), then delete the entry.
+  grandfathered: [
+    { file: 'tests/route-launch-local.test.js', cite: 'route-launch.js:269' },
+    { file: 'tests/route-launch-local.test.js', cite: 'route-launch.js:292-294' },
+    { file: 'tests/workspace/dead-seat-twins.test.js', cite: 'live-seats.js:209' },
+    { file: 'tests/workspace/run-detail.test.js', cite: 'run.js:293' },
+    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-seats.js:170-174' },
+    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-seats.js:234-243' },
+    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-model.js:227-241' },
+    // Not a moved-target rot: `createSessionMetadata` is a symbol (it lives in
+    // src/sidecar/start-metadata.js), never a file. Malformed since it was written.
+    { file: 'tests/start-json.test.js', cite: 'createSessionMetadata.js:50' },
+  ],
+};
+
+// A citation: a .js path, an optional @ref, then either :NNN[-MMM] or :: symbol.
+// The path class allows dots so `run-retry.test.js` is one token, and the
+// lookbehind stops the match starting mid-identifier.
+const CITATION = new RegExp(
+  '(?<![A-Za-z0-9_./-])' +
+  '([A-Za-z0-9_./-]*[A-Za-z0-9_-]\\.js)' +
+  '(?:@([A-Za-z0-9_./-]+))?' +
+  '(?:\\s*::\\s*([A-Za-z0-9_$.]+)|:(\\d+)(?:-(\\d+))?)',
+  'g'
+);
+
+/**
+ * Count lines the way this repo counts them (mirrors check-file-sizes.js, so a
+ * citation to the last line of a size-gated file is in range, not off by one).
+ * @param {string} content
+ * @returns {number}
+ */
+function countLines(content) {
+  const n = content.split('\n').length;
+  return content.endsWith('\n') ? n - 1 : n;
+}
+
+/**
+ * Parse every citation out of one file's content.
+ * @param {string} content
+ * @returns {Array<{raw: string, path: string, ref: string|null, symbol: string|null,
+ *                  start: number|null, end: number|null, line: number}>}
+ */
+function parseCitations(content) {
+  const found = [];
+  const lines = content.split('\n');
+  lines.forEach((text, i) => {
+    CITATION.lastIndex = 0;
+    let m;
+    while ((m = CITATION.exec(text))) {
+      found.push({
+        raw: m[0],
+        path: m[1],
+        ref: m[2] || null,
+        symbol: m[3] || null,
+        start: m[4] ? Number(m[4]) : null,
+        end: m[5] ? Number(m[5]) : (m[4] ? Number(m[4]) : null),
+        line: i + 1,
+      });
+    }
+  });
+  return found;
+}
+
+/**
+ * Resolve a cited path to a tracked file: exact path, then path suffix, then
+ * basename. The basename fallback is what makes `deriveSeatLoss/verdict.js`
+ * and `./run-stages.js` resolve — prose prefixes are common in this repo.
+ * @param {string} cited
+ * @param {string[]} tracked
+ * @returns {string[]} matching tracked paths (0 = unresolved, >1 = ambiguous)
+ */
+function resolveTarget(cited, tracked) {
+  const clean = cited.replace(/^\.\//, '');
+  if (tracked.includes(clean)) return [clean];
+  const suffix = tracked.filter(f => f.endsWith('/' + clean));
+  if (suffix.length) return suffix;
+  const base = clean.split('/').pop();
+  return tracked.filter(f => f.endsWith('/' + base) || f === base);
+}
+
+/**
+ * Simple glob match, identical in behaviour to check-file-sizes.js's.
+ * @param {string} filePath
+ * @param {string[]} patterns
+ * @returns {boolean}
+ */
+function matchesPattern(filePath, patterns) {
+  for (const pattern of patterns) {
+    const regexStr = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '<<GLOBSTAR_DIR>>')
+      .replace(/\*\*/g, '<<GLOBSTAR>>')
+      .replace(/\*/g, '[^/]*')
+      .replace(/<<GLOBSTAR_DIR>>/g, '(?:[^/]+/)*')
+      .replace(/<<GLOBSTAR>>/g, '.*');
+    if (new RegExp(`^${regexStr}$`).test(filePath)) return true;
+  }
+  return false;
+}
+
+/**
+ * Check one citation against the tree.
+ * @param {object} cite - from parseCitations
+ * @param {string} container - path of the file the citation lives in
+ * @param {object} ctx - {tracked, readFile, readAtRef, config}
+ * @returns {null | {file: string, line: number, cite: string, reason: string}}
+ */
+function checkCitation(cite, container, ctx) {
+  const config = ctx.config || CONFIG;
+  const fail = reason => ({ file: container, line: cite.line, cite: cite.raw, reason });
+
+  if (config.grandfathered.some(g => g.file === container && g.cite === cite.raw)) return null;
+  if (config.external.includes(cite.path.replace(/^\.\//, ''))) return null;
+
+  // Historical form: resolve the file AT that ref and range-check there.
+  if (cite.ref) {
+    let content;
+    try {
+      content = ctx.readAtRef(cite.ref, cite.path);
+    } catch {
+      return fail(`historical ref '${cite.ref}' does not resolve to ${cite.path}`);
+    }
+    const max = countLines(content);
+    if (cite.end !== null && cite.end > max) {
+      return fail(`line ${cite.end} is past EOF (${max} lines) in ${cite.path} at ${cite.ref}`);
+    }
+    return null;
+  }
+
+  const targets = resolveTarget(cite.path, ctx.tracked);
+  if (targets.length === 0) return fail(`no tracked file matches '${cite.path}'`);
+
+  // Symbol anchor: the symbol must appear in the target. Rot-immune form.
+  if (cite.symbol) {
+    const head = cite.symbol.split('.')[0];
+    const re = new RegExp(`\\b${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    if (!targets.some(t => re.test(ctx.readFile(t)))) {
+      return fail(`symbol '${cite.symbol}' not found in ${targets.join(' | ')}`);
+    }
+    return null;
+  }
+
+  // Line/range citation: the highest cited line must exist in the target.
+  const maxes = targets.map(t => countLines(ctx.readFile(t)));
+  if (!targets.some((t, i) => cite.end >= 1 && cite.end <= maxes[i])) {
+    return fail(`line ${cite.end} is past EOF (${Math.max(...maxes)} lines) in ${targets[0]}`);
+  }
+  return null;
+}
+
+/**
+ * Check every citation in a set of files.
+ * @param {Array<{path: string, content: string}>} files
+ * @param {object} ctx - {tracked, readFile, readAtRef, config}
+ * @returns {Array<{file: string, line: number, cite: string, reason: string}>}
+ */
+function checkCitations(files, ctx) {
+  const violations = [];
+  for (const { path, content } of files) {
+    for (const cite of parseCitations(content)) {
+      const v = checkCitation(cite, path, ctx);
+      if (v) violations.push(v);
+    }
+  }
+  return violations;
+}
+
+/**
+ * The commit's citation scope: files the commit changed (IN), plus every live
+ * file holding a citation that points AT a changed file (TO).
+ * @param {string[]} changed - paths the commit touched
+ * @param {string[]} scanned - live files eligible for scanning
+ * @param {(p: string) => string} readFile
+ * @returns {string[]} files to scan, sorted
+ */
+function scopeForCommit(changed, scanned, readFile) {
+  const inScope = new Set(changed.filter(f => scanned.includes(f)));
+  const changedBases = new Set(changed.map(f => f.split('/').pop()));
+  for (const f of scanned) {
+    if (inScope.has(f)) continue;
+    let content;
+    try { content = readFile(f); } catch { continue; }
+    // Cheap pre-filter before the regex: the basename must appear at all.
+    if (![...changedBases].some(b => content.includes(b))) continue;
+    for (const cite of parseCitations(content)) {
+      if (changedBases.has(cite.path.split('/').pop())) { inScope.add(f); break; }
+    }
+  }
+  return [...inScope].sort();
+}
+
+/** List git-tracked files. */
+function listTrackedFiles() {
+  return execFileSync('git', ['ls-files'], { encoding: 'utf-8' })
+    .trim().split('\n').filter(Boolean);
+}
+
+/** Build the IO context the pure checkers run against. */
+function buildContext(tracked = listTrackedFiles(), config = CONFIG) {
+  const cache = new Map();
+  return {
+    tracked,
+    config,
+    readFile(p) {
+      if (!cache.has(p)) cache.set(p, readFileSync(resolve(p), 'utf-8'));
+      return cache.get(p);
+    },
+    readAtRef(ref, p) {
+      const clean = p.replace(/^\.\//, '');
+      const candidates = tracked.filter(f => f === clean || f.endsWith('/' + clean));
+      const target = candidates[0] || clean;
+      return execFileSync('git', ['show', `${ref}:${target}`], {
+        encoding: 'utf-8', maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    },
+  };
+}
+
+/** The live files this gate scans. */
+function scanSet(tracked, config = CONFIG) {
+  return tracked.filter(f =>
+    matchesPattern(f, config.include) && !matchesPattern(f, config.exclude)
+  );
+}
+
+/** Whole-tree scan (CI / --all). */
+function checkAllTracked(tracked = listTrackedFiles(), config = CONFIG) {
+  const ctx = buildContext(tracked, config);
+  const files = scanSet(tracked, config).map(p => ({ path: p, content: ctx.readFile(p) }));
+  return checkCitations(files, ctx);
+}
+
+/** Report violations and exit non-zero. */
+function report(violations) {
+  console.error('\n  BLOCKED: stale cross-file citations:');
+  for (const v of violations) {
+    console.error(`    ${v.file}:${v.line}  [${v.cite}]  ${v.reason}`);
+  }
+  console.error(
+    '\n  Open the cited line and re-anchor it. Prefer `file.js :: symbolName`\n' +
+    '  — a line number is true until the next edit; a symbol anchor survives\n' +
+    '  every move. For provenance, use `file.js@<ref>:NNN`.\n'
+  );
+  process.exit(1);
+}
+
+/** Main: staged scope (pre-commit) or whole tree (--all / CI). */
+function main() {
+  const tracked = listTrackedFiles();
+
+  if (process.argv.includes('--all')) {
+    const violations = checkAllTracked(tracked);
+    if (violations.length > 0) report(violations);
+    process.exit(0);
+  }
+
+  let staged;
+  try {
+    staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'],
+      { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+  } catch {
+    console.error('Failed to get staged files.');
+    process.exit(1);
+  }
+  if (staged.length === 0) process.exit(0);
+
+  const ctx = buildContext(tracked);
+  const scope = scopeForCommit(staged, scanSet(tracked), ctx.readFile);
+  if (scope.length === 0) process.exit(0);
+
+  const violations = checkCitations(
+    scope.map(p => ({ path: p, content: ctx.readFile(p) })), ctx
+  );
+  if (violations.length > 0) report(violations);
+}
+
+if (process.argv[1] && process.argv[1].includes('check-citations')) {
+  main();
+}
+
+module.exports = {
+  countLines, parseCitations, resolveTarget, matchesPattern, checkCitation,
+  checkCitations, scopeForCommit, scanSet, buildContext, checkAllTracked,
+  listTrackedFiles, CONFIG,
+};

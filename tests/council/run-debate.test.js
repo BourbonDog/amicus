@@ -443,7 +443,7 @@ describe('runDebate — one bounded repair per defense solo', () => {
   });
 });
 
-// ---- re-vote repair branch (run-debate.js:138-152) — an ALIVE-but-unparseable judge leg is
+// ---- re-vote repair branch (run-debate-revote.js :: runRevoteWave) — an ALIVE-but-unparseable judge leg is
 // the only door into this branch: a DEAD leg (mkLeg(model, '', 'error')) never reaches it.
 describe('runDebate — re-vote repair branch', () => {
   describe('repair SUCCEEDS: an alive-but-unstructured judge leg is repaired once, and the repair is used', () => {
@@ -823,7 +823,7 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
   });
 
   // Step 9: priorVerdicts and revotes must be keyed in the SAME space —
-  // briefings-debate.js:164 looks up prior[j] over Object.keys(revotes), so a
+  // briefings-debate.js :: buildDebateAddendum looks up prior[j] over Object.keys(revotes), so a
   // skew prints `no prior verdict` on every line.
   test('priorVerdicts and the re-vote map share ONE key space', () => {
     const a1 = result.addendumOutcomes.find(o => o.id === 'A1');

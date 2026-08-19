@@ -418,6 +418,7 @@ electron/
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
+├── check-citations.js  # Cross-file citation enforcement for the pre-commit hook and the whole-tree
 ├── check-file-sizes.js  # File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).
 ├── check-global-install.js  # CI assertion (Windows install-smoke job, #35): after a REAL global install
 ├── check-html.js

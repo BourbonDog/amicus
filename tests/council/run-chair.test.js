@@ -74,7 +74,7 @@ describe('pickFallbackChair under resolved-id keys (v4.7 GOA-7 D11)', () => {
 // depended on the layout of an append-only file, with nothing pinning it.
 //
 // WHY TIES ARE ORDINARY, NOT EXOTIC. On a two-seat bench `peersOnly` is a mean
-// over ranks drawn from {1,2} — `tally.js:58` excludes the judge's own alias —
+// over ranks drawn from {1,2} — `tally.js :: computeStreetCred` excludes the judge's own alias —
 // so equal means are a common arithmetic outcome. (Note the tying groups reach
 // this function via a PAST run's ledger: `excluded()` already filters every
 // alias on the CURRENT bench.)

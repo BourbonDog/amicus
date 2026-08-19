@@ -96,13 +96,13 @@
   // replaced adjudications, so a matrix `dispute` cell can be a re-vote — gate per
   // (judge, findingId), not per run: a re-voting seat gets ONE re-vote leg covering only the ids
   // it actually re-voted; every other dispute cell still belongs to judge-*.md. debate.json's
-  // `revotes[].judge` is still keyed on the bench ALIAS (src/council/run-debate.js:217 keeps it
+  // `revotes[].judge` is still keyed on the bench ALIAS (src/council/run-debate.js :: runDebate keeps it
   // alias-valued and puts the seat in a sibling `seat` field only when the two differ), which is
   // the same key state.labelByModel uses, so this join needs no inversion.
   // ⚠️ v4.8 PR5a T2 CLOSES the PR3 forecast that stood here. The allowlist is seat-space now
   // (artifact-names.js) and the matrix has been seat-space since PR4c, so `judgePair.model` is
   // a SEAT ID and the name resolves. That is exactly why the re-vote join below had to move in
-  // the SAME commit: `revotes[].judge` stays alias-valued by design (run-debate.js:217), so an
+  // the SAME commit: `revotes[].judge` stays alias-valued by design (run-debate.js :: runDebate), so an
   // alias-vs-seat comparison is permanently false. At HEAD that was harmless — the name missed
   // too, so nothing rendered — but once the name resolves, a false join silently serves the
   // ORIGINAL judge's prose highlighted as the re-vote. `revotes[]` carries a sibling `seat`

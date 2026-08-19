@@ -1,7 +1,7 @@
 // src/council/run-finish.js
 'use strict';
 // Final tally (chair row included) + ledger gate + tally/verdict artifacts.
-// Moved verbatim from run.js:242-288 (v4.8 PR0 size-gate split, zero
+// Moved verbatim from run.js@6b0c3b6b:242-288 (v4.8 PR0 size-gate split, zero
 // behavior). NOT run-finalize.js — that sibling owns exit codes and the
 // terminal write; this module builds the final tally, appends the run
 // record to the ledger (skipped for lens runs), and writes the

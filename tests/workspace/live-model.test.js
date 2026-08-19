@@ -92,13 +92,13 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
   });
 
   // ⚠️ DE-ROT (F37): v4.1 `--debate` appends EXTRA runStats rows for the SAME bench alias
-  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — `debateRunStatsRows` at
-  // src/council/debate.js:134, merged at src/council/run-finish.js:43-48). renderSeats keys on
+  // (role 'rebuttal' per defense leg, 'revote' per re-vote leg — src/council/debate.js ::
+  // debateRunStatsRows, merged at src/council/run-finish.js:43-48). renderSeats keys on
   // `seat.id || seat.model`, and seatsFromRunStats set no id, so on any debate run the seat row
   // was silently overwritten by the re-vote leg. This case is the regression guard.
   //   ⚠️ The debate.js citation above read `:88-96` until v4.8 PR5b. That is the adjudication
   //   assembly, not the runStats-row emitter — a rotted citation that had been copied into two
-  //   other files. Verified: `debateRunStatsRows` is defined at debate.js:134.
+  //   other files. It is symbol-anchored now, so the next move cannot re-rot it.
   //   ⚠️ The expected ids below are `JSON.stringify([seat-or-alias, role])`, not `alias:role`
   //   (PR5b Task 1). What this guard pins is that the three roles stay DISTINCT; the spelling is
   //   incidental. An alias may contain ':' and roles include 'lens:*', so the concatenated form

@@ -216,8 +216,8 @@ describe('tally() — runStats carries what qualifies `conformance` (review F3)'
 });
 
 // v4.8 PR3 Task 5: `seat` (on adjudications) and `raiserSeat` (on findings) are
-// additive passthroughs — tally.js:89 and the findings return (:138) are
-// allowlists that silently DROP any key not explicitly named. RED today.
+// additive passthroughs — tally.js :: tally's adjudication push and its findings
+// return are allowlists that silently DROP any key not named. RED today.
 describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
   const baseInput = {
     meta: { runId: 'r', runType: 'review', date: 'd', models: ['deepseek#1', 'deepseek#2'],
@@ -265,7 +265,7 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
   });
 });
 
-// v4.8 PR4c Task 1 (plan §3.1, T13): tally.js:151-176 is an explicit allowlist
+// v4.8 PR4c Task 1 (plan §3.1, T13): tally.js :: tally's `runStats` map is an allowlist
 // that builds a FRESH object literal, so a `seat` key on an input row is
 // stripped before it can reach tally.json — and verdict.js:148 copies tally's
 // output verbatim, so verdict.json inherits the strip. Producing the row with

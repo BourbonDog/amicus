@@ -1,6 +1,6 @@
 // electron/workspace-ui/live-seats.js
 // Seats surface: dash, seatCells, SEATS_PANEL_EXCLUDED_ROLES,
-// seatsFromRunStats, deadSeats. Moved verbatim from live-model.js:53-285
+// seatsFromRunStats, deadSeats. Moved verbatim from live-model.js@ac7e7e12:53-285
 // (v4.8 PR0 size-gate split, zero behavior). Loads BEFORE live-model.js,
 // which re-exports these on window.AmicusLive so no consumer changes.
 // ES5 IIFE, dual export, strict-CSP <script> loading — same shape as
@@ -77,7 +77,7 @@
       return {
         // ⚠️ DE-ROT (F37) + v4.8 PR5b: composite id over the SEAT, not the alias.
         // ROLE half: a v4.1 `--debate` run emits extra runStats rows for the SAME bench alias
-        // (role 'rebuttal'/'revote', debateRunStatsRows at src/council/debate.js:134, merged at
+        // (role 'rebuttal'/'revote', src/council/debate.js :: debateRunStatsRows, merged at
         // run-finish.js:43-48). Without it, renderSeats keys on model and the re-vote row
         // silently overwrites the seat row.
         // SEAT half: PR1 made a bench that repeats an alias produce distinct seats, and two of
