@@ -13,7 +13,7 @@
  *
  *   file.js:NNN            line citation  — target resolves unambiguously, NNN in range
  *   file.js:NNN-MMM        range          — as above, and the range runs forwards
- *   file.js :: symbol      SYMBOL ANCHOR  — every dotted segment appears in the target
+ *   file.js :: symbol      SYMBOL ANCHOR  — the symbol (dotted path AS WRITTEN) is in the target
  *   file.js@<ref>:NNN      HISTORICAL     — NNN in range in the file AT <ref>
  *   file.js@<ref> :: sym   HISTORICAL+    — the symbol existed in that file AT <ref>
  *
@@ -165,16 +165,28 @@ function matchesPattern(filePath, patterns) {
 }
 
 /**
- * Which segments of a dotted symbol path are absent from the target.
- * Checking only the head (`foo` of `foo.bar`) passes any tail at all, so a
- * renamed member reads as verified when nothing verified it.
+ * Match an identifier on JS identifier boundaries. `\b` is wrong here: it is
+ * defined on [A-Za-z0-9_], so `\b$el\b` can never match `$el` — the boundary
+ * before `$` does not exist and a present symbol reads as missing.
+ * @param {string} ident
+ * @returns {RegExp}
+ */
+function identifierRegex(ident) {
+  const escaped = ident.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`);
+}
+
+/**
+ * Is a symbol anchor's target present? A dotted path is checked AS WRITTEN —
+ * `foo.bar` must appear as `foo.bar`. Checking each segment independently
+ * passes whenever an unrelated `foo` and an unrelated `bar` both exist
+ * somewhere in the file, which verifies nothing about the chain that was cited.
  * @param {string} symbol
  * @param {string} content
- * @returns {string[]} the segments not found
+ * @returns {boolean}
  */
-function missingSegments(symbol, content) {
-  return symbol.split('.').filter(Boolean).filter(seg =>
-    !new RegExp(`\\b${seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(content));
+function symbolPresent(symbol, content) {
+  return identifierRegex(symbol).test(content);
 }
 
 /**
@@ -195,6 +207,11 @@ function checkCitation(cite, container, ctx) {
   // out-of-range start: `a.js:200-100` against a 150-line file passes on 100.
   if (cite.start !== null && cite.end !== null && cite.start > cite.end) {
     return fail(`range runs backwards (${cite.start} > ${cite.end})`);
+  }
+  // Lines are 1-based. Only the END was bounded before, so `a.js:0-50` slipped
+  // through on its end while naming a line that does not exist.
+  if (cite.start !== null && cite.start < 1) {
+    return fail(`line ${cite.start} is not a line (lines are 1-based)`);
   }
 
   // ONE resolution for BOTH forms. Resolving separately per branch is exactly
@@ -231,10 +248,9 @@ function checkCitation(cite, container, ctx) {
     // this branch the hybrid form parsed fine and was checked by NOTHING —
     // cite.end is null, so the range check below fell straight through to pass.
     if (cite.symbol) {
-      const missing = missingSegments(cite.symbol, content);
-      return missing.length
-        ? fail(`symbol '${cite.symbol}' not in ${cite.path} at ${cite.ref} (missing: ${missing.join(', ')})`)
-        : null;
+      return symbolPresent(cite.symbol, content)
+        ? null
+        : fail(`symbol '${cite.symbol}' not in ${cite.path} at ${cite.ref}`);
     }
     const max = countLines(content);
     if (cite.end < 1 || cite.end > max) {
@@ -249,10 +265,9 @@ function checkCitation(cite, container, ctx) {
 
   // Symbol anchor: every segment must appear in the target. Rot-immune form.
   if (cite.symbol) {
-    const missing = missingSegments(cite.symbol, content);
-    return missing.length
-      ? fail(`symbol '${cite.symbol}' not found in ${target} (missing: ${missing.join(', ')})`)
-      : null;
+    return symbolPresent(cite.symbol, content)
+      ? null
+      : fail(`symbol '${cite.symbol}' not found in ${target}`);
   }
 
   // Line/range citation: the highest cited line must exist in the target.
@@ -314,6 +329,29 @@ function scopeForCommit(changed, scanned, readFile, tracked = scanned) {
     }
   }
   return [...inScope].sort();
+}
+
+/**
+ * Every path a staged change touches, INCLUDING both halves of a rename.
+ *
+ * `--name-only` reports a rename as its NEW path alone, so the old path never
+ * enters scope and the renaming commit is the one commit that cannot see the
+ * citations it just broke — the same hole deletions had. `--name-status` gives
+ * `R100<TAB>old<TAB>new`, and both halves matter: the old path is what other
+ * files still cite, the new path is what they must be re-anchored to.
+ * @param {string} [raw] - `git diff --cached --name-status` output, for testing
+ * @returns {string[]}
+ */
+function stagedPaths(raw = execFileSync(
+  'git', ['diff', '--cached', '--name-status', '--diff-filter=ACMRD'],
+  { encoding: 'utf-8' }
+)) {
+  const paths = [];
+  for (const line of raw.trim().split('\n').filter(Boolean)) {
+    // status, then 1 path (A/C/D/M) or 2 (R/C with a similarity score).
+    paths.push(...line.split('\t').slice(1).map(s => s.trim()).filter(Boolean));
+  }
+  return paths;
 }
 
 /** List git-tracked files. */
@@ -414,11 +452,11 @@ function main() {
   try {
     // D (deletions) is deliberately included, unlike check-file-sizes.js and
     // check-secrets.js which both use ACM. A deleted file needs no size or
-    // secret scan — there is nothing left to scan. But deleting a file is one of
-    // the surest ways to falsify OTHER files' citations, so it must enter the
-    // scope calculation or the breaking commit is the one commit that never looks.
-    staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMRD'],
-      { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+    // secret scan — there is nothing left to scan. But deleting or RENAMING a
+    // file is one of the surest ways to falsify OTHER files' citations, so both
+    // must enter the scope calculation, and a rename must contribute BOTH of
+    // its paths — see stagedPaths.
+    staged = stagedPaths();
   } catch {
     console.error('Failed to get staged files.');
     process.exit(1);
@@ -440,7 +478,8 @@ if (process.argv[1] && process.argv[1].includes('check-citations')) {
 }
 
 module.exports = {
-  countLines, parseCitations, resolveTarget, matchesPattern, checkCitation, missingSegments,
+  countLines, parseCitations, resolveTarget, matchesPattern, checkCitation,
+  identifierRegex, symbolPresent, stagedPaths,
   checkCitations, scopeForCommit, scanSet, buildContext, checkAllTracked,
   listTrackedFiles, isShallowClone, noticeSkipped, CONFIG,
 };

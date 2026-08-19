@@ -17,6 +17,7 @@ const {
   buildContext,
   checkAllTracked,
   listTrackedFiles,
+  stagedPaths,
   CONFIG,
 } = require('../../scripts/check-citations');
 
@@ -215,12 +216,30 @@ describe('check-citations', () => {
   // Every case below was a FALSE PASS raised by the council review on PR #172,
   // reproduced by execution before being fixed.
   describe('checkCitation — council #172 false passes', () => {
-    it('checks EVERY segment of a dotted symbol, not just the head', () => {
-      const ctx = stubCtx({ 'src/a.js': 'const foo = { realBar: 1 };\n' });
-      expect(one('// a.js :: foo.realBar', 'src/x.js', ctx)).toBeNull();
-      const v = one('// a.js :: foo.NOPE', 'src/x.js', ctx);
-      expect(v).not.toBeNull();
-      expect(v.reason).toMatch(/missing: NOPE/);
+    it('checks a dotted symbol as a CHAIN, not segment by segment', () => {
+      // Round 1 checked only the head (`foo`), round 2 each segment
+      // independently. Both pass when an unrelated `foo` and an unrelated `bar`
+      // merely coexist, which verifies nothing about the path that was cited.
+      const chain = stubCtx({ 'src/a.js': 'x = foo.realBar;\n' });
+      expect(one('// a.js :: foo.realBar', 'src/x.js', chain)).toBeNull();
+
+      const separate = stubCtx({ 'src/a.js': 'const foo = 1;\nconst realBar = 2;\n' });
+      expect(one('// a.js :: foo.realBar', 'src/x.js', separate)).not.toBeNull();
+
+      expect(one('// a.js :: foo.NOPE', 'src/x.js', chain)).not.toBeNull();
+    });
+
+    it('finds a symbol whose name starts with $', () => {
+      // `\b` is defined on [A-Za-z0-9_], so `\b$el\b` never matches and a
+      // present symbol read as missing — a false FAILURE, not a false pass.
+      const ctx = stubCtx({ 'src/a.js': 'const $el = 1;\n' });
+      expect(one('// a.js :: $el', 'src/x.js', ctx)).toBeNull();
+      expect(one('// a.js :: $nope', 'src/x.js', ctx)).not.toBeNull();
+    });
+
+    it('rejects a range STARTING at 0, not just one ending past EOF', () => {
+      const ctx = stubCtx({ 'src/a.js': 'x\n'.repeat(150) });
+      expect(one('// a.js:0-50', 'src/x.js', ctx).reason).toMatch(/1-based/);
     });
 
     it('refuses an ambiguous basename instead of passing on one lucky candidate', () => {
@@ -377,6 +396,25 @@ describe('check-citations', () => {
       const t = { 'tests/cites-gone.test.js': '// see gone.js:12\n' };
       const scope = scopeForCommit(['src/council/gone.js'], Object.keys(t), p => t[p], Object.keys(t));
       expect(scope).toContain('tests/cites-gone.test.js');
+    });
+  });
+
+  describe('stagedPaths', () => {
+    // `--name-only` reports a rename as its NEW path alone, so citations to the
+    // OLD path went unchecked at exactly the commit that broke them — the same
+    // hole deletions had.
+    it('contributes BOTH halves of a rename', () => {
+      expect(stagedPaths('R100\told-name.js\tnew-name.js\n'))
+        .toEqual(['old-name.js', 'new-name.js']);
+    });
+
+    it('keeps single-path statuses intact, deletions included', () => {
+      expect(stagedPaths('M\ta.js\nA\tb.js\nD\tgone.js\n'))
+        .toEqual(['a.js', 'b.js', 'gone.js']);
+    });
+
+    it('is empty for an empty diff', () => {
+      expect(stagedPaths('')).toEqual([]);
     });
   });
 

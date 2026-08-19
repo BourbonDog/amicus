@@ -11,7 +11,7 @@ went entirely to citations, and fixing them moved lines, which falsified more.
 
 | Form | Use it for | Enforced by |
 |---|---|---|
-| `file.js :: symbolName` | **Default.** Any claim about current code. | symbol must exist in the target |
+| `file.js :: symbolName` | **Default.** Any claim about current code. | the symbol must appear in the target, dotted paths **as written** |
 | `file.js:NNN` / `file.js:NNN-MMM` | A claim no symbol can carry (a line inside a function, a specific guard). | target resolves, line in range |
 | `file.js@<ref>:NNN` | Provenance — "moved verbatim from", "was true at". | line in range **in the file at that ref** |
 
@@ -43,6 +43,21 @@ Per commit it checks the union of two scopes:
 
 - **IN** — citations living in the files the commit changed.
 - **TO** — citations anywhere in live code that *point at* a file the commit changed.
+
+A commit's changed set deliberately includes **deletions**, and a **rename
+contributes both of its paths**. `git diff --name-only` reports a rename as its
+new path alone, which would leave the renaming commit unable to see the
+citations to the old path it just broke — the same hole deletions had. This is
+why the gate uses `--diff-filter=ACMRD` and `--name-status` where its sibling
+gates use plain `ACM`: a deleted file needs no size or secret scan, but deleting
+or renaming one is among the surest ways to falsify *other* files' citations.
+
+**What the symbol check is, honestly.** It is a text search on identifier
+boundaries, not a parse. `file.js :: foo.bar` requires the literal `foo.bar` to
+appear in the target; it does not prove `bar` is a property of `foo`, and it
+cannot see a symbol reached through destructuring or a computed key. It catches
+the case that actually rots — a renamed or removed symbol — and it will not be
+fooled by an unrelated `foo` and an unrelated `bar` merely coexisting.
 
 **TO is not optional.** Measured across PR #171's 38 commits, 119 corrected
 citations split 66 IN-scope / 18 TO-scope-only. A gate scoped to changed files
