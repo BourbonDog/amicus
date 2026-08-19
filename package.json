@@ -71,6 +71,7 @@
     "graphify:index": "graphify extract . --backend claude-cli",
     "check:secrets": "node scripts/check-secrets.js --all",
     "check:sizes": "node scripts/check-file-sizes.js --all",
+    "check:citations": "node scripts/check-citations.js --all",
     "check:tarball": "node scripts/check-tarball-lifecycle.js"
   },
   "dependencies": {

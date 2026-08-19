@@ -343,9 +343,9 @@ describe('debateRunStatsRows', () => {
 // v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the SECOND alias-space peer filter.
 //
 // `debate.js`'s `peerVerdicts` moves to the same guard as `tally.js`'s `peers`,
-// in the same commit. debate.js:81 and :178 are already seat-space, so this was
-// the last alias-space filter left; fixing one site without the other makes the
-// defense brief's peer split disagree with the tally the chair reads.
+// in the same commit. debate.js :: applyDebate and :: disputingJudges are already
+// seat-space, so this was the last alias-space filter left; fixing one site without
+// the other makes the defense brief's peer split disagree with the tally the chair reads.
 //
 // ⚠️ The trailing `.map(a => a.verdict)` is load-bearing: briefings-debate.js's
 // `verdictCounts` indexes its counter BY THE ELEMENT, so a list of adjudication

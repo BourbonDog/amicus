@@ -4,8 +4,9 @@
 # 1. lint-staged (ESLint on staged .js files)
 # 2. Secret detection
 # 3. File size enforcement
-# 4. Auto-regenerate doc sections (auto-stages CLAUDE.md if changed)
-# 5. CLAUDE.md drift warning
+# 4. Cross-file citation freshness (staged files + everything citing them)
+# 5. Auto-regenerate doc sections (auto-stages CLAUDE.md if changed)
+# 6. CLAUDE.md drift warning
 
 # Git runs this file directly (core.hooksPath=.husky, set by
 # scripts/setup-hooks.js); abort on the first failing check, as husky's
@@ -27,5 +28,6 @@ fi
 
 node scripts/check-secrets.js
 node scripts/check-file-sizes.js
+node scripts/check-citations.js
 node scripts/generate-docs.js
 node scripts/validate-docs.js

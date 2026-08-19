@@ -594,6 +594,7 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 | [docs/troubleshooting.md](./docs/troubleshooting.md) | Extended troubleshooting. |
 | [docs/electron-testing.md](./docs/electron-testing.md) | Chrome DevTools Protocol patterns for UI testing. |
 | [docs/testing.md](./docs/testing.md) | Test suite layout and how to run it. |
+| [docs/CITATIONS.md](./docs/CITATIONS.md) | How to cite one file from another so the citation cannot rot, and what the citation gate enforces. |
 | [docs/publishing.md](./docs/publishing.md) | Release and publish process. |
 | [docs/SHIMS.md](./docs/SHIMS.md) | v2.0.0 removal record for the pre-rebrand `sidecar*` compatibility shims — what was removed and how to migrate. |
 | [skills/second-opinion/SKILL.md](./skills/second-opinion/SKILL.md) | The LLM Council skill. |

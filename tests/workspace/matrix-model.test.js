@@ -35,7 +35,7 @@ describe('buildMatrixModel', () => {
   });
 
   // ⚠️ DE-ROT (F07): tally.json's own `tierOverride` is unconditionally null on
-  // every real run (tally.js:139) — it is not a fallback source. Without a
+  // every real run (tally.js :: tally) — it is not a fallback source. Without a
   // verdict.json, the row must show no badge and the PRE-override tier. Only
   // when verdict.json is joined by id does the post-override tier + the real
   // {from,to,reason} badge appear (verdict.js:122-126).
