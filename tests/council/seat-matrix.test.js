@@ -708,54 +708,67 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * make a decision observable: the `''` ROSTER, and a labelMap that maps a label
  * TO the model name `UNATTRIBUTED`.
  *
- * ⚠️ AND ALL FOUR RED SETS BELOW WERE RE-RUN AT FIX ROUND 1, NOT ADJUSTED. That
- * round changed what the join accepts, REPLACED a pin and added another, so
- * every number recorded against 09212e97 was invalid — they were DELETED and
- * re-measured against the shipped tree rather than edited. One mutant was
- * replaced outright: `WSEMPTYFOLD` pinned the behaviour the round reversed, so
- * it is gone, not renamed, and `WSEMPTYOK` is a different mutation of the
- * opposite code. Re-run, never renumber; re-take the denominator with it.
+ * ⚠️ AND ALL FOUR RED SETS BELOW WERE RE-RUN AT BOTH FIX ROUNDS, NOT ADJUSTED.
+ * Round 1 changed what the join accepts, REPLACED a pin and added another; round 2
+ * added the fuzz block. Every number recorded against the previous tree was
+ * therefore invalid each time — they were DELETED and re-measured, never edited,
+ * and the denominator was re-taken with them (7711 -> 7712 -> 7715). One mutant was
+ * replaced outright at round 1: `WSEMPTYFOLD` pinned the behaviour that round
+ * reversed, so it is gone rather than renamed, and `WSEMPTYOK` is a different
+ * mutation of the opposite code. Re-run, never renumber.
  *
  * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
  * mutant — the one the conditional exists for.
- * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
- * 3 suites / 29 tests, out of 541 / 7712. By suite:
- *   seat-matrix 22 · matrix-model 6 · workspace-matrix 1.
- * ⚠️ TWENTY-THREE of the 29 are pins that PREDATE T-C2 and assert an exact judge
+ * MEASURED red set, RE-RUN against 3a7dde42 (fix round 2):
+ * 3 suites / 31 tests, out of 541 / 7715. By suite:
+ *   seat-matrix 24 · matrix-model 6 · workspace-matrix 1.
+ * ⚠️ TWENTY-THREE of the 31 are pins that PREDATE T-C2 and assert an exact judge
  * or cell list — T17/T18, T20, T21, T22 shape 2, the eight shared-predicate rows,
  * the four malformed-table rows, all six buildMatrixModel pins in
  * tests/workspace/matrix-model.test.js, and T19's blind header. That breadth IS
  * the contract: the roster is the header, so an unconditional column changes
- * every matrix ever rendered. Of this block's own 20 pins it reds 6.
+ * every matrix ever rendered. The remaining eight are T-C2's own: six of this
+ * block's twenty pins, plus two of the fuzz block's three.
  * ⚠️ ZERO snapshots move, unlike report.js's ALWAYSCOL which took four. Not a
  * weaker mutant — measured, no snapshot in this repo captures a rendered
  * workspace matrix, so those 23 pins are the only thing standing where report.js
  * has snapshots.
- * ⚠️ It read 30 (seat-matrix 23) before fix round 1. The one it LOST is the
- * replaced `''`-roster pin: the old one asserted a two-column roster, so an
- * unconditional third column broke it; the new one already expects UNATTRIBUTED,
- * and so does the agreement pin beside it.
+ * ⚠️ It read 30 (seat-matrix 23) at 09212e97 and 29 at fa0c5ae7. It LOST one to
+ * fix round 1 — the replaced `''`-roster pin asserted a two-column roster, so an
+ * unconditional third column broke it, while the new one already expects
+ * UNATTRIBUTED — and GAINED two to fix round 2, both of them the fuzz's.
+ * ⚠️ THE FUZZ IS THE SHARPER MEASUREMENT, and it agrees with the pins exactly:
+ * 52 of its 504 cases disagree under this mutant, every one a COLUMN disagreement,
+ * and they are precisely the 52 cases that grow no fold column at HEAD — the other
+ * half of the non-vacuity pin, which reads 504 instead of 452 here. By shape,
+ * 26 ordinary + 26 holdsEmpty and NONE on holdsUnattributed, whose roster already
+ * carries the key so the append was already skipped.
  *
  * Named mutant "WSJUNKKEY": revert the join to 32a63e92's
  * `if (!adj || typeof adj.judge !== 'string') { continue; }` plus
  * `votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict`, leaving the
  * roster code in place. It is the "T-C2 never happened" mutant.
- * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
- * 2 suites / 15 tests, out of 541 / 7712. By suite:
- *   seat-matrix 14 · workspace-matrix 1.
- * Those 14 are thirteen of this block's own pins plus T22 shape 1. SEVEN pins
+ * MEASURED red set, RE-RUN against 3a7dde42 (fix round 2):
+ * 2 suites / 16 tests, out of 541 / 7715. By suite:
+ *   seat-matrix 15 · workspace-matrix 1.
+ * Those 15 are thirteen of this block's own pins, T22 shape 1, and the fuzz's
+ * agreement pin. SEVEN pins
  * here stay green under it, and the record names them rather than implying full
  * coverage: the no-unattributable-vote pin is WSALWAYSCOL's; `basis` is a
  * preservation pin no mutant here can move; so are the null-element and the three
  * malformed-`adjudications` pins; and the both-name-slots pin survives because
  * this mutation reverts only the ROUTING — the roster code is left in place, so
  * the column is still appended with the right pair.
- * ⚠️ It read 13 (seat-matrix 12) before fix round 1, and the TWO it gained are
- * both `''`-roster pins. That is worth reading rather than skipping: 32a63e92's
- * expression lands a `''` judge in a `''` roster column, so this mutant now
- * reproduces the exact desync fix round 1 removed, and the agreement pin catches
- * it — a second mutation, arrived at independently, that the same pin refuses.
+ * ⚠️ It read 13 at 09212e97 and 15 at fa0c5ae7; round 1's two gains were both
+ * `''`-roster pins, because 32a63e92's expression lands a `''` judge in a `''`
+ * roster column and so reproduces the exact desync that round removed. Round 2
+ * added one more, the fuzz.
+ * ⚠️ AND THE FUZZ IS WHERE THIS MUTANT'S REAL SIZE SHOWS: 351 of its 504 cases
+ * disagree under it — 117 on each of the three roster shapes — and every one is a
+ * PLACEMENT disagreement, never a COLUMN one, because the mutation reverts only the
+ * routing and leaves the roster code to build identical headers. A sixteen-test red
+ * set understates a mutation that desyncs 70% of the axis.
  *
  * Named mutant "WSEMPTYOK" (v4.8 T-C2 fix round 1): drop the `key !== ''`
  * conjunct from `columnFor`, leaving `typeof key === 'string' && keys.has(key)`.
@@ -767,26 +780,37 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * renamed. WSEMPTYFOLD mutated the opposite code (it ADDED the conjunct) and its
  * pin asserted the behaviour this round reversed, so neither its mutation nor its
  * number could be carried forward.
- * MEASURED red set, run against fa0c5ae7:
- * 1 suite / 2 tests, out of 541 / 7712 — seat-matrix 2: the `''`-fold pin and the
- * BOTH-CONSUMERS agreement pin.
- * ⚠️ TWO tests, and which two is the whole point. A small set here means the
- * conjunct is invisible everywhere else, not that the pin is weak: on every other
- * fixture's roster `keys.has('')` is already false, so `keys.has` does the
- * refusing and the conjunct is unobservable — T-C1 shipped that exact blind spot.
- * Only a roster HOLDING `''` separates the spellings. The second red is the one
- * that matters most: under this mutant the two consumers render one document two
- * ways, and the agreement pin is what says so.
+ * MEASURED red set, RE-RUN against 3a7dde42 (fix round 2):
+ * 1 suite / 4 tests, out of 541 / 7715 — seat-matrix 4: the `''`-fold pin, the
+ * BOTH-CONSUMERS agreement pin, and BOTH of the fuzz's behaviour pins.
+ * ⚠️ WHICH FOUR is the whole point. A small set here means the conjunct is
+ * invisible everywhere else, not that the pin is weak: on every other fixture's
+ * roster `keys.has('')` is already false, so `keys.has` does the refusing and the
+ * conjunct is unobservable — T-C1 shipped that exact blind spot. Only a roster
+ * HOLDING `''` separates the spellings.
+ * ⚠️ It read 2 at fa0c5ae7, and the two it gained are fix round 2's whole purpose.
+ * The fuzz reports 20 disagreements out of 504 under it, every one a COLUMN
+ * disagreement and every one on the `holdsEmpty` roster — 0 on `ordinary`, 0 on
+ * `holdsUnattributed`. That is the "only a roster holding `''` can see it" claim
+ * MEASURED across the whole axis rather than argued from one document, and it is
+ * the same mutation that made this file and report.js render one document two ways.
+ * The non-vacuity pin moves with it, 452 -> 432.
  *
  * Named mutant "WSPAIRFOR": build the fold column's pair as
  * `pairFor(UNATTRIBUTED, map)` instead of carrying the literal in both slots.
  * Invisible on every ordinary labelMap — `labelFor` returns null and display()
  * falls back to `pair.model`, printing the same string — so the only fixture
  * that can see it is one whose labelMap maps a label TO `UNATTRIBUTED`.
- * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
- * 2 suites / 2 tests, out of 541 / 7712. By suite:
+ * MEASURED red set, RE-RUN against 3a7dde42 (fix round 2):
+ * 2 suites / 2 tests, out of 541 / 7715. By suite:
  *   seat-matrix 1 (the both-name-slots pin) · workspace-matrix 1 (the painter).
- * Unchanged by the round in both mechanism and size; re-run, not carried over.
+ * Unchanged in mechanism and size across BOTH fix rounds; re-run each time rather
+ * than carried over, because a set that happens to be stable is still an assertion
+ * about a tree.
+ * ⚠️ THE FUZZ DOES NOT SEE IT — 0 of 504 — and that is correct rather than a gap.
+ * The fuzz drives labelMap `{}` and compares vote PLACEMENT; this mutant changes
+ * only a column's DISPLAY NAMES, which is a different axis and is why the painter
+ * test with its adversarial labelMap exists.
  * ⚠️ THE PAINTER PIN ONLY REDS BECAUSE ITS labelMap IS ADVERSARIAL. Measured, it
  * fails on the blind header rendering `Review Z` where the fold column belongs —
  * the mechanism this decision was made against, not a restatement of it. On an
