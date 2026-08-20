@@ -407,6 +407,12 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * R20 block and is not named by any record here; `R20 > report.js FOLDS it`,
  * which JUNKKEY's record DOES name, is unchanged.)
  *
+ *
+ * ⚠️ EVERY NUMBER BELOW IS SUPERSEDED BY v4.8 T-C4 AND IS RE-MEASURED IN THE
+ * COMMIT THAT FOLLOWS THIS ONE. T-C4 changed what `report.js :: adjOf` accepts
+ * and added twelve pins plus sixty fuzz cases, so no set recorded against
+ * a515400c still reproduces. They are DELETED and re-run, never edited.
+ *
  * Named mutant "ALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
  * routed to it. It is the "byte-unchanged artifact" mutant — every report that
@@ -471,6 +477,11 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * set — because on their rosters `columns.has('')` is already false, so
  * `columns.has` does the refusing and the conjunct is green against its own
  * mutant. Only a roster that HOLDS `''` separates the two spellings.
+ *
+ * Named mutant "ELEMKEEP" (v4.8 T-C4): drop `.filter(Boolean)` from
+ * `report.js :: adjOf`, so every element is kept whatever it is. It is the
+ * "T-C4 never happened" mutant: a falsy element folds again and grows a blank
+ * column `matrix-model.js` does not grow, and `null`/`undefined` throw.
  */
 describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
   const SEATS = [
@@ -742,10 +753,12 @@ describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ON
  * document desync PR B exists to remove; fix round 1 closed it and that pin is
  * what keeps it closed.
  *
- * ⚠️ ONE difference between the files REMAINS, and it is pre-existing rather
- * than chosen here: a null `adjudications` ELEMENT, which is not a vote at all.
- * `report.js` throws on it; this file skips it (pinned below, and in
- * tests/workspace/matrix-model.test.js since v4.4). R17 leaves it standing.
+ * ⚠️ THE ONE REMAINING DIFFERENCE THIS DOCBLOCK RECORDED IS CLOSED. It read
+ * that a null `adjudications` ELEMENT threw in `report.js` while this file
+ * skipped it, and that R17 left that standing. v4.8 T-C4 gave
+ * `report.js :: adjOf` a `.filter(Boolean)` — this file's `!adj` spelled a second
+ * time, not shared — so both consumers now skip every falsy element. Measured
+ * across ten element types, they disagree on none.
  *
  * NAMED MUTANTS on `src/workspace/matrix-model.js :: buildMatrixModel`. Protocol
  * per mutant: applied by hand, run against the FULL suite, hand-reverted,
@@ -771,6 +784,12 @@ describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ON
  * replaced outright at round 1: `WSEMPTYFOLD` pinned the behaviour that round
  * reversed, so it is gone rather than renamed, and `WSEMPTYOK` is a different
  * mutation of the opposite code. Re-run, never renumber.
+ *
+ *
+ * ⚠️ EVERY NUMBER BELOW IS SUPERSEDED BY v4.8 T-C4 AND IS RE-MEASURED IN THE
+ * COMMIT THAT FOLLOWS THIS ONE. T-C4 changed what `report.js :: adjOf` accepts
+ * and added twelve pins plus sixty fuzz cases, so no set recorded against
+ * a515400c still reproduces. They are DELETED and re-run, never edited.
  *
  * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
@@ -1107,11 +1126,12 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
   test('a null adjudication element is still SKIPPED, not folded — the surviving guard is doing work', () => {
     // ⚠️ Only HALF the old guard was subsumed by the classification. `!adj`
     // stays: a null element carries no verdict to fold, and `columnFor` would
-    // dereference it. Measured on this exact document, `report.js :: toModel`
-    // THROWS `TypeError: Cannot read properties of null (reading 'seat')` while
-    // this file renders — a strictness difference that predates T-C2 and that
-    // R17 deliberately leaves standing. Already pinned for the CELL in
+    // dereference it. Already pinned for the CELL in
     // tests/workspace/matrix-model.test.js; re-pinned here for the COLUMN set.
+    // ⚠️ THIS COMMENT USED TO SAY `report.js :: toModel` THROWS on this exact
+    // document while this file renders. That was true until v4.8 T-C4, which gave
+    // `report.js` the same predicate; the two now agree here, pinned in the T-C4
+    // block below. This pin is unchanged and still guards THIS file's guard.
     const m = buildMatrixModel(tallyOf(SEATS, [null, SEATED]), {}, null);
     expect(modelsOf(m)).toEqual(SEAT_COLS);
     expect(votesOf(m)).toEqual(['agree', null]);
@@ -1133,6 +1153,124 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
 
 
 // ---------------------------------------------------------------------------
+// SI-22.5 (v4.8 T-C4) — an adjudication ELEMENT that is not a vote.
+// ---------------------------------------------------------------------------
+
+/**
+ * The council's second run found the one shape T-C1 and T-C2 both got wrong, and
+ * it was not a key shape at all — it was the ELEMENT. A falsy non-null entry in
+ * `adjudications` has no `.seat` and no `.judge`, so `columnFor` classified it
+ * unattributable and `folded` grew a column; its `.verdict` is `undefined` too,
+ * so the column rendered BLANK. It announced an unattributable vote and showed
+ * nothing. `matrix-model.js` skipped the same element through its `!adj` guard
+ * and grew no column, so ONE document rendered two ways — the desync this PR
+ * exists to remove. Measured at ed5c0c02, no column grew on either side, so the
+ * divergence was introduced by this PR rather than inherited.
+ *
+ * THE FIX IS THE PREDICATE `matrix-model.js` ALREADY HAD. `report.js :: adjOf`
+ * now drops falsy elements, which is `!adj` spelled a second time rather than
+ * shared — R17 keeps the two implementations separate.
+ *
+ * ⚠️ THE PROTOTYPE HANDED TO THIS TASK WAS `a && typeof a === 'object'`, AND
+ * MEASUREMENT REJECTED IT. Over ten element types against the live
+ * `matrix-model.js`: `filter(Boolean)` disagrees on 0 of 10, that expression on
+ * 3 of 10. It filters TRUTHY non-objects — `42`, `'x'`, `true` — which
+ * `matrix-model.js` keeps, so it would have closed one divergence by opening
+ * three. The whole point of this block is that the two consumers agree; an
+ * expression that de-aligns them fails on its own terms.
+ *
+ * ⚠️ WHAT IS STILL OPEN, MEASURED AND PINNED BELOW RATHER THAN QUIETLY LEFT: a
+ * TRUTHY non-object element (`42`, `'x'`, `true`) — and `[]`/`{}` — still grows a
+ * blank fold column. That is the same phantom-column defect, but on BOTH
+ * consumers and identically, so it is not a desync and not what was filed.
+ * Closing it means editing both files, which is a scope call, not an
+ * implementer's. Filed in BACKLOG.md; pinned here as the AGREEMENT it is.
+ */
+describe('T-C4: an adjudication ELEMENT that is not a vote, on BOTH consumers', () => {
+  const SEATS = [
+    { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+    { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
+  ];
+  const COLS = ['deepseek#1', 'gpt'];
+  const SEATED = { judge: 'deepseek', verdict: 'agree', seat: 'deepseek#1' };
+
+  /** ONE finding object, shared BY REFERENCE by both documents — as the fuzz does. */
+  function docsFor(el) {
+    const finding = { id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
+      basis: { a: 1, d: 1, n: 0 }, adjudications: [SEATED, el] };
+    return {
+      verdict: { runId: 'tc4', runType: 'headless', date: '2026-07-20', chair: 'chair',
+        council: ['deepseek', 'gpt'], claudeInCouncil: false, seats: SEATS,
+        findings: [finding], streetCred: [], runStats: [], tierCounts: {} },
+      tally: { meta: { runId: 'tc4', runType: 'headless', date: '2026-07-20',
+        models: ['deepseek', 'gpt'], chair: 'chair', claudeInCouncil: false, seats: SEATS },
+      findings: [finding], tierCounts: {} },
+    };
+  }
+  /** Both consumers' answers in one comparable shape: columns, then vote per column. */
+  function bothOf(el) {
+    const { verdict, tally } = docsFor(el);
+    const r = toModel(verdict);
+    const m = buildMatrixModel(tally, {}, null);
+    return {
+      reportCols: r.judges,
+      matrixCols: m.judges.map(j => j.model),
+      reportVotes: r.findings[0].byJudge,
+      matrixVotes: Object.fromEntries(m.rows[0].cells.map(c => [c.judge.model, c.verdict])),
+    };
+  }
+
+  for (const [name, el] of [['0', 0], ['false', false], ['the empty string', ''],
+    ['null', null], ['undefined', undefined]]) {
+    test(`a ${name} element: no phantom column, and the two consumers agree exactly`, () => {
+      const b = bothOf(el);
+      // ⚠️ THE AGREEMENT IS THE PROPERTY; the literal values below are only its
+      // evidence. Asserted first so a future change that breaks both files the
+      // same way still fails here.
+      expect(b.reportCols).toEqual(b.matrixCols);
+      expect(b.reportVotes).toEqual(b.matrixVotes);
+      // And the answer they agree on is the one ed5c0c02 gave: no fold column.
+      expect(b.reportCols).toEqual(COLS);
+      expect(b.reportVotes).toEqual({ 'deepseek#1': 'agree', gpt: null });
+    });
+  }
+
+  test('the rendered header carries no phantom column either', () => {
+    const md = buildReport({ verdict: docsFor(0).verdict }, { format: 'md' });
+    expect(headerFor(md)).toBe('| Finding | Sev | Raiser | deepseek#1 | gpt | Tier | Decision |');
+    expect(md).not.toContain('UNATTRIBUTED');
+    expect(buildReport({ verdict: docsFor(0).verdict }, { format: 'html' })).not.toContain('UNATTRIBUTED');
+  });
+
+  test('null and undefined stop THROWING in report.js — the widening is named, not a side effect', () => {
+    // A null element threw `Cannot read properties of null (reading 'seat')` in
+    // BOTH of report.js's phases at a515400c, while matrix-model.js rendered.
+    // Dropping it is the same throw -> render widening already taken for the
+    // adjudications CONTAINER at T-C1 fix round 1, and it is what removes the
+    // last element-level strictness difference between the two files.
+    expect(() => toModel(docsFor(null).verdict)).not.toThrow();
+    expect(() => toModel(docsFor(undefined).verdict)).not.toThrow();
+  });
+
+  // ⚠️ PRESERVATION PINS, and green before this task as well as after — they are
+  // here to keep the REMAINING phantom column symmetric, not to endorse it. A
+  // truthy non-object carries no `.verdict` either, so its column is blank too;
+  // both consumers grow it, and the pin fails the moment only one of them stops.
+  for (const [name, el] of [['42', 42], ['a string', 'x'], ['true', true],
+    ['an empty array', []], ['an empty object', {}]]) {
+    test(`${name}: still folded, but folded the SAME WAY by both consumers`, () => {
+      const b = bothOf(el);
+      expect(b.reportCols).toEqual(b.matrixCols);
+      expect(b.reportVotes).toEqual(b.matrixVotes);
+      expect(b.reportCols).toEqual(COLS.concat('UNATTRIBUTED'));
+      // The blank cell, asserted rather than described: the column exists and
+      // shows nothing, which is why it is still filed as open.
+      expect(b.reportVotes.UNATTRIBUTED).toBeUndefined();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // SI-22.5 (v4.8 T-C2 fix round 2) — the agreement, proved by FUZZ, not by one shape.
 // ---------------------------------------------------------------------------
 
@@ -1152,37 +1290,61 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
  * that cites nothing beats one that cites something unverifiable. Every number
  * below is re-derivable from this tree by the recipe stated.
  *
- * EXHAUSTIVE, NOT SAMPLED. 504 cases is the complete cross-product of
+ * EXHAUSTIVE, NOT SAMPLED. 564 cases is the complete cross-product of
  *   roster shape  {ordinary, one holding `''`, one holding `UNATTRIBUTED`}
  *   x seatSpace   {on, off}
+ *   x a companion identifying vote {present, absent}
+ * with, per (shape, space, companion):
  *   x adj.seat    {absent, null, `''`, a roster id, an orphan id, 42, 'UNATTRIBUTED'}
  *   x adj.judge   {absent, `''`, a roster alias, an unknown alias, 42, 'UNATTRIBUTED'}
- *   x a companion identifying vote {present, absent}
+ *     — 504 cases whose element is a well-formed OBJECT, and
+ *   x the ELEMENT itself {0, false, `''`, null, undefined}
+ *     — 60 cases where the element is not a vote at all (v4.8 T-C4).
  * so there is no seed, no randomness and nothing to re-run for luck.
  *
- * ⚠️ MEASURED, and this is the number that makes the block mean anything:
- *   BASE 32a63e92  407 disagreements / 504
- *   HEAD           0   disagreements / 504
- * TO RE-DERIVE THE BASE FIGURE: write `git show 32a63e92:src/workspace/
- * matrix-model.js` to a NEW, UNTRACKED SIBLING file inside src/workspace/ — the
- * same directory, because its requires are relative — run this cross-product
- * against that copy, and delete it in a `finally`.
- * ⚠️ NEVER by editing the tracked matrix-model.js. The run takes minutes, and a
- * working tree left dirty for that long is one interruption away from a
- * half-reverted source file; the sibling leaves the tracked tree untouched
- * throughout and yields the identical 407 (re-derived that way at fix round 3).
- * Of the 407, 284 were COLUMN disagreements — BASE grows no fold column at all —
- * and 123 were PLACEMENT disagreements with matching columns; by roster shape,
- * 145 ordinary + 145 holdsEmpty + 117 holdsUnattributed. A fuzz that cannot fail
- * proves nothing; this one fails 81% of its cases against the code this task
- * replaced.
+ * ⚠️ THE ELEMENT AXIS IS T-C4's, AND ITS ABSENCE IS WHY A DEFECT SHIPPED. The
+ * seat/judge axes vary a vote's KEY and presuppose a vote; nothing varied whether
+ * the entry was a vote. A falsy element made `columnFor` fold and grew a blank
+ * column in `report.js` while `matrix-model.js` skipped it — 60 disagreements the
+ * 504-case axis could not see. The element does NOT multiply through seat/judge:
+ * those properties are meaningless on a non-object, so 60 cases carry the axis
+ * rather than 2520 duplicates of it.
  *
- * ⚠️ THE THREE KNOWN, LEGITIMATE DIVERGENCES ARE EXCLUDED BY CONSTRUCTION, never
- * by filtering a result set — a fuzz that silently skips cases reads as coverage
- * it does not have. Each is excluded by how the fixtures are BUILT:
- *   1. THE NULL ELEMENT. No `adjudications` entry is ever null, so the case
- *      cannot arise. `report.js` throws on it and this file skips it (measured;
- *      pinned separately above). Pre-existing, R17 leaves it standing.
+ * ⚠️ MEASURED, and these are the numbers that make the block mean anything.
+ * Every figure below is against THIS 564-case axis; the 504-case figures this
+ * docblock used to carry were DELETED rather than carried forward, because the
+ * element cases shift `out.length` and therefore the verdict rotation of the
+ * object cases — a re-run, not a renumber, and it moved.
+ *   T-C4 BASE  a515400c:report.js    x shipped matrix-model    60 / 564
+ *   T-C2 BASE  shipped report.js     x 32a63e92:matrix-model  408 / 564
+ *   SHIPPED    x SHIPPED                                        0 / 564
+ * Of T-C4's 60: 24 COLUMN, 12 PLACEMENT and 24 THROW (`null`/`undefined` threw in
+ * `report.js`); 20 per roster shape; 12 per element, and `@object` scored 0 of its
+ * 504 — the axis that already existed was clean, which is the point.
+ * Of T-C2's 408: 284 COLUMN, 124 PLACEMENT, all 408 on `@object`; by roster shape
+ * 145 ordinary + 146 holdsEmpty + 117 holdsUnattributed. ⚠️ It read 407 (123
+ * PLACEMENT, 145 holdsEmpty) on the 504-case axis; the one-case move is the
+ * verdict rotation named above, re-measured rather than assumed to be stable.
+ * TO RE-DERIVE EITHER FIGURE: write `git show <ref>:<path>` to a NEW, UNTRACKED
+ * SIBLING file inside the SAME directory — the requires are relative — run this
+ * cross-product against that copy, and delete it in a `finally`.
+ * ⚠️ NEVER by editing the tracked file. A working tree left dirty is one
+ * interruption away from a half-reverted source file; the sibling leaves the
+ * tracked tree untouched throughout. A fuzz that cannot fail proves nothing; this
+ * one fails 72% of its cases against the code T-C2 replaced and, on the axis T-C4
+ * added, every single case that axis exists to cover.
+ *
+ * ⚠️ TWO KNOWN, LEGITIMATE DIVERGENCES ARE EXCLUDED BY CONSTRUCTION, never by
+ * filtering a result set — a fuzz that silently skips cases reads as coverage it
+ * does not have. Each is excluded by how the fixtures are BUILT. There were
+ * THREE; the first is gone, and it is kept here as a record rather than deleted
+ * because its removal is what this task is:
+ *   1. THE ELEMENT TYPE — NO LONGER EXCLUDED. This exclusion read "no
+ *      `adjudications` entry is ever null, so the case cannot arise; report.js
+ *      throws on it and this file skips it". v4.8 T-C4 measured what that
+ *      exclusion was hiding — a falsy non-null element grew a phantom blank
+ *      column in `report.js` and none here — so the axis now VARIES the element
+ *      itself and the exclusion is deleted rather than re-worded.
  *   2. THE ROSTER SOURCES. ONE roster literal builds BOTH documents —
  *      `meta.seats`/`meta.models` for the tally and `seats`/`council` for the
  *      verdict are the SAME arrays. The two files genuinely read different
@@ -1230,6 +1392,11 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
   // producers are `|| null` by design (peer-split.js :: peersOf documents why).
   const SEATS_AXIS = ['@absent', null, '', 'gpt#1', 'deepseek#9', 42, 'UNATTRIBUTED'];
   const JUDGE_AXIS = ['@absent', '', 'gpt', 'nobody', 42, 'UNATTRIBUTED'];
+  // v4.8 T-C4 — THE ELEMENT ITSELF, the axis whose absence let the phantom
+  // column ship. The seat/judge axes are meaningless on a non-object element, so
+  // these do NOT multiply through them: each gets one case per roster shape x
+  // space x companion, which is 60 cases rather than 2520 duplicates.
+  const ELEMENT_AXIS = [0, false, '', null, undefined];
   const VERDICTS = ['agree', 'dispute', 'neutral'];
   /** Identifies a real column in EITHER space and on EVERY roster shape above. */
   const COMPANION = { judge: 'gpt', verdict: 'agree', seat: 'gpt#1' };
@@ -1244,8 +1411,14 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
               const adj = { verdict: VERDICTS[out.length % VERDICTS.length] };
               if (seat !== '@absent') { adj.seat = seat; }
               if (judge !== '@absent') { adj.judge = judge; }
-              out.push({ shape, seatSpace, seat, judge, withCompanion, adj });
+              out.push({ shape, seatSpace, seat, judge, withCompanion, adj, element: '@object' });
             }
+          }
+        }
+        for (const element of ELEMENT_AXIS) {
+          for (const withCompanion of [true, false]) {
+            out.push({ shape, seatSpace, seat: '@element', judge: '@element',
+              withCompanion, adj: element, element: String(element) });
           }
         }
       }
@@ -1275,8 +1448,9 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
     const { tally, verdict } = docsFor(c);
     const r = toModel(verdict);
     const m = buildMatrixModel(tally, {}, null);
-    const label = `${c.shape} seatSpace=${c.seatSpace} seat=${JSON.stringify(c.seat)} `
-      + `judge=${JSON.stringify(c.judge)} companion=${c.withCompanion}`;
+    const label = `${c.shape} seatSpace=${c.seatSpace} element=${c.element} `
+      + `seat=${JSON.stringify(c.seat)} judge=${JSON.stringify(c.judge)} `
+      + `companion=${c.withCompanion}`;
     const mCols = m.judges.map(j => j.model);
     if (JSON.stringify(r.judges) !== JSON.stringify(mCols)) {
       return `${label} — COLUMNS report=${JSON.stringify(r.judges)} matrix=${JSON.stringify(mCols)}`;
@@ -1291,15 +1465,20 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
     return null;
   }
 
-  test('the axis is the size it claims to be: 504 cases, and every one is distinct', () => {
+  test('the axis is the size it claims to be: 564 cases, and every one is distinct', () => {
     const all = fuzzCases();
     // ⚠️ THE ANTI-SHRINK PIN. A fuzz that quietly loses half its axis still passes
     // its own zero-disagreement assertion, and reads as coverage it no longer has.
-    // 3 shapes x 2 spaces x 7 seats x 6 judges x 2 companion states.
-    expect(all).toHaveLength(3 * 2 * SEATS_AXIS.length * JUDGE_AXIS.length * 2);
-    expect(all).toHaveLength(504);
-    const keys = new Set(all.map(c => `${c.shape}|${c.seatSpace}|${String(c.seat)}|${String(c.judge)}|${c.withCompanion}`));
-    expect(keys.size).toBe(504);
+    // 3 shapes x 2 spaces x (7 seats x 6 judges + 5 elements) x 2 companion states.
+    expect(all).toHaveLength(3 * 2 * (SEATS_AXIS.length * JUDGE_AXIS.length + ELEMENT_AXIS.length) * 2);
+    expect(all).toHaveLength(564);
+    // ⚠️ `element` is part of the key, and it has to be: the 60 element cases all
+    // carry the SAME seat/judge sentinel, so a key without it would collapse them
+    // to 12 and the distinctness pin would fail for the wrong reason.
+    const keys = new Set(all.map(c => `${c.shape}|${c.seatSpace}|${c.element}|${String(c.seat)}|${String(c.judge)}|${c.withCompanion}`));
+    expect(keys.size).toBe(564);
+    expect(all.filter(c => c.element === '@object')).toHaveLength(504);
+    expect(all.filter(c => c.element !== '@object')).toHaveLength(60);
   });
 
   test('the axis DRIVES BOTH BRANCHES of the conditional column — it is not vacuous', () => {
@@ -1310,14 +1489,26 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
       const { tally } = docsFor(c);
       return buildMatrixModel(tally, {}, null).judges.some(j => j.model === 'UNATTRIBUTED');
     }).length;
-    expect(grew).toBe(452);
-    expect(504 - grew).toBe(52);
+    expect(grew).toBe(472);
+    expect(564 - grew).toBe(92);
+    // ⚠️ The 60 element cases moved this by exactly 20, and the 20 are named
+    // rather than left as a delta: on the `holdsUnattributed` roster the column
+    // is a BENCH member, present whatever the element does. On the other two
+    // rosters a falsy element now grows nothing — which is the fix.
+    const byElement = fuzzCases().filter(c => c.element !== '@object' && (() => {
+      const { tally } = docsFor(c);
+      return buildMatrixModel(tally, {}, null).judges.some(j => j.model === 'UNATTRIBUTED');
+    })());
+    expect(byElement).toHaveLength(20);
+    expect(new Set(byElement.map(c => c.shape))).toEqual(new Set(['holdsUnattributed']));
   });
 
-  test('ZERO disagreements across all 504 cases — same columns, same vote in the same column', () => {
-    // ⚠️ Measured against BASE 32a63e92, this same cross-product produced 407
-    // disagreements (284 columns, 123 placement). The zero below is therefore a
-    // result, not a tautology. See this block's docblock for how BASE was run.
+  test('ZERO disagreements across all 564 cases — same columns, same vote in the same column', () => {
+    // ⚠️ This same cross-product produces 408 disagreements against 32a63e92's
+    // matrix-model (284 columns, 124 placement) and 60 against a515400c's
+    // report.js (24 columns, 12 placement, 24 throws — every one on the element
+    // axis). The zero below is a result, not a tautology. See this block's
+    // docblock for how each BASE was run.
     const found = fuzzCases().map(disagreement).filter(Boolean);
     expect(found).toEqual([]);
   });

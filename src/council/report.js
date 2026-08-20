@@ -86,8 +86,26 @@ function isSeatSpace(seats) {
  * WHOLE rather than throwing, for the same reason — the three schema-free
  * `JSON.parse` entry points can deliver any shape. Pinned, all three shapes, in
  * tests/council/seat-matrix.test.js.
+ *
+ * ⚠️ `.filter(Boolean)` is v4.8 T-C4, and it is `matrix-model.js`'s `!adj` guard
+ * spelled a SECOND time rather than shared — R17 keeps the rule in two places.
+ * A falsy ELEMENT has no `.seat` and no `.judge`, so `columnFor` called it
+ * unattributable and grew a column whose cell — `adj.verdict` — was `undefined`
+ * too, i.e. blank: a column announcing a vote it could not show. `matrix-model.js`
+ * skipped the same element and grew no column, so ONE document rendered two ways.
+ * Measured at ed5c0c02: no column on either side, so that desync arrived with
+ * this release rather than being inherited.
+ * ⚠️ It also drops `null`/`undefined`, which THREW here in both phases. Same
+ * throw -> render widening as the container above, named on purpose.
+ * ⚠️ `Boolean`, NOT `a && typeof a === 'object'`. Measured over ten element types
+ * against the live `matrix-model.js`: this predicate disagrees on 0 of 10, that
+ * one on 3 of 10 — it drops TRUTHY non-objects (`42`, `'x'`, `true`) which the
+ * other consumer keeps, closing one divergence by opening three. Those shapes
+ * still grow a blank column on BOTH consumers; that is filed, and pinned here as
+ * the agreement it is, not fixed by one-sided strictness.
+ * Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: ELEMKEEP.
  */
-function adjOf(f) { return Array.isArray(f.adjudications) ? f.adjudications : []; }
+function adjOf(f) { return Array.isArray(f.adjudications) ? f.adjudications.filter(Boolean) : []; }
 
 /** Build a neutral, render-agnostic model from a verdict (+ optional wave). */
 function toModel(verdict, wave) {

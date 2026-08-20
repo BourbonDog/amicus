@@ -2676,10 +2676,12 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   - **Council review of PR #175 (2026-08-20, chair verdict "Ship it") — four items filed, not fixed.**
     Thirteen findings collapsed to five mechanisms; three were already disclosed in the PR body and
     one did not hold. ⚠️ **The null-`adjudications`-element finding was raised FOUR times (A1/C2/B1/D2)
-    and is NOT a regression** — measured on both trees, `ed5c0c02` and the branch tip throw the
-    identical `Cannot read properties of null (reading 'judge')`. The new pre-pass is a second crash
-    SITE in the code, but the observable behaviour is unchanged. Filed here as pre-existing, and the
-    strictness asymmetry with `matrix-model.js` (which guards both phases) is real.
+    and was NOT a regression** — measured on both trees, `ed5c0c02` and the branch tip threw the
+    identical `Cannot read properties of null (reading 'judge')`. The new pre-pass was a second crash
+    SITE in the code, with the observable behaviour unchanged. ✅ **CLOSED 2026-08-20 by v4.8 T-C4**,
+    which was aimed at the falsy-element divergence below and closed this with the same expression:
+    `adjOf`'s `.filter(Boolean)` drops `null` before either phase can dereference it, so the
+    strictness asymmetry with `matrix-model.js` — real when this was filed — is gone.
     - [ ] **`UNATTRIBUTED` is not exported from either consumer.** Measured 2026-08-20: absent from
       `src/council/report.js`'s and `src/workspace/matrix-model.js`'s `module.exports`, and **39**
       occurrences of the bare string across `tests/` (the council said "~50"; 39 is the measured
@@ -2693,8 +2695,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       and pinned as measured during T-C1; it is disclosed in code but not in the PR body. Not a
       defect of this PR — the same last-wins applies to any two votes sharing a column — but the
       `UNATTRIBUTED` column is the one guaranteed to collect multiple votes.
-    - [ ] **⚠️ A FALSY NON-NULL adjudication element grows a PHANTOM EMPTY column, and the two
-      consumers diverge on it** (council run 2, A2 — the only NEW finding in that run). Measured
+    - [x] **✅ CLOSED 2026-08-20 by v4.8 T-C4 — a FALSY adjudication element grew a PHANTOM EMPTY
+      column, and the two consumers diverged on it** (council run 2, A2 — the only NEW finding in
+      that run, and the finding that flipped run 3's chair verdict to "Fix these first"). Measured
       2026-08-20 against `ed5c0c02` for elements `0`, `false` and `''`:
 
       ```
@@ -2703,18 +2706,58 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       matrix columns: [deepseek]   (skipped by the `!adj` guard — no column)
       ```
 
-      `columnFor` classifies the element as unattributable (its `.seat`/`.judge` are `undefined`),
-      so `folded` is true and the column is added — but the cell value is `adj.verdict`, also
-      `undefined`, so the column renders **blank**. It advertises an unattributable vote and shows
-      nothing. `matrix-model.js` skips the element entirely via its `!adj` guard, so the two
-      consumers render one document differently — the exact class T2.4 exists to close.
-      ⚠️ **This is a behaviour change introduced by T2.4**, not a pre-existing shape: at BASE the
-      junk key was `undefined` and no column grew. Malformed input only — the engine never emits
-      a non-object adjudication element — and both entry points that could carry it are schema-free
-      `JSON.parse` paths.
-      ⚠️ **Why the 504-case fuzz did not catch it:** the axis varies `seatSpace` × `adj.seat` ×
-      `adj.judge` × roster shape over **well-formed objects**. The element TYPE is not on the axis.
-      Widening it to non-object elements is the obvious first move for whoever takes this.
+      `columnFor` classified the element as unattributable (its `.seat`/`.judge` are `undefined`),
+      so `folded` was true and the column was added — but the cell value is `adj.verdict`, also
+      `undefined`, so the column rendered **blank**. It advertised an unattributable vote and showed
+      nothing. `matrix-model.js` skipped the element entirely via its `!adj` guard, so the two
+      consumers rendered one document differently — the exact class T2.4 exists to close. It was a
+      behaviour change introduced by T2.4, not a pre-existing shape.
+
+      **THE FIX** (`a515400c` → T-C4): `src/council/report.js :: adjOf` gained `.filter(Boolean)` —
+      `matrix-model.js`'s `!adj` predicate spelled a SECOND time, never shared, per **R17**.
+      ⚠️ **The prototype circulated with the task was `a && typeof a === 'object'`, and measurement
+      rejected it**: over ten element types against the live `matrix-model.js`, `filter(Boolean)`
+      disagrees on **0 of 10** and that expression on **3 of 10** — it drops TRUTHY non-objects
+      (`42`, `'x'`, `true`) which the other consumer keeps, closing one divergence by opening three.
+      ⚠️ **`null` and `undefined` moved from THROW to render**, deliberately and pinned: the same
+      widening already taken for the adjudications CONTAINER at T-C1 fix round 1. This also closes
+      the null-element crash noted at the head of this block, in `report.js`'s BOTH phases — that
+      note's "the strictness asymmetry with `matrix-model.js` is real" no longer holds.
+
+      **THE AXIS THAT MISSED IT IS FIXED TOO.** The agreement fuzz varied `seatSpace` × `adj.seat` ×
+      `adj.judge` × roster shape over well-formed OBJECTS; the element TYPE was never on it. T-C4
+      added it — **504 → 564 cases** — and measured, all against the 564-case axis:
+
+      | comparison | disagreements |
+      |---|---|
+      | `a515400c:report.js` × shipped `matrix-model.js` | **60 / 564** (24 column · 12 placement · 24 throw) |
+      | shipped `report.js` × `32a63e92:matrix-model.js` | **408 / 564** (284 column · 124 placement) |
+      | shipped × shipped | **0 / 564** |
+
+      All 60 of T-C4's are on the new element axis (12 per element, 20 per roster shape); the 504
+      object cases scored 0 at that BASE, which is precisely why the old axis could not see this.
+
+      ⚠️ **STILL OPEN, AND SPLIT OUT BELOW RATHER THAN CLOSED HERE:** a TRUTHY non-object element.
+    - [ ] **A TRUTHY NON-OBJECT adjudication element still grows a blank `UNATTRIBUTED` column — on
+      BOTH consumers, identically.** Split out of the item above by v4.8 T-C4, which found it while
+      measuring that fix rather than being told about it. Measured 2026-08-20 on the shipped tree:
+
+      ```
+      element   report.js columns                    matrix-model.js columns
+      42        [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      'x'       [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      true      [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      []  {}    [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      ```
+
+      It is the SAME phantom-blank-column defect — a primitive has no `.verdict`, so the cell is
+      empty — but it is **not a desync**: both consumers do the identical thing, so SI-22.5's
+      agreement property holds. That is why T-C4 pinned it as agreement rather than fixing it
+      one-sidedly: `report.js`-only strictness is exactly the prototype T-C4 measured and rejected.
+      ⚠️ **Closing it requires editing BOTH consumers** (each spelling the predicate separately, per
+      **R17**) — a scope call, not an implementer's, which is why it is filed instead of taken.
+      Pinned meanwhile in `tests/council/seat-matrix.test.js` (the T-C4 block's preservation pins),
+      so it cannot become a desync without a test failing.
     - [ ] **The synthetic `UNATTRIBUTED` matrix cell may silently no-op on click** (council/codex 6).
       `electron/workspace-ui/workspace-panels.js :: drillIntoJudge` builds its file list from the real
       bench roster, which has no `UNATTRIBUTED` entry. ⚠️ **REPORTED, NOT VERIFIED** — confirming the

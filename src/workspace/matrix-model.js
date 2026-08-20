@@ -158,9 +158,13 @@ function buildMatrixModel(tally, labelMap, verdict) {
     const votes = {};
     for (const adj of adjOf(f)) {
       // ⚠️ HALF of 32a63e92's guard survives, and that half is doing work: `!adj`
-      // skips a null element, which carries no verdict to fold and which
-      // `columnFor` would dereference — report.js has no such guard and THROWS
-      // on that document (measured), a strictness difference R17 leaves standing.
+      // skips a falsy element, which carries no verdict to fold and which
+      // `columnFor` would dereference.
+      // ⚠️ THE STRICTNESS DIFFERENCE THIS COMMENT USED TO RECORD IS GONE. It read
+      // "report.js has no such guard and THROWS on that document"; v4.8 T-C4 gave
+      // `report.js :: adjOf` a `.filter(Boolean)`, which is this predicate spelled
+      // a second time — R17, two implementations, never shared. That file no longer
+      // throws on a falsy element and no longer grows a phantom column for one.
       // The `typeof adj.judge` half is GONE, subsumed by the classification
       // above: it refused votes where R18 requires them folded.
       if (!adj) { continue; }
