@@ -56,8 +56,8 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
   // raiser or not — which deletes the named-judge arm along with the condition.
   // Witness A below and C1c at the end of this file are its two witnesses;
   // neither goes through tally(), so they are this module's OWN, direct pin on
-  // that branch. MEASURED red set beside the mutation itself,
-  // peer-split.js :: peersOf.
+  // that branch. MEASURED red set with the mutation record itself, in
+  // peer-split-mutants.js :: SPLITDROP.
   //
   // ⚠️ Witness A had to be REPLACED, not re-valued, and that is the sharpest
   // lesson of T-B4. Its old fixture (no raiser, a vote with NO judge field)

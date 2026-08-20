@@ -220,8 +220,8 @@ describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCor
 // mutant — emit unconditionally at both producers — the schema rejects the
 // zero-valued key, so a test here goes red alongside the three behavioural
 // absence pins, and so does schemas.test.js's whole-family check. ZEROEMIT's
-// full measured red set is recorded in one place only, on
-// peer-split.js :: unattributedPeerDrops; do not restate the count here.
+// full measured red set is recorded in one place only, in
+// peer-split-mutants.js :: ZEROEMIT; do not restate the count here.
 //
 // ⚠️ NOT declared in `council-verdict.schema.json`, deliberately: the findings
 // literal in verdict.js :: buildVerdict is CLOSED — it names every key it

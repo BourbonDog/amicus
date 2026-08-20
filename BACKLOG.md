@@ -2495,9 +2495,12 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   - **The four named mutants this release's peer-split safety net stands on are all in the tree
     now, not behind a report path.** `NAIVESPLIT`, `ZEROEMIT` and `SCHEMADROP` already were;
     `SPLITDROP` joined them this round (measured 2026-08-19, v4.8 T-B3: 2 suites / 9 tests, out of
-    541 / 7655). Point at any of them by symbol — `peer-split.js :: peersOf` for the first and
-    last, `peer-split.js :: unattributedPeerDrops` for `ZEROEMIT`, and its own comment block in
-    `tests/council/run-schema-debate.test.js:199` for `SCHEMADROP` — never by report path.
+    541 / 7655). Point at any of them by symbol, never by report path. ⚠️ **v4.8 T-B5 (council C4)
+    MOVED the five that mutate `peer-split.js` out of it, byte-for-byte, into
+    `tests/council/peer-split-mutants.js`**, because that file had reached 289/300: point at
+    `peer-split-mutants.js :: SPLITDROP` and `peer-split-mutants.js :: ZEROEMIT`. `SCHEMADROP` did
+    not move — it mutates the schema, not that module — and is still in its own comment block at
+    `tests/council/run-schema-debate.test.js:199`.
     ⚠️ **SIX as of v4.8 T-B4, all re-measured against the tree that ships, by re-running rather
     than renumbering — twice, because T-B4 took two rounds and the second changed behaviour again.**
     `SELFCORROB` and `SEATBLIND` joined them. Final measured red sets, all out of 541 / 7665:
@@ -2506,8 +2509,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     one T-B4 left alone); `SELFCORROB` **3 suites / 15 tests**; `SEATBLIND` **2 suites / 5 tests**.
     ⚠️ `SELFCORROB`'s total is the same in both rounds while its COMPOSITION is not
     (peer-split 8 → 10, tally 3 → 1) — two matching totals are not evidence of a matching red set,
-    which is why every one of these was re-run. The counts live beside the predicates, not here —
-    `peer-split.js :: peersOf` and `peer-split.js :: unattributedPeerDrops`.
+    which is why every one of these was re-run. The counts are not here: since v4.8 T-B5 they live
+    in `tests/council/peer-split-mutants.js`, and `peer-split.js :: peersOf` and
+    `peer-split.js :: unattributedPeerDrops` each carry a one-line anchor to it.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
@@ -2996,8 +3000,8 @@ deliberately left alone:
   `tests/council/peer-split.test.js`'s P0 block (the round-1 fixture is P0a, inverted) and by
   `tally.test.js` T7b/T7d. ⚠️ **Still not SI-22.1 or SI-22.2** — those are NAMED-raiser shapes,
   untouched by either round.
-- [ ] ⛔ **OPEN (filed v4.8 T-B4, 2026-08-19) · SIZE CEILING · `src/council/peer-split.js` is at
-  289/300, and the extraction candidate is already identified.** Read this BEFORE planning any change
+- [x] **DONE (filed v4.8 T-B4, TAKEN v4.8 T-B5 2026-08-19) · SIZE CEILING · `src/council/peer-split.js`
+  reached 289/300; the extraction landed and the file now measures 191.** Read this BEFORE planning any change
   to the peer-split predicate. Measured at each commit with `git show <rev>:src/council/peer-split.js
   | wc -l`, the file went **67 → 165 → 218 → 244 → 266 → 282 → 289** across `0fd630b6` (the
   extraction), `64b835b8` (PR B base), and T-B4's four commits plus its second fix round — and every
@@ -3008,10 +3012,14 @@ deliberately left alone:
   stale inside the commit that wrote it** — it read 282 until the fix round it belongs to pushed the
   file to 289 — which is the same class of defect as the twin sentence in F1 and the reason the
   number here is a measurement rather than a recollection. ⚠️ **Do not discover this mid-task the way #171 discovered `run-retry.js`.**
-  **THE EXTRACTION CANDIDATE IS THE MUTANT RECORDS.** Six named mutants now live in this file —
-  `SPLITDROP`, `NAIVESPLIT`, `SELFCORROB`, `SEATBLIND` (all on `peer-split.js :: peersOf`) and
-  `ZEROEMIT` plus the per-conjunct records (on `peer-split.js :: unattributedPeerDrops`) — roughly
-  90 lines of self-contained provenance that **no code reads and no gate reaches**. Each is a
+  **THE EXTRACTION CANDIDATE WAS THE MUTANT RECORDS, and they are what T-B5 moved.** FIVE named
+  mutants lived in this file — `SPLITDROP`, `NAIVESPLIT`, `SELFCORROB`, `SEATBLIND` (all on
+  `peer-split.js :: peersOf`) and `ZEROEMIT` (on `peer-split.js :: unattributedPeerDrops`).
+  ⚠️ An earlier draft of this line said **six** lived here and over-counted by one: the release's
+  sixth named mutant, `SCHEMADROP`, mutates the schema rather than this module and was never in this
+  file. **108 lines** of self-contained provenance that **no code reads and no gate reaches** moved;
+  the per-conjunct flip counts on `unattributedPeerDrops` deliberately did NOT, because they are
+  measurements OF that expression rather than mutant records, and they belong beside it. Each is a
   mutation definition plus a measured red set plus the history of how that red set moved. They are
   the single largest block, they are pure documentation, and they are the block most likely to grow
   again. ⚠️ **Extracting them has a real cost that must be planned for, not discovered:** a number
@@ -3022,6 +3030,16 @@ deliberately left alone:
   **NOT taken in T-B4, by owner ruling:** the gate has not fired, an extraction is a structural change
   with its own review surface at the end of an otherwise-verified PR, and it insures a future change
   rather than this one.
+  **TAKEN in v4.8 T-B5** as council finding C4 — as its own commit and before any other edit,
+  precisely so no later fix could hit the ceiling mid-flight the way `run-retry.js` did in PR #171.
+  Destination `tests/council/peer-split-mutants.js`, chosen for four properties: it is tracked; it is
+  a `.js` file, so `check-citations` both enforces the citations *inside* the records and blocks any
+  commit that deletes or renames it while the anchors stand — neither of which is true of the doc
+  tree, which that gate deliberately does not scan; it is not a jest suite
+  (`jest.config.js :: testMatch` collects `*.test.js` only), so the suite count did not move; and
+  both predicates carry a one-line symbol anchor to it, which is how the re-measure obligation
+  travels. Proven inert: the executable text of `peer-split.js` is byte-identical to `7aa71d1e`, and
+  the suite totals are unchanged at 541 / 7657 passed / 8 skipped / 0 failed.
 - [ ] **OPEN (filed v4.8 T-B4, 2026-08-19) · `raiser` and `judge` should be `z.string().min(1)` in
   the MCP tool schema.** `src/mcp-tools.js:416` declares a bare `z.string()` for `findings[].raiser`
   and `:420` the same for `adjudications[].judge`, so `''` validates and reaches the tally — and
