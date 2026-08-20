@@ -2980,7 +2980,8 @@ deliberately left alone:
   the raiser is falsy while the finding carries a `raiserSeat` and a vote carries the SAME `seat`
   with a NAMED `judge`, that vote is provably the raiser's own and was still counted. MEASURED at
   **36 cases** over the 1875-case truthiness cross-product of (raiser, raiserSeat, judge, seat,
-  verdict), 5 values apiece, unchanged from `64b835b8`.~~ **Closed hours later by the owner ruling
+  verdict) — 5 values for each of the four identity fields times the 3 verdicts, `5^4 x 3` — unchanged
+  from `64b835b8`.~~ **Closed hours later by the owner ruling
   that produced it.** The round-1 filing rested on a specification whose property 2 said "a NAMED
   judge counts beside a falsy raiser" while justifying it as "provably not the raiser" — and those
   diverge in exactly those 36 cases, because a vote carrying the raiser's own seat id IS the
@@ -2995,6 +2996,32 @@ deliberately left alone:
   `tests/council/peer-split.test.js`'s P0 block (the round-1 fixture is P0a, inverted) and by
   `tally.test.js` T7b/T7d. ⚠️ **Still not SI-22.1 or SI-22.2** — those are NAMED-raiser shapes,
   untouched by either round.
+- [ ] ⛔ **OPEN (filed v4.8 T-B4, 2026-08-19) · SIZE CEILING · `src/council/peer-split.js` is at
+  289/300, and the extraction candidate is already identified.** Read this BEFORE planning any change
+  to the peer-split predicate. Measured at each commit with `git show <rev>:src/council/peer-split.js
+  | wc -l`, the file went **67 → 165 → 218 → 244 → 266 → 282 → 289** across `0fd630b6` (the
+  extraction), `64b835b8` (PR B base), and T-B4's four commits plus its second fix round — and every
+  one of those lines is a measured record, not prose that can be trimmed. **11 free is not enough for
+  the next behaviour change**: T-B4's round 2 cost 16 and was a three-token edit to one expression,
+  the rest being the rationale, the re-scored property table and the mutant records the change
+  obliged; its documentation-only fix round then cost 7 more. ⚠️ **This filing's own number went
+  stale inside the commit that wrote it** — it read 282 until the fix round it belongs to pushed the
+  file to 289 — which is the same class of defect as the twin sentence in F1 and the reason the
+  number here is a measurement rather than a recollection. ⚠️ **Do not discover this mid-task the way #171 discovered `run-retry.js`.**
+  **THE EXTRACTION CANDIDATE IS THE MUTANT RECORDS.** Six named mutants now live in this file —
+  `SPLITDROP`, `NAIVESPLIT`, `SELFCORROB`, `SEATBLIND` (all on `peer-split.js :: peersOf`) and
+  `ZEROEMIT` plus the per-conjunct records (on `peer-split.js :: unattributedPeerDrops`) — roughly
+  90 lines of self-contained provenance that **no code reads and no gate reaches**. Each is a
+  mutation definition plus a measured red set plus the history of how that red set moved. They are
+  the single largest block, they are pure documentation, and they are the block most likely to grow
+  again. ⚠️ **Extracting them has a real cost that must be planned for, not discovered:** a number
+  that lives beside its predicate is re-read by anyone editing that predicate, and one that lives in
+  a separate file is not — which is exactly the failure mode that produced T-B3's Critical and T-B4's
+  F1. Whatever holds them must be reachable from the predicate by a **symbol anchor**, and the
+  re-measure obligation has to travel with them.
+  **NOT taken in T-B4, by owner ruling:** the gate has not fired, an extraction is a structural change
+  with its own review surface at the end of an otherwise-verified PR, and it insures a future change
+  rather than this one.
 - [ ] **OPEN (filed v4.8 T-B4, 2026-08-19) · `raiser` and `judge` should be `z.string().min(1)` in
   the MCP tool schema.** `src/mcp-tools.js:416` declares a bare `z.string()` for `findings[].raiser`
   and `:420` the same for `adjudications[].judge`, so `''` validates and reaches the tally — and

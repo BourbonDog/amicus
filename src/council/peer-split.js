@@ -74,12 +74,14 @@ function peersOf(f, votes) {
   // MEASURED red set: 1 suite / 4 tests, out of 541 / 7665. By suite:
   // peer-split 4 — witness A, C1c, P0d, and the exhaustive cross-product
   // invariant.
-  // ⚠️ It has SHRUNK at every step (2 suites / 9 tests at 64b835b8, 2 / 6 after
-  // round 1, 1 / 4 now), because each round moved the shipped behaviour closer
-  // to this mutant's on the shapes the other tests use. Round 2 took the last
-  // two suites away for a precise reason: tally.test.js's T7b/T7d and
-  // debate.test.js's T5 block all reach the SEAT compare or a same-falsy pair,
-  // and P0 settles those before the fallback this mutant edits. What still
+  // ⚠️ It has SHRUNK at every step (2 suites / 9 tests at 64b835b8 — peer-split 5
+  // · debate 4; 2 / 6 after round 1 — peer-split 4 · tally 2; 1 / 4 now —
+  // peer-split only), because each round moved the shipped behaviour closer to
+  // this mutant's on the shapes the other tests use. ROUND 1 took debate.test.js
+  // away: its T5 block stopped separating the two once the shipped falsy arm
+  // began dropping same-falsy pairs, exactly as this mutant does. ROUND 2 took
+  // tally.test.js away: T7b/T7d reach the SEAT compare, and P0 settles that
+  // before the fallback this mutant edits. What still
   // separates them is a MIXED-falsy raiser/judge pair — `''` beside `undefined`,
   // where the alias compare reads true and `!!v.judge` reads false. Do not read
   // a smaller red set as a weaker pin: it is a narrower TRUE one.
@@ -137,7 +139,9 @@ function peersOf(f, votes) {
   // and only when it cannot decide does the judge field get a say.
   //
   // Four spellings were enumerated over the 1875-case truthiness cross-product
-  // of (raiser, raiserSeat, judge, seat, verdict), 5 values apiece, and scored
+  // of (raiser, raiserSeat, judge, seat, verdict) — 5 values for each of the
+  // four IDENTITY fields (`undefined`, `null`, `''` and two distinct names or
+  // seat ids) times the 3 verdicts, so 5^4 x 3 = 1875, not 5^5 — and scored
   // against P0-P3 above. Only this one reaches zero violations. `64b835b8`
   // breaks P0 in 90 cases and P1 in 567; T-B4 round 1's form breaks P0's peer
   // rule in 90 and its no-mark rule in 108; a "named judge AND not the raiser's
@@ -234,9 +238,12 @@ function unattributedPeerDrops(f, votes) {
   // right about where the conjunct WAS and wrong the moment it moved.
   // Collapsing the ternary to its named arm flips 189 and to its falsy arm 297;
   // dropping the XOR flips 27; dropping `v.judge === f.raiser` flips 270;
-  // weakening `!v.judge` to `true` flips 243. All five ARE pinned in
-  // tests/council/peer-split.test.js — the hoisted conjunct by P0b and P0c,
-  // which assert that a seat-decided drop is NOT announced.
+  // weakening `!v.judge` to `true` flips 243. All five ARE pinned. The hoisted
+  // conjunct's own MEASURED red set, taken by dropping it and running the FULL
+  // suite: 2 suites / 5 tests, out of 541 / 7665 — peer-split 3 (P0b, P0c and
+  // the exhaustive cross-product invariant) and tally 2 (T7b, T7d). An earlier
+  // draft of this line said "P0b and P0c", which UNDERSTATED it by three; the
+  // count is measured now rather than named from the tests written for it.
   //
   // Named mutant "ZEROEMIT" (v4.8 T-B2), guarding the EMIT rule both callers
   // share — present only when > 0, so a run that does not orphan one side of a

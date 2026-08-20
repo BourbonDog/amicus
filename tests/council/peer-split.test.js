@@ -114,7 +114,10 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
 // RE-MEASURED at round 2 over the 1296-case truthiness cross-product of
 // (f.raiser, f.raiserSeat, v.judge, v.seat) with 6 values apiece — three falsy
 // (`undefined`, `null`, `''`) and three truthy: dropping the hoisted conjunct
-// flips 81 cases, ALL 81 with a falsy raiser and ZERO with a named one;
+// flips 81 cases, ALL 81 with a falsy raiser and ZERO with a named one — and
+// dropping it turns 5 tests red, MEASURED against the full suite: P0b, P0c and
+// the exhaustive cross-product invariant here, plus tally.test.js's T7b and
+// T7d. (An earlier draft named only P0b and P0c, understating it by three.);
 // collapsing the ternary to its named arm flips 189 and to its falsy arm 297;
 // dropping the XOR flips 27; dropping `v.judge === f.raiser` flips 270; and
 // weakening `!v.judge` to `true` flips 243.
@@ -301,7 +304,9 @@ describe('peersOf — an unnamed raiser cannot corroborate itself (v4.8 T-B4, C1
 //   P3  else (named raiser) ⇒ byte-identical to 64b835b8.
 //
 // ⚠️ Every one of the four candidate spellings was scored against P0-P3 over the
-// 1875-case truthiness cross-product before this one was written. Only this one
+// 1875-case truthiness cross-product of (raiser, raiserSeat, judge, seat,
+// verdict) before this one was written — 5 values for each of the four IDENTITY
+// fields times the 3 verdicts, 5^4 x 3 = 1875. Only this one
 // reaches zero: 64b835b8 violates P0 in 90 cases and P1 in 567; round 1's form
 // violates P0's peer rule in 90 and P0's no-mark rule in 108; the
 // "named judge AND not the raiser's own seat" variant violates them in 54 and

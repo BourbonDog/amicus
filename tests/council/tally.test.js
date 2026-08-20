@@ -456,9 +456,16 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
 // which restores the guard as the deciding term.
 // MEASURED at each step over the 768-shape cross-product of (f.raiser,
 // f.raiserSeat, v.judge, v.seat, verdict): deleting `f.raiser &&` flipped 8
-// shapes at 64b835b8, ZERO after round 1, and 8 again after round 2 — the T7b
-// family (4) and the T7d family (4), i.e. exactly these two tests. Never
-// inferred from the shape of the change; re-run after every edit to it.
+// shapes at 64b835b8, ZERO after round 1, and 4 after round 2 — the seat-DIFFER
+// shapes of the T7b family (2) and the T7d family (2), i.e. exactly these two
+// tests. It is 4 rather than 8 because P0 excludes the seat-EQUAL shapes
+// outright, so `peers` never holds them and the guard has nothing to suppress
+// there. ⚠️ This sentence shipped "8 again" for one commit: the number was
+// reasoned, measured at 4, and corrected in tally.js — and this twin was
+// missed, because a same-file sweep cannot see a twin in another file. The
+// escape that found it is a repo-wide grep for the distinctive phrase
+// `768-shape`, which appears in exactly two files. Never infer this number;
+// re-run it after every edit to peer-split.js :: peersOf.
 describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', () => {
   const meta = { runId: 'r', runType: 'headless', date: 'd',
     models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
