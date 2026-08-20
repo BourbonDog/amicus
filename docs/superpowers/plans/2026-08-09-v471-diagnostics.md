@@ -1235,7 +1235,13 @@ keeps the `AMICUS_NO_OUTPUT_BACKSTOP_MS` remedy, which is still correct for ordi
 #133 lesson — check `~/.local/share/opencode/log/opencode.log` for the session's real error.
 
 Leave `docs/usage.md:406`, `docs/configuration.md:111` and `docs/ROADMAP.md` alone (they elide the
-tail or describe the knob). **Do not edit `CHANGELOG.md:367-368`** — it is the frozen 4.6.2 entry.
+tail or describe the knob). **Do not edit `CHANGELOG.md@ed5c0c02:367-368`** — it is the frozen 4.6.2 entry.
+> ⚠️ **Pinned `@ed5c0c02` 2026-08-20 (v4.8 T2.4 fix round 2), and the pin does NOT rescue the
+> claim.** T2.4 rewrote that part of `CHANGELOG.md` — but **opened at `ed5c0c02` those lines were
+> already NOT the frozen 4.6.2 entry**: they sat inside `## [Unreleased]`, carrying the v4.8
+> seat-keyed-matrix bullet. The citation had rotted long before this release. The instruction
+> it carries (*do not edit a frozen entry*) still stands on its own terms; only the line
+> reference is dead.
 
 Optional, non-blocking: refresh the three stale self-contained fixtures at
 `tests/council/run-retry.test.js:443-444`, `tests/sidecar/models-probe.test.js:96-97` and

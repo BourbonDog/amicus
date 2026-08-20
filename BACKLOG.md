@@ -2477,28 +2477,307 @@ size argument for deferring it is BACK.** T-A2 took `run-retry.js` from 295/300 
 T-A6 spent all of it: re-measured at the end of this PR the file is **295/300** again, five free
 lines. Whoever takes this on needs an extraction first, not an edit.
 
-- [ ] **NEXT TASK — T2.4 / PR C: the consumers.** Filed 2026-08-19 (v4.8 T-B3) as the correct
-  resume point, replacing the run-retry.js entry above. Scope is SI-12's unidentifying-key join
-  and SI-22.5's unattributed column across all three renderers with the vote still in `basis`
-  (ruling **R3**) — see the phasing doc's own **T2.4** entry
+- [x] **✅ SI-22.5 — a vote the matrix could not place had no column to land in, so it rendered
+  nowhere. CLOSED 2026-08-20 by v4.8 T2.4 / PR C**, per owner ruling **R3** (render it) and **R18**
+  (fold into ONE column). `774dcdc2` + `d82e2127` (council report) and `09212e97` + `fa0c5ae7`
+  (Workspace matrix).
+  ⚠️ **THIS WORK IS NOT SI-12, and an earlier draft of this entry said it was.** Owner ruling
+  **R19** (2026-08-20): fold it into SI-22.5, do not mint a new identifier. **SI-12 is a different,
+  still-OPEN defect** — *double-orphan conformance collapse* at `run.js :: runCouncil`, filed below
+  as *"PR4 · a double-orphan collapses onto ONE conformance row in `run.js`'s Stage-2 merge"* and
+  row `| 12 | OPEN |` of the live status table in
+  `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`. **Nothing in T2.4 touches it and
+  nothing here closes it.**
+  ⚠️ **How the mislabel happened, because the mechanism matters more than the slip.** The live
+  status table writes its identifiers as a bare `| 12 |` column and never spells the string
+  `SI-12`, so `git grep SI-12` returns two hits and misses the actual definition entirely. That is
+  the same false-assurance class this file records as citation-gate Mechanisms A–D: **a search
+  that cannot express its target reports nothing wrong.** The mislabel **predates this PR** — the
+  phasing doc's T2.4 line has read *"SI-12 refuses to join on an unidentifying key"* since
+  `4ee46696` (2026-08-16), and this PR inherited it rather than inventing it.
+  - **What the defect was, by mechanism.** Both consumers keyed a vote's column on
+    `(seatSpace && adj.seat) || adj.judge` and wrote `votes[thatKey]` with **no check that the key
+    names a column** — so `''`, `undefined`, a non-string, or an orphaned seat id produced a junk
+    entry that no column ever read. The vote was silently dropped from the render while remaining
+    counted in `basis`, i.e. the artifact and the score disagreed. The Stage-2 orphaned-judge shape
+    SI-22.5 was originally filed for is one case of that rule; the refusal closes the whole class.
+  - **It is the consumer-side sibling of the defect PR B removed from
+    `src/council/peer-split.js :: peersOf`** — there an unnamed raiser matched an unnamed judge and
+    the vote self-corroborated; here an unidentifying key matched a column that did not exist.
+    Same root: treating a non-identity as an identity.
+  - **How it is closed.** Both consumers now CLASSIFY the key instead of trusting it, in a
+    deliberately separate implementation per **R17** (no shared module, and the pre-existing
+    `report.js`/`matrix-model.js` strictness asymmetry is explicitly out of scope):
+    `src/council/report.js :: toModel` and `src/workspace/matrix-model.js :: buildMatrixModel`.
+    A key that is not a non-empty string present in the column set folds to `UNATTRIBUTED`
+    (ruling **R18** — one column, one concept) and the vote **stays in `basis`**.
+    See shape 5 of "Five seat shapes the #137 peer fix does not close" below for the measured
+    before/after.
+  - **What T2.4 did, precisely.** Closed the unplaceable-vote class in both consumers by refusing a
+    key that names no column; rendered it per R3 in a **conditional** `UNATTRIBUTED` column — it
+    appears only when a vote actually folds, so a clean document is unchanged — with the vote still
+    counted in `basis`; proved the two consumers agree by an **exhaustive** cross-product fuzz,
+    **407 disagreements / 504 cases at `32a63e92`** (the tree with `report.js` fixed and
+    `matrix-model.js` not yet) **→ 0 / 504** at `e5376399`, recorded at
+    `tests/council/seat-matrix.test.js :: fuzzCases`; and **replaced** T22 shape 1's pin
+    deliberately, rather than keeping it green.
+  - ⚠️ **What T2.4 did NOT do. Do not tick these.** It did **not** close **SI-12** (above — a
+    different defect entirely), and it did **not** close **SI-22.1** or **SI-22.2**. Per owner
+    ruling **R2** the ambiguous *peer* drop still stays: `basis` does not move for it, the
+    undercount deliberately remains, and the drop is announced
+    (`findings[].unattributedPeerDrops`) rather than repaired. SI-22.5 is a **rendering** closure on
+    the vote→column join; it says nothing about the peer filter, and nothing here makes the peer
+    undercount fixed.
+  - ⚠️ **One shape is deliberately NOT closed and is measured, not assumed — ruling R20.** A
+    `judge: 'claude'` vote on a `claudeInCouncil: true` document is placed in **different columns**
+    by the two consumers. See "R20 · the claude vote" under the NEXT LEVER entry below.
+
+- [ ] **NEXT TASK — Phase 3: seat-keyed street cred + ledger.** Filed 2026-08-20 (v4.8 T2.4 / PR C)
+  as the correct resume point, replacing the T2.4 / PR C entry that stood here. Phase 2's four PRs
+  are all closed: **T2.1** `511cf43e` (2026-08-16 — `run-retry-group.js`'s `recordFailure` stopped
+  open-coding `seatObj ? seatObj.id : seat` and now calls the `seatKey` rule **exported a few lines
+  above it in that same file**; the docblock was updated to name it as an in-file consumer.
+  ⚠️ **An earlier draft of this line said `511cf43e` made the file import `seatKey` from
+  `run-retry-keys.js`. That is false and the commit disproves it**: no import is added, and
+  `run-retry-keys.js` did not exist at that ref — it was created a day later by **T-A1**
+  `955bd7c9`, and the file's own header at `511cf43e` reads *"Pure — parameters and builtins only,
+  no requires."*), **T2.2** `33e2ecf7` + T-A3 `4413eb25` + T-A4 `1e385895`,
+  **T2.3** `0fd630b6` + `e23e56cd`, **T2.4** this PR. ⚠️ The phasing doc marks T2.2, T2.3 and T2.4
+  completed but has **never ticked T2.1** — it is closed in fact, un-ticked in that record.
+  Scope is **T3.1–T3.3** — see the phasing doc's own **Phase 3** section
   (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, named rather than lined: this
-  task's own earlier commit cited that entry by line and the citation was stale before the
-  commit finished, because a hunk written earlier in the SAME edit had already moved it) for
-  the two-item scope; T2.3 changed nothing about it. ⚠️ **Needs a PRE-PASS, not a one-line
-  insert**: `report.js`'s `judges` array (`report.js:89`) is built BEFORE the per-finding loop
-  where an orphaned seat becomes detectable (`report.js:98`), so rendering the unattributed
-  column is a two-phase build.
-  Same shape in `src/workspace/matrix-model.js` (not `src/council/`) — check it too, not only the
-  council renderers.
+  entry's predecessor cited the phasing doc by line and the citation was stale before the commit
+  finished, because a hunk written earlier in the SAME edit had already moved it). In short:
+  SI-26 (`letterByModel` delete) lands first or folds in; seat onto `rankings[]` plus a seat-ified
+  `assignLabels`/`rankingToOrder` (a schema change); then the fixed internal order
+  `rankPositions` → peer split → `perJudgeRank` → `computeStreetCred` → ledger, including SI-17's
+  **normalise** per ruling **R4**. ⚠️ **`src/council/ledger.js :: buildLedgerRows`' street-cred Map
+  join must ship in the SAME PR** — the two twin street-cred rows are byte-identical today, which
+  makes that join a no-op; seat-key `rankPositions` alone and they diverge, at which point the Map
+  silently drops one and the fix is strictly worse than the bug. Closes SI-06, SI-18, SI-19,
+  SI-20, SI-17; unblocks SI-25 site (3).
+  ⚠️ **BUDGET AN EXTRACTION BEFORE TOUCHING `report.js`.** Measured at `0cb2d4d9` with the gate's
+  own `checkFileSize`: **277/300, 23 free** (197 at the branch point; T2.4 added ~80 lines carrying
+  roughly 10 of executable code — this file's comment style inflates fast). The next
+  comment-worthy change hits the gate. Release constraint 6 is **extract, never shave**, and the
+  clean leaf is the unattributed block (`columnFor` + `folded`/`judges` + its comment run).
+  `matrix-model.js` at **212/300** is comfortable.
+  - **Also waiting here: the four `src/`-side corrections T2.4 derived but could not
+    apply.** T2.4 was a documentation task, forbidden from touching `src/` and `electron/`, so both
+    are recorded rather than fixed — see "Citations T2.4 measured but could not apply" below.
   - **Also waiting here: `report.js`'s citation rot, pre-existing.** Three comments cite
-    `byJudge[adj.judge]` verbatim; the real expression (`report.js:98`) is
-    `byJudge[(seatSpace && adj.seat) || adj.judge]` — has been since the seat-space fix, so all
-    three were already stale when written. Re-derived current sites 2026-08-19 (v4.8 T-B3):
+    `byJudge[adj.judge]` verbatim; the real expression has not been that since the seat-space fix,
+    so all three were already stale when written. ⚠️ **Re-derived 2026-08-20 (T2.4) and the
+    correction itself has moved on**: this entry used to say the real expression was
+    `byJudge[(seatSpace && adj.seat) || adj.judge]` at `report.js:98`. Both halves are now false —
+    T2.4 replaced it with `byJudge[columnFor(adj)]`, and `columnFor` is where
+    `(seatSpace && adj.seat) || adj.judge` is now computed **and then classified**, so a key that
+    names no column folds to `UNATTRIBUTED` instead of being written raw. Anchored by symbol so it
+    stops rotting: `src/council/report.js :: toModel`. Re-derived current sites 2026-08-19 (v4.8 T-B3):
     `src/council/debate.js:89`, `src/council/run-debate.js:202`,
     `tests/council/debate.test.js:155`. NOT a fourth site:
     `tests/council/seat-matrix.test.js:75` uses the same bare string DELIBERATELY, to name the
     pre-fix behaviour the T17/T18 fixture exists to disprove — read in context, it is not a live
     claim about `report.js` today.
+  - **Citations T2.4 measured but could not apply — all four live under `src/`.** T2.4 was a
+    documentation and bookkeeping task, explicitly forbidden from editing `src/` and `electron/`.
+    Each correction below was **derived by opening the cited line**, never by offset arithmetic.
+    Whoever next edits these files should apply them; none is urgent and none affects behaviour.
+    1. `src/council/ledger.js:41` cites **`docs/council.md:562`** for the quoted phrase *"the legacy
+       default `council` (pre-#83 rows, or hand-assembled tally input that never set a role)"*.
+       Opened: `docs/council.md:562` is `` (`src/council/tally.js`). `` — unrelated. The phrase is at
+       **`docs/council.md:589`**, in the tally-input schema table. ⚠️ Prefer naming the row over
+       renumbering: Mechanism D means nothing can check either form. `tests/council/ledger.test.js`
+       carried the **verbatim twin** of this citation and T2.4 did fix that one, so the two now
+       differ — deliberately, not by oversight.
+    2. `src/council/report.js:100` cites **`docs/council.md:326`** for *"this is the street-cred
+       universe"*. Opened: `:326` is re-vote-leg prose — unrelated, and it was already wrong before
+       this release. The phrase is at **`docs/council.md:574`**, the `meta.models` row of the
+       `### Tally-input schema` table. Its verbatim twin in
+       `tests/council/report-claude-column.test.js` was fixed by T2.4.
+    3. `src/workspace/seat-space.js:22` cites **`src/workspace/matrix-model.js:25`**, which is
+       **still TRUE at `e5376399`** — line 25 is
+       `const { SYMBOL, isSeatSpace } = require('../council/report');`. It is filed anyway because
+       it survived T-C2 only by luck: every insertion that task made was routed below it, and it
+       points at a bare `require` line with **no symbol to anchor to**. One docblock edit above it
+       and it rots silently. The durable fix is to name what it means (`matrix-model.js` imports
+       `isSeatSpace` from `report.js`) rather than to cite the import's line.
+    4. **RR-1 is WITHDRAWN — the sentence it attacked was TRUE, and `src/council/report.js` needs no
+       edit.** Recorded here because three parties in a row got it wrong and the next reader will
+       otherwise re-open it. ⚠️ **The real defect is that the phrase "the three schema-free
+       `JSON.parse` entry points" has TWO conflicting enumerations in this repo**, and every
+       disagreement about it is really a disagreement about which one is meant:
+
+       | Enumeration | Set | Where |
+       |---|---|---|
+       | **A** | `council report <verdict.json>`, `council verdict <tally.json> --render`, `amicus_verdict` (`record: z.record(z.any())`) | `src/council/report.js :: isSeatSpace`'s docblock; `docs/superpowers/plans/2026-08-14-v48-pr4c-seat-spine.md:694` |
+       | **B** | `cli-handlers-council.js`'s `runTally`, `runReport`, `runVerdict` — with `amicus_verdict` listed **separately** as *"plus R4c-5's permissive zod"* | `docs/superpowers/plans/2026-08-14-v48-pr4c-seat-spine.md:751` |
+
+       **The `adjOf` docblock names its own referent** — *"`isSeatSpace` **above** … for the same
+       reason"* — so it means **A**. And the test comment it pairs with named its referent too:
+       *"the same three … **as a malformed seats table**"*. Under A the two sets coincide, so both
+       sentences were **correct as written**.
+       **Measured** by enumerating every `buildReport` caller in live code: `runReport`
+       (`cli-handlers-council.js:95`), `runVerdict` on `--render` (`:210`, via `buildVerdict`, which
+       copies `adjudications` straight through at `verdict.js:128`), `run-verdict-files.js:44`
+       (engine-internal, not schema-free), and `mcp-server.js :: amicus_verdict` (`:1462`/`:1472`).
+       `runTally` never calls `buildReport` at all. So a non-array `adjudications` reaches exactly
+       **A** — the same three a malformed seats table reaches.
+       ⚠️ **The error chain, recorded so it is not repeated:** a re-reviewer flagged the sentence
+       reading it as **B**; the controller carried the flag; T2.4 rewrote the test comment to say
+       *"NOT through the same three … the real reach is three DIFFERENT things"* — which is **A**
+       relabelled, i.e. it declared a true sentence false while restating its content. **T2.4 fix
+       round 1 reverted that rewrite**, dropping the count entirely rather than picking a side.
+       No `src/` edit is required and none was made.
+  - **NEXT LEVER after Phase 3's own scope: the roster SOURCES, which nothing has ever proven.**
+    Filed 2026-08-20 (v4.8 T2.4 / PR C) as the largest remaining drift surface between the two
+    consumers. `report.js :: toModel` builds its roster from **`verdict.seats` / `verdict.council`**;
+    `matrix-model.js :: buildMatrixModel` builds its roster from **`tally.meta.seats` /
+    `tally.meta.models`** — plus a `claudeTail` **on the seat-space branch only**, and with **no
+    claude filter on the alias branch at all** (see R20 below, where that asymmetry is measured). T2.4's fuzz proved the two agree about how they
+    **READ** a roster, but it is **exclusion 2** of that fuzz — both documents are built from ONE
+    roster literal by construction — so the two *sources* agreeing is unproven by anything.
+    ⚠️ **Deliberately ruled out of PR C, and the reason is not effort**: it is a different property.
+    It is a claim about how `run-assemble`/`verdict` **BUILD** the two documents, not about how the
+    consumers read them, and it is ruling **R17**'s residual cost. **The rig already exists** —
+    T2.4's harness generalises cheaply, one `disagreement()` function over a case list
+    (`tests/council/seat-matrix.test.js :: disagreement`), so the next taker inherits a working
+    fuzz rather than starting one.
+    - ⚠️ **R20 · the claude vote — the FIRST measured instance of this lever costing something.**
+      Owner ruling **R20** (2026-08-20): **disclose, pin and file. Do not align the rosters** — that
+      stays out of PR C per **R17**. On a `claudeInCouncil: true` document a `judge: 'claude'`
+      adjudication lands in **different columns** in the two consumers.
+      ⚠️ **THE CAUSE IS AN ABSENT FILTER, NOT `claudeTail`** — an earlier draft of this filing,
+      and of R20's own ruling text, said `matrix-model.js` "re-appends it as `claudeTail`". That is
+      **inverted**, and measurably false on the pinned fixture. What actually happens:
+      `report.js :: toModel` **FILTERS** the reserved `claude` seat OUT of its own roster when the
+      flag is on (`claudeInCouncil === true ? council.filter(j => j !== 'claude') : council`), so
+      `columns.has('claude')` is false and the vote **folds to `UNATTRIBUTED`**;
+      `matrix-model.js :: buildMatrixModel` has **no counterpart filter at all** — its alias branch
+      is a bare `aliasJudges.map(...)` over `meta.models`, which carries `claude`, so the vote lands
+      in the **`claude` column**. That file's own comment already said so: *"report.js filters the
+      reserved claude seat out of ITS roster; this one never has."*
+      ⚠️ **`claudeTail` does the OPPOSITE job, on the OTHER branch.** It is concatenated only on
+      the **seat-space** arm, where it RE-ADDS claude because `meta.seats` is bench-only. The pinned
+      fixture is **alias space**, so that arm is never taken — measured control: rebuilding the
+      module with `claudeTail = []` leaves the divergence **unchanged**.
+      ⚠️ **The flag flips `report.js` ONLY.** Measured in alias space at both values: at `false`
+      both consumers give `["deepseek","gpt","claude"]` and AGREE; at `true` only `report.js` moves.
+      **This is what the roster-SOURCES work needs to aim at: the missing alias-side filter, not
+      `claudeTail`.** Measured at `0cb2d4d9` on one document carrying
+      `{judge:'claude',verdict:'dispute'}` + `{judge:'gpt',verdict:'agree'}`:
+
+      ```
+      report  judges  ["deepseek","gpt","UNATTRIBUTED"]  byJudge {"deepseek":null,"gpt":"agree","UNATTRIBUTED":"dispute"}
+      matrix  columns ["deepseek","gpt","claude"]        cells   [null,"agree","dispute"]
+      basis   {a:1,d:1,n:0} on BOTH — unmoved, as everywhere else in this release
+      ```
+
+  - **Council review of PR #175 (2026-08-20, chair verdict "Ship it") — four items filed, not fixed.**
+    Thirteen findings collapsed to five mechanisms; three were already disclosed in the PR body and
+    one did not hold. ⚠️ **The null-`adjudications`-element finding was raised FOUR times (A1/C2/B1/D2)
+    and was NOT a regression** — measured on both trees, `ed5c0c02` and the branch tip threw the
+    identical `Cannot read properties of null (reading 'judge')`. The new pre-pass was a second crash
+    SITE in the code, with the observable behaviour unchanged. ✅ **CLOSED 2026-08-20 by v4.8 T-C4**,
+    which was aimed at the falsy-element divergence below and closed this with the same expression:
+    `adjOf`'s `.filter(Boolean)` drops `null` before either phase can dereference it, so the
+    strictness asymmetry with `matrix-model.js` — real when this was filed — is gone.
+    - [ ] **`UNATTRIBUTED` is not exported from either consumer.** Measured 2026-08-20: absent from
+      `src/council/report.js`'s and `src/workspace/matrix-model.js`'s `module.exports`, and **39**
+      occurrences of the bare string across `tests/` (the council said "~50"; 39 is the measured
+      count under `grep -rc "'UNATTRIBUTED'|"UNATTRIBUTED"" tests/`). A rename in one file would
+      not be caught by that file's own tests. ⚠️ Exporting a CONSTANT for test use does not breach
+      **R17**, which forbids sharing the RULE; do not let the fix drift into a shared `columnFor`.
+    - [ ] **`columnFor` is computed twice per adjudication** — `report.js:166` (the `folded`
+      pre-pass) and `:178` (the build loop); `matrix-model.js:152` and `:167`. Inherent to the
+      two-phase build, worst in the common no-fold case. Measure before optimising.
+    - [ ] **Two folded votes on one finding collapse to ONE cell, last-wins** (council A4). Measured
+      and pinned as measured during T-C1; it is disclosed in code but not in the PR body. Not a
+      defect of this PR — the same last-wins applies to any two votes sharing a column — but the
+      `UNATTRIBUTED` column is the one guaranteed to collect multiple votes.
+    - [x] **✅ CLOSED 2026-08-20 by v4.8 T-C4 — a FALSY adjudication element grew a PHANTOM EMPTY
+      column, and the two consumers diverged on it** (council run 2, A2 — the only NEW finding in
+      that run, and the finding that flipped run 3's chair verdict to "Fix these first"). Measured
+      2026-08-20 against `ed5c0c02` for elements `0`, `false` and `''`:
+
+      ```
+      BASE md header: | Finding | Sev | Raiser | deepseek | Tier | Decision |
+      HEAD md header: | Finding | Sev | Raiser | deepseek | UNATTRIBUTED | Tier | Decision |
+      matrix columns: [deepseek]   (skipped by the `!adj` guard — no column)
+      ```
+
+      `columnFor` classified the element as unattributable (its `.seat`/`.judge` are `undefined`),
+      so `folded` was true and the column was added — but the cell value is `adj.verdict`, also
+      `undefined`, so the column rendered **blank**. It advertised an unattributable vote and showed
+      nothing. `matrix-model.js` skipped the element entirely via its `!adj` guard, so the two
+      consumers rendered one document differently — the exact class T2.4 exists to close. It was a
+      behaviour change introduced by T2.4, not a pre-existing shape.
+
+      **THE FIX** (`a515400c` → T-C4): `src/council/report.js :: adjOf` gained `.filter(Boolean)` —
+      `matrix-model.js`'s `!adj` predicate spelled a SECOND time, never shared, per **R17**.
+      ⚠️ **The prototype circulated with the task was `a && typeof a === 'object'`, and measurement
+      rejected it**: over ten element types against the live `matrix-model.js`, `filter(Boolean)`
+      disagrees on **0 of 10** and that expression on **3 of 10** — it drops TRUTHY non-objects
+      (`42`, `'x'`, `true`) which the other consumer keeps, closing one divergence by opening three.
+      ⚠️ **`null` and `undefined` moved from THROW to render**, deliberately and pinned: the same
+      widening already taken for the adjudications CONTAINER at T-C1 fix round 1. This also closes
+      the null-element crash noted at the head of this block, in `report.js`'s BOTH phases — that
+      note's "the strictness asymmetry with `matrix-model.js` is real" no longer holds.
+
+      **THE AXIS THAT MISSED IT IS FIXED TOO.** The agreement fuzz varied `seatSpace` × `adj.seat` ×
+      `adj.judge` × roster shape over well-formed OBJECTS; the element TYPE was never on it. T-C4
+      added it — **504 → 564 cases** — and measured, all against the 564-case axis:
+
+      | comparison | disagreements |
+      |---|---|
+      | `a515400c:report.js` × shipped `matrix-model.js` | **60 / 564** (24 column · 12 placement · 24 throw) |
+      | shipped `report.js` × `32a63e92:matrix-model.js` | **408 / 564** (284 column · 124 placement) |
+      | shipped × shipped | **0 / 564** |
+
+      All 60 of T-C4's are on the new element axis (12 per element, 20 per roster shape); the 504
+      object cases scored 0 at that BASE, which is precisely why the old axis could not see this.
+
+      ⚠️ **STILL OPEN, AND SPLIT OUT BELOW RATHER THAN CLOSED HERE:** a TRUTHY non-object element.
+    - [ ] **A TRUTHY NON-OBJECT adjudication element still grows a blank `UNATTRIBUTED` column — on
+      BOTH consumers, identically.** Split out of the item above by v4.8 T-C4, which found it while
+      measuring that fix rather than being told about it. Measured 2026-08-20 on the shipped tree:
+
+      ```
+      element   report.js columns                    matrix-model.js columns
+      42        [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      'x'       [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      true      [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      []  {}    [deepseek#1, UNATTRIBUTED]           [deepseek#1, UNATTRIBUTED]
+      ```
+
+      It is the SAME phantom-blank-column defect — a primitive has no `.verdict`, so the cell is
+      empty — but it is **not a desync**: both consumers do the identical thing, so SI-22.5's
+      agreement property holds. That is why T-C4 pinned it as agreement rather than fixing it
+      one-sidedly: `report.js`-only strictness is exactly the prototype T-C4 measured and rejected.
+      ⚠️ **Closing it requires editing BOTH consumers** (each spelling the predicate separately, per
+      **R17**) — a scope call, not an implementer's, which is why it is filed instead of taken.
+      Pinned meanwhile in `tests/council/seat-matrix.test.js` (the T-C4 block's preservation pins),
+      so it cannot become a desync without a test failing.
+    - [ ] **The synthetic `UNATTRIBUTED` matrix cell may silently no-op on click** (council/codex 6).
+      `electron/workspace-ui/workspace-panels.js :: drillIntoJudge` builds its file list from the real
+      bench roster, which has no `UNATTRIBUTED` entry. ⚠️ **REPORTED, NOT VERIFIED** — confirming the
+      no-op needs the UI driven, which this filing did not do. No test simulates the click.
+
+      **It is carved out of the agreement fuzz BY CONSTRUCTION** (exclusion 3: `claudeInCouncil` is
+      always false and no roster carries `claude`, so `claudeTail` never fires) — which is a
+      statement about the fixtures, not about the world. The exclusion was honestly named; **its
+      cost was nowhere measured until now.** Both behaviours are now PINNED in
+      `tests/council/seat-matrix.test.js` so neither can drift silently.
+      ⚠️ **Reachability is the same class as every other shape this PR pins**:
+      `run-stage2.js:61-62` guarantees no engine run emits such a vote, but `council report
+      <verdict.json>`, `council verdict --render` and `amicus_verdict` are all schema-free — which
+      is exactly why `''`, a non-string `judge` and an orphan seat id are in scope.
+      ⚠️ **This shape also forced a correction to the column's DOCUMENTED MEANING.** The prose
+      glossed `UNATTRIBUTED` as *"nobody could attribute these"*; here the document names the voter
+      explicitly (`judge: "claude"`), so that gloss would make the artifact assert something false.
+      The code's rule is *"no **column** for this key on this document's bench"*, which is not the
+      same rule as *"no **identity** for this vote*". `docs/council.md` and `CHANGELOG.md` were
+      corrected to the code's rule.
   - **The four named mutants this release's peer-split safety net stands on are all in the tree
     now, not behind a report path.** `NAIVESPLIT`, `ZEROEMIT` and `SCHEMADROP` already were;
     `SPLITDROP` joined them this round (measured 2026-08-19, v4.8 T-B3: 2 suites / 9 tests, out of
@@ -2654,6 +2933,68 @@ above were updated in place; these are the items it could not close, filed rathe
     the same tool the way the controller's own instructions asked it to be used. Filed here rather
     than silently narrowed away, because it is the identical false-assurance shape and, at 8 live
     gate-scope sites against Mechanism A's 4 doc-tree ones, the larger of the two.
+  - **Mechanism C — a bare `:NNN` continuation is invisible.** Added 2026-08-20 (v4.8 T2.4 / PR C).
+    ⚠️ **This mechanism was being *referred to* as already filed and was not** — it existed only in
+    T2.4's own brief and handoff, never in this file. Measured here with the real exported
+    `parseCitations`, not asserted: the line
+    `the four seat-space-gated reads report.js:98/:104 and matrix-model.js:84/:88, which are`
+    yields exactly **two** citations (`report.js:98`, `matrix-model.js:84`) — the `/:104` and
+    `/:88` continuations produce nothing at all. Same result for `matrix-model.js:84 and :88` (one
+    citation) and `workspace-render.js:195/:225` (one). The regex requires a `<path>.js` prefix on
+    every match, so the abbreviated second-reference form this codebase uses constantly is
+    structurally unparseable. It is a **false negative on a checkable target**, the same class as
+    Mechanisms A and B. Candidate fix, **not implemented here**: carry the last matched path
+    forward across a bare `:NNN` on the same line.
+  - **Mechanism D — the gate structurally cannot express a non-`.js` target at all.** Added
+    2026-08-20 (v4.8 T2.4 / PR C); measured first by the controller on an earlier tree and
+    **re-derived here against `e5376399`**. The regex at `scripts/check-citations.js :: CITATION`
+    requires the path to end in `.js`, so `docs/council.md:562` returns `[]` while the control
+    `src/council/report.js:98` parses normally. **Distinct in kind from A, B and C**: those are
+    parse failures on a target the gate *could* check; this is a whole target class it cannot
+    express, so every `.md:NNN` citation in the codebase is unverified and always has been.
+    - **Measured exposure — every number below carries BOTH its path scope and its REF.** Counted
+      over the gate's scanned trees (`src/**`, `electron/**`, `tests/**`):
+
+      | Scope | `ed5c0c02` | `e5376399` | `0cb2d4d9` | `1c2f462c` | this commit |
+      |---|---:|---:|---:|---:|---:|
+      | `docs/*.md:NNN` | **7** (6 stale) | **7** (6 stale) | **3** (2 stale) | **3** | **3** (2 stale) |
+      | every `*.md:NNN` | **18** | **18** | **14** | **15** | **14** |
+
+      ⚠️ **The fall from 7→3 and 18→14 is T2.4's own four `tests/` fixes, not a change in the
+      blind spot.** An earlier draft stated 7 and 18 in the present tense in the very commit that
+      changed them — the release's own rot class, committed inside the entry filing it.
+      ⚠️ **AND THE ENTRY THEN DID IT AGAIN, TO ITSELF.** The `1c2f462c` column reads **15**, not the
+      **14** that commit recorded: its own C3 disclosure added a fresh unpinned `.md:NNN` citation to
+      live code — **inside the blind spot this very entry files**, and against the rule that a
+      correction must never introduce a new line number. Fix round 2 converted it to
+      `pr4c-seat-spine.md@ed5c0c02:751-752`, which is provenance rather than a live line reference,
+      and the count returns to **14**. The lesson is the entry's own: a count stated about the tree
+      is falsified by the commit that states it, so **quote the ref with the number, every time**. The 6-stale
+      set is four distinct stale `docs/council.md` targets across six citing sites, plus
+      `docs/usage.md:406`, which is **CORRECT — do not "fix" it** (`grep -n` puts the phrase *"not
+      tunable"* on 406 exactly). The two `docs/council.md` sites surviving at `0cb2d4d9` are the two
+      in `src/` T2.4 was forbidden to touch — recorded under "Citations T2.4 measured but could not
+      apply" below.
+    - ⚠️ **6-of-7 is NOT the size of the blind spot**, and a bare "7" invites reading it as such.
+      Widening by one character — every `*.md:NNN` rather than `docs/*.md:NNN` — adds **eleven more
+      citing sites across SEVEN distinct targets**, none of which has been opened and all of which
+      are of unknown freshness: `SKILL.md:448` (×2), `COUNCIL-DESIGN.md:268` (×2),
+      `MANUAL-ORCHESTRATION.md:147` (×2), `BACKLOG.md:280` (×2),
+      `usage.md:642-648`, `superpowers/sdd/task-10-report.md:127-148`, and — the one an earlier
+      draft omitted — `tests/gateway-router-local.test.js:176`'s `...-design.md:145-149`, whose
+      path is itself elided in the source comment. Any count quoted from this entry must carry its
+      scope **and its ref** in the same sentence.
+    - **State the lever honestly**: like A and B, the defect is arguably in the gate — it cannot
+      express a `.md` target — not in the authors, who wrote an ordinary line citation in good
+      faith (failure mode #7). Filed here, **not fixed**: a gate change is its own concern with its
+      own blast radius, and widening the path grammar would immediately put `BACKLOG.md`'s and
+      `docs/`'s deliberately-unscanned doc-tree citations one `CONFIG.include` edit away from the
+      gate. ⚠️ **The figure "3639" is quoted in this repo without a counting rule and does not
+      reproduce** — it appears at `scripts/check-citations.js:35` and `docs/CITATIONS.md:82`, and
+      an earlier draft of this entry repeated it as fact. Re-measured with the real exported
+      `parseCitations` over tracked `.md` files it comes to ~3.8k under the obvious scoping and
+      nothing produces 3639 exactly. Treat it as an undated order-of-magnitude marker, not a count;
+      whoever needs a real number must state the rule that produced it.
 - **Filed: a rare, unexplained single-test red in the full suite.** One `npm test` run during T-A4
   reported 1 failed / 7516 with the identity lost to filtered output; seven further runs were green.
   A one-sentence docs change cannot cause it, so it is treated as a **pre-existing flake**, not
@@ -3191,11 +3532,20 @@ deliberately left alone:
   ways `report.html` is. Fix them together, keyed on `(adj.seat || adj.judge)` against a
   seat-valued column list — the data is already on the document as of PR3.
   - **Verified by execution (2026-08-16):** `src/workspace/matrix-model.js :: buildMatrixModel` —
-    the join is seat-aware, not alias-only: `seatSpace` is computed at `matrix-model.js:58`,
-    columns key on the seat id at `:74` (`meta.seats.map(s => ({key: s.id, ...`), votes key on
-    `adj.seat` in seat space at `:84` (`votes[(seatSpace && adj.seat) || adj.judge] =
-    adj.verdict;`), and the raiser key uses `f.raiserSeat` in seat space at `:88`
+    the join is seat-aware, not alias-only: `seatSpace` is computed at
+    `matrix-model.js@ed5c0c02:58`, columns key on the seat id at `matrix-model.js@ed5c0c02:74`
+    (`meta.seats.map(s => ({key: s.id, ...`), votes key on `adj.seat` in seat space at
+    `matrix-model.js@ed5c0c02:84` (`votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict;`),
+    and the raiser key uses `f.raiserSeat` in seat space at `matrix-model.js@ed5c0c02:88`
     (`seatSpace ? (f.raiserSeat || f.raiser) : f.raiser`).
+    ⚠️ **Pinned to `@ed5c0c02` on 2026-08-20 (v4.8 T2.4), because T2.4 moved every one of them.**
+    Each was re-opened at its stated line at that ref and confirmed to carry what is claimed; each
+    was also re-opened at `e5376399`, where all four are false. The finding itself still holds —
+    the join is still seat-aware — but two of the four claims changed in kind, not just in line:
+    the vote-key expression above **no longer exists verbatim**, because T2.4 moved it inside
+    `columnFor`, which computes `(seatSpace && adj.seat) || adj.judge` and then refuses a key that
+    names no column; and the roster now grows a conditional `UNATTRIBUTED` entry. The current
+    locations are all inside `matrix-model.js :: buildMatrixModel` — anchor there, not at a line.
 - Minor, noticed while re-deriving citations — ✅ **FIXED at T-A8, by SYMBOL**: `src/council/seats.js`'s
   `bindSeats` docblock cited `run-retry.js:93` for "a retry wave is the loss subset". Both the
   `groupStage1Losses(` call and the `launchWave({ ...common, models: unit.models.slice() })` that
@@ -3539,10 +3889,23 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      `['openai/gpt-5 ','openai/gpt-5']` is two aliases, not one. Measured with both seats agreeing on
      both findings: `basis {a:0,d:0,n:0} Singleton` — **the undercount survives in full, silently.**
      The fix is upstream (trim at classification), not in the peer filter.
-  5. **A judge whose Stage-2 seat orphaned has its vote counted in `basis` but rendered NOWHERE**
+  5. ✅ **CLOSED 2026-08-20 — v4.8 T2.4 / PR C, in BOTH consumers.** This is the shape **SI-22.5**
+     names, and ruling **R3** governs it: the vote now renders in a conditional `UNATTRIBUTED`
+     column and stays in `basis`. Measured through the real `report.js :: toModel` on a twin bench
+     whose judge emitted no `adjudications[].seat` — at `ed5c0c02` the roster was
+     `["deepseek#1","deepseek#2","gpt#1"]` and `byJudge` carried a junk `"deepseek": "dispute"`
+     entry no column read; at `e5376399` the roster is
+     `["deepseek#1","deepseek#2","gpt#1","UNATTRIBUTED"]`, the vote lands in
+     `byJudge.UNATTRIBUTED`, **zero junk keys survive**, and `basis` is `{a:1,d:0,n:0}` on both
+     trees. See **SI-22.5's filing** ABOVE for the join rule that closed it — this is SI-22.5,
+     not SI-12, which is a different and still-OPEN defect (owner ruling **R19**, 2026-08-20).
+     ~~**A judge whose Stage-2 seat orphaned has its vote counted in `basis` but rendered NOWHERE**
      in the seat-keyed matrix — it keys to a bare alias no column reads. HEAD at least rendered it
-     via alias last-wins. NEW with PR4c's matrix re-key, pinned as disclosed behaviour in
-     `tests/council/seat-matrix.test.js` rather than left to be discovered. A sixth, related shape
+     via alias last-wins.~~ NEW with PR4c's matrix re-key, pinned as disclosed behaviour in
+     `tests/council/seat-matrix.test.js` rather than left to be discovered.
+     ⚠️ **The sixth shape below is NOT closed** — re-measured 2026-08-20 at `ed5c0c02` and at
+     `e5376399`, byte-identical output on both: it grows no `UNATTRIBUTED` column, because the
+     raiser cell is not a vote and PR C changed only the vote→column join. A sixth, related shape
      is pinned beside it: when the **raiser's** Stage-1 seat orphans on a twin bench the star
      disappears and the Raiser cell names no column, because `meta.seats`' guard runs over the whole
      seat table and is independent of binding while `raiserSeat` needs a bound `r.seat`.
@@ -3638,7 +4001,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   published `:153`/`:92`/`:98` were each 6 short. Each value above was re-opened at its stated line
   in the final working tree and confirmed to carry what the citation claims. **The counts
   themselves are unchanged** — T1.2 was a pure move of `renderMd`, which holds no Count-1 or
-  Count-2 site. `matrix-model.js:84`/`:88` re-checked, unaffected, still land. The former
+  Count-2 site. `matrix-model.js@ed5c0c02:84`/`@ed5c0c02:88` re-checked, unaffected, still land
+  **at that ref** — ⚠️ pinned to `@ed5c0c02` on 2026-08-20 (v4.8 T2.4), which moved both: at
+  `e5376399` neither lands, and the `:84` expression no longer exists verbatim (it is now inside
+  `matrix-model.js :: buildMatrixModel`'s `columnFor`). The former
   `report.js:24-40` range is retired in favour of a symbol anchor: line ranges in this file have now
   rotted twice in one day, and `isSeatSpace`'s docblock does not move when the file above it grows.
   - **Count 1 — object-form `seatKey` spellings. Counting rule:** the expression
@@ -3695,15 +4061,21 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
     5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
-    `report.js:159` spells the rule **twice on one line**, once per ternary branch: a bare "9" is
+    `src/council/report.js :: costRows` spells the rule **twice on one line**, once per ternary
+    branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js:83` (**was `:81`**),
-    `council/debate.js:181` (**was `:178`**), `council/report.js:159` (×2), `council/run-debate.js:259` (**was
+    `council/debate.js:181` (**was `:178`**), `council/report.js :: costRows` (×2) (**was `:159`; re-anchored
+    BY SYMBOL 2026-08-20, v4.8 T2.4, which moved it to `:239`**), `council/run-debate.js:259` (**was
     `:258`**), `council/run-debate.js:265` (**was `:264`**); `electron/workspace-ui/`: `live-dead-seats.js:219`,
     `live-seats.js:95`, `workspace-panels.js:122`, `workspace-seats.js:245 :: renderDeadSeatRows` (**was `:242`**). **Adjacent forms
     deliberately outside Count 2:** `debate.js:224`'s `f.raiserSeat || f.raiser` (**was `:211`**;
     same shape, a
-    *different* emitted field pair); the four seat-space-**gated** reads `report.js:98`/`:104` and
-    `workspace/matrix-model.js:84`/`:88`, which are all-or-nothing **by document** and **must not**
+    *different* emitted field pair); the four seat-space-**gated** reads — the vote key and the
+    raiser key in each consumer, re-anchored BY SYMBOL 2026-08-20 (v4.8 T2.4, which moved all four;
+    they were `report.js:98`/`:104` and `workspace/matrix-model.js:84`/`:88`, each true at
+    `@ed5c0c02`): `src/council/report.js :: columnFor` and the `raiser:` field of
+    `src/council/report.js :: toModel`'s findings map, `src/workspace/matrix-model.js :: columnFor`
+    and `src/workspace/matrix-model.js :: raiserKey` — which are all-or-nothing **by document** and **must not**
     be folded into the bare form — `report.js :: isSeatSpace`'s docblock records that independent
     fallbacks would blank every vote cell on twin verdicts already on disk; `workspace-seats.js:188`'s dual lookup (**was `:185`**; it
     queries *both* keys, so it is not a key derivation); `workspace-seats.js:88`'s `seatId` chain
@@ -3718,7 +4090,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `r.seat || r.model`"* counted a **Count-2** site as the fourth member of **Count 1**, which is
     the conflation in its purest form. The trap: `r.seat` is a seat **object** before the emit
     boundary and a **string** after it, so one property name reads as two different rules
-    (`run.js:231` vs `report.js:159`).
+    (`run.js:231` vs `src/council/report.js :: costRows`).
   - ⚠️ **The `electron/` re-spellings are structural, not sloppiness.** The Workspace renderer loads
     every module as a plain `<script src>` (`electron/workspace-ui/index.html:101-124`) under
     `contextIsolation: true, nodeIntegration: false, sandbox: true` (`electron/main.js:137`) and a

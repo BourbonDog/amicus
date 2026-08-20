@@ -815,10 +815,48 @@ first's and a finding whose `basis` was `a0/d1` could render as two agreements, 
 the rendered row and the finding's `basis` agree. **Benches with no repeated alias are
 byte-identical to v4.7** — every seat id there *is* its alias, so nothing in the document differs
 and nothing in the render does either. A verdict with no `seats` table (anything written before
-v4.8, anything hand-assembled) renders in alias space exactly as it always has. One known gap: a
-judge whose Stage-2 leg never bound to its seat emits no `adjudications[].seat`, so in seat space
-its vote keys to a bare alias that no column reads — it still counts in `basis` but renders
-nowhere, where the old last-wins matrix at least showed it somewhere.
+v4.8, anything hand-assembled) renders in alias space exactly as it always has.
+
+⚠️ **v4.8 — the `UNATTRIBUTED` column.** A vote the matrix cannot attribute to a column is no
+longer dropped from the render. The vote→column join **refuses** a key that identifies nothing — an
+empty string, a missing or non-string `judge`, or a seat id or alias that names no column on the
+bench — and folds every such vote into one extra column, headed `UNATTRIBUTED` and placed last
+among the judge columns. This closes the gap this section used to disclose: a judge whose Stage-2
+leg never bound to its seat emits no `adjudications[].seat`, so in seat space its vote keys to a
+bare alias no column reads. Before v4.8 that vote counted in `basis` and rendered nowhere; now it
+counts in `basis` **and** renders.
+
+- **`basis` does not move.** This is a rendering change only — such a vote was always counted and
+  still is. It is the same property the seat re-key above exists for: what the row shows and what
+  `basis` says now agree.
+- **The column appears only when a vote actually folds.** A document in which every vote is
+  attributable renders exactly as it did before — no extra column, and never an empty one.
+- ⚠️ **Read the header as “no column on this bench”, not “nobody knows who voted”.** The rule the
+  renderer applies is about the **column**, not the voter: a vote lands here when its key names no
+  column on *this document's* bench. Usually that also means the voter is unidentifiable — but not
+  always. A vote whose `judge` names a model the report deliberately keeps off the bench folds here
+  too, with its `judge` field intact in the document. The column says *this vote had nowhere to go*.
+- **Every folded vote on one finding shares one cell, last-wins.** One column is the deliberate
+  design — it records a fact about the document, not one per voter — so two folded votes on the same
+  finding collapse to the later one's verdict. What tells them apart is a seat id, and supplying one
+  is a producer-side fix, not a rendering one.
+- **The Council Workspace matrix applies the same refusal**, over the `tally.json` roster described
+  in the paragraph below. The two are deliberately separate implementations rather than a shared
+  module, and they are held in agreement by an exhaustive cross-product test rather than by
+  construction. ⚠️ **One known exception, disclosed rather than fixed:** on a
+  `--claude-review` run the report filters the reserved `claude` seat off its bench while the
+  Workspace keeps it, so a hand-authored `judge: "claude"` vote folds to `UNATTRIBUTED` in the
+  report and lands in the `claude` column in the Workspace. No engine run emits such a vote. The
+  two rosters are built from different sources, and reconciling them is deliberately out of scope
+  here.
+- ⚠️ **One residual, disclosed rather than fixed:** if a bench seat is *literally* named
+  `UNATTRIBUTED`, no extra column is added and folded votes land in that seat's own column. Nothing
+  reserves the name, so this is reachable only by naming a seat that way on purpose.
+- This is **not** the same thing as `findings[].unattributedPeerDrops` in the tally-record schema
+  above. That field counts votes the *peer filter* excluded from `basis` on the raiser side, and
+  ruling R2 deliberately leaves those excluded; this column renders a vote that
+  **is** in `basis` but had no column to land in. Different mechanism, different document, opposite
+  effect on `basis`.
 
 In the Council Workspace the same matrix is built from `tally.json` (via `tally.meta.seats`) and
 behaves identically, with one deliberate difference: it keeps rendering the blank `claude` column

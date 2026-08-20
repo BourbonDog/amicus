@@ -33,10 +33,14 @@ shapes, so the true open work-item count is **20**, not 16.
 > **These are the recon's counts at `53cd689c` and are not re-derived as work lands** — the table
 > below is the live record; read a verdict there, not here. ⚠️ **This "changes since" list is
 > affirmative and enumerative, so it must be extended whenever a verdict moves — it is not covered
-> by the "not re-derived" caveat above.** TWO changes since, not one: **SI-22.3 moved OPEN →
+> by the "not re-derived" caveat above.** THREE changes since, not one: **SI-22.3 moved OPEN →
 > PARTIAL** (T2.2, 2026-08-16, `33e2ecf7`) and then **PARTIAL → DONE** (T-A4, 2026-08-17,
-> `1e385895`). Re-counted directly off the live table at T-A8 fix round 2: **7 DONE · 3 PARTIAL ·
-> 1 SUPERSEDED · 1 HOLD · 19 OPEN** across its 31 rows (SI-22 already expanded into 22.1–22.5).
+> `1e385895`); and **SI-22.5 moved OPEN → DONE** (T2.4, 2026-08-20, `774dcdc2`+`d82e2127` /
+> `09212e97`+`fa0c5ae7`). Re-counted directly off the live table at T2.4 fix round 1:
+> **8 DONE · 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 18 OPEN** across its 31 rows (SI-22 already
+> expanded into 22.1–22.5). ⚠️ The previous line read **7 DONE · … · 19 OPEN** and named only two
+> changes; SI-22.5's move was made by T2.4's first commit and not carried here until this round —
+> exactly the miss this paragraph's own ⚠️ exists to prevent.
 > ⚠️ The derived "open work items" total is deliberately NOT restated: the recon's rule counts the
 > SI-22 roll-up as one OPEN row expanded to five, and the table counts the five directly, so the two
 > disagree about whether a shape that passed through PARTIAL is decremented once or twice. Count off
@@ -69,7 +73,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.2 | OPEN | peer twin's leg orphans | `tally.js :: tally` |
 | 22.3 | **DONE** (T2.2 `33e2ecf7` + T-A4 `1e385895`, 2026-08-17) | ~~two orphaned twins → ONE dead row~~ producer fixed, and the reconcile half too: a PARTIAL retry return now gives 2 notes / 2 stillDeadLegs (B1) and each note reads its OWN slot's `firstFailure` (B2), output-identical to the BOUND control. ⚠️ Row/note half closed in **four of four** retry shapes; the SLOT half is closed **and bounded** — `min(N, roster count)` since T-A3 `4413eb25`, never an unqualified N→N | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (done — slot COUNT, not first-wins) |
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
-| 22.5 | OPEN | orphaned Stage-2 judge rendered nowhere | `report.js :: toModel` · `matrix-model.js` · `report-html.js` |
+| 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
 | 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |
 | 24 | OPEN | `VERDICTS[v.verdict]` inherited keys | `tally.js :: tally` **+ `:: computeStreetCred`** (unfiled second site) |
 | 25 | OPEN | chair packet in alias space | `briefings-chair.js :: buildChairPacket` — three sites, three sizes |
@@ -217,6 +221,21 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
 | R14 | Duplication | **SI-27 in v4.8, after Phase 2, home = `stage1-bind.js`**; seatKey cross-file consolidation → v4.9 |
 | R15 | SI-25 chair packet | **Sites (1)+(2) now** as a small PR; site (3) rides Phase 3 |
 | R16 | `sessions-index` leak | **Pin all 13 unpinned rails** |
+| R17 | What is the consumer-side unidentifying-key defect? (asked as *"what is SI-12?"* — see R19) | The consumer-side sibling of PR B's council C1. **Narrow option:** the report.js/matrix-model.js strictness asymmetry is not in scope and no shared module is extracted |
+| R18 | Where does a refused vote go? | **Fold into UNATTRIBUTED** — one column, one concept; the vote stays in `basis` |
+| R19 | The work R17 scoped was labelled **SI-12**, but SI-12 is already taken — row `\| 12 \|` above, *double-orphan conformance collapse* at `run.js :: runCouncil`, still OPEN | **Fold it into SI-22.5. Do not mint a new identifier.** Leave SI-12 exactly as it is, and describe the closed defect by mechanism. ⚠️ The mislabel **predates this PR** — T2.4's line below has read *"SI-12 refuses to join on an unidentifying key"* since `4ee46696` |
+| R20 | A `judge: 'claude'` vote on a `claudeInCouncil: true` document lands in DIFFERENT columns in the two consumers. ⚠️ **Mechanism corrected 2026-08-20 (T2.4 fix round 2), by execution:** the ruling as first written said `matrix-model.js` "re-appends it as `claudeTail`" — **inverted**. `report.js` **filters** `claude` out of its own roster and folds; `matrix-model.js`'s alias branch has **no filter at all**, so it keeps it. `claudeTail` is on the **seat-space** branch only, where it RE-ADDS claude; forcing it empty leaves the divergence unchanged, and the flag moves `report.js` only. The ruling itself is unchanged — only its stated cause | **Disclose, pin and file.** Pin the measured behaviour of both consumers; correct the column's documented meaning to *no column on this bench*, not *nobody could attribute this*; file against the roster-SOURCES lever. **Do not align the rosters** — out of scope per R17 |
+
+⚠️ **R17–R20 were ruled 2026-08-20, not 2026-08-16** — appended here rather than renumbered, so
+R1–R16 keep the numbers every other document cites them by. R17/R18 were taken before T2.4 / PR C
+wrote any code; R19 and R20 during its fix round.
+⚠️ **R19 corrects a false premise this document briefly carried.** R17 was asked as *"what is
+SI-12?"*, and an earlier draft of this note asserted that **SI-12 had no definition anywhere in the
+repository**. That is **false**: SI-12 is defined in this file's own live status table as row
+`| 12 |`, *double-orphan conformance collapse*, and filed in `BACKLOG.md` — still OPEN. The search
+that "found nothing" was `git grep SI-12`, and the table writes a bare `| 12 |`, so the string never
+occurs: **a search that cannot express its target reported nothing wrong**, the same false-assurance
+class this release files as citation-gate Mechanisms A–D. The closed work is **SI-22.5**.
 
 ---
 
@@ -277,8 +296,42 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
   field — so before **T2.4 / PR C** the number is observable only in `tally.json`. Read
   "Replaces T1/T2" above as replacing WRONG-behaviour pins with right-behaviour-plus-mark pins,
   not as closing SI-22.1/SI-22.2 — both stay open.
-- **T2.4** Consumers: SI-12 refuses to join on an unidentifying key; SI-22.5 renders an
+- **T2.4** Consumers: ~~SI-12~~ **SI-22.5** refuses to join on an unidentifying key; SI-22.5 renders an
   **unattributed** column across all three renderers with the vote still in basis
+  ⚠️ **THE `SI-12` LABEL ON THIS LINE IS WRONG AND HAS BEEN SINCE `4ee46696` (2026-08-16), when
+  this line was written** — it is corrected here, not introduced here. SI-12 is row `| 12 |` of the
+  live status table above, *double-orphan conformance collapse* at `run.js :: runCouncil`, and it is
+  **still OPEN**. Owner ruling **R19** (2026-08-20): the work T2.4 did is **SI-22.5**; fold it there,
+  do not mint a new identifier, and leave SI-12 untouched.
+  ✅ **COMPLETED 2026-08-20 by Phase 2 T-C1 (`774dcdc2` + `d82e2127`) + T-C2 (`09212e97` +
+  `fa0c5ae7`) + T-C3 (`0cb2d4d9` + its fix round, the branch tip)** — **the unidentifying-key join
+  is closed in both consumers.** `src/council/report.js :: toModel`
+  and `src/workspace/matrix-model.js :: buildMatrixModel` each classify the vote key instead of
+  trusting it: a key that is not a non-empty string naming a real column folds to `UNATTRIBUTED`
+  (**R18**) and the vote **stays in `basis`**. Written twice, deliberately not shared, per **R17**.
+  **SI-22.5 is closed with it, per R3.** ⚠️ **"All three renderers" above describes the outcome,
+  not the edit** — measured: the council renderers needed **zero** changes, because the column
+  propagates from the model alone; `git diff` against the branch point is 0 bytes for
+  `report-md.js`, `report-html.js` and all of `electron/`. The column is **conditional**: it
+  appears only when a vote actually folds, so a clean document renders exactly as before.
+  ⚠️ **The two consumers were proved to agree by an EXHAUSTIVE fuzz, not by shape pins** —
+  **407 disagreements / 504 cases at `32a63e92`** (the tree with `report.js` fixed and
+  `matrix-model.js` not) **→ 0 / 504** at `e5376399`, in
+  `tests/council/seat-matrix.test.js :: fuzzCases`. Read `BACKLOG.md`'s **SI-22.5** entry for the
+  filing.
+  ⚠️ **DID NOT close SI-22.1 or SI-22.2 — read this precisely.** Per owner ruling **R2** the
+  ambiguous *peer* drop still STAYS: `basis` does not move for it, the undercount survives exactly
+  as before, on purpose, and the drop remains merely **announced** in
+  `findings[].unattributedPeerDrops`. SI-22.5 is a **rendering** closure on the vote→column join
+  and says nothing about the peer filter. Nothing in T2.4 makes the peer undercount fixed.
+  ⚠️ **It also did NOT close SI-12** (row `| 12 |`, a different defect — ruling **R19**), and it
+  did not close **SI-22.4**. ⚠️ **One shape is deliberately left DIVERGENT and is now pinned rather
+  than fixed — ruling R20**: a `judge: 'claude'` vote on a `claudeInCouncil: true` document folds to
+  `UNATTRIBUTED` in `report.js` and lands in the `claude` column in `matrix-model.js`. Filed against
+  the roster-SOURCES lever in `BACKLOG.md`; aligning the rosters stays out of scope per **R17**.
+  ⚠️ **T22 shape 1's pin was REPLACED, not kept green** — the old pin asserted the pre-fix
+  behaviour, so it had to assert the opposite. Read that as replacing a wrong-behaviour pin with a
+  right-behaviour one, exactly as T2.3's "Replaces T1/T2" should be read.
 
 ### Phase 3 · Seat-keyed street cred + ledger — 1 large PR
 - **T3.1** SI-26 (`letterByModel` delete) lands first or folds in — both edit `assignLabels`'

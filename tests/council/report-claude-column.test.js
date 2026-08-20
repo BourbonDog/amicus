@@ -8,9 +8,12 @@ const avInput = require('./fixtures/av-receiver-input');
 // SKILL.md:448 / run-stage2.js:61-62 guarantee: a --claude-review file is
 // judged by the council but never joins the judge roster. 'claude' legitimately
 // sits in meta.models (verdict.council) — that's the street-cred universe
-// (run-assemble.js:226, docs/council.md:326) — but it must never grow an
+// (run-assemble.js:226, and the `meta.models` row of docs/council.md's
+// `### Tally-input schema` section, whose wording is "this is the street-cred
+// universe") — but it must never grow an
 // adjudication-matrix column, or the report asserts claude cast a vote it never
-// cast (docs/council.md:1002 legend: a bare `*` means "raiser's own vote" —
+// cast (the legend under docs/council.md's `## Adjudication matrix` section:
+// a bare `*` means "raiser's own vote" —
 // under v4.8 PR4c that is the raiser's SEAT, and seats[] is bench-only, so a
 // seat-space roster can never grow a claude column either).
 function claudeInCouncilVerdict() {

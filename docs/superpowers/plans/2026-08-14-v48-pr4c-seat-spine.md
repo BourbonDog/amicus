@@ -523,7 +523,7 @@ guarantees `seat.alias === alias`); stated so the sentence is not read as univer
 >   executables — fires it falsely. Measured on one run: the tally stamps
 >   `sameModelCorroboration: true` while PR4b's ledger writes two rows,
 >   `resolvedModel: openrouter/deepseek-chat` and `deepinfra/deepseek-v3`. **This is the exact case
->   PR4b was rewritten for** (`CHANGELOG.md:13`, pinned `ledger.test.js:741` T11). The false negative
+>   PR4b was rewritten for** (`CHANGELOG.md:13`, pinned `ledger.test.js@ed5c0c02:741` T11). The false negative
 >   omits a warning; the false positive tells a reader to **discount a genuinely independent
 >   cross-executable corroboration.**
 >
@@ -649,7 +649,7 @@ an artifact that is not.**
 bench **aliases in bench order, duplicates preserved**, plus `claude` appended at `:177` and filtered
 back out at `report.js:36` when `claudeInCouncil === true`. It is deliberately **not** the union of
 `adjudications[].judge`: `report.js:29-35` documents that a dead judge with zero votes must still get
-a blank column, pinned at `report-claude-column.test.js:120-132`. **The seat roster must therefore
+a blank column, pinned at `report-claude-column.test.js@ed5c0c02:120-132`. **The seat roster must therefore
 come from the seat table, never from the votes.**
 
 `workspace/matrix-model.js:47` takes the same roster one hop earlier — `tally.meta.models` — with the
@@ -812,7 +812,7 @@ pre-built seam that returns exactly `seat.id`.
 > `council`.
 > **Whole-tree measurement, seat-keyed:** `521 suites passed / 7269 passed / 8 skipped / 4 snapshots
 > passed`. **Nothing moves.** Both snapshot suites (`report-debate.test.js:70,:73`;
-> `report-claude-column.test.js:141,:144`) snapshot the same **unique-alias** fixture
+> `report-claude-column.test.js@ed5c0c02:141,:144`) snapshot the same **unique-alias** fixture
 > (`tests/council/fixtures/av-receiver-input.js:20`).
 
 > ### ⚠️⚠️ HARD PREREQUISITE — BLIND MODE LEAKS THE MODEL NAME UNDER A NAIVE RE-KEY
@@ -936,6 +936,11 @@ An end-to-end twin run is §5's job.
    - **A judge whose Stage-2 seat orphaned has its vote counted in `basis` but rendered NOWHERE** in
      the seat-keyed matrix — it keys to a bare alias no column reads (§3.6's ⚠️). HEAD renders it via
      last-wins. New with §3.6; §5's T22 pins whichever behaviour is chosen.
+     > ⚠️ **Annotated 2026-08-20 (v4.8 T2.4 / PR C), not rewritten** — preserved dated record, and
+     > true of its own tree. This shape is **SI-22.5**, and it is now CLOSED: ruling R3 chose to
+     > render, so the vote folds into a conditional `UNATTRIBUTED` column in both consumers and
+     > stays in `basis`. "§5's T22 pins whichever behaviour is chosen" was discharged by T2.4
+     > **replacing** T22 shape 1's pin rather than keeping it green.
    - **The RAISER's Stage-1 seat orphans on a twin bench ⇒ the star disappears and the Raiser cell
      names no column.** `meta.seats`' guard runs over the whole seat table and is independent of
      binding, so a twin bench **always** ships a table; `raiserSeat` needs `r.seat` (`run.js:194`),
@@ -1075,7 +1080,7 @@ revision 1 listed it in both the new-test table and the must-stay-green list); T
 
 *Added — revision 2 omitted all of these, and §3.6 or R4c-5 edits the code they cover:*
 **the 20 report/matrix tests T17's own row cites** (star-loss 6, column-reorder 14) —
-`report-claude-column.test.js:89-92,94-100,102-105,107-112,120-123,125-128,130-132,141,144` ·
+`report-claude-column.test.js@ed5c0c02:89-92,94-100,102-105,107-112,120-123,125-128,130-132,141,144` ·
 `report.test.js:18-21` · `report-debate.test.js:70,73` · `matrix-model.test.js:16-22,24-35,42-60,62-70,91-96`
 · **`tests/mcp-tools.test.js`** (R4c-5 edits `src/mcp-tools.js`) ·
 **`tests/council/run-schema-debate.test.js`** (§5 extends it) ·
@@ -1141,7 +1146,7 @@ again as this PR's own edits land.
 ⚠️ **Two legend dialects already exist and §3.6 will make them diverge further.**
 `report.js:145` and `report-html.js:134` say *"raiser's own vote"*; `workspace-matrix.js:120` says
 *"`* raiser`"*. Pick one wording and apply it to all three, or state why not.
-⚠️ **Citation rot to fix in passing:** `tests/council/report-claude-column.test.js:13` cites
+⚠️ **Citation rot to fix in passing:** `tests/council/report-claude-column.test.js@ed5c0c02:13` cites
 "docs/council.md:661" for the legend. The actual line is **969**.
 The four snapshot legend lines (`report-claude-column.test.js.snap:172`/`:236`,
 `report-debate.test.js.snap:172`/`:236`) pin the current wording — measured **not** to move under

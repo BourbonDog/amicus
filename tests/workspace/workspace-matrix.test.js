@@ -228,6 +228,73 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       const tds = plainC.querySelectorAll('td').map(td => td.textContent);
       expect(tds.slice(0, 5)).toEqual(['A1', 'major', 'gemini#1', '✓*', '✗']);
     });
+
+    /**
+     * v4.8 T-C2 (SI-22.5, ruling R18) — the fold column through the REAL painter.
+     *
+     * ⚠️ `electron/workspace-ui/workspace-matrix.js` needed ZERO edits for this
+     * and received none: renderMatrix iterates `matrix.judges` for the header
+     * and `row.cells` for the body, so a roster entry IS a column. This test is
+     * the proof by execution.
+     *
+     * It is also where the BLIND-MODE decision is pinned, and the labelMap is
+     * adversarial on purpose. UNATTRIBUTED has no alias to protect and no
+     * identity to reveal, so matrix-model.js carries the same literal in BOTH
+     * name slots and the flip (`blind && pair.label ? pair.label : pair.model`)
+     * is a no-op on it BY CONSTRUCTION. The obvious alternative spelling,
+     * `pairFor(UNATTRIBUTED, map)`, renders identically on every ordinary
+     * labelMap — `labelFor` returns null and display() falls back to
+     * `pair.model` — so it would be GREEN against its own mutant here. The
+     * `'Review Z': 'UNATTRIBUTED'` entry below is what makes the two spellings
+     * diverge: measured, that mutant prints `Review Z` for the fold column with
+     * blind mode on, which is a column of nobody's votes wearing a seat's label.
+     * Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: WSPAIRFOR.
+     */
+    test('T-C2: the UNATTRIBUTED column paints, and reads the same with blind mode ON and OFF', () => {
+      const orphanTally = {
+        meta: {
+          models: ['gemini', 'gemini'], claudeInCouncil: false,
+          seats: [
+            { id: 'gemini#1', alias: 'gemini', role: 'seat', lens: null, position: 1 },
+            { id: 'gemini#2', alias: 'gemini', role: 'seat', lens: null, position: 2 },
+          ],
+        },
+        findings: [{
+          id: 'A1', severity: 'major', raiser: 'gemini', raiserSeat: 'gemini#1',
+          tier: 'Contested', basis: { a: 1, d: 1, n: 0 },
+          adjudications: [
+            { judge: 'gemini', verdict: 'agree', seat: 'gemini#1' },
+            { judge: 'gemini', verdict: 'dispute' },   // Stage-2 seat orphaned
+          ],
+        }],
+        tierCounts: { Contested: 1 },
+      };
+      const matrix = buildMatrixModel(orphanTally, {
+        'Review A': 'gemini', 'Review B': 'gemini', 'Review Z': 'UNATTRIBUTED',
+      }, null);
+
+      global.window.AmicusApp = { isBlind: () => false };
+      const plainC = document.createElement('div');
+      AmicusMatrix.renderMatrix(plainC, matrix, () => {});
+      expect(plainC.querySelectorAll('th').map(th => th.textContent))
+        .toEqual(['Finding', 'Sev', 'Raiser', 'gemini#1', 'gemini#2', 'UNATTRIBUTED', 'Tier', 'a/d/n']);
+      const tds = plainC.querySelectorAll('td').map(td => td.textContent);
+      expect(tds.slice(0, 6)).toEqual(['A1', 'major', 'gemini#1', '✓*', ' ', '✗']);
+
+      global.window.AmicusApp = { isBlind: () => true };
+      const blindC = document.createElement('div');
+      AmicusMatrix.renderMatrix(blindC, matrix, () => {});
+      expect(blindC.querySelectorAll('th').map(th => th.textContent))
+        .toEqual(['Finding', 'Sev', 'Raiser', 'Review A', 'Review A', 'UNATTRIBUTED', 'Tier', 'a/d/n']);
+      // The seat ids are still masked — the new column changed nothing about
+      // the twins — and the fold column reads the same word in both modes.
+      expect(blindC.textContent).not.toContain('gemini');
+      expect(blindC.textContent).not.toContain('Review Z');
+      // The hover/aria text names it too, so a cell of nobody's votes is not a
+      // silent blank: verdictTitle() runs the same display() over cell.judge.
+      const foldCell = blindC.querySelectorAll('td').filter(td => td.textContent === '✗')[0];
+      expect(foldCell.attributes['aria-label']).toBe('UNATTRIBUTED: dispute');
+    });
   });
 
   describe('renderVerdict', () => {

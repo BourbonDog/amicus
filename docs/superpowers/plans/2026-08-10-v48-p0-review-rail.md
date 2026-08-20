@@ -451,7 +451,7 @@ git commit -m "docs: plans are pruned at the release cut; specs are permanent"
 
 ## Self-review
 
-**Spec coverage.** §9 P0 (R12, exclusion + ordering) → Tasks 1–2. §9 P0b (R13, prune-at-release + reference fixes) → Task 3. §11.4 change 1 (delete rot-prone numbers) and change 3 (BACKLOG split) are **not** in this plan — change 1 rides `ROADMAP.md:248` in PR-Z per the spec's own train, and change 3 is scoped out above with its measurements. §11.4 change 2 (executable doc-fact gate) rides PR-Z with the `skills/` extension. **Gap deliberately accepted and named, not silent.**
+**Spec coverage.** §9 P0 (R12, exclusion + ordering) → Tasks 1–2. §9 P0b (R13, prune-at-release + reference fixes) → Task 3. §11.4 change 1 (delete rot-prone numbers) and change 3 (BACKLOG split) are **not** in this plan — change 1 rides `ROADMAP.md@ed5c0c02:248` in PR-Z per the spec's own train, and change 3 is scoped out above with its measurements. §11.4 change 2 (executable doc-fact gate) rides PR-Z with the `skills/` extension. **Gap deliberately accepted and named, not silent.**
 
 **Placeholder scan.** No TBD/TODO. Every code step carries the literal content. The one judgement call left to the implementer — whether `.github/` belongs in `PRIORITY` — is resolved in the code, not deferred.
 

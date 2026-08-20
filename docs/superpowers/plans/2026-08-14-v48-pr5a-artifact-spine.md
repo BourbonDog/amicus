@@ -223,6 +223,14 @@ alias, so rendering one defeats blind mode. This is verbatim the hazard `matrix-
 already solved. **The rule for T2: carry `seat.id` as identity, resolve the label from
 `seat.alias`.** No `labelMap` change (R5-2 stands); the split is done at the call site.
 
+> ⚠️ **Citation annotated 2026-08-20 (v4.8 T2.4), not renumbered** — this file is preserved dated
+> record. `matrix-model.js:66-76` was true when written and through `ed5c0c02`; T2.4 grew the file
+> and at `e5376399` that range is the `@returns` docblock and the function signature. The
+> blind-mode hazard block itself is unmoved in substance and now lives inside
+> `src/workspace/matrix-model.js :: buildMatrixModel`. ⚠️ This citation is the **verbatim twin** of
+> one that was fixed in `tests/workspace/seat-panels.test.js` during T-C2 — a per-file sweep could
+> not have found it, which is why the rule is to grep the distinctive phrase repo-wide.
+
 ### 2.4 T4 reverses a merged pin (R5-8)
 
 `run-assemble.test.js:286-307`, PR4c, verbatim rationale:
@@ -506,6 +514,13 @@ workspace-panels.js:117,:118         <- fed judgePair.model      (SEAT ID, via P
 The chain `workspace-panels.js:57 renderMatrix(…, drillIntoJudge)` → `workspace-matrix.js:88
 onDrill(cell.judge, …)` → `matrix-model.js:112 judge: c.pair` → `:74 pair:{model: s.id}` means
 `drillIntoJudge` receives a **seat id** whenever PR4c's `isSeatSpace` fires:
+
+> ⚠️ **Citations annotated 2026-08-20 (v4.8 T2.4), not renumbered** — preserved dated record. Both
+> `matrix-model.js:112` and `:74` were true when written and through `ed5c0c02`; T2.4 moved them
+> and at `e5376399` both stated lines are comments. Both constructs still exist, inside
+> `src/workspace/matrix-model.js :: buildMatrixModel`, and the chain above still holds.
+> ⚠️ The `:74` here is a **bare `:NNN` continuation**, which `check-citations.js` cannot parse even
+> for a `.js` target — see BACKLOG's citation-gate Mechanism C.
 
 ```
 matrix judges : ["gemini#1","gemini#2"]

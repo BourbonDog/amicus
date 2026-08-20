@@ -363,10 +363,31 @@ All notable changes to Amicus are documented here. Format follows
   finding's `basis` now agree. **Unique-alias benches are byte-identical**, and so is any verdict
   written before this release or assembled by hand: without a `seats` table (or with a malformed
   one) the renderer falls back to alias space whole. **Blind mode still never shows a seat id** — a
-  seat id contains its alias — so both twins collapse to `Review A` there exactly as before. One
-  known gap: a judge whose Stage-2 leg never bound to its seat emits no `adjudications[].seat`, so
-  in seat space its vote keys to a bare alias no column reads — it still counts in `basis` but
-  renders nowhere, where the old last-wins matrix at least showed it somewhere.
+  seat id contains its alias — so both twins collapse to `Review A` there exactly as before.
+- **A vote the matrix cannot attribute now renders in an `UNATTRIBUTED` column instead of vanishing.**
+  In `council report` (Markdown and HTML) and in the Council Workspace, the vote→column join now
+  **refuses** a key that identifies nothing — an empty string, a missing or non-string `judge`, or a
+  seat id or alias naming no column on the bench — and folds every such vote into one extra column,
+  headed `UNATTRIBUTED` and placed last among the judge columns. The case this was written for: a
+  judge whose Stage-2 leg never bound to its seat emits no `adjudications[].seat`, so in seat space
+  its vote keys to a bare alias no column reads. It used to count in `basis` and render nowhere —
+  the artifact and the score disagreed. It now counts in `basis` **and** renders. **`basis` is
+  unchanged either way**: this is a rendering fix, not a scoring one. The column is **conditional**
+  — it appears only on a document that actually has a vote to fold, so a document in which every
+  vote is attributable grows no column and never an empty one. ⚠️ **That last claim is scoped to
+  this change**, measured against the branch point `ed5c0c02` and not against 4.7.1: the seat re-key
+  described above is a separate, earlier change in this same release and moves such documents on its
+  own terms. All folded votes on one finding share the one cell, last-wins — the column records
+  one fact about the document rather than one per voter; a seat id is what tells them apart, and
+  supplying one is a producer-side fix. ⚠️ **Read the header as “no column on this bench”, not
+  “nobody knows who voted”** — the rule is about the column, not the voter. On a `--claude-review`
+  run the report keeps the reserved `claude` seat off its bench while the Workspace matrix keeps it,
+  so a hand-authored `judge: "claude"` vote folds in the report and lands in the `claude` column in
+  the Workspace; no engine run emits one, and reconciling the two rosters is deliberately out of
+  scope for this change. ⚠️ Not to be
+  confused with `findings[].unattributedPeerDrops`, listed earlier in this release, which counts votes the **peer filter**
+  excluded from `basis` on the raiser side and which ruling R2 deliberately leaves excluded —
+  different mechanism, different document, opposite effect on `basis`.
 - **`amicus_council_tally` (MCP) no longer strips the seat keys.** Its input schema now accepts
   `meta.seats`, `findings[].raiserSeat` and `adjudications[].seat`; previously zod silently dropped
   all three, which would have left the MCP tool permanently on the pre-fix peer-filter behaviour
