@@ -1051,6 +1051,180 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
   }
 });
 
+
+// ---------------------------------------------------------------------------
+// SI-12 (v4.8 T-C2 fix round 2) — the agreement, proved by FUZZ, not by one shape.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fix round 1 pinned `report.js` and `matrix-model.js` in agreement on ONE
+ * document — the `''` roster. That is the weakest possible place for the
+ * property: it is the document we already knew to look at, because a wrong brief
+ * sent it divergent. This block proves the agreement the way PR B proved its own
+ * (24,000 cases over the raiser/judge truthiness cross-product, 5,922
+ * disagreements at base and 0 at HEAD): by driving the whole axis.
+ *
+ * EXHAUSTIVE, NOT SAMPLED. 504 cases is the complete cross-product of
+ *   roster shape  {ordinary, one holding `''`, one holding `UNATTRIBUTED`}
+ *   x seatSpace   {on, off}
+ *   x adj.seat    {absent, null, `''`, a roster id, an orphan id, 42, 'UNATTRIBUTED'}
+ *   x adj.judge   {absent, `''`, a roster alias, an unknown alias, 42, 'UNATTRIBUTED'}
+ *   x a companion identifying vote {present, absent}
+ * so there is no seed, no randomness and nothing to re-run for luck.
+ *
+ * ⚠️ MEASURED, and this is the number that makes the block mean anything:
+ *   BASE 32a63e92  407 disagreements / 504
+ *   HEAD           0   disagreements / 504
+ * The BASE figure was taken by writing `git show 32a63e92:src/workspace/
+ * matrix-model.js` into src/workspace/ (its requires are relative, so it can only
+ * be measured in place) and running this same cross-product against it. 284 of
+ * the 407 were COLUMN disagreements — BASE grows no fold column at all — and 123
+ * were PLACEMENT disagreements with matching columns. A fuzz that cannot fail
+ * proves nothing; this one fails 81% of its cases against the code this task
+ * replaced.
+ *
+ * ⚠️ THE THREE KNOWN, LEGITIMATE DIVERGENCES ARE EXCLUDED BY CONSTRUCTION, never
+ * by filtering a result set — a fuzz that silently skips cases reads as coverage
+ * it does not have. Each is excluded by how the fixtures are BUILT:
+ *   1. THE NULL ELEMENT. No `adjudications` entry is ever null, so the case
+ *      cannot arise. `report.js` throws on it and this file skips it (measured;
+ *      pinned separately above). Pre-existing, R17 leaves it standing.
+ *   2. THE ROSTER SOURCES. ONE roster literal builds BOTH documents —
+ *      `meta.seats`/`meta.models` for the tally and `seats`/`council` for the
+ *      verdict are the SAME arrays. The two files genuinely read different
+ *      fields, and that difference is real but is not about the vote key.
+ *   3. THE CLAUDE TAIL. `claudeInCouncil` is always false and no roster carries
+ *      `claude`, so `claudeTail` — which this file re-appends and `report.js`
+ *      does not — never fires.
+ * Anything OUTSIDE those three is in scope, and a disagreement there is a defect
+ * in one of the two files.
+ *
+ * ⚠️ WHAT THIS BLOCK DOES NOT PROVE. The axis is the VOTE KEY, as bounded. It
+ * says nothing about the raiser, the tier/override/debate joins, `basis`, blind
+ * mode, or the three excluded shapes above — all pinned elsewhere in this file
+ * and in tests/workspace/.
+ */
+describe('SI-12 (R17/R18): the two consumers agree on EVERY vote-key shape (fuzz, fix round 2)', () => {
+  // ONE roster per shape. Each object is shared BY REFERENCE between the tally
+  // and the verdict below, which is what makes exclusion 2 structural.
+  const ROSTERS = {
+    ordinary: {
+      seats: [{ id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+        { id: 'gpt#1', alias: 'gpt', role: 'seat', lens: null, position: 2 }],
+      aliases: ['deepseek', 'gpt'],
+    },
+    // `isSeatSpace` accepts `{id: ''}`, so this roster is reachable and is the
+    // document fix round 1 was about.
+    holdsEmpty: {
+      seats: [{ id: '', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+        { id: 'gpt#1', alias: 'gpt', role: 'seat', lens: null, position: 2 }],
+      aliases: ['', 'gpt'],
+    },
+    // A bench member literally aliased UNATTRIBUTED — model names are user-supplied.
+    holdsUnattributed: {
+      seats: [{ id: 'UNATTRIBUTED', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+        { id: 'gpt#1', alias: 'gpt', role: 'seat', lens: null, position: 2 }],
+      aliases: ['UNATTRIBUTED', 'gpt'],
+    },
+  };
+  // `'@absent'` is a SENTINEL meaning "omit the property entirely", which is a
+  // different shape from `undefined` for `Object.keys`/spread and is the shape a
+  // producer actually emits. `null` is separate and deliberate: both seat
+  // producers are `|| null` by design (peer-split.js :: peersOf documents why).
+  const SEATS_AXIS = ['@absent', null, '', 'gpt#1', 'deepseek#9', 42, 'UNATTRIBUTED'];
+  const JUDGE_AXIS = ['@absent', '', 'gpt', 'nobody', 42, 'UNATTRIBUTED'];
+  const VERDICTS = ['agree', 'dispute', 'neutral'];
+  /** Identifies a real column in EITHER space and on EVERY roster shape above. */
+  const COMPANION = { judge: 'gpt', verdict: 'agree', seat: 'gpt#1' };
+
+  function fuzzCases() {
+    const out = [];
+    for (const shape of Object.keys(ROSTERS)) {
+      for (const seatSpace of [true, false]) {
+        for (const seat of SEATS_AXIS) {
+          for (const judge of JUDGE_AXIS) {
+            for (const withCompanion of [true, false]) {
+              const adj = { verdict: VERDICTS[out.length % VERDICTS.length] };
+              if (seat !== '@absent') { adj.seat = seat; }
+              if (judge !== '@absent') { adj.judge = judge; }
+              out.push({ shape, seatSpace, seat, judge, withCompanion, adj });
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /** One case -> the tally and the verdict that carry the SAME roster and finding. */
+  function docsFor(c) {
+    const { seats, aliases } = ROSTERS[c.shape];
+    const finding = { id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
+      basis: { a: 1, d: 1, n: 0 },
+      adjudications: c.withCompanion ? [COMPANION, c.adj] : [c.adj] };
+    return {
+      tally: { meta: { runId: 'fz', runType: 'headless', date: '2026-07-20',
+        models: aliases, chair: 'chair', claudeInCouncil: false,
+        ...(c.seatSpace ? { seats } : {}) },
+      findings: [finding], tierCounts: {} },
+      verdict: { runId: 'fz', runType: 'headless', date: '2026-07-20', chair: 'chair',
+        council: aliases, claudeInCouncil: false, ...(c.seatSpace ? { seats } : {}),
+        findings: [finding], streetCred: [], runStats: [], tierCounts: {} },
+    };
+  }
+
+  /** null when the two consumers agree; otherwise WHY, with both renderings. */
+  function disagreement(c) {
+    const { tally, verdict } = docsFor(c);
+    const r = toModel(verdict);
+    const m = buildMatrixModel(tally, {}, null);
+    const label = `${c.shape} seatSpace=${c.seatSpace} seat=${JSON.stringify(c.seat)} `
+      + `judge=${JSON.stringify(c.judge)} companion=${c.withCompanion}`;
+    const mCols = m.judges.map(j => j.model);
+    if (JSON.stringify(r.judges) !== JSON.stringify(mCols)) {
+      return `${label} — COLUMNS report=${JSON.stringify(r.judges)} matrix=${JSON.stringify(mCols)}`;
+    }
+    // A column's `pair.model` IS its key on every branch of this roster (seat
+    // columns carry `s.id`, alias columns the alias, the fold column the literal),
+    // so this map is directly comparable to report.js's `byJudge`.
+    const mMap = Object.fromEntries(m.rows[0].cells.map(x => [x.judge.model, x.verdict]));
+    if (JSON.stringify(r.findings[0].byJudge) !== JSON.stringify(mMap)) {
+      return `${label} — PLACEMENT report=${JSON.stringify(r.findings[0].byJudge)} matrix=${JSON.stringify(mMap)}`;
+    }
+    return null;
+  }
+
+  test('the axis is the size it claims to be: 504 cases, and every one is distinct', () => {
+    const all = fuzzCases();
+    // ⚠️ THE ANTI-SHRINK PIN. A fuzz that quietly loses half its axis still passes
+    // its own zero-disagreement assertion, and reads as coverage it no longer has.
+    // 3 shapes x 2 spaces x 7 seats x 6 judges x 2 companion states.
+    expect(all).toHaveLength(3 * 2 * SEATS_AXIS.length * JUDGE_AXIS.length * 2);
+    expect(all).toHaveLength(504);
+    const keys = new Set(all.map(c => `${c.shape}|${c.seatSpace}|${String(c.seat)}|${String(c.judge)}|${c.withCompanion}`));
+    expect(keys.size).toBe(504);
+  });
+
+  test('the axis DRIVES BOTH BRANCHES of the conditional column — it is not vacuous', () => {
+    // Observed, never recomputed from the rule under test: how many cases end up
+    // with a fold column at all. Both branches must be well populated, or a
+    // "0 disagreements" result would be agreement about nothing happening.
+    const grew = fuzzCases().filter((c) => {
+      const { tally } = docsFor(c);
+      return buildMatrixModel(tally, {}, null).judges.some(j => j.model === 'UNATTRIBUTED');
+    }).length;
+    expect(grew).toBe(452);
+    expect(504 - grew).toBe(52);
+  });
+
+  test('ZERO disagreements across all 504 cases — same columns, same vote in the same column', () => {
+    // ⚠️ Measured against BASE 32a63e92, this same cross-product produced 407
+    // disagreements (284 columns, 123 placement). The zero below is therefore a
+    // result, not a tautology. See this block's docblock for how BASE was run.
+    const found = fuzzCases().map(disagreement).filter(Boolean);
+    expect(found).toEqual([]);
+  });
+});
 describe('a malformed seats table falls back to alias space instead of throwing', () => {
   // Every shape below is reachable: the three schema-free JSON.parse entry
   // points (cli-handlers-council.js's tally/report/verdict handlers) and
