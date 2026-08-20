@@ -491,7 +491,7 @@ describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ON
    */
   function verdictOf(seats, adjudications) {
     return {
-      runId: 'si12', runType: 'headless', date: '2026-07-20',
+      runId: 'unattr', runType: 'headless', date: '2026-07-20',
       chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false,
       ...(seats ? { seats } : {}),
       findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
@@ -504,7 +504,7 @@ describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ON
   /** Two findings on one seated document, where only the SECOND folds a vote. */
   function twoFindings() {
     return {
-      runId: 'si12-multi', runType: 'headless', date: '2026-07-20',
+      runId: 'unattr-multi', runType: 'headless', date: '2026-07-20',
       chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false, seats: SEATS,
       findings: [
         { id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
@@ -894,7 +894,7 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
    */
   function tallyOf(seats, adjudications, meta) {
     return {
-      meta: { runId: 'si12-ws', runType: 'headless', date: '2026-07-20',
+      meta: { runId: 'unattr-ws', runType: 'headless', date: '2026-07-20',
         models: ALIAS_COLS.slice(), chair: 'deepseek', claudeInCouncil: false,
         ...(seats ? { seats } : {}), ...(meta || {}) },
       findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
@@ -1045,7 +1045,7 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
     { judge: 'gpt', verdict: 'dispute', seat: 'gpt' }];
   /** The same document as a verdict, for driving `report.js :: toModel` over it. */
   function emptyRosterVerdict() {
-    return { runId: 'si12-ws-empty', runType: 'headless', date: '2026-07-20',
+    return { runId: 'unattr-ws-empty', runType: 'headless', date: '2026-07-20',
       chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false,
       seats: EMPTY_SEATS,
       findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',

@@ -2673,6 +2673,31 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       basis   {a:1,d:1,n:0} on BOTH — unmoved, as everywhere else in this release
       ```
 
+  - **Council review of PR #175 (2026-08-20, chair verdict "Ship it") — four items filed, not fixed.**
+    Thirteen findings collapsed to five mechanisms; three were already disclosed in the PR body and
+    one did not hold. ⚠️ **The null-`adjudications`-element finding was raised FOUR times (A1/C2/B1/D2)
+    and is NOT a regression** — measured on both trees, `ed5c0c02` and the branch tip throw the
+    identical `Cannot read properties of null (reading 'judge')`. The new pre-pass is a second crash
+    SITE in the code, but the observable behaviour is unchanged. Filed here as pre-existing, and the
+    strictness asymmetry with `matrix-model.js` (which guards both phases) is real.
+    - [ ] **`UNATTRIBUTED` is not exported from either consumer.** Measured 2026-08-20: absent from
+      `src/council/report.js`'s and `src/workspace/matrix-model.js`'s `module.exports`, and **39**
+      occurrences of the bare string across `tests/` (the council said "~50"; 39 is the measured
+      count under `grep -rc "'UNATTRIBUTED'|"UNATTRIBUTED"" tests/`). A rename in one file would
+      not be caught by that file's own tests. ⚠️ Exporting a CONSTANT for test use does not breach
+      **R17**, which forbids sharing the RULE; do not let the fix drift into a shared `columnFor`.
+    - [ ] **`columnFor` is computed twice per adjudication** — `report.js:166` (the `folded`
+      pre-pass) and `:178` (the build loop); `matrix-model.js:152` and `:167`. Inherent to the
+      two-phase build, worst in the common no-fold case. Measure before optimising.
+    - [ ] **Two folded votes on one finding collapse to ONE cell, last-wins** (council A4). Measured
+      and pinned as measured during T-C1; it is disclosed in code but not in the PR body. Not a
+      defect of this PR — the same last-wins applies to any two votes sharing a column — but the
+      `UNATTRIBUTED` column is the one guaranteed to collect multiple votes.
+    - [ ] **The synthetic `UNATTRIBUTED` matrix cell may silently no-op on click** (council/codex 6).
+      `electron/workspace-ui/workspace-panels.js :: drillIntoJudge` builds its file list from the real
+      bench roster, which has no `UNATTRIBUTED` entry. ⚠️ **REPORTED, NOT VERIFIED** — confirming the
+      no-op needs the UI driven, which this filing did not do. No test simulates the click.
+
       **It is carved out of the agreement fuzz BY CONSTRUCTION** (exclusion 3: `claudeInCouncil` is
       always false and no roster carries `claude`, so `claudeTail` never fires) — which is a
       statement about the fixtures, not about the world. The exclusion was honestly named; **its
