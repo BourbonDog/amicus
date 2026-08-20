@@ -2693,6 +2693,28 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       and pinned as measured during T-C1; it is disclosed in code but not in the PR body. Not a
       defect of this PR — the same last-wins applies to any two votes sharing a column — but the
       `UNATTRIBUTED` column is the one guaranteed to collect multiple votes.
+    - [ ] **⚠️ A FALSY NON-NULL adjudication element grows a PHANTOM EMPTY column, and the two
+      consumers diverge on it** (council run 2, A2 — the only NEW finding in that run). Measured
+      2026-08-20 against `ed5c0c02` for elements `0`, `false` and `''`:
+
+      ```
+      BASE md header: | Finding | Sev | Raiser | deepseek | Tier | Decision |
+      HEAD md header: | Finding | Sev | Raiser | deepseek | UNATTRIBUTED | Tier | Decision |
+      matrix columns: [deepseek]   (skipped by the `!adj` guard — no column)
+      ```
+
+      `columnFor` classifies the element as unattributable (its `.seat`/`.judge` are `undefined`),
+      so `folded` is true and the column is added — but the cell value is `adj.verdict`, also
+      `undefined`, so the column renders **blank**. It advertises an unattributable vote and shows
+      nothing. `matrix-model.js` skips the element entirely via its `!adj` guard, so the two
+      consumers render one document differently — the exact class T2.4 exists to close.
+      ⚠️ **This is a behaviour change introduced by T2.4**, not a pre-existing shape: at BASE the
+      junk key was `undefined` and no column grew. Malformed input only — the engine never emits
+      a non-object adjudication element — and both entry points that could carry it are schema-free
+      `JSON.parse` paths.
+      ⚠️ **Why the 504-case fuzz did not catch it:** the axis varies `seatSpace` × `adj.seat` ×
+      `adj.judge` × roster shape over **well-formed objects**. The element TYPE is not on the axis.
+      Widening it to non-object elements is the obvious first move for whoever takes this.
     - [ ] **The synthetic `UNATTRIBUTED` matrix cell may silently no-op on click** (council/codex 6).
       `electron/workspace-ui/workspace-panels.js :: drillIntoJudge` builds its file list from the real
       bench roster, which has no `UNATTRIBUTED` entry. ⚠️ **REPORTED, NOT VERIFIED** — confirming the
