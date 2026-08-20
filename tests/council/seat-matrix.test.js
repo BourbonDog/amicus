@@ -383,10 +383,26 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
  * routed to it. It is the "byte-unchanged artifact" mutant — every report that
  * has no unattributable vote grows a column.
+ * MEASURED red set, run against 774dcdc2:
+ * 3 suites / 24 tests + 4 SNAPSHOTS, out of 541 / 7686. By suite:
+ *   seat-matrix 13 · report-claude-column 9 · report-debate 2.
+ * The four snapshot failures ARE the contract this conditional exists for: both
+ * pinned byte-unchanged report snapshots (report-claude-column's no-flag run and
+ * report-debate's v4.0 baseline) fail in both formats. Of this block's own pins
+ * it reds exactly ONE — the no-unattributable-vote pin — which is the division
+ * of labour with JUNKKEY below, measured rather than assumed.
  *
  * Named mutant "JUNKKEY": revert the join to c8867b48's bare
  * `byJudge[(seatSpace && adj.seat) || adj.judge]`, leaving the roster code in
  * place. It is the "T-C1 never happened" mutant for the refusal half.
+ * MEASURED red set, run against 774dcdc2:
+ * 1 suite / 11 tests, out of 541 / 7686. By suite: seat-matrix 11.
+ * Those 11 are every refusal pin in this block plus T22 shape 1 above, and they
+ * are the same 11 that were RED before the fix was written (one has since been
+ * retitled and had an assertion strengthened). Two pins stay GREEN
+ * under it and that is not a weakness: the no-unattributable-vote pin is
+ * ALWAYSCOL's, and the `basis` pin is a preservation pin that NEITHER mutant
+ * moves — `basis` is copied by reference on every path, which is the point.
  */
 describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
   const SEATS = [
