@@ -19,6 +19,11 @@ const { sumWaveUsage } = require('../utils/pricing');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
+// v4.8 T-C1 (SI-12, ruling R18): the ONE column every vote whose key names no
+// column folds into. Deliberately NOT exported: R17 took the narrow option —
+// src/workspace/matrix-model.js gets the same rule as a SEPARATE implementation
+// in its own task, so nothing is extracted or shared for it here.
+const UNATTRIBUTED = 'UNATTRIBUTED';
 
 /**
  * Is a document in SEAT SPACE — does it carry a USABLE seat table?
@@ -86,16 +91,55 @@ function toModel(verdict, wave) {
   const seatSpace = isSeatSpace(verdict.seats);
   // No claude filter needed in seat space: seats[] is bench-only (seats.js
   // excludes the reserved claude seat), so it can never grow a claude column.
-  const judges = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
+  const bench = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
+  const columns = new Set(bench);
+  // v4.8 T-C1 (SI-12): REFUSE a key that identifies nothing. PR4c wrote
+  // `byJudge[(seatSpace && adj.seat) || adj.judge]` whatever that expression
+  // produced, and six shapes were measured at c8867b48 landing as a key no
+  // column reads: an orphaned seat id, `''` and an absent `judge` in either
+  // space — the absent one arriving as the STRING "undefined", a JS coercion
+  // artifact and never a name — and a non-string judge. The three conjuncts
+  // refuse, in that order, a non-string, the empty string, and a string naming
+  // no column; `columns.has` is the whole orphan test, because the roster is
+  // the only thing that makes a key mean a column. A key that survives all
+  // three is written exactly where PR4c wrote it: this is a refusal, not a
+  // re-key, and ruling R3 leaves the vote counted in `basis` either way.
+  // Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: JUNKKEY.
+  const columnFor = (adj) => {
+    const key = (seatSpace && adj.seat) || adj.judge;
+    return (typeof key === 'string' && key !== '' && columns.has(key)) ? key : UNATTRIBUTED;
+  };
+  // ⚠️ TWO-PHASE, and it cannot be one: the roster is what CLASSIFIES a vote,
+  // and whether any vote was refused is what decides the roster. Phase 1 is the
+  // bench roster plus this pre-pass over every finding; phase 2 is the map
+  // below, which seeds `byJudge` from the FINAL roster. Deciding inside that map
+  // would seed the column onto some findings and not others.
+  // ⚠️ CONDITIONAL, the same shape as T2.3's emit-only-when-`> 0`: added
+  // unconditionally it grows a column on every report that has no such vote and
+  // breaks the byte-unchanged-artifact contract.
+  // ⚠️ `concat`, never `push`. In alias space with `claudeInCouncil !== true`,
+  // `bench` IS `verdict.council` BY REFERENCE (measured at c8867b48:
+  // `toModel(v).judges === v.council` reads true), so appending in place would
+  // write the label into the caller's own document and into `header.council` —
+  // which both renderers print as `council: …` on the meta line.
+  // ⚠️ `!columns.has(...)`: a bench model literally aliased UNATTRIBUTED already
+  // owns that column and R18 says ONE column. It then SHARES its cell with the
+  // folded votes — disclosed, not fixed, because the roster entry is also the
+  // `byJudge` key and separating them needs a renderer change.
+  // Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: ALWAYSCOL.
+  const folded = verdict.findings.some(f => (f.adjudications || []).some(a => columnFor(a) === UNATTRIBUTED));
+  const judges = folded && !columns.has(UNATTRIBUTED) ? bench.concat(UNATTRIBUTED) : bench;
   const findings = verdict.findings.map((f) => {
     const byJudge = {};
     for (const j of judges) { byJudge[j] = null; }
-    // Alias-keyed and LAST-WINS at HEAD: on a twin bench the second seat's vote
-    // overwrote the first's, so a finding whose basis was a0/d1 rendered as two
-    // agreements. A vote whose Stage-2 seat orphaned still keys to its bare
-    // alias here, which no seat column reads — counted in basis, rendered
-    // nowhere (a disclosed shape, plan §4.6, pinned in seat-matrix.test.js).
-    for (const adj of (f.adjudications || [])) { byJudge[(seatSpace && adj.seat) || adj.judge] = adj.verdict; }
+    // LAST-WINS, and still is: two votes sharing one column overwrite each
+    // other. Before PR4c (b9a98a0f) this key was the bare alias, which is what
+    // collapsed a twin bench — still pinned, on a seat-table-less document, by
+    // seat-matrix.test.js's T21 block. T-C1 changed only WHICH key a REFUSED
+    // vote gets: every refusal folds into the single UNATTRIBUTED column, so two
+    // refused votes on one finding show ONE verdict. Measured, and pinned as
+    // measured rather than claimed to be more. `basis` is untouched either way.
+    for (const adj of (f.adjudications || [])) { byJudge[columnFor(adj)] = adj.verdict; }
     return {
       // The raiser re-key IS the star fix, and it is why report-html.js needs
       // zero edits: renderMd's cell map and report-html.js's both test
