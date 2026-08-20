@@ -25,6 +25,27 @@
 const { SYMBOL, isSeatSpace } = require('../council/report');
 const { labelFor, pairFor } = require('./blind-mode');
 
+// v4.8 T-C2 (SI-12, ruling R18): the ONE column every vote whose key names no
+// column folds into. A SECOND implementation on purpose — ruling R17 took the
+// narrow option, so this is NOT imported from src/council/report.js and nothing
+// is extracted for it. The two files therefore keep the strictness levels they
+// already had, and the one document they measurably disagree about is driven
+// through BOTH of them in tests/council/seat-matrix.test.js.
+const UNATTRIBUTED = 'UNATTRIBUTED';
+
+/**
+ * A finding's adjudications AS AN ARRAY, whatever the document actually carries.
+ *
+ * ⚠️ ONE expression, TWO readers, and that is the whole reason it is a function.
+ * The `folded` pre-pass and the per-finding loop both walk this list, and in
+ * report.js the identical pair drifted apart on type for one commit — `.some`
+ * is Array-only while `for...of` takes any iterable, so `adjudications: "abc"`
+ * rendered on one side and threw on the other. A non-array contributes no
+ * votes: the same answer isSeatSpace gives a malformed seats table, and the
+ * same answer this expression already gave inline before T-C2 hoisted it.
+ */
+function adjOf(f) { return Array.isArray(f.adjudications) ? f.adjudications : []; }
+
 /** Index verdict.findings[] by id, tolerating an absent/malformed verdict doc. */
 function indexVerdictFindings(verdict) {
   const byId = new Map();
@@ -70,18 +91,74 @@ function buildMatrixModel(tally, labelMap, verdict) {
   // pair.model and prints `deepseek#1` with blind mode ON. A seat id contains
   // its alias, so rendering one in blind mode defeats blind mode. Both twins
   // therefore collapse to `Review A` when blind — exactly as at HEAD.
-  const columns = seatSpace
+  const bench = seatSpace
     ? meta.seats.map(s => ({ key: s.id, pair: { model: s.id, label: labelFor(s.alias, map) } }))
       .concat(claudeTail.map(j => ({ key: j, pair: pairFor(j, map) })))
     : aliasJudges.map(j => ({ key: j, pair: pairFor(j, map) }));
   const findings = tally && Array.isArray(tally.findings) ? tally.findings : [];
   const verdictById = indexVerdictFindings(verdict);
+  // v4.8 T-C2 (SI-12): CLASSIFY the key instead of trusting it. At 32a63e92 the
+  // domain split in two and BOTH halves lost the vote: `typeof adj.judge !==
+  // 'string'` refused an absent or non-string judge outright — in seat space
+  // testing a field that is not even the key, so a valid seat with a numeric
+  // judge rendered nowhere — while an orphaned seat id and `''` were written to
+  // a `votes` key no column reads. The roster is the only thing that makes a key
+  // mean a column, so `keys.has` IS the identifying test and everything else
+  // folds. ⚠️ Note what is deliberately NOT here: report.js's `key !== ''`.
+  // `isSeatSpace` accepts `{id: ''}`, so a roster CAN hold `''`, and on that
+  // roster `''` names a real column and the vote belongs in it. Measured, a
+  // roster holding `''` is the ONLY document whose votes the two files now
+  // column differently — everywhere else the rules agree, including the numeric
+  // judge above, where T-C2 CLOSED a divergence. R17's narrow option is what
+  // lets that last one stand. (The files also differ on a null `adjudications`
+  // ELEMENT, which is not a vote at all — see the loop below.)
+  // Named mutants, with their measured red sets:
+  // tests/council/seat-matrix.test.js :: WSJUNKKEY and
+  // tests/council/seat-matrix.test.js :: WSEMPTYFOLD.
+  const keys = new Set(bench.map(c => c.key));
+  const columnFor = (adj) => {
+    const key = (seatSpace && adj.seat) || adj.judge;
+    return (typeof key === 'string' && keys.has(key)) ? key : UNATTRIBUTED;
+  };
+  // ⚠️ TWO-PHASE, and here it could not be anything else: `cells` is built by
+  // MAPPING this roster, so a roster decided inside the per-finding map would
+  // give two rows DIFFERENT CELL COUNTS — a body that no longer matches its own
+  // header. The pre-pass therefore walks every finding before the map starts.
+  // ⚠️ CONDITIONAL: added unconditionally it grows a column on every matrix that
+  // has no such vote. Named mutant: tests/council/seat-matrix.test.js :: WSALWAYSCOL.
+  // ⚠️ `!keys.has(UNATTRIBUTED)`: a bench model literally aliased UNATTRIBUTED
+  // already owns that column and R18 says ONE column. It then SHARES its cell
+  // with the folded votes — disclosed, not fixed, because the column key is also
+  // what the fold writes and separating them needs a renderer change.
+  // ⚠️ LAST, after `claudeTail`: the fold column is not a bench member, and
+  // appending keeps every existing column at the index it had at 32a63e92.
+  // `concat` for uniformity with the `claudeTail` append above, NOT for safety:
+  // report.js needs it because its alias roster IS `verdict.council` by
+  // reference, and measured, this file has no such trap — every branch of
+  // `bench` ends in a `.map`, which always allocates.
+  // ⚠️ BLIND MODE — both name slots carry the same literal rather than
+  // `pairFor(UNATTRIBUTED, map)`. UNATTRIBUTED has no alias to protect and no
+  // identity to reveal, so the flip must be a no-op on it BY CONSTRUCTION, not
+  // by `labelFor` happening to return null — which it stops doing the moment a
+  // labelMap value IS `UNATTRIBUTED`, when the blind header would print a review
+  // label over a column of nobody's votes.
+  // Named mutant: tests/council/seat-matrix.test.js :: WSPAIRFOR.
+  const folded = findings.some(f => adjOf(f).some(a => a && columnFor(a) === UNATTRIBUTED));
+  const columns = folded && !keys.has(UNATTRIBUTED)
+    ? bench.concat([{ key: UNATTRIBUTED, pair: { model: UNATTRIBUTED, label: UNATTRIBUTED } }])
+    : bench;
 
   const rows = findings.map((f) => {
     const votes = {};
-    for (const adj of (Array.isArray(f.adjudications) ? f.adjudications : [])) {
-      if (!adj || typeof adj.judge !== 'string') { continue; }
-      votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict;
+    for (const adj of adjOf(f)) {
+      // ⚠️ HALF of 32a63e92's guard survives, and that half is doing work: `!adj`
+      // skips a null element, which carries no verdict to fold and which
+      // `columnFor` would dereference — report.js has no such guard and THROWS
+      // on that document (measured), a strictness difference R17 leaves standing.
+      // The `typeof adj.judge` half is GONE, subsumed by the classification
+      // above: it refused votes where R18 requires them folded.
+      if (!adj) { continue; }
+      votes[columnFor(adj)] = adj.verdict;
     }
     // The raiser's column key. In alias space this is `f.raiser` and every
     // expression below is byte-identical to HEAD.

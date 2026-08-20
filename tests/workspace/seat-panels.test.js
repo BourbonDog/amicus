@@ -18,8 +18,9 @@ const UI = '../../electron/workspace-ui/';
  * labelMap, which PR5a does not touch — R5-2), so keying it with a seat id yields
  * undefined and AmicusRender.display() falls through to `pair.model`, printing `gemini#1`
  * with blind mode ON. A seat id contains its alias, so rendering one defeats blind mode.
- * matrix-model.js:66-76 already documents this trap for the matrix columns; these panels
- * had no equivalent.
+ * `src/workspace/matrix-model.js :: buildMatrixModel` already documents this trap for the
+ * matrix columns; these panels had no equivalent. (Was a `:66-76` line citation; v4.8 T-C2
+ * moved that block, so it is a symbol anchor now.)
  */
 function loadOrderedScripts() {
   jest.resetModules();

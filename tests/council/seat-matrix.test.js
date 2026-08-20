@@ -291,7 +291,8 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
   // `raiserSeat` is absent and tally's guard is a pure alias compare: BOTH twin
   // votes count in `basis`, but the seat-less one keys to the bare alias
   // `gemini`, which names no seat column. Until v4.8 T-C1 that vote was counted
-  // and rendered nowhere; the report now folds it into an UNATTRIBUTED column.
+  // and rendered nowhere; the report folds it into an UNATTRIBUTED column, and
+  // since T-C2 so does the workspace matrix — separately, under ruling R17.
   const orphanJudge = {
     meta: { runId: 'orphan-judge', runType: 'headless', date: '2026-07-20',
       models: ['gemini', 'gemini', 'gpt'], chair: 'deepseek', claudeInCouncil: false,
@@ -318,12 +319,14 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
     // property renderedBasis() was written for.
     expect(verdict.findings[0].basis).toEqual({ a: 1, d: 1, n: 0 });
     expect(renderedBasis(rowFor(md, 'A1'), 4)).toEqual(verdict.findings[0].basis);
-    // ⚠️ The workspace model is UNCHANGED here, and this line says so rather
-    // than reading as if both consumers moved: ruling R17 gives matrix-model.js
-    // the same rule as a SECOND implementation in its own task, not a shared
-    // module, so report.js and matrix-model.js diverge on this document today.
+    // v4.8 T-C2 closed the matrix-model side, so BOTH consumers now move on this
+    // document — the line that used to stand here saying they diverge, and that
+    // named T-C2 as the task that would close it, is gone with the divergence.
+    // The columns ARE the report's judge columns above, in order, and the
+    // seat-less vote takes the same fourth one.
     const m = buildMatrixModel(record, {}, verdict);
-    expect(m.rows[0].cells.map(c => c.verdict)).toEqual(['agree', null, null]);
+    expect(m.judges.map(j => j.model)).toEqual(['gemini#1', 'gemini#2', 'gpt', 'UNATTRIBUTED']);
+    expect(m.rows[0].cells.map(c => c.verdict)).toEqual(['agree', null, null, 'dispute']);
   });
 
   // Shape 2 — the RAISER's Stage-1 seat orphaned on a twin bench. meta.seats is
@@ -654,6 +657,284 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
     expect(m.judges).toEqual(['UNATTRIBUTED', 'gpt']);
     expect(m.findings[0].byJudge.UNATTRIBUTED).toBe('dispute');
   });
+});
+
+// ---------------------------------------------------------------------------
+// SI-12 (v4.8 T-C2) — the SAME rule, written AGAIN for the workspace matrix.
+// ---------------------------------------------------------------------------
+
+/**
+ * `buildMatrixModel` keyed every vote on `(seatSpace && adj.seat) || adj.judge`
+ * from behind `typeof adj.judge !== 'string'`, and the domain split in two —
+ * with BOTH halves losing the vote. Measured by probe at 32a63e92:
+ *
+ *   REFUSED by the guard, contributing nothing: `judge` absent, `judge` a
+ *   non-string — in EITHER space, and whatever `seat` said.
+ *   WRITTEN to a key no column reads: an orphaned seat id; `''`.
+ *
+ * The observable defect here is NOT report.js's polluted key set. `votes` is
+ * internal and every cell is read BY COLUMN KEY, so no junk key ever escaped
+ * into the model; what was lost is the COLUMN, and that is what this block pins.
+ *
+ * ⚠️ RULING R17 TOOK THE NARROW OPTION — this is a SECOND IMPLEMENTATION of
+ * ruling R18's rule, not a shared one. Nothing is imported from `report.js`
+ * for it and nothing is extracted, so the two files keep the strictness levels
+ * they already had. Two documents measurably separate them, and both are driven
+ * through BOTH consumers below so each divergence is a recorded decision rather
+ * than a drift: the `''` roster (they disagree), and the null adjudication
+ * element (report.js throws where this file renders).
+ *
+ * NAMED MUTANTS on `src/workspace/matrix-model.js :: buildMatrixModel`. Protocol
+ * per mutant: applied by hand, run against the FULL suite, hand-reverted,
+ * byte-verified with `git show HEAD:src/workspace/matrix-model.js`, never
+ * shipped — and measured LAST, after every other edit, so a recorded set
+ * describes the tree that ships.
+ *
+ * ⚠️ RE-RUN, NEVER RENUMBER. A recorded red set ASSERTS that the set still
+ * holds; editing the number instead of re-running the mutant is the defect these
+ * records exist to prevent. Re-take the denominator with it.
+ *
+ * ⚠️ AN EMPTY RED SET MEANS THE PROPERTY IS UNPINNED, NOT THAT THE CODE IS SAFE.
+ * T-C1 shipped a conjunct that was green against its own mutant because every
+ * fixture it had made the conjunct unobservable. Two pins below exist purely to
+ * make a decision observable: the `''` ROSTER, and a labelMap that maps a label
+ * TO the model name `UNATTRIBUTED`.
+ *
+ * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
+ * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
+ * mutant — the one the conditional exists for.
+ *
+ * Named mutant "WSJUNKKEY": revert the join to 32a63e92's
+ * `if (!adj || typeof adj.judge !== 'string') { continue; }` plus
+ * `votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict`, leaving the
+ * roster code in place. It is the "T-C2 never happened" mutant.
+ *
+ * Named mutant "WSEMPTYFOLD": add report.js's `key !== ''` conjunct to
+ * `columnFor`. It is the "the two implementations were unified after all"
+ * mutant, and the ONLY thing that can see it is a roster holding `''`.
+ *
+ * Named mutant "WSPAIRFOR": build the fold column's pair as
+ * `pairFor(UNATTRIBUTED, map)` instead of carrying the literal in both slots.
+ * Invisible on every ordinary labelMap — `labelFor` returns null and display()
+ * falls back to `pair.model`, printing the same string — so the only fixture
+ * that can see it is one whose labelMap maps a label TO `UNATTRIBUTED`.
+ */
+describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
+  const SEATS = [
+    { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+    { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
+  ];
+  const SEAT_COLS = ['deepseek#1', 'gpt'];
+  const ALIAS_COLS = ['deepseek', 'gpt'];
+  /** The one vote every fixture below carries whose key DOES name a column. */
+  const SEATED = { judge: 'deepseek', verdict: 'agree', seat: 'deepseek#1' };
+
+  /**
+   * A hand-built `tally.json`, driven straight at `buildMatrixModel`. The
+   * classes below differ only in a key the join reads, so routing them through
+   * `tally()` would mix producer behaviour into a pin about the consumer. The
+   * orphaned-seat class, which a real run DOES produce, is driven end to end
+   * through tally + buildVerdict by T22 shape 1 above.
+   */
+  function tallyOf(seats, adjudications, meta) {
+    return {
+      meta: { runId: 'si12-ws', runType: 'headless', date: '2026-07-20',
+        models: ALIAS_COLS.slice(), chair: 'deepseek', claudeInCouncil: false,
+        ...(seats ? { seats } : {}), ...(meta || {}) },
+      findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
+        basis: { a: 1, d: 1, n: 0 }, adjudications }],
+      tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 },
+    };
+  }
+  const modelsOf = m => m.judges.map(j => j.model);
+  const votesOf = m => m.rows[0].cells.map(c => c.verdict);
+
+  // One row per refusal class — an orphan, the empty string, an absent key, a
+  // non-string — with each driven in the space whose field carries it. The
+  // trailing comment is what that shape did at 32a63e92, measured by probe.
+  for (const [name, seats, cols, adj] of [
+    ['seat space · an ORPHANED seat id', SEATS, SEAT_COLS,                  // votes["deepseek#9"]
+      { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }],
+    ['seat space · seat falsy, judge is the empty string', SEATS, SEAT_COLS, // votes[""]
+      { judge: '', verdict: 'dispute', seat: '' }],
+    ['seat space · seat falsy, judge absent', SEATS, SEAT_COLS,             // REFUSED by the guard
+      { verdict: 'dispute', seat: null }],
+    ['alias space · judge is the empty string', null, ALIAS_COLS,           // votes[""]
+      { judge: '', verdict: 'dispute' }],
+    ['alias space · judge absent', null, ALIAS_COLS,                        // REFUSED by the guard
+      { verdict: 'dispute' }],
+    ['alias space · judge is not a string', null, ALIAS_COLS,               // REFUSED by the guard
+      { judge: 42, verdict: 'dispute' }],
+  ]) {
+    test(`${name}: the vote gets a column instead of vanishing`, () => {
+      const m = buildMatrixModel(tallyOf(seats, [SEATED, adj]), {}, null);
+      expect(modelsOf(m)).toEqual(cols.concat('UNATTRIBUTED'));
+      // The whole cell run, in roster order: the identifying vote is untouched
+      // in column 1, the bench member who never voted stays blank, and the
+      // refused vote is the LAST cell rather than no cell at all.
+      expect(votesOf(m)).toEqual(['agree', null, 'dispute']);
+      expect(m.rows[0].cells[2].sym).toBe(SYMBOL.dispute);
+      expect(m.rows[0].cells[2].isRaiser).toBe(false);
+    });
+  }
+
+  test('seat space · a VALID seat with a non-string judge lands in its OWN column (measured widening)', () => {
+    // ⚠️ NOT a fold, and the one shape where this task WIDENS rather than
+    // redirects. At 32a63e92 the guard tested `adj.judge` even in seat space,
+    // where the judge is not the key, so this vote was refused outright and
+    // rendered nowhere: measured `[null, null]`. R18 classifies the KEY, and
+    // here the key is `gpt` — a string naming a real column. Measured, this
+    // CLOSES a pre-existing divergence rather than opening one: `report.js ::
+    // toModel` has never had the guard and already puts this vote in `gpt`.
+    const m = buildMatrixModel(tallyOf(SEATS, [{ judge: 42, verdict: 'dispute', seat: 'gpt' }]), {}, null);
+    expect(modelsOf(m)).toEqual(SEAT_COLS);
+    expect(votesOf(m)).toEqual([null, 'dispute']);
+  });
+
+  test('a document with NO unattributable vote grows no UNATTRIBUTED column, in either space', () => {
+    for (const [seats, cols] of [[SEATS, SEAT_COLS], [null, ALIAS_COLS]]) {
+      const m = buildMatrixModel(tallyOf(seats, [SEATED,
+        { judge: 'gpt', verdict: 'agree', ...(seats ? { seat: 'gpt' } : {}) }]), {}, null);
+      expect(modelsOf(m)).toEqual(cols);
+      expect(m.rows[0].cells).toHaveLength(cols.length);
+    }
+  });
+
+  test('UNATTRIBUTED is appended AFTER the reserved claude column, and moves no existing column', () => {
+    const m = buildMatrixModel(tallyOf(SEATS, [SEATED,
+      { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }],
+    { models: ALIAS_COLS.concat('claude'), claudeInCouncil: true }), {}, null);
+    // `claudeTail` re-appends the reserved claude seat that `meta.seats` omits;
+    // the fold column is not a bench member at all, so it goes LAST — which is
+    // also what keeps every existing column at the index it had at 32a63e92.
+    expect(modelsOf(m)).toEqual(SEAT_COLS.concat(['claude', 'UNATTRIBUTED']));
+    expect(votesOf(m)).toEqual(['agree', null, null, 'dispute']);
+  });
+
+  test('the roster decision is GLOBAL, not per finding — every row gets the same cells', () => {
+    const t = tallyOf(SEATS, [SEATED]);
+    t.findings.push({ id: 'F2', raiser: 'gpt', severity: 'major', tier: 'Contested',
+      basis: { a: 1, d: 1, n: 0 },
+      adjudications: [SEATED, { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }] });
+    const m = buildMatrixModel(t, {}, null);
+    expect(modelsOf(m)).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
+    // ⚠️ The two-phase invariant is STRICTLY more visible here than in report.js.
+    // `cells` is built by MAPPING the roster, so a roster decided inside the
+    // per-finding map gives the two rows DIFFERENT CELL COUNTS — a table whose
+    // body no longer matches its own header, not merely a key-set difference.
+    expect(m.rows[0].cells).toHaveLength(3);
+    expect(m.rows[1].cells).toHaveLength(3);
+    expect(m.rows[0].cells[2].verdict).toBeNull();
+    expect(m.rows[1].cells[2].verdict).toBe('dispute');
+  });
+
+  test('two unattributable votes on ONE finding collapse into ONE cell — LAST WINS (measured)', () => {
+    const m = buildMatrixModel(tallyOf(SEATS, [
+      { judge: 'deepseek', verdict: 'agree', seat: 'deepseek#9' },
+      { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#7' },
+    ]), {}, null);
+    // R18 folds both into one column, so the second write overwrites the first
+    // exactly as two votes on any other shared key always have. The row shows
+    // the LAST vote; the first is shown nowhere. Pinned as measured rather than
+    // claimed to be more.
+    expect(modelsOf(m)).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
+    expect(votesOf(m)).toEqual([null, null, 'dispute']);
+  });
+
+  test('basis does not move: the row passes the tally own object through', () => {
+    const t = tallyOf(SEATS, [SEATED, { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }]);
+    const m = buildMatrixModel(t, {}, null);
+    // Reference identity, not deep equality: it pins that nothing recomputed
+    // basis from the folded column. R3 keeps the vote counted where it was.
+    expect(m.rows[0].basis).toBe(t.findings[0].basis);
+    expect(m.rows[0].basis).toEqual({ a: 1, d: 1, n: 0 });
+  });
+
+  test('the fold column carries the SAME string in both name slots', () => {
+    const m = buildMatrixModel(tallyOf(SEATS, [SEATED,
+      { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }]),
+    { 'Review A': 'deepseek', 'Review B': 'gpt' }, null);
+    // ⚠️ NOT `pairFor(UNATTRIBUTED, map)`. UNATTRIBUTED has no alias to protect
+    // and no identity to reveal, so the blind flip must be a no-op on it BY
+    // CONSTRUCTION rather than by the accident of `labelFor` returning null —
+    // which stops being an accident that helps the moment a labelMap value IS
+    // `UNATTRIBUTED`. The rendered proof of that, through the real display(),
+    // is in tests/workspace/workspace-matrix.test.js.
+    expect(m.judges[2]).toEqual({ model: 'UNATTRIBUTED', label: 'UNATTRIBUTED' });
+    expect(m.rows[0].cells[2].judge).toEqual({ model: 'UNATTRIBUTED', label: 'UNATTRIBUTED' });
+  });
+
+  test("a `''` ROSTER entry NAMES a column, so a `judge: ''` vote lands in it — where report.js folds", () => {
+    const seats = [
+      { id: '', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+      { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
+    ];
+    const adjudications = [{ judge: '', verdict: 'agree', seat: '' },
+      { judge: 'gpt', verdict: 'dispute', seat: 'gpt' }];
+    // `isSeatSpace` accepts `{id: ''}` — it tests `typeof s.id === 'string'` and
+    // `''` IS one — so this roster genuinely holds `''` as a column key, and
+    // `columns.has(key)` is the WHOLE identifying test in this file.
+    expect(isSeatSpace(seats)).toBe(true);
+    const m = buildMatrixModel(tallyOf(seats, adjudications), {}, null);
+    expect(modelsOf(m)).toEqual(['', 'gpt']);
+    expect(votesOf(m)).toEqual(['agree', 'dispute']);
+
+    // ⚠️ THE ONE DOCUMENT ON WHICH THE TWO IMPLEMENTATIONS DISAGREE, driven
+    // through both so it is a RECORDED DECISION and not a drift. `report.js ::
+    // toModel` carries a `key !== ''` conjunct, so it refuses this vote even
+    // though its own roster seeded a `''` column for it, blanks that column and
+    // emits UNATTRIBUTED. R17 took the narrow option; this is what that costs,
+    // measured, in the only place it is observable.
+    const verdict = { runId: 'si12-ws-empty', runType: 'headless', date: '2026-07-20',
+      chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false, seats,
+      findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
+        basis: { a: 1, d: 1, n: 0 }, adjudications }],
+      streetCred: [], runStats: [],
+      tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 } };
+    const r = toModel(verdict);
+    expect(r.judges).toEqual(['', 'gpt', 'UNATTRIBUTED']);
+    expect(r.findings[0].byJudge['']).toBeNull();
+    expect(r.findings[0].byJudge.UNATTRIBUTED).toBe('agree');
+  });
+
+  test('a bench model literally aliased UNATTRIBUTED is not columned twice — it SHARES the cell', () => {
+    const m = buildMatrixModel(tallyOf(null, [{ judge: 'nobody', verdict: 'dispute' }],
+      { models: ['UNATTRIBUTED', 'gpt'] }), { 'Review A': 'gpt' }, null);
+    // DISCLOSED, not fixed: the column key is what the fold writes, so that
+    // model's column and the folded vote share one cell. R18 says ONE column,
+    // so the roster keeps ONE entry rather than rendering one key under two
+    // identical headers — and the entry it keeps is the BENCH member's, pair
+    // and all, because the append is what is skipped.
+    expect(modelsOf(m)).toEqual(['UNATTRIBUTED', 'gpt']);
+    expect(m.judges[0]).toEqual({ model: 'UNATTRIBUTED', label: null });
+    expect(votesOf(m)).toEqual(['dispute', null]);
+  });
+
+  test('a null adjudication element is still SKIPPED, not folded — the surviving guard is doing work', () => {
+    // ⚠️ Only HALF the old guard was subsumed by the classification. `!adj`
+    // stays: a null element carries no verdict to fold, and `columnFor` would
+    // dereference it. Measured on this exact document, `report.js :: toModel`
+    // THROWS `TypeError: Cannot read properties of null (reading 'seat')` while
+    // this file renders — a strictness difference that predates T-C2 and that
+    // R17 deliberately leaves standing. Already pinned for the CELL in
+    // tests/workspace/matrix-model.test.js; re-pinned here for the COLUMN set.
+    const m = buildMatrixModel(tallyOf(SEATS, [null, SEATED]), {}, null);
+    expect(modelsOf(m)).toEqual(SEAT_COLS);
+    expect(votesOf(m)).toEqual(['agree', null]);
+  });
+
+  // A non-array `adjudications` reaches this function through run-detail.js's
+  // defensive parse of a hand-editable tally.json. `adjOf` is the ONE expression
+  // both phases read, so they cannot drift apart on type the way report.js's
+  // did for one commit (T-C1 fix round 1) — a pre-pass reaching for Array-only
+  // `.some` while the loop still took any iterable made `'abc'` throw.
+  for (const [name, bad] of [['a string', 'abc'], ['an object', {}], ['a number', 42]]) {
+    test(`${name} adjudications contributes no votes and grows no column`, () => {
+      const m = buildMatrixModel(tallyOf(SEATS, bad), {}, null);
+      expect(modelsOf(m)).toEqual(SEAT_COLS);
+      expect(votesOf(m)).toEqual([null, null]);
+    });
+  }
 });
 
 describe('a malformed seats table falls back to alias space instead of throwing', () => {
