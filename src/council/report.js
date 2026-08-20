@@ -67,6 +67,28 @@ function isSeatSpace(seats) {
     && seats.every(s => s && typeof s.id === 'string');
 }
 
+/**
+ * A finding's adjudications AS AN ARRAY, whatever the document actually carries.
+ *
+ * ⚠️ ONE expression, TWO readers, and that is the whole reason it exists.
+ * `toModel`'s pre-pass and its per-finding map both walk this list, and for one
+ * commit they disagreed about the type: `.some` is Array-only while `for...of`
+ * takes any iterable, so `adjudications: "abc"` RENDERED at c8867b48 and THREW at
+ * 774dcdc2. Measured at c8867b48: the string rendered
+ * `| A1 | major | gpt |   |  * | Contested |  |` with a junk `"undefined"` key in
+ * `byJudge`; `{}` and `42` threw there too.
+ *
+ * `Array.isArray` refuses all three the same way — a malformed value contributes
+ * no votes — which renders the string case BYTE-IDENTICALLY to c8867b48 in both
+ * formats (measured) and WIDENS `{}`/`42` from throw to that same vote-less
+ * render. The widening is deliberate: it is the direction this file already
+ * points. `isSeatSpace` above answers a malformed seats table by falling back
+ * WHOLE rather than throwing, for the same reason — the three schema-free
+ * `JSON.parse` entry points can deliver any shape. Pinned, all three shapes, in
+ * tests/council/seat-matrix.test.js.
+ */
+function adjOf(f) { return Array.isArray(f.adjudications) ? f.adjudications : []; }
+
 /** Build a neutral, render-agnostic model from a verdict (+ optional wave). */
 function toModel(verdict, wave) {
   if (!verdict || !Array.isArray(verdict.findings)) {
@@ -104,7 +126,18 @@ function toModel(verdict, wave) {
   // the only thing that makes a key mean a column. A key that survives all
   // three is written exactly where PR4c wrote it: this is a refusal, not a
   // re-key, and ruling R3 leaves the vote counted in `basis` either way.
-  // Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: JUNKKEY.
+  // ⚠️ `typeof key === 'string'` does not refuse only junk, and the one shape it
+  // COSTS is disclosed rather than discovered: a NUMERIC key coerced to a column
+  // at c8867b48 — `council: [42,'gpt']` with `judge: 42` put a ✓ in the `42`
+  // column — and now folds instead, leaving that column blank. Brief class 3 says
+  // "any non-string" unconditionally; this is that, measured.
+  // ⚠️ `key !== ''` is NOT redundant with `columns.has`, and is not asserted from
+  // structure: `isSeatSpace` accepts `{id: ''}`, so a roster CAN hold `''`, and on
+  // `seats: [{id:''},…]` with `judge: ''` the two spellings measurably diverge —
+  // with the conjunct the vote folds, without it `byJudge['']` takes it.
+  // Named mutants, with their measured red sets:
+  // tests/council/seat-matrix.test.js :: JUNKKEY and
+  // tests/council/seat-matrix.test.js :: EMPTYOK.
   const columnFor = (adj) => {
     const key = (seatSpace && adj.seat) || adj.judge;
     return (typeof key === 'string' && key !== '' && columns.has(key)) ? key : UNATTRIBUTED;
@@ -113,7 +146,10 @@ function toModel(verdict, wave) {
   // and whether any vote was refused is what decides the roster. Phase 1 is the
   // bench roster plus this pre-pass over every finding; phase 2 is the map
   // below, which seeds `byJudge` from the FINAL roster. Deciding inside that map
-  // would seed the column onto some findings and not others.
+  // would seed the column onto some findings and not others — which is only
+  // OBSERVABLE on a MULTI-finding document, so the pin that separates the two
+  // shapes carries two findings on purpose.
+  // Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: PERFINDING.
   // ⚠️ CONDITIONAL, the same shape as T2.3's emit-only-when-`> 0`: added
   // unconditionally it grows a column on every report that has no such vote and
   // breaks the byte-unchanged-artifact contract.
@@ -127,7 +163,7 @@ function toModel(verdict, wave) {
   // folded votes — disclosed, not fixed, because the roster entry is also the
   // `byJudge` key and separating them needs a renderer change.
   // Named mutant, with its measured red set: tests/council/seat-matrix.test.js :: ALWAYSCOL.
-  const folded = verdict.findings.some(f => (f.adjudications || []).some(a => columnFor(a) === UNATTRIBUTED));
+  const folded = verdict.findings.some(f => adjOf(f).some(a => columnFor(a) === UNATTRIBUTED));
   const judges = folded && !columns.has(UNATTRIBUTED) ? bench.concat(UNATTRIBUTED) : bench;
   const findings = verdict.findings.map((f) => {
     const byJudge = {};
@@ -139,7 +175,7 @@ function toModel(verdict, wave) {
     // vote gets: every refusal folds into the single UNATTRIBUTED column, so two
     // refused votes on one finding show ONE verdict. Measured, and pinned as
     // measured rather than claimed to be more. `basis` is untouched either way.
-    for (const adj of (f.adjudications || [])) { byJudge[columnFor(adj)] = adj.verdict; }
+    for (const adj of adjOf(f)) { byJudge[columnFor(adj)] = adj.verdict; }
     return {
       // The raiser re-key IS the star fix, and it is why report-html.js needs
       // zero edits: renderMd's cell map and report-html.js's both test

@@ -379,30 +379,32 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * peer-split records were rewritten twice to remove. Re-take the denominator
  * with it.
  *
+ * ⚠️ ALL FOUR RED SETS BELOW ARE RE-MEASURED IN THE COMMIT THAT FOLLOWS THIS
+ * ONE. The numbers first recorded against 774dcdc2 were invalidated by fix
+ * round 1, which added five pins and changed what the join accepts, so they were
+ * DELETED rather than adjusted. Re-run, never renumber.
+ *
  * Named mutant "ALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
  * routed to it. It is the "byte-unchanged artifact" mutant — every report that
  * has no unattributable vote grows a column.
- * MEASURED red set, run against 774dcdc2:
- * 3 suites / 24 tests + 4 SNAPSHOTS, out of 541 / 7686. By suite:
- *   seat-matrix 13 · report-claude-column 9 · report-debate 2.
- * The four snapshot failures ARE the contract this conditional exists for: both
- * pinned byte-unchanged report snapshots (report-claude-column's no-flag run and
- * report-debate's v4.0 baseline) fail in both formats. Of this block's own pins
- * it reds exactly ONE — the no-unattributable-vote pin — which is the division
- * of labour with JUNKKEY below, measured rather than assumed.
  *
  * Named mutant "JUNKKEY": revert the join to c8867b48's bare
  * `byJudge[(seatSpace && adj.seat) || adj.judge]`, leaving the roster code in
  * place. It is the "T-C1 never happened" mutant for the refusal half.
- * MEASURED red set, run against 774dcdc2:
- * 1 suite / 11 tests, out of 541 / 7686. By suite: seat-matrix 11.
- * Those 11 are every refusal pin in this block plus T22 shape 1 above, and they
- * are the same 11 that were RED before the fix was written (one has since been
- * retitled and had an assertion strengthened). Two pins stay GREEN
- * under it and that is not a weakness: the no-unattributable-vote pin is
- * ALWAYSCOL's, and the `basis` pin is a preservation pin that NEITHER mutant
- * moves — `basis` is copied by reference on every path, which is the point.
+ *
+ * Named mutant "PERFINDING" (v4.8 T-C1 fix round 1): leave `m.judges` global and
+ * move only the `byJudge` SEEDING inside the per-finding map, so each finding is
+ * seeded from a roster decided by ITS OWN votes. It is the exact failure the
+ * `⚠️ TWO-PHASE` comment on report.js names, and it ran the FULL suite GREEN
+ * before the multi-finding pin above existed — every fixture here had one
+ * finding, and one finding cannot tell a global roster from a per-finding one.
+ *
+ * Named mutant "EMPTYOK" (v4.8 T-C1 fix round 1): drop the `key !== ''` conjunct
+ * from `columnFor`, leaving `typeof key === 'string' && columns.has(key)`. The
+ * six class pins are GREEN against it — on their rosters `columns.has('')` is
+ * already false — so it is named to keep the conjunct honest on the one roster
+ * where `columns.has('')` is TRUE.
  */
 describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
   const SEATS = [
@@ -430,6 +432,23 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
         basis: { a: 1, d: 1, n: 0 }, adjudications }],
       streetCred: [], runStats: [],
       tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 },
+    };
+  }
+
+  /** Two findings on one seated document, where only the SECOND folds a vote. */
+  function twoFindings() {
+    return {
+      runId: 'si12-multi', runType: 'headless', date: '2026-07-20',
+      chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false, seats: SEATS,
+      findings: [
+        { id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
+          basis: { a: 1, d: 0, n: 0 }, adjudications: [SEATED] },
+        { id: 'F2', raiser: 'gpt', severity: 'major', tier: 'Contested',
+          basis: { a: 1, d: 1, n: 0 },
+          adjudications: [SEATED, { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#9' }] },
+      ],
+      streetCred: [], runStats: [],
+      tierCounts: { Confirmed: 0, Contested: 2, Singleton: 0, Disputed: 0 },
     };
   }
 
@@ -511,6 +530,7 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
       { judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#7' },
     ]));
     expect(m.judges).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
+    expect(Object.keys(m.findings[0].byJudge)).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
     // R18 folds both into one column, so the second write overwrites the first
     // exactly as two votes on any other shared key always have. What the row
     // shows is the LAST vote; the first is shown nowhere. Measured, and pinned
@@ -531,6 +551,66 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
     expect(council).toEqual(ALIAS_COLS);
     expect(m.header.council).toEqual(ALIAS_COLS);
   });
+
+  test('the roster decision is GLOBAL, not per finding (v4.8 T-C1 fix round 1)', () => {
+    const verdict = twoFindings();
+    const m = toModel(verdict);
+    expect(m.judges).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
+    // ⚠️ THE ONLY SHAPE THAT CAN SEE THE TWO-PHASE INVARIANT. Every other fixture
+    // in this block carries exactly ONE finding, and on a one-finding document a
+    // global roster and a per-finding one are indistinguishable — measured: the
+    // PERFINDING mutant ran the FULL suite green before this pin existed. Both
+    // findings must carry the SAME key set, seeded from the FINAL roster.
+    expect(Object.keys(m.findings[0].byJudge)).toEqual(Object.keys(m.findings[1].byJudge));
+    expect(Object.keys(m.findings[0].byJudge)).toEqual(SEAT_COLS.concat('UNATTRIBUTED'));
+    expect(m.findings[0].byJudge.UNATTRIBUTED).toBeNull();
+    expect(m.findings[1].byJudge.UNATTRIBUTED).toBe('dispute');
+    // ⚠️ The RENDERED rows cannot separate the two: a missing key and a `null` key
+    // both read falsy, so both render the same blank cell. Stated because it is
+    // the reason the assertions above are on `Object.keys` and not on the row.
+    const md = buildReport({ verdict }, { format: 'md' });
+    expect(rowFor(md, 'F1')).toBe('| F1 | major | gpt | ✓ |  * |   | Contested |  |');
+    expect(rowFor(md, 'F2')).toBe('| F2 | major | gpt | ✓ |  * | ✗ | Contested |  |');
+  });
+
+  test("a `''` ROSTER entry is seeded by the roster and still refused by the join (v4.8 T-C1 fix round 1)", () => {
+    const verdict = verdictOf(
+      [{ id: '', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+        { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 }],
+      [{ judge: '', verdict: 'agree', seat: '' }, { judge: 'gpt', verdict: 'dispute', seat: 'gpt' }]);
+    const m = toModel(verdict);
+    // `isSeatSpace` accepts `{id:''}` — it checks `typeof s.id === 'string'` and
+    // `''` IS one — so a roster can hold `''`, and the seeding loop puts it in
+    // `byJudge` exactly as it did at c8867b48. The brief's property 5 is therefore
+    // a statement about the JOIN, not about the model's whole key set: nothing the
+    // join WRITES is `""` or `"undefined"`.
+    expect(m.judges).toEqual(['', 'gpt', 'UNATTRIBUTED']);
+    expect(Object.keys(m.findings[0].byJudge)).toEqual(['', 'gpt', 'UNATTRIBUTED']);
+    expect(m.findings[0].byJudge['']).toBeNull();
+    // ⚠️ This is also the WITNESS for the `key !== ''` conjunct, which the other
+    // six class pins do NOT cover: on their rosters `columns.has('')` is false, so
+    // `columns.has` refuses the empty key and the conjunct is green against its own
+    // mutant. Here `columns.has('')` is TRUE, and measured, dropping `key !== ''`
+    // puts this agree in `byJudge['']` and emits no UNATTRIBUTED column at all.
+    expect(m.findings[0].byJudge.UNATTRIBUTED).toBe('agree');
+  });
+
+  // A non-array `adjudications` is reachable through the same three schema-free
+  // `JSON.parse` entry points as a malformed seats table. Measured at c8867b48:
+  // `'abc'` RENDERED (a string is iterable, so `for...of` walked it and left a junk
+  // `"undefined"` key), while `{}` and `42` THREW. At 774dcdc2 all three threw,
+  // because the pre-pass reached for Array-only `.some` while the map still used
+  // `for...of` — the two phases had drifted apart on type. `adjOf` is now the one
+  // expression both read, and it refuses all three the same way.
+  for (const [name, bad] of [['a string', 'abc'], ['an object', {}], ['a number', 42]]) {
+    test(`${name} adjudications contributes no votes and does not throw (v4.8 T-C1 fix round 1)`, () => {
+      const empty = buildReport({ verdict: verdictOf(null, []) }, { format: 'md' });
+      expect(buildReport({ verdict: verdictOf(null, bad) }, { format: 'md' })).toBe(empty);
+      const m = toModel(verdictOf(null, bad));
+      expect(m.judges).toEqual(ALIAS_COLS);
+      expect(Object.keys(m.findings[0].byJudge)).toEqual(ALIAS_COLS);
+    });
+  }
 
   test('a bench model literally aliased UNATTRIBUTED is not columned twice', () => {
     const verdict = { ...verdictOf(null, [{ judge: 'nobody', verdict: 'dispute' }]),
