@@ -64,6 +64,18 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
   // Proven in BOTH directions by execution at T-B5: a real `require(` added to
   // peer-split.js turns this test RED, and the same token written into one of
   // its comments leaves it GREEN.
+  // ⚠️⚠️ SECOND COST, AND THE SENTENCE THAT STOPS THIS RECURRING. The volume
+  // pin fires on ANY edit that changes the executable line count — including a
+  // MUTATION. Every named mutant on `peersOf` (SPLITDROP, NAIVESPLIT,
+  // SELFCORROB, SEATBLIND) respells that ternary at a different line count, so
+  // this pin ENLARGES each of their red sets by one test, and it is not a
+  // behavioural catch when it does — it is this pin noticing a reformat.
+  // Consequence, and it is structural rather than drift: ANY red set recorded
+  // BEFORE this pin existed is STALE BY CONSTRUCTION. All six named mutants
+  // were re-run at T-B5 fix round 2 for exactly that reason, and each record
+  // now says how much of its red set is this pin.
+  // ⇒ If you add, remove or reshape ANY pin in this file, re-run every mutant
+  // in peer-split-mutants.js before trusting a single number in it.
   test('P3 — the module is REQUIRE-FREE, so a DI-free consumer (debate.js) can import it', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/council/peer-split.js'), 'utf8');

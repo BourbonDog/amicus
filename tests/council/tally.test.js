@@ -400,8 +400,10 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     // carry is the one-side-seated TWIN pair, in both directions.
     // ⚠️ SUPERSEDED COUNT, not a superseded point — the sentence above was true
     // at T-B2 (`e23e56cd`) and stands. T-B4 re-ran the mutant twice: it is now
-    // 17 suites / 109 tests, 13 of them here. The point is unaffected; only the
-    // numbers moved. Single source, re-run and never renumbered:
+    // 17 suites / 110 tests, 13 of them here (109 after T-B4's re-runs; T-B5's
+    // volume pin in peer-split.test.js added the 110th, which fires on the
+    // line-count change rather than on behaviour). The point is unaffected; only
+    // the numbers moved. Single source, re-run and never renumbered:
     // peer-split-mutants.js :: NAIVESPLIT.
     const record = tally({
       ...base,

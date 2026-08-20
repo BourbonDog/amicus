@@ -36,6 +36,16 @@
 // produced T-B3's Critical. Re-run every record below whose guarded expression
 // OR its consumers changed, and re-take the denominator with it.
 //
+// ⚠️ AND "ITS CONSUMERS" INCLUDES THE PINS. Every red set below was re-run at
+// v4.8 T-B5 fix round 2, against HEAD, because T-B5 added a volume pin to
+// tests/council/peer-split.test.js — see its own docblock — that fires on any
+// edit changing peer-split.js's executable LINE COUNT. Four of the five mutants
+// here respell the ternary at a different line count, so each gained exactly one
+// red test: the P3 REQUIRE-FREE pin. That one test is NOT a behavioural catch,
+// and each record below says so. ZEROEMIT was unchanged because it mutates the
+// two producers, not this module. Nobody re-ran them when the pin landed, which
+// is how three records went stale inside the commit that added it.
+//
 // ⚠️ These records LEFT the predicate they guard, and the cost of that is worth
 // naming rather than discovering: a number beside its expression is re-read by
 // anyone editing that expression, and a number in another file is not. Both
@@ -65,9 +75,15 @@
   // it is what the witnesses in tests/council/peer-split.test.js are named for.
   // Never shipped — applied, run against the FULL suite, reverted by hand,
   // byte-verified against `git show HEAD:`.
-  // MEASURED red set: 1 suite / 4 tests, out of 541 / 7665. By suite:
-  // peer-split 4 — witness A, C1c, P0d, and the exhaustive cross-product
-  // invariant.
+  // MEASURED red set, re-run at T-B5 fix round 2 against HEAD:
+  // 1 suite / 5 tests, out of 541 / 7665. By suite:
+  // peer-split 5 — witness A, C1c, P0d, the exhaustive cross-product
+  // invariant, and the P3 REQUIRE-FREE pin.
+  // ⚠️ FOUR of those five are behavioural. The fifth, P3, is the volume pin
+  // firing because this mutation respells the ternary at 3 lines instead of 4 —
+  // it catches a reformat, not the behaviour change. The behavioural set is
+  // unchanged at 4; the recorded TOTAL moved from 1/4 to 1/5 purely because the
+  // pin landed. Do not read the extra test as a stronger pin on this mutant.
   // ⚠️ It has SHRUNK at every step (2 suites / 9 tests at 64b835b8 — peer-split 5
   // · debate 4; 2 / 6 after round 1 — peer-split 4 · tally 2; 1 / 4 now —
   // peer-split only), because each round moved the shipped behaviour closer to
@@ -88,15 +104,22 @@
   // against `git show HEAD:`. RE-MEASURED at T-B4 against the tree that ships —
   // re-run, never renumbered, because editing a recorded number ASSERTS the red
   // set still holds and that assertion is what produced T-B3's Critical.
-  // MEASURED red set: 17 suites / 109 tests, out of 541 / 7665. By suite:
-  //   run-debate 50 · tally 13 · peer-split 11 · debate 8 ·
+  // MEASURED red set, re-run at T-B5 fix round 2 against HEAD:
+  // 17 suites / 110 tests, out of 541 / 7665. By suite:
+  //   run-debate 50 · tally 13 · peer-split 12 · debate 8 ·
   //   seat-parity-ondisk 5 · report 4 · report-claude-column 4 ·
   //   report-debate 2 · run-claude-review 2 · run-no-cost-gate 2 ·
   //   seat-matrix 2 · cli-handlers-council 1 · council-events 1 · ledger 1 ·
   //   mcp-server 1 · run-assemble 1 · run-cost-bijection 1.
-  // It has GROWN across T-B4 (97 at 64b835b8, 98 after round 1, 109 now) purely
-  // because T-B4 added tests in the files NAIVE already broke — the suite list
-  // is unchanged at 17.
+  // It has GROWN across T-B4 (97 at 64b835b8, 98 after round 1, 109 at the end
+  // of T-B4) purely because T-B4 added tests in the files NAIVE already broke —
+  // the suite list is unchanged at 17.
+  // ⚠️ 110 NOW, and the last one is a different KIND. peer-split went 11 -> 12
+  // when T-B5 added the volume pin; that twelfth test is P3 REQUIRE-FREE, firing
+  // on the line-count change rather than on behaviour. The behavioural red set
+  // is still 109. This is the finding that forced fix round 2: the number 109
+  // was re-stamped across nine tracked sites while the pin that invalidated it
+  // was being added in the same round.
   // ⚠️ That measurement RETIRES a claim this repo carried in three places —
   // "T1 and T2 are the ONLY tests separating GUARDED from NAIVE". They are
   // not, and not even within their own file: 11 of tally.test.js's 13 reds are
@@ -110,8 +133,12 @@
   // corroborates itself again. It is the "T-B4 never happened" mutant and its
   // red set is the whole T-B4 pin surface. Never shipped — applied, run against
   // the FULL suite, reverted by hand, byte-verified against `git show HEAD:`.
-  // MEASURED red set: 3 suites / 15 tests, out of 541 / 7665. By suite:
-  // peer-split 10 · debate 4 · tally 1.
+  // MEASURED red set, re-run at T-B5 fix round 2 against HEAD:
+  // 3 suites / 16 tests, out of 541 / 7665. By suite:
+  // peer-split 11 · debate 4 · tally 1.
+  // ⚠️ peer-split 10 -> 11 is the T-B5 volume pin (P3 REQUIRE-FREE), not a new
+  // behavioural catch: this mutation restores 64b835b8's 3-line predicate where
+  // the shipped one is 4 lines. The behavioural set is unchanged at 15.
   // ⚠️ The TOTAL is identical to round 1's reading and the COMPOSITION is not
   // (peer-split 8 -> 10, tally 3 -> 1), which is why it was re-run rather than
   // carried: T7b and T7d stopped separating this mutant, because reverting to
@@ -124,9 +151,13 @@
   // from the shipped form on exactly the shapes P0 was added for, and it is a
   // separate mutant from SELFCORROB because it keeps the C1 fix while dropping
   // the correction to it. Never shipped, same application/revert/verify
-  // discipline. MEASURED red set: 2 suites / 5 tests, out of 541 / 7665. By
-  // suite: peer-split 3 (P0a, P0b, P0c) · tally 2 (T7b, T7d) — which is exactly
-  // the set that was RED before round 2's source change and GREEN after it.
+  // discipline. MEASURED red set, re-run at T-B5 fix round 2 against HEAD:
+  // 2 suites / 6 tests, out of 541 / 7665. By suite: peer-split 4 · tally 2
+  // (T7b, T7d). The behavioural three are P0a, P0b and P0c — exactly the set
+  // that was RED before round 2's source change and GREEN after it.
+  // ⚠️ The fourth peer-split red is the T-B5 volume pin (P3 REQUIRE-FREE),
+  // firing on the line-count change rather than on behaviour. The behavioural
+  // set is unchanged at 5.
 
 // ── on src/council/peer-split.js :: unattributedPeerDrops ────────────────────
 
@@ -135,8 +166,12 @@
   // twin pair is byte-for-byte unchanged. Mutation: emit unconditionally at
   // both sites (`unattributedPeerDrops: drops`, zero included). Never shipped —
   // applied, run against the FULL suite, reverted by hand, byte-verified.
-  // MEASURED red set, re-taken at T-B4 round 2 against the tree that ships:
-  // 4 suites / 8 tests, out of 541 / 7665.
+  // MEASURED red set, re-taken at T-B4 round 2 and RE-RUN AGAIN at T-B5 fix
+  // round 2 against HEAD: 4 suites / 8 tests, out of 541 / 7665 — UNCHANGED,
+  // and the invariance is the informative part. This mutation edits the two
+  // PRODUCERS (tally.js and debate.js), never peer-split.js, so T-B5's volume
+  // pin cannot fire on it. That is why it is one of only two records fix round 2
+  // did not have to move.
   //   BEHAVIOURAL — the three absence pins written for this change, plus three
   //   T-B4 added:
   //     tally.test.js T3b · debate.test.js T6b · debate.test.js T6c ·

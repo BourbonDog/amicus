@@ -202,11 +202,14 @@ describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCor
 // pre-T-B2 documents are still accepted and BOTH T-B2 documents are REJECTED.
 // Then measured again against the FULL suite with SCHEMADROP written into the
 // real schema file, and RE-MEASURED twice at v4.8 T-B4 against the tree that
-// ships (re-run each time, never renumbered): 1 suite / 1 test red out of
-// 541 / 7665 — the first test below, and nothing else, the same identity as
-// both earlier readings. The denominator moved because T-B4 added tests, not
-// because this red set did. It is the only one of the six named mutants whose
-// red set T-B4 left alone.
+// ships (re-run each time, never renumbered), and RE-RUN AGAIN at v4.8 T-B5 fix
+// round 2: 1 suite / 1 test red out of 541 / 7665 — the first test below, and
+// nothing else, the same identity as all three earlier readings. The denominator
+// moved because T-B4 added tests, not because this red set did. It was the only
+// one of the six named mutants whose red set T-B4 left alone, and at T-B5 it is
+// one of TWO: this mutation edits the schema and ZEROEMIT edits the producers,
+// so neither can trip the volume pin T-B5 added to peer-split.test.js — the pin
+// that moved the other four.
 // So "the only thing standing between that tightening and a
 // silent rejection of every twin-orphan tally.json" is a measurement, not a
 // figure of speech. As with PR4c's mutant 3, note the implication: a tightening
