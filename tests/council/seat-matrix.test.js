@@ -703,21 +703,65 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
  * mutant — the one the conditional exists for.
+ * MEASURED red set, run against 09212e97:
+ * 3 suites / 30 tests, out of 541 / 7711. By suite:
+ *   seat-matrix 23 · matrix-model 6 · workspace-matrix 1.
+ * ⚠️ TWENTY-THREE of the 30 are pins that PREDATE T-C2 and assert an exact
+ * judge or cell list — T20, T21, T22 shape 2, the eight shared-predicate rows,
+ * the four malformed-table rows, every buildMatrixModel pin in
+ * tests/workspace/matrix-model.test.js, and T19's blind header. That breadth IS
+ * the contract: the roster is the header, so an unconditional column changes
+ * every matrix ever rendered. Of this block's own 19 pins it reds exactly 7.
+ * ⚠️ ZERO snapshots move, unlike report.js's ALWAYSCOL, which took four. Not a
+ * weaker mutant — measured, no snapshot in this repo captures a rendered
+ * workspace matrix, so the pins above are the only thing standing there.
  *
  * Named mutant "WSJUNKKEY": revert the join to 32a63e92's
  * `if (!adj || typeof adj.judge !== 'string') { continue; }` plus
  * `votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict`, leaving the
  * roster code in place. It is the "T-C2 never happened" mutant.
+ * MEASURED red set, run against 09212e97:
+ * 2 suites / 13 tests, out of 541 / 7711. By suite:
+ *   seat-matrix 12 · workspace-matrix 1.
+ * Those 12 are eleven of this block's own pins plus T22 shape 1, and they are
+ * the same twelve that were RED before the fix was written. EIGHT pins here stay
+ * green under it, and the record says which rather than implying full coverage:
+ * the no-unattributable-vote pin is WSALWAYSCOL's; `basis` is a preservation pin
+ * no mutant here can move; the null-element and three malformed-`adjudications`
+ * pins are preservation pins too; the `''`-roster pin is WSEMPTYFOLD's, and this
+ * mutant lands that vote in the `''` column anyway; and the both-name-slots pin
+ * survives because this mutation reverts only the ROUTING — the roster code is
+ * left in place, so the column is still appended with the right pair.
  *
  * Named mutant "WSEMPTYFOLD": add report.js's `key !== ''` conjunct to
  * `columnFor`. It is the "the two implementations were unified after all"
  * mutant, and the ONLY thing that can see it is a roster holding `''`.
+ * MEASURED red set, run against 09212e97:
+ * 1 suite / 1 test, out of 541 / 7711 — seat-matrix 1, the `''`-roster pin.
+ * ⚠️ READ THAT NUMBER THE RIGHT WAY, and it is T-C1's EMPTYOK lesson mirrored.
+ * A one-test set is small because the conjunct is INVISIBLE everywhere else, not
+ * because the pin is weak: on every other fixture's roster `keys.has('')` is
+ * already false, so `keys.has` does the refusing and adding `key !== ''` changes
+ * nothing observable. Only a roster that HOLDS `''` separates the two spellings —
+ * which is why that pin drives both consumers and is the record of the one
+ * document R17's narrow option leaves them disagreeing about.
  *
  * Named mutant "WSPAIRFOR": build the fold column's pair as
  * `pairFor(UNATTRIBUTED, map)` instead of carrying the literal in both slots.
  * Invisible on every ordinary labelMap — `labelFor` returns null and display()
  * falls back to `pair.model`, printing the same string — so the only fixture
  * that can see it is one whose labelMap maps a label TO `UNATTRIBUTED`.
+ * MEASURED red set, run against 09212e97:
+ * 2 suites / 2 tests, out of 541 / 7711. By suite:
+ *   seat-matrix 1 (the both-name-slots pin) · workspace-matrix 1 (the painter).
+ * ⚠️ THE PAINTER PIN ONLY REDS BECAUSE ITS labelMap IS ADVERSARIAL. Measured, it
+ * fails on the blind header rendering `Review Z` where the fold column belongs —
+ * the mechanism this decision was made against, not a restatement of it. On an
+ * ordinary labelMap the two spellings are indistinguishable, also measured:
+ * `display(pairFor('UNATTRIBUTED', {}), true)` and
+ * `display({model: 'UNATTRIBUTED', label: 'UNATTRIBUTED'}, true)` both return
+ * `UNATTRIBUTED`. Written with the map T19 uses, that test would have been GREEN
+ * against its own mutant — an EMPTY red set proving nothing.
  */
 describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
   const SEATS = [
