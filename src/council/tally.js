@@ -111,7 +111,14 @@ function tally(input) {
     // surviving peer whose ALIAS equals the raiser's is a different seat of the
     // same model — corroboration that is not independent. Emitted only when TRUE
     // (an unconditional `false` would change every document's shape).
-    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration.
+    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration. The WHY
+    // left this file with the v4.8 T-B1 extraction; it now lives on
+    // peer-split.js :: unattributedPeerDrops, whose own guard is the same
+    // shape. Short form: when `f.raiser` is falsy `peersOf` returns `votes`
+    // WHOLE, so `v.judge === f.raiser` reads `undefined === undefined` on the
+    // CLI path and `'' === ''` on the MCP path, and without the guard this
+    // expression fires on documents that name no models at all. T7b and T7d in
+    // tally.test.js pin exactly those two shapes for this stamp.
     // ⚠️ Alias-only in BOTH directions, and the CHANGELOG says so: it misses
     // `gpt-5,openai/gpt-5` (one model, two aliases — votes carry no
     // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats

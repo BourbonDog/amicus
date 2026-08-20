@@ -3392,8 +3392,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   (`tally.js:72`, **was `:71`**) is a plain object literal, so `verdict: 'toString'` resolves through the prototype chain
   and `basis["function toString() { [native code] }"] = NaN`, serialized as `null` in both
   `tally.json` and `verdict.json`. Reachable on the schema-free CLI path. Pre-existing, and PR4c's
-  `sameModelCorroboration` stamp (`tally.js:122-124`, **was `:141`, likewise already stale**) reads
-  the **same expression**, so it inherits the hole. The
+  `sameModelCorroboration` stamp (`tally.js :: sameModelCorroboration`) reads the **same
+  expression**, so it inherits the hole. ⚠️ Anchored BY NAME because the line form rotted twice
+  inside one task: `:141` (already stale at `8e97faaf`) → `:122-124` (T-B2 fix round 1) →
+  `:129-131` (T-B2 fix round 2, when a comment was added above it). The
   fix is an `Object.prototype.hasOwnProperty.call(VERDICTS, v.verdict)` guard at both sites — cheap,
   but it changes `basis` on a document that currently produces a `null`, so it needs a decision
   about whether that is a fix or a shape change.

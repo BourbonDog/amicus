@@ -450,7 +450,7 @@ describe('debateTargets — the two documents must agree on the peer split (v4.8
     expect(byRaiser.undefined[0].peerVerdicts).toEqual(['dispute', 'agree']);
   });
 
-  test('T5c: every vote from an empty-string judge — the tally read Disputed while the brief read all-zero', () => {
+  test('T5c: every vote from an empty-string judge — the brief carries BOTH disputes, matching the tally (base briefed zero)', () => {
     // The sharpest case, and the one the trailing `.map(a => a.verdict)`
     // comment describes from the other direction: measured at 8e97faaf,
     // peerVerdicts was [] — so briefings-debate.js's verdictCounts rendered

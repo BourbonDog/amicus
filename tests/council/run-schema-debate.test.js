@@ -201,8 +201,9 @@ describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCor
 // tightening that forgets this key. MEASURED against the corpus above: the three
 // pre-T-B2 documents are still accepted and BOTH T-B2 documents are REJECTED.
 // Then measured again against the FULL suite with SCHEMADROP written into the
-// real schema file: 541 suites, EXACTLY 1 test red — the first test below, and
-// nothing else. So "the only thing standing between that tightening and a
+// real schema file, and RE-MEASURED 2026-08-19 against the tree that ships:
+// 1 suite / 1 test red out of 541 / 7655 — the first test below, and nothing
+// else. So "the only thing standing between that tightening and a
 // silent rejection of every twin-orphan tally.json" is a measurement, not a
 // figure of speech. As with PR4c's mutant 3, note the implication: a tightening
 // that KEEPS the declaration is safe.
@@ -210,7 +211,13 @@ describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCor
 // `minimum: 1` is deliberate and mirrors `sameModelCorroboration`'s `const: true`
 // — both state the emit-when-set rule in the schema rather than only describing
 // it in prose. The producers never emit 0 (`tally.js` and `debate.js` both spell
-// `drops > 0 ? … : {}`, pinned by the ZEROEMIT mutant).
+// `drops > 0 ? … : {}`). That `minimum: 1` makes THIS FILE an independent second
+// guard on the emit rule, not merely documentation of it: under the ZEROEMIT
+// mutant — emit unconditionally at both producers — the schema rejects the
+// zero-valued key, so a test here goes red alongside the three behavioural
+// absence pins, and so does schemas.test.js's whole-family check. ZEROEMIT's
+// full measured red set is recorded in one place only, on
+// peer-split.js :: unattributedPeerDrops; do not restate the count here.
 //
 // ⚠️ NOT declared in `council-verdict.schema.json`, deliberately: the findings
 // literal in verdict.js :: buildVerdict is CLOSED — it names every key it

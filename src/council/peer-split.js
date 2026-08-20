@@ -60,8 +60,12 @@ function peersOf(f, votes) {
   // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole INNER ternary
   // with the unguarded, seat-valued `v.seat !== f.raiserSeat`, keeping the
   // outer `f.raiser ?` condition (that one is SPLITDROP's). Never shipped —
-  // applied, run against the FULL suite, reverted by hand, byte-verified.
-  // MEASURED red set: 17 suites / 97 tests, out of 541 / 7652. By suite:
+  // applied, run against the FULL suite, reverted by hand, byte-verified
+  // against `git show HEAD:`. RE-MEASURED 2026-08-19 against the tree that
+  // ships (the first reading's 7652 was e23e56cd's total; the red set was
+  // re-run rather than the denominator edited, because editing it would have
+  // ASSERTED the red set still held). MEASURED red set: 17 suites / 97 tests,
+  // out of 541 / 7655 — identical to the first reading. By suite:
   //   run-debate 50 · tally 10 · seat-parity-ondisk 5 · peer-split 5 ·
   //   debate 5 · report 4 · report-claude-column 4 · seat-matrix 2 ·
   //   run-no-cost-gate 2 · run-claude-review 2 · report-debate 2 ·
@@ -125,11 +129,35 @@ function unattributedPeerDrops(f, votes) {
   // Named mutant "ZEROEMIT" (v4.8 T-B2), guarding the EMIT rule both callers
   // share — present only when > 0, so a run that does not orphan one side of a
   // twin pair is byte-for-byte unchanged. Mutation: emit unconditionally at
-  // both sites (`unattributedPeerDrops: drops`, zero included). MEASURED red
-  // set: exactly 3 tests, and all three are the absence pins written for this
-  // change — tally.test.js T3b, debate.test.js T6b and T6c. Nothing else in
-  // 541 suites notices a stray zero-valued key, on disk or in memory, so that
-  // byte-identity property rests on those three pins and nothing else.
+  // both sites (`unattributedPeerDrops: drops`, zero included). Never shipped —
+  // applied, run against the FULL suite, reverted by hand, byte-verified.
+  // MEASURED red set, re-taken 2026-08-19 against the tree that ships:
+  // 4 suites / 5 tests, out of 541 / 7655.
+  //   BEHAVIOURAL — the three absence pins written for this change:
+  //     tally.test.js T3b · debate.test.js T6b · debate.test.js T6c.
+  //   SCHEMA-MEDIATED — both caused by `"minimum": 1` on
+  //   council-tally.schema.json's `findings[].unattributedPeerDrops`, which
+  //   rejects a present-and-zero key:
+  //     run-schema-debate.test.js "a document that does not orphan a twin leg
+  //     omits the key and still validates" · schemas.test.js
+  //     "council-tally.schema.json accepts tally() output" — the PRE-EXISTING
+  //     whole-family check, which nobody wrote for this field.
+  //
+  // ⚠️ THIS RECORD WAS WRONG BETWEEN e23e56cd AND ITS CORRECTION, and how it
+  // went wrong matters more than the number. It read "exactly 3 tests … nothing
+  // else in 541 suites notices a stray zero-valued key … that byte-identity
+  // property rests on those three pins and nothing else." That was TRUE when
+  // written. Then c2e1f9d0 — the SAME task's own fix round — added the schema
+  // declaration with `minimum: 1`, which silently made it false, and nothing
+  // re-measured the record against the final tree. A number that lives in
+  // `src/` is reachable by no gate; only a re-run reaches it. Re-run any mutant
+  // record in this file whose guarded expression OR its consumers changed.
+  //
+  // The correction runs in the SAFE direction, which is why it had to be made
+  // rather than left: an engineer reading "rests on those three pins and
+  // nothing else" would conclude `minimum: 1` is removable decoration. It is
+  // not — it is the fourth and fifth guard. run-schema-debate.test.js says the
+  // same thing from its own side and defers the count to here.
   return votes.filter(v => f.raiser && !(v.seat && f.raiserSeat)
     && (!!v.seat !== !!f.raiserSeat) && v.judge === f.raiser).length;
 }
