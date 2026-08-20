@@ -1878,7 +1878,9 @@ sized and deferred rather than carried half-done.
    to be pinned with a **named mutant**.
    ✅ **EXECUTED 2026-08-19 — v4.8 Phase 2 T-B2, `e23e56cd`.** Both replaced; both titles now end
    `⇒ excluded AND announced`; pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red),
-   not by a preservation test. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
+   not by a preservation test.
+   ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and is left as written; T-B4's two
+   re-runs make it **17 suites / 109 tests**. Single source: `peer-split-mutants.js :: NAIVESPLIT`. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
    explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
    `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
    describe SURVIVES, deliberately. The one thing that changed is that the drop is now
@@ -3051,9 +3053,16 @@ deliberately left alone:
   **TAKEN in v4.8 T-B5** as council finding C4 — as its own commit and before any other edit,
   precisely so no later fix could hit the ceiling mid-flight the way `run-retry.js` did in PR #171.
   Destination `tests/council/peer-split-mutants.js`, chosen for four properties: it is tracked; it is
-  a `.js` file, so `check-citations` both enforces the citations *inside* the records and blocks any
-  commit that deletes or renames it while the anchors stand — neither of which is true of the doc
-  tree, which that gate deliberately does not scan; it is not a jest suite
+  a `.js` file, so `check-citations` blocks any commit that deletes or renames it while the anchors
+  stand — measured, not argued: drop the path from the tracked set and all three anchors report
+  "no tracked file matches", and `scopeForCommit` really does pull `peer-split.js` in. That is not
+  true of the doc tree, which the gate deliberately does not scan. ⚠️ **It is the ONLY citation
+  property at stake.** A first draft of this entry also claimed the gate enforces the citations
+  *inside* the records; measured with the real exported `parseCitations`, **the 108 moved lines
+  contain ZERO parseable citations** — `peer-split.js` held exactly three at `7aa71d1e`
+  (`tally.js@115bc861:93-112`, `debate.js :: debateTargets`, `mcp-tools.js:416`), all OUTSIDE the
+  moved regions and all still in the file. The records name files only in passing, never with a line
+  or a symbol. It is not a jest suite
   (`jest.config.js :: testMatch` collects `*.test.js` only), so the suite count did not move; and
   both predicates carry a one-line symbol anchor to it, which is how the re-measure obligation
   travels. Proven inert: the executable text of `peer-split.js` is byte-identical to `7aa71d1e`, and
@@ -3382,6 +3391,8 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red), not by a
      preservation test. Both titles gained `AND announced`; current values, read from the tree
      after the last edit to that file:
+     ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and stands as written; T-B4's two
+     re-runs make it **17 suites / 109 tests**. Single source: `peer-split-mutants.js :: NAIVESPLIT`.
      - T1 — `tally.test.js:331` (**was `:329`**)
        `T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded AND announced`
      - T2 — `tally.test.js:357` (**was `:341`**)
@@ -3403,7 +3414,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      MEASUREMENT 2026-08-19 (T-B2).** The named mutant `NAIVESPLIT` (the inner ternary of
      `peer-split.js :: peersOf` replaced by the unguarded `v.seat !== f.raiserSeat`) was run
      against the FULL suite: **17 suites / 97 tests red**, of which 10 are in `tally.test.js` and
-     only 2 of those are T1/T2. NAIVE also breaks the ordinary unique-alias bench, reading
+     only 2 of those are T1/T2.
+     ⚠️ **SUPERSEDED COUNT, not a superseded retirement** — true at T-B2 (`e23e56cd`); T-B4's re-runs
+     make it **17 / 109**, 13 in `tally.test.js`. The retirement above holds a fortiori. Single
+     source: `peer-split-mutants.js :: NAIVESPLIT`. NAIVE also breaks the ordinary unique-alias bench, reading
      `undefined !== undefined` and dropping a real peer, which most of the council suite
      exercises. The narrower TRUE statement, which is what mattered here: T1 and T2 are the only
      tests pinning the **one-side-seated twin** directions. Both were REPLACED (not deleted) by
@@ -3424,6 +3438,8 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red). Both titles
      gained `AND announced`; T1 is now `tally.test.js:331` (**was `:329`**) and T2
      `tally.test.js:357` (**was `:341`**).
+     ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and stands as written; T-B4's two
+     re-runs make it **17 suites / 109 tests**. Single source: `peer-split-mutants.js :: NAIVESPLIT`.
 
      ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
      explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
@@ -3445,6 +3461,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      turns **17 suites / 97 tests** red, not 2. The narrower true statement is that T1 and T2 are
      the only tests pinning the one-side-seated twin directions, and T-B2 REPLACED both rather
      than deleting them, so that separation is carried forward.
+     ⚠️ **SUPERSEDED COUNT, not a superseded retirement** — true at T-B2 (`e23e56cd`); T-B4's re-runs
+     make it **17 / 109**. "Not 2" holds a fortiori. Single source:
+     `peer-split-mutants.js :: NAIVESPLIT`.
   3. ✅ **DONE — producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`); reconcile half 2026-08-17 (T-A4, `1e385895`).**
      ~~Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.~~ `deadSeats`
      (`src/council/run-stage1-rows.js :: pushDeadSeatRows` — anchored BY SYMBOL; the old `:76-89`

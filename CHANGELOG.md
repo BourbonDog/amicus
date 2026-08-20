@@ -28,10 +28,11 @@ All notable changes to Amicus are documented here. Format follows
   byte-identical to `64b835b8`, the commit it was written on top of, measured over 300,000
   randomized named-raiser findings with zero differences.
   ⚠️ **That is a claim about this fix, not about v4.7.1.** The `unattributedPeerDrops` mark below
-  landed earlier in the same release and it fires on named-raiser documents too — the one-side-seated
-  twin shape — so a document that names its raisers can still carry a key that a v4.7.1 one did not.
-  Measured on the same 300,000: the mark is emitted on 15.8% of them. Anything claiming such
-  documents are unchanged *by the release* is false; they are unchanged by this fix.
+  landed earlier in the same release and it fires on named-raiser documents too — where the finding
+  and the vote carry a seat id on only **one** side — so a document that names its raisers can still
+  carry a key that a v4.7.1 one did not. Anything claiming such documents are unchanged *by the
+  release* is false; they are unchanged by this fix. On an ordinary bench, where no alias repeats and
+  `raiserSeat` is absent by design, that shape does not arise.
   The same predicate builds the defense brief,
   so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
   reaches a brief at all.

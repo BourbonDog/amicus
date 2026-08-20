@@ -398,6 +398,11 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
     // breaks the ordinary unique-alias bench, where it reads
     // `undefined !== undefined` and drops a real peer. What T1 and T2 alone
     // carry is the one-side-seated TWIN pair, in both directions.
+    // ⚠️ SUPERSEDED COUNT, not a superseded point — the sentence above was true
+    // at T-B2 (`e23e56cd`) and stands. T-B4 re-ran the mutant twice: it is now
+    // 17 suites / 109 tests, 13 of them here. The point is unaffected; only the
+    // numbers moved. Single source, re-run and never renumbered:
+    // peer-split-mutants.js :: NAIVESPLIT.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],

@@ -98,7 +98,10 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    `⇒ excluded AND announced`; and the cited lines have moved — T1 `tally.test.js:331` (was
    `:329`), T2 `tally.test.js:357` (was `:341`), both re-derived by opening the file. The
    replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red), not by a
-   preservation test. ⚠️ Replacing the tests did **not** close SI-22.1 or SI-22.2: by owner ruling
+   preservation test.
+   ⚠️ **SUPERSEDED COUNT — annotation only.** Per `docs/CITATIONS.md`, this is a dated snapshot and
+   the sentence above stands: `97` was true at T-B2 (`e23e56cd`). T-B4's two re-runs make it
+   **17 suites / 109 tests**. Single source: `tests/council/peer-split-mutants.js :: NAIVESPLIT`. ⚠️ Replacing the tests did **not** close SI-22.1 or SI-22.2: by owner ruling
    R2 the vote is still dropped, `basis` still reads `{a:0,d:0,n:0}`, the tier is still
    `Singleton`, and the undercount deliberately remains. Only the announcement —
    `findings[].unattributedPeerDrops` — is new. Do not re-issue this instruction.

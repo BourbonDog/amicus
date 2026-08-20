@@ -6,11 +6,22 @@
 //
 // ⚠️ NOT A JEST SUITE, AND NOT MEANT TO BECOME ONE. jest.config.js :: testMatch
 // collects **/tests/**/*.test.js only, so nothing here is loaded and the suite
-// count does not move. It is a .js file rather than a doc on purpose:
+// count does not move. It is a .js file rather than a doc for ONE reason:
 // scripts/check-citations.js :: scanSet covers tests/**/*.js and deliberately
-// does NOT cover the doc tree, so (a) every citation inside these records stays
-// enforced, and (b) deleting or renaming this file breaks the anchors in
-// peer-split.js loudly, at the commit that does it, instead of silently.
+// does NOT cover the doc tree, so deleting or renaming this file breaks the
+// anchors in peer-split.js loudly, at the commit that does it, instead of
+// silently. That property is measured, not argued: drop this path from the
+// tracked set and all three anchors report "no tracked file matches".
+// ⚠️ It is the ONLY reason. An earlier draft of this header also claimed the
+// gate "enforces the citations inside these records"; measured with the real
+// exported parseCitations, the 108 moved lines contain ZERO parseable
+// citations, and every citation this file does carry is header prose written
+// for it. The records do name six files in passing — tally.test.js,
+// debate.test.js, peer-split.test.js, run-schema-debate.test.js,
+// schemas.test.js and council-tally.schema.json, that list itself measured —
+// but never with a line or a symbol, so no gate ever read them. Note what is
+// NOT among them: tally.js, debate.js and mcp-tools.js appear nowhere in the
+// moved text, though all three are cited from peer-split.js itself.
 //
 // FIVE named mutants mutate that module. Four are on
 // src/council/peer-split.js :: peersOf — SPLITDROP, NAIVESPLIT, SELFCORROB and

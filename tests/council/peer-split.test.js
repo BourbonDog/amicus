@@ -51,9 +51,16 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
   // and it silently constrained what this comment-heavy module was allowed to
   // say about itself. The BAN is exactly as strong: a real call is still caught
   // wherever it hides, because only commentary is removed and string literals
-  // are kept. The two `toContain` assertions are the ANTI-VACUITY guard — strip
-  // too much and `toBeNull()` would pass for the wrong reason, which is the
-  // failure mode a comment-stripping pin actually has.
+  // are kept.
+  // ⚠️ ANTI-VACUITY, in VOLUME not just in kind. Strip too much and
+  // `toBeNull()` passes for the wrong reason — that is the failure mode a
+  // comment-stripping pin actually has. Naming two surviving tokens is not
+  // enough: a scanner that ate everything ELSE would still satisfy them. So the
+  // executable line COUNT is pinned, and it catches the fault in BOTH
+  // directions — over-strip drops below 14, and a comment surviving the strip
+  // pushes above it. MEASURED at 14 with this very function, extracted from
+  // this file so the measurement cannot drift from what ships. Re-MEASURE it,
+  // never renumber it, if this module's executable text ever changes.
   // Proven in BOTH directions by execution at T-B5: a real `require(` added to
   // peer-split.js turns this test RED, and the same token written into one of
   // its comments leaves it GREEN.
@@ -61,7 +68,8 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/council/peer-split.js'), 'utf8');
     const code = executableText(src);
-    // The scan must not have eaten what it is scanning.
+    // The scan must not have eaten what it is scanning, nor left commentary in.
+    expect(code.split('\n').filter(l => l.trim().length)).toHaveLength(14);
     expect(code).toContain('module.exports');
     expect(code).toContain('votes.filter');
     expect(code.match(/require\(/g)).toBeNull();
