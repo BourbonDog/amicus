@@ -1880,8 +1880,9 @@ sized and deferred rather than carried half-done.
    `⇒ excluded AND announced`; pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red),
    not by a preservation test.
    ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and is left as written; T-B4's two
-   re-runs make it 17 suites / 109 tests, and T-B5's volume pin makes it **17 suites / 110 tests** at
-   HEAD. Single source: `peer-split-mutants.js :: NAIVESPLIT`. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
+   re-runs make it **17 suites / 109 tests**, which is also the value at HEAD — T-B5's round-1 volume
+   pin briefly inflated it to 110 and round 3 removed that coupling. Single source:
+   `peer-split-mutants.js :: NAIVESPLIT`. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
    explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
    `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
    describe SURVIVES, deliberately. ⚠️ **"Undercount" here names a POSSIBILITY** (T-B5 fix round 3,
@@ -2509,20 +2510,27 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     `tests/council/run-schema-debate.test.js:199`.
     ⚠️ **SIX as of v4.8 T-B4, all re-measured against the tree that ships, by re-running rather
     than renumbering — twice, because T-B4 took two rounds and the second changed behaviour again.**
-    `SELFCORROB` and `SEATBLIND` joined them. Final measured red sets, all out of 541 / 7665:
+    `SELFCORROB` and `SEATBLIND` joined them. T-B4's final measured red sets, all out of 541 / 7665
+    — superseded twice at T-B5, see the block below for the values at HEAD:
     `SPLITDROP` 2/9 → 2/6 → 1/4; `NAIVESPLIT` 17/97 → 17/98 → 17/109;
     `ZEROEMIT` 4/5 → 4/6 → **4 / 8**; `SCHEMADROP` **1 / 1** throughout; `SELFCORROB` 3/15;
     `SEATBLIND` 2/5.
-    ⚠️ **ALL SIX RE-RUN AT v4.8 T-B5 FIX ROUND 2, and four of them MOVED.** T-B5 added a volume pin
-    to `tests/council/peer-split.test.js` that fires on any edit changing `peer-split.js`'s executable
-    LINE COUNT, so every mutant that respells the ternary gained exactly one red test — the P3
-    REQUIRE-FREE pin, which catches a reformat rather than a behaviour change. **Measured at HEAD,
-    all out of 541 / 7665:** `SPLITDROP` **1 suite / 5 tests**; `NAIVESPLIT` **17 suites / 110
-    tests**; `SELFCORROB` **3 suites / 16 tests**; `SEATBLIND` **2 suites / 6 tests**; `ZEROEMIT`
-    **4 / 8** and `SCHEMADROP` **1 / 1**, both UNCHANGED because neither touches `peer-split.js`.
-    The behavioural red sets are unchanged throughout; only the totals moved. ⚠️ The lesson is
-    structural, not clerical: **a red set recorded before a pin existed is stale BY CONSTRUCTION.**
-    Re-run every mutant after adding, removing or reshaping ANY pin in that file.
+    ⚠️ **RE-RUN TWICE MORE AT v4.8 T-B5, AND THE SECOND RE-RUN UNDID THE FIRST.** Fix round 1 added
+    a volume pin to `tests/council/peer-split.test.js` asserting `peer-split.js`'s executable LINE
+    COUNT; every mutant that respells the ternary silently gained one red test that caught a reformat
+    rather than a behaviour change, so round 2 re-ran all six and recorded the inflated sets
+    (`SPLITDROP` 1/5, `NAIVESPLIT` 17/110, `SELFCORROB` 3/16, `SEATBLIND` 2/6). Round 3 then removed
+    the coupling on council finding C2 — the anti-vacuity guard now pins `executableText()` directly
+    instead of the file it reads — and all six were re-run a THIRD time.
+    **FINAL, measured at `a3372721`, all out of 541 / 7674:** `SPLITDROP` **1 suite / 4 tests**;
+    `NAIVESPLIT` **17 suites / 109 tests**; `SELFCORROB` **3 suites / 15 tests**; `SEATBLIND`
+    **2 suites / 5 tests**; `ZEROEMIT` **4 / 8**; `SCHEMADROP` **1 / 1**. The four inflated sets each
+    shrank by exactly the one test, back to their pre-pin values; the two that never touch
+    `peer-split.js` never moved. The denominator went 7665 → 7674 because round 3 added nine
+    extractor tests. ⚠️ Two structural lessons, both paid for: **a red set recorded before a pin
+    existed is stale BY CONSTRUCTION** — re-run every mutant after adding, removing or reshaping ANY
+    pin in that file — and **a pin that names a property of the file under test will fire on every
+    honest change to it**, so guard the tool, not the text it reads.
     ⚠️ `SELFCORROB`'s total is the same in both rounds while its COMPOSITION is not
     (peer-split 8 → 10, tally 3 → 1) — two matching totals are not evidence of a matching red set,
     which is why every one of these was re-run. The counts are not here: since v4.8 T-B5 they live
@@ -3406,8 +3414,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      preservation test. Both titles gained `AND announced`; current values, read from the tree
      after the last edit to that file:
      ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and stands as written; T-B4's two
-     re-runs make it 17 suites / 109 tests, and T-B5's volume pin makes it **17 suites / 110 tests** at
-     HEAD. Single source: `peer-split-mutants.js :: NAIVESPLIT`.
+     re-runs make it **17 suites / 109 tests**, which is also the value at HEAD — T-B5's round-1 volume
+     pin briefly inflated it to 110 and round 3 removed that coupling. Single source:
+     `peer-split-mutants.js :: NAIVESPLIT`.
      - T1 — `tally.test.js:331` (**was `:329`**)
        `T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded AND announced`
      - T2 — `tally.test.js:357` (**was `:341`**)
@@ -3433,8 +3442,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      against the FULL suite: **17 suites / 97 tests red**, of which 10 are in `tally.test.js` and
      only 2 of those are T1/T2.
      ⚠️ **SUPERSEDED COUNT, not a superseded retirement** — true at T-B2 (`e23e56cd`); T-B4's re-runs
-     make it 17/109, and T-B5's volume pin **17 / 110** at HEAD, 13 in `tally.test.js`. The
-     retirement above holds a fortiori. Single
+     make it **17 / 109**, which is also the value at HEAD (T-B5's round-1 pin briefly read 110;
+     round 3 removed the coupling), 13 in `tally.test.js`. The retirement above holds a fortiori.
+     Single
      source: `peer-split-mutants.js :: NAIVESPLIT`. NAIVE also breaks the ordinary unique-alias bench, reading
      `undefined !== undefined` and dropping a real peer, which most of the council suite
      exercises. The narrower TRUE statement, which is what mattered here: T1 and T2 are the only
@@ -3457,8 +3467,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      gained `AND announced`; T1 is now `tally.test.js:331` (**was `:329`**) and T2
      `tally.test.js:357` (**was `:341`**).
      ⚠️ **SUPERSEDED COUNT** — `97` was true at T-B2 (`e23e56cd`) and stands as written; T-B4's two
-     re-runs make it 17 suites / 109 tests, and T-B5's volume pin makes it **17 suites / 110 tests** at
-     HEAD. Single source: `peer-split-mutants.js :: NAIVESPLIT`.
+     re-runs make it **17 suites / 109 tests**, which is also the value at HEAD — T-B5's round-1 volume
+     pin briefly inflated it to 110 and round 3 removed that coupling. Single source:
+     `peer-split-mutants.js :: NAIVESPLIT`.
 
      ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
      explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
@@ -3483,8 +3494,8 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      the only tests pinning the one-side-seated twin directions, and T-B2 REPLACED both rather
      than deleting them, so that separation is carried forward.
      ⚠️ **SUPERSEDED COUNT, not a superseded retirement** — true at T-B2 (`e23e56cd`); T-B4's re-runs
-     make it 17/109, and T-B5's volume pin **17 / 110** at HEAD. "Not 2" holds a fortiori. Single
-     source:
+     make it **17 / 109**, which is also the value at HEAD (T-B5's round-1 pin briefly read 110;
+     round 3 removed the coupling). "Not 2" holds a fortiori. Single source:
      `peer-split-mutants.js :: NAIVESPLIT`.
   3. ✅ **DONE — producer half SHIPPED 2026-08-16 (T2.2, `33e2ecf7`); reconcile half 2026-08-17 (T-A4, `1e385895`).**
      ~~Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.~~ `deadSeats`

@@ -174,11 +174,12 @@ function unattributedPeerDrops(f, votes) {
   // dropping the XOR flips 27; dropping `v.judge === f.raiser` flips 270;
   // weakening `!v.judge` to `true` flips 243. All five ARE pinned. The hoisted
   // conjunct's own MEASURED red set, taken by dropping it and running the FULL
-  // suite, and RE-RUN at T-B5 fix round 2: 2 suites / 5 tests, out of 541 / 7665
-  // — peer-split 3 (P0b, P0c and the exhaustive cross-product invariant) and
-  // tally 2 (T7b, T7d). UNCHANGED, and measured rather than assumed: dropping
-  // this conjunct is a same-line-count edit, so T-B5's volume pin does not fire
-  // on it, unlike the four mutants that respell the ternary above. An earlier
+  // suite, and RE-RUN at T-B5 fix rounds 2 AND 3: 2 suites / 5 tests, out of
+  // 541 / 7674 — peer-split 3 (P0b, P0c and the exhaustive cross-product
+  // invariant) and tally 2 (T7b, T7d). UNCHANGED through both, and measured
+  // rather than assumed each time: dropping this conjunct is a same-line-count
+  // edit, so round 1's volume pin never fired on it and round 3's removal of
+  // that pin changed nothing here. Only the denominator moved. An earlier
   // draft of this line said "P0b and P0c", which UNDERSTATED it by three; the
   // count is measured now rather than named from the tests written for it.
   //
