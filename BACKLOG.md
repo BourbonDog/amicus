@@ -2512,6 +2512,24 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     which is why every one of these was re-run. The counts are not here: since v4.8 T-B5 they live
     in `tests/council/peer-split-mutants.js`, and `peer-split.js :: peersOf` and
     `peer-split.js :: unattributedPeerDrops` each carry a one-line anchor to it.
+  - **Council round 2 on PR #174 (run `32331788257`) returned 6 findings on near-identical code
+    after round 1 returned 1 — this council's documented non-convergence — so every one was
+    adjudicated BY MEASUREMENT, not on vote weight. Two were DECLINED, and the reasons are here so
+    the next round does not re-raise them as new:**
+    - **C2 [major] "the MCP tool schema still accepts empty strings for `raiser` and `judge`" —
+      DECLINED as ALREADY FILED, not as wrong.** It is true and it is the OPEN item further down
+      this file (`raiser` and `judge` should be `z.string().min(1)`), raised by T-B4 itself and
+      re-verified present at T-B5. It is pre-existing; it does **not** subsume the T-B4 fix, because
+      `cli-handlers-council.js` reaches `tally()` through a raw `JSON.parse` with no schema at all;
+      and tightening the boundary has its own blast radius. `docs/council.md:580` already documents
+      the shape for callers. **No schema changed.**
+    - **C1 [major, CONTESTED a1/d1] "`basis` deliberately does not count it, leaving tier and
+      confidence knowingly incorrect" — DECLINED: it is a disagreement with owner ruling R2, not a
+      defect.** R2 is *mark explicitly, attribute nothing*, and the behaviour is disclosed at
+      `docs/council.md:658` and in `CHANGELOG.md`. Counting that vote reproduces `NAIVESPLIT`'s
+      outcome and re-arms #137 — the measured reason the ruling exists. ⚠️ **The R2 disclosure is
+      not to be weakened, hedged or re-litigated while editing nearby prose**; T-B5 edited the
+      sentence immediately after it and left it byte-identical.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
@@ -3001,7 +3019,7 @@ deliberately left alone:
   `tally.test.js` T7b/T7d. ⚠️ **Still not SI-22.1 or SI-22.2** — those are NAMED-raiser shapes,
   untouched by either round.
 - [x] **DONE (filed v4.8 T-B4, TAKEN v4.8 T-B5 2026-08-19) · SIZE CEILING · `src/council/peer-split.js`
-  reached 289/300; the extraction landed and the file now measures 191.** Read this BEFORE planning any change
+  reached 289/300; the extraction landed and the file now measures 192.** Read this BEFORE planning any change
   to the peer-split predicate. Measured at each commit with `git show <rev>:src/council/peer-split.js
   | wc -l`, the file went **67 → 165 → 218 → 244 → 266 → 282 → 289** across `0fd630b6` (the
   extraction), `64b835b8` (PR B base), and T-B4's four commits plus its second fix round — and every
@@ -3052,6 +3070,11 @@ deliberately left alone:
   `cli-handlers-council.js` reaches `tally()` through a raw `JSON.parse` with no schema at all, so
   the predicate still has to be right on its own. Do both, in that order, not one instead of the
   other.
+  ⚠️ **RE-RAISED as council C2 [major] in round 2 of PR #174 and DECLINED AGAIN at v4.8 T-B5** — as
+  already-filed, not as wrong. Both line citations above were re-opened and verified at T-B5:
+  `src/mcp-tools.js:416` is `raiser: z.string()` inside the `findings` object and `:420` is
+  `judge: z.string()` inside `adjudications`. **No schema was changed.** A future round raising it
+  a third time should tick this box rather than open a new item.
 - [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
   alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
   before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats

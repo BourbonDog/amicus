@@ -23,8 +23,16 @@ All notable changes to Amicus are documented here. Format follows
   **announced** in `findings[].unattributedPeerDrops`: a vote the seats attributed is not ambiguous,
   so it is never counted there.
   Consequences on such a document: `basis` can move and the tier with it — a finding whose only
-  votes are unidentifiable now reads `Singleton` rather than `Confirmed` or `Disputed`. Documents
-  that name their raisers are byte-for-byte unchanged. The same predicate builds the defense brief,
+  votes are unidentifiable now reads `Singleton` rather than `Confirmed` or `Disputed`. On a
+  document that **names** its raisers, *this* fix changes nothing: the peer split there is
+  byte-identical to `64b835b8`, the commit it was written on top of, measured over 300,000
+  randomized named-raiser findings with zero differences.
+  ⚠️ **That is a claim about this fix, not about v4.7.1.** The `unattributedPeerDrops` mark below
+  landed earlier in the same release and it fires on named-raiser documents too — the one-side-seated
+  twin shape — so a document that names its raisers can still carry a key that a v4.7.1 one did not.
+  Measured on the same 300,000: the mark is emitted on 15.8% of them. Anything claiming such
+  documents are unchanged *by the release* is false; they are unchanged by this fix.
+  The same predicate builds the defense brief,
   so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
   reaches a brief at all.
   ⚠️ **This does not close the twin-seat undercount** (SI-22.1 / SI-22.2). Where a *named* raiser's

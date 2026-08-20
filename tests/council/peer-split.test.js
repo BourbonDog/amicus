@@ -6,11 +6,65 @@ const path = require('path');
 
 const { peersOf, unattributedPeerDrops } = require('../../src/council/peer-split');
 
+/**
+ * The EXECUTABLE text of a JS source: line and block comments removed, string
+ * literals kept intact. Written as an explicit scan rather than a regex
+ * alternation because the two get different answers on the case that matters —
+ * a `//` inside a string literal. Regex literals are not modelled; the file this
+ * scans contains none, and the anti-vacuity assertions at the call site go red
+ * if the scan ever eats the code instead of the commentary.
+ * @param {string} src
+ * @returns {string}
+ */
+function executableText(src) {
+  let out = '', i = 0;
+  while (i < src.length) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '*') {
+      const end = src.indexOf('*/', i + 2);
+      i = end < 0 ? src.length : end + 2;
+      continue;
+    }
+    if (c === '/' && d === '/') {
+      while (i < src.length && src[i] !== '\n') { i += 1; }
+      continue;
+    }
+    if (c === '"' || c === '\'' || c === '`') {
+      out += c; i += 1;
+      while (i < src.length && src[i] !== c) {
+        if (src[i] === '\\') { out += src[i]; i += 1; }
+        out += src[i]; i += 1;
+      }
+      out += src[i] || ''; i += 1;
+      continue;
+    }
+    out += c; i += 1;
+  }
+  return out;
+}
+
 describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
+  // ⚠️ v4.8 T-B5 (council C3) narrowed this scan to EXECUTABLE TEXT. It used to
+  // match the RAW file, so the banned sequence fired from inside a comment or a
+  // string as readily as from a real call — it caught its own author during
+  // T-B1, who had to avoid writing the token while documenting the ban on it,
+  // and it silently constrained what this comment-heavy module was allowed to
+  // say about itself. The BAN is exactly as strong: a real call is still caught
+  // wherever it hides, because only commentary is removed and string literals
+  // are kept. The two `toContain` assertions are the ANTI-VACUITY guard — strip
+  // too much and `toBeNull()` would pass for the wrong reason, which is the
+  // failure mode a comment-stripping pin actually has.
+  // Proven in BOTH directions by execution at T-B5: a real `require(` added to
+  // peer-split.js turns this test RED, and the same token written into one of
+  // its comments leaves it GREEN.
   test('P3 — the module is REQUIRE-FREE, so a DI-free consumer (debate.js) can import it', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/council/peer-split.js'), 'utf8');
-    expect(src.match(/require\(/g)).toBeNull();
+    const code = executableText(src);
+    // The scan must not have eaten what it is scanning.
+    expect(code).toContain('module.exports');
+    expect(code).toContain('votes.filter');
+    expect(code.match(/require\(/g)).toBeNull();
   });
 
   // ⚠️ REWRITTEN by v4.8 T-B4 (council C1). This test used to read

@@ -20,10 +20,11 @@
  * ⚠️ REQUIRE-FREE by design, like ./seats and ./run-stats-entry: debate.js's
  * own docblock declares it DI-free, so any module it requires must itself
  * pull in nothing else. Do not add a `require` call here — a pin
- * (tests/council/peer-split.test.js) scans this file's raw text for the word
- * `require` immediately followed by an opening parenthesis, so it fires on
- * that sequence ANYWHERE, including inside a comment, not only inside a real
- * statement.
+ * (tests/council/peer-split.test.js) strips this file's comments and scans the
+ * executable text that is left, so it fires on a real call and no longer on the
+ * same sequence written inside a comment. ⚠️ v4.8 T-B5 narrowed THIS pin only;
+ * run-stats-entry.js's twin still scans raw text, so the two are no longer
+ * symmetric — do not assume one from the other.
  */
 
 /**
