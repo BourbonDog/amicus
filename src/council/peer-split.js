@@ -71,12 +71,18 @@ function peersOf(f, votes) {
   // it is what the witnesses in tests/council/peer-split.test.js are named for.
   // Never shipped — applied, run against the FULL suite, reverted by hand,
   // byte-verified against `git show HEAD:`.
-  // ⚠️ Its red set has SHRUNK across both rounds (2 suites / 9 tests at
-  // 64b835b8, then 2 / 6), because each round moved the shipped behaviour closer
-  // to this mutant's on the plain shapes. What still separates them is a
-  // MIXED-falsy raiser/judge pair — `''` beside `undefined`, where the alias
-  // compare reads true and `!!v.judge` reads false. Do not read a smaller red
-  // set as a weaker pin: it is a narrower TRUE one.
+  // MEASURED red set: 1 suite / 4 tests, out of 541 / 7665. By suite:
+  // peer-split 4 — witness A, C1c, P0d, and the exhaustive cross-product
+  // invariant.
+  // ⚠️ It has SHRUNK at every step (2 suites / 9 tests at 64b835b8, 2 / 6 after
+  // round 1, 1 / 4 now), because each round moved the shipped behaviour closer
+  // to this mutant's on the shapes the other tests use. Round 2 took the last
+  // two suites away for a precise reason: tally.test.js's T7b/T7d and
+  // debate.test.js's T5 block all reach the SEAT compare or a same-falsy pair,
+  // and P0 settles those before the fallback this mutant edits. What still
+  // separates them is a MIXED-falsy raiser/judge pair — `''` beside `undefined`,
+  // where the alias compare reads true and `!!v.judge` reads false. Do not read
+  // a smaller red set as a weaker pin: it is a narrower TRUE one.
   //
   // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole seat-guarded
   // ternary with the unguarded, seat-valued `v.seat !== f.raiserSeat`, i.e. drop
@@ -86,19 +92,19 @@ function peersOf(f, votes) {
   // against `git show HEAD:`. RE-MEASURED at T-B4 against the tree that ships —
   // re-run, never renumbered, because editing a recorded number ASSERTS the red
   // set still holds and that assertion is what produced T-B3's Critical.
-  // MEASURED red set: 17 suites / 98 tests, out of 541 / 7662. By suite:
-  //   run-debate 50 · tally 11 · debate 5 · peer-split 5 ·
+  // MEASURED red set: 17 suites / 109 tests, out of 541 / 7665. By suite:
+  //   run-debate 50 · tally 13 · peer-split 11 · debate 8 ·
   //   seat-parity-ondisk 5 · report 4 · report-claude-column 4 ·
   //   report-debate 2 · run-claude-review 2 · run-no-cost-gate 2 ·
   //   seat-matrix 2 · cli-handlers-council 1 · council-events 1 · ledger 1 ·
   //   mcp-server 1 · run-assemble 1 · run-cost-bijection 1.
-  // The one moved count is tally 10 -> 11: T-B4's new T8b CONTROL names a
-  // raiser on a unique-alias bench, which is exactly where NAIVE reads
-  // `undefined !== undefined` and drops a real peer.
+  // It has GROWN across T-B4 (97 at 64b835b8, 98 after round 1, 109 now) purely
+  // because T-B4 added tests in the files NAIVE already broke — the suite list
+  // is unchanged at 17.
   // ⚠️ That measurement RETIRES a claim this repo carried in three places —
   // "T1 and T2 are the ONLY tests separating GUARDED from NAIVE". They are
-  // not, and not even within their own file: 9 of tally.test.js's 11 reds are
-  // neither (8 of 10 at the first reading; T-B4's T8b CONTROL is the 9th). NAIVE breaks the ORDINARY unique-alias bench, where it reads
+  // not, and not even within their own file: 11 of tally.test.js's 13 reds are
+  // neither (8 of 10 at the first reading, 9 of 11 after T-B4 round 1). NAIVE breaks the ORDINARY unique-alias bench, where it reads
   // `undefined !== undefined` and drops a real peer, so most of this suite
   // separates the two spellings. T1/T2 remain the only tests pinning the
   // one-side-seated TWIN directions, which is the narrower true statement.
@@ -143,6 +149,13 @@ function peersOf(f, votes) {
   // corroborates itself again. It is the "T-B4 never happened" mutant and its
   // red set is the whole T-B4 pin surface. Never shipped — applied, run against
   // the FULL suite, reverted by hand, byte-verified against `git show HEAD:`.
+  // MEASURED red set: 3 suites / 15 tests, out of 541 / 7665. By suite:
+  // peer-split 10 · debate 4 · tally 1.
+  // ⚠️ The TOTAL is identical to round 1's reading and the COMPOSITION is not
+  // (peer-split 8 -> 10, tally 3 -> 1), which is why it was re-run rather than
+  // carried: T7b and T7d stopped separating this mutant, because reverting to
+  // `: votes` also keeps the seat-DIFFER vote those two fixtures assert is
+  // counted. Two matching totals are not evidence of a matching red set.
   //
   // Named mutant "SEATBLIND" (v4.8 T-B4 round 2), guarding P0's reach: restore
   // round 1's placement — `f.raiser ? <the inner ternary> : votes.filter(v =>
@@ -150,7 +163,9 @@ function peersOf(f, votes) {
   // from the shipped form on exactly the shapes P0 was added for, and it is a
   // separate mutant from SELFCORROB because it keeps the C1 fix while dropping
   // the correction to it. Never shipped, same application/revert/verify
-  // discipline.
+  // discipline. MEASURED red set: 2 suites / 5 tests, out of 541 / 7665. By
+  // suite: peer-split 3 (P0a, P0b, P0c) · tally 2 (T7b, T7d) — which is exactly
+  // the set that was RED before round 2's source change and GREEN after it.
   const peers = votes.filter(v => (v.seat && f.raiserSeat)
     ? v.seat !== f.raiserSeat                       // P0 — the seats decide
     : f.raiser ? v.judge !== f.raiser               // P3 — the alias compare
@@ -228,13 +243,14 @@ function unattributedPeerDrops(f, votes) {
   // twin pair is byte-for-byte unchanged. Mutation: emit unconditionally at
   // both sites (`unattributedPeerDrops: drops`, zero included). Never shipped —
   // applied, run against the FULL suite, reverted by hand, byte-verified.
-  // MEASURED red set, re-taken at T-B4 against the tree that ships:
-  // 4 suites / 6 tests, out of 541 / 7662.
-  //   BEHAVIOURAL — the three absence pins written for this change, plus one
+  // MEASURED red set, re-taken at T-B4 round 2 against the tree that ships:
+  // 4 suites / 8 tests, out of 541 / 7665.
+  //   BEHAVIOURAL — the three absence pins written for this change, plus three
   //   T-B4 added:
   //     tally.test.js T3b · debate.test.js T6b · debate.test.js T6c ·
-  //     tally.test.js T8b (the C1 control, which asserts the key is ABSENT on a
-  //     named raiser and so notices a stray zero for free).
+  //     tally.test.js T8b (the C1 control) · tally.test.js T7b · T7d (the two
+  //     P0 shapes, which assert the key is ABSENT on a seat-decided vote — a
+  //     drop nobody made, so a zero there would be doubly wrong).
   //   SCHEMA-MEDIATED — both caused by `"minimum": 1` on
   //   council-tally.schema.json's `findings[].unattributedPeerDrops`, which
   //   rejects a present-and-zero key:

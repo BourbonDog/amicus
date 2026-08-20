@@ -2498,13 +2498,16 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     541 / 7655). Point at any of them by symbol — `peer-split.js :: peersOf` for the first and
     last, `peer-split.js :: unattributedPeerDrops` for `ZEROEMIT`, and its own comment block in
     `tests/council/run-schema-debate.test.js:199` for `SCHEMADROP` — never by report path.
-    ⚠️ **FIVE as of v4.8 T-B4, and every one of the four re-measured against the tree that ships,
-    by re-running rather than renumbering.** `SELFCORROB` joined them, and three of the four
-    existing red sets MOVED: `SPLITDROP` 2/9 → **2 suites / 6 tests**, `NAIVESPLIT` 17/97 →
-    **17 / 98**, `ZEROEMIT` 4/5 → **4 / 6**, `SCHEMADROP` unchanged at **1 / 1** (same identity);
-    `SELFCORROB` is **3 suites / 15 tests**. All out of 541 / 7662. The counts live beside the
-    predicates, not here — `peer-split.js :: peersOf` and
-    `peer-split.js :: unattributedPeerDrops`.
+    ⚠️ **SIX as of v4.8 T-B4, all re-measured against the tree that ships, by re-running rather
+    than renumbering — twice, because T-B4 took two rounds and the second changed behaviour again.**
+    `SELFCORROB` and `SEATBLIND` joined them. Final measured red sets, all out of 541 / 7665:
+    `SPLITDROP` 2/9 → 2/6 → **1 suite / 4 tests**; `NAIVESPLIT` 17/97 → 17/98 → **17 / 109**;
+    `ZEROEMIT` 4/5 → 4/6 → **4 / 8**; `SCHEMADROP` **1 / 1** throughout (same identity, the only
+    one T-B4 left alone); `SELFCORROB` **3 suites / 15 tests**; `SEATBLIND` **2 suites / 5 tests**.
+    ⚠️ `SELFCORROB`'s total is the same in both rounds while its COMPOSITION is not
+    (peer-split 8 → 10, tally 3 → 1) — two matching totals are not evidence of a matching red set,
+    which is why every one of these was re-run. The counts live beside the predicates, not here —
+    `peer-split.js :: peersOf` and `peer-split.js :: unattributedPeerDrops`.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
