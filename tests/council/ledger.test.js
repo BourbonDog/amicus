@@ -311,8 +311,11 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
   });
 
   // Final-review consolidated wave, owner-ruled (item 1): a ROLELESS row
-  // (role null/undefined) is the docs/council.md:562-blessed hand-assembled
-  // shape — "the legacy default `council` (pre-#83 rows, or hand-assembled
+  // (role null/undefined) is the hand-assembled shape blessed by docs/council.md's
+  // `### Tally-input schema` section (cited by section, not by line: the line
+  // citation this replaces had rotted, and no gate can check a .md target at all
+  // — see BACKLOG's citation-gate Mechanism D)
+  // — "the legacy default `council` (pre-#83 rows, or hand-assembled
   // tally input that never set a role)" — and must JOIN as legacy, mirroring
   // GOA-7's absent-field⇒legacy pattern elsewhere in this codebase. Distinct
   // from a NAMED custom/unknown role (still rejected — E6 unchanged, pinned
@@ -839,9 +842,11 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
   });
 
   test('T14 — chair ON the bench, one shared resolution: worst-wins conformance, any-wins wasChair', () => {
-    // The documented `amicus council tally` shape (docs/council.md:906-913 — the
-    // worked example's own meta block) and the golden fixture both put the chair
-    // on the bench.
+    // The documented `amicus council tally` shape — the meta block of
+    // docs/council.md's `## Worked example` section, the one containing
+    // `"chair": "deepseek"` — and the golden fixture both put the chair
+    // on the bench. (Cited by section: the line range this replaces had rotted,
+    // and it named the heading plus intro prose, not the meta block at all.)
     const rows = buildLedgerRows(rec({
       models: ['deepseek', 'gpt', 'mistral'], chair: 'deepseek',
       runStats: [

@@ -195,10 +195,13 @@ list. Two findings drove it:
    ergonomics line wholesale (all three items are reading/working affordances) and promotes anything
    that makes the numbers right.
 2. **`runStats` is a cost source, not just a record.** Verified at `8d0584a`:
-   `cli-handlers-council.js:56` computes `amicus council stats` cost as
-   `sumWaveUsage(r.runStats).cost` with **no fallback**; `council/report.js:79` falls back to
-   `sumWaveUsage(runStats).cost` when wave usage is absent; `council/ledger.js:24` joins street-cred
-   off the same array. So CA-4's omissions are not a schema nicety — they under-report spend on the
+   `cli-handlers-council.js@8d0584a:56` computes `amicus council stats` cost as
+   `sumWaveUsage(r.runStats).cost` with **no fallback**; `council/report.js@8d0584a:79` falls back to
+   `sumWaveUsage(runStats).cost` when wave usage is absent; `council/ledger.js@8d0584a:24` joins street-cred
+   off the same array. ⚠️ **Pinned to `@8d0584a` on 2026-08-20 (v4.8 T2.4).** All three were
+   re-opened at that ref and confirmed; all three had **already** rotted against the current tree
+   before T2.4 began, so this is pre-existing drift, not this release's. The report fallback is now
+   at `src/council/report.js :: toModel`'s `total`; the claims themselves still hold. So CA-4's omissions are not a schema nicety — they under-report spend on the
    surface the owner relies on, which collides with the cost-truth principle (*reported > estimated
    > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never
    spent on legs that spent money.

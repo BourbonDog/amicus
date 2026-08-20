@@ -217,6 +217,13 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
 | R14 | Duplication | **SI-27 in v4.8, after Phase 2, home = `stage1-bind.js`**; seatKey cross-file consolidation → v4.9 |
 | R15 | SI-25 chair packet | **Sites (1)+(2) now** as a small PR; site (3) rides Phase 3 |
 | R16 | `sessions-index` leak | **Pin all 13 unpinned rails** |
+| R17 | What is SI-12? | The consumer-side sibling of PR B's council C1. **Narrow option:** the report.js/matrix-model.js strictness asymmetry is not in scope and no shared module is extracted |
+| R18 | Where does a refused vote go? | **Fold into UNATTRIBUTED** — one column, one concept; the vote stays in `basis` |
+
+⚠️ **R17 and R18 were ruled 2026-08-20, not 2026-08-16** — appended here rather than renumbered, so
+R1–R16 keep the numbers every other document cites them by. They were taken before T2.4 / PR C
+wrote any code, because SI-12 had **no definition anywhere in the repository**: R17 *is* that
+definition, confirmed by the owner, and `BACKLOG.md`'s SI-12 entry records it in full.
 
 ---
 
@@ -279,6 +286,28 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
   not as closing SI-22.1/SI-22.2 — both stay open.
 - **T2.4** Consumers: SI-12 refuses to join on an unidentifying key; SI-22.5 renders an
   **unattributed** column across all three renderers with the vote still in basis
+  ✅ **COMPLETED 2026-08-20 by Phase 2 T-C1 (`774dcdc2` + `d82e2127`) + T-C2 (`09212e97` +
+  `fa0c5ae7`) + T-C3** — **SI-12 is closed in both consumers.** `src/council/report.js :: toModel`
+  and `src/workspace/matrix-model.js :: buildMatrixModel` each classify the vote key instead of
+  trusting it: a key that is not a non-empty string naming a real column folds to `UNATTRIBUTED`
+  (**R18**) and the vote **stays in `basis`**. Written twice, deliberately not shared, per **R17**.
+  **SI-22.5 is closed with it, per R3.** ⚠️ **"All three renderers" above describes the outcome,
+  not the edit** — measured: the council renderers needed **zero** changes, because the column
+  propagates from the model alone; `git diff` against the branch point is 0 bytes for
+  `report-md.js`, `report-html.js` and all of `electron/`. The column is **conditional**: it
+  appears only when a vote actually folds, so a clean document renders exactly as before.
+  ⚠️ **The two consumers were proved to agree by an EXHAUSTIVE fuzz, not by shape pins** —
+  **407 disagreements / 504 cases at `32a63e92`** (the tree with `report.js` fixed and
+  `matrix-model.js` not) **→ 0 / 504** at `e5376399`, in
+  `tests/council/seat-matrix.test.js :: fuzzCases`. Read `BACKLOG.md`'s SI-12 entry for the filing.
+  ⚠️ **DID NOT close SI-22.1 or SI-22.2 — read this precisely.** Per owner ruling **R2** the
+  ambiguous *peer* drop still STAYS: `basis` does not move for it, the undercount survives exactly
+  as before, on purpose, and the drop remains merely **announced** in
+  `findings[].unattributedPeerDrops`. SI-22.5 is a **rendering** closure on the Stage-2 judge vote
+  and says nothing about the peer filter. Nothing in T2.4 makes the peer undercount fixed.
+  ⚠️ **T22 shape 1's pin was REPLACED, not kept green** — the old pin asserted the pre-fix
+  behaviour, so it had to assert the opposite. Read that as replacing a wrong-behaviour pin with a
+  right-behaviour one, exactly as T2.3's "Replaces T1/T2" should be read.
 
 ### Phase 3 · Seat-keyed street cred + ledger — 1 large PR
 - **T3.1** SI-26 (`letterByModel` delete) lands first or folds in — both edit `assignLabels`'

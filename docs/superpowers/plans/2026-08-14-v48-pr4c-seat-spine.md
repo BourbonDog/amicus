@@ -936,6 +936,11 @@ An end-to-end twin run is §5's job.
    - **A judge whose Stage-2 seat orphaned has its vote counted in `basis` but rendered NOWHERE** in
      the seat-keyed matrix — it keys to a bare alias no column reads (§3.6's ⚠️). HEAD renders it via
      last-wins. New with §3.6; §5's T22 pins whichever behaviour is chosen.
+     > ⚠️ **Annotated 2026-08-20 (v4.8 T2.4 / PR C), not rewritten** — preserved dated record, and
+     > true of its own tree. This shape is **SI-22.5**, and it is now CLOSED: ruling R3 chose to
+     > render, so the vote folds into a conditional `UNATTRIBUTED` column in both consumers and
+     > stays in `basis`. "§5's T22 pins whichever behaviour is chosen" was discharged by T2.4
+     > **replacing** T22 shape 1's pin rather than keeping it green.
    - **The RAISER's Stage-1 seat orphans on a twin bench ⇒ the star disappears and the Raiser cell
      names no column.** `meta.seats`' guard runs over the whole seat table and is independent of
      binding, so a twin bench **always** ships a table; `raiserSeat` needs `r.seat` (`run.js:194`),

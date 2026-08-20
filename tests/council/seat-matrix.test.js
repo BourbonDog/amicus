@@ -634,8 +634,20 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
     expect(m.findings[0].byJudge.UNATTRIBUTED).toBe('agree');
   });
 
-  // A non-array `adjudications` is reachable through the same three schema-free
-  // `JSON.parse` entry points as a malformed seats table. Measured at c8867b48:
+  // A non-array `adjudications` is reachable through schema-free entry points,
+  // the same CLASS as a malformed seats table — but ⚠️ NOT through the same three.
+  // Re-derived 2026-08-20 (v4.8 T2.4) by enumerating every `buildReport` caller in
+  // live code, because the earlier wording here said "the same three schema-free
+  // JSON.parse entry points" and that is false. "The three" names
+  // cli-handlers-council.js's tally/report/verdict handlers, and
+  // `src/cli-handlers-council.js :: runTally` never calls `buildReport` at all —
+  // its `tally()` output always carries an array `adjudications`, so it is not a
+  // vector for this shape. The real reach is three DIFFERENT things:
+  // `src/cli-handlers-council.js :: runReport`,
+  // `src/cli-handlers-council.js :: runVerdict` on --render (via `buildVerdict`,
+  // which copies `adjudications` straight through), and
+  // `src/mcp-server.js :: amicus_verdict`, which receives an already-parsed MCP
+  // argument rather than a file `JSON.parse`. Measured at c8867b48:
   // `'abc'` RENDERED (a string is iterable, so `for...of` walked it and left a junk
   // `"undefined"` key), while `{}` and `42` THREW. At 774dcdc2 all three threw,
   // because the pre-pass reached for Array-only `.some` while the map still used
