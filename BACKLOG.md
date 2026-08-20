@@ -2498,6 +2498,13 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     541 / 7655). Point at any of them by symbol — `peer-split.js :: peersOf` for the first and
     last, `peer-split.js :: unattributedPeerDrops` for `ZEROEMIT`, and its own comment block in
     `tests/council/run-schema-debate.test.js:199` for `SCHEMADROP` — never by report path.
+    ⚠️ **FIVE as of v4.8 T-B4, and every one of the four re-measured against the tree that ships,
+    by re-running rather than renumbering.** `SELFCORROB` joined them, and three of the four
+    existing red sets MOVED: `SPLITDROP` 2/9 → **2 suites / 6 tests**, `NAIVESPLIT` 17/97 →
+    **17 / 98**, `ZEROEMIT` 4/5 → **4 / 6**, `SCHEMADROP` unchanged at **1 / 1** (same identity);
+    `SELFCORROB` is **3 suites / 15 tests**. All out of 541 / 7662. The counts live beside the
+    predicates, not here — `peer-split.js :: peersOf` and
+    `peer-split.js :: unattributedPeerDrops`.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 

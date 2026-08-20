@@ -59,27 +59,40 @@ function peersOf(f, votes) {
   // condition so the NAMED-RAISER filter runs UNCONDITIONALLY on every finding,
   // raiser or not — which since T-B4 also deletes the falsy-raiser arm rather
   // than a bare `: votes`. Never shipped — applied, run against the FULL suite,
-  // reverted by hand, byte-verified (v4.8 T-B3, 2026-08-19). MEASURED red set:
-  // 2 suites / 9 tests, out of 541 / 7655. By suite: peer-split 5 · debate 4.
+  // reverted by hand, byte-verified against `git show HEAD:`. RE-MEASURED at
+  // T-B4 against the tree that ships. MEASURED red set: 2 suites / 6 tests, out
+  // of 541 / 7662. By suite: peer-split 4 · tally 2.
+  // ⚠️ That red set MOVED, and the movement is the point rather than a
+  // bookkeeping detail: at 64b835b8 it was 2 suites / 9 tests (peer-split 5 ·
+  // debate 4), and T-B4 SHRANK it by moving the shipped behaviour toward this
+  // mutant's on the plain shapes. Deleting the outer condition now differs from
+  // the shipped form only where the two arms disagree — a MIXED-falsy
+  // raiser/judge pair (`''` vs `undefined`, where SPLITDROP's
+  // `v.judge !== f.raiser` is true and `!!v.judge` is false), and any
+  // seat-carrying vote on a raiser-less finding. debate.test.js's T5 block no
+  // longer separates them at all, and tally.test.js's T7b/T7d newly do. Do not
+  // read a smaller red set as a weaker pin here: it is a narrower TRUE one.
   //
   // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole INNER ternary
   // with the unguarded, seat-valued `v.seat !== f.raiserSeat`, keeping the
   // outer `f.raiser ?` condition (that one is SPLITDROP's). Never shipped —
   // applied, run against the FULL suite, reverted by hand, byte-verified
-  // against `git show HEAD:`. RE-MEASURED 2026-08-19 against the tree that
-  // ships (the first reading's 7652 was e23e56cd's total; the red set was
-  // re-run rather than the denominator edited, because editing it would have
-  // ASSERTED the red set still held). MEASURED red set: 17 suites / 97 tests,
-  // out of 541 / 7655 — identical to the first reading. By suite:
-  //   run-debate 50 · tally 10 · seat-parity-ondisk 5 · peer-split 5 ·
-  //   debate 5 · report 4 · report-claude-column 4 · seat-matrix 2 ·
-  //   run-no-cost-gate 2 · run-claude-review 2 · report-debate 2 ·
-  //   council-events 1 · mcp-server 1 · run-cost-bijection 1 ·
-  //   run-assemble 1 · ledger 1 · cli-handlers-council 1.
+  // against `git show HEAD:`. RE-MEASURED at T-B4 against the tree that ships —
+  // re-run, never renumbered, because editing a recorded number ASSERTS the red
+  // set still holds and that assertion is what produced T-B3's Critical.
+  // MEASURED red set: 17 suites / 98 tests, out of 541 / 7662. By suite:
+  //   run-debate 50 · tally 11 · debate 5 · peer-split 5 ·
+  //   seat-parity-ondisk 5 · report 4 · report-claude-column 4 ·
+  //   report-debate 2 · run-claude-review 2 · run-no-cost-gate 2 ·
+  //   seat-matrix 2 · cli-handlers-council 1 · council-events 1 · ledger 1 ·
+  //   mcp-server 1 · run-assemble 1 · run-cost-bijection 1.
+  // The one moved count is tally 10 -> 11: T-B4's new T8b CONTROL names a
+  // raiser on a unique-alias bench, which is exactly where NAIVE reads
+  // `undefined !== undefined` and drops a real peer.
   // ⚠️ That measurement RETIRES a claim this repo carried in three places —
   // "T1 and T2 are the ONLY tests separating GUARDED from NAIVE". They are
-  // not, and not even within their own file: 8 of tally.test.js's 10 reds are
-  // neither. NAIVE breaks the ORDINARY unique-alias bench, where it reads
+  // not, and not even within their own file: 9 of tally.test.js's 11 reds are
+  // neither (8 of 10 at the first reading; T-B4's T8b CONTROL is the 9th). NAIVE breaks the ORDINARY unique-alias bench, where it reads
   // `undefined !== undefined` and drops a real peer, so most of this suite
   // separates the two spellings. T1/T2 remain the only tests pinning the
   // one-side-seated TWIN directions, which is the narrower true statement.
@@ -119,7 +132,14 @@ function peersOf(f, votes) {
   // Named mutant "SELFCORROB" (v4.8 T-B4), guarding exactly that arm: revert it
   // to `: votes`, i.e. pre-T-B4 behaviour, so an unnamed raiser corroborates
   // itself again. Never shipped — applied, run against the FULL suite, reverted
-  // by hand, byte-verified against `git show HEAD:`.
+  // by hand, byte-verified against `git show HEAD:`. MEASURED red set: 3 suites
+  // / 15 tests, out of 541 / 7662. By suite: peer-split 8 · debate 4 · tally 3.
+  // Note what the 8 in peer-split are: the four C1 pins, both rewritten
+  // falsy-arm drop pins, SPLITDROP witness A, and the exhaustive cross-product
+  // invariant — which fires because reverting `peersOf` without reverting
+  // `unattributedPeerDrops` makes the mark count votes the filter KEPT. The
+  // three in tally.test.js are T8a and the two R8-stamp shapes T7b/T7d, whose
+  // `basis`/mark assertions exist for exactly this reason.
   const peers = f.raiser
     ? votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
     : votes.filter(v => !!v.judge);
@@ -128,10 +148,13 @@ function peersOf(f, votes) {
   // the named-raiser filter the seat branch and the alias branch. `peers` can
   // still hold seat-carrying votes with the seat branch never having run — a
   // falsy raiser reaches them through the NAMED-judge arm now, not through an
-  // unfiltered pass-through — so tally.js's `v.judge === f.raiser` stamp guard
-  // is still reading a document that may name no models at all
-  // (cli-handlers-council.js parses raw JSON with no schema; the MCP path's
-  // z.string() accepts the empty string).
+  // unfiltered pass-through. What CHANGED for tally.js's `sameModelCorroboration`
+  // stamp is that every such vote now has a NAMED judge, so its
+  // `v.judge === f.raiser` can no longer read `undefined === undefined` on the
+  // CLI path (cli-handlers-council.js parses raw JSON with no schema) or
+  // `'' === ''` on the MCP path (whose z.string() accepts the empty string).
+  // That is why the stamp's own `f.raiser &&` guard is now defense in depth
+  // rather than a decider — measured at its site, not inferred here.
   return peers;
 }
 
@@ -183,10 +206,13 @@ function unattributedPeerDrops(f, votes) {
   // twin pair is byte-for-byte unchanged. Mutation: emit unconditionally at
   // both sites (`unattributedPeerDrops: drops`, zero included). Never shipped —
   // applied, run against the FULL suite, reverted by hand, byte-verified.
-  // MEASURED red set, re-taken 2026-08-19 against the tree that ships:
-  // 4 suites / 5 tests, out of 541 / 7655.
-  //   BEHAVIOURAL — the three absence pins written for this change:
-  //     tally.test.js T3b · debate.test.js T6b · debate.test.js T6c.
+  // MEASURED red set, re-taken at T-B4 against the tree that ships:
+  // 4 suites / 6 tests, out of 541 / 7662.
+  //   BEHAVIOURAL — the three absence pins written for this change, plus one
+  //   T-B4 added:
+  //     tally.test.js T3b · debate.test.js T6b · debate.test.js T6c ·
+  //     tally.test.js T8b (the C1 control, which asserts the key is ABSENT on a
+  //     named raiser and so notices a stray zero for free).
   //   SCHEMA-MEDIATED — both caused by `"minimum": 1` on
   //   council-tally.schema.json's `findings[].unattributedPeerDrops`, which
   //   rejects a present-and-zero key:
