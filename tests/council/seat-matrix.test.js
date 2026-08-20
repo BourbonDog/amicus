@@ -677,12 +677,20 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * into the model; what was lost is the COLUMN, and that is what this block pins.
  *
  * ⚠️ RULING R17 TOOK THE NARROW OPTION — this is a SECOND IMPLEMENTATION of
- * ruling R18's rule, not a shared one. Nothing is imported from `report.js`
- * for it and nothing is extracted, so the two files keep the strictness levels
- * they already had. Two documents measurably separate them, and both are driven
- * through BOTH consumers below so each divergence is a recorded decision rather
- * than a drift: the `''` roster (they disagree), and the null adjudication
- * element (report.js throws where this file renders).
+ * ruling R18's rule, not a shared one. Nothing is imported from `report.js` for
+ * it and nothing is extracted. Two implementations can DRIFT, so the classes
+ * below are pinned as an AGREEMENT rather than as two separate behaviours: the
+ * `''`-roster document is driven through BOTH consumers and asserted to render
+ * the same columns and the same vote placement. T-C2 shipped that one document
+ * divergent for a single commit — `report.js` folded the `''` vote while this
+ * file landed it in a `''` column — which is exactly the two-consumers-one-
+ * document desync PR B exists to remove; fix round 1 closed it and that pin is
+ * what keeps it closed.
+ *
+ * ⚠️ ONE difference between the files REMAINS, and it is pre-existing rather
+ * than chosen here: a null `adjudications` ELEMENT, which is not a vote at all.
+ * `report.js` throws on it; this file skips it (pinned below, and in
+ * tests/workspace/matrix-model.test.js since v4.4). R17 leaves it standing.
  *
  * NAMED MUTANTS on `src/workspace/matrix-model.js :: buildMatrixModel`. Protocol
  * per mutant: applied by hand, run against the FULL suite, hand-reverted,
@@ -700,68 +708,39 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * make a decision observable: the `''` ROSTER, and a labelMap that maps a label
  * TO the model name `UNATTRIBUTED`.
  *
+ * ⚠️ AND ALL FOUR RED SETS BELOW WERE RE-RUN AT FIX ROUND 1, NOT ADJUSTED. That
+ * round changed what the join accepts, REPLACED a pin and added another, so
+ * every number recorded against 09212e97 was invalid — they were DELETED and
+ * re-measured against the shipped tree rather than edited. One mutant was
+ * replaced outright: `WSEMPTYFOLD` pinned the behaviour the round reversed, so
+ * it is gone, not renamed, and `WSEMPTYOK` is a different mutation of the
+ * opposite code. Re-run, never renumber; re-take the denominator with it.
+ *
  * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
  * mutant — the one the conditional exists for.
- * MEASURED red set, run against 09212e97:
- * 3 suites / 30 tests, out of 541 / 7711. By suite:
- *   seat-matrix 23 · matrix-model 6 · workspace-matrix 1.
- * ⚠️ TWENTY-THREE of the 30 are pins that PREDATE T-C2 and assert an exact
- * judge or cell list — T20, T21, T22 shape 2, the eight shared-predicate rows,
- * the four malformed-table rows, every buildMatrixModel pin in
- * tests/workspace/matrix-model.test.js, and T19's blind header. That breadth IS
- * the contract: the roster is the header, so an unconditional column changes
- * every matrix ever rendered. Of this block's own 19 pins it reds exactly 7.
- * ⚠️ ZERO snapshots move, unlike report.js's ALWAYSCOL, which took four. Not a
- * weaker mutant — measured, no snapshot in this repo captures a rendered
- * workspace matrix, so the pins above are the only thing standing there.
  *
  * Named mutant "WSJUNKKEY": revert the join to 32a63e92's
  * `if (!adj || typeof adj.judge !== 'string') { continue; }` plus
  * `votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict`, leaving the
  * roster code in place. It is the "T-C2 never happened" mutant.
- * MEASURED red set, run against 09212e97:
- * 2 suites / 13 tests, out of 541 / 7711. By suite:
- *   seat-matrix 12 · workspace-matrix 1.
- * Those 12 are eleven of this block's own pins plus T22 shape 1, and they are
- * the same twelve that were RED before the fix was written. EIGHT pins here stay
- * green under it, and the record says which rather than implying full coverage:
- * the no-unattributable-vote pin is WSALWAYSCOL's; `basis` is a preservation pin
- * no mutant here can move; the null-element and three malformed-`adjudications`
- * pins are preservation pins too; the `''`-roster pin is WSEMPTYFOLD's, and this
- * mutant lands that vote in the `''` column anyway; and the both-name-slots pin
- * survives because this mutation reverts only the ROUTING — the roster code is
- * left in place, so the column is still appended with the right pair.
  *
- * Named mutant "WSEMPTYFOLD": add report.js's `key !== ''` conjunct to
- * `columnFor`. It is the "the two implementations were unified after all"
- * mutant, and the ONLY thing that can see it is a roster holding `''`.
- * MEASURED red set, run against 09212e97:
- * 1 suite / 1 test, out of 541 / 7711 — seat-matrix 1, the `''`-roster pin.
- * ⚠️ READ THAT NUMBER THE RIGHT WAY, and it is T-C1's EMPTYOK lesson mirrored.
- * A one-test set is small because the conjunct is INVISIBLE everywhere else, not
- * because the pin is weak: on every other fixture's roster `keys.has('')` is
- * already false, so `keys.has` does the refusing and adding `key !== ''` changes
- * nothing observable. Only a roster that HOLDS `''` separates the two spellings —
- * which is why that pin drives both consumers and is the record of the one
- * document R17's narrow option leaves them disagreeing about.
+ * Named mutant "WSEMPTYOK" (v4.8 T-C2 fix round 1): drop the `key !== ''`
+ * conjunct from `columnFor`, leaving `typeof key === 'string' && keys.has(key)`.
+ * It is the mutant for the fix round itself — the spelling T-C2 shipped for one
+ * commit, under which a `''` judge matches a `''` roster key and the two
+ * consumers render one document two ways. The ONLY thing that can see it is a
+ * roster holding `''`.
+ * ⚠️ THIS REPLACES a mutant named WSEMPTYFOLD, which is GONE rather than
+ * renamed. WSEMPTYFOLD mutated the opposite code (it ADDED the conjunct) and its
+ * pin asserted the behaviour this round reversed, so neither its mutation nor its
+ * number could be carried forward.
  *
  * Named mutant "WSPAIRFOR": build the fold column's pair as
  * `pairFor(UNATTRIBUTED, map)` instead of carrying the literal in both slots.
  * Invisible on every ordinary labelMap — `labelFor` returns null and display()
  * falls back to `pair.model`, printing the same string — so the only fixture
  * that can see it is one whose labelMap maps a label TO `UNATTRIBUTED`.
- * MEASURED red set, run against 09212e97:
- * 2 suites / 2 tests, out of 541 / 7711. By suite:
- *   seat-matrix 1 (the both-name-slots pin) · workspace-matrix 1 (the painter).
- * ⚠️ THE PAINTER PIN ONLY REDS BECAUSE ITS labelMap IS ADVERSARIAL. Measured, it
- * fails on the blind header rendering `Review Z` where the fold column belongs —
- * the mechanism this decision was made against, not a restatement of it. On an
- * ordinary labelMap the two spellings are indistinguishable, also measured:
- * `display(pairFor('UNATTRIBUTED', {}), true)` and
- * `display({model: 'UNATTRIBUTED', label: 'UNATTRIBUTED'}, true)` both return
- * `UNATTRIBUTED`. Written with the map T19 uses, that test would have been GREEN
- * against its own mutant — an EMPTY red set proving nothing.
  */
 describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
   const SEATS = [
@@ -908,37 +887,74 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
     expect(m.rows[0].cells[2].judge).toEqual({ model: 'UNATTRIBUTED', label: 'UNATTRIBUTED' });
   });
 
-  test("a `''` ROSTER entry NAMES a column, so a `judge: ''` vote lands in it — where report.js folds", () => {
-    const seats = [
-      { id: '', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
-      { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
-    ];
-    const adjudications = [{ judge: '', verdict: 'agree', seat: '' },
-      { judge: 'gpt', verdict: 'dispute', seat: 'gpt' }];
-    // `isSeatSpace` accepts `{id: ''}` — it tests `typeof s.id === 'string'` and
-    // `''` IS one — so this roster genuinely holds `''` as a column key, and
-    // `columns.has(key)` is the WHOLE identifying test in this file.
-    expect(isSeatSpace(seats)).toBe(true);
-    const m = buildMatrixModel(tallyOf(seats, adjudications), {}, null);
-    expect(modelsOf(m)).toEqual(['', 'gpt']);
-    expect(votesOf(m)).toEqual(['agree', 'dispute']);
-
-    // ⚠️ THE ONE DOCUMENT ON WHICH THE TWO IMPLEMENTATIONS DISAGREE, driven
-    // through both so it is a RECORDED DECISION and not a drift. `report.js ::
-    // toModel` carries a `key !== ''` conjunct, so it refuses this vote even
-    // though its own roster seeded a `''` column for it, blanks that column and
-    // emits UNATTRIBUTED. R17 took the narrow option; this is what that costs,
-    // measured, in the only place it is observable.
-    const verdict = { runId: 'si12-ws-empty', runType: 'headless', date: '2026-07-20',
-      chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false, seats,
+  /**
+   * The `''`-roster document. ONE fixture, TWO pins — the behaviour, then the
+   * agreement — because they fail for different reasons and a reviewer needs to
+   * see which one broke.
+   *
+   * ⚠️ REPLACED, NOT ADJUSTED (v4.8 T-C2 fix round 1). The pin that stood here
+   * asserted the OPPOSITE: that `''` names a real column when the roster holds it,
+   * so the vote LANDS there. That was wrong and the owner ruled it out. Matching a
+   * `''` roster key against a `''` judge matches TWO NON-IDENTITIES — structurally
+   * the defect v4.8 T-B4 removed from src/council/peer-split.js :: peersOf, where a
+   * falsy raiser matched a falsy judge and corroborated its own finding. R18 and R2
+   * both say `''` is not an identity, and a malformed roster carrying `''` does not
+   * make it into a name. The old pin and its mutant were deleted rather than edited:
+   * this project has measured twice that an adjusted pin can go green against its
+   * own mutant.
+   */
+  const EMPTY_SEATS = [
+    { id: '', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
+    { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
+  ];
+  const EMPTY_ADJ = [{ judge: '', verdict: 'agree', seat: '' },
+    { judge: 'gpt', verdict: 'dispute', seat: 'gpt' }];
+  /** The same document as a verdict, for driving `report.js :: toModel` over it. */
+  function emptyRosterVerdict() {
+    return { runId: 'si12-ws-empty', runType: 'headless', date: '2026-07-20',
+      chair: 'deepseek', council: ALIAS_COLS.slice(), claudeInCouncil: false,
+      seats: EMPTY_SEATS,
       findings: [{ id: 'F1', raiser: 'gpt', severity: 'major', tier: 'Contested',
-        basis: { a: 1, d: 1, n: 0 }, adjudications }],
+        basis: { a: 1, d: 1, n: 0 }, adjudications: EMPTY_ADJ }],
       streetCred: [], runStats: [],
       tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 } };
-    const r = toModel(verdict);
-    expect(r.judges).toEqual(['', 'gpt', 'UNATTRIBUTED']);
-    expect(r.findings[0].byJudge['']).toBeNull();
-    expect(r.findings[0].byJudge.UNATTRIBUTED).toBe('agree');
+  }
+
+  test("a `''` key FOLDS even when the roster HOLDS `''` — two non-identities are not a match (v4.8 T-C2 fix round 1)", () => {
+    // `isSeatSpace` accepts `{id: ''}` — it tests `typeof s.id === 'string'` and
+    // `''` IS one — so this roster genuinely seeds a `''` COLUMN. That column is
+    // still rendered; what it does not do is CLAIM a vote. `key !== ''` is what
+    // separates the two, and `keys.has` cannot: on every other fixture's roster
+    // `keys.has('')` is already false, so the conjunct is unobservable there.
+    expect(isSeatSpace(EMPTY_SEATS)).toBe(true);
+    const m = buildMatrixModel(tallyOf(EMPTY_SEATS, EMPTY_ADJ), {}, null);
+    expect(modelsOf(m)).toEqual(['', 'gpt', 'UNATTRIBUTED']);
+    // The `''` column stays BLANK and the vote goes to the fold column; the
+    // identifying vote beside it is untouched.
+    expect(votesOf(m)).toEqual([null, 'dispute', 'agree']);
+  });
+
+  test("the `''`-roster document renders the SAME through report.js and the matrix — one document, one answer", () => {
+    // ⚠️ THE DURABLE PIN OF FIX ROUND 1, and the reason it exists is that this
+    // exact document rendered TWO WAYS for one commit: report.js folded the `''`
+    // vote while the matrix landed it in the `''` column. Two consumers disagreeing
+    // about one document is the desync class PR B exists to remove, and R17's
+    // second implementation is precisely what can drift back into it — so the
+    // agreement is ASSERTED here rather than left to be re-derived from two
+    // separate behaviour pins.
+    const r = toModel(emptyRosterVerdict());
+    const m = buildMatrixModel(tallyOf(EMPTY_SEATS, EMPTY_ADJ), {}, null);
+    // Same columns, in the same order. (A column's `pair.model` IS its key on
+    // every branch of this roster: seat columns carry `s.id`, alias and claude
+    // columns carry the alias, and the fold column carries the literal.)
+    expect(modelsOf(m)).toEqual(r.judges);
+    // Same vote in the same column — compared as a whole map, not spot-checked,
+    // so a vote appearing in one and not the other cannot pass.
+    expect(Object.fromEntries(m.rows[0].cells.map(c => [c.judge.model, c.verdict])))
+      .toEqual(r.findings[0].byJudge);
+    // And stated absolutely, so the pin still means something if both sides
+    // regress together: the vote is FOLDED on both, and `''` claims nothing.
+    expect(r.findings[0].byJudge).toEqual({ '': null, gpt: 'dispute', UNATTRIBUTED: 'agree' });
   });
 
   test('a bench model literally aliased UNATTRIBUTED is not columned twice — it SHARES the cell', () => {

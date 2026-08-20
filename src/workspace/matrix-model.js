@@ -28,9 +28,10 @@ const { labelFor, pairFor } = require('./blind-mode');
 // v4.8 T-C2 (SI-12, ruling R18): the ONE column every vote whose key names no
 // column folds into. A SECOND implementation on purpose — ruling R17 took the
 // narrow option, so this is NOT imported from src/council/report.js and nothing
-// is extracted for it. The two files therefore keep the strictness levels they
-// already had, and the one document they measurably disagree about is driven
-// through BOTH of them in tests/council/seat-matrix.test.js.
+// is extracted for it. Two implementations can DRIFT — T-C2 shipped one document
+// rendering two ways for a single commit — so the rule below is pinned as an
+// AGREEMENT with report.js, not merely as this file's own behaviour:
+// tests/council/seat-matrix.test.js drives BOTH consumers over that document.
 const UNATTRIBUTED = 'UNATTRIBUTED';
 
 /**
@@ -102,23 +103,28 @@ function buildMatrixModel(tally, labelMap, verdict) {
   // 'string'` refused an absent or non-string judge outright — in seat space
   // testing a field that is not even the key, so a valid seat with a numeric
   // judge rendered nowhere — while an orphaned seat id and `''` were written to
-  // a `votes` key no column reads. The roster is the only thing that makes a key
-  // mean a column, so `keys.has` IS the identifying test and everything else
-  // folds. ⚠️ Note what is deliberately NOT here: report.js's `key !== ''`.
-  // `isSeatSpace` accepts `{id: ''}`, so a roster CAN hold `''`, and on that
-  // roster `''` names a real column and the vote belongs in it. Measured, a
-  // roster holding `''` is the ONLY document whose votes the two files now
-  // column differently — everywhere else the rules agree, including the numeric
-  // judge above, where T-C2 CLOSED a divergence. R17's narrow option is what
-  // lets that last one stand. (The files also differ on a null `adjudications`
-  // ELEMENT, which is not a vote at all — see the loop below.)
+  // a `votes` key no column reads. The roster is what makes a key mean a column,
+  // so `keys.has` is the orphan test, and the three conjuncts refuse, in order, a
+  // non-string, the empty string, and a string naming no column.
+  // ⚠️ `key !== ''` IS NOT REDUNDANT WITH `keys.has`, and T-C2 shipped it wrong
+  // for one commit, which is why the reason is written down. `isSeatSpace`
+  // accepts `{id: ''}`, so a roster CAN hold `''` — and matching a `''` roster
+  // key against a `''` judge matches TWO NON-IDENTITIES. That is structurally
+  // the defect v4.8 T-B4 removed from src/council/peer-split.js :: peersOf, where
+  // a falsy raiser matched a falsy judge and corroborated its own finding.
+  // Rulings R18 and R2 both say `''` is not an identity, and a malformed roster
+  // carrying `''` does not make it into a name. Without the conjunct the two
+  // consumers rendered ONE document differently — the desync class PR B exists to
+  // remove — so this is now the SAME classification rule report.js applies, over
+  // this file's own roster. Written again, never shared (R17); a pin drives BOTH
+  // consumers over that document so the agreement is enforced, not re-derived.
   // Named mutants, with their measured red sets:
   // tests/council/seat-matrix.test.js :: WSJUNKKEY and
-  // tests/council/seat-matrix.test.js :: WSEMPTYFOLD.
+  // tests/council/seat-matrix.test.js :: WSEMPTYOK.
   const keys = new Set(bench.map(c => c.key));
   const columnFor = (adj) => {
     const key = (seatSpace && adj.seat) || adj.judge;
-    return (typeof key === 'string' && keys.has(key)) ? key : UNATTRIBUTED;
+    return (typeof key === 'string' && key !== '' && keys.has(key)) ? key : UNATTRIBUTED;
   };
   // ⚠️ TWO-PHASE, and here it could not be anything else: `cells` is built by
   // MAPPING this roster, so a roster decided inside the per-finding map would
