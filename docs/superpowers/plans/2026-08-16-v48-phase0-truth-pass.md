@@ -31,7 +31,7 @@ adversarially re-measured. **Do not re-derive it, and do not contradict it witho
   broken by measurement.
 - **Citation rot is PER-CITATION, not per-item.** Re-derive an anchor by its symbol or its quoted
   title text; never discard an item's other anchors because one number moved. Worked example,
-  measured: `BACKLOG.md:2574` at `53cd689c` is the `seatKey` filing; on `main` = `17b6b6f2` the
+  measured: `BACKLOG.md@53cd689c:2574` is the `seatKey` filing; on `main` = `17b6b6f2` the
   same filing is at `:2656` — the SCOPE RULED banner shifted it **+82** lines. The citation was
   correct and rotted; the item is intact.
 - **Line numbers inside `BACKLOG.md` rot WITHIN this PR.** Each task edits the file, so every task

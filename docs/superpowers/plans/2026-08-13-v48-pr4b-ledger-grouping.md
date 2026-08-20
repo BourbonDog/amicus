@@ -308,8 +308,14 @@ take the same fix:
 11. **Chair-on-bench, one shared resolution:** row count unchanged, but `conformance` moves from the
     chair row's value to worst-wins and `wasChair` from last-wins to any-wins (R4b-4). ⚠️ **This is
     the documented `amicus council tally` shape, not an engine-only edge** — the golden fixture
-    (`models: JUDGES, chair: 'deepseek'`) and `docs/council.md:867-875`'s worked example both put
+    (`models: JUDGES, chair: 'deepseek'`) and `docs/council.md@ed5c0c02:867-875`'s worked example both put
     the chair on the bench, `docs/council.md:575-581` prescribes one row per paid launch with both
+> ⚠️ **Pinned `@ed5c0c02` 2026-08-20 (v4.8 T2.4 fix round 2), and the pin does NOT rescue the
+> claim.** T2.4 grew `docs/council.md` above this range, so the bare number no longer lands — but
+> **opened at `ed5c0c02` it did not land either**: `:867` there is the `avgStreetCredPeersOnly`
+> row of the LEDGER schema, not the worked example. The citation was already misaimed before
+> this release touched the file. Recorded rather than silently renumbered to whatever the
+> worked example occupies today.
     `council` and `chair` as primary roles, and neither hand-assembled call site has or can have a
     chair guard. Measured on that exact meta: `conformance` `clean → unstructured`.
 12. `wasChair` no longer propagates across a **split** alias (§3.3).

@@ -401,8 +401,11 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * and three of the four red sets GREW because the pins T-C2 added to detect a
  * report.js/matrix-model.js desync are, by construction, red under a report.js
  * mutation. No set shrank; nothing became unpinned.
- * (Comments were edited after these runs — comment-only, no test added or
- * removed, so the denominator and every set below still describe this tree.)
+ * (Comments — and, in fix round 2, one test TITLE — were edited after these runs.
+ * No test was added or removed and no assertion changed, so the denominator and
+ * every set below still describe this tree. The one title that moved is in the
+ * R20 block and is not named by any record here; `R20 > report.js FOLDS it`,
+ * which JUNKKEY's record DOES name, is unchanged.)
  *
  * Named mutant "ALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
@@ -661,16 +664,28 @@ describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ON
   // A non-array `adjudications` is reachable through the same schema-free
   // `JSON.parse` entry points as a malformed seats table. ⚠️ The COUNT is
   // deliberately dropped: "the three schema-free entry points" has two conflicting
-  // enumerations in this repo — `src/council/report.js :: isSeatSpace`'s docblock
-  // reads it as {council report, council verdict --render, amicus_verdict}, while
-  // pr4c-seat-spine.md:751-752 reads it as the three cli-handlers-council.js
-  // handlers, with amicus_verdict listed separately. Naming a number here picks a side
-  // silently. Measured for THIS shape by enumerating every `buildReport` caller in
-  // live code: `src/cli-handlers-council.js :: runReport`,
+  // enumerations in this repo, and this comment RESOLVES that ambiguity rather than
+  // merely noting it — see below for which reading it takes and why.
+  //   A  {council report, council verdict --render, amicus_verdict}
+  //      — `src/council/report.js :: isSeatSpace`'s docblock, which is the docblock
+  //        `adjOf` explicitly back-references ("isSeatSpace ABOVE … for the same
+  //        reason"), so it is the referent the sentence above actually names.
+  //   B  {runTally, runReport, runVerdict}, with amicus_verdict listed SEPARATELY
+  //      — nearest instances are IN THIS FILE: the file docblock at the top, and the
+  //        `a malformed seats table falls back to alias space` block near the end
+  //        ("cli-handlers-council.js's tally/report/verdict handlers"). Also
+  //        pr4c-seat-spine.md@ed5c0c02:751-752.
+  // THIS COMMENT TAKES READING A, because A is what `adjOf` back-references.
+  // Measured for THIS shape by enumerating every `buildReport` caller in live code
+  // — there are FOUR: `src/cli-handlers-council.js :: runReport`,
   // `src/cli-handlers-council.js :: runVerdict` on --render (via `buildVerdict`,
-  // which copies `adjudications` straight through), and
-  // `src/mcp-server.js :: amicus_verdict`; `src/cli-handlers-council.js :: runTally`
-  // never calls `buildReport` at all. That set IS the seats-table set, so the
+  // which copies `adjudications` straight through),
+  // `src/mcp-server.js :: amicus_verdict`, and
+  // `src/council/run-verdict-files.js :: writeVerdictFiles`, which is
+  // engine-internal (it builds its verdict in process from a live record) and so
+  // is NOT a schema-free vector. `src/cli-handlers-council.js
+  // :: runTally` never calls `buildReport` at all. The three that ARE schema-free are
+  // exactly set A, so under the referent the sentence names, the
   // "same … as a malformed seats table" claim above is exact. Measured at c8867b48:
   // `'abc'` RENDERED (a string is iterable, so `for...of` walked it and left a junk
   // `"undefined"` key), while `{}` and `42` THREW. At 774dcdc2 all three threw,
@@ -1174,7 +1189,10 @@ describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names n
  *      fields, and that difference is real but is not about the vote key.
  *   3. THE CLAUDE TAIL. `claudeInCouncil` is always false and no roster carries
  *      `claude`, so `claudeTail` — which this file re-appends and `report.js`
- *      does not — never fires.
+ *      does not — never fires. ⚠️ READ THE R20 BLOCK BELOW BEFORE ACTING ON THIS
+ *      EXCLUSION: its cost is measured there, and the divergence it hides is
+ *      caused by an ABSENT alias-side filter, NOT by `claudeTail`, which is on
+ *      the seat-space arm only.
  * Anything OUTSIDE those three is in scope, and a disagreement there is a defect
  * in one of the two files.
  *
@@ -1312,12 +1330,31 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
  * statement about the fixtures, not about the world, and until this block its
  * cost was nowhere measured. It is NOT zero.
  *
- * The two consumers build their rosters from different sources and treat the
- * reserved `claude` seat oppositely:
- *   report.js       filters it OUT  (`council.filter(j => j !== 'claude')`)
- *                   so `columns.has('claude')` is false → the vote FOLDS.
- *   matrix-model.js re-appends it   (`claudeTail`)
- *                   so `keys.has('claude')` is true  → the vote lands in `claude`.
+ * ⚠️ THE CAUSE IS AN ABSENT FILTER, NOT `claudeTail`. An earlier draft of this
+ * block said matrix-model.js "re-appends it as `claudeTail`" — that is INVERTED,
+ * and it is measurably false on this very fixture. What actually happens:
+ *   report.js       FILTERS claude OUT of its own roster when the flag is on:
+ *                   `claudeInCouncil === true ? council.filter(j => j !== 'claude')
+ *                   : council` — so `columns.has('claude')` is false and the
+ *                   vote FOLDS.
+ *   matrix-model.js has NO counterpart filter AT ALL. Its alias branch is a bare
+ *                   `aliasJudges.map(...)` over `meta.models`, which carries
+ *                   `claude` — so the vote lands in the `claude` column. That
+ *                   file's own comment says so: "report.js filters the reserved
+ *                   claude seat out of ITS roster; this one never has".
+ *
+ * ⚠️ `claudeTail` DOES THE OPPOSITE JOB, ON THE OTHER BRANCH. It is concatenated
+ * only on the SEAT-SPACE arm, where it RE-ADDS claude because `meta.seats` is
+ * bench-only and excludes the reserved seat. THIS FIXTURE IS ALIAS SPACE, so that
+ * arm is never taken. Measured control: rebuilding the module with
+ * `claudeTail = []` leaves the divergence below completely UNCHANGED.
+ *
+ * ⚠️ AND THE FLAG FLIPS report.js ONLY — measured, alias space, both values:
+ *   claudeInCouncil=true   report [deepseek,gpt,UNATTRIBUTED]  matrix [deepseek,gpt,claude]  DIVERGE
+ *   claudeInCouncil=false  report [deepseek,gpt,claude]        matrix [deepseek,gpt,claude]  AGREE
+ * The matrix output is IDENTICAL at both flag values. Only `report.js` moves.
+ * This matters beyond bookkeeping: the roster-SOURCES lever this is filed against
+ * must be aimed at the MISSING ALIAS FILTER, not at `claudeTail`.
  *
  * ⚠️ OWNER RULING R20: DISCLOSE, PIN AND FILE — do NOT align the rosters. That is
  * a roster-SOURCES question and R17 keeps it out of this PR. These pins exist so
@@ -1357,8 +1394,10 @@ describe('R20: a claude vote is placed DIFFERENTLY by the two consumers, pinned 
     expect(Object.keys(m.findings[0].byJudge)).not.toContain('claude');
   });
 
-  test('matrix-model.js PLACES it in the claude column — claudeTail puts it on the bench', () => {
+  test('matrix-model.js PLACES it in the claude column — it has no claude filter at all', () => {
     const w = buildMatrixModel(tally(), {}, verdict());
+    // ALIAS space: the bare `aliasJudges.map(...)` arm, so `claudeTail` is never
+    // reached. `meta.models` carries `claude` and nothing removes it.
     expect(w.judges.map(j => j.model)).toEqual(['deepseek', 'gpt', 'claude']);
     expect(w.rows[0].cells.map(c => c.verdict)).toEqual([null, 'agree', 'dispute']);
     // And it grows NO fold column, because nothing was refused here.

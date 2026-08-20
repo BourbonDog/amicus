@@ -2633,7 +2633,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     Filed 2026-08-20 (v4.8 T2.4 / PR C) as the largest remaining drift surface between the two
     consumers. `report.js :: toModel` builds its roster from **`verdict.seats` / `verdict.council`**;
     `matrix-model.js :: buildMatrixModel` builds its roster from **`tally.meta.seats` /
-    `tally.meta.models` plus a `claudeTail`**. T2.4's fuzz proved the two agree about how they
+    `tally.meta.models`** — plus a `claudeTail` **on the seat-space branch only**, and with **no
+    claude filter on the alias branch at all** (see R20 below, where that asymmetry is measured). T2.4's fuzz proved the two agree about how they
     **READ** a roster, but it is **exclusion 2** of that fuzz — both documents are built from ONE
     roster literal by construction — so the two *sources* agreeing is unproven by anything.
     ⚠️ **Deliberately ruled out of PR C, and the reason is not effort**: it is a different property.
@@ -2645,12 +2646,25 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     - ⚠️ **R20 · the claude vote — the FIRST measured instance of this lever costing something.**
       Owner ruling **R20** (2026-08-20): **disclose, pin and file. Do not align the rosters** — that
       stays out of PR C per **R17**. On a `claudeInCouncil: true` document a `judge: 'claude'`
-      adjudication lands in **different columns** in the two consumers, because their rosters are
-      built from different sources: `report.js :: toModel` deliberately filters the reserved
-      `claude` seat OUT (`council.filter(j => j !== 'claude')`), so `columns.has('claude')` is
-      false and the vote **folds to `UNATTRIBUTED`**; `matrix-model.js :: buildMatrixModel`
-      deliberately re-appends it as `claudeTail`, so `keys.has('claude')` is true and the vote lands
-      in the **`claude` column**. Measured at `0cb2d4d9` on one document carrying
+      adjudication lands in **different columns** in the two consumers.
+      ⚠️ **THE CAUSE IS AN ABSENT FILTER, NOT `claudeTail`** — an earlier draft of this filing,
+      and of R20's own ruling text, said `matrix-model.js` "re-appends it as `claudeTail`". That is
+      **inverted**, and measurably false on the pinned fixture. What actually happens:
+      `report.js :: toModel` **FILTERS** the reserved `claude` seat OUT of its own roster when the
+      flag is on (`claudeInCouncil === true ? council.filter(j => j !== 'claude') : council`), so
+      `columns.has('claude')` is false and the vote **folds to `UNATTRIBUTED`**;
+      `matrix-model.js :: buildMatrixModel` has **no counterpart filter at all** — its alias branch
+      is a bare `aliasJudges.map(...)` over `meta.models`, which carries `claude`, so the vote lands
+      in the **`claude` column**. That file's own comment already said so: *"report.js filters the
+      reserved claude seat out of ITS roster; this one never has."*
+      ⚠️ **`claudeTail` does the OPPOSITE job, on the OTHER branch.** It is concatenated only on
+      the **seat-space** arm, where it RE-ADDS claude because `meta.seats` is bench-only. The pinned
+      fixture is **alias space**, so that arm is never taken — measured control: rebuilding the
+      module with `claudeTail = []` leaves the divergence **unchanged**.
+      ⚠️ **The flag flips `report.js` ONLY.** Measured in alias space at both values: at `false`
+      both consumers give `["deepseek","gpt","claude"]` and AGREE; at `true` only `report.js` moves.
+      **This is what the roster-SOURCES work needs to aim at: the missing alias-side filter, not
+      `claudeTail`.** Measured at `0cb2d4d9` on one document carrying
       `{judge:'claude',verdict:'dispute'}` + `{judge:'gpt',verdict:'agree'}`:
 
       ```
@@ -2851,14 +2865,21 @@ above were updated in place; these are the items it could not close, filed rathe
     - **Measured exposure — every number below carries BOTH its path scope and its REF.** Counted
       over the gate's scanned trees (`src/**`, `electron/**`, `tests/**`):
 
-      | Scope | `ed5c0c02` | `e5376399` | `0cb2d4d9` |
-      |---|---:|---:|---:|
-      | `docs/*.md:NNN` | **7** (6 stale) | **7** (6 stale) | **3** (2 stale) |
-      | every `*.md:NNN` | **18** | **18** | **14** |
+      | Scope | `ed5c0c02` | `e5376399` | `0cb2d4d9` | `1c2f462c` | this commit |
+      |---|---:|---:|---:|---:|---:|
+      | `docs/*.md:NNN` | **7** (6 stale) | **7** (6 stale) | **3** (2 stale) | **3** | **3** (2 stale) |
+      | every `*.md:NNN` | **18** | **18** | **14** | **15** | **14** |
 
       ⚠️ **The fall from 7→3 and 18→14 is T2.4's own four `tests/` fixes, not a change in the
       blind spot.** An earlier draft stated 7 and 18 in the present tense in the very commit that
-      changed them — the release's own rot class, committed inside the entry filing it. The 6-stale
+      changed them — the release's own rot class, committed inside the entry filing it.
+      ⚠️ **AND THE ENTRY THEN DID IT AGAIN, TO ITSELF.** The `1c2f462c` column reads **15**, not the
+      **14** that commit recorded: its own C3 disclosure added a fresh unpinned `.md:NNN` citation to
+      live code — **inside the blind spot this very entry files**, and against the rule that a
+      correction must never introduce a new line number. Fix round 2 converted it to
+      `pr4c-seat-spine.md@ed5c0c02:751-752`, which is provenance rather than a live line reference,
+      and the count returns to **14**. The lesson is the entry's own: a count stated about the tree
+      is falsified by the commit that states it, so **quote the ref with the number, every time**. The 6-stale
       set is four distinct stale `docs/council.md` targets across six citing sites, plus
       `docs/usage.md:406`, which is **CORRECT — do not "fix" it** (`grep -n` puts the phrase *"not
       tunable"* on 406 exactly). The two `docs/council.md` sites surviving at `0cb2d4d9` are the two
