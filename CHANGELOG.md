@@ -12,16 +12,24 @@ All notable changes to Amicus are documented here. Format follows
   tally used to treat an unknown raiser as "exclude nothing" — so a document with `raiser: ""` and
   a `judge: ""` adjudication scored that adjudication into `findings[].basis`. Measured: a finding
   with votes `["" agree, "gpt" agree]` read `{a:2}` **Confirmed (solid)**, where the same shape
-  with a named raiser reads `{a:1}` (thin). Votes the engine cannot attribute are now excluded and
-  **announced** in `findings[].unattributedPeerDrops` instead of counted; every **named** judge
-  still counts, so no real peer is dropped for want of a raiser. Consequences on such a document:
-  `basis` can shrink and the tier can fall with it — a finding whose only votes are unidentifiable
-  now reads `Singleton` rather than `Confirmed` or `Disputed`. Documents that name their raisers
-  are byte-for-byte unchanged. The same predicate builds the defense brief, so the brief moved with
-  the tally; a finding that falls off `Contested`/`Disputed` no longer reaches a brief at all.
-  ⚠️ **Disclosed residual:** when the raiser is unnamed but the finding and the vote carry the
-  *same* seat id, the vote is provably the raiser's own and is still counted. Unchanged by this
-  release, reachable only on hand-assembled or MCP-assembled input, filed and pinned by a test.
+  with a named raiser reads `{a:1}` (thin).
+  The rule is now one principle — *attribute when you can, mark only when you cannot* — applied in
+  order. **Seat ids decide first, and no longer need a known raiser:** when the adjudication *and*
+  the finding both carry a seat id, the same seat means the raiser's own vote (excluded) and
+  different seats mean a real peer (counted), whatever `raiser` and `judge` say. Only when the seats
+  cannot decide does the name matter: a named raiser excludes by alias exactly as before, and an
+  **unnamed** one keeps every **named** judge — so no real peer is dropped for want of a raiser —
+  while dropping the votes whose judge is equally unidentifiable. Those, and only those, are
+  **announced** in `findings[].unattributedPeerDrops`: a vote the seats attributed is not ambiguous,
+  so it is never counted there.
+  Consequences on such a document: `basis` can move and the tier with it — a finding whose only
+  votes are unidentifiable now reads `Singleton` rather than `Confirmed` or `Disputed`. Documents
+  that name their raisers are byte-for-byte unchanged. The same predicate builds the defense brief,
+  so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
+  reaches a brief at all.
+  ⚠️ **This does not close the twin-seat undercount** (SI-22.1 / SI-22.2). Where a *named* raiser's
+  finding and an adjudication carry seat ids on only **one** side, the vote is still excluded and
+  still only announced, deliberately, by owner ruling — unchanged by this release.
 
 - **The Workspace's dead-seat rows no longer collapse, and a live seat no longer erases its dead
   twin, on a bench that repeats an alias.** Two measured defects. Two dead twins rendered as a

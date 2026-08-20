@@ -50,14 +50,13 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
     expect(peersOf(f, votes)).toEqual(votes);
   });
 
-  // SPLITDROP witnesses (v4.8 Phase 2 T-B1; witness A REPLACED by T-B4). Named
-  // mutant "SPLITDROP": delete the outer `f.raiser ? … :` condition so the
-  // NAMED-RAISER filter runs UNCONDITIONALLY — which deletes the falsy-raiser
-  // arm along with the condition. Neither witness below goes through tally() —
-  // no test elsewhere in the suite happens to put a vote's `judge` or `seat` in
-  // a position that collides with a falsy `f.raiser`/`f.raiserSeat`, so these
-  // two are this module's OWN, direct pin on the outer branch. Both are RED
-  // under SPLITDROP — MEASURED red set beside the mutation itself,
+  // SPLITDROP witnesses (v4.8 Phase 2 T-B1; witness A REPLACED and witness B
+  // RETIRED by T-B4). Named mutant "SPLITDROP": delete the `f.raiser ? … :`
+  // condition in the FALLBACK arm so the ALIAS compare runs for every finding,
+  // raiser or not — which deletes the named-judge arm along with the condition.
+  // Witness A below and C1c at the end of this file are its two witnesses;
+  // neither goes through tally(), so they are this module's OWN, direct pin on
+  // that branch. MEASURED red set beside the mutation itself,
   // peer-split.js :: peersOf.
   //
   // ⚠️ Witness A had to be REPLACED, not re-valued, and that is the sharpest
@@ -75,23 +74,16 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
     expect(unattributedPeerDrops(f, votes)).toBe(1);
   });
 
-  test('SPLITDROP witness B: no raiser, a NAMED judge whose seat equals raiserSeat, still survives', () => {
-    // GUARDED: f.raiser is falsy, so the falsy-raiser arm runs and keeps every
-    // NAMED judge (L8); the seat compare is never reached. SPLITDROP: the
-    // named-raiser filter runs anyway, takes its seat branch, and
-    // v.seat !== f.raiserSeat reads 'x#1' !== 'x#1' -> false -> dropped.
-    //
-    // ⚠️ Read this fixture honestly. The surviving vote carries the raiser's OWN
-    // seat id, so it is provably the raiser's own vote and it is still counted.
-    // That is the measured RESIDUAL of T-B4's property 2 — "a vote with a NAMED
-    // judge is provably not the unnamed raiser" is false exactly when the seats
-    // say otherwise. It is UNCHANGED from HEAD (T-B4 closed the alias-space
-    // hole, not this seat-space one) and it is filed, not fixed. The count and
-    // the reachability argument live on peer-split.js :: peersOf.
-    const f = { id: 'F1', raiserSeat: 'x#1' };
-    const votes = [{ judge: 'x', verdict: 'agree', seat: 'x#1' }];
-    expect(peersOf(f, votes)).toHaveLength(1);
-  });
+  // ⚠️ WHAT WAS "SPLITDROP witness B" IS RETIRED, and the honest reason is worth
+  // more than the test was. It asserted that a raiser-less finding KEEPS a vote
+  // carrying a NAMED judge and the raiser's OWN seat id — measured at T-B4
+  // round 1 as a 36-case residual and filed as such. Round 2's corrected
+  // specification says that vote IS the raiser's own and must be EXCLUDED (P0),
+  // so the assertion inverted; and because the seat compare now decides before
+  // the fallback, the shipped form and SPLITDROP now agree on it, so it no
+  // longer separates them either. It is not deleted — the fixture moved to the
+  // P0 block at the end of this file, where it pins the corrected behaviour
+  // instead of a disclosed residual. SPLITDROP's second witness is now C1c.
 });
 
 // v4.8 Phase 2 T-B2 — `unattributedPeerDrops`, the mark BOTH documents carry.
@@ -104,22 +96,28 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
 //
 // v4.8 T-B4 widened it: on a finding whose raiser is FALSY it now also counts
 // every vote whose `judge` is falsy, because such a vote may be the unnamed
-// raiser's own and `peersOf` no longer keeps it.
+// raiser's own and `peersOf` no longer keeps it. Round 2 then NARROWED it at the
+// other end — a drop the SEAT ids decided is attributed, not ambiguous, so it is
+// never counted here.
 //
 // Each pin below drives ONE conjunct of the predicate, asserted in the
 // expression itself, never inferred from a branch.
 //
-// ⚠️ `!(v.seat && f.raiserSeat)` deliberately has NO pin. The XOR beside it
-// already implies it (exactly one side truthy => their AND is falsy), so no
-// fixture can make it the deciding conjunct. RE-MEASURED at T-B4 against the
-// widened predicate, over the 1296-case truthiness cross-product of
+// ⚠️ `!(v.seat && f.raiserSeat)` USED TO HAVE NO PIN, and the note saying so is
+// retired rather than deleted, because how it stopped being true is the lesson.
+// While it sat inside the named-raiser arm the XOR beside it already implied it
+// (exactly one side truthy => their AND is falsy), so no fixture could make it
+// the deciding conjunct and a test claiming to pin it would have been green
+// against its own mutant. Round 2 HOISTED it in front of the ternary, where the
+// falsy-raiser arm has no XOR to imply it — so it decides, and P0b and P0c at
+// the end of this file pin it.
+// RE-MEASURED at round 2 over the 1296-case truthiness cross-product of
 // (f.raiser, f.raiserSeat, v.judge, v.seat) with 6 values apiece — three falsy
-// (`undefined`, `null`, `''`) and three truthy: dropping it still flips ZERO,
-// while collapsing the ternary to its named arm flips 270 and to its falsy arm
-// 378, dropping the XOR flips 27, dropping `v.judge === f.raiser` flips 270 and
-// weakening `!v.judge` to `true` flips 324. A test titled as if it pinned that
-// one conjunct would be green against its own mutant, which is the failure this
-// note exists to prevent someone from adding.
+// (`undefined`, `null`, `''`) and three truthy: dropping the hoisted conjunct
+// flips 81 cases, ALL 81 with a falsy raiser and ZERO with a named one;
+// collapsing the ternary to its named arm flips 189 and to its falsy arm 297;
+// dropping the XOR flips 27; dropping `v.judge === f.raiser` flips 270; and
+// weakening `!v.judge` to `true` flips 243.
 describe('unattributedPeerDrops — the unattributable-drop mark (v4.8 Phase 2 T-B2)', () => {
   test('SI-22.2 shape, the PEER leg orphaned: finding HAS raiserSeat, vote is seatless => 1', () => {
     const f = { id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1' };
@@ -280,5 +278,71 @@ describe('peersOf — an unnamed raiser cannot corroborate itself (v4.8 T-B4, C1
     const votes = [{ judge: '', verdict: 'dispute' }, { judge: '', verdict: 'dispute' }];
     expect(peersOf(f, votes)).toEqual([]);
     expect(unattributedPeerDrops(f, votes)).toBe(2);
+  });
+});
+
+// v4.8 T-B4 round 2 (P0) — SEATS DECIDE FIRST, whatever `f.raiser` says.
+//
+// Round 1 shipped the seat compare inside the named-raiser arm and disclosed a
+// measured 36-case residual: a falsy raiser whose vote carried a NAMED judge
+// and the raiser's OWN seat id was still counted as peer signal. The owner
+// ruled that residual closed, and corrected the specification that produced it:
+// the "provably not the raiser" clause is the load-bearing half of the
+// named-judge rule, and a vote bearing the raiser's own seat id is provably the
+// raiser's own vote whatever its `judge` field says.
+//
+// One principle — attribute when you can, mark only when you cannot (R2):
+//   P0  both sides carry a seat id  ⇒ the SEATS decide, for ANY raiser.
+//       equal  ⇒ the raiser's own vote ⇒ excluded, and NOT marked: we know
+//                what it is, so nothing about it is unattributable.
+//       differ ⇒ a real peer ⇒ counted.
+//   P1  else, falsy raiser + falsy judge ⇒ unattributable ⇒ excluded AND marked.
+//   P2  else, falsy raiser + named judge ⇒ counted.
+//   P3  else (named raiser) ⇒ byte-identical to 64b835b8.
+//
+// ⚠️ Every one of the four candidate spellings was scored against P0-P3 over the
+// 1875-case truthiness cross-product before this one was written. Only this one
+// reaches zero: 64b835b8 violates P0 in 90 cases and P1 in 567; round 1's form
+// violates P0's peer rule in 90 and P0's no-mark rule in 108; the
+// "named judge AND not the raiser's own seat" variant violates them in 54 and
+// 108. Numbers re-derived against the CORRECTED properties, not carried over.
+describe('peersOf — the seats decide first, for any raiser (v4.8 T-B4 round 2, P0)', () => {
+  test('P0a: no raiser, a NAMED judge whose seat EQUALS raiserSeat — the raiser\'s own vote, excluded', () => {
+    // This is round 1's disclosed residual, inverted. It is the fixture that was
+    // "SPLITDROP witness B" and asserted the opposite.
+    const f = { id: 'F1', raiserSeat: 'x#1' };
+    const votes = [{ judge: 'x', verdict: 'agree', seat: 'x#1' }];
+    expect(peersOf(f, votes)).toEqual([]);
+    // ⚠️ NOT marked. The seats attributed it, so nothing here is ambiguous —
+    // marking it would make one number mean two different things.
+    expect(unattributedPeerDrops(f, votes)).toBe(0);
+  });
+
+  test('P0b: no raiser, NO judge, but the seats DIFFER — provably a real peer, counted', () => {
+    // The mirror, and the case round 1 got wrong in the other direction: it
+    // dropped this vote for having no judge and MARKED it, when the seat ids
+    // already prove it is not the raiser's. Nothing is unattributable here.
+    const f = { id: 'F1', raiserSeat: 'x#1' };
+    const votes = [{ verdict: 'agree', seat: 'x#2' }];
+    expect(peersOf(f, votes)).toEqual(votes);
+    expect(unattributedPeerDrops(f, votes)).toBe(0);
+  });
+
+  test('P0c: an EMPTY-STRING raiser and judge (MCP path), seats DIFFER — counted, not marked', () => {
+    const f = { id: 'F1', raiser: '', raiserSeat: 'deepseek#1' };
+    const votes = [{ judge: '', verdict: 'agree', seat: 'deepseek#2' }];
+    expect(peersOf(f, votes)).toEqual(votes);
+    expect(unattributedPeerDrops(f, votes)).toBe(0);
+  });
+
+  test('P0d: an empty-string SEAT is not a seat id — the pair does not decide, so P1 does', () => {
+    // `adjudications[].seat` is `z.string().nullable().optional()`, so '' and
+    // null both reach here. Neither is an identity, so neither can attribute a
+    // vote: the truthiness guard `(v.seat && f.raiserSeat)` is what keeps them
+    // out of the seat branch, and the vote falls through to the falsy-judge rule.
+    const f = { id: 'F1', raiserSeat: 'x#1' };
+    const votes = [{ judge: '', verdict: 'agree', seat: '' }];
+    expect(peersOf(f, votes)).toEqual([]);
+    expect(unattributedPeerDrops(f, votes)).toBe(1);
   });
 });

@@ -2971,22 +2971,39 @@ deliberately left alone:
   falsy raiser can no longer corroborate itself. The count of branches and the divergence this
   paragraph records are both unaffected; only the arm's body moved. T5a/T5b/T5c still pin the
   agreement, at re-measured values — see `peer-split.js :: peersOf` for the shipped form.
-- [ ] **OPEN (filed v4.8 T-B4, 2026-08-19) · the SEAT-space half of the same class is NOT closed.**
-  T-B4 stopped an unnamed raiser (`raiser: ''` or missing) from counting an equally-unnamed judge's
-  vote as peer signal. It did NOT stop the seat-space twin of that shape: when the raiser is falsy
-  but the finding carries a `raiserSeat` and a vote carries the SAME `seat` with a NAMED `judge`,
-  that vote is provably the raiser's own and is still counted. MEASURED over the 1875-case
-  truthiness cross-product of (raiser, raiserSeat, judge, seat, verdict), 5 values apiece: **36
-  cases**, unchanged from `64b835b8` — T-B4 neither opened nor widened it. Both alternative
-  placements of the seat compare were built and enumerated and both were rejected by measurement:
-  running it before the judge test for a falsy raiser costs **54** cases where a vote the seats
-  prove is NOT the raiser's is dropped for having no judge, plus **36** where a named judge is
-  dropped on a seat match — violating T-B4's stated properties 1 and 2 respectively, the second of
-  which is L8's own concern. Reachable only where a falsy raiser is: the MCP path
-  (`mcp-tools.js:416`'s bare `z.string()`) and the CLI path (a raw `JSON.parse`); the engine's own
-  `anonymize.js :: toGlobalFindings` always passes a de-anonymized alias. Pinned in the open by
-  `tests/council/peer-split.test.js`'s SPLITDROP witness B. ⚠️ **Not SI-22.1 or SI-22.2** — those
-  are NAMED-raiser shapes and are untouched by T-B4.
+- [x] **CLOSED (v4.8 T-B4 round 2, 2026-08-19) · the SEAT-space half of the same class.**
+  ~~Filed the same day as OPEN: T-B4 round 1 stopped an unnamed raiser (`raiser: ''` or missing)
+  from counting an equally-unnamed judge's vote as peer signal, but not the seat-space twin — when
+  the raiser is falsy while the finding carries a `raiserSeat` and a vote carries the SAME `seat`
+  with a NAMED `judge`, that vote is provably the raiser's own and was still counted. MEASURED at
+  **36 cases** over the 1875-case truthiness cross-product of (raiser, raiserSeat, judge, seat,
+  verdict), 5 values apiece, unchanged from `64b835b8`.~~ **Closed hours later by the owner ruling
+  that produced it.** The round-1 filing rested on a specification whose property 2 said "a NAMED
+  judge counts beside a falsy raiser" while justifying it as "provably not the raiser" — and those
+  diverge in exactly those 36 cases, because a vote carrying the raiser's own seat id IS the
+  raiser's own vote. The corrected rule makes the SEAT comparison decide FIRST for any raiser (P0):
+  equal seats ⇒ the raiser's own vote, excluded and NOT announced; different seats ⇒ a real peer,
+  counted. Announcing a seat-decided exclusion is explicitly wrong — the mark is for genuine
+  ambiguity only, and counting attributed drops there would make one number mean two things.
+  Four spellings were enumerated against the corrected properties: `64b835b8` violates P0 in 90
+  cases and P1 in 567; round 1's form violates P0's peer rule in 90 and its no-mark rule in 108; a
+  "named judge AND not the raiser's own seat" variant violates them in 54 and 108; **the shipped
+  form violates none, and the 36-case residual measures ZERO.** Pinned by
+  `tests/council/peer-split.test.js`'s P0 block (the round-1 fixture is P0a, inverted) and by
+  `tally.test.js` T7b/T7d. ⚠️ **Still not SI-22.1 or SI-22.2** — those are NAMED-raiser shapes,
+  untouched by either round.
+- [ ] **OPEN (filed v4.8 T-B4, 2026-08-19) · `raiser` and `judge` should be `z.string().min(1)` in
+  the MCP tool schema.** `src/mcp-tools.js:416` declares a bare `z.string()` for `findings[].raiser`
+  and `:420` the same for `adjudications[].judge`, so `''` validates and reaches the tally — and
+  from there the append-only ledger. That is what made every shape council C1 raised reachable in
+  production. `.min(1)` on both would make the empty string unrepresentable at the boundary instead
+  of merely handled downstream, which is the better lever for the CLASS. **Deliberately not taken in
+  T-B4**, by owner ruling: it has its own blast radius — a caller currently sending `''` would start
+  getting a validation rejection where it previously got a silently mis-scored document — and it
+  deserves its own pins rather than riding a behaviour fix. ⚠️ **It does NOT subsume the T-B4 fix**:
+  `cli-handlers-council.js` reaches `tally()` through a raw `JSON.parse` with no schema at all, so
+  the predicate still has to be right on its own. Do both, in that order, not one instead of the
+  other.
 - [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
   alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
   before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats

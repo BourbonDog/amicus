@@ -94,9 +94,11 @@ function tally(input) {
     const peers = peersOf(f, votes);
     // v4.8 T-B2: how many votes `peersOf` excluded without being able to
     // attribute them — the one-sided alias fallback, plus (T-B4) the falsy
-    // judges of a falsy raiser. Same function and same emit rule (> 0 only) as
-    // debate.js :: debateTargets, so this document and the defense brief can
-    // never announce different numbers.
+    // judges of a falsy raiser. ⚠️ NOT the votes the SEAT ids attributed: when
+    // both sides carry a seat id the engine knows whose vote it is, so that
+    // exclusion is announced by nothing. Same function and same emit rule
+    // (> 0 only) as debate.js :: debateTargets, so this document and the
+    // defense brief can never announce different numbers.
     // ⚠️ On the SEATED shapes — tally.test.js T1 and T2, the one-sided twin
     // pair — `basis` deliberately does NOT move: counting the ambiguous vote
     // reproduces the naive filter's outcome, measured Confirmed on both, which
@@ -118,20 +120,23 @@ function tally(input) {
     // surviving peer whose ALIAS equals the raiser's is a different seat of the
     // same model — corroboration that is not independent. Emitted only when TRUE
     // (an unconditional `false` would change every document's shape).
-    // ⚠️ The leading `f.raiser &&` is DEFENSE IN DEPTH as of v4.8 T-B4, and no
-    // longer a decider — the honest statement replaces "LOAD-BEARING, not
-    // decoration", which was true until T-B4 and is not now. It was load-
-    // bearing because a falsy raiser made `peersOf` return `votes` WHOLE, so
-    // `v.judge === f.raiser` read `undefined === undefined` on the CLI path and
-    // `'' === ''` on the MCP path and this expression fired on documents naming
-    // no models at all. T-B4 makes `peersOf` drop every falsy-judge vote of a
-    // falsy raiser, so every surviving peer of a falsy raiser has a NAMED judge
-    // and `v.judge === f.raiser` can no longer be true. MEASURED over the
-    // 768-shape cross-product of (f.raiser, f.raiserSeat, v.judge, v.seat,
-    // verdict): deleting the guard flipped 8 shapes before T-B4 and flips ZERO
-    // after it. KEPT anyway, so this file does not silently depend on
-    // peer-split.js's post-condition for its correctness — but no test can pin
-    // it, and tally.test.js's T7b/T7d say so rather than claiming to.
+    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration — and the
+    // interesting part is that this sentence was FALSE for one commit inside
+    // v4.8 T-B4, so it is written with its measurement rather than its
+    // adjective. It is load-bearing because `peersOf` can hand back a
+    // seat-carrying vote whose `judge` is falsy, and then `v.judge === f.raiser`
+    // reads `undefined === undefined` on the CLI path (cli-handlers-council.js
+    // is a raw JSON.parse with no schema) and `'' === ''` on the MCP path
+    // (mcp-tools.js's z.string() accepts the empty string) — so without the
+    // guard this stamp fires on documents that name no models at all.
+    // MEASURED at each step over the 768-shape cross-product of (f.raiser,
+    // f.raiserSeat, v.judge, v.seat, verdict): deleting the guard flipped 8
+    // shapes at 64b835b8, ZERO after T-B4 round 1 — which had made `peersOf`
+    // drop every falsy-judge vote of a falsy raiser, briefly disarming the very
+    // pins that guarded this — and 4 after round 2, whose P0 rule counts the
+    // ones the SEAT ids prove are real peers. The 4 are the seat-DIFFER shapes
+    // of the T7b and T7d families, i.e. exactly those two tests. Re-run this
+    // after any edit to peer-split.js :: peersOf; do not infer it.
     // ⚠️ Alias-only in BOTH directions, and the CHANGELOG says so: it misses
     // `gpt-5,openai/gpt-5` (one model, two aliases — votes carry no
     // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats

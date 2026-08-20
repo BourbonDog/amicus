@@ -314,14 +314,16 @@ describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => 
 // v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the GUARDED peer filter and the R8 stamp.
 //
 // The peer filter (peer-split.js :: peersOf, called by tally.js since v4.8
-// Phase 2 T-B1 and by debate.js :: debateTargets since T-B2) has THREE
+// Phase 2 T-B1 and by debate.js :: debateTargets since T-B2) has THREE ORDERED
 // branches, and each test below names the one it
-// drives: the OUTER `f.raiser ? … : …`, and inside its named-raiser arm the seat
-// branch and the alias branch. ⚠️ The outer arm taken by a FALSY raiser is no
-// longer `votes` — v4.8 T-B4 made it `votes.filter(v => !!v.judge)`, so an
-// unnamed raiser can no longer corroborate itself. Nothing in T1-T3b reaches
-// that arm; every fixture here names a raiser. Two spellings are being
-// separated —
+// drives: the SEAT compare, which decides first for ANY raiser; then, only when
+// the seats cannot decide, the ALIAS compare for a named raiser and the
+// named-judge rule for a falsy one. ⚠️ v4.8 T-B4 changed the last of those from
+// a bare `: votes` — an unnamed raiser used to corroborate itself — and then
+// lifted the seat compare above the raiser test entirely, so a vote carrying
+// the raiser's own seat id is excluded whatever its judge field says. T1-T3b
+// all name a raiser and all take the first two branches. Two spellings are
+// being separated —
 //   GUARDED  (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser
 //   NAIVE    v.seat !== f.raiserSeat            (seat-valued, unguarded)
 // — and NAIVE is wrong on a REAL run, not merely on hand-assembled input.
@@ -445,18 +447,18 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
 // its finding BOTH carry seat ids. Each conjunct is asserted in the expression
 // itself; none is inferred from a branch. T7 pins `v.judge === f.raiser`.
 //
-// ⚠️ T7b and T7d NO LONGER PIN `f.raiser &&`, and saying so is the point of this
-// note. Until v4.8 T-B4 they were its two witnesses; T-B4 made `peersOf` drop
-// every falsy-judge vote on a falsy-raiser finding, so `peers` is now EMPTY on
-// both fixtures and the stamp cannot fire whether the guard is there or not.
-// MEASURED over the 768-shape cross-product of (f.raiser, f.raiserSeat, v.judge,
-// v.seat, verdict): deleting `f.raiser &&` flipped 8 shapes before T-B4 — the
-// T7b family (4) and the T7d family (4), i.e. exactly these two tests — and
-// flips ZERO after it. The guard is kept as defense in depth precisely so
-// tally.js does not silently depend on peer-split.js's post-condition, but no
-// fixture can make it the decider, so no test may claim to pin it. What T7b and
-// T7d pin NOW is T-B4's behaviour itself: the vote is dropped, `basis` is empty
-// and the drop is announced.
+// ⚠️ T7b and T7d pin `f.raiser &&` — but that sentence was FALSE for one commit
+// and the reason is worth keeping. T-B4 round 1 made `peersOf` drop every
+// falsy-judge vote of a falsy raiser, which emptied `peers` on both fixtures and
+// left the stamp unable to fire whether the guard was there or not: a hardening
+// had disarmed the very pins that guarded it. Round 2's P0 rule counts those
+// votes again — the two seat ids DIFFER, so they are provably real peers —
+// which restores the guard as the deciding term.
+// MEASURED at each step over the 768-shape cross-product of (f.raiser,
+// f.raiserSeat, v.judge, v.seat, verdict): deleting `f.raiser &&` flipped 8
+// shapes at 64b835b8, ZERO after round 1, and 8 again after round 2 — the T7b
+// family (4) and the T7d family (4), i.e. exactly these two tests. Never
+// inferred from the shape of the change; re-run after every edit to it.
 describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', () => {
   const meta = { runId: 'r', runType: 'headless', date: 'd',
     models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
@@ -503,34 +505,40 @@ describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', (
 
   test('T7b: no raiser and no judge, but BOTH seat fields set, does not stamp', () => {
     // Reachable through cli-handlers-council.js's raw JSON.parse, which has no
-    // schema at all. ⚠️ The REASON changed at v4.8 T-B4 even though the verdict
-    // did not: the outer arm used to hand `votes` back whole, so `peers` held a
-    // seat-carrying vote with the seat branch never having run and
-    // `v.judge === f.raiser` read `undefined === undefined`. Now the vote is
-    // DROPPED as unattributable before the stamp is computed, so `peers` is
-    // empty. The `basis` and mark assertions below are what make this test fail
-    // if that drop is ever reverted — the stamp assertion alone would not.
+    // schema at all. ⚠️ This fixture moved TWICE inside T-B4 and the second move
+    // put it back where it started, so read the values, not the history: the two
+    // seat ids DIFFER, so P0 attributes the vote as a real peer and it is
+    // COUNTED — `basis {a:1}`, no mark. Round 1 briefly dropped and marked it for
+    // having no judge, which the corrected specification calls a mistake: the
+    // seats already prove it is not the raiser's.
+    //
+    // ⚠️ THIS TEST PINS `f.raiser &&` AGAIN. Because the vote is counted, `peers`
+    // holds a seat-carrying vote whose `v.judge === f.raiser` reads
+    // `undefined === undefined`, so the stamp's inner expression is TRUE here and
+    // the leading guard is the only thing suppressing it. Deleting the guard
+    // turns this assertion red.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
       adjudications: [{ findingId: 'F1', verdict: 'agree', seat: 'deepseek#2' }],
     });
-    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
-    expect(record.findings[0].unattributedPeerDrops).toBe(1);
+    expect(record.findings[0].basis).toEqual({ a: 1, d: 0, n: 0 });
+    expect('unattributedPeerDrops' in record.findings[0]).toBe(false);
     expect('sameModelCorroboration' in record.findings[0]).toBe(false);
   });
 
   test('T7d: an EMPTY-STRING raiser and judge do not stamp', () => {
     // mcp-tools.js makes `raiser`/`judge` required z.string(), which ACCEPTS '',
-    // and that path reaches the append-only ledger via mcp-server.js. Same T-B4
-    // change of reason as T7b, on the other engine path.
+    // and that path reaches the append-only ledger via mcp-server.js. The mirror
+    // of T7b on the other engine path, and it pins the guard the same way:
+    // `'' === ''` is the reading that makes the stamp's inner expression true.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: '', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
       adjudications: [{ findingId: 'F1', judge: '', verdict: 'agree', seat: 'deepseek#2' }],
     });
-    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
-    expect(record.findings[0].unattributedPeerDrops).toBe(1);
+    expect(record.findings[0].basis).toEqual({ a: 1, d: 0, n: 0 });
+    expect('unattributedPeerDrops' in record.findings[0]).toBe(false);
     expect('sameModelCorroboration' in record.findings[0]).toBe(false);
   });
 });

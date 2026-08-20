@@ -198,13 +198,14 @@ function disputingJudges(provisionalRecord, bundledIds) {
  * `undefined` from the CLI path) was briefed a peer split the tally never
  * computed. `unattributedPeerDrops` rides beside it under the same emit rule as
  * tally.js's, so the two documents also carry the same mark.
- * v4.8 T-B4 then changed what that arm COMPUTES — a falsy raiser no longer
- * corroborates itself — and because both documents read the one function, the
- * brief moved with the tally at no cost here. Two consequences are visible from
- * this file: the briefed peer split of a falsy-raiser finding is smaller, and
- * some such findings no longer reach a brief at all, because dropping their
- * unattributable votes moves them off Contested/Disputed and `debateTargets`
- * skips every other tier.
+ * v4.8 T-B4 then changed what that branch COMPUTES — a falsy raiser no longer
+ * corroborates itself, and the seat compare was lifted ABOVE the raiser test so
+ * the seats decide first whatever `f.raiser` says (P0). Because both documents
+ * read the one function, the brief moved with the tally at no cost here. Two
+ * consequences are visible from this file: the briefed peer split of a
+ * falsy-raiser finding changes, and some such findings no longer reach a brief
+ * at all, because dropping their unattributable votes moves them off
+ * Contested/Disputed and `debateTargets` skips every other tier.
  * debate.js :: applyDebate reads `(a.seat || a.judge)` and
  * debate.js :: disputingJudges reads `adj.seat || adj.judge` — both already
  * seat-space, both read at T-B2 — so this was the last hand-rolled peer filter

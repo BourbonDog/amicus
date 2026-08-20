@@ -27,11 +27,16 @@
  */
 
 /**
- * Peer votes for one finding: every adjudication in `votes` EXCEPT the
- * raiser's own, when a raiser is known (`f.raiser` truthy); when it is not,
- * every vote whose `judge` is NAMED — a vote with no judge could be the
- * unnamed raiser's own, so it is dropped and counted by
- * `unattributedPeerDrops` below (v4.8 T-B4).
+ * Peer votes for one finding: every adjudication in `votes` except the ones
+ * that are, or might be, the raiser's own. One principle — attribute when you
+ * can, mark only when you cannot (ruling R2) — in three branches:
+ *   P0  the vote AND the finding both carry a seat id ⇒ the SEATS decide, for
+ *       ANY raiser. Equal ⇒ the raiser's own vote, excluded and NOT marked
+ *       (we know what it is). Different ⇒ a real peer, counted.
+ *   P3  else, a NAMED raiser ⇒ exclude by alias, exactly as before v4.8 T-B4.
+ *   P1/P2  else (falsy raiser) ⇒ keep every NAMED judge, because a named judge
+ *       is provably not the unnamed raiser; drop every falsy one, because it
+ *       may be the raiser's own, and count it in `unattributedPeerDrops`.
  * @param {{raiser?: string, raiserSeat?: string}} f - the finding
  * @param {Array<{judge?: string, seat?: string, verdict?: string}>} votes - its adjudications
  * @returns {Array} the peer-filtered votes
@@ -55,27 +60,28 @@ function peersOf(f, votes) {
   // debate.js :: debateTargets CALLS this function as of v4.8 T-B2, so the
   // defense brief's peer split can no longer disagree with the tally.
   //
-  // Named mutant "SPLITDROP": delete this ternary's outer `f.raiser ? … :`
-  // condition so the NAMED-RAISER filter runs UNCONDITIONALLY on every finding,
-  // raiser or not — which since T-B4 also deletes the falsy-raiser arm rather
-  // than a bare `: votes`. Never shipped — applied, run against the FULL suite,
-  // reverted by hand, byte-verified against `git show HEAD:`. RE-MEASURED at
-  // T-B4 against the tree that ships. MEASURED red set: 2 suites / 6 tests, out
-  // of 541 / 7662. By suite: peer-split 4 · tally 2.
-  // ⚠️ That red set MOVED, and the movement is the point rather than a
-  // bookkeeping detail: at 64b835b8 it was 2 suites / 9 tests (peer-split 5 ·
-  // debate 4), and T-B4 SHRANK it by moving the shipped behaviour toward this
-  // mutant's on the plain shapes. Deleting the outer condition now differs from
-  // the shipped form only where the two arms disagree — a MIXED-falsy
-  // raiser/judge pair (`''` vs `undefined`, where SPLITDROP's
-  // `v.judge !== f.raiser` is true and `!!v.judge` is false), and any
-  // seat-carrying vote on a raiser-less finding. debate.test.js's T5 block no
-  // longer separates them at all, and tally.test.js's T7b/T7d newly do. Do not
-  // read a smaller red set as a weaker pin here: it is a narrower TRUE one.
+  // Named mutant "SPLITDROP": delete the `f.raiser ? … :` condition in the
+  // FALLBACK arm so the ALIAS compare runs for every finding, raiser or not —
+  // which deletes the named-judge arm along with the condition. ⚠️ Its MEANING
+  // moved twice inside T-B4, and this record says so rather than reading as if
+  // it never had: at 64b835b8 the condition was the OUTER `f.raiser ? … : votes`;
+  // round 1 kept it outer over a filtering arm; round 2 lifted the seat compare
+  // above it, so what is left to delete is the fallback's own condition. The
+  // mutation is one idea throughout — make the alias compare unconditional — and
+  // it is what the witnesses in tests/council/peer-split.test.js are named for.
+  // Never shipped — applied, run against the FULL suite, reverted by hand,
+  // byte-verified against `git show HEAD:`.
+  // ⚠️ Its red set has SHRUNK across both rounds (2 suites / 9 tests at
+  // 64b835b8, then 2 / 6), because each round moved the shipped behaviour closer
+  // to this mutant's on the plain shapes. What still separates them is a
+  // MIXED-falsy raiser/judge pair — `''` beside `undefined`, where the alias
+  // compare reads true and `!!v.judge` reads false. Do not read a smaller red
+  // set as a weaker pin: it is a narrower TRUE one.
   //
-  // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole INNER ternary
-  // with the unguarded, seat-valued `v.seat !== f.raiserSeat`, keeping the
-  // outer `f.raiser ?` condition (that one is SPLITDROP's). Never shipped —
+  // Named mutant "NAIVESPLIT" (v4.8 T-B2): replace the whole seat-guarded
+  // ternary with the unguarded, seat-valued `v.seat !== f.raiserSeat`, i.e. drop
+  // both the `(v.seat && f.raiserSeat)` guard and every fallback branch. (The
+  // `f.raiser ?` condition inside the fallback is SPLITDROP's, not this one's.) Never shipped —
   // applied, run against the FULL suite, reverted by hand, byte-verified
   // against `git show HEAD:`. RE-MEASURED at T-B4 against the tree that ships —
   // re-run, never renumbered, because editing a recorded number ASSERTS the red
@@ -110,57 +116,61 @@ function peersOf(f, votes) {
   // `{a:2}` there too — so T-B2 propagated it to the brief rather than causing
   // it. R2 governs the fix: mark explicitly, attribute nothing.
   //
-  // The arm keeps every NAMED judge, which is what L8's rationale actually
-  // protects — a named judge is not the unnamed raiser, so no real peer is
-  // dropped for want of a raiser. What stops is the silent self-corroboration.
+  // The falsy-raiser branch keeps every NAMED judge, which is what L8's
+  // rationale actually protects — a named judge is provably not the unnamed
+  // raiser, so no real peer is dropped for want of a raiser. What stops is the
+  // silent self-corroboration.
   //
-  // ⚠️ The seat compare deliberately stays INSIDE the named-raiser arm. Both
-  // placements were built and enumerated over the 1875-case truthiness
-  // cross-product of (raiser, raiserSeat, judge, seat, verdict), 5 values
-  // apiece: running the seat compare first for a falsy raiser costs 54 cases
-  // where a vote the seats prove is NOT the raiser's is dropped for having no
-  // judge (violating T-B4 property 1) and 36 where a NAMED judge is dropped
-  // because its seat matches (violating property 2, L8's own concern). The
-  // shipped form violates neither, and buys those 36 back as a KNOWN RESIDUAL:
-  // a falsy raiser plus a named judge whose `seat` EQUALS `f.raiserSeat` is
-  // provably the raiser's own vote and is still counted. That residual is
-  // UNCHANGED from `64b835b8` — T-B4 closed the alias-space hole, not the seat-
-  // space one — it is the same class R2 defers (SI-22.1 / SI-22.2), and
-  // tests/council/peer-split.test.js's SPLITDROP witness B pins it in the open
-  // rather than leaving it undescribed.
+  // ⚠️ WHY THE SEAT COMPARE RUNS FIRST, FOR ANY RAISER, AND NOT INSIDE THE
+  // NAMED-RAISER BRANCH. T-B4 round 1 put it inside, on the reading that a
+  // NAMED judge always counts beside a falsy raiser. Measured, that left 36
+  // cases where a vote carrying the raiser's OWN seat id was counted as its own
+  // peer signal — self-corroboration through a second door, the same defect the
+  // council raised one layer down. The clause that matters is "provably not the
+  // raiser", and a seat id is the strongest proof either way: it decides FIRST,
+  // and only when it cannot decide does the judge field get a say.
   //
-  // Named mutant "SELFCORROB" (v4.8 T-B4), guarding exactly that arm: revert it
-  // to `: votes`, i.e. pre-T-B4 behaviour, so an unnamed raiser corroborates
-  // itself again. Never shipped — applied, run against the FULL suite, reverted
-  // by hand, byte-verified against `git show HEAD:`. MEASURED red set: 3 suites
-  // / 15 tests, out of 541 / 7662. By suite: peer-split 8 · debate 4 · tally 3.
-  // Note what the 8 in peer-split are: the four C1 pins, both rewritten
-  // falsy-arm drop pins, SPLITDROP witness A, and the exhaustive cross-product
-  // invariant — which fires because reverting `peersOf` without reverting
-  // `unattributedPeerDrops` makes the mark count votes the filter KEPT. The
-  // three in tally.test.js are T8a and the two R8-stamp shapes T7b/T7d, whose
-  // `basis`/mark assertions exist for exactly this reason.
-  const peers = f.raiser
-    ? votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
-    : votes.filter(v => !!v.judge);
-  // The filter above still has THREE branches: the OUTER `f.raiser ? … : …`
-  // picks between the named-raiser filter and the falsy-raiser one, and inside
-  // the named-raiser filter the seat branch and the alias branch. `peers` can
-  // still hold seat-carrying votes with the seat branch never having run — a
-  // falsy raiser reaches them through the NAMED-judge arm now, not through an
-  // unfiltered pass-through. What CHANGED for tally.js's `sameModelCorroboration`
-  // stamp is that every such vote now has a NAMED judge, so its
-  // `v.judge === f.raiser` can no longer read `undefined === undefined` on the
-  // CLI path (cli-handlers-council.js parses raw JSON with no schema) or
-  // `'' === ''` on the MCP path (whose z.string() accepts the empty string).
-  // That is why the stamp's own `f.raiser &&` guard is now defense in depth
-  // rather than a decider — measured at its site, not inferred here.
+  // Four spellings were enumerated over the 1875-case truthiness cross-product
+  // of (raiser, raiserSeat, judge, seat, verdict), 5 values apiece, and scored
+  // against P0-P3 above. Only this one reaches zero violations. `64b835b8`
+  // breaks P0 in 90 cases and P1 in 567; T-B4 round 1's form breaks P0's peer
+  // rule in 90 and its no-mark rule in 108; a "named judge AND not the raiser's
+  // own seat" variant breaks them in 54 and 108. The 36-case residual round 1
+  // disclosed is measured at ZERO here.
+  //
+  // Named mutant "SELFCORROB" (v4.8 T-B4): restore `64b835b8`'s whole predicate
+  // — `f.raiser ? <the inner ternary> : votes` — so an unnamed raiser
+  // corroborates itself again. It is the "T-B4 never happened" mutant and its
+  // red set is the whole T-B4 pin surface. Never shipped — applied, run against
+  // the FULL suite, reverted by hand, byte-verified against `git show HEAD:`.
+  //
+  // Named mutant "SEATBLIND" (v4.8 T-B4 round 2), guarding P0's reach: restore
+  // round 1's placement — `f.raiser ? <the inner ternary> : votes.filter(v =>
+  // !!v.judge)` — so the seat compare runs only for a NAMED raiser. It differs
+  // from the shipped form on exactly the shapes P0 was added for, and it is a
+  // separate mutant from SELFCORROB because it keeps the C1 fix while dropping
+  // the correction to it. Never shipped, same application/revert/verify
+  // discipline.
+  const peers = votes.filter(v => (v.seat && f.raiserSeat)
+    ? v.seat !== f.raiserSeat                       // P0 — the seats decide
+    : f.raiser ? v.judge !== f.raiser               // P3 — the alias compare
+      : !!v.judge);                                 // P1/P2 — named, or nothing
+  // The filter above has THREE branches and they are ORDERED: the seat compare
+  // decides first and does not consult `f.raiser` at all, so `peers` never
+  // holds a vote carrying the raiser's own seat id, whatever its `judge` says.
+  // It CAN hold a seat-carrying vote whose judge is falsy — that is P0
+  // admitting a provable peer — which is why tally.js's `sameModelCorroboration`
+  // guard still has to reckon with `v.judge === f.raiser` reading
+  // `undefined === undefined` on the CLI path (cli-handlers-council.js parses
+  // raw JSON with no schema) and `'' === ''` on the MCP path (whose z.string()
+  // accepts the empty string). Measured at that guard's own site, its leading
+  // `f.raiser &&` is a DECIDER again after round 2.
   return peers;
 }
 
 /**
  * How many of `votes` `peersOf` excluded WITHOUT being able to attribute them.
- * Two families, one per arm of `peersOf`:
+ * Two families, one per FALLBACK arm of `peersOf` (never a seat-decided drop):
  *   - raiser NAMED: the drop happened on the ALIAS branch while exactly ONE
  *     side of the pair carried a seat id — the finding has a `raiserSeat` and
  *     the vote has no `seat`, or the reverse. A seat-less `deepseek` vote
@@ -171,6 +181,11 @@ function peersOf(f, votes) {
  *     `v.judge === f.raiser` — the pair is judged by TRUTHINESS, so a
  *     `raiser:''` finding beside a `judge:undefined` vote is the same
  *     unattributable pair as `''`/`''` and an `===` spelling would miss it.
+ * ⚠️ NEITHER family includes a drop the SEATS decided (P0). When the vote and
+ * the finding both carry a seat id the engine knows whose vote it is, so
+ * excluding it ATTRIBUTES it rather than losing it, and it is not counted here.
+ * That is what the leading `!(v.seat && f.raiserSeat)` says. Marking an
+ * attributed drop would make one number mean two different things.
  * This number is what says so out loud instead of leaving the drop silently
  * correct.
  *
@@ -182,24 +197,31 @@ function peersOf(f, votes) {
  */
 function unattributedPeerDrops(f, votes) {
   // ⚠️ `f.raiser` was a leading `&&` guard until v4.8 T-B4 and is now the
-  // TERNARY CONDITION, because the two arms of `peersOf` drop for two different
-  // reasons and this function must count both. The guard existed because a
-  // falsy raiser used to drop nothing at all, so any non-zero count would have
-  // announced a drop that never happened; T-B4 made those drops real, and the
-  // same fixtures that pinned 0 now pin 1.
+  // TERNARY CONDITION, because the two FALLBACK arms of `peersOf` drop for two
+  // different reasons and this function must count both. The guard existed
+  // because a falsy raiser used to drop nothing at all, so any non-zero count
+  // would have announced a drop that never happened; T-B4 made those drops real,
+  // and the same fixtures that pinned 0 now pin 1.
   //
-  // ⚠️ `!(v.seat && f.raiserSeat)` is DOCUMENTATION, not a live test, and is
-  // deliberately left unpinned: it names the `peersOf` branch this counts, but
-  // the XOR beside it already implies it (exactly one side truthy ⇒ their AND
-  // is falsy). RE-MEASURED at T-B4 against the widened predicate, over the
-  // 1296-case truthiness cross-product of (f.raiser, f.raiserSeat, v.judge,
-  // v.seat) with 6 values apiece, three falsy and three truthy: dropping
-  // `!(v.seat && f.raiserSeat)` still flips ZERO — so no fixture can make that
-  // conjunct the deciding one, and a test claiming to pin it would be green
-  // against its own mutant. Collapsing the ternary to its named arm flips 270
-  // and to its falsy arm 378; dropping the XOR flips 27; dropping
-  // `v.judge === f.raiser` flips 270; weakening `!v.judge` to `true` flips 324.
-  // Those four ARE pinned, one apiece, in tests/council/peer-split.test.js.
+  // ⚠️ `!(v.seat && f.raiserSeat)` IS NOW A DECIDER AND IS NOW PINNED — retiring
+  // a claim this file carried from T-B2 through T-B4 round 1, which read
+  // "DOCUMENTATION, not a live test … dropping it flips ZERO … a test claiming
+  // to pin it would be green against its own mutant." That was true while it sat
+  // inside the named-raiser arm, where the XOR beside it already implied it
+  // (exactly one side truthy ⇒ their AND is falsy). Round 2 HOISTED it in front
+  // of the ternary to state what P0 requires — a seat-decided exclusion is
+  // attributed, so it is never marked — and in the falsy-raiser arm there is no
+  // XOR to imply it.
+  // RE-MEASURED at round 2 over the 1296-case truthiness cross-product of
+  // (f.raiser, f.raiserSeat, v.judge, v.seat), 6 values apiece, three falsy and
+  // three truthy: dropping the hoisted conjunct flips 81 cases — ALL 81 in the
+  // falsy-raiser arm and ZERO in the named one, so the retired sentence was
+  // right about where the conjunct WAS and wrong the moment it moved.
+  // Collapsing the ternary to its named arm flips 189 and to its falsy arm 297;
+  // dropping the XOR flips 27; dropping `v.judge === f.raiser` flips 270;
+  // weakening `!v.judge` to `true` flips 243. All five ARE pinned in
+  // tests/council/peer-split.test.js — the hoisted conjunct by P0b and P0c,
+  // which assert that a seat-decided drop is NOT announced.
   //
   // Named mutant "ZEROEMIT" (v4.8 T-B2), guarding the EMIT rule both callers
   // share — present only when > 0, so a run that does not orphan one side of a
@@ -236,8 +258,8 @@ function unattributedPeerDrops(f, votes) {
   // nothing else" would conclude `minimum: 1` is removable decoration. It is
   // not — it is the fourth and fifth guard. run-schema-debate.test.js says the
   // same thing from its own side and defers the count to here.
-  return votes.filter(v => (f.raiser
-    ? (!(v.seat && f.raiserSeat) && (!!v.seat !== !!f.raiserSeat) && v.judge === f.raiser)
+  return votes.filter(v => !(v.seat && f.raiserSeat) && (f.raiser
+    ? ((!!v.seat !== !!f.raiserSeat) && v.judge === f.raiser)
     : !v.judge)).length;
 }
 
