@@ -2959,6 +2959,27 @@ deliberately left alone:
   filter, and `peersOf` has THREE — the missing outer `f.raiser ? … : votes` is precisely what
   made the brief and the tally disagree on any finding with a falsy raiser (`''` via the MCP path,
   `undefined` via the CLI path). Measured at `8e97faaf` and pinned by `debate.test.js` T5a/T5b/T5c.
+  ⚠️ **ANNOTATION, not a rewrite (docs/CITATIONS.md): the `: votes` spelling above was true through
+  `64b835b8` and is no longer.** v4.8 T-B4 changed that outer arm to keep only NAMED judges, so a
+  falsy raiser can no longer corroborate itself. The count of branches and the divergence this
+  paragraph records are both unaffected; only the arm's body moved. T5a/T5b/T5c still pin the
+  agreement, at re-measured values — see `peer-split.js :: peersOf` for the shipped form.
+- [ ] **OPEN (filed v4.8 T-B4, 2026-08-19) · the SEAT-space half of the same class is NOT closed.**
+  T-B4 stopped an unnamed raiser (`raiser: ''` or missing) from counting an equally-unnamed judge's
+  vote as peer signal. It did NOT stop the seat-space twin of that shape: when the raiser is falsy
+  but the finding carries a `raiserSeat` and a vote carries the SAME `seat` with a NAMED `judge`,
+  that vote is provably the raiser's own and is still counted. MEASURED over the 1875-case
+  truthiness cross-product of (raiser, raiserSeat, judge, seat, verdict), 5 values apiece: **36
+  cases**, unchanged from `64b835b8` — T-B4 neither opened nor widened it. Both alternative
+  placements of the seat compare were built and enumerated and both were rejected by measurement:
+  running it before the judge test for a falsy raiser costs **54** cases where a vote the seats
+  prove is NOT the raiser's is dropped for having no judge, plus **36** where a named judge is
+  dropped on a seat match — violating T-B4's stated properties 1 and 2 respectively, the second of
+  which is L8's own concern. Reachable only where a falsy raiser is: the MCP path
+  (`mcp-tools.js:416`'s bare `z.string()`) and the CLI path (a raw `JSON.parse`); the engine's own
+  `anonymize.js :: toGlobalFindings` always passes a de-anonymized alias. Pinned in the open by
+  `tests/council/peer-split.test.js`'s SPLITDROP witness B. ⚠️ **Not SI-22.1 or SI-22.2** — those
+  are NAMED-raiser shapes and are untouched by T-B4.
 - [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
   alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
   before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats

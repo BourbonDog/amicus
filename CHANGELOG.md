@@ -7,6 +7,22 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **A finding whose `raiser` is empty or missing no longer counts its own vote as peer
+  corroboration.** `""` is not a model id, but the council-tally input schema accepts it, and the
+  tally used to treat an unknown raiser as "exclude nothing" — so a document with `raiser: ""` and
+  a `judge: ""` adjudication scored that adjudication into `findings[].basis`. Measured: a finding
+  with votes `["" agree, "gpt" agree]` read `{a:2}` **Confirmed (solid)**, where the same shape
+  with a named raiser reads `{a:1}` (thin). Votes the engine cannot attribute are now excluded and
+  **announced** in `findings[].unattributedPeerDrops` instead of counted; every **named** judge
+  still counts, so no real peer is dropped for want of a raiser. Consequences on such a document:
+  `basis` can shrink and the tier can fall with it — a finding whose only votes are unidentifiable
+  now reads `Singleton` rather than `Confirmed` or `Disputed`. Documents that name their raisers
+  are byte-for-byte unchanged. The same predicate builds the defense brief, so the brief moved with
+  the tally; a finding that falls off `Contested`/`Disputed` no longer reaches a brief at all.
+  ⚠️ **Disclosed residual:** when the raiser is unnamed but the finding and the vote carry the
+  *same* seat id, the vote is provably the raiser's own and is still counted. Unchanged by this
+  release, reachable only on hand-assembled or MCP-assembled input, filed and pinned by a test.
+
 - **The Workspace's dead-seat rows no longer collapse, and a live seat no longer erases its dead
   twin, on a bench that repeats an alias.** Two measured defects. Two dead twins rendered as a
   single row (`deadSeats` dedup'd on the alias); and with one twin alive and the other genuinely

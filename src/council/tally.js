@@ -92,12 +92,19 @@ function tally(input) {
   const outFindings = findings.map(f => {
     const votes = byFinding.get(f.id) || [];
     const peers = peersOf(f, votes);
-    // v4.8 T-B2: how many votes the one-sided alias fallback excluded. Same
-    // function and same emit rule (> 0 only) as debate.js :: debateTargets, so
-    // this document and the defense brief can never announce different numbers.
-    // ⚠️ `basis` deliberately does NOT move: counting the ambiguous vote
-    // reproduces the naive filter's outcome — measured Confirmed on both
-    // tally.test.js T1 and T2 — which re-arms #137. Announced, not counted.
+    // v4.8 T-B2: how many votes `peersOf` excluded without being able to
+    // attribute them — the one-sided alias fallback, plus (T-B4) the falsy
+    // judges of a falsy raiser. Same function and same emit rule (> 0 only) as
+    // debate.js :: debateTargets, so this document and the defense brief can
+    // never announce different numbers.
+    // ⚠️ On the SEATED shapes — tally.test.js T1 and T2, the one-sided twin
+    // pair — `basis` deliberately does NOT move: counting the ambiguous vote
+    // reproduces the naive filter's outcome, measured Confirmed on both, which
+    // re-arms #137. Announced, not counted. ⚠️ T-B4 is the deliberate exception
+    // and the scope of that sentence narrowed with it: on a finding whose
+    // raiser is FALSY, `basis` DOES move, because there the ambiguous vote is
+    // the raiser's own inflating its own basis rather than a twin's signal
+    // going uncounted (council C1 — see peer-split.js :: peersOf).
     const drops = unattributedPeerDrops(f, votes);
     const basis = { a: 0, d: 0, n: 0 };
     // Skip unknown verdict strings so a stray value can't corrupt the basis via
@@ -111,14 +118,20 @@ function tally(input) {
     // surviving peer whose ALIAS equals the raiser's is a different seat of the
     // same model — corroboration that is not independent. Emitted only when TRUE
     // (an unconditional `false` would change every document's shape).
-    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration. The WHY
-    // left this file with the v4.8 T-B1 extraction; it now lives on
-    // peer-split.js :: unattributedPeerDrops, whose own guard is the same
-    // shape. Short form: when `f.raiser` is falsy `peersOf` returns `votes`
-    // WHOLE, so `v.judge === f.raiser` reads `undefined === undefined` on the
-    // CLI path and `'' === ''` on the MCP path, and without the guard this
-    // expression fires on documents that name no models at all. T7b and T7d in
-    // tally.test.js pin exactly those two shapes for this stamp.
+    // ⚠️ The leading `f.raiser &&` is DEFENSE IN DEPTH as of v4.8 T-B4, and no
+    // longer a decider — the honest statement replaces "LOAD-BEARING, not
+    // decoration", which was true until T-B4 and is not now. It was load-
+    // bearing because a falsy raiser made `peersOf` return `votes` WHOLE, so
+    // `v.judge === f.raiser` read `undefined === undefined` on the CLI path and
+    // `'' === ''` on the MCP path and this expression fired on documents naming
+    // no models at all. T-B4 makes `peersOf` drop every falsy-judge vote of a
+    // falsy raiser, so every surviving peer of a falsy raiser has a NAMED judge
+    // and `v.judge === f.raiser` can no longer be true. MEASURED over the
+    // 768-shape cross-product of (f.raiser, f.raiserSeat, v.judge, v.seat,
+    // verdict): deleting the guard flipped 8 shapes before T-B4 and flips ZERO
+    // after it. KEPT anyway, so this file does not silently depend on
+    // peer-split.js's post-condition for its correctness — but no test can pin
+    // it, and tally.test.js's T7b/T7d say so rather than claiming to.
     // ⚠️ Alias-only in BOTH directions, and the CHANGELOG says so: it misses
     // `gpt-5,openai/gpt-5` (one model, two aliases — votes carry no
     // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats

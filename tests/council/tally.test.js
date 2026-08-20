@@ -150,7 +150,11 @@ describe('tally() — defensive basis handling', () => {
         { judge: 'y', findingId: 'F1', verdict: 'agree' },
       ],
     });
-    // With no raiser, every vote is a peer vote (nothing excluded).
+    // With no raiser, every NAMED vote is a peer vote. ⚠️ v4.8 T-B4 narrowed
+    // that from "every vote": a vote whose `judge` is falsy beside a falsy
+    // raiser may be the raiser's own, so it is dropped and announced instead.
+    // Both judges here are named, so this fixture is unchanged — which is the
+    // half of L8 that was ever load-bearing.
     expect(record.findings[0].basis).toEqual({ a: 2, d: 0, n: 0 });
   });
 });
@@ -312,8 +316,12 @@ describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => 
 // The peer filter (peer-split.js :: peersOf, called by tally.js since v4.8
 // Phase 2 T-B1 and by debate.js :: debateTargets since T-B2) has THREE
 // branches, and each test below names the one it
-// drives: the OUTER `f.raiser ? … : votes`, and inside it the seat branch and the
-// alias branch. Two spellings are being separated —
+// drives: the OUTER `f.raiser ? … : …`, and inside its named-raiser arm the seat
+// branch and the alias branch. ⚠️ The outer arm taken by a FALSY raiser is no
+// longer `votes` — v4.8 T-B4 made it `votes.filter(v => !!v.judge)`, so an
+// unnamed raiser can no longer corroborate itself. Nothing in T1-T3b reaches
+// that arm; every fixture here names a raiser. Two spellings are being
+// separated —
 //   GUARDED  (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser
 //   NAIVE    v.seat !== f.raiserSeat            (seat-valued, unguarded)
 // — and NAIVE is wrong on a REAL run, not merely on hand-assembled input.
@@ -435,7 +443,20 @@ describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
 // The achievable property, stated rather than assumed: the stamp is unreachable
 // unless a raiser is NAMED (a truthy `f.raiser`, which '' is not) AND a vote and
 // its finding BOTH carry seat ids. Each conjunct is asserted in the expression
-// itself; none is inferred from a branch. T7/T7b/T7d pin one conjunct each.
+// itself; none is inferred from a branch. T7 pins `v.judge === f.raiser`.
+//
+// ⚠️ T7b and T7d NO LONGER PIN `f.raiser &&`, and saying so is the point of this
+// note. Until v4.8 T-B4 they were its two witnesses; T-B4 made `peersOf` drop
+// every falsy-judge vote on a falsy-raiser finding, so `peers` is now EMPTY on
+// both fixtures and the stamp cannot fire whether the guard is there or not.
+// MEASURED over the 768-shape cross-product of (f.raiser, f.raiserSeat, v.judge,
+// v.seat, verdict): deleting `f.raiser &&` flipped 8 shapes before T-B4 — the
+// T7b family (4) and the T7d family (4), i.e. exactly these two tests — and
+// flips ZERO after it. The guard is kept as defense in depth precisely so
+// tally.js does not silently depend on peer-split.js's post-condition, but no
+// fixture can make it the decider, so no test may claim to pin it. What T7b and
+// T7d pin NOW is T-B4's behaviour itself: the vote is dropped, `basis` is empty
+// and the drop is announced.
 describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', () => {
   const meta = { runId: 'r', runType: 'headless', date: 'd',
     models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
@@ -481,26 +502,81 @@ describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', (
   });
 
   test('T7b: no raiser and no judge, but BOTH seat fields set, does not stamp', () => {
-    // The outer `f.raiser ? … : votes` skips the filter entirely, so `peers` holds
-    // a seat-carrying vote with the seat branch never having run, and
-    // `v.judge === f.raiser` is `undefined === undefined`. Reachable through
-    // cli-handlers-council.js's raw JSON.parse, which has no schema at all.
+    // Reachable through cli-handlers-council.js's raw JSON.parse, which has no
+    // schema at all. ⚠️ The REASON changed at v4.8 T-B4 even though the verdict
+    // did not: the outer arm used to hand `votes` back whole, so `peers` held a
+    // seat-carrying vote with the seat branch never having run and
+    // `v.judge === f.raiser` read `undefined === undefined`. Now the vote is
+    // DROPPED as unattributable before the stamp is computed, so `peers` is
+    // empty. The `basis` and mark assertions below are what make this test fail
+    // if that drop is ever reverted — the stamp assertion alone would not.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
       adjudications: [{ findingId: 'F1', verdict: 'agree', seat: 'deepseek#2' }],
     });
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
+    expect(record.findings[0].unattributedPeerDrops).toBe(1);
     expect('sameModelCorroboration' in record.findings[0]).toBe(false);
   });
 
   test('T7d: an EMPTY-STRING raiser and judge do not stamp', () => {
     // mcp-tools.js makes `raiser`/`judge` required z.string(), which ACCEPTS '',
-    // and that path reaches the append-only ledger via mcp-server.js.
+    // and that path reaches the append-only ledger via mcp-server.js. Same T-B4
+    // change of reason as T7b, on the other engine path.
     const record = tally({
       ...base,
       findings: [{ id: 'F1', raiser: '', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
       adjudications: [{ findingId: 'F1', judge: '', verdict: 'agree', seat: 'deepseek#2' }],
     });
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
+    expect(record.findings[0].unattributedPeerDrops).toBe(1);
     expect('sameModelCorroboration' in record.findings[0]).toBe(false);
+  });
+});
+
+// v4.8 T-B4 (T8) — council C1, end to end through `tally()`: the finding the
+// council actually raised against PR #174, and the named-raiser control it was
+// measured against. The defect was PRE-EXISTING, not introduced by PR B —
+// measured at base e7cf54b0, the tally read `{a:2}` Confirmed there too.
+describe('tally() — an unnamed raiser does not corroborate itself (v4.8 T-B4, C1)', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+  const base = { meta, rankings: [], runStats: [] };
+
+  test('T8a: `raiser:\'\'` with its own vote beside a real peer counts ONE peer, and says so', () => {
+    // HEAD counted BOTH: `basis {a:2}`, tier Confirmed, confidence SOLID, and no
+    // mark — an empty-string raiser voting its own finding up to a two-peer
+    // majority on a live MCP code path (mcp-tools.js's `raiser` is a bare
+    // `z.string()`, which accepts '').
+    const record = tally({
+      ...base,
+      findings: [{ id: 'A1', raiser: '', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'A1', judge: '', verdict: 'agree' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'agree' }],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 1, d: 0, n: 0 });
+    expect(f.tier).toBe('Confirmed');
+    expect(f.confidence).toBe('thin');
+    expect(f.unattributedPeerDrops).toBe(1);
+  });
+
+  test('T8b CONTROL: the same shape with a NAMED raiser — identical basis, and no mark', () => {
+    // The control the finding was adjudicated against. It reads the same
+    // `{a:1}` it always has: T-B4 moved the falsy-raiser case TO the control,
+    // it did not move the control. The only difference that survives is the
+    // mark, which is the whole point — the ambiguous vote is announced, and
+    // an ordinary alias exclusion is not.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'A1', judge: 'gemini', verdict: 'agree' },
+        { findingId: 'A1', judge: 'gpt', verdict: 'agree' }],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 1, d: 0, n: 0 });
+    expect(f.tier).toBe('Confirmed');
+    expect('unattributedPeerDrops' in f).toBe(false);
   });
 });
