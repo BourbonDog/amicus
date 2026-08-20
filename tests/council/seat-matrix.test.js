@@ -379,32 +379,64 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * peer-split records were rewritten twice to remove. Re-take the denominator
  * with it.
  *
- * ⚠️ ALL FOUR RED SETS BELOW ARE RE-MEASURED IN THE COMMIT THAT FOLLOWS THIS
- * ONE. The numbers first recorded against 774dcdc2 were invalidated by fix
- * round 1, which added five pins and changed what the join accepts, so they were
- * DELETED rather than adjusted. Re-run, never renumber.
+ * ⚠️ EVERY NUMBER BELOW WAS RE-RUN AT FIX ROUND 1, NOT ADJUSTED. The sets first
+ * recorded against 774dcdc2 (ALWAYSCOL 3/24+4, JUNKKEY 1/11, out of 541/7686)
+ * were invalidated by that round — five pins were added and the join's input
+ * handling changed — so they were DELETED and re-measured rather than edited.
+ * Both grew, and the growth is accounted for below. Re-run, never renumber; and
+ * re-take the denominator with them.
  *
  * Named mutant "ALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
  * routed to it. It is the "byte-unchanged artifact" mutant — every report that
  * has no unattributable vote grows a column.
+ * MEASURED red set, run against d82e2127:
+ * 3 suites / 27 tests + 4 SNAPSHOTS, out of 541 / 7691. By suite:
+ *   seat-matrix 16 · report-claude-column 9 · report-debate 2.
+ * The four snapshot failures ARE the contract this conditional exists for: both
+ * pinned byte-unchanged report snapshots (report-claude-column's no-flag run and
+ * report-debate's v4.0 baseline) fail in both formats.
+ * ⚠️ It read 3/24+4 before fix round 1. The three it gained are the three
+ * malformed-`adjudications` pins, which assert that such a document keeps the
+ * bench roster EXACTLY — so of this block's own pins it now reds FOUR, not one:
+ * the no-unattributable-vote pin plus those three.
  *
  * Named mutant "JUNKKEY": revert the join to c8867b48's bare
  * `byJudge[(seatSpace && adj.seat) || adj.judge]`, leaving the roster code in
  * place. It is the "T-C1 never happened" mutant for the refusal half.
+ * MEASURED red set, run against d82e2127:
+ * 1 suite / 13 tests, out of 541 / 7691. By suite: seat-matrix 13.
+ * ⚠️ It read 1/11 before fix round 1; the two it gained are that round's
+ * multi-finding pin and `''`-roster pin, both of which route a vote to
+ * UNATTRIBUTED and so cannot survive the refusal being removed.
+ * Two pins stay GREEN under it and that is not a weakness: the
+ * no-unattributable-vote pin is ALWAYSCOL's, and the `basis` pin is a
+ * preservation pin that NO mutant here moves — `basis` is copied by reference on
+ * every path, which is the point.
  *
  * Named mutant "PERFINDING" (v4.8 T-C1 fix round 1): leave `m.judges` global and
  * move only the `byJudge` SEEDING inside the per-finding map, so each finding is
  * seeded from a roster decided by ITS OWN votes. It is the exact failure the
- * `⚠️ TWO-PHASE` comment on report.js names, and it ran the FULL suite GREEN
- * before the multi-finding pin above existed — every fixture here had one
- * finding, and one finding cannot tell a global roster from a per-finding one.
+ * `⚠️ TWO-PHASE` comment on report.js names.
+ * MEASURED red set, run against d82e2127:
+ * 1 suite / 1 test, out of 541 / 7691 — seat-matrix 1, the multi-finding pin.
+ * ⚠️ READ THAT NUMBER THE RIGHT WAY. A one-test red set is small because this
+ * mutant is INVISIBLE to every other shape, not because the pin is weak: against
+ * 3938d64f, where every fixture in this block had exactly ONE finding, the same
+ * mutation ran the FULL suite GREEN — 541 suites, 0 failures. One finding cannot
+ * tell a global roster from a per-finding one, and the rendered ROW cannot tell
+ * them apart even with two, because a missing key and a `null` key both read
+ * falsy. The pin asserts `Object.keys` for exactly that reason.
  *
  * Named mutant "EMPTYOK" (v4.8 T-C1 fix round 1): drop the `key !== ''` conjunct
- * from `columnFor`, leaving `typeof key === 'string' && columns.has(key)`. The
- * six class pins are GREEN against it — on their rosters `columns.has('')` is
- * already false — so it is named to keep the conjunct honest on the one roster
- * where `columns.has('')` is TRUE.
+ * from `columnFor`, leaving `typeof key === 'string' && columns.has(key)`.
+ * MEASURED red set, run against d82e2127:
+ * 1 suite / 1 test, out of 541 / 7691 — seat-matrix 1, the `''`-roster pin.
+ * ⚠️ That ONE test is the entire reason the mutant is named. The six class pins
+ * are GREEN against it — measured, they are not in this set — because on their
+ * rosters `columns.has('')` is already false, so `columns.has` does the refusing
+ * and the conjunct is green against its own mutant. Only a roster that HOLDS
+ * `''` separates the two spellings.
  */
 describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
   const SEATS = [
