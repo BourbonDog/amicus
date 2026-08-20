@@ -719,11 +719,43 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * Named mutant "WSALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in UNATTRIBUTED. It is the "every existing matrix grows a column"
  * mutant — the one the conditional exists for.
+ * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
+ * 3 suites / 29 tests, out of 541 / 7712. By suite:
+ *   seat-matrix 22 · matrix-model 6 · workspace-matrix 1.
+ * ⚠️ TWENTY-THREE of the 29 are pins that PREDATE T-C2 and assert an exact judge
+ * or cell list — T17/T18, T20, T21, T22 shape 2, the eight shared-predicate rows,
+ * the four malformed-table rows, all six buildMatrixModel pins in
+ * tests/workspace/matrix-model.test.js, and T19's blind header. That breadth IS
+ * the contract: the roster is the header, so an unconditional column changes
+ * every matrix ever rendered. Of this block's own 20 pins it reds 6.
+ * ⚠️ ZERO snapshots move, unlike report.js's ALWAYSCOL which took four. Not a
+ * weaker mutant — measured, no snapshot in this repo captures a rendered
+ * workspace matrix, so those 23 pins are the only thing standing where report.js
+ * has snapshots.
+ * ⚠️ It read 30 (seat-matrix 23) before fix round 1. The one it LOST is the
+ * replaced `''`-roster pin: the old one asserted a two-column roster, so an
+ * unconditional third column broke it; the new one already expects UNATTRIBUTED,
+ * and so does the agreement pin beside it.
  *
  * Named mutant "WSJUNKKEY": revert the join to 32a63e92's
  * `if (!adj || typeof adj.judge !== 'string') { continue; }` plus
  * `votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict`, leaving the
  * roster code in place. It is the "T-C2 never happened" mutant.
+ * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
+ * 2 suites / 15 tests, out of 541 / 7712. By suite:
+ *   seat-matrix 14 · workspace-matrix 1.
+ * Those 14 are thirteen of this block's own pins plus T22 shape 1. SEVEN pins
+ * here stay green under it, and the record names them rather than implying full
+ * coverage: the no-unattributable-vote pin is WSALWAYSCOL's; `basis` is a
+ * preservation pin no mutant here can move; so are the null-element and the three
+ * malformed-`adjudications` pins; and the both-name-slots pin survives because
+ * this mutation reverts only the ROUTING — the roster code is left in place, so
+ * the column is still appended with the right pair.
+ * ⚠️ It read 13 (seat-matrix 12) before fix round 1, and the TWO it gained are
+ * both `''`-roster pins. That is worth reading rather than skipping: 32a63e92's
+ * expression lands a `''` judge in a `''` roster column, so this mutant now
+ * reproduces the exact desync fix round 1 removed, and the agreement pin catches
+ * it — a second mutation, arrived at independently, that the same pin refuses.
  *
  * Named mutant "WSEMPTYOK" (v4.8 T-C2 fix round 1): drop the `key !== ''`
  * conjunct from `columnFor`, leaving `typeof key === 'string' && keys.has(key)`.
@@ -735,12 +767,34 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * renamed. WSEMPTYFOLD mutated the opposite code (it ADDED the conjunct) and its
  * pin asserted the behaviour this round reversed, so neither its mutation nor its
  * number could be carried forward.
+ * MEASURED red set, run against fa0c5ae7:
+ * 1 suite / 2 tests, out of 541 / 7712 — seat-matrix 2: the `''`-fold pin and the
+ * BOTH-CONSUMERS agreement pin.
+ * ⚠️ TWO tests, and which two is the whole point. A small set here means the
+ * conjunct is invisible everywhere else, not that the pin is weak: on every other
+ * fixture's roster `keys.has('')` is already false, so `keys.has` does the
+ * refusing and the conjunct is unobservable — T-C1 shipped that exact blind spot.
+ * Only a roster HOLDING `''` separates the spellings. The second red is the one
+ * that matters most: under this mutant the two consumers render one document two
+ * ways, and the agreement pin is what says so.
  *
  * Named mutant "WSPAIRFOR": build the fold column's pair as
  * `pairFor(UNATTRIBUTED, map)` instead of carrying the literal in both slots.
  * Invisible on every ordinary labelMap — `labelFor` returns null and display()
  * falls back to `pair.model`, printing the same string — so the only fixture
  * that can see it is one whose labelMap maps a label TO `UNATTRIBUTED`.
+ * MEASURED red set, RE-RUN against fa0c5ae7 (fix round 1):
+ * 2 suites / 2 tests, out of 541 / 7712. By suite:
+ *   seat-matrix 1 (the both-name-slots pin) · workspace-matrix 1 (the painter).
+ * Unchanged by the round in both mechanism and size; re-run, not carried over.
+ * ⚠️ THE PAINTER PIN ONLY REDS BECAUSE ITS labelMap IS ADVERSARIAL. Measured, it
+ * fails on the blind header rendering `Review Z` where the fold column belongs —
+ * the mechanism this decision was made against, not a restatement of it. On an
+ * ordinary labelMap the two spellings are indistinguishable, also measured:
+ * `display(pairFor('UNATTRIBUTED', {}), true)` and
+ * `display({model: 'UNATTRIBUTED', label: 'UNATTRIBUTED'}, true)` both return
+ * `UNATTRIBUTED`. Written with the map T19 uses, that test would have been GREEN
+ * against its own mutant — an EMPTY red set proving nothing.
  */
 describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
   const SEATS = [
