@@ -1884,7 +1884,10 @@ sized and deferred rather than carried half-done.
    HEAD. Single source: `peer-split-mutants.js :: NAIVESPLIT`. ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
    explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
    `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
-   describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+   describe SURVIVES, deliberately. ⚠️ **"Undercount" here names a POSSIBILITY** (T-B5 fix round 3,
+   council C1): such a vote is either a real twin's signal or the raiser's own, and the engine
+   cannot tell — which is why it is announced. The user-facing text says so; this dated sentence is
+   annotated rather than rewritten. The one thing that changed is that the drop is now
    **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0.
 3. **`position`/`lens` ARE recoverable on twin benches** — measured by executing `buildSeats` +
    `buildTallyInput` (re-measured 2026-08-16: on `['deepseek','deepseek','gpt']` every `meta.seats`
@@ -3413,7 +3416,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
      explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
      `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
-     describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+     describe SURVIVES, deliberately. ⚠️ **"Undercount" here names a POSSIBILITY** (T-B5 fix round 3,
+     council C1): such a vote is either a real twin's signal or the raiser's own, and the engine
+     cannot tell — which is why it is announced. Annotated, not rewritten. The one thing that changed is that the drop is now
      **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0.
 
      **THIS shape's own fixture is T2 (`tally.test.js:357`, **was `:341`**) — the mapping is the REVERSE of the ordinal guess.**
@@ -3458,7 +3463,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      ⚠️ **This did NOT close SI-22.1 or SI-22.2.** Owner ruling R2 is *mark
      explicitly, attribute nothing*: the ambiguous vote is STILL dropped, `basis` still reads
      `{a:0,d:0,n:0}`, the tier is still `Singleton`, and the undercount these two shapes
-     describe SURVIVES, deliberately. The one thing that changed is that the drop is now
+     describe SURVIVES, deliberately. ⚠️ **"Undercount" here names a POSSIBILITY** (T-B5 fix round 3,
+     council C1): such a vote is either a real twin's signal or the raiser's own, and the engine
+     cannot tell — which is why it is announced. Annotated, not rewritten. The one thing that changed is that the drop is now
      **ANNOUNCED** — `findings[].unattributedPeerDrops`, emitted only when > 0. In particular, the "deliberate safe-drop" above is still a DROP: a seat-less
      `deepseek` vote still cannot be told apart from the raiser's own, and `sameModelCorroboration`
      still does not fire on it. It is now counted, not recovered.

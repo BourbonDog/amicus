@@ -36,9 +36,14 @@ All notable changes to Amicus are documented here. Format follows
   The same predicate builds the defense brief,
   so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
   reaches a brief at all.
-  ⚠️ **This does not close the twin-seat undercount** (SI-22.1 / SI-22.2). Where a *named* raiser's
+  ⚠️ **This does not close the twin-seat case** (SI-22.1 / SI-22.2). Where a *named* raiser's
   finding and an adjudication carry seat ids on only **one** side, the vote is still excluded and
   still only announced, deliberately, by owner ruling — unchanged by this release.
+  ⚠️ What those two track is a **possible** undercount, not an established one. Such a vote is
+  either a real twin's signal being discarded or the raiser's own being correctly excluded, and
+  nothing in the document distinguishes them — which is exactly why the drop is announced rather
+  than silently taken. Read the count as "up to N votes of peer signal may be missing here", never
+  as "N are".
 
 - **The Workspace's dead-seat rows no longer collapse, and a live seat no longer erases its dead
   twin, on a bench that repeats an alias.** Two measured defects. Two dead twins rendered as a

@@ -11,8 +11,11 @@ const { peersOf, unattributedPeerDrops } = require('../../src/council/peer-split
  * literals kept intact. Written as an explicit scan rather than a regex
  * alternation because the two get different answers on the case that matters —
  * a `//` inside a string literal. Regex literals are not modelled; the file this
- * scans contains none, and the anti-vacuity assertions at the call site go red
- * if the scan ever eats the code instead of the commentary.
+ * scans contains none.
+ * ⚠️ THIS FUNCTION IS PINNED DIRECTLY, by the describe block immediately below.
+ * That is what keeps the require-ban below it from passing vacuously: a scanner
+ * that returned '' — or that ate a string literal — fails those unit tests
+ * before the ban is ever consulted. Guard the extractor, not the text it reads.
  * @param {string} src
  * @returns {string}
  */
@@ -43,6 +46,65 @@ function executableText(src) {
   return out;
 }
 
+// ⚠️ THE ANTI-VACUITY GUARD, v4.8 T-B5 fix round 3 (council C2). It used to be a
+// line-count assertion on peer-split.js's executable text — `toHaveLength(14)`.
+// That closed the vacuity risk but bolted the guard to the SUBJECT FILE, so it
+// fired on any edit rewriting that text, including every MUTATION: three named
+// mutants gained a red test that caught a reformat rather than a behaviour
+// change, and every red set recorded before it existed went stale. The property
+// was right and the attachment point was wrong.
+// These tests guard the EXTRACTOR itself. A scanner that ate everything, or that
+// stripped inside a string literal, fails here immediately — so the ban below
+// cannot pass for the wrong reason — and nothing here moves when peer-split.js
+// is reformatted, remeasured or mutated.
+describe('executableText — the extractor the require-ban rests on', () => {
+  test('a whole-line // comment is removed', () => {
+    expect(executableText('// gone\nconst a = 1;').trim()).toBe('const a = 1;');
+  });
+
+  test('a TRAILING // comment goes, the code before it stays', () => {
+    expect(executableText('const a = 1; // gone').trim()).toBe('const a = 1;');
+  });
+
+  test('a /* block */ comment is removed', () => {
+    expect(executableText('const a = /* gone */ 1;')).toBe('const a =  1;');
+  });
+
+  test('a JSDoc block is removed, and code after it survives', () => {
+    expect(executableText('/**\n * gone\n */\nconst a = 1;').trim()).toBe('const a = 1;');
+  });
+
+  test('a // INSIDE a string literal is NOT a comment — the decisive case', () => {
+    // A naive regex strip truncates here, which would let a real call on the
+    // same line hide behind the URL. This is why the scan is explicit.
+    const src = 'const u = \'http://x\'; const os = require("os");';
+    expect(executableText(src)).toBe(src);
+  });
+
+  test('a /* inside a string literal is NOT a comment either', () => {
+    const src = 'const s = "/* not a comment */";';
+    expect(executableText(src)).toBe(src);
+  });
+
+  test('all three quote styles survive intact', () => {
+    const src = 'const a = \'x\'; const b = "y"; const c = `z`;';
+    expect(executableText(src)).toBe(src);
+  });
+
+  test('comment-free code is returned unchanged', () => {
+    const src = 'const a = 1;\nmodule.exports = { a };';
+    expect(executableText(src)).toBe(src);
+  });
+
+  test('it does NOT eat the code it is given (the vacuity case, stated directly)', () => {
+    const src = '// header\nfunction f() { return 1; }\nmodule.exports = { f };';
+    const out = executableText(src);
+    expect(out).toContain('function f()');
+    expect(out).toContain('module.exports');
+    expect(out).not.toContain('header');
+  });
+});
+
 describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
   // ⚠️ v4.8 T-B5 (council C3) narrowed this scan to EXECUTABLE TEXT. It used to
   // match the RAW file, so the banned sequence fired from inside a comment or a
@@ -52,38 +114,29 @@ describe('peer-split — extraction pins (v4.8 Phase 2 T-B1)', () => {
   // say about itself. The BAN is exactly as strong: a real call is still caught
   // wherever it hides, because only commentary is removed and string literals
   // are kept.
-  // ⚠️ ANTI-VACUITY, in VOLUME not just in kind. Strip too much and
-  // `toBeNull()` passes for the wrong reason — that is the failure mode a
-  // comment-stripping pin actually has. Naming two surviving tokens is not
-  // enough: a scanner that ate everything ELSE would still satisfy them. So the
-  // executable line COUNT is pinned, and it catches the fault in BOTH
-  // directions — over-strip drops below 14, and a comment surviving the strip
-  // pushes above it. MEASURED at 14 with this very function, extracted from
-  // this file so the measurement cannot drift from what ships. Re-MEASURE it,
-  // never renumber it, if this module's executable text ever changes.
+  // Vacuity is closed by the describe block ABOVE, which pins executableText()
+  // against synthetic inputs, so this test asserts the BAN and nothing else. It
+  // deliberately makes no claim about peer-split.js's size, shape or line count.
   // Proven in BOTH directions by execution at T-B5: a real `require(` added to
   // peer-split.js turns this test RED, and the same token written into one of
   // its comments leaves it GREEN.
-  // ⚠️⚠️ SECOND COST, AND THE SENTENCE THAT STOPS THIS RECURRING. The volume
-  // pin fires on ANY edit that changes the executable line count — including a
-  // MUTATION. Every named mutant on `peersOf` (SPLITDROP, NAIVESPLIT,
-  // SELFCORROB, SEATBLIND) respells that ternary at a different line count, so
-  // this pin ENLARGES each of their red sets by one test, and it is not a
-  // behavioural catch when it does — it is this pin noticing a reformat.
-  // Consequence, and it is structural rather than drift: ANY red set recorded
-  // BEFORE this pin existed is STALE BY CONSTRUCTION. All six named mutants
-  // were re-run at T-B5 fix round 2 for exactly that reason, and each record
-  // now says how much of its red set is this pin.
-  // ⇒ If you add, remove or reshape ANY pin in this file, re-run every mutant
-  // in peer-split-mutants.js before trusting a single number in it.
+  // ⚠️ HISTORY, kept because it cost three rounds to learn. Fix round 1 closed
+  // vacuity with `toHaveLength(14)` on peer-split.js's executable text. It
+  // worked, and it coupled this pin to the subject file: any edit rewriting that
+  // text tripped it, INCLUDING a mutation, so three named mutants each gained a
+  // red test that caught a reformat rather than a behaviour change, and every
+  // red set recorded before it went stale by construction. Fix round 3 moved the
+  // guard onto the extractor and re-ran all six mutants to confirm the coupling
+  // is gone. ⇒ Guard the tool, not the text it reads. A pin that names a
+  // property of the file under test will fire on every honest change to it.
   test('P3 — the module is REQUIRE-FREE, so a DI-free consumer (debate.js) can import it', () => {
     const src = fs.readFileSync(
       path.join(__dirname, '../../src/council/peer-split.js'), 'utf8');
     const code = executableText(src);
-    // The scan must not have eaten what it is scanning, nor left commentary in.
-    expect(code.split('\n').filter(l => l.trim().length)).toHaveLength(14);
+    // One structural sanity check that every CommonJS module satisfies, so it
+    // does not couple to this predicate's shape; the extractor's own tests above
+    // are what actually close vacuity.
     expect(code).toContain('module.exports');
-    expect(code).toContain('votes.filter');
     expect(code.match(/require\(/g)).toBeNull();
   });
 
