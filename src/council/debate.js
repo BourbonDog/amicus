@@ -11,6 +11,8 @@
  * Also holds the pure pre-debate helpers (target selection, dispute detection, re-vote bundling) moved from run-debate.js (v4.7 PR0).
  */
 
+const { peersOf, unattributedPeerDrops } = require('./peer-split');
+
 const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
 // The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,
@@ -82,10 +84,11 @@ function applyDebate({ tallyInput, defenseByRaiser, revoteByJudge, aliasOf }) {
       if (entry) { entry.verdict = rv.verdict; }
       else {
         // Fail-open push (a stateless leg re-voting an id it never adjudicated).
-        // `judge` MUST stay alias-space: it reaches tally.js's `v.judge !==
-        // f.raiser` and report.js's `byJudge[adj.judge]`, where a seat id
-        // silently retiers the finding. The seat rides beside it, emitted only
-        // when it differs — so a unique bench pushes today's exact row.
+        // `judge` MUST stay alias-space: it reaches
+        // peer-split.js :: peersOf's `v.judge !== f.raiser` and report.js's
+        // `byJudge[adj.judge]`, where a seat id silently retiers the finding.
+        // The seat rides beside it, emitted only when it differs — so a unique
+        // bench pushes today's exact row.
         const alias = aliasOf ? aliasOf(key) : key;
         adjudications.push({ findingId: id, judge: alias, verdict: rv.verdict,
           ...(alias !== key ? { seat: key } : {}) });
@@ -186,11 +189,27 @@ function disputingJudges(provisionalRecord, bundledIds) {
  * v4.8 PR3 Task 6: keyed on `f.raiserSeat || f.raiser`. Claude's findings carry
  * no `raiserSeat`, so its key stays the literal 'claude' and run-debate.js's
  * `.filter(m => m !== 'claude')` / `byRaiser.claude` keep working unchanged.
- * v4.8 PR4c §3.3 (#137): `peerVerdicts` below now takes the SAME guard as
- * tally.js's `peers` — seats when both sides carry one, aliases otherwise — and
- * moved in the same commit, because fixing one site without the other makes this
- * brief's peer split disagree with the tally the chair reads. It was the last
- * alias-space filter in this file (:81 and :178 were already seat-space).
+ * v4.8 Phase 2 T-B2: `peerVerdicts` below CALLS peer-split.js :: peersOf —
+ * the one predicate tally.js also calls — so the defense brief's peer split and
+ * the tally the chair reads agree by construction rather than by two spellings
+ * kept in step by hand. Until T-B2 this file spelled its own copy with TWO
+ * branches while `peersOf` had THREE: the outer `f.raiser ? … : …` arm was
+ * missing here, so a finding whose raiser is falsy ('' from the MCP path,
+ * `undefined` from the CLI path) was briefed a peer split the tally never
+ * computed. `unattributedPeerDrops` rides beside it under the same emit rule as
+ * tally.js's, so the two documents also carry the same mark.
+ * v4.8 T-B4 then changed what that branch COMPUTES — a falsy raiser no longer
+ * corroborates itself, and the seat compare was lifted ABOVE the raiser test so
+ * the seats decide first whatever `f.raiser` says (P0). Because both documents
+ * read the one function, the brief moved with the tally at no cost here. Two
+ * consequences are visible from this file: the briefed peer split of a
+ * falsy-raiser finding changes, and some such findings no longer reach a brief
+ * at all, because dropping their unattributable votes moves them off
+ * Contested/Disputed and `debateTargets` skips every other tier.
+ * debate.js :: applyDebate reads `(a.seat || a.judge)` and
+ * debate.js :: disputingJudges reads `adj.seat || adj.judge` — both already
+ * seat-space, both read at T-B2 — so this was the last hand-rolled peer filter
+ * left in this file.
  */
 function debateTargets(provisionalRecord, tallyInput) {
   const claimById = new Map(tallyInput.findings.map(f => [f.id, f]));
@@ -205,12 +224,15 @@ function debateTargets(provisionalRecord, tallyInput) {
     // adjudication OBJECTS renders "0 dispute, 0 agree, 0 neutral" — a silent
     // all-zero byte-identical to the no-data case, i.e. a paid brief telling the
     // model nobody disputed it.
-    const peerVerdicts = (f.adjudications || [])
-      .filter(a => (a.seat && f.raiserSeat) ? a.seat !== f.raiserSeat : a.judge !== f.raiser)
-      .map(a => a.verdict);
+    const adjs = f.adjudications || [];
+    const peerVerdicts = peersOf(f, adjs).map(a => a.verdict);
+    // Emitted only when > 0, exactly as tally.js emits it, so a run that does
+    // not orphan one side of a twin pair produces a byte-identical row.
+    const drops = unattributedPeerDrops(f, adjs);
     const raiserKey = f.raiserSeat || f.raiser;
     (byRaiser[raiserKey] = byRaiser[raiserKey] || []).push({ id: f.id, claim: src.claim,
-      severity: f.severity, location: src.location, peerVerdicts, disputeReasons: [] });
+      severity: f.severity, location: src.location, peerVerdicts,
+      ...(drops > 0 ? { unattributedPeerDrops: drops } : {}), disputeReasons: [] });
   }
   return { byRaiser, previousTier };
 }

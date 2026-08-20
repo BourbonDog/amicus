@@ -1,5 +1,6 @@
 // src/council/tally.js
 'use strict';
+const { peersOf, unattributedPeerDrops } = require('./peer-split');
 
 /**
  * Peers-only tier cascade. a/d are agree/dispute counts among PEER judges
@@ -90,26 +91,23 @@ function tally(input) {
   }
   const outFindings = findings.map(f => {
     const votes = byFinding.get(f.id) || [];
-    // Only exclude the raiser's own vote when a raiser is known; the raiser is
-    // populated by the orchestrator (not the reviewer JSON), so an unset raiser
-    // must not silently drop a real peer vote (L8).
-    //
-    // v4.8 PR4c §3.3 (#137): compare SEATS when both sides carry one, aliases
-    // otherwise. On a twin bench the alias compare drops a twin's real vote —
-    // measured on ['deepseek','deepseek','gpt'], one corroborating peer reported
-    // as `Singleton {a:0,d:0}`; on three deepseeks the whole cross-review was
-    // discarded. The guard is NOT the naive `v.seat !== f.raiserSeat`: both
-    // producers are `X && X.id !== alias` over independent bind operations
-    // (anonymize.js's raiserSeat over Stage 1, run-assemble.js's adjudication
-    // seat over Stage 2), each `|| null` by design, so exactly one side carrying
-    // a seat id is ENGINE-reachable in both directions whenever bindSeats
-    // orphans a twin leg — and there the naive form reads `undefined !== 'x#1'`
-    // and silently promotes a Singleton to Confirmed on the raiser's own vote.
-    // debate.js's peerVerdicts moves with this in the SAME commit, or the
-    // defense brief's peer split disagrees with the tally the chair reads.
-    const peers = f.raiser
-      ? votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
-      : votes;
+    const peers = peersOf(f, votes);
+    // v4.8 T-B2: how many votes `peersOf` excluded without being able to
+    // attribute them — the one-sided alias fallback, plus (T-B4) the falsy
+    // judges of a falsy raiser. ⚠️ NOT the votes the SEAT ids attributed: when
+    // both sides carry a seat id the engine knows whose vote it is, so that
+    // exclusion is announced by nothing. Same function and same emit rule
+    // (> 0 only) as debate.js :: debateTargets, so this document and the
+    // defense brief can never announce different numbers.
+    // ⚠️ On the SEATED shapes — tally.test.js T1 and T2, the one-sided twin
+    // pair — `basis` deliberately does NOT move: counting the ambiguous vote
+    // reproduces the naive filter's outcome, measured Confirmed on both, which
+    // re-arms #137. Announced, not counted. ⚠️ T-B4 is the deliberate exception
+    // and the scope of that sentence narrowed with it: on a finding whose
+    // raiser is FALSY, `basis` DOES move, because there the ambiguous vote is
+    // the raiser's own inflating its own basis rather than a twin's signal
+    // going uncounted (council C1 — see peer-split.js :: peersOf).
+    const drops = unattributedPeerDrops(f, votes);
     const basis = { a: 0, d: 0, n: 0 };
     // Skip unknown verdict strings so a stray value can't corrupt the basis via
     // basis[undefined] = NaN (L9).
@@ -122,14 +120,23 @@ function tally(input) {
     // surviving peer whose ALIAS equals the raiser's is a different seat of the
     // same model — corroboration that is not independent. Emitted only when TRUE
     // (an unconditional `false` would change every document's shape).
-    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration. The filter
-    // above has THREE branches: the OUTER `f.raiser ? … : votes` skips it
-    // entirely, so `peers` can hold seat-carrying votes with the seat branch
-    // never having run, and `v.judge === f.raiser` is then
-    // `undefined === undefined` on a hand-assembled document that names no
-    // models (cli-handlers-council.js parses raw JSON with no schema), and
-    // `'' === ''` on the MCP path, whose z.string() accepts the empty string and
-    // whose output reaches the append-only ledger.
+    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration — and the
+    // interesting part is that this sentence was FALSE for one commit inside
+    // v4.8 T-B4, so it is written with its measurement rather than its
+    // adjective. It is load-bearing because `peersOf` can hand back a
+    // seat-carrying vote whose `judge` is falsy, and then `v.judge === f.raiser`
+    // reads `undefined === undefined` on the CLI path (cli-handlers-council.js
+    // is a raw JSON.parse with no schema) and `'' === ''` on the MCP path
+    // (mcp-tools.js's z.string() accepts the empty string) — so without the
+    // guard this stamp fires on documents that name no models at all.
+    // MEASURED at each step over the 768-shape cross-product of (f.raiser,
+    // f.raiserSeat, v.judge, v.seat, verdict): deleting the guard flipped 8
+    // shapes at 64b835b8, ZERO after T-B4 round 1 — which had made `peersOf`
+    // drop every falsy-judge vote of a falsy raiser, briefly disarming the very
+    // pins that guarded this — and 4 after round 2, whose P0 rule counts the
+    // ones the SEAT ids prove are real peers. The 4 are the seat-DIFFER shapes
+    // of the T7b and T7d families, i.e. exactly those two tests. Re-run this
+    // after any edit to peer-split.js :: peersOf; do not infer it.
     // ⚠️ Alias-only in BOTH directions, and the CHANGELOG says so: it misses
     // `gpt-5,openai/gpt-5` (one model, two aliases — votes carry no
     // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats
@@ -139,7 +146,8 @@ function tally(input) {
              tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
              ...(f.raiser
                && peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge === f.raiser)
-               ? { sameModelCorroboration: true } : {}) };
+               ? { sameModelCorroboration: true } : {}),
+             ...(drops > 0 ? { unattributedPeerDrops: drops } : {}) };
   });
   return {
     schemaVersion: COUNCIL_SCHEMA_VERSION,

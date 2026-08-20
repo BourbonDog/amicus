@@ -91,6 +91,23 @@ DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STA
    `:341` (T2) pin exactly SI-22.1's and SI-22.2's outcomes (`basis {a:0,d:0,n:0}`, `Singleton`).
    The peer-split fix must **replace** them, not pass them. Writing it "keeping the suite green" is
    impossible. Pin the replacement with a **named mutant**, not a preservation test.
+
+   ✅ **EXECUTED 2026-08-19 at `e23e56cd` (v4.8 Phase 2 T-B2).** Annotation only — the sentences
+   above stand exactly as written on 2026-08-16, per `docs/CITATIONS.md`'s preserved-record rule.
+   What actually happened: both tests were REPLACED, not passed; their titles now end
+   `⇒ excluded AND announced`; and the cited lines have moved — T1 `tally.test.js:331` (was
+   `:329`), T2 `tally.test.js:357` (was `:341`), both re-derived by opening the file. The
+   replacement is pinned by the named mutant `NAIVESPLIT` (17 suites / 97 tests red), not by a
+   preservation test.
+   ⚠️ **SUPERSEDED COUNT — annotation only.** Per `docs/CITATIONS.md`, this is a dated snapshot and
+   the sentence above stands: `97` was true at T-B2 (`e23e56cd`). T-B4's two re-runs make it
+   **17 suites / 109 tests**, which is also the value at HEAD — T-B5's round-1 volume pin briefly
+   inflated it to 110 and round 3 removed that coupling. Single source:
+   `tests/council/peer-split-mutants.js :: NAIVESPLIT`. ⚠️ Replacing the tests did **not** close SI-22.1 or SI-22.2: by owner ruling
+   R2 the vote is still dropped, `basis` still reads `{a:0,d:0,n:0}`, the tier is still
+   `Singleton`, and the undercount deliberately remains. Only the announcement —
+   `findings[].unattributedPeerDrops` — is new. Do not re-issue this instruction.
+
 3. **Three source comments are false, and SI-08's DONE endorses them.**
    `run-assemble.js:190` and `tests/council/run-assemble.test.js:102` both claim "`position` is
    unrecoverable on every bench." Measured by executing `buildSeats` + `buildTallyInput`: on
@@ -246,6 +263,20 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
   (measured: `debateTargets` returns 1 peer where `tally` counts 2, because `tally` has an outer
   `f.raiser ?` branch `debate.js` lacks; the comment at `debate.js:189-193` claiming "the SAME
   guard" is false). **Replaces** T1/T2
+  ✅ **COMPLETED 2026-08-19 by Phase 2 T-B1 (`0fd630b6`) + T-B2 (`e23e56cd`)** — the desync
+  above IS closed: `debate.js :: debateTargets` now routes through the same
+  `peer-split.js :: peersOf` that `tally.js` calls, so the comment quoted above as false is no
+  longer written anywhere in the tree. `unattributedPeerDrops(f, votes)` is a new function both
+  documents call, on `findings[]`, emitted only when > 0; `tally.test.js` T1/T2 were REPLACED,
+  not merely kept green; the field is declared in `council-tally.schema.json`.
+  ⚠️ **DID NOT close SI-22.1 or SI-22.2 — read this precisely.** Per owner ruling **R2** the
+  ambiguous drop STAYS: `basis` does not move, tier does not move, the undercount survives
+  exactly as before, on purpose. The only change is that the drop is now **announced**. Nor is
+  the mark rendered anywhere yet: `byRaiser` feeds `buildDefenseBrief` only and never reaches
+  disk, and `verdict.js :: buildVerdict`'s findings literal is closed and does not copy the
+  field — so before **T2.4 / PR C** the number is observable only in `tally.json`. Read
+  "Replaces T1/T2" above as replacing WRONG-behaviour pins with right-behaviour-plus-mark pins,
+  not as closing SI-22.1/SI-22.2 — both stay open.
 - **T2.4** Consumers: SI-12 refuses to join on an unidentifying key; SI-22.5 renders an
   **unattributed** column across all three renderers with the vote still in basis
 

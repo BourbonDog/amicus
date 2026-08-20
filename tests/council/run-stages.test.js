@@ -1195,9 +1195,9 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
     // `retry.attemptedSeats.has(join)` goes false, `deadLegs0.find` hands the row its OWN first
     // leg back, and that leg — which already carries a `superseded` row — is billed twice.
     // RE-RUN against the FULL suite at `9f460526`: RED on exactly TWO tests, 533 of 535 suites
-    // green — this one at the `!('waveId' in x)` assertion, and run-retry.test.js ::
-    // *"attemptedSeats carries the minted key; no emitted still-dead note does"*. So the claim
-    // held; what was missing was the NAME, not the pin.
+    // green — this one at the `!('waveId' in x)` assertion, and
+    // run-retry.test.js :: *"attemptedSeats carries the minted key; no emitted still-dead note does"*.
+    // So the claim held; what was missing was the NAME, not the pin.
     // ⚠️ Post-consolidation the mutation is made at the `legLossKey` CALL inside
     // `planStillDeadSources` (`legLossKey(bound, alias, l, new Map())`) rather than at its
     // `twins` binding, which is now a threaded parameter — emptying that would desync nothing,

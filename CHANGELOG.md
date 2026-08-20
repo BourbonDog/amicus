@@ -7,6 +7,44 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **A finding whose `raiser` is empty or missing no longer counts its own vote as peer
+  corroboration.** `""` is not a model id, but the council-tally input schema accepts it, and the
+  tally used to treat an unknown raiser as "exclude nothing" — so a document with `raiser: ""` and
+  a `judge: ""` adjudication scored that adjudication into `findings[].basis`. Measured: a finding
+  with votes `["" agree, "gpt" agree]` read `{a:2}` **Confirmed (solid)**, where the same shape
+  with a named raiser reads `{a:1}` (thin).
+  The rule is now one principle — *attribute when you can, mark only when you cannot* — applied in
+  order. **Seat ids decide first, and no longer need a known raiser:** when the adjudication *and*
+  the finding both carry a seat id, the same seat means the raiser's own vote (excluded) and
+  different seats mean a real peer (counted), whatever `raiser` and `judge` say. Only when the seats
+  cannot decide does the name matter: a named raiser excludes by alias exactly as before, and an
+  **unnamed** one keeps every **named** judge — so no real peer is dropped for want of a raiser —
+  while dropping the votes whose judge is equally unidentifiable. Those, and only those, are
+  **announced** in `findings[].unattributedPeerDrops`: a vote the seats attributed is not ambiguous,
+  so it is never counted there.
+  Consequences on such a document: `basis` can move and the tier with it — a finding whose only
+  votes are unidentifiable now reads `Singleton` rather than `Confirmed` or `Disputed`. On a
+  document that **names** its raisers, *this* fix changes nothing: the peer split there is
+  byte-identical to `64b835b8`, the commit it was written on top of, measured over 300,000
+  randomized named-raiser findings with zero differences.
+  ⚠️ **That is a claim about this fix, not about v4.7.1.** The `unattributedPeerDrops` mark below
+  landed earlier in the same release and it fires on named-raiser documents too — where the finding
+  and the vote carry a seat id on only **one** side — so a document that names its raisers can still
+  carry a key that a v4.7.1 one did not. Anything claiming such documents are unchanged *by the
+  release* is false; they are unchanged by this fix. On an ordinary bench, where no alias repeats and
+  `raiserSeat` is absent by design, that shape does not arise.
+  The same predicate builds the defense brief,
+  so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
+  reaches a brief at all.
+  ⚠️ **This does not close the twin-seat case** (SI-22.1 / SI-22.2). Where a *named* raiser's
+  finding and an adjudication carry seat ids on only **one** side, the vote is still excluded and
+  still only announced, deliberately, by owner ruling — unchanged by this release.
+  ⚠️ What those two track is a **possible** undercount, not an established one. Such a vote is
+  either a real twin's signal being discarded or the raiser's own being correctly excluded, and
+  nothing in the document distinguishes them — which is exactly why the drop is announced rather
+  than silently taken. Read the count as "up to N votes of peer signal may be missing here", never
+  as "N are".
+
 - **The Workspace's dead-seat rows no longer collapse, and a live seat no longer erases its dead
   twin, on a bench that repeats an alias.** Two measured defects. Two dead twins rendered as a
   single row (`deadSeats` dedup'd on the alias); and with one twin alive and the other genuinely

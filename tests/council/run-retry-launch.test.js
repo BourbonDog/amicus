@@ -146,8 +146,8 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
 
   test('C1 — the conjunction END TO END: a BOUND still-dead retry leg always resolves `exact`', async () => {
     // C1a and C1b above pin each half at this function's own boundary. This pins the property
-    // the two halves BUY, measured where it is actually spent: `run-stage1-rows.js ::
-    // pushDeadSeatRows` consults `retryLegBySeat` on its `exact` arm ONLY, so a still-dead
+    // the two halves BUY, measured where it is actually spent: `run-stage1-rows.js :: pushDeadSeatRows`
+    // consults `retryLegBySeat` on its `exact` arm ONLY, so a still-dead
     // retry leg that reaches the record BOUND while its row is `!exact` has its billed `usage`
     // dropped silently (BACKLOG.md's PR #170 round-2 C1 — verdict: reachable at the function
     // boundary, measured UNREACHABLE end to end, pre-existing at `main`. This is a GUARD RAIL,

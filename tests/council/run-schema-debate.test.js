@@ -8,6 +8,8 @@ const SCHEMA_DIR = path.join(__dirname, '..', '..', 'schemas');
 const load = (name) => JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, name), 'utf-8'));
 const ajv = new Ajv({ allErrors: true, strict: false });
 
+const { tally } = require('../../src/council/tally');
+
 describe('council-run schema accepts the debate summary (spec §5.1)', () => {
   const validate = ajv.compile(load('council-run.schema.json'));
   const base = {
@@ -182,5 +184,94 @@ describe('council-verdict schema genuinely permits seats/raiserSeat/sameModelCor
     expect('raiserSeat' in verdict.findings[0]).toBe(false);
     expect('sameModelCorroboration' in verdict.findings[0]).toBe(false);
     expect(fresh().compile(load('council-verdict.schema.json'))(verdict)).toBe(true);
+  });
+});
+// v4.8 Phase 2 T-B2: the same treatment for `findings[].unattributedPeerDrops`,
+// the mark this release adds. The schema edit is DOCUMENTARY — `findings` items
+// declare no `additionalProperties: false`, so the key already validated —
+// which is exactly why it needs a pin: ajv's validate() never strips, so a check
+// that does not put the field IN its fixture cannot see a schema that has
+// started rejecting it. MEASURED before declaring: a 5-document corpus (three
+// pre-T-B2 shapes carrying no such key, two T-B2 shapes carrying `1`) validated
+// identically against the schema BEFORE and AFTER the declaration — 0 of 5
+// changed verdict — so the declaration alters nothing for existing documents.
+//
+// Named mutant "SCHEMADROP": close `additionalProperties` on the findings items
+// AND delete the `unattributedPeerDrops` declaration — i.e. exactly the future
+// tightening that forgets this key. MEASURED against the corpus above: the three
+// pre-T-B2 documents are still accepted and BOTH T-B2 documents are REJECTED.
+// Then measured again against the FULL suite with SCHEMADROP written into the
+// real schema file, and RE-MEASURED twice at v4.8 T-B4 against the tree that
+// ships (re-run each time, never renumbered), and RE-RUN AGAIN at v4.8 T-B5 fix
+// rounds 2 AND 3: 1 suite / 1 test red out of 541 / 7674 — the first test below,
+// and nothing else, the same identity as every earlier reading. The denominator
+// has moved twice (T-B4 added tests, T-B5 round 3 added nine more) without this
+// red set moving once. It was the only one of the six named mutants T-B4 left
+// alone, and at T-B5 it is one of TWO: this mutation edits the schema and
+// ZEROEMIT edits the producers, so neither could be reached by round 1's
+// line-count pin on peer-split.js, nor by its removal in round 3 — the change
+// that moved the other four back down.
+// So "the only thing standing between that tightening and a
+// silent rejection of every twin-orphan tally.json" is a measurement, not a
+// figure of speech. As with PR4c's mutant 3, note the implication: a tightening
+// that KEEPS the declaration is safe.
+//
+// `minimum: 1` is deliberate and mirrors `sameModelCorroboration`'s `const: true`
+// — both state the emit-when-set rule in the schema rather than only describing
+// it in prose. The producers never emit 0 (`tally.js` and `debate.js` both spell
+// `drops > 0 ? … : {}`). That `minimum: 1` makes THIS FILE an independent second
+// guard on the emit rule, not merely documentation of it: under the ZEROEMIT
+// mutant — emit unconditionally at both producers — the schema rejects the
+// zero-valued key, so a test here goes red alongside the three behavioural
+// absence pins, and so does schemas.test.js's whole-family check. ZEROEMIT's
+// full measured red set is recorded in one place only, in
+// peer-split-mutants.js :: ZEROEMIT; do not restate the count here.
+//
+// ⚠️ NOT declared in `council-verdict.schema.json`, deliberately: the findings
+// literal in verdict.js :: buildVerdict is CLOSED — it names every key it
+// copies — and it does not copy this one, so no verdict.json can carry it.
+// Declaring it there would be a documentary claim about a field that never
+// arrives.
+describe('council-tally schema genuinely permits unattributedPeerDrops (v4.8 T-B2)', () => {
+  const fresh = () => new Ajv({ allErrors: true, strict: false });
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+
+  test('a REAL tally() document carrying the mark validates, and really carries it', () => {
+    const doc = tally({
+      meta, rankings: [], runStats: [],
+      // SI-22.2's shape: the finding has a raiserSeat, the twin's vote has none.
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree' }],
+    });
+    // Guard against a vacuous pin, matching the PR4c test above: assert the
+    // field is PRESENT before asserting the schema accepts it. A producer that
+    // stopped emitting it would otherwise leave this green against a schema
+    // that forbids it.
+    expect(doc.findings[0].unattributedPeerDrops).toBe(1);
+    expect(fresh().compile(load('council-tally.schema.json'))(doc)).toBe(true);
+  });
+
+  test('a document that does not orphan a twin leg omits the key and still validates', () => {
+    const doc = tally({
+      meta: { ...meta, models: ['gemini', 'gpt'] }, rankings: [], runStats: [],
+      findings: [{ id: 'F1', raiser: 'gemini', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'gpt', verdict: 'agree' }],
+    });
+    expect('unattributedPeerDrops' in doc.findings[0]).toBe(false);
+    expect(fresh().compile(load('council-tally.schema.json'))(doc)).toBe(true);
+  });
+
+  test('the declared shape REJECTS a zero — the emit rule is stated, not just described', () => {
+    // The REJECT direction, so the pin proves the validator is live on this
+    // field rather than merely permissive. `minimum: 1` is what makes a
+    // present-and-zero document (which no producer writes) fail loudly.
+    const doc = tally({
+      meta, rankings: [], runStats: [],
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree' }],
+    });
+    doc.findings[0].unattributedPeerDrops = 0;
+    expect(fresh().compile(load('council-tally.schema.json'))(doc)).toBe(false);
   });
 });

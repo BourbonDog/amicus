@@ -565,6 +565,16 @@ Append to **each** of the two sub-items (adapting the test name to the one it pi
 
 Use the line numbers and names you measured in Step 1.
 
+✅ **STEPS 1-2 ARE SPENT — annotation added 2026-08-19, nothing above rewritten.** The text Step 2
+prescribes was appended to both sub-items and has since been SUPERSEDED in `BACKLOG.md` by v4.8
+Phase 2 T-B2 (`e23e56cd`), which executed the replacement. Do not re-apply the template above: it
+would re-introduce a retired instruction and the stale `:329`/`:341` citations with it. Current
+values, re-derived by opening the file: T1 `tally.test.js:331`, T2 `tally.test.js:357`, both
+titles now ending `⇒ excluded AND announced`. ⚠️ The replacement did **not** close SI-22.1 or
+SI-22.2 — `basis` and `Singleton` are unchanged by owner ruling R2 and the undercount remains;
+only `findings[].unattributedPeerDrops` is new. Step 1's instruction to *"record their test names,
+not just their line numbers"* is the part that aged well, and both filings now carry the names.
+
 - [ ] **Step 3: Run the gates**
 
 ```bash
