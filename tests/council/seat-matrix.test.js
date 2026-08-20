@@ -320,8 +320,12 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
     expect(verdict.findings[0].basis).toEqual({ a: 1, d: 1, n: 0 });
     expect(renderedBasis(rowFor(md, 'A1'), 4)).toEqual(verdict.findings[0].basis);
     // v4.8 T-C2 closed the matrix-model side, so BOTH consumers now move on this
-    // document — the line that used to stand here saying they diverge, and that
-    // named T-C2 as the task that would close it, is gone with the divergence.
+    // document. Read out of 32a63e92, the line that stood here said the workspace
+    // model was "UNCHANGED", that ruling R17 gives matrix-model.js the same rule
+    // "as a SECOND implementation in its own task", and that the two files
+    // "diverge on this document today". It named NO task — `T-C2` appears nowhere
+    // in src/, tests/ or electron/ at that commit — so what is closed here is the
+    // deferral it described, not a promise it made.
     // The columns ARE the report's judge columns above, in order, and the
     // seat-less vote takes the same fourth one.
     const m = buildMatrixModel(record, {}, verdict);
@@ -1084,9 +1088,17 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
  * Fix round 1 pinned `report.js` and `matrix-model.js` in agreement on ONE
  * document — the `''` roster. That is the weakest possible place for the
  * property: it is the document we already knew to look at, because a wrong brief
- * sent it divergent. This block proves the agreement the way PR B proved its own
- * (24,000 cases over the raiser/judge truthiness cross-product, 5,922
- * disagreements at base and 0 at HEAD): by driving the whole axis.
+ * sent it divergent. This block drives the whole axis instead.
+ *
+ * ⚠️ A CROSS-REFERENCE TO AN EARLIER PR'S FUZZ STOOD HERE AND IS DELETED, with no
+ * substitute. Its case and disagreement counts came from conversation rather than
+ * from this repository, and `git grep` over src/, tests/, electron/, docs/ and
+ * BACKLOG.md finds them nowhere — every hit is an unrelated `240000` timeout. The
+ * truthiness cross-products that ARE recorded in tracked code measure a different
+ * function (src/council/peer-split.js :: peersOf) and are not this fuzz's
+ * precedent; quoting them here would be a second invented equivalence. A comment
+ * that cites nothing beats one that cites something unverifiable. Every number
+ * below is re-derivable from this tree by the recipe stated.
  *
  * EXHAUSTIVE, NOT SAMPLED. 504 cases is the complete cross-product of
  *   roster shape  {ordinary, one holding `''`, one holding `UNATTRIBUTED`}
@@ -1099,11 +1111,17 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
  * ⚠️ MEASURED, and this is the number that makes the block mean anything:
  *   BASE 32a63e92  407 disagreements / 504
  *   HEAD           0   disagreements / 504
- * The BASE figure was taken by writing `git show 32a63e92:src/workspace/
- * matrix-model.js` into src/workspace/ (its requires are relative, so it can only
- * be measured in place) and running this same cross-product against it. 284 of
- * the 407 were COLUMN disagreements — BASE grows no fold column at all — and 123
- * were PLACEMENT disagreements with matching columns. A fuzz that cannot fail
+ * TO RE-DERIVE THE BASE FIGURE: write `git show 32a63e92:src/workspace/
+ * matrix-model.js` to a NEW, UNTRACKED SIBLING file inside src/workspace/ — the
+ * same directory, because its requires are relative — run this cross-product
+ * against that copy, and delete it in a `finally`.
+ * ⚠️ NEVER by editing the tracked matrix-model.js. The run takes minutes, and a
+ * working tree left dirty for that long is one interruption away from a
+ * half-reverted source file; the sibling leaves the tracked tree untouched
+ * throughout and yields the identical 407 (re-derived that way at fix round 3).
+ * Of the 407, 284 were COLUMN disagreements — BASE grows no fold column at all —
+ * and 123 were PLACEMENT disagreements with matching columns; by roster shape,
+ * 145 ordinary + 145 holdsEmpty + 117 holdsUnattributed. A fuzz that cannot fail
  * proves nothing; this one fails 81% of its cases against the code this task
  * replaced.
  *
