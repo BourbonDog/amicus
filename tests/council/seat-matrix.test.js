@@ -312,7 +312,7 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
     const md = buildReport({ verdict }, { format: 'md' });
     expect(headerFor(md)).toBe('| Finding | Sev | Raiser | gemini#1 | gemini#2 | gpt | UNATTRIBUTED | Tier | Decision |');
     expect(rowFor(md, 'A1')).toBe('| A1 | major | gpt | ✓ |   |  * | ✗ | Contested |  |');
-    // v4.8 T-C1 (SI-12, ruling R18) REPLACED this block. It used to assert the
+    // v4.8 T-C1 (SI-22.5, ruling R18) REPLACED this block. It used to assert the
     // divergence — basis 1a/1d against a row showing 1a/0d — and its own comment
     // said a future fix must edit it deliberately. This is that edit: `basis` is
     // untouched and the row now recomputes to the SAME counts, which is the
@@ -361,7 +361,7 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SI-12 (v4.8 T-C1) — the join refuses a key that identifies nothing.
+// SI-22.5 (v4.8 T-C1) — the join refuses a key that identifies nothing.
 // ---------------------------------------------------------------------------
 
 /**
@@ -386,36 +386,51 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * peer-split records were rewritten twice to remove. Re-take the denominator
  * with it.
  *
- * ⚠️ EVERY NUMBER BELOW WAS RE-RUN AT FIX ROUND 1, NOT ADJUSTED. The sets first
- * recorded against 774dcdc2 (ALWAYSCOL 3/24+4, JUNKKEY 1/11, out of 541/7686)
- * were invalidated by that round — five pins were added and the join's input
- * handling changed — so they were DELETED and re-measured rather than edited.
- * Both grew, and the growth is accounted for below. Re-run, never renumber; and
- * re-take the denominator with them.
+ * ⚠️ EVERY NUMBER BELOW WAS RE-RUN AT v4.8 T2.4 FIX ROUND 1, AGAINST THE TREE
+ * THAT SHIPS. The previous sets were measured at d82e2127 and committed at
+ * 32a63e92 — and then this file changed EIGHT more times (09212e97, 70481ccf,
+ * fa0c5ae7, bd83c2ef, 3a7dde42, 0814624c, e5376399, 0cb2d4d9), adding the whole
+ * T-C2 workspace block, the fuzz block and the R20 block. The T-C1 records were
+ * never re-run, so the docblock asserted a measurement that no longer
+ * reproduced: exactly the defect this banner exists to prevent, committed
+ * inside the banner. Every superseded number was DELETED, not edited, and the
+ * denominator was re-taken with them.
+ *
+ * ⚠️ WHAT CHANGED AND WHY, so the growth is accounted for rather than absorbed:
+ * the denominator moved 7691 -> 7719 because T-C2 and this round added tests,
+ * and three of the four red sets GREW because the pins T-C2 added to detect a
+ * report.js/matrix-model.js desync are, by construction, red under a report.js
+ * mutation. No set shrank; nothing became unpinned.
+ * (Comments were edited after these runs — comment-only, no test added or
+ * removed, so the denominator and every set below still describe this tree.)
  *
  * Named mutant "ALWAYSCOL": drop the `folded &&` conditional so the roster
  * always ends in `UNATTRIBUTED`, i.e. emit the column whether or not any vote
  * routed to it. It is the "byte-unchanged artifact" mutant — every report that
  * has no unattributable vote grows a column.
- * MEASURED red set, run against d82e2127:
- * 3 suites / 27 tests + 4 SNAPSHOTS, out of 541 / 7691. By suite:
- *   seat-matrix 16 · report-claude-column 9 · report-debate 2.
+ * MEASURED red set, run against the fix-round tree:
+ * 3 suites / 28 tests + 4 SNAPSHOTS, out of 541 / 7719. By suite:
+ *   seat-matrix 17 · report-claude-column 9 · report-debate 2.
  * The four snapshot failures ARE the contract this conditional exists for: both
  * pinned byte-unchanged report snapshots (report-claude-column's no-flag run and
  * report-debate's v4.0 baseline) fail in both formats.
- * ⚠️ It read 3/24+4 before fix round 1. The three it gained are the three
- * malformed-`adjudications` pins, which assert that such a document keeps the
- * bench roster EXACTLY — so of this block's own pins it now reds FOUR, not one:
- * the no-unattributable-vote pin plus those three.
+ * ⚠️ Of THIS block's own pins it reds FOUR — re-derived, not carried: the
+ * no-unattributable-vote pin plus the three malformed-`adjudications` pins,
+ * which assert that such a document keeps the bench roster EXACTLY. The
+ * seat-matrix total of 17 is those 4 plus 8 in the A3/B1 table, 2 in T17/T18,
+ * 1 in T21, 1 in T22 and 1 fuzz pin.
  *
  * Named mutant "JUNKKEY": revert the join to c8867b48's bare
  * `byJudge[(seatSpace && adj.seat) || adj.judge]`, leaving the roster code in
  * place. It is the "T-C1 never happened" mutant for the refusal half.
- * MEASURED red set, run against d82e2127:
- * 1 suite / 13 tests, out of 541 / 7691. By suite: seat-matrix 13.
- * ⚠️ It read 1/11 before fix round 1; the two it gained are that round's
- * multi-finding pin and `''`-roster pin, both of which route a vote to
- * UNATTRIBUTED and so cannot survive the refusal being removed.
+ * MEASURED red set, run against the fix-round tree:
+ * 1 suite / 15 tests, out of 541 / 7719. By suite: seat-matrix 15 — 11 of this
+ * block's own pins, 1 in the workspace block (its BOTH-CONSUMERS agreement pin),
+ * 1 fuzz pin, 1 in T22, and 1 in the R20 block.
+ * ⚠️ THE R20 RED IS WORTH READING. `R20 > report.js FOLDS it` goes red because
+ * under the bare join a `judge: 'claude'` vote lands in `byJudge['claude']` — a
+ * key no column reads — instead of folding. That pin was written to DISCLOSE a
+ * divergence, and it independently catches the refusal being removed.
  * Two pins stay GREEN under it and that is not a weakness: the
  * no-unattributable-vote pin is ALWAYSCOL's, and the `basis` pin is a
  * preservation pin that NO mutant here moves — `basis` is copied by reference on
@@ -425,8 +440,9 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * move only the `byJudge` SEEDING inside the per-finding map, so each finding is
  * seeded from a roster decided by ITS OWN votes. It is the exact failure the
  * `⚠️ TWO-PHASE` comment on report.js names.
- * MEASURED red set, run against d82e2127:
- * 1 suite / 1 test, out of 541 / 7691 — seat-matrix 1, the multi-finding pin.
+ * MEASURED red set, run against the fix-round tree:
+ * 1 suite / 1 test, out of 541 / 7719 — seat-matrix 1, the multi-finding pin
+ * (`the roster decision is GLOBAL, not per finding`).
  * ⚠️ READ THAT NUMBER THE RIGHT WAY. A one-test red set is small because this
  * mutant is INVISIBLE to every other shape, not because the pin is weak: against
  * 3938d64f, where every fixture in this block had exactly ONE finding, the same
@@ -434,18 +450,26 @@ describe('T22: the two orphaned-seat shapes (§4.6)', () => {
  * tell a global roster from a per-finding one, and the rendered ROW cannot tell
  * them apart even with two, because a missing key and a `null` key both read
  * falsy. The pin asserts `Object.keys` for exactly that reason.
+ * ⚠️ It is the ONLY one of the four whose red set did not grow — only its
+ * denominator was stale. Re-run, not adjusted.
  *
  * Named mutant "EMPTYOK" (v4.8 T-C1 fix round 1): drop the `key !== ''` conjunct
  * from `columnFor`, leaving `typeof key === 'string' && columns.has(key)`.
- * MEASURED red set, run against d82e2127:
- * 1 suite / 1 test, out of 541 / 7691 — seat-matrix 1, the `''`-roster pin.
- * ⚠️ That ONE test is the entire reason the mutant is named. The six class pins
- * are GREEN against it — measured, they are not in this set — because on their
- * rosters `columns.has('')` is already false, so `columns.has` does the refusing
- * and the conjunct is green against its own mutant. Only a roster that HOLDS
- * `''` separates the two spellings.
+ * MEASURED red set, run against the fix-round tree:
+ * 1 suite / 3 tests, out of 541 / 7719 — seat-matrix 3: this block's `''`-roster
+ * pin, the workspace block's `''`-roster BOTH-CONSUMERS pin, and the fuzz block's
+ * ZERO-disagreements pin.
+ * ⚠️ IT USED TO READ 1, AND THE PROSE BUILT ON THAT NUMBER WAS WRONG TOO: the
+ * old record said "that ONE test is the entire reason the mutant is named". It is
+ * three, and the two it gained are both T-C2's cross-consumer pins — which is
+ * the more interesting fact, because it means a report.js-only mutation is now
+ * caught by the machinery built to prove the two consumers agree.
+ * The six class pins are still GREEN against it — measured, they are not in this
+ * set — because on their rosters `columns.has('')` is already false, so
+ * `columns.has` does the refusing and the conjunct is green against its own
+ * mutant. Only a roster that HOLDS `''` separates the two spellings.
  */
-describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
+describe('SI-22.5 (R17/R18): a vote whose key identifies no column folds into ONE UNATTRIBUTED column', () => {
   const SEATS = [
     { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
     { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
@@ -634,20 +658,20 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
     expect(m.findings[0].byJudge.UNATTRIBUTED).toBe('agree');
   });
 
-  // A non-array `adjudications` is reachable through schema-free entry points,
-  // the same CLASS as a malformed seats table — but ⚠️ NOT through the same three.
-  // Re-derived 2026-08-20 (v4.8 T2.4) by enumerating every `buildReport` caller in
-  // live code, because the earlier wording here said "the same three schema-free
-  // JSON.parse entry points" and that is false. "The three" names
-  // cli-handlers-council.js's tally/report/verdict handlers, and
-  // `src/cli-handlers-council.js :: runTally` never calls `buildReport` at all —
-  // its `tally()` output always carries an array `adjudications`, so it is not a
-  // vector for this shape. The real reach is three DIFFERENT things:
-  // `src/cli-handlers-council.js :: runReport`,
+  // A non-array `adjudications` is reachable through the same schema-free
+  // `JSON.parse` entry points as a malformed seats table. ⚠️ The COUNT is
+  // deliberately dropped: "the three schema-free entry points" has two conflicting
+  // enumerations in this repo — `src/council/report.js :: isSeatSpace`'s docblock
+  // reads it as {council report, council verdict --render, amicus_verdict}, while
+  // pr4c-seat-spine.md:751-752 reads it as the three cli-handlers-council.js
+  // handlers, with amicus_verdict listed separately. Naming a number here picks a side
+  // silently. Measured for THIS shape by enumerating every `buildReport` caller in
+  // live code: `src/cli-handlers-council.js :: runReport`,
   // `src/cli-handlers-council.js :: runVerdict` on --render (via `buildVerdict`,
   // which copies `adjudications` straight through), and
-  // `src/mcp-server.js :: amicus_verdict`, which receives an already-parsed MCP
-  // argument rather than a file `JSON.parse`. Measured at c8867b48:
+  // `src/mcp-server.js :: amicus_verdict`; `src/cli-handlers-council.js :: runTally`
+  // never calls `buildReport` at all. That set IS the seats-table set, so the
+  // "same … as a malformed seats table" claim above is exact. Measured at c8867b48:
   // `'abc'` RENDERED (a string is iterable, so `for...of` walked it and left a junk
   // `"undefined"` key), while `{}` and `42` THREW. At 774dcdc2 all three threw,
   // because the pre-pass reached for Array-only `.some` while the map still used
@@ -676,7 +700,7 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
 });
 
 // ---------------------------------------------------------------------------
-// SI-12 (v4.8 T-C2) — the SAME rule, written AGAIN for the workspace matrix.
+// SI-22.5 (v4.8 T-C2) — the SAME rule, written AGAIN for the workspace matrix.
 // ---------------------------------------------------------------------------
 
 /**
@@ -836,7 +860,7 @@ describe('SI-12 (R17/R18): a vote whose key identifies no column folds into ONE 
  * `UNATTRIBUTED`. Written with the map T19 uses, that test would have been GREEN
  * against its own mutant — an EMPTY red set proving nothing.
  */
-describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
+describe('SI-22.5 (R17/R18): the workspace matrix folds a vote whose key names no column', () => {
   const SEATS = [
     { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },
     { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 },
@@ -901,8 +925,9 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
     // where the judge is not the key, so this vote was refused outright and
     // rendered nowhere: measured `[null, null]`. R18 classifies the KEY, and
     // here the key is `gpt` — a string naming a real column. Measured, this
-    // CLOSES a pre-existing divergence rather than opening one: `report.js ::
-    // toModel` has never had the guard and already puts this vote in `gpt`.
+    // CLOSES a pre-existing divergence rather than opening one:
+    // `src/council/report.js :: toModel` has never had the guard and already
+    // puts this vote in `gpt`.
     const m = buildMatrixModel(tallyOf(SEATS, [{ judge: 42, verdict: 'dispute', seat: 'gpt' }]), {}, null);
     expect(modelsOf(m)).toEqual(SEAT_COLS);
     expect(votesOf(m)).toEqual([null, 'dispute']);
@@ -1093,7 +1118,7 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
 
 
 // ---------------------------------------------------------------------------
-// SI-12 (v4.8 T-C2 fix round 2) — the agreement, proved by FUZZ, not by one shape.
+// SI-22.5 (v4.8 T-C2 fix round 2) — the agreement, proved by FUZZ, not by one shape.
 // ---------------------------------------------------------------------------
 
 /**
@@ -1158,7 +1183,7 @@ describe('SI-12 (R17/R18): the workspace matrix folds a vote whose key names no 
  * mode, or the three excluded shapes above — all pinned elsewhere in this file
  * and in tests/workspace/.
  */
-describe('SI-12 (R17/R18): the two consumers agree on EVERY vote-key shape (fuzz, fix round 2)', () => {
+describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fuzz, fix round 2)', () => {
   // ONE roster per shape. Each object is shared BY REFERENCE between the tally
   // and the verdict below, which is what makes exclusion 2 structural.
   const ROSTERS = {
@@ -1277,6 +1302,78 @@ describe('SI-12 (R17/R18): the two consumers agree on EVERY vote-key shape (fuzz
     // result, not a tautology. See this block's docblock for how BASE was run.
     const found = fuzzCases().map(disagreement).filter(Boolean);
     expect(found).toEqual([]);
+  });
+});
+/**
+ * R20 (v4.8 T2.4 fix round 1) — THE COST OF THE FUZZ'S EXCLUSION 3, MEASURED.
+ *
+ * The agreement fuzz above excludes the claude tail BY CONSTRUCTION: no fixture
+ * there sets `claudeInCouncil` and no roster carries `claude`. That is a
+ * statement about the fixtures, not about the world, and until this block its
+ * cost was nowhere measured. It is NOT zero.
+ *
+ * The two consumers build their rosters from different sources and treat the
+ * reserved `claude` seat oppositely:
+ *   report.js       filters it OUT  (`council.filter(j => j !== 'claude')`)
+ *                   so `columns.has('claude')` is false → the vote FOLDS.
+ *   matrix-model.js re-appends it   (`claudeTail`)
+ *                   so `keys.has('claude')` is true  → the vote lands in `claude`.
+ *
+ * ⚠️ OWNER RULING R20: DISCLOSE, PIN AND FILE — do NOT align the rosters. That is
+ * a roster-SOURCES question and R17 keeps it out of this PR. These pins exist so
+ * the divergence cannot drift silently, and so that whoever takes the roster-
+ * sources lever inherits the measured behaviour of BOTH sides rather than a
+ * sentence about it. Filed in BACKLOG.md under the NEXT LEVER entry.
+ *
+ * ⚠️ NO ENGINE RUN EMITS THIS VOTE — `run-stage2.js:61-62` guarantees Claude is
+ * judged but never judges. It is reachable exactly the way every other shape in
+ * this file is: the schema-free `JSON.parse` entry points.
+ *
+ * ⚠️ THIS SHAPE IS WHY THE COLUMN'S DOCUMENTED MEANING WAS CORRECTED. `judge`
+ * names the voter here, so "nobody could attribute this vote" would be false.
+ * The rule the code applies is "no COLUMN for this key on this document's
+ * bench", which is not the same rule. docs/council.md and CHANGELOG.md say so.
+ */
+describe('R20: a claude vote is placed DIFFERENTLY by the two consumers, pinned as measured', () => {
+  const ADJS = [
+    { findingId: 'A1', judge: 'gpt', verdict: 'agree' },
+    { findingId: 'A1', judge: 'claude', verdict: 'dispute' },
+  ];
+  const BASIS = { a: 1, d: 1, n: 0 };
+  const finding = () => ({ id: 'A1', severity: 'major', raiser: 'deepseek', tier: 'Contested',
+    basis: BASIS, adjudications: ADJS });
+  const verdict = () => ({ runType: 'council', id: 'r', date: 'd', chair: 'gpt',
+    council: ['deepseek', 'gpt', 'claude'], claudeInCouncil: true,
+    findings: [finding()], runStats: [] });
+  const tally = () => ({ meta: { runId: 'r', runType: 'headless', date: 'd', chair: 'gpt',
+    models: ['deepseek', 'gpt', 'claude'], claudeInCouncil: true },
+  findings: [finding()], rankings: [], runStats: [] });
+
+  test('report.js FOLDS it — claude is off its bench, so the key names no column', () => {
+    const m = toModel(verdict(), null);
+    expect(m.judges).toEqual(['deepseek', 'gpt', 'UNATTRIBUTED']);
+    expect(m.findings[0].byJudge).toEqual({ deepseek: null, gpt: 'agree', UNATTRIBUTED: 'dispute' });
+    // No junk key survives on this side either — the refusal still holds.
+    expect(Object.keys(m.findings[0].byJudge)).not.toContain('claude');
+  });
+
+  test('matrix-model.js PLACES it in the claude column — claudeTail puts it on the bench', () => {
+    const w = buildMatrixModel(tally(), {}, verdict());
+    expect(w.judges.map(j => j.model)).toEqual(['deepseek', 'gpt', 'claude']);
+    expect(w.rows[0].cells.map(c => c.verdict)).toEqual([null, 'agree', 'dispute']);
+    // And it grows NO fold column, because nothing was refused here.
+    expect(w.judges.map(j => j.model)).not.toContain('UNATTRIBUTED');
+  });
+
+  test('the two DISAGREE — asserted, not hoped: this is exclusion 3 costing something', () => {
+    const rep = toModel(verdict(), null).judges;
+    const ws = buildMatrixModel(tally(), {}, verdict()).judges.map(j => j.model);
+    expect(rep).not.toEqual(ws);
+  });
+
+  test('`basis` is unmoved on BOTH sides — the divergence is placement only', () => {
+    expect(toModel(verdict(), null).findings[0].basis).toEqual(BASIS);
+    expect(buildMatrixModel(tally(), {}, verdict()).rows[0].basis).toEqual(BASIS);
   });
 });
 describe('a malformed seats table falls back to alias space instead of throwing', () => {

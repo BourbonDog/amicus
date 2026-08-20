@@ -195,13 +195,19 @@ list. Two findings drove it:
    ergonomics line wholesale (all three items are reading/working affordances) and promotes anything
    that makes the numbers right.
 2. **`runStats` is a cost source, not just a record.** Verified at `8d0584a`:
-   `cli-handlers-council.js@8d0584a:56` computes `amicus council stats` cost as
+   `cli-handlers-council.js:56` computes `amicus council stats` cost as
    `sumWaveUsage(r.runStats).cost` with **no fallback**; `council/report.js@8d0584a:79` falls back to
    `sumWaveUsage(runStats).cost` when wave usage is absent; `council/ledger.js@8d0584a:24` joins street-cred
-   off the same array. ⚠️ **Pinned to `@8d0584a` on 2026-08-20 (v4.8 T2.4).** All three were
-   re-opened at that ref and confirmed; all three had **already** rotted against the current tree
-   before T2.4 began, so this is pre-existing drift, not this release's. The report fallback is now
-   at `src/council/report.js :: toModel`'s `total`; the claims themselves still hold. So CA-4's omissions are not a schema nicety — they under-report spend on the
+   off the same array. ⚠️ **Two of the three pinned to `@8d0584a` on 2026-08-20 (v4.8 T2.4); the
+   first deliberately NOT pinned, because it never rotted.** Opened at all three refs,
+   `cli-handlers-council.js:56` is byte-identical — `const cost = sumWaveUsage(r.runStats || []).cost;`
+   at `8d0584a`, at `ed5c0c02` and at the current tree — so it is a **live-true** citation and
+   pinning it to a historical ref would have made a correct present-tense claim read as history.
+   An earlier draft of this note said *"all three had already rotted"*; that universal is false and
+   is corrected here. The other two HAD already rotted before T2.4 began (`report.js:79` and
+   `ledger.js:24` are comments at `ed5c0c02`), so their drift is pre-existing, not this release's.
+   The report fallback is now at `src/council/report.js :: toModel`'s `total`; all three claims
+   themselves still hold. So CA-4's omissions are not a schema nicety — they under-report spend on the
    surface the owner relies on, which collides with the cost-truth principle (*reported > estimated
    > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never
    spent on legs that spent money.

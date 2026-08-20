@@ -377,9 +377,14 @@ All notable changes to Amicus are documented here. Format follows
   vote is attributable grows no column and never an empty one. ⚠️ **That last claim is scoped to
   this change**, measured against the branch point `ed5c0c02` and not against 4.7.1: the seat re-key
   described above is a separate, earlier change in this same release and moves such documents on its
-  own terms. All unattributable votes on one finding share the one cell, last-wins — the column
-  asserts *nobody could attribute these*, which is one fact about the document rather than one per
-  voter; a seat id is what tells them apart, and supplying one is a producer-side fix. ⚠️ Not to be
+  own terms. All folded votes on one finding share the one cell, last-wins — the column records
+  one fact about the document rather than one per voter; a seat id is what tells them apart, and
+  supplying one is a producer-side fix. ⚠️ **Read the header as “no column on this bench”, not
+  “nobody knows who voted”** — the rule is about the column, not the voter. On a `--claude-review`
+  run the report keeps the reserved `claude` seat off its bench while the Workspace matrix keeps it,
+  so a hand-authored `judge: "claude"` vote folds in the report and lands in the `claude` column in
+  the Workspace; no engine run emits one, and reconciling the two rosters is deliberately out of
+  scope for this change. ⚠️ Not to be
   confused with `findings[].unattributedPeerDrops`, listed earlier in this release, which counts votes the **peer filter**
   excluded from `basis` on the raiser side and which ruling R2 deliberately leaves excluded —
   different mechanism, different document, opposite effect on `basis`.

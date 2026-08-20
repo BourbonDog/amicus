@@ -25,7 +25,7 @@
 const { SYMBOL, isSeatSpace } = require('../council/report');
 const { labelFor, pairFor } = require('./blind-mode');
 
-// v4.8 T-C2 (SI-12, ruling R18): the ONE column every vote whose key names no
+// v4.8 T-C2 (SI-22.5, ruling R18): the ONE column every vote whose key names no
 // column folds into. A SECOND implementation on purpose — ruling R17 took the
 // narrow option, so this is NOT imported from src/council/report.js and nothing
 // is extracted for it. Two implementations can DRIFT — T-C2 shipped one document
@@ -98,7 +98,7 @@ function buildMatrixModel(tally, labelMap, verdict) {
     : aliasJudges.map(j => ({ key: j, pair: pairFor(j, map) }));
   const findings = tally && Array.isArray(tally.findings) ? tally.findings : [];
   const verdictById = indexVerdictFindings(verdict);
-  // v4.8 T-C2 (SI-12): CLASSIFY the key instead of trusting it. At 32a63e92 the
+  // v4.8 T-C2 (SI-22.5): CLASSIFY the key instead of trusting it. At 32a63e92 the
   // domain split in two and BOTH halves lost the vote: `typeof adj.judge !==
   // 'string'` refused an absent or non-string judge outright — in seat space
   // testing a field that is not even the key, so a valid seat with a numeric

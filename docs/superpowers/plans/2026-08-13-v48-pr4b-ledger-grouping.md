@@ -149,7 +149,7 @@ over the short alias, which `run-chair.js:48-52` argues against at length.
 ⚠️ **Emission order has ZERO coverage in the repo.** Two lenses independently mutated it —
 `meta.models.slice().reverse()`, and a full PR4b build with first-occurrence anchoring injected via
 `moduleNameMapper` — and the **entire suite passed: 521 suites / 7246 tests** both times.
-`tests/council/ledger.test.js:440-456` looks like the guard and is not: it writes rows directly via
+`tests/council/ledger.test.js@ed5c0c02:440-456` looks like the guard and is not: it writes rows directly via
 its local `appendRows` helper, bypassing `buildLedgerRows`. PR4b must bring its own.
 
 ⚠️ **The fan-out GROWS a group's alias set, so `pickFallbackChair` exclusions grow too.**
@@ -269,7 +269,7 @@ take the same fix:
 |---|---|---|
 | `ledger.test.js:87-97` | `appendRun(record)` **twice**; `record = tally(avInput)`, so both rows carry `meta.runId: 'av-receiver-council'` (fixture line 34 — **not** `'r'`, which belongs to `debateBaseInput()` at `:16`) | give the second append a distinct runId; keep `toBe(2)` |
 | `ledger.test.js:153-160` | **ONE** `appendRun` at `:155` plus a hand-built `{...gptRow, schemaVersion: LEDGER_SCHEMA_VERSION + 1}` appended raw at `:158`, inheriting the same runId. There is **no second append**. | stamp the literal at `:157` with `runId: 'r-future'`; keep `toBe(2)` |
-| `ledger.test.js:376-389` | two **aliases** sharing `runId: 'r1'`, one executable | assert **`runs: 1`** — a genuine semantic correction. Do NOT add a second runId. |
+| `ledger.test.js@ed5c0c02:376-389` | two **aliases** sharing `runId: 'r1'`, one executable | assert **`runs: 1`** — a genuine semantic correction. Do NOT add a second runId. |
 
 > ⚠️ **The `:153-160` row is the trap, and revision 1 walked into it.** Its purpose is the
 > version-blind legacy-read contract (`ledger.js:118`): prove a row stamped with an unknown

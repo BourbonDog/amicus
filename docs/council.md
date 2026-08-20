@@ -831,21 +831,30 @@ counts in `basis` **and** renders.
   `basis` says now agree.
 - **The column appears only when a vote actually folds.** A document in which every vote is
   attributable renders exactly as it did before — no extra column, and never an empty one.
-- **Every unattributable vote on one finding shares one cell, last-wins.** One column is the
-  deliberate design: it says *nobody could attribute these*, which is a single fact about the
-  document, not a per-voter one. Two unattributable votes on the same finding therefore collapse to
-  the later one's verdict. What tells them apart is a seat id, and supplying one is a producer-side
-  fix, not a rendering one.
-- **The Council Workspace matrix does the same thing**, built from `tally.json` (via
-  `tally.meta.seats`) rather than `verdict.json`. The two are deliberately separate implementations
-  rather than a shared module, and they are held in agreement by an exhaustive cross-product test
-  rather than by construction.
+- ⚠️ **Read the header as “no column on this bench”, not “nobody knows who voted”.** The rule the
+  renderer applies is about the **column**, not the voter: a vote lands here when its key names no
+  column on *this document's* bench. Usually that also means the voter is unidentifiable — but not
+  always. A vote whose `judge` names a model the report deliberately keeps off the bench folds here
+  too, with its `judge` field intact in the document. The column says *this vote had nowhere to go*.
+- **Every folded vote on one finding shares one cell, last-wins.** One column is the deliberate
+  design — it records a fact about the document, not one per voter — so two folded votes on the same
+  finding collapse to the later one's verdict. What tells them apart is a seat id, and supplying one
+  is a producer-side fix, not a rendering one.
+- **The Council Workspace matrix applies the same refusal**, over the `tally.json` roster described
+  in the paragraph below. The two are deliberately separate implementations rather than a shared
+  module, and they are held in agreement by an exhaustive cross-product test rather than by
+  construction. ⚠️ **One known exception, disclosed rather than fixed:** on a
+  `--claude-review` run the report filters the reserved `claude` seat off its bench while the
+  Workspace keeps it, so a hand-authored `judge: "claude"` vote folds to `UNATTRIBUTED` in the
+  report and lands in the `claude` column in the Workspace. No engine run emits such a vote. The
+  two rosters are built from different sources, and reconciling them is deliberately out of scope
+  here.
 - ⚠️ **One residual, disclosed rather than fixed:** if a bench seat is *literally* named
   `UNATTRIBUTED`, no extra column is added and folded votes land in that seat's own column. Nothing
   reserves the name, so this is reachable only by naming a seat that way on purpose.
 - This is **not** the same thing as `findings[].unattributedPeerDrops` in the tally-record schema
   above. That field counts votes the *peer filter* excluded from `basis` on the raiser side, and
-  ruling R2 deliberately leaves those excluded; this column renders a Stage-2 judge vote that
+  ruling R2 deliberately leaves those excluded; this column renders a vote that
   **is** in `basis` but had no column to land in. Different mechanism, different document, opposite
   effect on `basis`.
 

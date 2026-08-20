@@ -230,7 +230,7 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
     });
 
     /**
-     * v4.8 T-C2 (SI-12, ruling R18) — the fold column through the REAL painter.
+     * v4.8 T-C2 (SI-22.5, ruling R18) — the fold column through the REAL painter.
      *
      * ⚠️ `electron/workspace-ui/workspace-matrix.js` needed ZERO edits for this
      * and received none: renderMatrix iterates `matrix.judges` for the header

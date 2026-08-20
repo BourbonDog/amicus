@@ -19,7 +19,7 @@ const { sumWaveUsage } = require('../utils/pricing');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
-// v4.8 T-C1 (SI-12, ruling R18): the ONE column every vote whose key names no
+// v4.8 T-C1 (SI-22.5, ruling R18): the ONE column every vote whose key names no
 // column folds into. Deliberately NOT exported: R17 took the narrow option —
 // src/workspace/matrix-model.js gets the same rule as a SEPARATE implementation
 // in its own task, so nothing is extracted or shared for it here.
@@ -115,7 +115,7 @@ function toModel(verdict, wave) {
   // excludes the reserved claude seat), so it can never grow a claude column.
   const bench = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
   const columns = new Set(bench);
-  // v4.8 T-C1 (SI-12): REFUSE a key that identifies nothing. PR4c wrote
+  // v4.8 T-C1 (SI-22.5): REFUSE a key that identifies nothing. PR4c wrote
   // `byJudge[(seatSpace && adj.seat) || adj.judge]` whatever that expression
   // produced, and six shapes were measured at c8867b48 landing as a key no
   // column reads: an orphaned seat id, `''` and an absent `judge` in either
