@@ -229,6 +229,49 @@ describe('buildTallyInput adjudications + rankings seat (v4.8 PR3 Task 5 / T3.2,
     });
     expect('seat' in noSeat.rankings[0]).toBe(false);
   });
+
+  // v4.8 T3.3: the hop T3.2 deliberately stopped short of. `orderSeats` reached
+  // judgeResults[] in run-stage2.js but never rankings[], and computeStreetCred
+  // reads rankings[] — so without this the seat channel never arrives where
+  // SI-20's collapse happens.
+  describe('rankings[].orderSeats (v4.8 T3.3, emit-when-it-CARRIES-something)', () => {
+    const withOrderSeats = (order, orderSeats) => asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x', reviews: REVIEWS,
+      judgeResults: [{ judge: 'gemini', ok: true, order, orderSeats, adjudications: [] }],
+      chairStats: null,
+    }).rankings[0];
+
+    test('a seated bench carries the parallel array verbatim, right after `order`', () => {
+      const r = withOrderSeats(['gemini', 'gemini'], ['gemini#1', 'gemini#2']);
+      expect(r).toEqual({ judge: 'gemini', order: ['gemini', 'gemini'],
+        orderSeats: ['gemini#1', 'gemini#2'] });
+      expect(Object.keys(r)).toEqual(['judge', 'order', 'orderSeats']);
+    });
+
+    test('a tie group keeps its nesting in both arrays', () => {
+      expect(withOrderSeats([['gemini', 'gemini']], [['gemini#1', 'gemini#2']]).orderSeats)
+        .toEqual([['gemini#1', 'gemini#2']]);
+    });
+
+    test('⚠️ an ALL-NULL parity shape emits NOTHING — the unique-alias byte-identity guard', () => {
+      // rankingToOrder returns `[null, null]` rather than nothing on a bench
+      // with no repeated alias, so emit-when-SET would add a key to rankings[]
+      // in tally-input.json, tally.json and tally-provisional.json on every run
+      // that has ever happened. The nested form is the same trap one level down.
+      expect('orderSeats' in withOrderSeats(['gemini', 'gemini'], [null, null])).toBe(false);
+      expect('orderSeats' in withOrderSeats([['gemini', 'gemini']], [[null, null]])).toBe(false);
+    });
+
+    test('absent or null orderSeats emits nothing (every pre-T3.2 judgeResult)', () => {
+      expect('orderSeats' in withOrderSeats(['gemini'], undefined)).toBe(false);
+      expect('orderSeats' in withOrderSeats(['gemini'], null)).toBe(false);
+    });
+
+    test('a PARTLY seated array is emitted whole — one non-null is enough', () => {
+      expect(withOrderSeats(['gemini', 'other'], ['gemini#1', null]).orderSeats)
+        .toEqual(['gemini#1', null]);
+    });
+  });
 });
 
 // ---- v4.8 PR4c Task 1 (plan §3.1): runStats rows name their SEAT ----

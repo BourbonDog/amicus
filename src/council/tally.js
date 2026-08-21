@@ -1,6 +1,11 @@
 // src/council/tally.js
 'use strict';
 const { peersOf, unattributedPeerDrops } = require('./peer-split');
+// The street-cred half (rankPositions / credSeats / computeStreetCred) lives in
+// ./street-cred (v4.8 T3.3 size-gate split; this file stood at 301 of 300 with
+// the seat-keying in it — release Constraint 6 is EXTRACT, never shave).
+// computeStreetCred is re-exported below, so no existing import path moved.
+const { computeStreetCred } = require('./street-cred');
 
 /**
  * Peers-only tier cascade. a/d are agree/dispute counts among PEER judges
@@ -25,46 +30,6 @@ function assignTier(a, d) {
   else { tier = 'Singleton'; }
   const confidence = (a + d <= 1) ? 'thin' : 'solid';
   return { tier, confidence };
-}
-
-function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
-
-/** Map each model to its (possibly fractional) rank position in one judge's order. */
-function rankPositions(order) {
-  const pos = new Map();
-  let p = 1;
-  for (const slot of order) {
-    const group = Array.isArray(slot) ? slot : [slot];
-    const meanPos = p + (group.length - 1) / 2;
-    for (const m of group) { pos.set(m, meanPos); }
-    p += group.length;
-  }
-  return pos;
-}
-
-/**
- * Both-numbers street-cred. Lower mean rank = better.
- * @param {Array<{judge:string, order:Array<string|string[]>}>} rankings
- * @param {string[]} models all reviewed models (incl. claude when in-council)
- */
-function computeStreetCred(rankings, models) {
-  const judgePos = rankings.map(r => ({ judge: r.judge, pos: rankPositions(r.order) }));
-  return models.map(m => {
-    const all = [], peers = [], perJudgeRank = {};
-    for (const { judge, pos } of judgePos) {
-      if (!pos.has(m)) { continue; }       // absent from this judge's ranking → skip
-      const rank = pos.get(m);
-      perJudgeRank[judge] = rank;
-      all.push(rank);
-      if (judge !== m) { peers.push(rank); }
-    }
-    return {
-      model: m,
-      withSelf: all.length ? mean(all) : null,
-      peersOnly: peers.length ? mean(peers) : null,
-      perJudgeRank,
-    };
-  });
 }
 
 // v4.0 §7: council family v2 — every council doc carries {schemaVersion, type}.
@@ -154,7 +119,11 @@ function tally(input) {
     type: 'council-tally',
     meta,
     judged: Array.isArray(rankings) && rankings.length >= 2,
-    streetCred: computeStreetCred(rankings || [], meta.models),
+    // v4.8 T3.3: `meta.seats` joins BY VALUE inside computeStreetCred (never
+    // positionally against meta.models — run-assemble.js :: buildTallyInput
+    // forbids that). Absent on every unique-alias bench and on both
+    // hand-assembled appendRun paths, where the rows stay alias-driven.
+    streetCred: computeStreetCred(rankings || [], meta.models, meta.seats),
     findings: outFindings,
     runStats: (runStats || []).map(r => ({
       model: r.model, role: r.role, wasChair: !!r.wasChair, conformance: r.conformance || 'clean',

@@ -168,10 +168,23 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
       // the two strings drifted (a padded --council member; a leg with no
       // modelInput), i.e. exactly where the field carries no information.
       ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) })));
-  // v4.8 T3.2: the SAME predicate as the adjudication map one line above —
+  // v4.8 T3.2: the SAME predicate as the adjudication map immediately above —
   // the judge's own seat, emit-when-DIFFERENT. `order` itself is untouched
-  // (still alias-valued; T3.3's job, not this one's).
+  // (still alias-valued).
+  // v4.8 T3.3 carries `orderSeats` the one further hop T3.2 deliberately
+  // stopped short of: it reached judgeResults[] in run-stage2.js, but
+  // `computeStreetCred` reads `rankings`, so without this the seat channel
+  // never arrives where SI-20's collapse happens.
+  // ⚠️ EMIT ONLY WHEN IT CARRIES AT LEAST ONE NON-NULL. rankingToOrder returns
+  // a PARITY SHAPE, not an absence: on a unique-alias bench `orderSeats` is
+  // `[null, null, null]`, and emitting that would add a key to rankings[] in
+  // tally-input.json, tally.json and tally-provisional.json on every run that
+  // has ever happened. `.flat()` is depth-1 because a tie group is the only
+  // nesting rankingToOrder can produce (anonymize.js :: rankingToOrder maps
+  // one level of `Array.isArray(slot)`).
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order,
+    ...(Array.isArray(j.orderSeats) && j.orderSeats.flat().some(Boolean)
+      ? { orderSeats: j.orderSeats } : {}),
     ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,

@@ -77,6 +77,12 @@ function mergeConformance(a, b) {
   return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;
 }
 
+// v4.8 T3.3: the JOIN SEMANTICS — SI-17 normalise (benchLegs) and the
+// seat-aware street-cred join (credFor) — live in ./ledger-join, the same
+// one-directional split T3.0 used for ./ledger-stats. Read their docblocks
+// there before changing either call site below.
+const { benchLegs, credFor } = require('./ledger-join');
+
 /**
  * One row per distinct (model, resolvedModel) pair on the bench. Rates are over
  * RAW raised findings.
@@ -107,7 +113,9 @@ function mergeConformance(a, b) {
  */
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
-  const sc = new Map(streetCred.map(s => [s.model, s]));
+  // Keyed by SEAT where the row has one, alias otherwise — the hazard, the
+  // emit rule and the fallback are in ledger-join.js :: credFor.
+  const sc = new Map(streetCred.map(s => [s.seat || s.model, s]));
   // Only allowlisted roles (joinsLedger, above) may join, so a non-primary
   // row-per-launch row can never contribute a model's role/conformance.
   const byAlias = new Map();
@@ -124,7 +132,6 @@ function buildLedgerRows(record) {
   const rows = [];
   for (const model of aliases) {
     const raised = findings.filter(f => f.raiser === model);
-    const s = sc.get(model) || {};
     const pairs = byAlias.get(model);
     // An alias with NO joinable runStats row yields exactly ONE row with an
     // empty group — today's `rs.get(model) || {}` fallback, preserved.
@@ -140,18 +147,27 @@ function buildLedgerRows(record) {
       // Seat-attributed findings are filed to BACKLOG, not scheduled. The other
       // rows' null rates fall out of the `judged && denom` guards at denom 0.
       // Street cred deliberately does NOT concentrate (§0): stripping it flips
-      // the launched name from the alias to the raw executable id.
+      // the launched name from the alias to the raw executable id. Since v4.8
+      // T3.3 it is also per-SEAT rather than per-alias (ledger-join.js :: credFor).
       const mine = i === 0 ? raised : [];
       const denom = mine.length;
-      const last = group[group.length - 1] || {};
+      // SI-17's normalise: a chair-synthesis row never decides a bench leg's
+      // role or conformance (ledger-join.js :: benchLegs). `group` is unchanged, so
+      // `wasChair` below still reads every row.
+      const legs = benchLegs(group);
+      const last = legs[legs.length - 1] || {};
+      const s = credFor(sc, group, model);
       rows.push({
         schemaVersion: LEDGER_SCHEMA_VERSION,
         runId: meta.runId, date: meta.date, runType: meta.runType, model,
-        // `role`: last row of the PAIR GROUP wins. No role ordering exists
-        // anywhere in src/, so with no principled merge this stays closest to
-        // today's last-wins. Lens twins are genuinely undecidable.
+        // `role`: last row of the PAIR GROUP wins, chair rows excluded while a
+        // bench leg is present. No role ordering exists anywhere in src/, so
+        // with no principled merge this stays closest to today's last-wins.
+        // Lens twins are genuinely undecidable.
         role: last.role || 'council',
-        // `wasChair`: any-wins. A boolean fact has no last-wins reading.
+        // `wasChair`: any-wins over the WHOLE group. A boolean fact has no
+        // last-wins reading, and this is the one field a chair row contributes
+        // to a bench seat's row.
         wasChair: group.some(r => !!r.wasChair),
         judged: judged === true,
         streetCredWithSelf: judged ? (s.withSelf ?? null) : null,
@@ -173,9 +189,12 @@ function buildLedgerRows(record) {
         // ['weird','clean'] folds to 'weird', ['clean','weird'] to 'clean',
         // because unknown and 'clean' both rank 0 and the accumulator wins the
         // tie. T13c pins it so nobody "fixes" it into a divergence.
-        conformance: group.length
-          ? group.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
-            group[0].conformance || 'clean')
+        // ⚠️ The fold runs over `legs`, not `group` — SI-17's normalise. On
+        // every group without a chair row the two arrays ARE the same array's
+        // contents, so T13b/T13c and the seed rule above are untouched.
+        conformance: legs.length
+          ? legs.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
+            legs[0].conformance || 'clean')
           : 'clean',
         ...(resolvedKey ? { resolvedModel: resolvedKey } : {}),
       });

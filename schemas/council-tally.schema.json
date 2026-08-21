@@ -34,7 +34,10 @@
           "model": { "type": "string" },
           "withSelf": { "type": ["number", "null"] },
           "peersOnly": { "type": ["number", "null"] },
-          "perJudgeRank": { "type": "object" },
+          "perJudgeRank": {
+            "type": "object",
+            "description": "This row's rank position under each judge that ranked it. KEYED BY THE JUDGE'S SEAT ID where the judge has one that differs from its alias, and by the judge's alias otherwise (v4.8 T3.3) — the same emit-when-DIFFERENT rule as every other seat field in this document, so a bench with no repeated alias is keyed exactly as before. Before T3.3 the key was always the alias, which last-wins-collapsed two twin judges into one entry while withSelf/peersOnly averaged over both, so the map and the averages could disagree about the same row. ⚠️ They can still disagree on hand-assembled input that repeats a judge alias and carries no seat, because nothing in such a document can tell those judges apart."
+          },
           "seat": {
             "type": "string",
             "description": "v4.8, optional, documentation-only ahead of its producer. One row per SEAT rather than per alias, and this row's seat id, when it differs from `model` (its alias) — emitted by computeStreetCred (v4.8 T3.3, not yet shipped when this property was declared). verdict.js :: buildVerdict already carries it through its own streetCred projection (T3.2) so the field is never silently stripped once T3.3 starts emitting it. No `additionalProperties: false` above means an additive field always validated here even before this declaration; this documents the shape rather than changing what is accepted."
