@@ -4,8 +4,14 @@
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Carry a leg's seat id from the Stage-1 roster down to the live leg row, so
-`electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — today permanently dead on the
-live path — actually executes.
+`electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — permanently dead on the live
+path at BASE (2026-08-21, `1832b9c7`) — actually executes.
+
+> ⚠️ **ANNOTATED 2026-08-21 (T4.6) — this Goal is BASE-state, and BASE has moved.** "Permanently
+> dead on the live path" was exact at `1832b9c7`, the substrate §0 measures from. It no longer is:
+> T4.1–T4.5 shipped the thread end to end, and the arm now **executes** on the live-tick path,
+> pinned by the named mutant `LIVESEATBLIND` (red set 2). Read the clause above as the finding this
+> plan was written to fix, not as a live claim about the tree today.
 
 **Architecture:** Seat identity already exists at launch (`run-stage1-launch.js`'s
 `seated[].roster`) and already survives to the terminal path (`run-assemble.js` cost rows →
@@ -81,6 +87,14 @@ reachable on the terminal path.** The BACKLOG's wording ("permanently dead on th
 exact and re-verifies. **The task is unchanged.** The in-file comment at
 `live-dead-seats.js:204-206` states the same mechanism and is TRUE at BASE — which is precisely
 why it becomes FALSE when this plan lands (see §0.6).
+
+> ⚠️ **ANNOTATED 2026-08-21 (T4.6) — measured substrate AT BASE, and BASE has moved.** Every claim
+> in this section was true at `1832b9c7`, which is exactly what §0's own header promises — it is
+> not re-derived as later work lands. It no longer holds: T4.1–T4.5 shipped the thread this plan
+> designs, so `if (s.seat)` at `:209` is now **reachable on the live-tick path too**, pinned end to
+> end by the named mutant `LIVESEATBLIND` (red set 2, `tests/workspace/live-normalize.test.js` +
+> `tests/workspace/dead-seat-rows.test.js`). Read this whole section as the BASE-state finding the
+> plan was written from, not as a live description of the tree today.
 
 ### 0.4 The threading chain, measured hop by hop
 

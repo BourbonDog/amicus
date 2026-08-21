@@ -85,9 +85,10 @@
         // BOTH rows on tick one, then froze the first forever — `existing` is snapshotted
         // before the loop, so both seats resolved to the LAST row and the first was never
         // re-matched, while `seen[key]` kept it from being removed.
-        // `r.seat` is emit-when-set upstream (run-assemble.js:89 stamps it only when
-        // seat.id differs from seat.alias, which seats.js:67 makes true exactly for a repeated
-        // alias), so `|| r.model` is load-bearing — it keeps a unique bench byte-identical.
+        // `r.seat` is emit-when-set upstream (src/council/run-stats-entry.js :: buildRunStatsEntry
+        // stamps it only when seat.id differs from seat.alias, which seats.js:67 makes true
+        // exactly for a repeated alias), so `|| r.model` is load-bearing — it keeps a unique
+        // bench byte-identical.
         // JSON.stringify, not concatenation: an alias may contain ':' and roles include
         // 'lens:*', so a concatenated key is NOT injective — ('a','lens:x') and ('a:lens','x')
         // both spell 'a:lens:x'. Never displayed; it is only ever a dataset.key, and

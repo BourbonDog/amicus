@@ -52,6 +52,16 @@ shapes, so the true open work-item count is **20**, not 16.
 > SI-22 roll-up as one OPEN row expanded to five, and the table counts the five directly, so the two
 > disagree about whether a shape that passed through PARTIAL is decremented once or twice. Count off
 > the table with the rule you need and state the rule, rather than inheriting a number.
+> ⚠️ **ONE MORE change since Phase 3 — v4.8 Phase 4 (2026-08-21): R5 moved OPEN→v4.8→DONE**, in the
+> **PR5x filings** line immediately below this table (R5 is a PR5-series filing, not one of the 31
+> numbered rows above, so it has no cell of its own here). T4.1–T4.6 (`e42b6aaa` … `8cb811e6`, and
+> the bookkeeping commit that lands with this sentence) shipped it: the Stage-1 roster now threads
+> through the fanout transport to `metadata.json` and back out via the composed live doc, so
+> `live-dead-seats.js:209`'s `if (s.seat)` arm executes on the live path for the first time, pinned
+> by the named mutant `LIVESEATBLIND` (red set 2). Re-counted directly off the 31-row table by
+> bucketing every Verdict cell — **unchanged**, because Phase 4/R5 touches no row in it: **13 DONE ·
+> 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 13 OPEN**, the same partition as the line above, confirmed
+> rather than carried forward by arithmetic.
 
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
@@ -87,8 +97,9 @@ shapes, so the true open work-item count is **20**, not 16.
 | 26 | **DONE** (T3.1 `13ae8cf6`, 2026-08-20) | ~~`letterByModel` dead code~~ deleted — the JSDoc `@returns` clause, the `const`, the populate line and the return-literal key; `labelMap`/`entries` untouched | `anonymize.js :: assignLabels` |
 | 27 | OPEN | roster-padding ×3 | `run-retry.js` · `run-stage2.js` · `run-debate-revote.js` |
 
-**PR5x filings:** PR5a-1 **HOLD** · PR5b-1 OPEN→v4.9 · R4 OPEN→v4.9 · R5 OPEN→**v4.8** ·
-DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split · STANDING **HOLD**.
+**PR5x filings:** PR5a-1 **HOLD** · PR5b-1 OPEN→v4.9 · R4 OPEN→v4.9 · R5 OPEN→v4.8→**DONE (v4.8
+Phase 4, 2026-08-21)** · DOMKEY **HOLD** · DURABLE OPEN→**v4.8 (T2.2)** · SEATKEY OPEN→split ·
+STANDING **HOLD**.
 
 ---
 
@@ -380,10 +391,39 @@ on a mixed group the chair leg's own `conformance` no longer reaches the ledger 
 `wasChair: true` survives — is filed in `BACKLOG.md` for the owner to rule on, not decided here.
 
 ### Phase 4 · R5 — 1 PR
-Seat id on the live leg row: extend `writeLegPatch` in `fanout-leg.js :: runLeg` so `buildLegRow`
-reads the seat off `metadata.json`, threading from `run-stage1-launch.js`'s `seated[].roster`; then
-through `live-normalize.js :: seatOf`. Makes `live-dead-seats.js:207`'s `if (s.seat)` arm — today
-permanently dead on the live path — actually live.
+Seat id on the live leg row: extend `writeLegPatch` in `fanout-leg.js :: runSingleAttempt` so
+`buildLegRow` reads the seat off `metadata.json`, threading from `run-stage1-launch.js`'s
+`seated[].roster`; then through `live-normalize.js :: seatOf`. Makes `live-dead-seats.js:209`'s
+`if (s.seat)` arm — dead on the live path at every measurement before this phase — actually live.
+⚠️ **Citation correction (v4.8 T4.6):** this line named the symbol `:: runLeg` and the line number
+`:207` until this pass. Measured: `runLeg` is a 6-line dispatcher with no `writeLegPatch` call —
+both write sites are inside `runSingleAttempt` — and the arm moved from `:207` to `:209` when
+T4.5's own comment rewrite grew the file above it. Corrected here and in `BACKLOG.md`'s matching
+Phase 4 entry; case-insensitive repo sweep confirmed no other live carrier of either stale form.
+The mechanism this line describes was, and remains, correct — a citation repair, not a truth
+repair.
+
+✅ **COMPLETED 2026-08-21 by Phase 4 T4.1 (`e42b6aaa`) + T4.2 (`49c2313d`+`41d6f793`) + T4.3
+(`3c95bd18`+`94fdb76b`+`2294ce8a`+`c009c7eb`+`3e5ad689`) + T4.4 (`40b26dde`+`2d69a987`) + T4.5
+(`b9c760a5`+`6a944404`) + T4.6 (the truth pass, citation correction and bookkeeping — no behaviour
+change).** The per-wave Stage-1 roster now threads through the fanout transport
+(`fanout-wave-io.js :: stampLegAttribution`, stamping `leg.seat` emit-when-DIFFERENT against the
+seat's own alias — the same predicate `run-stats-entry.js :: buildRunStatsEntry` and the three
+`run-assemble.js` producers already share) to `metadata.json` via `fanout-leg.js ::
+runSingleAttempt`, and back out through `council-legs.js :: buildLegRow` and
+`live-normalize.js :: seatOf`. `live-dead-seats.js:209`'s `if (s.seat)` arm now **executes on the
+live path**, pinned end to end by the named mutant `LIVESEATBLIND` (red set 2). A unique-alias
+bench writes nothing new to `metadata.json` — byte-identical to pre-R5 — but the composed live doc
+is **not** byte-identical regardless: every leg row gains an explicit `seat: null` (T4.4's
+annotation corrected a false "byte-identical" claim about this same doc before it shipped). Stage 1
+only, as scoped: chair, debate and repair legs launch without a roster and are unchanged. Four
+named mutants recorded and hand-reverted end to end: `SEATALIAS` (the predicate pin, red set 2),
+`SEATSLOPPY` (the surgical index pin, red set 1), `SEATDROP` (the persistence pin, red set 2) and
+`LIVESEATBLIND` (the end-to-end pin, red set 2). T4.6 also re-anchored `run-assemble.js:89` by
+symbol to `run-stats-entry.js :: buildRunStatsEntry` in `electron/workspace-ui/live-seats.js`,
+`workspace-seats.js` and `tests/workspace/seat-panel-twins.test.js` — that line is
+`labelClaudeReview`'s docblock, unrelated to seats, and the mechanism those comments describe was
+already correct; only the line number was rotten.
 
 ### Phase 5 · Debate join — 1 PR
 SI-10 **refuse** a re-vote whose seat is unknown, and announce. SI-13 becomes a JSDoc edit.

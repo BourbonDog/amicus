@@ -157,8 +157,9 @@
       // the deliberate direction: visible beats silent.
       //
       // ⚠️ NAMING HAZARD (council A1): `seat` means TWO different things three lines apart.
-      // `s.seat` is a SEAT ID (`alias#N`, from run-assemble.js:89 via the cost row). The degrade
-      // records keyed into `retried` above use `data.seat`, which is an ALIAS and stays one
+      // `s.seat` is a SEAT ID (`alias#N`, from src/council/run-stats-entry.js :: buildRunStatsEntry
+      // via the cost row). The degrade records keyed into `retried` above use `data.seat`,
+      // which is an ALIAS and stays one
       // deliberately (run-retry-notes.js:39-45 — verdict.js:72 compares it against `o.critic`).
       // Reading one as the other is precisely how an earlier revision of this fix paired an
       // alias-keyed map with a seat-id lookup and dropped every badge. When touching either
