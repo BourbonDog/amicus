@@ -554,7 +554,9 @@ The `git diff --stat` must show **only** the T4.2 addition before the `git add`.
 **Files:**
 - Modify: `src/sidecar/fanout-leg.js:101` (inside **`runSingleAttempt`**, ⚠️ **not** `runLeg` — see §0.5)
 - Modify: `src/observe/council-legs.js:25` (the docblock enumeration this falsifies — see §0.6)
-- Test: `tests/sidecar/fanout-leg.test.js`
+- Test: `tests/sidecar/runleg-fallback.test.js`, in its existing
+  `describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize extraction)')`
+  block (`:158`)
 
 **Interfaces:**
 - Consumes: `leg.seat` from T4.2.
@@ -562,28 +564,60 @@ The `git diff --stat` must show **only** the T4.2 addition before the `git add`.
 
 - [ ] **Step 1: Write the failing test**
 
-```js
-test('runSingleAttempt writes the leg seat into metadata.json (v4.8 R5)', async () => {
-  const doc = await runSingleAttempt(argsFor({ leg: { model: 'm', modelInput: 'a', seat: 'a#2' } }));
-  const meta = JSON.parse(fs.readFileSync(path.join(legDirOf(doc), 'metadata.json'), 'utf-8'));
-  expect(meta.seat).toBe('a#2');
-});
+⚠️ **Corrected mid-flight (controller ruling PF-5).** An earlier draft named
+`tests/sidecar/fanout-leg.test.js` and helpers `argsFor`/`legDirOf`. **None of those exist.** The
+real harness is `runleg-fallback.test.js`, which mocks the OpenCode transport at the module
+boundary (its file header) so the REAL `runSingleAttempt` runs against a canned `runHeadless`
+result, then reads `metadata.json` straight off the leg dir. Its existing first test already
+asserts `meta.parentWave` and `meta.modelInput` — **the very enumeration you are extending.**
+Add these two beside it, matching its call shape exactly:
 
-test('a seatless leg leaves metadata.json without a seat key at all', async () => {
-  const doc = await runSingleAttempt(argsFor({ leg: { model: 'm', modelInput: 'a' } }));
-  const meta = JSON.parse(fs.readFileSync(path.join(legDirOf(doc), 'metadata.json'), 'utf-8'));
-  expect('seat' in meta).toBe(false);
-});
+```js
+  test('writes the leg seat into metadata.json when the leg carries one (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w10'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', seat: 'opus#2' },
+      legId: 'w10-1', waveId: 'w10', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w10-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.seat).toBe('opus#2');
+  });
+
+  test('a seatless leg leaves metadata.json without a seat key at all (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w11'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' },
+      legId: 'w11-1', waveId: 'w11', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w11-1'), 'metadata.json'), 'utf-8'));
+    expect('seat' in meta).toBe(false);
+  });
 ```
 
-⚠️ Match the existing harness in that file for `argsFor`/`legDirOf` — **read the suite first** and
-reuse its helpers rather than inventing new ones.
+⚠️ The `fs.mkdirSync(getSessionDir(project, '<wave>'))` line is **not optional** — `fanout.js`
+normally creates the wave dir before any leg launches, and `emitLegStarted`/`emitLegTerminal`
+append into it. The existing test documents this at `:160-163`. Use a FRESH `tmp()` project and a
+distinct wave id per test, as the suite does.
 
 - [ ] **Step 2: Run and confirm test 1 FAILS**
 
-Run: `npx jest tests/sidecar/fanout-leg.test.js -t 'v4.8 R5' --silent`
+Run: `npx jest tests/sidecar/runleg-fallback.test.js --silent`
 Expected: test 1 FAILS (`meta.seat` undefined); test 2 passes vacuously (the preservation pin,
 proved by Step 6's mutant).
+
+⚠️ **Do not add a `-t` filter.** Jest's `-t` is a REGEX, not a literal: Task 2 measured that
+`-t 'seat (v4.8 R5)'` silently matches ZERO tests because the parentheses are treated as a regex
+group. A filter that matches nothing looks exactly like a passing run. Run the whole file.
 
 - [ ] **Step 3: Implement — one key**
 
@@ -597,10 +631,13 @@ property — and a reader would then have to check both to know the behaviour.
 
 - [ ] **Step 4: Run and confirm BOTH pass, plus the fallback path**
 
-Run: `npx jest tests/sidecar/fanout-leg.test.js tests/sidecar/fanout-leg-fallback.test.js --silent`
-Expected: PASS. **The fallback suite is the point** — `fanout-leg-fallback.js:160` routes through
-`runSingleAttempt`, so the seat must appear on a fallback-substituted leg too **without a second
-edit**. If it does not, that premise from §0.4 fact 1 is wrong — **stop and re-measure.**
+Run: `npx jest tests/sidecar/runleg-fallback.test.js --silent`
+Expected: PASS — **the whole file, both describes.** ⚠️ **The FALLBACK half of this file is the
+point, and it is why one file suffices**: `src/sidecar/fanout-leg-fallback.js:160` is
+`const runOnce = deps.runOnce || ((a) => require('./fanout-leg').runSingleAttempt(a, deps));`, so
+the fallback loop routes through the same `runSingleAttempt` you just edited. The seat must reach
+a fallback-substituted leg **without a second edit**. If the fallback describe reds, that premise
+from §0.4 fact 1 is wrong — **stop and re-measure, do not add a second write site.**
 
 - [ ] **Step 5: Fix the enumeration this falsifies (§0.6)**
 
