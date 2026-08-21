@@ -3001,9 +3001,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   extend `writeLegPatch` (`src/sidecar/fanout-leg.js :: runSingleAttempt`) so `src/observe/council-legs.js ::
   buildLegRow` reads the seat off `metadata.json`, threading from `run-stage1-launch.js`'s
   `seated[].roster`; then through `live-normalize.js :: seatOf`. Makes
-  `electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — re-verified 2026-08-21, still
-  permanently dead on the live path, since neither `buildLegRow` nor any live-tick payload emits
-  `.seat` today — actually live.
+  `electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — re-verified 2026-08-21 at
+  BASE (`1832b9c7`), dead on the live path at every measurement before this phase, since neither
+  `buildLegRow` nor any live-tick payload emitted `.seat` there — actually live.
   ⚠️ **Ordering is PREFERENCE ONLY, not a hard gate.** The phasing doc's own §6 lists "Phase 3 vs
   Phase 4 order" among preference-only orderings, so nothing in Phase 3's closure forces Phase 4
   next over Phase 5 (SI-10/SI-13, the debate join) or Phase 6's independents — this entry follows
@@ -3013,7 +3013,12 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   inside `runSingleAttempt`. Corrected here and in the phasing doc's own Phase 4 line, case-
   insensitive repo sweep confirmed clean. The line number in the sentence above was also stale
   (`:207` → `:209`, the arm moved when T4.5's comment rewrite grew the file above it) and is
-  corrected the same way. Citation repair only — the sentence's claim was, and remains, accurate.
+  corrected the same way. The mechanism this line describes was, and remains, correct — a
+  citation repair, not a truth repair. ⚠️ **Fix round (reviewer finding):** this annotation
+  previously said the sentence's CLAIM "was, and remains, accurate" — that overclaimed. Only the
+  citation was repaired; the "still dead" claim is now explicitly scoped to BASE, immediately
+  above, because it stopped being true the moment T4.1–T4.5 shipped — three lines below it, in
+  this same paragraph.
   ✅ **COMPLETED 2026-08-21 — v4.8 Phase 4: T4.1 (`e42b6aaa`) + T4.2 (`49c2313d`+`41d6f793`) + T4.3
   (`3c95bd18`+`94fdb76b`+`2294ce8a`+`c009c7eb`+`3e5ad689`) + T4.4 (`40b26dde`+`2d69a987`) + T4.5
   (`b9c760a5`+`6a944404`) + T4.6 (this bookkeeping pass, no behaviour change).** The Stage-1 roster
@@ -3033,8 +3038,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   entry, above) and `run-assemble.js:89` (`electron/workspace-ui/live-seats.js`,
   `workspace-seats.js`, `tests/workspace/seat-panel-twins.test.js` — that line is
   `labelClaudeReview`'s docblock, unrelated to seats; the real producer is
-  `run-stats-entry.js :: buildRunStatsEntry`). Suite baseline at T4.3: 544 suites / 7805 passed / 8
-  skipped / 0 failed.
+  `run-stats-entry.js :: buildRunStatsEntry`). Final measured state (`npm test`, this task, not
+  T4.3's mid-phase baseline): 544 suites / 7810 passed / 8 skipped / 0 failed.
 
 - [ ] **NEXT TASK — Phase 5: Debate join.** Filed 2026-08-21 (v4.8 Phase 4 T4.6) as the correct
   resume point, replacing the Phase 4 entry above (now ✅ COMPLETED). Per the phasing doc's own
