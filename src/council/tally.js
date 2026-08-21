@@ -121,8 +121,17 @@ function tally(input) {
     judged: Array.isArray(rankings) && rankings.length >= 2,
     // v4.8 T3.3: `meta.seats` joins BY VALUE inside computeStreetCred (never
     // positionally against meta.models — run-assemble.js :: buildTallyInput
-    // forbids that). Absent on every unique-alias bench and on both
-    // hand-assembled appendRun paths, where the rows stay alias-driven.
+    // forbids that). The ENGINE emits it only when the bench repeats an alias,
+    // so a unique-alias run leaves the rows alias-driven and byte-identical.
+    // ⚠️ DO NOT READ THAT AS "hand-assembled input is always alias-driven" —
+    // this sentence said so until fix round 1 and it was false, in the way that
+    // hides a defect rather than merely misinforming. `meta` is copied verbatim
+    // from user JSON on both hand-assembled appendRun paths, and
+    // mcp-tools.js :: amicus_council_tally DECLARES `meta.seats`, so such a
+    // record produces SEAT-driven street-cred rows here while its `runStats`
+    // rows — declared `z.array(z.record(z.any()))`, so never asked for a seat —
+    // carry none. That asymmetry is a live quadrant, not a hypothetical; it is
+    // what ledger-join.js :: credFor's second lookup exists for.
     streetCred: computeStreetCred(rankings || [], meta.models, meta.seats),
     findings: outFindings,
     runStats: (runStats || []).map(r => ({

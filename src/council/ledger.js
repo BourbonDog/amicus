@@ -113,10 +113,13 @@ const { benchLegs, credFor } = require('./ledger-join');
  */
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
-  // Keyed by SEAT where the row has one, alias otherwise — the hazard, the
-  // emit rule and the fallback are in ledger-join.js :: credFor. Named mutant
-  // LEDGERALIAS, tests/council/street-cred-mutants.js :: LEDGERALIAS.
-  const sc = new Map(streetCred.map(s => [s.seat || s.model, s]));
+  // The SEATED street-cred rows only, keyed by seat id. ⚠️ Not `s.seat ||
+  // s.model`: an alias key here cannot serve a row whose alias has ONLY seated
+  // street cred, which is the fix-round-1 regression — credFor's second lookup
+  // filters the array by alias instead. The hazard, the emit rule and both
+  // lookups are written out at ledger-join.js :: credFor. Named mutant
+  // tests/council/street-cred-mutants.js :: LEDGERALIAS.
+  const sc = new Map(streetCred.filter(s => s && s.seat).map(s => [s.seat, s]));
   // Only allowlisted roles (joinsLedger, above) may join, so a non-primary
   // row-per-launch row can never contribute a model's role/conformance.
   const byAlias = new Map();
@@ -157,7 +160,7 @@ function buildLedgerRows(record) {
       // `wasChair` below still reads every row.
       const legs = benchLegs(group);
       const last = legs[legs.length - 1] || {};
-      const s = credFor(sc, group, model);
+      const s = credFor(sc, group, model, streetCred);
       rows.push({
         schemaVersion: LEDGER_SCHEMA_VERSION,
         runId: meta.runId, date: meta.date, runType: meta.runType, model,

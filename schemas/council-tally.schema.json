@@ -40,7 +40,7 @@
           },
           "seat": {
             "type": "string",
-            "description": "v4.8, optional, documentation-only ahead of its producer. One row per SEAT rather than per alias, and this row's seat id, when it differs from `model` (its alias) — emitted by computeStreetCred (v4.8 T3.3, not yet shipped when this property was declared). verdict.js :: buildVerdict already carries it through its own streetCred projection (T3.2) so the field is never silently stripped once T3.3 starts emitting it. No `additionalProperties: false` above means an additive field always validated here even before this declaration; this documents the shape rather than changing what is accepted."
+            "description": "v4.8, optional. One row per SEAT rather than per alias, and this row's seat id, when it differs from `model` (its alias). SHIPPED at v4.8 T3.3 — street-cred.js :: computeStreetCred is the producer; this property was DECLARED one task earlier, at T3.2, and read 'documentation-only ahead of its producer' until T3.3 landed. The engine emits it only when the bench repeats an alias, so a unique-alias run carries no seat on any row and its document is byte-identical to a pre-v4.8 one. verdict.js :: buildVerdict carries it through its own closed streetCred projection, so the field is never silently stripped. No `additionalProperties: false` above means an additive field was always validated here even before this declaration; this documents the shape rather than changing what is accepted."
           }
         }
       }
