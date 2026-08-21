@@ -5,14 +5,13 @@ const { assignLabels, toGlobalId, toGlobalFindings, rankingToOrder } =
 
 describe('assignLabels', () => {
   test('assigns Review A/B/C in model order with both maps', () => {
-    const { entries, labelMap, letterByModel } = assignLabels(['deepseek', 'gemini', 'gpt']);
+    const { entries, labelMap } = assignLabels(['deepseek', 'gemini', 'gpt']);
     expect(entries).toEqual([
       { label: 'Review A', letter: 'A', model: 'deepseek' },
       { label: 'Review B', letter: 'B', model: 'gemini' },
       { label: 'Review C', letter: 'C', model: 'gpt' },
     ]);
     expect(labelMap['Review B']).toBe('gemini');
-    expect(letterByModel.gpt).toBe('C');
   });
 
   test('throws on an empty bench', () => {

@@ -15,7 +15,7 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
  * Assign stable labels in the given model order.
  * @param {string[]} models reviewed model ids (bench order)
  * @returns {{entries: Array<{label: string, letter: string, model: string}>,
- *   labelMap: Object<string, string>, letterByModel: Object<string, string>}}
+ *   labelMap: Object<string, string>}}
  */
 function assignLabels(models) {
   if (!Array.isArray(models) || models.length === 0 || models.length > LETTERS.length) {
@@ -25,12 +25,10 @@ function assignLabels(models) {
     label: `Review ${LETTERS[i]}`, letter: LETTERS[i], model,
   }));
   const labelMap = {};
-  const letterByModel = {};
   for (const e of entries) {
     labelMap[e.label] = e.model;
-    letterByModel[e.model] = e.letter;
   }
-  return { entries, labelMap, letterByModel };
+  return { entries, labelMap };
 }
 
 /** Rewrite a review's local integer finding id to its run-global label id. */
