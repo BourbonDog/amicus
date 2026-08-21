@@ -161,9 +161,11 @@ test('v4.8 PR4c T9b: meta.seats is a pure tail; the six-key order is untouched',
 
 // v4.8 PR3 Task 5: buildTallyInput's adjudications carry `seat` alongside the
 // unchanged alias-valued `judge` — emit-when-DIFFERENT (§3.3), mirroring Task
-// 4's judgeResults[].seat guard. `judge: j.judge` stays the alias; rankings
-// (street-cred) are untouched.
-describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-different)', () => {
+// 4's judgeResults[].seat guard. `judge: j.judge` stays the alias.
+// v4.8 T3.2: rankings[] now carries the SAME judge seat, under the identical
+// predicate — see the block below. `order`'s VALUES stay alias-valued; only
+// the row gains a sibling `seat` key (street-cred NUMBERS are still T3.3's).
+describe('buildTallyInput adjudications + rankings seat (v4.8 PR3 Task 5 / T3.2, emit-when-different)', () => {
   const judgesWithSeat = (seat) => [
     { judge: 'gemini', ok: true, order: ['gemini'], seat,
       adjudications: [{ id: 'A1', verdict: 'agree' }] },
@@ -197,13 +199,78 @@ describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-differe
     expect('seat' in input.adjudications[0]).toBe(false);
   });
 
-  test('rankings (street-cred) stay alias-valued — unchanged by seat', () => {
+  // v4.8 T3.2 (was: "rankings (street-cred) stay alias-valued — unchanged by
+  // seat" — that claim is what this task changes; replaced rather than left
+  // to rot, since a stale assertion here would be exactly the falsified-
+  // comment/pin trap this release keeps tripping on). `order`'s VALUES are
+  // still alias-valued (unchanged); the row now ALSO carries the judge's seat.
+  test('rankings order stays alias-valued; the row now carries the JUDGE seat (v4.8 T3.2)', () => {
     const input = asm.buildTallyInput({
       runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x',
       reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini#2', alias: 'gemini' }),
       chairStats: null,
     });
-    expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
+    expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'], seat: 'gemini#2' }]);
+  });
+
+  test('v4.8 T3.2: rankings seat is emit-when-DIFFERENT, matching adjudications exactly', () => {
+    const unique = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini', alias: 'gemini' }),
+      chairStats: null,
+    });
+    expect(unique.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
+    expect('seat' in unique.rankings[0]).toBe(false);
+
+    const noSeat = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat(null),
+      chairStats: null,
+    });
+    expect('seat' in noSeat.rankings[0]).toBe(false);
+  });
+
+  // v4.8 T3.3: the hop T3.2 deliberately stopped short of. `orderSeats` reached
+  // judgeResults[] in run-stage2.js but never rankings[], and computeStreetCred
+  // reads rankings[] — so without this the seat channel never arrives where
+  // SI-20's collapse happens.
+  describe('rankings[].orderSeats (v4.8 T3.3, emit-when-it-CARRIES-something)', () => {
+    const withOrderSeats = (order, orderSeats) => asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x', reviews: REVIEWS,
+      judgeResults: [{ judge: 'gemini', ok: true, order, orderSeats, adjudications: [] }],
+      chairStats: null,
+    }).rankings[0];
+
+    test('a seated bench carries the parallel array verbatim, right after `order`', () => {
+      const r = withOrderSeats(['gemini', 'gemini'], ['gemini#1', 'gemini#2']);
+      expect(r).toEqual({ judge: 'gemini', order: ['gemini', 'gemini'],
+        orderSeats: ['gemini#1', 'gemini#2'] });
+      expect(Object.keys(r)).toEqual(['judge', 'order', 'orderSeats']);
+    });
+
+    test('a tie group keeps its nesting in both arrays', () => {
+      expect(withOrderSeats([['gemini', 'gemini']], [['gemini#1', 'gemini#2']]).orderSeats)
+        .toEqual([['gemini#1', 'gemini#2']]);
+    });
+
+    test('⚠️ an ALL-NULL parity shape emits NOTHING — the unique-alias byte-identity guard', () => {
+      // rankingToOrder returns `[null, null]` rather than nothing on a bench
+      // with no repeated alias, so emit-when-SET would add a key to rankings[]
+      // in tally-input.json, tally.json and tally-provisional.json on every run
+      // that has ever happened. The nested form is the same trap one level down.
+      expect('orderSeats' in withOrderSeats(['gemini', 'gemini'], [null, null])).toBe(false);
+      expect('orderSeats' in withOrderSeats([['gemini', 'gemini']], [[null, null]])).toBe(false);
+    });
+
+    test('absent or null orderSeats emits nothing (every pre-T3.2 judgeResult)', () => {
+      expect('orderSeats' in withOrderSeats(['gemini'], undefined)).toBe(false);
+      expect('orderSeats' in withOrderSeats(['gemini'], null)).toBe(false);
+    });
+
+    test('a PARTLY seated array is emitted whole — one non-null is enough', () => {
+      expect(withOrderSeats(['gemini', 'other'], ['gemini#1', null]).orderSeats)
+        .toEqual(['gemini#1', null]);
+    });
   });
 });
 

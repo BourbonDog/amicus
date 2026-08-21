@@ -3,6 +3,11 @@
 const fs = require('fs');
 const path = require('path');
 const { getConfigDir } = require('../utils/config');
+// The read/aggregate half lives in ./ledger-stats (v4.8 Phase 3 T3.0 size-gate split).
+// readRows/avg/countRuns/deriveReliability/buildStatsDoc/LEDGER_FILE are re-exported
+// below — existing consumers keep importing them from here.
+const { LEDGER_FILE, readRows, avg, countRuns, deriveReliability,
+  buildStatsDoc } = require('./ledger-stats');
 
 // v4.7 GOA-7 D9: v2 rows may carry `resolvedModel` (the executable id that
 // served, copied from the joined runStats row, emit-only-when-set). Absent
@@ -12,7 +17,6 @@ const { getConfigDir } = require('../utils/config');
 // unknowable. Legacy-READ only: readers never inspect schemaVersion, rows are
 // never migrated.
 const LEDGER_SCHEMA_VERSION = 2;
-const LEDGER_FILE = 'council-ledger.jsonl';
 
 // v4.7 D4/E1/E2/E6 (Task-7, task-6/task-7 adjudications): fail-closed
 // ALLOWLIST of runStats roles the ledger join (below) may consume as a
@@ -60,7 +64,11 @@ function countSeverity(findings) {
 
 // v4.8 PR4b (R4b-4): a LOCAL COPY of run-assemble.js's CONFORMANCE_RANK +
 // worseConformance. Deliberately copied, not imported: this module requires
-// only fs/path/utils-config, while run-assemble pulls findings → anonymize →
+// fs/path/utils-config directly, plus its own two size-gate extractions —
+// ./ledger-stats and ./ledger-join (v4.8 T3.0/T3.3) — and neither deepens the
+// graph: ./ledger-join is require-free and ./ledger-stats requires only the
+// same three, plus a LAZY require('./tally') inside buildStatsDoc that never
+// runs at module load. run-assemble pulls findings → anonymize →
 // seats, atomic-write, and — since v4.8 PR4c moved writeVerdictFiles out —
 // run-verdict-files → verdict → report. The graph is one hop longer than the
 // comment PR4b wrote, not one hop shorter. The duplication is paid for
@@ -72,6 +80,12 @@ const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
 function mergeConformance(a, b) {
   return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;
 }
+
+// v4.8 T3.3: the JOIN SEMANTICS — SI-17 normalise (benchLegs) and the
+// seat-aware street-cred join (credFor) — live in ./ledger-join, the same
+// one-directional split T3.0 used for ./ledger-stats. Read their docblocks
+// there before changing either call site below.
+const { benchLegs, credFor } = require('./ledger-join');
 
 /**
  * One row per distinct (model, resolvedModel) pair on the bench. Rates are over
@@ -103,7 +117,13 @@ function mergeConformance(a, b) {
  */
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
-  const sc = new Map(streetCred.map(s => [s.model, s]));
+  // The SEATED street-cred rows only, keyed by seat id. ⚠️ Not `s.seat ||
+  // s.model`: an alias key here cannot serve a row whose alias has ONLY seated
+  // street cred, which is the fix-round-1 regression — credFor's second lookup
+  // filters the array by alias instead. The hazard, the emit rule and both
+  // lookups are written out at ledger-join.js :: credFor. Named mutant
+  // tests/council/street-cred-mutants.js :: LEDGERALIAS.
+  const sc = new Map(streetCred.filter(s => s && s.seat).map(s => [s.seat, s]));
   // Only allowlisted roles (joinsLedger, above) may join, so a non-primary
   // row-per-launch row can never contribute a model's role/conformance.
   const byAlias = new Map();
@@ -120,10 +140,11 @@ function buildLedgerRows(record) {
   const rows = [];
   for (const model of aliases) {
     const raised = findings.filter(f => f.raiser === model);
-    const s = sc.get(model) || {};
     const pairs = byAlias.get(model);
     // An alias with NO joinable runStats row yields exactly ONE row with an
-    // empty group — today's `rs.get(model) || {}` fallback, preserved.
+    // empty group — the shape the founding ledger commit (c073995e) wrote as
+    // `rs.get(model) || {}`; `rs` itself is gone, replaced by `byAlias`/`pairs`
+    // during the R4b-2 pair-group split, but the empty-group fallback is not.
     const groups = pairs ? [...pairs.entries()] : [['', []]];
     groups.forEach(([resolvedKey, group], i) => {
       // R4b-2: within a block exactly ONE row — the FIRST pair group — carries
@@ -136,18 +157,27 @@ function buildLedgerRows(record) {
       // Seat-attributed findings are filed to BACKLOG, not scheduled. The other
       // rows' null rates fall out of the `judged && denom` guards at denom 0.
       // Street cred deliberately does NOT concentrate (§0): stripping it flips
-      // the launched name from the alias to the raw executable id.
+      // the launched name from the alias to the raw executable id. Since v4.8
+      // T3.3 it is also per-SEAT rather than per-alias (ledger-join.js :: credFor).
       const mine = i === 0 ? raised : [];
       const denom = mine.length;
-      const last = group[group.length - 1] || {};
+      // SI-17's normalise: a chair-synthesis row never decides a bench leg's
+      // role or conformance (ledger-join.js :: benchLegs). `group` is unchanged, so
+      // `wasChair` below still reads every row.
+      const legs = benchLegs(group);
+      const last = legs[legs.length - 1] || {};
+      const s = credFor(sc, group, model, streetCred);
       rows.push({
         schemaVersion: LEDGER_SCHEMA_VERSION,
         runId: meta.runId, date: meta.date, runType: meta.runType, model,
-        // `role`: last row of the PAIR GROUP wins. No role ordering exists
-        // anywhere in src/, so with no principled merge this stays closest to
-        // today's last-wins. Lens twins are genuinely undecidable.
+        // `role`: last row of the PAIR GROUP wins, chair rows excluded while a
+        // bench leg is present. No role ordering exists anywhere in src/, so
+        // with no principled merge this stays closest to today's last-wins.
+        // Lens twins are genuinely undecidable.
         role: last.role || 'council',
-        // `wasChair`: any-wins. A boolean fact has no last-wins reading.
+        // `wasChair`: any-wins over the WHOLE group. A boolean fact has no
+        // last-wins reading, and this is the one field a chair row contributes
+        // to a bench seat's row.
         wasChair: group.some(r => !!r.wasChair),
         judged: judged === true,
         streetCredWithSelf: judged ? (s.withSelf ?? null) : null,
@@ -169,9 +199,12 @@ function buildLedgerRows(record) {
         // ['weird','clean'] folds to 'weird', ['clean','weird'] to 'clean',
         // because unknown and 'clean' both rank 0 and the accumulator wins the
         // tie. T13c pins it so nobody "fixes" it into a divergence.
-        conformance: group.length
-          ? group.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
-            group[0].conformance || 'clean')
+        // ⚠️ The fold runs over `legs`, not `group` — SI-17's normalise. On
+        // every group without a chair row the two arrays ARE the same array's
+        // contents, so T13b/T13c and the seed rule above are untouched.
+        conformance: legs.length
+          ? legs.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
+            legs[0].conformance || 'clean')
           : 'clean',
         ...(resolvedKey ? { resolvedModel: resolvedKey } : {}),
       });
@@ -189,90 +222,6 @@ function appendRun(record, opts = {}) {
   return rows;
 }
 
-function readRows(dir) {
-  const file = path.join(dir, LEDGER_FILE);
-  if (!fs.existsSync(file)) { return []; }
-  return fs.readFileSync(file, 'utf-8').split('\n').map(l => l.trim()).filter(Boolean)
-    .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-}
-
-function avg(nums) { return nums.length ? nums.reduce((s, x) => s + x, 0) / nums.length : null; }
-
-/**
- * v4.8 PR4b (R4b-1): `runs` counts distinct council RUNS, not ledger rows. One
- * run on `--models a,a` is one appearance, not two — and that was true of every
- * bench where one executable served more than one seat, pre-PR4b rows included
- * (history self-corrects; the append-only file never blends two counting units).
- *
- * ⚠️ Spell the predicate literally: only a NON-EMPTY STRING runId is an
- * identity. `runId: ''` is persistable and reaches disk verbatim on the
- * hand-assembled tally path, and `runId: 0` is the mirror hazard — under a
- * bare `if (r.runId)` or an `'runId' in r` both would silently collapse a
- * whole history into ONE run, permanently, in a file that is never migrated.
- * Anything that is not a non-empty string counts individually.
- */
-function countRuns(rows) {
-  const ids = new Set();
-  let unkeyed = 0;
-  for (const r of rows) {
-    if (typeof r.runId === 'string' && r.runId) { ids.add(r.runId); } else { unkeyed += 1; }
-  }
-  return ids.size + unkeyed;
-}
-
-/**
- * Aggregate the ledger per model. peersOnly nulls excluded; lowN flags < 3 runs
- * (v4.8 PR4b R4b-1: `runs` is DISTINCT runIds — see countRuns).
- * v4.7 GOA-7 D10: groups by `row.resolvedModel || row.model` — v2 rows segment
- * by the executable id that actually served; rows without a resolvedModel
- * (pre-v2 history, leg-less rows, hand-assembled tally input) stay alias-keyed
- * with `legacy: true`. `aliases` lists every row-level `model` (alias) observed
- * for the group, most recently observed FIRST — ledger append order is the only
- * recency signal (`date` is day-granular, free-form on the MCP path), so
- * aliases[0] is the launch-preferred name (pickFallbackChair, D11).
- * Version-blind by design: schemaVersion is never read (legacy-read, R2).
- */
-function deriveReliability(opts = {}) {
-  const dir = opts.dir || getConfigDir();
-  const byKey = new Map();
-  for (const row of readRows(dir)) {
-    const key = row.resolvedModel || row.model;
-    if (!byKey.has(key)) { byKey.set(key, []); }
-    byKey.get(key).push(row);
-  }
-  return [...byKey.entries()].map(([model, rows]) => {
-    const peers = rows.map(r => r.streetCredPeersOnly).filter(v => typeof v === 'number');
-    const confirms = rows.map(r => r.confirmRate).filter(v => typeof v === 'number');
-    const facts = rows.map(r => r.factErrorRate).filter(v => typeof v === 'number');
-    const conformance = rows.reduce((acc, r) => { acc[r.conformance] = (acc[r.conformance] || 0) + 1; return acc; }, {});
-    const lastSeen = new Map();
-    rows.forEach((r, i) => { lastSeen.set(r.model, i); });
-    const aliases = [...lastSeen.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
-    const runs = countRuns(rows);
-    return {
-      model, runs, lowN: runs < 3,
-      avgStreetCredPeersOnly: avg(peers),
-      lifetimeConfirmRate: avg(confirms),
-      lifetimeFactErrorRate: avg(facts),
-      conformance,
-      aliases,
-      ...(rows.every(r => !r.resolvedModel) ? { legacy: true } : {}),
-    };
-  });
-}
-
-/**
- * v4.0 §7: wrap the deriveReliability() rows in the council v2 envelope —
- * THE one sanctioned breaking shape change (`council stats --json` used to
- * emit the bare array). Human rendering keeps consuming the bare rows.
- * @param {Array<object>} models deriveReliability() output
- * @returns {{schemaVersion: number, type: 'council-stats', models: Array<object>}}
- */
-function buildStatsDoc(models) {
-  const { COUNCIL_SCHEMA_VERSION } = require('./tally');
-  return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-stats', models };
-}
-
 // ⚠️ CLAUDE.md's AUTO:modules marker truncates at five exports — append new
 // ones at the END so the generated table stays stable.
 module.exports = {
@@ -280,4 +229,7 @@ module.exports = {
   LEDGER_SCHEMA_VERSION,
   // Both exported for the drift guard against run-assemble.js's sibling copy.
   mergeConformance, CONFORMANCE_RANK,
+  // Re-exported from ./ledger-stats (v4.8 Phase 3 T3.0 split); no import path
+  // in the tree moved.
+  readRows, avg, countRuns,
 };

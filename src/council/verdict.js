@@ -144,7 +144,36 @@ function buildVerdict(record, decisions = [], opts = {}) {
       if (f.debate) { out.debate = f.debate; }   // v4.1: additive debate decoration carry-through (spec §5.6)
       return out;
     }),
-    streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly })),
+    // v4.8 fix round 1 (review finding): emit-when-DIFFERENT, adapted to this
+    // row's flat {model, seat} shape — model is the alias, seat is the seat
+    // id, so on a unique-alias bench they are byte-equal and nothing is
+    // emitted (same semantics as `seat.id !== seat.alias` one layer up,
+    // run-stats-entry.js:64). NOT a plain pass-through like `raiserSeat`
+    // above (:141) — that field's upstream producer already holds a real
+    // {id, alias} seat OBJECT at its own decision point (run.js:202:
+    // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
+    // through here is safe. The street-cred producer never has such an object
+    // at this point, only a flat row, so a pass-through here would leak `seat`
+    // onto every unique-alias verdict.json the moment that producer's own
+    // guard slipped — silently, since nothing else guards this closed literal.
+    // This check is deliberate defense in depth: buildVerdict is also reachable
+    // on externally-supplied records that never touched computeStreetCred
+    // in-process at all — the MCP `record` param of mcp-tools.js ::
+    // amicus_verdict is `z.record(z.any())`, fully permissive — so this
+    // literal's own byte-identity cannot be contingent on that producer alone;
+    // this file's own tests exercise that exact shape (hand-built rec objects,
+    // never calling tally()). tally.json keeps its own pin regardless — a
+    // genuine producer bug still reds at seat-parity-ondisk.test.js — this
+    // check exists so verdict.json is never the ONE document such a bug (or an
+    // externally-supplied record) masks.
+    // ⚠️ NO LONGER INERT. This comment said "computeStreetCred emits no `seat`
+    // at all yet" until v4.8 T3.3 shipped that producer — street-cred.js ::
+    // computeStreetCred, one row per SEAT with the id emitted when it differs
+    // from the alias. Both guards now fire on the same real documents, and the
+    // pin that proves this literal carries the field through lives at
+    // seat-parity-ondisk.test.js on a real runCouncil twin bench.
+    streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly,
+      ...(s.seat && s.seat !== s.model ? { seat: s.seat } : {}) })),
     runStats: record.runStats,
     tierCounts: record.tierCounts,
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic

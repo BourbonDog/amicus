@@ -140,6 +140,65 @@ describe('v4.8 PR4c §3.4: findings[] carry raiserSeat and sameModelCorroboratio
   });
 });
 
+// v4.8 T3.2: verdict.js's CLOSED streetCred literal must carry a seat
+// through, or its producer (computeStreetCred) loses it silently — found by
+// measurement, filed nowhere before that task (mirrors the §3.4
+// raiserSeat/sameModelCorroboration precedent above). These rows stay
+// hand-built (same idiom as :90-94 above) so the CARRY-THROUGH is pinned in
+// isolation from the producer. ⚠️ That producer SHIPPED at v4.8 T3.3 —
+// street-cred.js :: computeStreetCred — so the reason changed even though the
+// fixtures did not: the isolation is no longer "it does not exist yet" but
+// "buildVerdict is reachable on records it never touched", amicus_verdict's
+// `record: z.record(z.any())` being the live path. The END-TO-END half, driven
+// through the real runCouncil, is in seat-parity-ondisk.test.js.
+describe('v4.8 T3.2: streetCred[].seat survives the closed verdict literal', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek'], chair: 'gemini', claudeInCouncil: false };
+
+  test('a seat-carrying row keeps its seat in the VERDICT document', () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek#1' }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek#1' });
+  });
+
+  test("a row with no seat (today's only shape) emits NO seat key — byte-identity", () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1 }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1 });
+    expect('seat' in v.streetCred[0]).toBe(false);
+  });
+
+  // Fix round 1 (review finding): the distinguishing fixture that was
+  // missing — a row where seat === model (the UNIQUE-ALIAS shape a real
+  // producer emits) must emit NO seat key. Neither test above can tell
+  // emit-when-DIFFERENT apart from emit-when-SET: the first has no seat at
+  // all, the one above has a seat that already differs from model. This is
+  // the one that can — a mutant reverting to emit-when-SET reds THIS test
+  // (verified: see the fix-round-1 note in the module docblock above the
+  // streetCred literal).
+  test('a row whose seat EQUALS its model (unique-alias shape) emits NO seat key', () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek' }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1 });
+    expect('seat' in v.streetCred[0]).toBe(false);
+  });
+
+  test('the real producer chain (unique-alias fixture at the top of this file) stays byte-identical', () => {
+    // `record` is tally(avInput)'s OWN output. ⚠️ The reason it carries no
+    // seat MOVED at v4.8 T3.3 and the assertion did not: computeStreetCred
+    // emits `seat` now, but avInput is a UNIQUE-ALIAS fixture with no
+    // `meta.seats`, so every row's seat id would be its own alias and the
+    // emit-when-DIFFERENT guard keeps the field absent. Still the byte-identity
+    // control the task is judged on, driven through the real producer rather
+    // than a hand-built stand-in — and now a live one rather than a vacuous one.
+    const v = buildVerdict(record, []);
+    for (const s of v.streetCred) { expect('seat' in s).toBe(false); }
+  });
+});
+
 test('writeVerdictAtomic writes valid JSON via rename', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdict-'));
   const file = path.join(dir, 'verdict.json');

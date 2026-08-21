@@ -420,8 +420,28 @@ function getTools() {
         judge: z.string(), findingId: z.string(), verdict: z.enum(['agree', 'dispute', 'neutral']),
         seat: z.string().nullable().optional(),
       })).describe('One row per (judge × finding).'),
+      // v4.8 T3.2: `seat` added here to match `adjudications.seat` immediately
+      // above — the channel run-assemble.js's buildTallyInput now puts on
+      // rankings[] (the judge's own seat, emit-when-DIFFERENT) is otherwise
+      // unreachable from a hand-assembled MCP call: zod strips unknown keys
+      // by default. NOT R10's territory — R10 covers SI-23 (findings[]
+      // losing evidence/file/line) as its own document-shape PR; this is a
+      // different field on a different array, and the adjudications.seat
+      // precedent immediately above is this repo's own pattern of adding a
+      // seat field in the PR that introduces it, not deferring to a later
+      // schema PR.
+      // v4.8 T3.3 adds `orderSeats` for the same reason and by the same rule.
+      // It is the seat-valued PARALLEL of `order` (street-cred.js ::
+      // rankPositions keys on it), so without the declaration an MCP caller
+      // that sends it gets the alias collapse SI-20 exists to fix, silently.
+      // `nullable()` inside the arrays is load-bearing, not defensive:
+      // anonymize.js :: rankingToOrder emits `null` for every slot with no
+      // distinguishing seat, so a mixed bench legitimately sends nulls.
       rankings: z.array(z.object({
         judge: z.string(), order: z.array(z.union([z.string(), z.array(z.string())])),
+        seat: z.string().nullable().optional(),
+        orderSeats: z.array(z.union([z.string().nullable(),
+          z.array(z.string().nullable())])).nullable().optional(),
       })).describe("Each judge's preference order over the reviews (ties = nested array)."),
       runStats: z.array(z.record(z.any())).optional().describe('Optional per-model run stats (status/duration/usage).'),
       project: z.string().optional().describe('Optional project directory path.'),

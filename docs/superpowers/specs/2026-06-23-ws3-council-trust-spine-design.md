@@ -256,6 +256,11 @@ Per judge's `FINAL RANKING:` block (translated to a model `order`), each model g
 position (1 = best). For each model:
 - **withSelf** = mean rank across **all** judges' rankings.
 - **peersOnly** = mean rank across judges **other than** that model.
+  > ⚠️ **v4.8 (2026-08-21, Phase 3 T3.3/T3.4): this exclusion is now a SEAT rule, not a model rule,
+  > whenever seat ids are present** — a twin's OTHER seat is a real peer and counts, so only that
+  > row's own seat is excluded (falls back to alias exclusion without seat ids). This dated design
+  > doc is a preserved record of the pre-v4.8 rule; see `docs/council.md`'s `streetCred[].peersOnly`
+  > row for the current behaviour.
 - **Ranking ties** within one judge's block get **fractional ranking** (the mean of the
   positions they span, e.g. a tie for 2nd–3rd → 2.5 each).
 - **Zero/one-peer cases (defined, not undefined):**

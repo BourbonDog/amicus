@@ -105,12 +105,13 @@ describe('MCP Tool Definitions', () => {
     expect(prose).not.toContain('gemini-3-flash-preview');
   });
 
-  // M-1 (whole-branch review of 4.1.1): mcp-tools.js:60,584 were reverted from a
-  // bare dot-versioned Anthropic id (`anthropic/claude-opus-4.8`, which the
-  // direct Anthropic API rejects) back to the correct dash-form id
-  // (`anthropic/claude-opus-4-8`). Nothing pinned either surface, so all 7 MCP
-  // suites stayed green whichever form was live. Pin both to the dash form and
-  // reject any bare dot-versioned Anthropic id pattern.
+  // M-1 (whole-branch review of 4.1.1): mcp-tools.js :: amicus_start and
+  // mcp-tools.js :: getGuideText were reverted from a bare dot-versioned
+  // Anthropic id (`anthropic/claude-opus-4.8`, which the direct Anthropic API
+  // rejects) back to the correct dash-form id (`anthropic/claude-opus-4-8`).
+  // Nothing pinned either surface, so all 7 MCP suites stayed green whichever
+  // form was live. Pin both to the dash form and reject any bare
+  // dot-versioned Anthropic id pattern.
   describe('anthropic model ids use dash form, not bare dot-versioned ids (M-1)', () => {
     const dotVersionedAnthropicId = /anthropic\/claude-[a-z]+-\d+\.\d+/;
 
@@ -735,6 +736,19 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
     const out = schema().adjudications.parse([
       { judge: 'deepseek', findingId: 'F1', verdict: 'agree', seat: 'deepseek#2' },
       { judge: 'gpt', findingId: 'F1', verdict: 'agree', seat: null },
+    ]);
+    expect(out[0].seat).toBe('deepseek#2');
+    expect(out[1].seat).toBeNull();
+  });
+
+  // v4.8 T3.2: rankings[].seat is a FOURTH seat key, added when run-assemble.js's
+  // buildTallyInput started emitting the judge's own seat on rankings[]. Same
+  // reasoning as the three above: undeclared here, zod strips it silently and a
+  // hand-assembled MCP call can seat its adjudications but not its rankings.
+  test('rankings[].seat survives, including the `|| null` idiom', () => {
+    const out = schema().rankings.parse([
+      { judge: 'deepseek', order: ['deepseek'], seat: 'deepseek#2' },
+      { judge: 'gpt', order: ['deepseek'], seat: null },
     ]);
     expect(out[0].seat).toBe('deepseek#2');
     expect(out[1].seat).toBeNull();

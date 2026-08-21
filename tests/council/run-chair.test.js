@@ -74,13 +74,16 @@ describe('pickFallbackChair under resolved-id keys (v4.7 GOA-7 D11)', () => {
 // depended on the layout of an append-only file, with nothing pinning it.
 //
 // WHY TIES ARE ORDINARY, NOT EXOTIC. On a two-seat bench `peersOnly` is a mean
-// over ranks drawn from {1,2} — `tally.js :: computeStreetCred` excludes the judge's own alias —
-// so equal means are a common arithmetic outcome. (Note the tying groups reach
+// over ranks drawn from {1,2} — `street-cred.js :: computeStreetCred` excludes
+// the judge's own SEAT where both sides carry one and its alias otherwise
+// (v4.8 T3.3; before that it was always the alias, and the function lived in
+// tally.js, which still re-exports it) — so equal means are a common
+// arithmetic outcome. (Note the tying groups reach
 // this function via a PAST run's ledger: `excluded()` already filters every
 // alias on the CURRENT bench.)
 //
 // WHY `runs` IS ONLY A TIE-BREAK. `runs` is the group's TOTAL ledger row count
-// (`ledger.js:137`) and includes `judged:false` runs that wrote no street cred.
+// (`ledger-stats.js :: countRuns`) and includes `judged:false` runs that wrote no street cred.
 // A model with 10 runs of which 2 were judged therefore outranks one with 5 all
 // judged, on a tie — so `runs` proxies operational history, NOT the sample
 // behind the mean, and must never be read as a ranking signal. The model-id term
@@ -99,7 +102,7 @@ describe('pickFallbackChair tie-break is explicit and order-independent (v4.8 PR
     expect(forward).toBe(reversed);
   });
 
-  // `runs` is total ledger appearances (ledger.js:137), including judged:false
+  // `runs` is total ledger appearances (ledger-stats.js :: countRuns), including judged:false
   // runs that contributed no street cred — a tie-break, not a ranking signal.
   test('on a tie the group with more council appearances wins', () => {
     const a = agg('alpha', 2, 1);

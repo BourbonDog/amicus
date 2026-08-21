@@ -14,10 +14,36 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 /**
  * Assign stable labels in the given model order.
  * @param {string[]} models reviewed model ids (bench order)
+ * @param {?Array<?{id: string, alias: string}>} [seats] (v4.8 T3.2) the bound
+ *   seat (or null/undefined) for each entry, SAME length/order as `models`.
+ *   Optional — every pre-T3.2 caller omits it. This is NOT the positional join
+ *   run-assemble.js's buildTallyInput docblock forbids for meta.seats (that one
+ *   joins meta.seats to the INDEPENDENTLY-sourced/filtered meta.models or
+ *   streetCred[]): here both arrays are built by the ONE caller from the SAME
+ *   source list in the SAME pass (run.js's `s1.reviews.map(...)`, twice), the
+ *   same positional pairing run.js already relies on one block below
+ *   (`labels.entries[i]` against `s1.reviews[i]`).
  * @returns {{entries: Array<{label: string, letter: string, model: string}>,
- *   labelMap: Object<string, string>, letterByModel: Object<string, string>}}
+ *   labelMap: Object<string, string>, seatMap: Object<string, string>}}
+ *   `labelMap` is UNCHANGED by this task — label -> alias, byte-identical.
+ *   This is a controller ruling (P-3): `labelMap` is persisted to run.json and
+ *   schemas/council-run.schema.json:45 declares its shape, and
+ *   src/workspace/blind-mode.js :: labelFor does an EXACT-STRING match against
+ *   its VALUE — measured 2026-08-20, `labelFor("gemini", {'Review A':'gemini#1'})`
+ *   -> `null`, the label silently lost. Seat identity rides the separate,
+ *   additive `seatMap` below instead.
+ *   `seatMap` (label -> seat id) is sparse by construction: a label lands in
+ *   it only when `seats[i]` is a real bound seat that differs from its own
+ *   alias — the shared emit-when-DIFFERENT predicate every other seat-emit
+ *   producer uses (run-stats-entry.js:64: `seat.id !== seat.alias`). On a
+ *   unique-alias bench, or when `seats` is omitted entirely, `seatMap` is
+ *   `{}` — so no pre-T3.2 caller (or consumer of just `{entries, labelMap}`)
+ *   can observe a change. T3.2 wired `seatMap` only as far as
+ *   `rankingToOrder`'s `orderSeats` below; consuming it into street cred was
+ *   T3.3's, and T3.3 SHIPPED — street-cred.js :: computeStreetCred now keys on
+ *   it, so this channel has a live consumer rather than a forecast one.
  */
-function assignLabels(models) {
+function assignLabels(models, seats) {
   if (!Array.isArray(models) || models.length === 0 || models.length > LETTERS.length) {
     throw new Error(`assignLabels needs 1-${LETTERS.length} models`);
   }
@@ -25,12 +51,17 @@ function assignLabels(models) {
     label: `Review ${LETTERS[i]}`, letter: LETTERS[i], model,
   }));
   const labelMap = {};
-  const letterByModel = {};
   for (const e of entries) {
     labelMap[e.label] = e.model;
-    letterByModel[e.model] = e.letter;
   }
-  return { entries, labelMap, letterByModel };
+  const seatMap = {};
+  if (Array.isArray(seats)) {
+    entries.forEach((e, i) => {
+      const seat = seats[i];
+      if (seat && seat.id !== seat.alias) { seatMap[e.label] = seat.id; }
+    });
+  }
+  return { entries, labelMap, seatMap };
 }
 
 /** Rewrite a review's local integer finding id to its run-global label id. */
@@ -74,18 +105,37 @@ function toGlobalFindings(letter, raiser, findings, raiserSeat) {
  * a tally rankings[].order array of model ids via the private label map.
  * @param {Array<string|string[]>} ranking
  * @param {Object<string, string>} labelMap
- * @returns {{order: Array<string|string[]>, errors: string[]}}
+ * @param {Object<string, string>} [seatMap] (v4.8 T3.2) assignLabels' additive
+ *   label -> seat-id channel. Optional; every pre-T3.2 caller omits it.
+ * @returns {{order: Array<string|string[]>,
+ *   orderSeats: Array<?string|Array<?string>>, errors: string[]}}
+ *   `order` and `errors` are UNCHANGED — same expression, same call to
+ *   `mapOne`, so briefings-chair.js and the tally schema stay unmoved
+ *   (SI-25 site (3) becomes *possible*, not *done*: T3.2 does not touch that
+ *   call site). `orderSeats` is the NEW, separate, parallel channel: the SAME
+ *   slots resolved through `seatMap` instead of `labelMap` — a by-VALUE
+ *   (label) lookup mirroring `order`'s own resolution, never a positional
+ *   join across two independently-sourced arrays. `null` marks a slot whose
+ *   label has no distinguishing seat (unique-alias bench, or no `seatMap`
+ *   given at all — every pre-T3.2 call site). T3.2 wired `orderSeats` no
+ *   further than its `judgeResults[]` call site in run-stage2.js. T3.3 carried
+ *   it one hop on, to `rankings[]` in run-assemble.js :: buildTallyInput, and
+ *   seat-keyed street-cred.js :: rankPositions with it — emitting the field
+ *   only when it holds a non-null, because THIS function returns an all-null
+ *   parity shape rather than an absence.
  */
-function rankingToOrder(ranking, labelMap) {
+function rankingToOrder(ranking, labelMap, seatMap) {
   const errors = [];
   const mapOne = (label) => {
     const model = labelMap[label];
     if (!model) { errors.push(`unknown label '${label}'`); }
     return model;
   };
-  const order = (Array.isArray(ranking) ? ranking : [])
-    .map(slot => (Array.isArray(slot) ? slot.map(mapOne) : mapOne(slot)));
-  return { order, errors };
+  const seatOne = (label) => (seatMap && seatMap[label]) || null;
+  const slots = Array.isArray(ranking) ? ranking : [];
+  const order = slots.map(slot => (Array.isArray(slot) ? slot.map(mapOne) : mapOne(slot)));
+  const orderSeats = slots.map(slot => (Array.isArray(slot) ? slot.map(seatOne) : seatOne(slot)));
+  return { order, orderSeats, errors };
 }
 
 module.exports = { assignLabels, toGlobalId, toGlobalFindings, rankingToOrder, LETTERS };

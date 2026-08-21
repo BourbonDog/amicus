@@ -112,8 +112,8 @@ describe('normalizeLive', () => {
   });
 
   test('blind-mode identity: Seat.modelInput (the alias) is distinct from Seat.model (the resolved id) — a label lookup keyed on the alias succeeds where keying on the resolved id fails', () => {
-    // labelMap values are ALIASES, never resolved ids (src/council/anonymize.js:30 stamps them
-    // from the bench alias list).
+    // labelMap values are ALIASES, never resolved ids (src/council/anonymize.js :: assignLabels
+    // stamps them from the bench alias list).
     const labelMap = { 'Review A': 'gemini' };
     const m = normalizeLive({
       taskId: 'x', status: 'running',

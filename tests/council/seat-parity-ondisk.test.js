@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { runCouncil } = require('../../src/council/run');
+const { buildLedgerRows } = require('../../src/council/ledger');
 const {
   debateScript, review, judgeOut, mkLeg, okWave, launchersFromScript, baseOptions,
 } = require('./helpers/fake-launchers');
@@ -47,7 +48,15 @@ const {
 // when TRUE, so an always-emitted `sameModelCorroboration: false` — which would
 // falsify CHANGELOG's "none of these documents changes shape at all there" —
 // shows up here and nowhere else in the suite.
-const FORBIDDEN = ['"seat":', '"raiserSeat":', '"seats":', '"sameModelCorroboration":', '__unbound-'];
+// `"orderSeats":` is v4.8 T3.3's parallel seat channel on rankings[]. Unlike
+// every other entry here its producer does NOT hand back an absence on a
+// unique-alias bench — anonymize.js :: rankingToOrder returns a PARITY-SHAPED
+// `[null, null, null]` — so emit-when-SET rather than emit-when-it-carries-
+// something would add the key to rankings[] in tally-input.json, tally.json and
+// tally-provisional.json on every run that has ever happened. This is the
+// end-to-end half of that guard; run-assemble.test.js has the unit half.
+const FORBIDDEN = ['"seat":', '"raiserSeat":', '"seats":', '"sameModelCorroboration":',
+  '"orderSeats":', '__unbound-'];
 
 /** The union of every row's key set, sorted — one row shape or a real skew. */
 function keyUnion(rows) {
@@ -214,5 +223,104 @@ describe('twin bench: the seat table reaches disk (§3.2, the run.js seam)', () 
     // The stamp is what makes the seat ids MEAN something: both seats are
     // `gemini`, so every corroboration on this bench is same-model.
     expect(v.findings.map(f => f.basis)).toEqual([{ a: 1, d: 0, n: 0 }, { a: 1, d: 0, n: 0 }]);
+  });
+
+  // v4.8 T3.3 — the seat channel now reaches the STREET CRED on disk. This run
+  // is symmetric (each judge ranks the other twin first), so the two rows carry
+  // the same numbers; what separates them is their `seat` and their
+  // `perJudgeRank`, which is the SI-20 site 3 collapse. The asymmetric bench
+  // below is where the NUMBERS diverge.
+  test('T3.3: tally.json carries one street-cred row per SEAT, with a per-judge map each', () => {
+    const t = docs['tally.json'];
+    expect(t.streetCred.map(s => s.seat)).toEqual(['gemini#1', 'gemini#2']);
+    expect(t.streetCred.map(s => s.model)).toEqual(['gemini', 'gemini']);
+    // Before T3.3 both rows were BYTE-IDENTICAL — `perJudgeRank` held one entry
+    // for two judges of the same alias and both rows read the same collapsed map.
+    expect(t.streetCred[0].perJudgeRank).toEqual({ 'gemini#1': 2, 'gemini#2': 1 });
+    expect(t.streetCred[1].perJudgeRank).toEqual({ 'gemini#1': 1, 'gemini#2': 2 });
+    expect(JSON.stringify(t.streetCred[0])).not.toEqual(JSON.stringify(t.streetCred[1]));
+    // And the judges' rankings carry the channel that made it possible.
+    const ti = docs['tally-input.json'];
+    expect(ti.rankings.map(r => r.orderSeats))
+      .toEqual([['gemini#2', 'gemini#1'], ['gemini#1', 'gemini#2']]);
+  });
+
+  test('T3.3: verdict.json carries the seat through its own closed streetCred literal', () => {
+    // verdict.js's literal was taught this field by T3.2, one task before any
+    // producer emitted it. This is that carry-through EXECUTED rather than
+    // assumed — the check the T3.3 brief asked for by name.
+    expect(docs['verdict.json'].streetCred).toEqual([
+      { model: 'gemini', withSelf: 1.5, peersOnly: 1, seat: 'gemini#1' },
+      { model: 'gemini', withSelf: 1.5, peersOnly: 1, seat: 'gemini#2' },
+    ]);
+  });
+});
+
+/**
+ * v4.8 T3.3 — the ASYMMETRIC twin bench, where the two seats' numbers actually
+ * diverge, driven end to end through the real `runCouncil`.
+ *
+ * Both judges rank Review A above Review B, so seat gemini#1 is ranked 1 by
+ * everyone and gemini#2 is ranked 2 by everyone. At BASE the alias collapse
+ * made those two rows byte-identical; here they are 1 and 2, and the ledger row
+ * that covers both must read BOTH of them rather than whichever the Map kept.
+ */
+describe('twin bench: DIVERGENT per-seat street cred, and the ledger row that covers both', () => {
+  let docs, ledgerRows;
+
+  beforeAll(async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-parity-asym-'));
+    const runId = 'twin03';
+    const sameOrder = () => judgeOut(['Review A', 'Review B'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]);
+    const script = {
+      [`${runId}-s1`]: (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
+      [`${runId}-s2`]: () => okWave([mkLeg('gemini', sameOrder()), mkLeg('gemini', sameOrder())]),
+      [`${runId}-ch1`]: () => okWave([
+        mkLeg('deepseek', 'Synthesis.\n\nVERDICT: Ship it', 'complete', 0.03),
+      ]),
+    };
+    const opts = baseOptions(tmp, {
+      models: ['gemini', 'gemini'], runId, runDir: path.join(tmp, `council-${runId}`),
+    });
+    ledgerRows = [];
+    const { exitCode } = await runCouncil(opts, {
+      launchers: launchersFromScript(script),
+      appendRunFn: (rec) => { ledgerRows.push(...buildLedgerRows(rec)); },
+      statsFn: () => [], installSignalAbortFn: () => () => {},
+    });
+    expect(exitCode).toBe(0);
+    docs = {};
+    for (const f of ['tally.json', 'verdict.json']) {
+      docs[f] = JSON.parse(fs.readFileSync(path.join(opts.runDir, f), 'utf-8'));
+    }
+  });
+
+  test('the two seats report DIFFERENT numbers, and each row names which seat it is', () => {
+    expect(docs['tally.json'].streetCred).toEqual([
+      { model: 'gemini', withSelf: 1, peersOnly: 1, perJudgeRank: { 'gemini#1': 1, 'gemini#2': 1 }, seat: 'gemini#1' },
+      { model: 'gemini', withSelf: 2, peersOnly: 2, perJudgeRank: { 'gemini#1': 2, 'gemini#2': 2 }, seat: 'gemini#2' },
+    ]);
+    // SI-06 / ruling C-2 on the real engine: gemini#1's peers include the OTHER
+    // seat of its own alias. Excluding both twins by alias would leave no peer
+    // at all and report `peersOnly: null` on both rows.
+    expect(docs['tally.json'].streetCred.map(s => s.peersOnly)).toEqual([1, 2]);
+  });
+
+  test('verdict.json mirrors the divergence', () => {
+    expect(docs['verdict.json'].streetCred).toEqual([
+      { model: 'gemini', withSelf: 1, peersOnly: 1, seat: 'gemini#1' },
+      { model: 'gemini', withSelf: 2, peersOnly: 2, seat: 'gemini#2' },
+    ]);
+  });
+
+  test('the ONE ledger row covering both seats reads both — not whichever the Map kept', () => {
+    // Both seats resolved to the same executable, so PR4b's fan-out gives one
+    // (alias, resolvedModel) pair group and one row. Alias-keying would put the
+    // LAST street-cred row's numbers (2 / 2) on it and lose gemini#1 into an
+    // append-only file; the mean of 1 and 2 is 1.5 and uses both.
+    expect(ledgerRows).toHaveLength(1);
+    expect(ledgerRows[0]).toMatchObject({ model: 'gemini',
+      streetCredWithSelf: 1.5, streetCredPeersOnly: 1.5 });
   });
 });

@@ -458,7 +458,10 @@ The engine's tally stage computes the two scoring signals and writes them to
 
 **Street-cred** — computed two ways:
 - **withSelf** = each model's mean rank position across **all** judges' `FINAL RANKING:` blocks (lower is better).
-- **peersOnly** = mean rank excluding the model's own ranking of itself.
+- **peersOnly** = mean rank excluding this row's own ranking of itself — **by seat, not by model,
+  whenever seat ids are present** (v4.8): on a bench that seats one model twice, the twin's OTHER
+  seat is a real peer and its ranking counts, so only the row's own seat is excluded. Without seat
+  ids the engine falls back to excluding by alias, the pre-v4.8 behaviour.
 
 Both are surfaced in `report.html` and `report.md`. The ledger and Stage-0 bench recommendations use **peersOnly** only.
 

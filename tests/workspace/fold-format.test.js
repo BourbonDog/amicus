@@ -143,7 +143,7 @@ describe('buildFoldText', () => {
 
   // Review follow-up #2: overallVerdict is embedded from verdict.json, which
   // this module does not re-validate (the MCP path types it as a bare
-  // nullable string — mcp-tools.js:428). Defense-in-depth: newlines are
+  // nullable string — mcp-tools.js :: amicus_verdict). Defense-in-depth: newlines are
   // clamped and any marker stripped so a malformed/adversarial value can
   // never shift the head lines below VERDICT: or smuggle a spoofed marker.
   test('overallVerdict is newline-clamped and marker-stripped before embedding', () => {

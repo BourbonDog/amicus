@@ -17,7 +17,8 @@
  * src/workspace/ must stay free of.
  * ⚠️ DE-ROT (F58): the header used to claim it "reuses the v4.0 marker/nonce
  * contract exactly" while silently dropping formatFoldOutput's nonce-required
- * throw (src/headless.js:776-778). The guard is restored in buildFoldText below.
+ * throw (src/headless.js :: formatFoldOutput). The guard is restored in
+ * buildFoldText below.
  * No model call — the chair result already exists on disk, so a workspace fold
  * is a local read+format.
  * The chair body is UNTRUSTED model text: it passes through stripFoldMarkers
@@ -49,17 +50,19 @@ function stageSummary(run) {
  * @returns {string} the fold block (marker first line; no trailing newline)
  */
 function buildFoldText(o) {
-  // ⚠️ DE-ROT (F58): mirror formatFoldOutput's v4.0 §9 guard (src/headless.js:776).
-  // Without it a missing nonce emits `[SIDECAR_FOLD:]`, which the hex-only marker
-  // regex (src/utils/fold-marker.js:68) never parses — a silently unfoldable block.
+  // ⚠️ DE-ROT (F58): mirror formatFoldOutput's v4.0 §9 guard
+  // (src/headless.js :: formatFoldOutput). Without it a missing nonce emits
+  // `[SIDECAR_FOLD:]`, which the hex-only marker regex
+  // (src/utils/fold-marker.js :: extractNonceFromText) never parses — a
+  // silently unfoldable block.
   if (!o || !o.nonce) { throw new TypeError('buildFoldText requires a per-run nonce (v4.0 §9)'); }
   const run = o.run || {};
   const verdict = ok(o.verdict);
   const tally = ok(o.tally);
   // Review follow-up #2: verdict.json is NOT re-validated here (the
   // amicus_verdict MCP path types overallVerdict as a bare z.string().nullable()
-  // — mcp-tools.js:428), so a multi-line or marker-bearing value must never
-  // reach the head verbatim: an embedded '\n' would shift every line below
+  // — mcp-tools.js :: amicus_verdict), so a multi-line or marker-bearing value
+  // must never reach the head verbatim: an embedded '\n' would shift every line below
   // VERDICT: (a raw string containing '\n' becomes several elements once the
   // head array is '\n'-joined), and an embedded marker could spoof the fold.
   // Safe on the shipped engine path (parseChairVerdict returns a canonical

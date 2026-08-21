@@ -10,6 +10,10 @@ const { debateRunStatsRows } = require('../../src/council/debate');
 const { worseConformance,
   CONFORMANCE_RANK: ASM_CONFORMANCE_RANK } = require('../../src/council/run-assemble');
 const { pickFallbackChair } = require('../../src/council/run-chair');
+// v4.8 T3.3: the join semantics ledger.js delegates to — SI-17's normalise and
+// the seat-aware street-cred join. Imported from their own module because
+// ledger.js deliberately does not re-export them (see that file's docblock).
+const { benchLegs, meanCred } = require('../../src/council/ledger-join');
 const avInput = require('./fixtures/av-receiver-input');
 
 // A provisional tally-input: 3 findings, judges gpt+qwen adjudicated. Carried
@@ -501,6 +505,12 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
       wasChair: !!o.wasChair,
       conformance: o.conformance || 'clean',
       ...(o.resolvedModel ? { resolvedModel: o.resolvedModel } : {}),
+      // v4.8 T3.3: same slot and same emit-when-set shape as the producer
+      // (run-stats-entry.js :: buildRunStatsEntry), which emits the id only
+      // when it differs from the seat's own alias. Every fixture that omits it
+      // is therefore a unique-alias / hand-assembled row, which is the majority
+      // of this file and is what keeps those rows on the alias join.
+      ...(o.seat ? { seat: o.seat } : {}),
       status: o.status || 'complete', durationMs: 1, usage: null,
     };
   }
@@ -761,10 +771,26 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(rows[1].bySeverity).toEqual({ blocker: 0, major: 0, minor: 0, nit: 0 });
     expect(rows[1].confirmRate).toBeNull();
     expect(rows[1].factErrorRate).toBeNull();
-    expect(rows[1].streetCredPeersOnly).toBe(1);   // street cred does NOT concentrate
+    // Street cred does NOT concentrate. ⚠️ v4.8 T3.3 re-read this line rather
+    // than moving it: no runStats row in this fixture carries a `seat`, so
+    // ledger-join.js :: credFor takes its ALIAS branch and the value is
+    // unchanged. What changed is that this is now the fallback rather than the
+    // only rule. ⚠️ The seated behaviour is T12b's alone: this edit RETITLED T12
+    // to "with no seated row the join stays ALIAS-keyed", and its fixture has
+    // no `seat` on any runStats row either, so T12 covers the same branch this
+    // assertion does. T12 and T12b together cover the two branches.
+    expect(rows[1].streetCredPeersOnly).toBe(1);
   });
 
-  test('T12 — street cred stays alias-keyed on EVERY row, and the launch stays on the short alias', () => {
+  // ⚠️ REPLACED at v4.8 T3.3, not adjusted. The old T12 was titled "street
+  // cred stays alias-keyed on EVERY row" and asserted exactly the two facts
+  // kept below. Both are still TRUE — its fixture is seat-less, so it went on
+  // passing against the seat-aware join and would have gone on passing against
+  // that join's own mutant. The general claim in its title is what T3.3
+  // falsifies, so the title is replaced and a SEATED fixture (T12b) now
+  // carries the mutant-detecting weight. Keeping a pin that cannot fail is
+  // worse than having none: it reads as coverage.
+  test('T12 — with no seated row the join stays ALIAS-keyed, and the launch stays on the short alias', () => {
     // §0's forcing bench: one twin leg live, one dead. Concentrating street
     // cred onto the anchor would strip the leg-less group's numeric cred, drop
     // it out of candidacy, and flip the launch to the raw executable id.
@@ -788,6 +814,167 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     const dir = mkLedgerDir();
     appendRun(record2, { dir });
     expect(pickFallbackChair(deriveReliability({ dir }), ['zeta'], 'zeta-chair')).toBe('gpt-5');
+  });
+
+  // The SEATED half of the replacement — the fixture the old T12 could not
+  // build, because `runStats[].seat` did not exist when it was written.
+  describe('T12b — the seat-aware street-cred join (v4.8 T3.3, SI-20)', () => {
+    // Two seats of alias `a`, DIVERGENT street cred — which is what
+    // street-cred.js starts producing the moment rankPositions is seat-keyed,
+    // and what the old `new Map(s => [s.model, s])` silently dropped one of.
+    const seatedCred = [
+      { model: 'a', withSelf: 1, peersOnly: 1, seat: 'a#1' },
+      { model: 'a', withSelf: 3, peersOnly: 5, seat: 'a#2' },
+      { model: 'b', withSelf: 2, peersOnly: 2 },
+    ];
+    const twinRec = (resolutions) => rec({
+      models: ['a', 'a', 'b'], streetCred: seatedCred,
+      runStats: [
+        rsRow({ model: 'a', seat: 'a#1', resolvedModel: resolutions[0] }),
+        rsRow({ model: 'a', seat: 'a#2', resolvedModel: resolutions[1] }),
+        rsRow({ model: 'b', resolvedModel: 'v/b' }),
+      ],
+    });
+
+    test('twins SPLIT across executables: each row reads its OWN seat, neither is dropped', () => {
+      // Alias-keying gives BOTH `a` rows the LAST row's numbers (3 / 5) and
+      // loses a#1 entirely — into a file that is never migrated.
+      const rows = buildLedgerRows(twinRec(['v/a', 'v/a-turbo']));
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toMatchObject({ model: 'a', resolvedModel: 'v/a',
+        streetCredWithSelf: 1, streetCredPeersOnly: 1 });
+      expect(rows[1]).toMatchObject({ model: 'a', resolvedModel: 'v/a-turbo',
+        streetCredWithSelf: 3, streetCredPeersOnly: 5 });
+      expect(rows[2]).toMatchObject({ model: 'b', streetCredWithSelf: 2 });
+    });
+
+    test('twins SHARING one executable: one row, and it reads BOTH seats (mean)', () => {
+      // One pair group, two seats, one street-cred slot. The row set is PR4b's
+      // and does not move, so the only lossless answer is to combine.
+      const rows = buildLedgerRows(twinRec(['v/a', 'v/a']));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ model: 'a', resolvedModel: 'v/a',
+        streetCredWithSelf: 2, streetCredPeersOnly: 3 });
+    });
+
+    // ⚠️ FIX ROUND 1, Important 1 — THE FOURTH QUADRANT, and the one this
+    // describe originally missed. The two sides are indexed by INDEPENDENT
+    // producers, so all four combinations of (runStats seated?, streetCred
+    // seated?) are reachable. Three were covered; this is `streetCred SEATED /
+    // runStats NOT`, and the first shipped form of credFor returned `{}` there
+    // and persisted NULL street cred into an append-only file.
+    test('streetCred SEATED but runStats NOT: the alias still resolves — no null', () => {
+      const rows = buildLedgerRows(rec({
+        models: ['a', 'a', 'b'], streetCred: seatedCred,
+        runStats: [rsRow({ model: 'a', resolvedModel: 'v/a' }),      // no `seat`
+          rsRow({ model: 'a', resolvedModel: 'v/a' }),
+          rsRow({ model: 'b', resolvedModel: 'v/b' })],
+      }));
+      expect(rows).toHaveLength(2);
+      // Mean of a#1 (1/1) and a#2 (3/5). Nulling these was the regression.
+      expect(rows[0]).toMatchObject({ model: 'a',
+        streetCredWithSelf: 2, streetCredPeersOnly: 3 });
+      expect(rows[1]).toMatchObject({ model: 'b', streetCredWithSelf: 2 });
+    });
+
+    test('the same quadrant end to end through the real tally(): the BASE numbers, not null', () => {
+      // Driven through tally() rather than hand-built, because the quadrant is
+      // MADE by tally(): `meta.seats` seats the street-cred rows while nothing
+      // asks a hand-assembling caller for `runStats[].seat`
+      // (mcp-tools.js :: amicus_council_tally declares the former, not the
+      // latter). MEASURED on this exact record: b341b273 gave withSelf 2.667 /
+      // peersOnly 3, and the first shipped form of credFor gave null / null.
+      const seats = [{ id: 'a#1', alias: 'a', role: 'seat', lens: null, position: 1 },
+        { id: 'a#2', alias: 'a', role: 'seat', lens: null, position: 2 },
+        { id: 'b', alias: 'b', role: 'seat', lens: null, position: 3 }];
+      const record = tally({
+        meta: { runId: 'r1', date: '2026-08-01', runType: 'headless',
+          models: ['a', 'a', 'b'], chair: 'c', claudeInCouncil: false, seats },
+        findings: [], adjudications: [],
+        rankings: [{ judge: 'a', order: ['a', 'a', 'b'] }, { judge: 'a', order: ['b', 'a', 'a'] },
+          { judge: 'b', order: ['a', 'b', 'a'] }],
+        runStats: [rsRow({ model: 'a' }), rsRow({ model: 'a' }), rsRow({ model: 'b' })],
+      });
+      expect(record.streetCred.map(r => r.seat)).toEqual(['a#1', 'a#2', undefined]);
+      const rows = buildLedgerRows(record);
+      expect(rows.find(r => r.model === 'a').streetCredWithSelf).toBeCloseTo(8 / 3);
+      expect(rows.find(r => r.model === 'a').streetCredPeersOnly).toBe(3);
+    });
+
+    test('the alias fallback MEANS its rows, it does not take the last one', () => {
+      // The design choice made explicit. On every shape BASE could produce the
+      // two spellings agree — BASE's `models.map(m => f(m))` is deterministic in
+      // `m`, so same-alias rows were always byte-identical (brute-forced at
+      // BASE: 4374 cases, 3402 duplicated-alias groups, ZERO differing). They
+      // part only on hand-assembled input that supplies two DIFFERING rows under
+      // one alias, and there last-wins would silently discard one — the defect
+      // class this whole task exists to close. Killing mutant: ALIASLASTWINS.
+      const rows = buildLedgerRows(rec({
+        models: ['a', 'a'],
+        streetCred: [{ model: 'a', withSelf: 1, peersOnly: 2 },
+          { model: 'a', withSelf: 3, peersOnly: 8 }],
+        runStats: [rsRow({ model: 'a', resolvedModel: 'v/a' })],
+      }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ streetCredWithSelf: 2, streetCredPeersOnly: 5 });
+    });
+
+    test('a seat the streetCred array does not name falls back to the ALIAS row', () => {
+      // Reachable: `meta.seats`/`runStats[].seat` and `streetCred[].seat` are
+      // written by different producers, and both hand-assembled appendRun paths
+      // can carry one without the other.
+      const rows = buildLedgerRows(rec({
+        models: ['a'], streetCred: [{ model: 'a', withSelf: 9, peersOnly: 9 }],
+        runStats: [rsRow({ model: 'a', seat: 'a#7', resolvedModel: 'v/a' })],
+      }));
+      expect(rows[0]).toMatchObject({ streetCredWithSelf: 9, streetCredPeersOnly: 9 });
+    });
+
+    test('a null half is skipped, not averaged as zero', () => {
+      const rows = buildLedgerRows(rec({
+        models: ['a', 'a'],
+        streetCred: [{ model: 'a', withSelf: 4, peersOnly: null, seat: 'a#1' },
+          { model: 'a', withSelf: null, peersOnly: 6, seat: 'a#2' }],
+        runStats: [rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+          rsRow({ model: 'a', seat: 'a#2', resolvedModel: 'v/a' })],
+      }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ streetCredWithSelf: 4, streetCredPeersOnly: 6 });
+    });
+
+    test('both halves null still yields null, never NaN', () => {
+      const rows = buildLedgerRows(rec({
+        models: ['a', 'a'],
+        streetCred: [{ model: 'a', withSelf: null, peersOnly: null, seat: 'a#1' },
+          { model: 'a', withSelf: null, peersOnly: null, seat: 'a#2' }],
+        runStats: [rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+          rsRow({ model: 'a', seat: 'a#2', resolvedModel: 'v/a' })],
+      }));
+      expect(rows[0].streetCredWithSelf).toBeNull();
+      expect(rows[0].streetCredPeersOnly).toBeNull();
+    });
+
+    test('meanCred: a lone seat returns its own number unchanged, and non-numbers never count', () => {
+      expect(meanCred([{ v: 3 }], 'v')).toBe(3);
+      expect(meanCred([{ v: 1 }, { v: 4 }], 'v')).toBe(2.5);
+      expect(meanCred([{ v: null }, { v: '2' }, { v: undefined }], 'v')).toBeNull();
+      expect(meanCred([], 'v')).toBeNull();
+    });
+
+    test('SI-19: a leg-less SEATED twin no longer borrows its live twin\'s numbers', () => {
+      // The BACKLOG's own SI-19 shape, now seated. The dead seat's own row is
+      // what the ledger records; alias-keying handed it whichever twin's row
+      // the Map happened to keep.
+      const rows = buildLedgerRows(rec({
+        models: ['a', 'a'], streetCred: seatedCred.slice(0, 2),
+        runStats: [rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+          rsRow({ model: 'a', seat: 'a#2', status: 'error' })],
+      }));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ resolvedModel: 'v/a', streetCredPeersOnly: 1 });
+      expect('resolvedModel' in rows[1]).toBe(false);
+      expect(rows[1].streetCredPeersOnly).toBe(5);   // a#2's OWN number, not a#1's
+    });
   });
 
   test('T13a — ledger.js LOCAL conformance rank agrees with run-assemble, table AND pairwise', () => {
@@ -841,26 +1028,73 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(rows[0].conformance).toBe('weird');   // a 'clean' seed would rewrite it
   });
 
-  test('T14 — chair ON the bench, one shared resolution: worst-wins conformance, any-wins wasChair', () => {
+  // ⚠️ REPLACED at v4.8 T3.3 — SI-17's normalise, owner ruling R4. This test
+  // WAS the BACKLOG's "today's answer, T14": keep accepting chair-on-bench with
+  // the accidental merge documented. R4 rules against that answer, so the pin
+  // that recorded it is rewritten rather than adjusted. Two of its three
+  // assertions survive unchanged; the third (`role === 'chair'`) asserted the
+  // behaviour being replaced, so it now asserts the opposite.
+  describe('T14 — chair ON the bench: the chair leg no longer decides the bench seat (SI-17)', () => {
     // The documented `amicus council tally` shape — the meta block of
     // docs/council.md's `## Worked example` section, the one containing
     // `"chair": "deepseek"` — and the golden fixture both put the chair
     // on the bench. (Cited by section: the line range this replaces had rotted,
     // and it named the heading plus intro prose, not the meta block at all.)
-    const rows = buildLedgerRows(rec({
+    const chairOnBench = (benchConf, chairConf) => buildLedgerRows(rec({
       models: ['deepseek', 'gpt', 'mistral'], chair: 'deepseek',
       runStats: [
-        rsRow({ model: 'deepseek', role: 'council', conformance: 'unstructured', resolvedModel: 'v/ds' }),
+        rsRow({ model: 'deepseek', role: 'council', conformance: benchConf, resolvedModel: 'v/ds' }),
         rsRow({ model: 'gpt', role: 'council', resolvedModel: 'v/gpt' }),
         rsRow({ model: 'mistral', role: 'council', resolvedModel: 'v/mi' }),
-        rsRow({ model: 'deepseek', role: 'chair', wasChair: true, conformance: 'clean', resolvedModel: 'v/ds' }),
+        rsRow({ model: 'deepseek', role: 'chair', wasChair: true, conformance: chairConf, resolvedModel: 'v/ds' }),
       ],
     }));
-    expect(rows).toHaveLength(3);
-    const ds = rows.find(r => r.model === 'deepseek');
-    expect(ds.conformance).toBe('unstructured');   // worst-wins, NOT the chair row's 'clean'
-    expect(ds.wasChair).toBe(true);                // any-wins
-    expect(ds.role).toBe('chair');                 // last row of the pair group
+
+    test('the BENCH leg decides role and conformance; wasChair still rides along', () => {
+      const rows = chairOnBench('unstructured', 'clean');
+      expect(rows).toHaveLength(3);
+      const ds = rows.find(r => r.model === 'deepseek');
+      expect(ds.conformance).toBe('unstructured');   // the BENCH leg's, unchanged
+      expect(ds.wasChair).toBe(true);                // any-wins, over the WHOLE group
+      expect(ds.role).toBe('council');               // was 'chair' before T3.3
+    });
+
+    test('the REVERSE direction — the one the old pin could not see — no longer contaminates', () => {
+      // MEASURED at BASE b341b273: both directions returned
+      // `role 'chair', conformance 'unstructured'`, i.e. a CLEAN bench review
+      // was persisted as unstructured because the chair SYNTHESIS was. The two
+      // directions were indistinguishable in an append-only file.
+      const ds = chairOnBench('clean', 'unstructured').find(r => r.model === 'deepseek');
+      expect(ds.conformance).toBe('clean');
+      expect(ds.role).toBe('council');
+      expect(ds.wasChair).toBe(true);
+    });
+
+    test('and it now AGREES with the same bench when the chair is off it', () => {
+      // The control the merge silently disagreed with. An off-bench chair
+      // contributes no ledger row at all (meta.models drives the rows), so its
+      // conformance never reached the bench seat — the normalise is what makes
+      // on-bench and off-bench report the same thing about the same leg.
+      const off = buildLedgerRows(rec({
+        models: ['deepseek', 'gpt'], chair: 'zeta',
+        runStats: [
+          rsRow({ model: 'deepseek', role: 'council', conformance: 'clean', resolvedModel: 'v/ds' }),
+          rsRow({ model: 'gpt', role: 'council', resolvedModel: 'v/gpt' }),
+          rsRow({ model: 'zeta', role: 'chair', wasChair: true, conformance: 'unstructured', resolvedModel: 'v/z' }),
+        ],
+      })).find(r => r.model === 'deepseek');
+      expect([off.role, off.conformance]).toEqual(['council', 'clean']);
+    });
+
+    test('a group of ONLY chair rows is untouched — there is no bench leg to prefer', () => {
+      // benchLegs falls back to the whole group, so a give-up row or a chair
+      // leg that resolved somewhere of its own keeps saying what it is. T16
+      // below is the split-resolution version of this on a real bench.
+      expect(benchLegs([{ role: 'chair', conformance: 'unstructured' }]))
+        .toEqual([{ role: 'chair', conformance: 'unstructured' }]);
+      expect(benchLegs([{ role: 'seat' }, { role: 'chair' }])).toEqual([{ role: 'seat' }]);
+      expect(benchLegs([])).toEqual([]);
+    });
   });
 
   test('T15 — wasChair is ANY-wins inside a pair group, not last-wins', () => {
@@ -877,7 +1111,11 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     }));
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds', wasChair: true });
-    expect(rows[0].role).toBe('seat');              // role IS last-wins, deliberately
+    // role IS last-wins, deliberately — but since v4.8 T3.3 that is last-wins
+    // AMONG BENCH LEGS (ledger-join.js :: benchLegs). This fixture cannot tell
+    // the two spellings apart: its chair row is FIRST, so the trailing seat row
+    // wins under both. T14 is where they diverge.
+    expect(rows[0].role).toBe('seat');
     expect(rows[1]).toMatchObject({ model: 'gpt', wasChair: false, role: 'seat' });
   });
 

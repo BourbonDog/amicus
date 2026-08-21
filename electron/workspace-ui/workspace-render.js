@@ -217,7 +217,7 @@
     // RN-11 (v4.5): the keyed update added and removed rows but never MOVED
     // them, so table order was frozen at first render — wrong the moment a
     // repair solo or new wave changes the composed doc's leg order mid-run.
-    // The O(n²) `find()` per seat is deliberate: bench is capped at 26 (anonymize.js:21),
+    // The O(n²) `find()` per seat is deliberate: bench is capped at 26 (anonymize.js :: assignLabels),
     // so this is ~100 rows worst case on a debate run, every 1.5s. `existing` above is
     // already the map an O(n) rewrite would need — reach for it only if this table ever
     // renders unbounded rows.

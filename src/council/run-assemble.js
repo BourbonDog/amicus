@@ -112,7 +112,7 @@ function claudeRunStatsRow() {
  * Assemble the five-keys tally input (spec §5 / SKILL.md Stage-2 recipe).
  * @param {{runId: string, date: string, bench: string[], chair: string,
  *   reviews: Array<{model, role, conformance, leg, globalFindings}>,
- *   judgeResults: Array<{judge, ok, order, adjudications}>,
+ *   judgeResults: Array<{judge, seat, ok, order, orderSeats, adjudications, conformance, leg}>,
  *   chairStats: object|null, claudeReview?: object|null, extraRows?: Array<object>,
  *   seats?: Array<object>}} args
  *   `claudeReview` (v4.1 §4.4) amends the v4.0 meta pin: present ⇒ claudeInCouncil
@@ -149,8 +149,8 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // ⚠️ Consumers: absence means "no seat table available", NEVER "the bench was
     // unique" — two of appendRun's three call sites feed hand-assembled input no
     // seat machinery touches. And seats[] is BENCH-ONLY, so it must never be
-    // joined positionally to meta.models (`claude` is pushed onto that at :226)
-    // or to streetCred[].
+    // joined positionally to meta.models (`claude` is pushed onto that inside
+    // run-assemble.js :: buildTallyInput) or to streetCred[].
     // .slice() is defence-in-depth only: the array is shared with
     // runState.checkpoint (run.js:135) and with both tally inputs. Nothing
     // mutates meta.seats — unlike models, which meta.models.push mutates below —
@@ -168,7 +168,25 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
       // the two strings drifted (a padded --council member; a leg with no
       // modelInput), i.e. exactly where the field carries no information.
       ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) })));
-  const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
+  // v4.8 T3.2: the SAME predicate as the adjudication map immediately above —
+  // the judge's own seat, emit-when-DIFFERENT. `order` itself is untouched
+  // (still alias-valued).
+  // v4.8 T3.3 carries `orderSeats` the one further hop T3.2 deliberately
+  // stopped short of: it reached judgeResults[] in run-stage2.js, but
+  // `computeStreetCred` reads `rankings`, so without this the seat channel
+  // never arrives where SI-20's collapse happens.
+  // ⚠️ EMIT ONLY WHEN IT CARRIES AT LEAST ONE NON-NULL. rankingToOrder returns
+  // a PARITY SHAPE, not an absence: on a unique-alias bench `orderSeats` is
+  // `[null, null, null]`, and emitting that would add a key to rankings[] in
+  // tally-input.json, tally.json and tally-provisional.json on every run that
+  // has ever happened. `.flat()` is depth-1 because a tie group is the only
+  // nesting rankingToOrder can produce (anonymize.js :: rankingToOrder maps
+  // one level of `Array.isArray(slot)`). The named mutant that guards this
+  // predicate is tests/council/street-cred-mutants.js :: EMITSET.
+  const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order,
+    ...(Array.isArray(j.orderSeats) && j.orderSeats.flat().some(Boolean)
+      ? { orderSeats: j.orderSeats } : {}),
+    ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
     findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused, seat: r.seat,
@@ -191,8 +209,9 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
   // `joinsLedger` has no 'judge' member, so nothing consumed it; report.js's cost
   // table does now, and without it a twin bench's two judge rows are identical.
-  // `buildRunStatsEntry` applies the shared emit-when-DIFFERENT predicate (:89), so
-  // a unique bench stays byte-identical and no new predicate enters the tree.
+  // `buildRunStatsEntry` (run-stats-entry.js :: buildRunStatsEntry) applies the
+  // shared emit-when-DIFFERENT predicate, so a unique bench stays byte-identical
+  // and no new predicate enters the tree.
   for (const j of (judgeResults || [])) {
     runStats.push(buildRunStatsEntry({
       leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance, seat: j.seat,

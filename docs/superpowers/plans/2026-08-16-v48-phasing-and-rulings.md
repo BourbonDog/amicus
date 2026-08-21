@@ -41,6 +41,13 @@ shapes, so the true open work-item count is **20**, not 16.
 > expanded into 22.1–22.5). ⚠️ The previous line read **7 DONE · … · 19 OPEN** and named only two
 > changes; SI-22.5's move was made by T2.4's first commit and not carried here until this round —
 > exactly the miss this paragraph's own ⚠️ exists to prevent.
+> ⚠️ **FIVE MORE changes since T2.4 fix round 1 — v4.8 Phase 3 (2026-08-20/21): rows 06, 17, 19, 20
+> and 26 all moved OPEN → DONE.** T3.1 (`13ae8cf6`) closed **26**; T3.3 (`fb3fa09d` + fix round 1
+> `8027391b`) closed **06**, **17**, **19** and **20**. Row **18 did NOT move** — it stays OPEN; see
+> its own cell for the narrowed scope (T3.3 closed a NEIGHBOUR half of the same `buildLedgerRows`
+> anchor, not this row's own filter). Re-counted directly off the live table by bucketing every
+> row's Verdict cell, not by arithmetic on the prior line: **13 DONE · 3 PARTIAL · 1 SUPERSEDED · 1
+> HOLD · 13 OPEN** across the same 31 rows.
 > ⚠️ The derived "open work items" total is deliberately NOT restated: the recon's rule counts the
 > SI-22 roll-up as one OPEN row expanded to five, and the table counts the five directly, so the two
 > disagree about whether a shape that passed through PARTIAL is decremented once or twice. Count off
@@ -53,7 +60,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 03 | PARTIAL → ruled | Stage-2 judge roster from `modelInput` | `run-stage2.js :: runStage2` |
 | 04 | **DONE** | tally peer filter | `tally.js :: tally` |
 | 05 | PARTIAL | `debate.js` second copy of the filter | `debate.js :: debateTargets` |
-| 06 | OPEN | `computeStreetCred` peer split | `tally.js :: computeStreetCred` |
+| 06 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21) | ~~`computeStreetCred` peer split~~ the third alias comparison now compares SEATS when both sides carry one, aliases otherwise (ruling ledger C-2), reusing `peer-split.js :: peersOf`'s shape | `street-cred.js :: computeStreetCred` |
 | 07 | **DONE** | R8 `sameModelCorroboration` stamp | `tally.js :: tally` |
 | 08 | **DONE** | `meta.seats` in tally input | `run-assemble.js :: buildTallyInput` |
 | 09 | **DONE** | `verdict.json` lacks `raiserSeat` | `verdict.js :: buildVerdict` |
@@ -64,10 +71,10 @@ shapes, so the true open work-item count is **20**, not 16.
 | 14 | PARTIAL | nothing pins "launcher must not dedupe" | `tests/council/run-launch.test.js` |
 | 15 | **SUPERSEDED** | seatKey + padding duplication | by PR5c-SEATKEY + SI-27 |
 | 16 | OPEN → **v4.9** | function lengths | `runStage2` 161 · `runDebate` 165 · `runRevoteWave` 91 |
-| 17 | OPEN → ruled | chair-on-bench, no engine guard | `seats.js :: preflightSeats` (absence) |
-| 18 | OPEN | findings attributed by alias | `ledger.js :: buildLedgerRows` |
-| 19 | OPEN | never-ran aggregate stays chair-promotable | `run-chair.js :: pickFallbackChair` |
-| 20 | OPEN | street cred collapses twins ×3 | `tally.js :: rankPositions` · `:: computeStreetCred` · `ledger.js` |
+| 17 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21, ruling R4) | ~~chair-on-bench, no engine guard~~ normalised at the ledger join instead of guarded: a chair-synthesis row never decides a bench seat's `role`/`conformance` when the group also holds a bench leg; `wasChair` stays any-wins | `ledger-join.js :: benchLegs` |
+| 18 | OPEN | findings attributed by alias — **only this half of `buildLedgerRows` is still open**; T3.3 closed the OTHER half of the same anchor (the street-cred join, row 20) but `findings.filter(f => f.raiser === model)` is byte-unchanged | `ledger.js :: buildLedgerRows` |
+| 19 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21) | ~~never-ran aggregate stays chair-promotable~~ closes as a side effect of seat-attributed street cred (row 20): a dead seat now gets its OWN seat-keyed row, which resolves to `null`/`null` rather than borrowing its live twin's number | `run-chair.js :: pickFallbackChair` |
+| 20 | **DONE** (T3.3 `fb3fa09d` + fix round 1 `8027391b`, 2026-08-21) | ~~street cred collapses twins ×3~~ all three sites seat-keyed: `rankPositions` keys by seat where `orderSeats` names one, `computeStreetCred`'s driver is one row per seat, and the ledger join is seat-keyed with an alias-mean fallback | `street-cred.js :: rankPositions` · `:: computeStreetCred` · `ledger-join.js :: credFor` |
 | 21 | **HOLD** | lens/position unrecoverable | owner-deferred; its own prose is false (§3) |
 | 22.1 | OPEN | raiser's own leg orphans | `tally.js :: tally` |
 | 22.2 | OPEN | peer twin's leg orphans | `tally.js :: tally` |
@@ -75,9 +82,9 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
 | 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
 | 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |
-| 24 | OPEN | `VERDICTS[v.verdict]` inherited keys | `tally.js :: tally` **+ `:: computeStreetCred`** (unfiled second site) |
+| 24 | OPEN | `VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first) | `tally.js :: tally` **+ `street-cred.js :: computeStreetCred`** (perJudgeRank half closed) |
 | 25 | OPEN | chair packet in alias space | `briefings-chair.js :: buildChairPacket` — three sites, three sizes |
-| 26 | OPEN | `letterByModel` dead code | `anonymize.js :: assignLabels` |
+| 26 | **DONE** (T3.1 `13ae8cf6`, 2026-08-20) | ~~`letterByModel` dead code~~ deleted — the JSDoc `@returns` clause, the `const`, the populate line and the return-literal key; `labelMap`/`entries` untouched | `anonymize.js :: assignLabels` |
 | 27 | OPEN | roster-padding ×3 | `run-retry.js` · `run-stage2.js` · `run-debate-revote.js` |
 
 **PR5x filings:** PR5a-1 **HOLD** · PR5b-1 OPEN→v4.9 · R4 OPEN→v4.9 · R5 OPEN→**v4.8** ·
@@ -338,6 +345,10 @@ class this release files as citation-gate Mechanisms A–D. The closed work is *
   return literal and JSDoc
 - **T3.2** Seat onto `rankings[]` (`buildTallyInput:216`) + seat-ify
   `assignLabels`/`rankingToOrder` — schema change
+  ⚠️ **`buildTallyInput:216` rotted before T3.2 even shipped — re-derived 2026-08-21 (T3.4): `:216`
+  is `runStats.push(buildRunStatsEntry({` inside the judge-row loop, unrelated to `rankings[]`.**
+  Prefer the symbol anchor `run-assemble.js :: buildTallyInput`, which does not rot when the
+  function gains lines — as this one did, twice, before T3.2's own commit landed.
 - **T3.3** Fixed internal order: `rankPositions` → peer split → `perJudgeRank` →
   `computeStreetCred` driver → ledger. Includes SI-17 **normalise** (R4). Replaces
   `ledger.test.js` T12
@@ -345,6 +356,28 @@ class this release files as citation-gate Mechanisms A–D. The closed work is *
   byte-identical today, which makes that Map join a no-op. Seat-key `rankPositions` alone and they
   diverge — at which point the Map **silently drops one**, and the fix is strictly worse than the bug
 - Closes SI-06, SI-18, SI-19, SI-20, SI-17. Unblocks SI-25 site (3)
+  ⚠️ **WRONG ABOUT SI-18 — measured 2026-08-21 (v4.8 Phase 3 T3.4), not merely disputed.** SI-18
+  ("findings attributed by alias") is NOT closed: `ledger.js :: buildLedgerRows`'s
+  `findings.filter(f => f.raiser === model)` is byte-unchanged across this entire PR (zero-context
+  diff, `f207538c` to the branch tip). This PR closes a DIFFERENT half of the same anchor — the
+  street-cred join, SI-20's third site. Leave SI-18 open; see §1 row 18.
+
+✅ **COMPLETED 2026-08-21 by Phase 3 T3.1 (`13ae8cf6`+`a46e90cb`) + T3.2 (`b17a6329`+`b341b273`) +
+T3.3 (`fb3fa09d`+`1c5d36b9`+`05cfa5ac`+`46719a7f`+`8027391b`+`d766bc71`) + T3.4 (citation and
+tracker sweep, no behaviour change)** — shipped in the internal order this section specifies: T3.1
+deleted `letterByModel` (SI-26); T3.2 carried the seat channel onto `assignLabels`/`rankingToOrder`
+and put `seat` on `rankings[]`; T3.3 added `rankings[].orderSeats` (the one further hop T3.2
+deliberately stopped short of) and seat-keyed `rankPositions`, `computeStreetCred`'s driver
+(`credSeats`, one row per SEAT), the peer split and `perJudgeRank`, plus the ledger join — now
+`ledger-join.js :: credFor`, extracted in the same commit rather than left at the `ledger.js:106`
+cited above — and SI-17's normalise (R4) via `ledger-join.js :: benchLegs`. Closes **SI-06, SI-17,
+SI-19, SI-20**; unblocks SI-25 site (3). **Does NOT close SI-18** — see the ⚠️ immediately above;
+the line this replaces was wrong about it from the day it was written. Release constraint 6
+(extract, never shave) fired twice: `street-cred.js` now holds
+`computeStreetCred`/`rankPositions`/`credSeats`, and `ledger-join.js` holds
+`benchLegs`/`credFor`/`meanCred`. One disclosed, unrepaired consequence of the SI-17 normalise —
+on a mixed group the chair leg's own `conformance` no longer reaches the ledger at all, only
+`wasChair: true` survives — is filed in `BACKLOG.md` for the owner to rule on, not decided here.
 
 ### Phase 4 · R5 — 1 PR
 Seat id on the live leg row: extend `writeLegPatch` in `fanout-leg.js :: runLeg` so `buildLegRow`

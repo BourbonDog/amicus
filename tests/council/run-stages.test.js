@@ -2224,6 +2224,91 @@ describe('runStage2', () => {
       });
     });
   });
+
+  // v4.8 T3.2: the seat channel (anonymize.js :: assignLabels' seatMap ->
+  // rankingToOrder's orderSeats) threads through runStage2 into
+  // judgeResults[].orderSeats. This is the plumbing T3.3 will seat-key
+  // rankPositions with — this task changes NO number: `order` stays exactly
+  // what it was, `orderSeats` is a new, separate, parallel field.
+  describe('T3.2: the seat channel reaches judgeResults[].orderSeats', () => {
+    function twinReviewsWithSeats(twinSeats) {
+      return [
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-1'),
+          findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-1')), seat: twinSeats[0] },
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-2'),
+          findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-2')), seat: twinSeats[1] },
+      ];
+    }
+    const twinSeats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const twinLabelsWithSeats = assignLabels(['deepseek', 'deepseek'], twinSeats);
+    const twinGlobalFindings = [
+      ...toGlobalFindings('A', 'deepseek', [{ id: 1, severity: 'major', claim: 'c' }]),
+      ...toGlobalFindings('B', 'deepseek', [{ id: 1, severity: 'nit', claim: 'c' }]),
+    ];
+
+    test('a twin bench: each judge ranking BOTH twins gets a distinct seat per slot in orderSeats', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          // judge 1 (seat deepseek#1) ranks twin-1 first, twin-2 second.
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          // judge 2 (seat deepseek#2) ranks the reverse.
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: twinReviewsWithSeats(twinSeats), labels: twinLabelsWithSeats, globalFindings: twinGlobalFindings });
+      expect(judgeResults).toHaveLength(2);
+      // `order` stays exactly what it is today: ambiguous, both slots read
+      // 'deepseek' — this task changes NO number and no existing artifact.
+      expect(judgeResults[0].order).toEqual(['deepseek', 'deepseek']);
+      expect(judgeResults[1].order).toEqual(['deepseek', 'deepseek']);
+      // `orderSeats` is the NEW channel: the same slots, disambiguated.
+      expect(judgeResults[0].orderSeats).toEqual(['deepseek#1', 'deepseek#2']);
+      expect(judgeResults[1].orderSeats).toEqual(['deepseek#2', 'deepseek#1']);
+    });
+
+    test('a unique-alias bench: order is byte-identical to before T3.2; orderSeats is an all-null parity shape', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      // `labels` here is the file-level fixture at :1684 — `assignLabels(['gemini',
+      // 'gpt'])`, no seats argument, exactly the pre-T3.2 call shape.
+      const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+      const g = judgeResults.find(j => j.judge === 'gemini');
+      expect(g.order).toEqual(['gpt', 'gemini']);   // byte-identical to the existing happy-path pin (:1721)
+      expect(g.orderSeats).toEqual([null, null]);
+    });
+
+    test('a judge that never parses (ok:false) carries orderSeats: null, same shape as order', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          mkLeg('deepseek', 'no json', 'complete', opts.waveId, 1),
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: (opts) => okWave([mkLeg('deepseek', 'still no json', 'complete', opts.waveId, 1)]),
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: twinReviewsWithSeats(twinSeats), labels: twinLabelsWithSeats, globalFindings: twinGlobalFindings });
+      const failed = judgeResults.find(j => j.ok === false);
+      expect(failed).toBeDefined();
+      expect(failed.order).toBeNull();
+      expect(failed.orderSeats).toBeNull();
+    });
+  });
 });
 
 describe('launchStage1 roster return', () => {

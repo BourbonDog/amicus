@@ -2556,6 +2556,119 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   makes that join a no-op; seat-key `rankPositions` alone and they diverge, at which point the Map
   silently drops one and the fix is strictly worse than the bug. Closes SI-06, SI-18, SI-19,
   SI-20, SI-17; unblocks SI-25 site (3).
+  ⚠️ **THAT CLAIM IS WRONG ABOUT SI-18 — measured, not merely disputed. Do not tick SI-18 off this
+  entry.** SI-18 ("findings attributed by alias", anchored at the same `ledger.js :: buildLedgerRows`
+  this PR also touches) is a DIFFERENT half of that function from the one this PR closes.
+  `findings.filter(f => f.raiser === model)` — SI-18's own body — is byte-unchanged across every
+  commit of this entire PR, measured with a zero-context diff against the state at Phase 3's own
+  start (`f207538c`). What this PR closes at the same `buildLedgerRows` anchor is the STREET-CRED
+  join (SI-20's third site), a neighbour, not SI-18 itself. See SI-18's own entry above for the
+  un-narrowed scope.
+  ✅ **COMPLETED 2026-08-21 — v4.8 Phase 3: T3.1 (`13ae8cf6`+`a46e90cb`) + T3.2 (`b17a6329`+
+  `b341b273`) + T3.3 (`fb3fa09d`+`1c5d36b9`+`05cfa5ac`+`46719a7f`+`8027391b`+`d766bc71`) + T3.4 (the
+  citation/tracker sweep — no behaviour change).** SI-06, SI-17, SI-19 and SI-20 are closed — see
+  each item's own ✅ block above for the mechanism and the measurement that proves it. SI-18 is
+  explicitly NOT among them, per the correction immediately above. SI-25 site (3) is UNBLOCKED, not
+  done: `briefings-chair.js :: buildChairPacket`'s `rankingLines` still renders `${r.judge}`
+  alias-keyed and was not touched by this PR. T3.3's fix-round-1 baseline: 542 suites / 7782 passed
+  / 8 skipped / 4 snapshots / 0 failed.
+  - **Council review of PR #176 (2026-08-21) — the run was PARTIAL; two findings, both raised by
+    one model and neither peer-adjudicated.** ⚠️ **The job passed and the review is still not
+    clean** — read the verdict comment, not the status. Recorded state:
+    `stage1:partial -> stage2:complete -> chair:error -> tally:complete`, **chair verdict
+    unavailable** (no parseable VERDICT line, `overallVerdict: null`), and street-cred `n/a` for
+    all four bench models, i.e. no usable rankings. Both findings scored `a0/d0/n0 - thin`
+    (Singleton: no peer corroborated OR disputed either). Run duration 337s, so this is NOT the
+    ~26s all-legs-dead OpenRouter key-limit signature — the legs ran, the chair failed.
+    - **B1 [major] — "chair-synthesis conformance is discarded from reliability history whenever
+      the chair shares a pair group with a bench leg." ALREADY OURS, not a new finding.** This is
+      the exact consequence T3.3 measured, disclosed and filed: `ledger-join.js :: benchLegs`'
+      docblock carries it with the end-to-end measurement (`{unstructured:1}` -> `{clean:1}`
+      through `appendRun` -> `ledger-stats.js :: deriveReliability`), and `CHANGELOG.md` states it
+      in the merged-rows entry. The council rediscovering it independently is corroboration that
+      disclosing it was right. **Still awaiting an owner ruling**; repairing it means giving the
+      chair its own ledger identity, which changes the row SET.
+    - [ ] **B2 [major] — an inconsistent `meta.seats` silently drops or invents street-cred rows
+      relative to `meta.models`. CONFIRMED BY MEASUREMENT, filed not fixed.** Measured 2026-08-21
+      against the shipped `street-cred.js :: credSeats`:
+
+      ```
+      models ['a','a','b'] + seats [a#1,a#2,b]  -> 3 rows   delta  0   (engine path, consistent)
+      models ['a','a','b'] + seats [a#1,b]      -> 2 rows   delta -1   (a row is DROPPED)
+      models ['a','b']     + seats [a#1,a#2,b]  -> 3 rows   delta +1   (a row is INVENTED)
+      models ['a','b']     + seats [z#1,z#2]    -> 2 rows   delta  0   (alien alias ignored)
+      ```
+
+      The mechanism is `credSeats`' `expanded.has(m) -> continue`: the first occurrence of an
+      alias expands to ONE ROW PER SEAT ID, and every later occurrence is skipped, so the row
+      count follows `seats` rather than `models` wherever the two disagree.
+      ⚠️ **This IS a surface v4.8 Phase 3 created.** At base `006bdec5` the signature was
+      `computeStreetCred(rankings, models)` — `meta.seats` could not influence street cred at all,
+      so a malformed seat table was simply ignored. Verified by opening the base file.
+      ⚠️ **Unreachable on the engine path**, where `seats.js :: buildSeats` derives `meta.seats`
+      from the same bench that becomes `meta.models`, so they agree by construction. Reachable on
+      the two hand-assembled `appendRun` paths: `mcp-tools.js` declares `meta.seats` on
+      `amicus_council_tally`, and `cli-handlers-council.js` passes user JSON verbatim. Those rows
+      reach the append-only ledger.
+      **Ruling (2026-08-21): FILE with the measurement, do not fix in PR #176.** Malformed-input
+      only, and ruling **R2** governs — attribute nothing where there is nothing to attribute.
+      This follows the T2.4 precedent exactly: the phantom `UNATTRIBUTED` column was likewise
+      malformed-input-only, filed with its measurement, and fixed in a later task rather than late
+      in a reviewed green PR. A fix belongs with its own tests and named mutant. Cost if wrong: a
+      hand-assembled document with a bad seat table writes a wrong row count to the ledger until
+      that fix lands.
+  - **⚠️ SUPERSEDED BY A REAL RUN — the council was RE-RUN on `4b2b5416` after the owner added
+    OpenRouter credits, and this time it produced a verdict.** Run `32481536014`, **17m44s**
+    (vs 36s credit-death and 337s degraded), `chair:complete`. **Chair verdict: "Fix these
+    first" — 5 Confirmed, 0 Contested, 0 Disputed, 0 Singleton**, every one `a2/d0/n0 solid`.
+    Still `stage1:partial`: kimi's leg died, so its street cred reads `n/a`. The block above is
+    kept as the record of the two FAILED attempts — do not read it as this PR's review.
+    ⚠️ **Collapsed to MECHANISMS per the standing rule that a repeated finding is not a stronger
+    one: FIVE findings became THREE mechanisms, one of them new and one of them FALSE.**
+    - **B1 (gpt) + C1 (glm) are the SAME mechanism** — the inconsistent-`meta.seats` defect filed
+      immediately above, found INDEPENDENTLY by two models. Double-discovery is corroboration that
+      the filing was right, not two problems.
+    - **C3 (glm)** — SI-17's conformance time-inconsistency. Already disclosed in
+      `ledger-join.js :: benchLegs`, in `CHANGELOG.md`, and in this entry.
+    - **C2 (glm) — MEASURED FALSE. Recorded so nobody re-raises it.** Claim: `benchLegs` treats
+      `judge`, `repair`, `superseded` and give-up roles as bench legs for the role/conformance
+      decision. Measured end to end through `buildLedgerRows` on a group carrying `seat` + `judge`
+      + `repair` + `superseded` rows: `conformance` came out **`clean`**, not `unstructured`.
+      Those roles never reach `benchLegs`, because `ledger.js :: joinsLedger`'s fail-closed
+      allowlist (`seat/critic/chair/claude/council/redteam` + `lens:*` + absent) drops them
+      upstream. Direct control: `benchLegs([{role:'judge'},{role:'chair'},{role:'seat'}])` DOES
+      return `judge`. **So the finding is true about the FUNCTION in isolation and false about the
+      SYSTEM** — the function is permissive, its only caller is fail-closed. If a future producer
+      is ever added to `LEDGER_JOIN_ROLES`, re-open this.
+    - [ ] **A1 (qwen) [minor] — REAL, NEW, and the only unfiled one. `credFor` reads only the
+      IDENTIFIABLE seats of a pair group that mixes seated and seatless runStats rows.** Measured
+      2026-08-21 against the shipped `ledger-join.js :: credFor`, with `a#1` at 1 and `a#2` at 5:
+
+      ```
+      both seated -> {withSelf:3, peersOnly:3}   mean of both seats
+      MIXED       -> {withSelf:1, peersOnly:1}   a#1 only; the seatless row contributes nothing
+      none seated -> {withSelf:3, peersOnly:3}   alias fallback reads BOTH
+      ```
+
+      ⚠️ **The inconsistency is the finding, not the drop:** a group that identifies ZERO seats
+      reads MORE seats than one that identifies ONE. **Partial seat information produces a
+      NARROWER read than no seat information.** It is the mirror of the Important-1 defect the
+      T3.3 task review caught (seated streetCred + unseated runStats), and it is defensible under
+      ruling **R2** — a seatless row has no identifiable street-cred row to contribute — but it is
+      SILENT, and it lands in the append-only ledger.
+      **⚠️ THESE THREE ARE ONE FOLLOW-UP PR, not three.** A1 above, plus the
+      inconsistent-`meta.seats` mechanism filed immediately before it (council B1 = C1), are the
+      same subject: how `ledger-join.js :: credFor` and `street-cred.js :: credSeats` resolve
+      seats when the document's seat information is partial, inconsistent, or mixed. All three
+      are unreachable on the engine path — `seats.js :: buildSeats` derives `meta.seats` from the
+      same bench that becomes `meta.models`, and the engine always emits `runStats[].seat` for
+      both twins — and all three are reachable on the two hand-assembled `appendRun` paths, whose
+      rows reach a file that is never migrated.
+      **Owner ruling 2026-08-21: MERGE Phase 3, fix this cluster in its own PR.** The chair said
+      *"Fix these first"*, and that was weighed: the counter is that a focused PR reviews better
+      than a late behaviour change bolted onto a 17-commit branch that is already green and
+      four-times reviewed, and nothing here is reachable from the engine. The fix needs its own
+      RED-before-GREEN tests and named mutants — treat it as a task, not a patch.
   ⚠️ **BUDGET AN EXTRACTION BEFORE TOUCHING `report.js`.** Measured at `0cb2d4d9` with the gate's
   own `checkFileSize`: **277/300, 23 free** (197 at the branch point; T2.4 added ~80 lines carrying
   roughly 10 of executable code — this file's comment style inflates fast). The next
@@ -2833,6 +2946,20 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       outcome and re-arms #137 — the measured reason the ruling exists. ⚠️ **The R2 disclosure is
       not to be weakened, hedged or re-litigated while editing nearby prose**; T-B5 edited the
       sentence immediately after it and left it byte-identical.
+
+- [ ] **NEXT TASK — Phase 4: R5, seat id on the live leg row.** Filed 2026-08-21 (v4.8 Phase 3 T3.4)
+  as the correct resume point, replacing the Phase 3 entry above (now ✅ COMPLETED). Per the phasing
+  doc's own task list (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 4):
+  extend `writeLegPatch` (`src/sidecar/fanout-leg.js :: runLeg`) so `src/observe/council-legs.js ::
+  buildLegRow` reads the seat off `metadata.json`, threading from `run-stage1-launch.js`'s
+  `seated[].roster`; then through `live-normalize.js :: seatOf`. Makes
+  `electron/workspace-ui/live-dead-seats.js:207`'s `if (s.seat)` arm — re-verified 2026-08-21, still
+  permanently dead on the live path, since neither `buildLegRow` nor any live-tick payload emits
+  `.seat` today — actually live.
+  ⚠️ **Ordering is PREFERENCE ONLY, not a hard gate.** The phasing doc's own §6 lists "Phase 3 vs
+  Phase 4 order" among preference-only orderings, so nothing in Phase 3's closure forces Phase 4
+  next over Phase 5 (SI-10/SI-13, the debate join) or Phase 6's independents — this entry follows
+  the phasing doc's own §5 listing order, not a discovered dependency. Re-derive before starting.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
@@ -3447,12 +3574,26 @@ deliberately left alone:
   `src/mcp-tools.js:416` is `raiser: z.string()` inside the `findings` object and `:420` is
   `judge: z.string()` inside `adjudications`. **No schema was changed.** A future round raising it
   a third time should tick this box rather than open a new item.
-- [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
+- [x] **PR4 · `street-cred.js :: computeStreetCred`'s peer split (`if (judge !== m)`) is the third
   alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
-  before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats
-  one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
-  `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
-  cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
+  before the anonymize twin collapse: `assignLabels` (`anonymize.js@5ef5048e:20-33`) gives two twin
+  seats one `letterByModel` key (last wins) and `rankPositions` (`street-cred.js :: rankPositions`)
+  collapses them, so `rankings[].order` is already meaningless on a twin bench and street-cred
+  computed from it cannot be made correct by editing the peer split alone. Seat-ify
+  `assignLabels`/`rankingToOrder` first.
+  ✅ **CLOSED 2026-08-21 — v4.8 Phase 3 (SI-06), in the order this item required.** T3.2
+  (`b17a6329`) seat-ified `assignLabels`/`rankingToOrder` first (an additive `seatMap`/`orderSeats`;
+  `labelMap`/`order` stay byte-identical); T3.3 (`fb3fa09d`) then closed the peer split itself —
+  `street-cred.js :: computeStreetCred` now compares SEATS when both sides carry one and ALIASES
+  otherwise (controller ruling ledger C-2), reusing `peer-split.js :: peersOf`'s two-branch shape
+  rather than re-deriving it. `computeStreetCred` and `rankPositions` both moved out of `tally.js`
+  into the new `street-cred.js` in the same commit (`tally.js` re-exports `computeStreetCred` only);
+  the two citations above are updated to follow, per this task's own citation-anchoring rule.
+  ⚠️ **The `letterByModel` deletion this item also names (T3.1, `13ae8cf6`) was never a functional
+  prerequisite here** — measured, `letterByModel` had no production consumer anywhere in `src/`
+  (SI-26), so seat-ifying or deleting it changes nothing `computeStreetCred` reads. The actual
+  prerequisite this item asked for — a seat channel on `assignLabels`/`rankingToOrder` — is T3.2's
+  contribution, not T3.1's; the two are easy to conflate because both touch `anonymize.js`.
 - [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
   rulings table) is still unwritten.** Spec
   §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
@@ -3657,7 +3798,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
 Three items PR4b deliberately did NOT fix. All three citations were re-derived from the source at
 `c1c3a5ee`, not inherited from the plan.
 
-- [ ] **Chair-on-bench has no engine-side guard, and PR4b made its consequence observable.** The
+- [x] **Chair-on-bench has no engine-side guard, and PR4b made its consequence observable.** The
   guard exists in three places and `src/council/` is not one of them:
   `src/cli-handlers-council-run.js:137`, `src/mcp-council-run.js:114`, and
   `src/pack/pack-validate.js:93` (packs only, `pack.kind === 'council'`). `preflightSeats` — the
@@ -3670,6 +3811,36 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   merge into one ledger row whose `conformance` is worst-wins and whose `wasChair` is any-wins —
   a persisted scalar that now reads differently. Decide whether the engine should refuse it,
   normalise it, or keep accepting it with the merge documented (today's answer, T14).
+  ✅ **CLOSED 2026-08-21 — v4.8 Phase 3 T3.3 (`fb3fa09d`), per owner ruling R4 (SI-17).** The engine
+  NORMALISES rather than refuses or keeps the merge: a `role: 'chair'` runStats row no longer
+  decides a bench seat's `role` or `conformance` when the group also holds a bench leg
+  (`ledger-join.js :: benchLegs`); `wasChair` stays any-wins over the whole group, and a group of
+  only chair rows is unchanged. Both hand-assembled `appendRun` paths are covered, as R4 required.
+  ⚠️ **"today's answer, T14" above is now WRONG, and it is the pin itself that moved.**
+  `tests/council/ledger.test.js`'s `T14` describe block is REWRITTEN, not kept — it is now titled
+  *"chair ON the bench: the chair leg no longer decides the bench seat (SI-17)"* and asserts the
+  NORMALISE behaviour this item argued for, not the merge it originally recorded. One consequence
+  of the normalise is disclosed, not repaired, and filed separately below for the owner.
+- [ ] **NEW, owner decision needed — SI-17's normalise loses a mixed-group chair leg's OWN
+  conformance to the lifetime histogram (v4.8 Phase 3 T3.4, 2026-08-21).** Filed for a ruling, not
+  decided here; behaviour is unchanged from what T3.3 shipped. On a group that mixes a bench leg
+  with a chair-synthesis leg for the same seat, the chair leg's `conformance` no longer reaches
+  `ledger.js` at all — only the bench leg's `conformance` does, and `wasChair: true` is the only
+  trace that the model also chaired. MEASURED end to end through `appendRun` →
+  `ledger-stats.js :: deriveReliability`, on `--models ds,gpt --chair ds` with a CLEAN bench leg and
+  an UNSTRUCTURED chair leg, both resolving to `v/ds`:
+  ```
+  before (b341b273) : conformance { unstructured: 1 }
+  after  (fb3fa09d)  : conformance { clean: 1 }
+  ```
+  A chair that hallucinates or drops its verdict-parse contract while its bench review stays clean
+  is now invisible to the lifetime `conformance` histogram — a REAL loss of signal, not a
+  relabelling, and disclosed rather than repaired because recording a chair leg's own conformance
+  would mean giving the chair its own ledger identity, which changes the row SET (out of scope for
+  a normalise). Already disclosed in `ledger-join.js :: benchLegs`'s docblock; this is the tracker
+  copy so it is not buried in a source comment. Options for the owner: (a) accept the loss as the
+  cost of a truthful bench-seat identity, (b) give the chair-synthesis leg its own ledger row/key,
+  (c) something narrower — e.g. a `chairConformance` side-field on the bench row. Not decided here.
 - [ ] **Findings are attributed by ALIAS, not by seat.** ⚠️ **This item was filed "→ PR4c" and PR4c
   did NOT take it (ruling R4c-3); the forecast expired unfulfilled and `ledger.js`'s in-source
   comment has been corrected to say so.** `buildLedgerRows` filters
@@ -3686,7 +3857,13 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   builds a fresh object literal. What remains is the actual attribution change: `findings[].raiser`
   is still the ALIAS, so the join has nothing to split on. Seat-attributing it means keying the
   filter on `raiserSeat` and deciding what a seat-less finding joins to.
-- [ ] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
+  ⚠️ **STILL OPEN 2026-08-21 (SI-18) — do not read this as closed.** v4.8 Phase 3 T3.3 (`fb3fa09d`)
+  also touched `buildLedgerRows`, and its own commit message names SI-18 at the same anchor, but
+  what it closed there is the STREET-CRED join (SI-20's third site, `findings.filter(f => f.raiser
+  === model)`'s NEIGHBOUR, not itself). **This item's own filter is byte-unchanged**: measured,
+  `findings.filter(f => f.raiser === model)` is identical before and after this entire PR. The
+  findings half stays exactly as described above — filed, not scheduled.
+- [x] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
   cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
   flip the launched name from the short alias to the raw executable id, the exact failure
   `src/council/run-chair.js:48-52` argues against). So on a mixed live/dead twin, the leg-less
@@ -3695,6 +3872,18 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   **pre-existing** — today it is merged into one group — but PR4b splits it out as its own
   promotable aggregate with its own permanent `legacy` line in `council stats`. Do not invent a
   rule here: the real fix is seat-attributed street cred, which belongs with the item above.
+  ✅ **CLOSED 2026-08-21 — v4.8 Phase 3 T3.3 (`fb3fa09d`) (SI-19).** Street cred is now seat-attributed
+  (the item above's own prescription), which removes the borrowing mechanism rather than patching
+  its symptom. MEASURED end to end through the real `tally()` → `buildLedgerRows()` on a synthetic
+  mixed live/dead twin (`deepseek#1` reviewed and ranked, `deepseek#2` bound but leg-less, one judge
+  `gpt`): the dead seat gets its OWN `computeStreetCred` row, keyed on `deepseek#2`, and since no
+  judge ranked that seat id `withSelf`/`peersOnly` are both `null` — not a number copied from
+  `deepseek#1`. The ledger row `credFor` builds for that pair group reads `null`/`null` the same
+  way: `sc.get('deepseek#2')` returns an object (so the alias-mean fallback never fires), and
+  `meanCred` filters non-numeric values out, leaving nothing to average. A null row is invisible to
+  `ledger-stats.js :: deriveReliability`'s `avg()` (`typeof v === 'number'` only), so the dead twin
+  can no longer inflate `avgStreetCredPeersOnly` and cannot be promoted by
+  `run-chair.js :: pickFallbackChair`.
 
 #### Filed by PR4c — the seat spine (2026-08-14)
 
@@ -3703,11 +3892,11 @@ below was re-derived from the source at the end of PR4c, not inherited from the 
 own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, and
 `classifyCouncilMembers` is in `src/utils/config.js`, not `src/config.js`).
 
-- [ ] **Street cred collapses twins, three ways, and PR4c left all three (ruling R4c-2).** Measured
-  on bench `['a','a','b']`: (1) `rankPositions` (`src/council/tally.js:32-42`) keys its map by
-  MODEL — `pos.set(m, meanPos)` at `:38` — so on `order ["a","a","b"]` the first twin's position 1
+- [x] **Street cred collapses twins, three ways, and PR4c left all three (ruling R4c-2).** Measured
+  on bench `['a','a','b']`: (1) `rankPositions` (`street-cred.js :: rankPositions`) keys its map by
+  MODEL — `pos.set(m, meanPos)` — so on `order ["a","a","b"]` the first twin's position 1
   is **overwritten**, not averaged, yielding `{a:2, b:3}`. (2) `computeStreetCred`
-  (`src/council/tally.js:49-67`) maps over `meta.models` at `:51`, which is still `['a','a','b']`, so the
+  (`street-cred.js :: computeStreetCred`) maps over `meta.models`, which is still `['a','a','b']`, so the
   record carries **two byte-identical `streetCred` rows**, and both reach the user — the Markdown
   street-cred table at `src/council/report-md.js :: renderMd` and the HTML one at
   `src/council/report-html.js :: renderHtml`. ⚠️ **Re-anchored BY SYMBOL 2026-08-16** (v4.8 Phase 1
@@ -3717,10 +3906,27 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   wrong (pre-existing, not T1.2's doing): re-measured, `:49` is a `<td>` in the findings-table row
   builder; the street-cred rows are built two lines later. Both now anchor to the enclosing
   function, per this release's re-anchoring rule. (3) The ledger's
-  join `new Map(streetCred.map(s => [s.model, s]))` (`src/council/ledger.js:106`) is **last-wins**
+  join `new Map(streetCred.map(s => [s.model, s]))` (`ledger.js@b341b273:110` — the citation's own
+  `:106` had already drifted before T3.3 touched it) is **last-wins**
   into an append-only file. R4c-2 re-confirmed R4-3 on this evidence: fixing (3) alone was measured
   to flip the launched chair name from the short alias to the raw executable id, so this needs to be
   taken as one seat-keyed change, in its own PR, not piecemeal.
+  ✅ **CLOSED 2026-08-21 — v4.8 Phase 3 T3.3 (`fb3fa09d`, fix round 1 `8027391b`) (SI-20), taken as
+  ONE seat-keyed change exactly as this item required.** ⚠️ Not T3.2: diffed by commit to be sure —
+  T3.2 (`b17a6329`) put `seat` (the judge's own identity) onto `rankings[]`, consumed by the peer
+  split (SI-06); `rankings[].orderSeats` — the parallel array `rankPositions` actually keys on — is
+  T3.3's own addition, in the same commit as the three sites below. All three sites: (1)
+  `rankPositions` now keys by SEAT where `orderSeats` names one, alias
+  otherwise, so a twin bench's two positions no longer collapse. (2) `computeStreetCred`'s driver is
+  `credSeats(models, seats)`, one row per SEAT rather than one row per alias — the two twin rows are
+  no longer byte-identical. (3) the ledger join (`ledger-join.js :: credFor`, extracted out of
+  `ledger.js` in the same PR) is seat-keyed with an alias-MEAN fallback (fix round 1: the mean, not
+  a last-wins alias key, because a seated alias with no runStats seat must not resolve to `{}`),
+  replacing the old alias-keyed last-wins `Map`. `report-md.js:70` and `report-html.js:51-52`
+  needed zero changes — they still render `s.model`, so on a twin bench they now show two
+  DIFFERENT numbers under the same alias rather than two identical ones (the rendered table is more
+  truthful, but ambiguous about which seat is which). Flagged as an SI-25-adjacent follow-up, not
+  fixed here — `report.js` and `matrix-model.js` are explicitly out of scope for this PR (§1).
 - [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
   does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
   which is a **different question** from "does anything else in the document carry the seat's lens".
@@ -3945,15 +4151,22 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   model-carrying **launch** argument is a non-routable model name and a real paid failure — the
   packet is prose, not a launch argument, so it is safe to seat-key, but the boundary must be kept
   explicit.
-- [ ] **`letterByModel` is dead code that looks live, and it collapses twins.**
-  `src/council/anonymize.js` declares it in `assignLabels`' JSDoc (`:18`), builds it (`:28`),
-  populates it keyed by MODEL (`:31`) and returns it (`:33`) — and it has **no production consumer
-  anywhere in `src/`**; the only reader is `tests/council/anonymize.test.js`. On a twin bench
+- [x] **`letterByModel` is dead code that looks live, and it collapses twins.**
+  `src/council/anonymize.js@5ef5048e` declares it in `assignLabels`' JSDoc (`:18`), builds it
+  (`:28`), populates it keyed by MODEL (`:31`) and returns it (`:33`) — and it has **no production
+  consumer anywhere in `src/`**; the only reader is `tests/council/anonymize.test.js`. On a twin bench
   `letterByModel` keeps one letter per alias, so anyone who reaches for it gets a silent collapse.
   ⚠️ **`labelMap` is NOT the collapsing map** — a prior review claimed it was; measured,
   `assignLabels(['a','a','b'])` yields `{"Review A":"a","Review B":"a","Review C":"b"}`, whose keys
   are labels and are unique by construction. Delete `letterByModel`, or give it a seat key before
   something starts using it.
+  ✅ **CLOSED 2026-08-20 — v4.8 Phase 3 T3.1 (`13ae8cf6`) (SI-26).** Deleted — the first option this
+  item offered. The JSDoc `@returns` clause, the `const`, the populate line and the return-literal
+  key are all gone; `labelMap`/`entries` are untouched. Confirmed by a repo-wide, case-insensitive
+  grep for `letterByModel` across `src/`, `electron/`, `tests/`, `scripts/`, `bin/`: zero hits.
+  ⚠️ **SI-26 has no standalone checkbox anywhere in this document** — this item predates that label
+  and was never renamed to carry it; its only OTHER mention is prose inside the Phase 3 NEXT TASK
+  entry, and the phasing doc's own status-table row 26 is the other place this closure is recorded.
 - [ ] **SI-DUP · the duplication filing (merges SI-15 + SI-27 + PR5c-SEATKEY, 2026-08-16).** Three
   filings described this one duplication and gave three different counts, **all wrong** — SI-15 said
   3, SI-27 enumerated 4 and missed 5, PR5c-SEATKEY said 3 "+ a fourth". Both true counts come to

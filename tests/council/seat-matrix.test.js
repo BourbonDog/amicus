@@ -1704,9 +1704,10 @@ describe('a malformed seats table falls back to alias space instead of throwing'
  * one site alone yields two renderers that disagree about which space a
  * document is in — the exact class §3.6 exists to remove.
  *
- * ⚠️ This is NOT `ledger.js:61-69`'s documented-copy situation. That copy is
- * paid for because `ledger.js` requires only fs/path/utils-config while its
- * sibling pulls findings → anonymize → seats. MEASURED here instead: a fresh
+ * ⚠️ This is NOT `ledger.js :: CONFORMANCE_RANK`'s documented-copy situation.
+ * That copy is paid for because `ledger.js` (plus its two size-gate
+ * extractions, both shallow) never reaches findings/anonymize/seats, while its
+ * sibling pulls all three. MEASURED here instead: a fresh
  * `require('src/workspace/matrix-model')` already loads four first-party
  * modules (v4.8 Phase 1 T1.2 moved renderMd's own pricing/format-duration/
  * degrade requires out to report-md.js, which this path never reaches —

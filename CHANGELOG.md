@@ -134,13 +134,26 @@ All notable changes to Amicus are documented here. Format follows
   the chair on the bench, so a chair whose seat row was `unstructured` now reads `unstructured`
   where it previously read the chair leg's `clean`. Conversely, on an alias whose seats resolved
   *differently*, `wasChair` no longer propagates to the seat row that did not chair.
+  **Later in the same release, both `role` and `conformance` stopped counting a chair-synthesis leg
+  at all, while the pair also holds a bench leg** — a chair leg is a different contract from a bench
+  review (prose plus a verdict line, not findings JSON), so a seat's recorded role and conformance no
+  longer depend on whether that model also happened to chair. `wasChair` is untouched: still
+  any-wins over the pair's whole row set, chair leg included. Consequence, disclosed rather than
+  repaired: the worked example above still holds in the direction shown (bench `unstructured` + chair
+  `clean` → `unstructured`), but its reverse no longer does — bench `clean` + chair `unstructured`
+  now reads `clean`, so a broken chair synthesis by a model that also sits on the bench can vanish
+  from `amicus council stats`'s lifetime conformance histogram; only `wasChair: true` still shows
+  that it chaired. A pair of chair legs only, with no bench leg to prefer, is unaffected.
 - **A mixed live/dead twin now shows an extra permanent line in `amicus council stats`** — the
   executable-keyed group plus a `legacy` alias-keyed one for the leg-less seat, where there was
   previously one line. The legacy line accrues `runs`, clears `low-N` at three runs, and carries
-  zero findings but a numeric street cred borrowed from its live twin, because street cred remains
-  alias-level. Not fixed here, and filed: that leg-less group is a chair-promotion candidate and can
-  outrank the executable it routes to. Findings also remain attributed by alias rather than by seat,
-  so on a split alias they are recorded against one of its rows rather than divided across them.
+  zero findings. Its street cred is no longer borrowed from its live twin: street cred is seat-keyed
+  now (see below), and a seat that never ran a leg never appears in any judge's ranking, so its own
+  seat-keyed row resolves both numbers to `null` instead of adopting its live twin's — closing what
+  this entry used to describe as a filed gap, since the legacy line can no longer outrank the
+  executable it routes to for the fallback chair (that promotion excludes any group whose average
+  street cred is not a number). Findings also remain attributed by alias rather than by seat, so on a
+  split alias they are recorded against one of its rows rather than divided across them.
 - **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
   when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
   because that alias occupies more than one bench seat (remove the duplicate entry, or use two
@@ -404,10 +417,24 @@ All notable changes to Amicus are documented here. Format follows
   had no seat table able to resolve it. All four seat-emitting producers now share one rule: emit
   when the seat's id differs from **its own alias**. This is a visible change to two fields, and it
   is a correction.
-- **Known limitations after this release — filed, not fixed.** Street cred still collapses twins
-  (its rank map is model-keyed and last-wins, and a repeated alias produces two byte-identical
-  `streetCred` rows), and the ledger's street-cred join is last-wins over the same rows. Findings
-  remain attributed by **alias**, not by seat, in the ledger. `lens` and `position` are still
+- **Street cred is seat-keyed, end to end.** On a bench that repeats an alias, `streetCred[]` now
+  emits **one row per seat** instead of one collapsed row per alias, each carrying the new
+  `streetCred[].seat` field (the seat id, emitted only when it differs from the row's own alias).
+  `rankings[]` gained the matching `seat` and `orderSeats` fields — a judge's own seat id, and a
+  seat-valued parallel of `order` — on the same emit-when-**different** terms, so a bench with no
+  repeated alias carries neither and its documents stay byte-identical to before. `peersOnly`'s
+  self-exclusion is now seat-conditional too: when a row and a judge both carry a seat id the engine
+  compares seats, so a twin's *other* seat now counts as a real peer instead of being excluded as
+  "the same model reviewing itself." See `council.md`'s tally-record schema for the full
+  field-by-field notes. ⚠️ Disclosed side effect, filed not fixed: the same release's ledger-join
+  change means a chair-synthesis leg's own conformance can fall out of the reliability ledger
+  entirely on a mixed bench/chair group — see the merged-rows entry above.
+- **Known limitations after this release — filed, not fixed, except street cred.** Street cred no
+  longer collapses twins: its rank map, the street-cred driver and the ledger's street-cred join are
+  all seat-keyed now, so a repeated alias emits one `streetCred` row per seat instead of two
+  byte-identical ones, and the ledger resolves each seat's own row instead of losing one to a
+  last-wins alias key (see above). Findings remain attributed by **alias**, not by seat, in the
+  ledger. `lens` and `position` are still
   unrecoverable from the tally artifacts on any bench that does *not* repeat an alias, because
   `meta.seats` is emitted only when one does. The chair packet is still assembled entirely in alias
   space, so on a repeated-alias bench the chair sees two `A1 — deepseek:` lines beside a tier count
