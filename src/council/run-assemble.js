@@ -149,8 +149,8 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // ⚠️ Consumers: absence means "no seat table available", NEVER "the bench was
     // unique" — two of appendRun's three call sites feed hand-assembled input no
     // seat machinery touches. And seats[] is BENCH-ONLY, so it must never be
-    // joined positionally to meta.models (`claude` is pushed onto that at :226)
-    // or to streetCred[].
+    // joined positionally to meta.models (`claude` is pushed onto that inside
+    // run-assemble.js :: buildTallyInput) or to streetCred[].
     // .slice() is defence-in-depth only: the array is shared with
     // runState.checkpoint (run.js:135) and with both tally inputs. Nothing
     // mutates meta.seats — unlike models, which meta.models.push mutates below —
@@ -209,8 +209,9 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
   // `joinsLedger` has no 'judge' member, so nothing consumed it; report.js's cost
   // table does now, and without it a twin bench's two judge rows are identical.
-  // `buildRunStatsEntry` applies the shared emit-when-DIFFERENT predicate (:89), so
-  // a unique bench stays byte-identical and no new predicate enters the tree.
+  // `buildRunStatsEntry` (run-stats-entry.js :: buildRunStatsEntry) applies the
+  // shared emit-when-DIFFERENT predicate, so a unique bench stays byte-identical
+  // and no new predicate enters the tree.
   for (const j of (judgeResults || [])) {
     runStats.push(buildRunStatsEntry({
       leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance, seat: j.seat,

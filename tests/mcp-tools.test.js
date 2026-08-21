@@ -105,12 +105,13 @@ describe('MCP Tool Definitions', () => {
     expect(prose).not.toContain('gemini-3-flash-preview');
   });
 
-  // M-1 (whole-branch review of 4.1.1): mcp-tools.js:60,584 were reverted from a
-  // bare dot-versioned Anthropic id (`anthropic/claude-opus-4.8`, which the
-  // direct Anthropic API rejects) back to the correct dash-form id
-  // (`anthropic/claude-opus-4-8`). Nothing pinned either surface, so all 7 MCP
-  // suites stayed green whichever form was live. Pin both to the dash form and
-  // reject any bare dot-versioned Anthropic id pattern.
+  // M-1 (whole-branch review of 4.1.1): mcp-tools.js :: amicus_start and
+  // mcp-tools.js :: getGuideText were reverted from a bare dot-versioned
+  // Anthropic id (`anthropic/claude-opus-4.8`, which the direct Anthropic API
+  // rejects) back to the correct dash-form id (`anthropic/claude-opus-4-8`).
+  // Nothing pinned either surface, so all 7 MCP suites stayed green whichever
+  // form was live. Pin both to the dash form and reject any bare
+  // dot-versioned Anthropic id pattern.
   describe('anthropic model ids use dash form, not bare dot-versioned ids (M-1)', () => {
     const dotVersionedAnthropicId = /anthropic\/claude-[a-z]+-\d+\.\d+/;
 

@@ -138,7 +138,9 @@ function buildLedgerRows(record) {
     const raised = findings.filter(f => f.raiser === model);
     const pairs = byAlias.get(model);
     // An alias with NO joinable runStats row yields exactly ONE row with an
-    // empty group — today's `rs.get(model) || {}` fallback, preserved.
+    // empty group — the shape the founding ledger commit (c073995e) wrote as
+    // `rs.get(model) || {}`; `rs` itself is gone, replaced by `byAlias`/`pairs`
+    // during the R4b-2 pair-group split, but the empty-group fallback is not.
     const groups = pairs ? [...pairs.entries()] : [['', []]];
     groups.forEach(([resolvedKey, group], i) => {
       // R4b-2: within a block exactly ONE row — the FIRST pair group — carries
