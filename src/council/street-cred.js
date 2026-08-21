@@ -80,11 +80,19 @@ function rankPositions(order, orderSeats) {
  * hand-assembled `appendRun` paths — `mcp-tools.js :: amicus_council_tally`
  * declares `meta.seats` independently of `meta.models` and
  * `cli-handlers-council.js` passes user JSON through verbatim — never on the
- * engine's own output, where `seats[]` and `models` always agree by
- * construction: `seats.js :: buildSeats` is `aliases.map(...)` over the same
- * bench array, so it is structurally one-to-one with the bench and cannot
- * itself over- or under-register an alias, independent of anything
- * `preflightSeats` separately rejects (id collisions, critic placement).
+ * engine's own output. ⚠️ NOT because `seats[]` and `models` always agree —
+ * they do not: `meta.models` carries a `claude` tail on a `claudeInCouncil`
+ * run (synthesized downstream of `buildSeats`, seats.js:44-45) that `seats[]`
+ * never names, so the two can differ in LENGTH. What DOES hold, for every
+ * alias `seats[]` was built FROM: `seats.js :: buildSeats` is
+ * `aliases.map(...)` over the bench array `models` is built from, so it is
+ * structurally one-to-one with that bench and cannot itself over- or
+ * under-register any bench alias, independent of anything `preflightSeats`
+ * separately rejects (id collisions, critic placement). The `claude` tail
+ * falls to the `!ids` branch below exactly like an alien alias does — a
+ * shortfall this function already handles by design, not a counterexample to
+ * it (pinned as the "claude tail" case, both here and in the invariant table
+ * at street-cred.test.js).
  *
  * FIX: the k-th occurrence of alias `m` in `models` takes the k-th id
  * `byAlias.get(m)` registered for it, in table order. Once that list is
@@ -92,6 +100,22 @@ function rankPositions(order, orderSeats) {
  * ALIAS-KEYED row (`key: m, seat: null`) instead of being dropped, and a
  * surplus registered id simply goes unused instead of being invented into an
  * extra row — so `credSeats(models, seats).length === models.length` always.
+ *
+ * ⚠️ ROW ORDER, SEPARATELY — review round 1 of this task, Important 1. This
+ * function's row order is now `models` order, always: each occurrence pushes
+ * exactly where its own index puts it. The pre-fix loop ALSO happened to
+ * group an alias's rows at its first occurrence (`expanded.has(m) ->
+ * continue` skipped every later one), so on a NON-ADJACENT repeat — an
+ * ordinary engine bench, e.g. `['a','b','a']`, `buildSeats` handles it fine —
+ * this function's order now differs from BASE's even though every ADJACENT
+ * case in this file's own tests (and the ones street-cred.test.js pins) never
+ * showed it. Content is identical either way, only order moves; RULING
+ * (owner): the new `models`-order form is correct — BASE's grouping was an
+ * accident of the buggy loop, never a stated doctrine, and this order already
+ * agrees with `meta.seats`/`position`, which are in `models` order too. Full
+ * measurement, the mutant that pins it (EXPANDONCE), and the ruling's
+ * reasoning are at street-cred.test.js's "non-adjacent repeat" tests and
+ * tests/council/street-cred-mutants.js :: EXPANDONCE.
  *
  * ⚠️ JOINED BY VALUE — never positionally. run-assemble.js :: buildTallyInput
  * forbids the positional join in-code and the reasons are all live here:

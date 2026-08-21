@@ -60,7 +60,14 @@ describe('rankPositions — SI-20 site 1, the alias collapse', () => {
 });
 
 describe('credSeats — the driver, joined BY VALUE', () => {
-  test('a seated alias expands ONCE into its seats, in table order', () => {
+  // ⚠️ RETITLED at this task's review round 1 (fix round 1) — "expands ONCE
+  // into its seats" named the pre-Rule-A mechanism (first occurrence expands
+  // into every registered id at once). Rule A replaced it with a per-occurrence
+  // lookup; this fixture (adjacent repeats, table fully registered) still
+  // passes because the two mechanisms AGREE there, not because either title
+  // is still accurate. See "credSeats — Rule A" below for the mechanism and
+  // for the non-adjacent case where they diverge.
+  test('a seated alias: each occurrence takes its OWN seat, in table order', () => {
     expect(credSeats(['a', 'a', 'b'], SEATS)).toEqual([
       { model: 'a', key: 'a#1', seat: 'a#1' },
       { model: 'a', key: 'a#2', seat: 'a#2' },
@@ -96,17 +103,45 @@ describe('credSeats — the driver, joined BY VALUE', () => {
  * table registered FEWER ids for a repeated alias than `models` repeats it
  * ("partial"), and a row INVENTED when the table registered MORE ids for an
  * alias than `models` repeats it ("over-specified"). Both are reachable only
- * on the two hand-assembled `appendRun` paths — the engine's own `seats[]` and
- * `models` always agree by construction — but `mcp-tools.js ::
+ * on the two hand-assembled `appendRun` paths — `mcp-tools.js ::
  * amicus_council_tally` declares `meta.seats` independently of `meta.models`
  * and `cli-handlers-council.js` passes user JSON through verbatim, so nothing
- * stops the two from disagreeing on that input.
+ * stops the two from disagreeing on that input — never on the engine's own
+ * output. ⚠️ NOT because `seats[]` and `models` always agree: they differ in
+ * LENGTH on a `claudeInCouncil` run (the `claude` tail `seats[]` never names —
+ * pinned as the "claude tail" case below). What holds instead: `seats.js ::
+ * buildSeats` is one-to-one with the BENCH `models` is built from, so it can
+ * never over- or under-register a bench alias (fix round 1 of this task's
+ * review caught the earlier draft's overclaim here).
  *
  * Rule A: `seats` NAMES rows, it never changes how many there are. The k-th
  * occurrence of alias `m` takes the k-th registered seat id for `m`, else no
  * seat (an alias-keyed row, `seat: null` — NOT a dropped row).
  * `rows.length === models.length`, always — pinned below as ONE invariant
  * over a case list, not as N near-duplicate example tests.
+ *
+ * ⚠️ ROW ORDER, SEPARATELY — fix round 1 of this task's review, Important 1.
+ * The pre-fix loop also happened to GROUP an alias's rows at its FIRST
+ * occurrence (`expanded.has(m) -> continue` skipped every later one, so
+ * nothing from a later occurrence could ever land between two earlier rows).
+ * Rule A's per-occurrence loop has no such grouping: each occurrence pushes
+ * exactly where its OWN index in `models` puts it. On every ADJACENT-repeat
+ * case in the table below the two orders coincide, which is why nothing
+ * caught the divergence until a NON-ADJACENT repeat (`['a','b','a']`, an
+ * ordinary bench — `buildSeats(['a','b','a'])` assigns it real positions, no
+ * rejection) was tried. MEASURED: BASE gives `['a#1','a#2','b']` (both `a`
+ * rows adjacent, grouped by the accident above); Rule A gives
+ * `['a#1','b','a#2']` (bench order). Contents are identical either way, only
+ * ORDER moves — and `streetCred[]` is serialised array-order into
+ * verdict.json (verdict.js) and rendered array-order into both report
+ * renderers (report-md.js, report-html.js), so this is observable, not
+ * cosmetic. RULING (owner): the NEW order is correct — it follows
+ * `meta.models`, which ledger.js's own docblock names as the row driver, and
+ * it aligns with `meta.seats`/`position` ordering, which are already in
+ * models order; BASE's grouping was never a stated doctrine, just what the
+ * buggy loop happened to do. Pinned below as an explicit shape/order
+ * assertion, not folded into the length-only table — a length check alone
+ * cannot tell the two orders apart.
  */
 describe('credSeats — Rule A: exactly one row per `models` entry (v4.8 follow-up)', () => {
   const PARTIAL_SEATS = [{ id: 'a#1', alias: 'a', role: 'seat', lens: null, position: 1 }];
@@ -125,6 +160,7 @@ describe('credSeats — Rule A: exactly one row per `models` entry (v4.8 follow-
     ['alien alias — table names an alias absent from models', ['a', 'b'], ALIEN_SEATS],
     ['no seats table at all', ['x', 'y'], undefined],
     ['claude tail — meta.seats never names claude', ['a', 'a', 'claude'], SEATS],
+    ['non-adjacent repeat — a bench interrupted by another alias', ['a', 'b', 'a'], SEATS],
   ];
 
   test.each(CASES)('%s: rows.length === models.length', (_label, models, seats) => {
@@ -154,6 +190,33 @@ describe('credSeats — Rule A: exactly one row per `models` entry (v4.8 follow-
     expect(credSeats(['a', 'b'], ALIEN_SEATS)).toEqual([
       { model: 'a', key: 'a', seat: null },
       { model: 'b', key: 'b', seat: null },
+    ]);
+  });
+
+  test('non-adjacent repeat: row ORDER follows `models`, not alias grouping', () => {
+    // Review round 1 finding (Important 1) — reproduced independently, not
+    // taken on claim: the length invariant above is silent on ORDER, and
+    // every other case in this file keeps a repeated alias's occurrences
+    // ADJACENT, where the pre-fix grouping and Rule A's per-occurrence order
+    // happen to coincide. This is the case that tells them apart.
+    // MEASURED — same seats table (SEATS: a#1, a#2, b), bench interrupted by
+    // 'b' between the two 'a' occurrences:
+    //   BASE  (expand-once-then-skip): ['a#1','a#2','b']  -- grouped at the
+    //     FIRST 'a', because the buggy loop's `expanded.has('a') -> continue`
+    //     is what kept an alias's rows together; no doctrine ever specified
+    //     that order, it fell out of the bug.
+    //   Rule A (per-occurrence lookup): ['a#1','b','a#2'] -- bench order,
+    //     because each occurrence pushes exactly where its own index in
+    //     `models` puts it.
+    // RULING (owner, review round 1): the bench-order form is correct — it
+    // follows `meta.models` (ledger.js's own row driver) and already agrees
+    // with `meta.seats`/`position` ordering. Content is identical either way;
+    // only order moves. `streetCred[]` is serialised in this array order into
+    // verdict.json and both report renderers, so the order is observable.
+    expect(credSeats(['a', 'b', 'a'], SEATS)).toEqual([
+      { model: 'a', key: 'a#1', seat: 'a#1' },
+      { model: 'b', key: 'b', seat: null },
+      { model: 'a', key: 'a#2', seat: 'a#2' },
     ]);
   });
 });

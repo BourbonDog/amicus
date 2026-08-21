@@ -38,15 +38,18 @@
 // holds. Re-run every record below whose guarded expression OR its consumers
 // changed, and re-take the DENOMINATOR with it.
 //
-// DENOMINATOR: 542 suites / 7795 passed / 8 skipped / 4 snapshots / 0 failed,
-// at this task's commit (v48-seat-resolution, source+tests), which is the
-// tree every red set below was measured against. Baseline before this task,
-// at `13cd0a2d`: 542 / 7782 / 8. Each mutant was applied by exact-string
-// replacement via a small Node script (the peer-split-mutants.js precedent's
-// "exact-string replacement" done programmatically rather than by hand, to
-// keep 13 applications honest), run with the full `npx jest`, then restored
-// from a FILE COPY taken before the run — never `git checkout`/`restore`/
-// `stash` — and re-verified with `git diff --quiet -- src/`.
+// DENOMINATOR: 542 suites / 7797 passed / 8 skipped / 4 snapshots / 0 failed,
+// after review round 1 (below), which is the tree every red set in this file
+// now reflects. At the substantive commit, before review: 542 / 7795 / 8.
+// Baseline before this task, at `13cd0a2d`: 542 / 7782 / 8. Each mutant was
+// applied by exact-string replacement (a small script for the 13-mutant pass;
+// individually-authored, individually-verified inline scripts for the two
+// re-measured at review round 1, after the reusable script from the first
+// pass was found on disk with content that did not match anything authored
+// for this task and was discarded unused, rather than trusted) — run with the
+// full `npx jest`, then restored from a FILE COPY taken before the run —
+// never `git checkout`/`restore`/`stash` — and re-verified with `git diff
+// --quiet -- src/` AND a `sha256sum` match against that copy.
 //
 // ⚠️ ALL THIRTEEN WERE RE-RUN AT THIS TASK (v4.8 follow-up, 2026-08-21), not
 // just the two whose guarded code this task edited (CREDALIAS, ALIASDRIVER)
@@ -60,19 +63,46 @@
 // the old single-conditional flip no longer exists to mutate; see its record),
 // NOFALLBACK 3/2 -> 4/2 and ALIASLASTWINS 5/2 -> 8/2. ANYSEATED and EXPANDONCE
 // are new. Fix round 1's denominator was 542 / 7782 at `8027391b`; every
-// number here is from this task's re-run, against the tree with Rule A and
-// Rule B and all 13 new tests in place (this file's own record excluded, since
-// it loads in no suite).
+// number here (except the review-round-1 update just below) is from this
+// task's re-run, against the tree with Rule A and Rule B and all 13 new tests
+// in place (this file's own record excluded, since it loads in no suite).
+//
+// ⚠️ REVIEW ROUND 1 (Important 1) added a 15th and 16th test — the
+// `['a','b','a']` non-adjacent-repeat length case and its explicit order pin
+// — after the reviewer found Rule A moves streetCred row ORDER on an
+// engine-producible shape the original 13 tests never exercised. Re-measured
+// the two mutants whose guarded code a bare `credSeats(...)` call can reach —
+// ALIASDRIVER and EXPANDONCE — the only two that could possibly move; reasoned
+// through, then confirmed by running all 13, that the other eleven (all
+// gated behind `computeStreetCred`, `buildLedgerRows`, or `buildTallyInput`,
+// none of which the two new tests call) cannot. Both grew: ALIASDRIVER
+// 15/3 -> 16/3 (content reason — it nulls the `a#1`/`a#2` ids the order pin
+// also checks), EXPANDONCE 6/2 -> 7/2 (the order reason itself — it IS the
+// pre-fix algorithm whose grouping produced the wrong order). No new mutant
+// was added for order specifically; EXPANDONCE's record has the reasoning.
 //
 // ⚠️ READ THIS BEFORE READING ANY NUMBER BELOW — the T3.3 header's point
-// still holds and this task adds to it, not against it: every NEW test this
-// task wrote targets exactly the two shapes BASE (pre-T3.3 AND pre-this-task)
-// could not produce — a seat table that disagrees with `models` in COUNT
-// (Rule A) and a pair group that is seated in PART (Rule B). Nothing in the
-// tree before this task could tell "row dropped" from "row present but
-// alias-keyed", or "MIXED" from "none seated", because nothing produced those
-// shapes. Where a mutant here reds an OLDER pin as well as this task's new
-// ones, the record says so by name.
+// still holds and this task adds to it, not against it, but an earlier draft
+// of THIS sentence overclaimed the quantifier and review round 1 caught it
+// (Minor 2): NOT every new test targets a shape BASE could not produce. Ten of
+// the fifteen do, in three defect classes — a seat table that disagrees with
+// `models` in COUNT (Rule A drop/invent, four tests), a pair group seated in
+// PART (Rule B MIXED plus the two composition tests riding on Rule A's count
+// fix, four tests), and — added at review round 1, Important 1 — a
+// NON-ADJACENT repeated alias, where BASE's row ORDER (not its count or
+// content) was wrong (two tests: `['a','b','a']`'s explicit shape pin, plus
+// the same input's entry in the length-invariant table below, which is
+// itself a CONTROL for count specifically — BASE gets that shape's length
+// right, only its order is wrong, which is why order needed its own explicit
+// pin rather than riding the length table). The other FIVE are CONTROL
+// rows — consistent / alien-alias (its table entry AND its own explicit
+// test) / no-seats / claude-tail — confirming Rule A is a byte-identical
+// no-op there, not merely asserting it. Nothing in the tree before this task
+// could tell "row dropped" from "row present but alias-keyed", "MIXED" from
+// "none seated", or bench order from alias-grouped order, because nothing
+// produced those shapes; the control rows are a deliberate exception to
+// that, not a violation of it. Where a mutant here reds an OLDER pin as well
+// as this task's new ones, the record says so by name.
 
 // ── on src/council/ledger.js :: buildLedgerRows (the join key) ───────────────
 
@@ -403,16 +433,25 @@
   // a genuinely different property from the one EXPANDONCE (below) guards; the
   // two do not overlap in what a shrink would mean.
   //
-  // RE-RUN at this task. RED: 15 tests / 3 suites — GREW from 12/3 (which was
-  // 11/2 before fix round 1). Suite count unchanged; two suites gained tests.
-  //   tests/council/street-cred.test.js (8, up from 6) — both original
-  //     `credSeats` expansion cases ("a seated alias expands ONCE …", "the
-  //     `claude` tail gets an alias entry …"), three of the `computeStreetCred`
-  //     seated cases, "seat table but alias-only rankings …", AND — new at
-  //     this task — "partial: the SECOND occurrence is no longer dropped …"
+  // RE-RUN at this task (twice — once at the substantive commit, once more at
+  // review round 1 after `['a','b','a']` was added). RED: 16 tests / 3 suites
+  // — GREW from 15/3 (12/3 before that, 11/2 before fix round 1). Suite count
+  // unchanged; street-cred.test.js gained one more test.
+  //   tests/council/street-cred.test.js (9, up from 8) — both original
+  //     `credSeats` per-occurrence cases ("a seated alias: each occurrence
+  //     takes its OWN seat …" — RETITLED at review round 1, Minor 1: its old
+  //     title named the pre-Rule-A "expands ONCE" mechanism, which this very
+  //     mutant reverts to — "the `claude` tail gets an alias entry …"), three
+  //     of the `computeStreetCred` seated cases, "seat table but alias-only
+  //     rankings …", "partial: the SECOND occurrence is no longer dropped …"
   //     and "over-specified: the surplus registered seat no longer invents an
-  //     extra row": both assert EXACT seat ids (`a#1`), which this mutant
-  //     erases from every row.
+  //     extra row" (both assert EXACT seat ids, which this mutant erases from
+  //     every row), AND — new at review round 1, Important 1 — "non-adjacent
+  //     repeat: row ORDER follows `models` …": with every row alias-keyed this
+  //     mutant erases the `a#1`/`a#2` content the order pin also checks, so it
+  //     reds for a CONTENT reason even though this mutant does not itself
+  //     touch order (contrast EXPANDONCE below, which reds it for the order
+  //     reason).
   //   tests/council/seat-parity-ondisk.test.js (5, unchanged) — all five
   //     seat-parity tests that read a twin bench off disk.
   //   tests/council/ledger.test.js (2, up from 1) — the fix-round-1 "the same
@@ -455,30 +494,60 @@
    * drop/invent pair this mutant exists to pin, and — unlike ALIASDRIVER —
    * this mutation DOES change the row count on the two shapes that matter.
    *
-   * RED: 6 tests / 2 suites.
-   *   tests/council/street-cred.test.js — "credSeats — Rule A: exactly one row
-   *     per `models` entry" — the `partial` and `over-specified` length-
-   *     invariant cases from the `test.each` table, PLUS "partial: the SECOND
-   *     occurrence is no longer dropped …" and "over-specified: the surplus
-   *     registered seat no longer invents an extra row" (both length AND exact
-   *     shape fail).
-   *   tests/council/ledger.test.js — "Rule A x Rule B composition …" — both
-   *     tests: "the unregistered twin position is NOT dropped …" (streetCred
-   *     reverts to 2 rows, not 3) and "with NO orderSeats either, the
-   *     unregistered position reads the SAME collapsed number as its twin …"
-   *     (same — 2 rows, not 3).
+   * RE-RUN at review round 1 (Important 1, after `['a','b','a']` was added).
+   * RED: 7 tests / 2 suites — GREW from 6/2. Suite count unchanged.
+   *   tests/council/street-cred.test.js (5, up from 3) — "credSeats — Rule A:
+   *     exactly one row per `models` entry" — the `partial` and
+   *     `over-specified` length-invariant cases from the `test.each` table,
+   *     "partial: the SECOND occurrence is no longer dropped …" and
+   *     "over-specified: the surplus registered seat no longer invents an
+   *     extra row" (both length AND exact shape fail), AND — new at review
+   *     round 1 — "non-adjacent repeat: row ORDER follows `models` …": this
+   *     mutant reverts to the exact pre-fix algorithm whose accidental
+   *     grouping (`expanded.has(m) -> continue`) produced the wrong order in
+   *     the first place, so on `['a','b','a']` it reproduces that order
+   *     byte-for-byte (`['a#1','a#2','b']` vs. the pin's `['a#1','b','a#2']`)
+   *     — a genuine ORDER red, not a content or count one. ⚠️ Its OWN
+   *     `test.each` row for this shape does NOT red: EXPANDONCE preserves
+   *     `rows.length === 3` here (MEASURED — the pre-fix algorithm only drops
+   *     or invents when the table's id COUNT for an alias disagrees with its
+   *     repeat count in `models`, and this shape's table is fully registered),
+   *     which is exactly why the length table alone was not enough and the
+   *     review asked for an explicit order pin.
+   *   tests/council/ledger.test.js (2, unchanged) — "Rule A x Rule B
+   *     composition …" — both tests: "the unregistered twin position is NOT
+   *     dropped …" (streetCred reverts to 2 rows, not 3) and "with NO
+   *     orderSeats either, the unregistered position reads the SAME collapsed
+   *     number as its twin …" (same — 2 rows, not 3).
    *
-   * ⚠️ WHY NOTHING ELSE REDS. On every case this task did NOT change
-   * (consistent / alien-alias / no-seats / claude-tail) the pre-fix algorithm
-   * and Rule A produce IDENTICAL output — measured in the brief before this
-   * task started, and re-confirmed here by the fact that no OLDER pin (every
-   * `computeStreetCred` seated test, all five seat-parity tests, the
-   * fix-round-1 ledger quadrant test) appears in this red set. Contrast
-   * ALIASDRIVER just above, which reds every one of those by nulling every
-   * seat regardless of case — the two mutants are complementary rather than
-   * redundant: ALIASDRIVER catches "is the table consulted at all",
-   * EXPANDONCE catches "is the row COUNT right when the table disagrees with
-   * `models`".
+   * ⚠️ NO NEW MUTANT FOR ORDER — REASONED, THEN VERIFIED, NOT REFLEXIVE
+   * (review round 1, Important 1, item 3). EXPANDONCE already reverts
+   * `credSeats` to the pre-fix algorithm wholesale, and that algorithm IS the
+   * thing whose accidental first-occurrence grouping produced BASE's order —
+   * there is no narrower mutation that isolates order-only, because Rule A's
+   * new loop has no separate "ordering" step to mutate: the order falls
+   * straight out of iterating `models` and pushing one row per iteration, the
+   * SAME mechanism that gives the count invariant. A dedicated order mutant
+   * would necessarily either (a) collapse to the same wholesale revert
+   * EXPANDONCE already is, or (b) invent an unmotivated bug (e.g. reversing
+   * push order) with no prior-code basis, which the review explicitly warned
+   * against adding reflexively. MEASURED, not assumed: applied and re-ran the
+   * full suite with EXPANDONCE in place after adding the order pin — it reds,
+   * confirmed above.
+   *
+   * ⚠️ WHY NOTHING ELSE REDS. On every case NEITHER this task NOR review round
+   * 1 changed (consistent / alien-alias / no-seats / claude-tail) the pre-fix
+   * algorithm and Rule A produce IDENTICAL output, in CONTENT and in ORDER —
+   * measured in the brief before this task started for the first four, and
+   * now separately measured for the fifth (non-adjacent repeat) rather than
+   * assumed to share their fate. No OLDER pin (every `computeStreetCred`
+   * seated test, all five seat-parity tests, the fix-round-1 ledger quadrant
+   * test) appears in this red set. Contrast ALIASDRIVER just above, which
+   * reds every one of those by nulling every seat regardless of case — the
+   * two mutants are complementary rather than redundant: ALIASDRIVER catches
+   * "is the table consulted at all", EXPANDONCE catches "is the row COUNT —
+   * and, as of review round 1, the row ORDER — right when the table
+   * disagrees with `models`, or a repeated alias is non-adjacent".
    *
    * NO PIN THAT PRE-DATES THIS TASK REDS.
    */
@@ -570,15 +639,35 @@
   // the run-directory path, and is identical once those are normalised.
   //
   // ⚠️ NOT RE-RUN at this task (v4.8 follow-up), by scope rather than by
-  // oversight, and the reason is structural rather than assumed: Rule A and
-  // Rule B are BOTH measured no-ops on every case an engine-produced document
-  // can be in — `consistent` (Rule A) and every case unmodified by Rule B —
-  // because `run-assemble.js :: buildTallyInput` is the one `appendRun` call
-  // site (of three) where `meta.seats`/`meta.models` and
-  // `runStats[].seat`/`streetCred[].seat` are built from the SAME `seats[]`
-  // table in the same pass (credSeats' own docblock: "two of appendRun's three
-  // call sites feed hand-assembled input no seat machinery touches" — this is
-  // the third). The `partial`/`over-specified`/MIXED shapes this task fixes
-  // are unreachable from that path by construction, not merely unobserved on
-  // this one fixture, so a byte-identity re-run would re-prove a premise this
-  // task did not touch rather than test anything Rule A or Rule B changed.
+  // oversight, and CORRECTED at review round 1 (Important 1) — the ORIGINAL
+  // reasoning here overclaimed, the same way the plan's brief §0.4 did, and
+  // for the identical failure: "measured no-op" was checked on ADJACENT
+  // repeats only and generalised to "every case", unchecked.
+  //
+  // What is actually true, and what this specific proof's SUBJECT means it
+  // does not need: the bench this proof drives is `['gemini','gpt','qwen']` —
+  // three DISTINCT aliases, no repeat at all — so it is insensitive to both
+  // Rule A defect classes by construction (a row can only be dropped,
+  // invented, or reordered relative to a SIBLING occurrence of the same
+  // alias, and this bench has none). That was true when T3.3 wrote it, is
+  // still true now, and needs no re-proof.
+  //
+  // What is NOT true, corrected rather than left standing: neither rule is a
+  // no-op on every engine-producible shape. `run-assemble.js ::
+  // buildTallyInput` DOES keep `meta.seats`/`meta.models` and
+  // `runStats[].seat`/`streetCred[].seat` in agreement by construction (the
+  // premise the composition proof above still relies on, unaffected), but
+  // agreement in CONTENT is not agreement in ORDER — engine-shaped fuzzing (a
+  // repeated alias, adjacent or not, over a bench `buildSeats` accepts
+  // without complaint) found 2178 cases, of which 1368 diverged from BASE:
+  // ALL 1368 were ORDER-only (a non-adjacent repeated alias — the
+  // EXPANDONCE record above has the mechanism and the `['a','b','a']` proof),
+  // ZERO were content or length divergences, and the RULING (owner, review
+  // round 1) is to accept the new order, not restore BASE's. A twin bench
+  // WOULD be sensitive to this — `['gemini','gemini','gpt']` interrupted by a
+  // third alias, for instance — but no fixture in this proof, this file, or
+  // seat-parity-ondisk.test.js drives one end to end through the real engine,
+  // so this specific gap (order byte-identity on a REPEATED-alias engine
+  // bench) is disclosed rather than closed. Filed, not silently left as if it
+  // read "no-op on every shape" — which is exactly the sentence this
+  // correction replaces.

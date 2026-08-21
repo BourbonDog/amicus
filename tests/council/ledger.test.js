@@ -1067,11 +1067,17 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     }
 
     test('the unregistered twin position is NOT dropped from streetCred, and its ONE recoverable number reaches the ledger', () => {
-      // orderSeats DOES distinguish a#1 from a#2 here, but credSeats keys the
-      // second row by the bare alias 'a' (the table never registered a#2), so
-      // that row's rankPositions lookup finds no 'a#1'/'a#2' key to fall back
-      // to and every judge is skipped -> withSelf/peersOnly are honestly null,
-      // not borrowed from the twin. Rule A: still 3 rows for 3 models.
+      // orderSeats DOES distinguish a#1 from a#2 here, but credSeats already
+      // decided this occurrence gets NO seat (the table never registered
+      // a#2), so its `key` is the bare alias 'a' — the SAME string as `model`
+      // for this row. `computeStreetCred`'s lookup is `j.pos.has(key) ?
+      // j.pos.get(key) : j.pos.get(model)`; with key === model === 'a' both
+      // branches probe the identical key. `rankPositions` never populates a
+      // bare 'a' entry in THIS fixture (every 'a'-labelled order slot names a
+      // real seat id), so that one missing key — not a missing 'a#1'/'a#2' —
+      // is what every judge misses on, and every judge is skipped ->
+      // withSelf/peersOnly are honestly null, not borrowed from the twin.
+      // Rule A: still 3 rows for 3 models.
       const record = partialRecord(SEATED_RANKINGS);
       expect(record.streetCred).toHaveLength(3);
       expect(record.streetCred.map(s => s.seat)).toEqual(['a#1', undefined, undefined]);
