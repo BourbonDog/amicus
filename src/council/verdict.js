@@ -144,14 +144,33 @@ function buildVerdict(record, decisions = [], opts = {}) {
       if (f.debate) { out.debate = f.debate; }   // v4.1: additive debate decoration carry-through (spec §5.6)
       return out;
     }),
-    // v4.8 T3.2: this literal is CLOSED (§3.4 precedent above) — carry `seat`
-    // through NOW, emit-when-SET (mirroring tally.js's own runStats/adjudications
-    // carry-through, not a fresh id!==alias decision — computeStreetCred, T3.3,
-    // is the producer that decides), so a future row that carries one is never
-    // silently stripped here. Inert today: computeStreetCred emits no `seat` yet,
-    // so every row's `s.seat` is undefined and this document stays byte-identical.
+    // v4.8 fix round 1 (review finding): emit-when-DIFFERENT, adapted to this
+    // row's flat {model, seat} shape — model is the alias, seat is the seat
+    // id, so on a unique-alias bench they are byte-equal and nothing is
+    // emitted (same semantics as `seat.id !== seat.alias` one layer up,
+    // run-stats-entry.js:64). NOT a plain pass-through like `raiserSeat`
+    // above (:141) — that field's upstream producer already holds a real
+    // {id, alias} seat OBJECT at its own decision point (run.js:202:
+    // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
+    // through here is safe. T3.3's computeStreetCred has no such object at
+    // this point, only a flat row (tally.js's current signature passes it
+    // bare alias strings), so its plausible naive form sets `.seat` on
+    // every row unconditionally — a pass-through here would then leak
+    // `seat` onto every unique-alias verdict.json, silently, since nothing
+    // else guards this closed literal. This check is deliberate defense in
+    // depth: buildVerdict is also reachable on externally-supplied records
+    // that never touched computeStreetCred in-process at all —
+    // amicus_verdict's MCP `record` param is `z.record(z.any())`
+    // (mcp-tools.js:461), fully permissive — so this literal's own
+    // byte-identity cannot be contingent on computeStreetCred alone; this
+    // file's own tests exercise that exact shape (hand-built rec objects,
+    // never calling tally()). tally.json keeps its own pin regardless — a
+    // genuine T3.3 producer bug still reds at seat-parity-ondisk.test.js —
+    // this check exists so verdict.json is never the ONE document a T3.3 bug
+    // (or an externally-supplied record) masks. Still inert today:
+    // computeStreetCred emits no `seat` at all yet.
     streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly,
-      ...(s.seat ? { seat: s.seat } : {}) })),
+      ...(s.seat && s.seat !== s.model ? { seat: s.seat } : {}) })),
     runStats: record.runStats,
     tierCounts: record.tierCounts,
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic

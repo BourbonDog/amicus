@@ -165,6 +165,22 @@ describe('v4.8 T3.2: streetCred[].seat survives the closed verdict literal', () 
     expect('seat' in v.streetCred[0]).toBe(false);
   });
 
+  // Fix round 1 (review finding): the distinguishing fixture that was
+  // missing — a row where seat === model (the UNIQUE-ALIAS shape a real
+  // producer emits) must emit NO seat key. Neither test above can tell
+  // emit-when-DIFFERENT apart from emit-when-SET: the first has no seat at
+  // all, the one above has a seat that already differs from model. This is
+  // the one that can — a mutant reverting to emit-when-SET reds THIS test
+  // (verified: see the fix-round-1 note in the module docblock above the
+  // streetCred literal).
+  test('a row whose seat EQUALS its model (unique-alias shape) emits NO seat key', () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek' }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1 });
+    expect('seat' in v.streetCred[0]).toBe(false);
+  });
+
   test('the real producer chain (unique-alias fixture at the top of this file) stays byte-identical', () => {
     // `record` is tally(avInput)'s OWN output — computeStreetCred emits no
     // seat yet (T3.3), so this is the byte-identity control the whole task is
