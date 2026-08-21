@@ -16,6 +16,12 @@
  * ⚠️ NOT re-exported from ./ledger: none of the three is used outside the row
  * build, so adding them to that module's export list would only risk the
  * AUTO:modules truncation its own comment warns about. Tests import them here.
+ *
+ * ⚠️ Two named mutants guard these, alongside LEDGERALIAS on ledger.js's join
+ * key. Each mutation and its MEASURED red set is recorded with the rest:
+ * tests/council/street-cred-mutants.js :: CHAIRWINS guards benchLegs, and
+ * tests/council/street-cred-mutants.js :: CREDALIAS guards credFor. RE-RUN
+ * them, never renumber them.
  */
 
 /**

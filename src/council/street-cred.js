@@ -12,6 +12,14 @@
  * ⚠️ REQUIRE-FREE by design, the ./seats · ./run-stats-entry · ./peer-split
  * precedent: this is a leaf, so the dependency runs one way (tally.js ->
  * street-cred.js) and cannot cycle.
+ *
+ * ⚠️ SIX named mutants guard the expressions below — RANKALIAS, ALIASSELF,
+ * JUDGEALIAS, SEATALWAYS, ALIASDRIVER and NOFALLBACK. Each mutation and its
+ * MEASURED red set is recorded beside the others, in
+ * tests/council/street-cred-mutants.js :: RANKALIAS and its five siblings
+ * there, following the tests/council/peer-split-mutants.js :: SPLITDROP
+ * precedent. RE-RUN them, never renumber them, whenever anything here or any
+ * of its consumers changes.
  */
 
 function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }

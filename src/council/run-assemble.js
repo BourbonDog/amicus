@@ -181,7 +181,8 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // tally-input.json, tally.json and tally-provisional.json on every run that
   // has ever happened. `.flat()` is depth-1 because a tie group is the only
   // nesting rankingToOrder can produce (anonymize.js :: rankingToOrder maps
-  // one level of `Array.isArray(slot)`).
+  // one level of `Array.isArray(slot)`). The named mutant that guards this
+  // predicate is tests/council/street-cred-mutants.js :: EMITSET.
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order,
     ...(Array.isArray(j.orderSeats) && j.orderSeats.flat().some(Boolean)
       ? { orderSeats: j.orderSeats } : {}),

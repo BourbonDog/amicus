@@ -114,7 +114,8 @@ const { benchLegs, credFor } = require('./ledger-join');
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
   // Keyed by SEAT where the row has one, alias otherwise — the hazard, the
-  // emit rule and the fallback are in ledger-join.js :: credFor.
+  // emit rule and the fallback are in ledger-join.js :: credFor. Named mutant
+  // LEDGERALIAS, tests/council/street-cred-mutants.js :: LEDGERALIAS.
   const sc = new Map(streetCred.map(s => [s.seat || s.model, s]));
   // Only allowlisted roles (joinsLedger, above) may join, so a non-primary
   // row-per-launch row can never contribute a model's role/conformance.
