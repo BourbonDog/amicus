@@ -85,6 +85,12 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
   // entirely, so the test would pass at HEAD regardless of whether seatOf does anything. That
   // was measured, not reasoned: an earlier draft did exactly this and was caught green at HEAD
   // (with zero production code changed) before it shipped.
+  //
+  // Named mutant LIVESEATBLIND (src/workspace/live-normalize.js :: seatOf, delete the `seat:
+  // leg.seat || null,` line): measured to red BOTH this test (received `['a#1','a#2']`, back to
+  // the pre-fix behaviour) and live-normalize.test.js's "normalizeLive carries each leg seat onto
+  // its live seat row (v4.8 R5)" (received `undefined`) — a red set of 2. Hand-reverted and
+  // byte-verified clean via `git diff --stat` against the T4.5 commit.
   test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5)', () => {
     // Derive liveSeats through the REAL normalizeLive so seatOf — the function this
     // task changes — is genuinely in the path. Hand-building `.seat` here would take
