@@ -977,6 +977,139 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     });
   });
 
+  /**
+   * v4.8 follow-up (2026-08-21) — council finding 3 on PR #176, Rule B:
+   * `credFor` is ALL-OR-NOTHING. A group is either FULLY identified — every
+   * row carries a seat that resolves in `sc` — and uses those seats, or it is
+   * not, and reads the alias mean. Before this, a MIXED group (one seated
+   * row, one not) took whichever seats DID resolve and silently discarded the
+   * rest, so it read NARROWER than a group with NO seat information at all —
+   * partial information produced a narrower read than no information, which
+   * is backwards. The invariant: MIXED reads the SAME as none-seated.
+   */
+  describe('Rule B — MIXED groups read the SAME as none-seated, never narrower (v4.8 follow-up)', () => {
+    const cred = [
+      { model: 'a', withSelf: 1, peersOnly: 1, seat: 'a#1' },
+      { model: 'a', withSelf: 3, peersOnly: 5, seat: 'a#2' },
+    ];
+    function ledgerRow(runStats) {
+      return buildLedgerRows(rec({ models: ['a'], streetCred: cred, runStats }))[0];
+    }
+
+    test('one seated row + one unseated row in the SAME pair group == the alias mean, not the seated row alone', () => {
+      const mixed = ledgerRow([
+        rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+        rsRow({ model: 'a', resolvedModel: 'v/a' }),          // no seat — same pair group
+      ]);
+      const none = ledgerRow([
+        rsRow({ model: 'a', resolvedModel: 'v/a' }),
+        rsRow({ model: 'a', resolvedModel: 'v/a' }),
+      ]);
+      // MEASURED at BASE: mixed gave {withSelf:1, peersOnly:1} — the seated
+      // row ALONE — while none gave {2,3}. Narrower than no information.
+      expect(mixed.streetCredWithSelf).toBe(none.streetCredWithSelf);
+      expect(mixed.streetCredPeersOnly).toBe(none.streetCredPeersOnly);
+      expect(mixed).toMatchObject({ streetCredWithSelf: 2, streetCredPeersOnly: 3 });   // mean(1,3) / mean(1,5)
+    });
+
+    test('both rows carry A seat, but only one of them RESOLVES: still not fully identified', () => {
+      // Reachable whenever `streetCred[].seat` and `runStats[].seat` disagree
+      // about which positions are seated — independent producers, per
+      // street-cred.js :: credSeats' own "joined BY VALUE" docblock. "Every row
+      // carries a seat that RESOLVES", not merely "every row carries A seat".
+      const rows = buildLedgerRows(rec({
+        models: ['a'], streetCred: cred,
+        runStats: [
+          rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+          rsRow({ model: 'a', seat: 'a#9', resolvedModel: 'v/a' }),   // sc has no 'a#9'
+        ],
+      }));
+      // MEASURED at BASE: {1,1} — the ONE seat that happened to resolve.
+      expect(rows[0]).toMatchObject({ streetCredWithSelf: 2, streetCredPeersOnly: 3 });
+    });
+  });
+
+  /**
+   * v4.8 follow-up, brief §0.5 — the two rules COMPOSE, and that composition
+   * is REASONED, not measured, until it is run end to end. Rule A can now
+   * emit an alias-keyed row (`seat: null`) for a bench position the seat
+   * table does not cover; this measures what happens to THAT row once it
+   * reaches the ledger join, through the REAL tally() -> buildLedgerRows()
+   * pipeline — not two isolated unit tests of credSeats and credFor.
+   */
+  describe('Rule A x Rule B composition, end to end through tally() (v4.8 follow-up, brief §0.5)', () => {
+    // `meta.seats` names only a#1 — one id short of the two 'a' occurrences in
+    // `meta.models`. `rankings[].orderSeats` is a channel INDEPENDENT of
+    // `meta.seats` (street-cred.test.js's own theme) and distinguishes both
+    // physical positions regardless — the shape a hand-assembled or MCP
+    // caller can produce: a seat table that under-registers a repeated alias
+    // while the rankings still carry full per-position data.
+    const PARTIAL_SEATS = [
+      { id: 'a#1', alias: 'a', role: 'seat', lens: null, position: 1 },
+      { id: 'b', alias: 'b', role: 'seat', lens: null, position: 2 },
+    ];
+    const SEATED_RANKINGS = [
+      { judge: 'a', seat: 'a#1', order: ['a', 'a', 'b'], orderSeats: ['a#1', 'a#2', null] },
+      { judge: 'a', seat: 'a#2', order: ['b', 'a', 'a'], orderSeats: [null, 'a#1', 'a#2'] },
+      { judge: 'b', order: ['a', 'b', 'a'], orderSeats: ['a#1', null, 'a#2'] },
+    ];
+    function partialRecord(rankings) {
+      return tally({
+        meta: { runId: 'r1', date: '2026-08-01', runType: 'headless',
+          models: ['a', 'a', 'b'], chair: 'c', claudeInCouncil: false, seats: PARTIAL_SEATS },
+        findings: [], adjudications: [], rankings,
+        runStats: [
+          rsRow({ model: 'a', seat: 'a#1', resolvedModel: 'v/a' }),
+          rsRow({ model: 'a', seat: 'a#2', resolvedModel: 'v/a' }),
+          rsRow({ model: 'b', resolvedModel: 'v/b' }),
+        ],
+      });
+    }
+
+    test('the unregistered twin position is NOT dropped from streetCred, and its ONE recoverable number reaches the ledger', () => {
+      // orderSeats DOES distinguish a#1 from a#2 here, but credSeats keys the
+      // second row by the bare alias 'a' (the table never registered a#2), so
+      // that row's rankPositions lookup finds no 'a#1'/'a#2' key to fall back
+      // to and every judge is skipped -> withSelf/peersOnly are honestly null,
+      // not borrowed from the twin. Rule A: still 3 rows for 3 models.
+      const record = partialRecord(SEATED_RANKINGS);
+      expect(record.streetCred).toHaveLength(3);
+      expect(record.streetCred.map(s => s.seat)).toEqual(['a#1', undefined, undefined]);
+      expect(record.streetCred[0].withSelf).toBeCloseTo(4 / 3);
+      expect(record.streetCred[0].peersOnly).toBe(1.5);
+      expect(record.streetCred[1]).toMatchObject({ model: 'a', withSelf: null, peersOnly: null });
+
+      // Rule B: the runStats group's two seats are 'a#1' (resolves in `sc`,
+      // since only that streetCred row carries a `.seat`) and 'a#2' (does
+      // NOT — Rule A gave that bench position no seat at all). NOT fully
+      // identified -> the alias mean over BOTH streetCred rows, with the null
+      // half skipped by meanCred -> exactly the one real number, not zero and
+      // not a crash.
+      const rows = buildLedgerRows(record);
+      const row = rows.find(r => r.model === 'a');
+      expect(row.streetCredWithSelf).toBeCloseTo(4 / 3);
+      expect(row.streetCredPeersOnly).toBe(1.5);
+    });
+
+    test('with NO orderSeats either, the unregistered position reads the SAME collapsed number as its twin — not null, not dropped', () => {
+      // The opposite edge: neither channel distinguishes the two 'a' bench
+      // positions, so credSeats' alias-keyed row and the seated row it sits
+      // beside both resolve every judge through the bare alias and end up
+      // numerically identical — exactly the pre-T3.2 collapse, now emitted as
+      // TWO rows instead of silently dropping one.
+      const aliasOnlyRankings = SEATED_RANKINGS.map(r => ({ judge: r.judge, order: r.order }));
+      const record = partialRecord(aliasOnlyRankings);
+      expect(record.streetCred).toHaveLength(3);
+      expect(record.streetCred[0].withSelf).toBeCloseTo(record.streetCred[1].withSelf);
+      expect(record.streetCred[1].withSelf).not.toBeNull();
+
+      const rows = buildLedgerRows(record);
+      const row = rows.find(r => r.model === 'a');
+      expect(row.streetCredWithSelf).toBeCloseTo(record.streetCred[0].withSelf);
+      expect(row.streetCredPeersOnly).toBeCloseTo(record.streetCred[0].peersOnly);
+    });
+  });
+
   test('T13a — ledger.js LOCAL conformance rank agrees with run-assemble, table AND pairwise', () => {
     // ⚠️ Council A1: a pairwise sweep over a HARDCODED value list cannot catch
     // the drift it exists to catch. Adding a level to run-assemble's table and

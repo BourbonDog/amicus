@@ -90,6 +90,74 @@ describe('credSeats — the driver, joined BY VALUE', () => {
   });
 });
 
+/**
+ * v4.8 follow-up (2026-08-21) — council findings 1+2 on PR #176. Row count
+ * followed `seats` wherever it disagreed with `models`: a row DROPPED when the
+ * table registered FEWER ids for a repeated alias than `models` repeats it
+ * ("partial"), and a row INVENTED when the table registered MORE ids for an
+ * alias than `models` repeats it ("over-specified"). Both are reachable only
+ * on the two hand-assembled `appendRun` paths — the engine's own `seats[]` and
+ * `models` always agree by construction — but `mcp-tools.js ::
+ * amicus_council_tally` declares `meta.seats` independently of `meta.models`
+ * and `cli-handlers-council.js` passes user JSON through verbatim, so nothing
+ * stops the two from disagreeing on that input.
+ *
+ * Rule A: `seats` NAMES rows, it never changes how many there are. The k-th
+ * occurrence of alias `m` takes the k-th registered seat id for `m`, else no
+ * seat (an alias-keyed row, `seat: null` — NOT a dropped row).
+ * `rows.length === models.length`, always — pinned below as ONE invariant
+ * over a case list, not as N near-duplicate example tests.
+ */
+describe('credSeats — Rule A: exactly one row per `models` entry (v4.8 follow-up)', () => {
+  const PARTIAL_SEATS = [{ id: 'a#1', alias: 'a', role: 'seat', lens: null, position: 1 }];
+  const OVER_SEATS = [
+    { id: 'a#1', alias: 'a', role: 'seat', lens: null, position: 1 },
+    { id: 'a#2', alias: 'a', role: 'seat', lens: null, position: 2 },
+  ];
+  // An alias the table names that never appears in `models` at all — it has no
+  // occurrence to attach to, so it can only ever be inert.
+  const ALIEN_SEATS = [{ id: 'z#1', alias: 'z', role: 'seat', lens: null, position: 1 }];
+
+  const CASES = [
+    ['consistent — table registers exactly as many ids as models repeats', ['a', 'a', 'b'], SEATS],
+    ['partial — table under-registers a repeated alias (was: DROPPED a row)', ['a', 'a', 'b'], PARTIAL_SEATS],
+    ['over-specified — table over-registers a non-repeated alias (was: INVENTED a row)', ['a', 'b'], OVER_SEATS],
+    ['alien alias — table names an alias absent from models', ['a', 'b'], ALIEN_SEATS],
+    ['no seats table at all', ['x', 'y'], undefined],
+    ['claude tail — meta.seats never names claude', ['a', 'a', 'claude'], SEATS],
+  ];
+
+  test.each(CASES)('%s: rows.length === models.length', (_label, models, seats) => {
+    expect(credSeats(models, seats)).toHaveLength(models.length);
+  });
+
+  test('partial: the SECOND occurrence is no longer dropped — it gets an alias-keyed row', () => {
+    // MEASURED at BASE: credSeats(['a','a','b'], PARTIAL_SEATS) was only 2 rows
+    // — the second 'a' vanished once `expanded.has('a')` was already true.
+    expect(credSeats(['a', 'a', 'b'], PARTIAL_SEATS)).toEqual([
+      { model: 'a', key: 'a#1', seat: 'a#1' },
+      { model: 'a', key: 'a', seat: null },      // table exhausted -> alias-keyed, not dropped
+      { model: 'b', key: 'b', seat: null },
+    ]);
+  });
+
+  test('over-specified: the surplus registered seat no longer invents an extra row', () => {
+    // MEASURED at BASE: credSeats(['a','b'], OVER_SEATS) was 3 rows — the
+    // single 'a' occurrence expanded into BOTH of its table's registered ids.
+    expect(credSeats(['a', 'b'], OVER_SEATS)).toEqual([
+      { model: 'a', key: 'a#1', seat: 'a#1' },   // only the FIRST occurrence's own seat
+      { model: 'b', key: 'b', seat: null },
+    ]);
+  });
+
+  test('alien alias: an unused table entry is inert either way', () => {
+    expect(credSeats(['a', 'b'], ALIEN_SEATS)).toEqual([
+      { model: 'a', key: 'a', seat: null },
+      { model: 'b', key: 'b', seat: null },
+    ]);
+  });
+});
+
 describe('computeStreetCred — one row per SEAT (SI-20 sites 2+3)', () => {
   const seated = computeStreetCred(SEATED_RANKINGS, ['a', 'a', 'b'], SEATS);
 
