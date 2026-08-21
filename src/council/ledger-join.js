@@ -142,8 +142,8 @@ function meanCred(rows, field) {
  * case already relied on. Killed by the named mutant
  * tests/council/street-cred-mutants.js :: ANYSEATED, which reverts the gate
  * to its pre-fix "any resolves" form and reproduces the MIXED regression
- * above; CREDALIAS (below the function) is the narrower mutant that the seat
- * lookup can never win AT ALL, fully-seated groups included.
+ * above; CREDALIAS (below the function) is the narrower mutant forcing the
+ * seat lookup to never win AT ALL, fully-seated groups included.
  *
  * ⚠️ WHY (2) IS A FILTER AND NOT AN ALIAS KEY IN `sc`. Fix round 1, Important 1
  * — this function REGRESSED that quadrant and the regression was measured, not

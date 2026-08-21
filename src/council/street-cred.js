@@ -81,7 +81,10 @@ function rankPositions(order, orderSeats) {
  * declares `meta.seats` independently of `meta.models` and
  * `cli-handlers-council.js` passes user JSON through verbatim — never on the
  * engine's own output, where `seats[]` and `models` always agree by
- * construction (preflightSeats rejects a bench that could not).
+ * construction: `seats.js :: buildSeats` is `aliases.map(...)` over the same
+ * bench array, so it is structurally one-to-one with the bench and cannot
+ * itself over- or under-register an alias, independent of anything
+ * `preflightSeats` separately rejects (id collisions, critic placement).
  *
  * FIX: the k-th occurrence of alias `m` in `models` takes the k-th id
  * `byAlias.get(m)` registered for it, in table order. Once that list is
