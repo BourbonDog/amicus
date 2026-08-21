@@ -39,6 +39,7 @@
           "model": { "type": ["string", "null"], "description": "Resolved executable id (metadata.model)." },
           "modelInput": { "type": ["string", "null"], "description": "Council alias (run.json bench/chair/critic/lenses are keyed on this, not `model`); null when the leg's metadata.json has not been patched with it yet (F36)." },
           "role": { "type": ["string", "null"], "description": "'seat' | 'critic' | 'lens:<slug>' | 'chair', derived via roleFor keyed on modelInput (chair via the owning stage's name instead, F34); null when modelInput is unknown." },
+          "seat": { "type": ["string", "null"], "description": "v4.8 R5, optional. This leg's seat id (`alias#N`) when the bench repeats an alias, else null. Written at launch by src/sidecar/fanout-leg.js :: runSingleAttempt from the per-wave roster and read back by src/observe/council-legs.js :: buildLegRow. Present on every leg row, including a truthful null — unlike metadata.json's own `seat` key, which is absent (not null) on a unique-alias bench: `buildLegRow`'s base row literal is unconditional and already emits nulls the same way for `model`/`modelInput`, so this field matches that literal rather than the absent-when-unset convention `usageError` above uses. The leg-row `items` object declares no `additionalProperties: false`, so an additive field was already accepted here — this documents the shape rather than changing what is accepted." },
           "status": { "type": "string" },
           "messages": { "type": "number" },
           "stage": { "type": "string" },
