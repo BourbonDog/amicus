@@ -38,9 +38,10 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
  *   producer uses (run-stats-entry.js:64: `seat.id !== seat.alias`). On a
  *   unique-alias bench, or when `seats` is omitted entirely, `seatMap` is
  *   `{}` — so no pre-T3.2 caller (or consumer of just `{entries, labelMap}`)
- *   can observe a change. This task wires `seatMap` only as far as
- *   `rankingToOrder`'s `orderSeats` below; consuming it into street cred is
- *   T3.3's.
+ *   can observe a change. T3.2 wired `seatMap` only as far as
+ *   `rankingToOrder`'s `orderSeats` below; consuming it into street cred was
+ *   T3.3's, and T3.3 SHIPPED — street-cred.js :: computeStreetCred now keys on
+ *   it, so this channel has a live consumer rather than a forecast one.
  */
 function assignLabels(models, seats) {
   if (!Array.isArray(models) || models.length === 0 || models.length > LETTERS.length) {
@@ -116,9 +117,12 @@ function toGlobalFindings(letter, raiser, findings, raiserSeat) {
  *   (label) lookup mirroring `order`'s own resolution, never a positional
  *   join across two independently-sourced arrays. `null` marks a slot whose
  *   label has no distinguishing seat (unique-alias bench, or no `seatMap`
- *   given at all — every pre-T3.2 call site). This task wires `orderSeats` no
- *   further than its `judgeResults[]` call site in run-stage2.js; seat-keying
- *   rankPositions/computeStreetCred with it is T3.3's.
+ *   given at all — every pre-T3.2 call site). T3.2 wired `orderSeats` no
+ *   further than its `judgeResults[]` call site in run-stage2.js. T3.3 carried
+ *   it one hop on, to `rankings[]` in run-assemble.js :: buildTallyInput, and
+ *   seat-keyed street-cred.js :: rankPositions with it — emitting the field
+ *   only when it holds a non-null, because THIS function returns an all-null
+ *   parity shape rather than an absence.
  */
 function rankingToOrder(ranking, labelMap, seatMap) {
   const errors = [];

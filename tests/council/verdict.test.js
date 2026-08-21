@@ -141,11 +141,16 @@ describe('v4.8 PR4c §3.4: findings[] carry raiserSeat and sameModelCorroboratio
 });
 
 // v4.8 T3.2: verdict.js's CLOSED streetCred literal must carry a seat
-// through, or a future producer (computeStreetCred, T3.3) loses it silently —
-// found by measurement, filed nowhere before this task (mirrors the §3.4
-// raiserSeat/sameModelCorroboration precedent above). computeStreetCred does
-// not emit `.seat` yet, so these rows are hand-built (same idiom as :90-94
-// above) to prove the CARRY-THROUGH in isolation from its future producer.
+// through, or its producer (computeStreetCred) loses it silently — found by
+// measurement, filed nowhere before that task (mirrors the §3.4
+// raiserSeat/sameModelCorroboration precedent above). These rows stay
+// hand-built (same idiom as :90-94 above) so the CARRY-THROUGH is pinned in
+// isolation from the producer. ⚠️ That producer SHIPPED at v4.8 T3.3 —
+// street-cred.js :: computeStreetCred — so the reason changed even though the
+// fixtures did not: the isolation is no longer "it does not exist yet" but
+// "buildVerdict is reachable on records it never touched", amicus_verdict's
+// `record: z.record(z.any())` being the live path. The END-TO-END half, driven
+// through the real runCouncil, is in seat-parity-ondisk.test.js.
 describe('v4.8 T3.2: streetCred[].seat survives the closed verdict literal', () => {
   const meta = { runId: 'r', runType: 'headless', date: 'd',
     models: ['deepseek', 'deepseek'], chair: 'gemini', claudeInCouncil: false };
@@ -182,9 +187,13 @@ describe('v4.8 T3.2: streetCred[].seat survives the closed verdict literal', () 
   });
 
   test('the real producer chain (unique-alias fixture at the top of this file) stays byte-identical', () => {
-    // `record` is tally(avInput)'s OWN output — computeStreetCred emits no
-    // seat yet (T3.3), so this is the byte-identity control the whole task is
-    // judged on, driven through the real producer, not a hand-built stand-in.
+    // `record` is tally(avInput)'s OWN output. ⚠️ The reason it carries no
+    // seat MOVED at v4.8 T3.3 and the assertion did not: computeStreetCred
+    // emits `seat` now, but avInput is a UNIQUE-ALIAS fixture with no
+    // `meta.seats`, so every row's seat id would be its own alias and the
+    // emit-when-DIFFERENT guard keeps the field absent. Still the byte-identity
+    // control the task is judged on, driven through the real producer rather
+    // than a hand-built stand-in — and now a live one rather than a vacuous one.
     const v = buildVerdict(record, []);
     for (const s of v.streetCred) { expect('seat' in s).toBe(false); }
   });

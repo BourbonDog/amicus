@@ -152,23 +152,26 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // above (:141) — that field's upstream producer already holds a real
     // {id, alias} seat OBJECT at its own decision point (run.js:202:
     // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
-    // through here is safe. T3.3's computeStreetCred has no such object at
-    // this point, only a flat row (tally.js's current signature passes it
-    // bare alias strings), so its plausible naive form sets `.seat` on
-    // every row unconditionally — a pass-through here would then leak
-    // `seat` onto every unique-alias verdict.json, silently, since nothing
-    // else guards this closed literal. This check is deliberate defense in
-    // depth: buildVerdict is also reachable on externally-supplied records
-    // that never touched computeStreetCred in-process at all —
-    // amicus_verdict's MCP `record` param is `z.record(z.any())`
-    // (mcp-tools.js:461), fully permissive — so this literal's own
-    // byte-identity cannot be contingent on computeStreetCred alone; this
-    // file's own tests exercise that exact shape (hand-built rec objects,
+    // through here is safe. The street-cred producer never has such an object
+    // at this point, only a flat row, so a pass-through here would leak `seat`
+    // onto every unique-alias verdict.json the moment that producer's own
+    // guard slipped — silently, since nothing else guards this closed literal.
+    // This check is deliberate defense in depth: buildVerdict is also reachable
+    // on externally-supplied records that never touched computeStreetCred
+    // in-process at all — amicus_verdict's MCP `record` param is
+    // `z.record(z.any())` (mcp-tools.js:461), fully permissive — so this
+    // literal's own byte-identity cannot be contingent on that producer alone;
+    // this file's own tests exercise that exact shape (hand-built rec objects,
     // never calling tally()). tally.json keeps its own pin regardless — a
-    // genuine T3.3 producer bug still reds at seat-parity-ondisk.test.js —
-    // this check exists so verdict.json is never the ONE document a T3.3 bug
-    // (or an externally-supplied record) masks. Still inert today:
-    // computeStreetCred emits no `seat` at all yet.
+    // genuine producer bug still reds at seat-parity-ondisk.test.js — this
+    // check exists so verdict.json is never the ONE document such a bug (or an
+    // externally-supplied record) masks.
+    // ⚠️ NO LONGER INERT. This comment said "computeStreetCred emits no `seat`
+    // at all yet" until v4.8 T3.3 shipped that producer — street-cred.js ::
+    // computeStreetCred, one row per SEAT with the id emitted when it differs
+    // from the alias. Both guards now fire on the same real documents, and the
+    // pin that proves this literal carries the field through lives at
+    // seat-parity-ondisk.test.js on a real runCouncil twin bench.
     streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly,
       ...(s.seat && s.seat !== s.model ? { seat: s.seat } : {}) })),
     runStats: record.runStats,

@@ -35,8 +35,9 @@ function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
  * entry. MEASURED at BASE `b341b273` on that bench: both `a` street-cred rows
  * came back `withSelf 2.667 / peersOnly 3` off the SAME collapsed map, and
  * `JSON.stringify(row0) === JSON.stringify(row1)` was `true`. Seat keys are
- * what make those two rows diverge — which is why ledger.js's join had to be
- * seat-aware in the same commit (see its buildLedgerRows docblock).
+ * what make those two rows diverge — which is why the ledger's join had to be
+ * seat-aware in the same commit; the hazard is written out in full at
+ * ledger-join.js :: credFor.
  *
  * `order` itself is UNTOUCHED: still alias-valued, still the array
  * briefings-chair.js :: buildChairPacket and the tally schema read.
@@ -115,11 +116,11 @@ function credSeats(models, seats) {
  *    P3), reused rather than re-derived. ⚠️ CONTROLLER RULING (ledger C-2):
  *    self-exclusion drops only the judge that IS this seat; the twin's OTHER
  *    seat COUNTS AS A PEER. That matches peersOf's P0 branch, where a vote
- *    whose seat differs from the raiser's is a real peer, and `tally`'s
- *    `sameModelCorroboration` stamp below already exists to mark such support
- *    as concurrence rather than independence. Counting-and-marking is this
- *    release's settled shape (owner ruling R2). The alias arm is what a bench
- *    with no seat channel keeps, so nothing about today's numbers moves there.
+ *    whose seat differs from the raiser's is a real peer, and the
+ *    `sameModelCorroboration` stamp in tally.js :: tally already exists to mark
+ *    such support as concurrence rather than independence. Counting-and-marking
+ *    is this release's settled shape (owner ruling R2). The alias arm is what a
+ *    bench with no seat channel keeps, so today's numbers do not move there.
  * 3. `perJudgeRank` was `[judge] = rank` — last-wins by judge alias while
  *    `all`/`peers` accumulate into ARRAYS, so on a twin-JUDGE bench the map and
  *    the averages disagreed about the SAME row (the phasing doc's row `| 24 |`

@@ -201,7 +201,8 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     }
     // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
     // so orderSeats can disambiguate a twin bench's `order`, which stays
-    // alias-only — T3.3 wires this into rankPositions, not this task.
+    // alias-only. T3.3 wired it into street-cred.js :: rankPositions, via
+    // rankings[] in run-assemble.js :: buildTallyInput; `order` never moved.
     const { order, orderSeats } = rankingToOrder(parsed.ranking, labels.labelMap, labels.seatMap);
     judgeResults.push({ judge, seat, ok: true, order, orderSeats, adjudications: parsed.adjudications,
       conformance, leg: leg || null });
