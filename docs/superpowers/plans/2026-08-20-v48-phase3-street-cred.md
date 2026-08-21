@@ -231,12 +231,28 @@ invisible to it today.
 - ⚠️ **A near-twin pin sits immediately before it** (the `// street cred does NOT concentrate`
   assertion in the preceding test). T3.3 names only T12; **this second one will also move.** Do not
   discover it from a red — go and read it first.
+  > ⚠️ **WRONG, BY MEASUREMENT (T3.3, confirmed by T3.4).** The near-twin pin is `T11`
+  > (`ledger.test.js:754`, *"a split alias concentrates FINDINGS on the anchor"*) and its
+  > `streetCredPeersOnly` assertion does **not** move: its fixture (`models ['gpt','other']`,
+  > hand-written alias-keyed `streetCred`, no `seat` on any `runStats` row) takes the alias branch
+  > both before and after this PR, so `rows[1].streetCredPeersOnly` reads `1` unchanged. T3.3 read
+  > it first as this note instructed, measured the false prediction, and annotated T11 in place
+  > (`ledger.test.js:774-781`) to say WHY it is unchanged — the alias fallback, now one branch of
+  > two — rather than moving it for ceremony. `T12` (this section's actual subject) still moved,
+  > exactly as predicted above.
 
 ---
 
 ## 1. Scope
 
 **Closes** SI-06, SI-17, SI-18, SI-19, SI-20. **Unblocks** SI-25 site (3).
+
+> ⚠️ **WRONG ABOUT SI-18 — measured 2026-08-21 (T3.4), not merely disputed.** This PR does NOT close
+> SI-18 ("findings attributed by alias", `ledger.js :: buildLedgerRows`).
+> `findings.filter(f => f.raiser === model)` — SI-18's own body — is byte-unchanged across every
+> commit of this entire PR (zero-context diff, this plan's own `006bdec5` base to the branch tip).
+> What T3.3 closes at the SAME `buildLedgerRows` anchor is the street-cred join (SI-20's third
+> site), a neighbour, not SI-18 itself. Read "Closes" above as SI-06, SI-17, SI-19, SI-20 only.
 
 Their definitions, from the phasing doc's §1 status table (one line each; there are no fuller
 filings — the BACKLOG bodies are written as bare `| NN |` rows that `git grep SI-06` cannot find):
@@ -500,6 +516,10 @@ in a gitignored report path.
 - Sweep `docs/council.md` — no gate covers it. Its streetCred shape at `:634` shows `perJudgeRank`.
 - Update `BACKLOG.md`: tick SI-06/17/18/19/20/26, repoint NEXT TASK, and correct the rotted
   citations in the SI-06/SI-20 bodies.
+  > ⚠️ **WRONG ABOUT SI-18 — corrected by controller ruling before T3.4 executed (see §1's own
+  > blockquote above for the measurement).** SI-18's own filter is byte-unchanged by this PR; only
+  > SI-06, SI-17, SI-19, SI-20 and SI-26 were ticked. SI-18 stays open, annotated in place with its
+  > narrowed scope, exactly as its own BACKLOG entry and the phasing doc's §1 row 18 now read.
 - Close the Phase 3 record in the phasing doc (`✅ COMPLETED <date> by <task> (<sha>)`), following
   the T2.2/T2.3/T2.4 convention. **Append rulings, never renumber** — R1–R20 keep their numbers.
 
