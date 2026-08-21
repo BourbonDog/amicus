@@ -237,8 +237,15 @@ resolved id) or when a `--council` preset carries a padded member. **Hop 4 is im
 `options.seats[i]` by INDEX and compares the roster entry's own `id` against its own `alias`,
 never against `model`.
 
-**Consequence: "null on a unique-alias bench" and "byte-identical" are now TRUE claims** throughout
-this plan, because nothing is stamped there at all. They were false in the draft.
+**Consequence: "null on a unique-alias bench" is now a TRUE claim** throughout this plan, because
+nothing is stamped there at all. It was false in the draft.
+
+⚠️ **But "byte-identical" is true only of what is written to DISK, and only at hops 2–3.** The
+stamp writes no `seat` onto the leg object and `writeLegPatch` writes no `seat` key into
+`metadata.json` — those are byte-identical. **The composed live doc at hops 7–8 is NOT**, because
+`buildLegRow`/`seatOf` emit an explicit `seat: null` on every row. Saying "byte-identical" of the
+doc is false. See T4.4's annotation, where exactly that sentence had to be caught by an implementer
+before it shipped into the schema.
 
 ### 0.8 ⚠️ A SECOND stale citation — `run-assemble.js:89`
 
@@ -772,8 +779,21 @@ Add to `council-run-live.schema.json`'s leg-row `properties`, after `role` (`:41
 `council-tally.schema.json:43`:
 
 ```json
-          "seat": { "type": ["string", "null"], "description": "v4.8 R5, optional. This leg's seat id (`alias#N`) when the bench repeats an alias, else null. Written at launch by src/sidecar/fanout-leg.js :: runSingleAttempt from the per-wave roster and read back by src/observe/council-legs.js :: buildLegRow. The leg-row `items` object declares no `additionalProperties: false`, so an additive field was already accepted here — this documents the shape rather than changing what is accepted. A unique-alias run emits null on every leg and its document is byte-identical to a pre-R5 one." },
+          "seat": { "type": ["string", "null"], "description": "v4.8 R5, optional. This leg's seat id (`alias#N`) when the bench repeats an alias, else null. Written at launch by src/sidecar/fanout-leg.js :: runSingleAttempt from the per-wave roster and read back by src/observe/council-legs.js :: buildLegRow. Present on every leg row, including a truthful null — unlike metadata.json's own `seat` key, which is absent (not null) on a unique-alias bench: `buildLegRow`'s base row literal is unconditional and already emits nulls the same way for `model`/`modelInput`, so this field matches that literal rather than the absent-when-unset convention `usageError` above uses. The leg-row `items` object declares no `additionalProperties: false`, so an additive field was already accepted here — this documents the shape rather than changing what is accepted." },
 ```
+
+> ⚠️ **ANNOTATED 2026-08-21 (T4.4) — the description above is the implementer's, not the
+> controller's, and it is a CORRECTION.** The draft ended with *"A unique-alias run emits null on
+> every leg and its document is byte-identical to a pre-R5 one."* **That is FALSE**: a row carrying
+> `"seat": null` is not byte-identical to a pre-R5 row that had no `seat` key at all, and it
+> contradicts this very task's own "truthful null, present on every row" framing one section up.
+> The implementer refused to paste it and wrote the accurate version.
+>
+> **Root cause is the TWIN-SENTENCE failure mode.** §0.7's annotation corrected "byte-identical"
+> for hops 2 and 3, where it IS true because those hops are absent-not-null — and left the hop-4
+> twin standing, where it is false because this hop is null-not-absent. Correcting one instance of
+> a phrase and not grepping for its twins is the exact defect this plan's own Global Constraints
+> warn about.
 
 - [ ] **Step 6: Run the schema suite**
 
@@ -1025,10 +1045,16 @@ Under the v4.8.0 unreleased section, state the behaviour change **and its limit*
 ```markdown
 - Live council-run leg rows now carry the leg's seat id (`alias#N`) when the bench repeats an
   alias, threaded from the Stage-1 roster through the fanout transport to `metadata.json` and back
-  out via the composed live doc. On a unique-alias bench every leg reports `null` and the document
-  is byte-identical to before. Stage 1 only — chair, debate and repair legs launch without a
-  roster and are unchanged.
+  out via the composed live doc. On a unique-alias bench nothing is written — `metadata.json` is
+  unchanged — and every live leg row reports an explicit `seat: null`. Stage 1 only; chair, debate
+  and repair legs launch without a roster and are unchanged.
 ```
+
+⚠️ **Corrected before dispatch (T4.4's annotation).** The draft of this entry said "the document is
+byte-identical to before." **False** — every leg row gains an explicit `seat: null`. This was the
+THIRD twin of that sentence; the first was caught by an implementer refusing to paste it into the
+schema, and this one would have shipped the same false claim to users in the CHANGELOG. **Do not
+reintroduce "byte-identical" about the composed doc.**
 
 - [ ] **Step 5: Update the phasing doc §1 and §5 — THREE obligations, not one**
 
@@ -1090,9 +1116,11 @@ npm test
 - [ ] `npm test` green, **one** `Test Suites:` block, suite count >= 542 and **0 failed**.
 - [ ] `live-dead-seats.js:207`'s `if (s.seat)` arm **executes on the live path**, proved by the
       end-to-end dead-twin test in T4.5, not by reading.
-- [ ] A unique-alias bench is **byte-identical**: nothing is stamped (the `id !== alias` predicate
-      of §0.7 is false for every seat), `metadata.json` has no `seat` key, and every live leg row
-      reports `seat: null`.
+- [ ] A unique-alias bench changes **nothing on disk**: the `id !== alias` predicate of §0.7 is
+      false for every seat, so nothing is stamped and `metadata.json` is byte-identical to pre-R5.
+      ⚠️ **The composed live doc is NOT byte-identical** — every leg row gains an explicit
+      `seat: null` (see T4.4's annotation). Say "unchanged on disk", never "byte-identical",
+      about the doc.
 - [ ] The seat-emit predicate is `seat.id !== seat.alias`, matching the four existing producers.
       **A `if (s.id)` truthiness guard anywhere in the diff is the §0.7 defect and must not ship.**
 - [ ] Four named mutants — `SEATALIAS`, `SEATSLOPPY`, `SEATDROP`, `LIVESEATBLIND` — each applied,
