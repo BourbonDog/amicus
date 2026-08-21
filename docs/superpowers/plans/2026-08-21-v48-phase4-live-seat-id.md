@@ -4,7 +4,7 @@
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Carry a leg's seat id from the Stage-1 roster down to the live leg row, so
-`electron/workspace-ui/live-dead-seats.js:207`'s `if (s.seat)` arm — today permanently dead on the
+`electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — today permanently dead on the
 live path — actually executes.
 
 **Architecture:** Seat identity already exists at launch (`run-stage1-launch.js`'s
@@ -76,7 +76,7 @@ calls — so `fanout.js` gains **zero lines**.
   `{taskId, model, status, modelInput, role}` plus progress/usage fields — **no `seat`, verified by
   opening lines 127–130.**
 
-**Therefore `if (s.seat)` at `live-dead-seats.js:207` is unreachable on the live-tick path and
+**Therefore `if (s.seat)` at `live-dead-seats.js:209` is unreachable on the live-tick path and
 reachable on the terminal path.** The BACKLOG's wording ("permanently dead on the live path") is
 exact and re-verifies. **The task is unchanged.** The in-file comment at
 `live-dead-seats.js:204-206` states the same mechanism and is TRUE at BASE — which is precisely
@@ -819,7 +819,7 @@ git commit -m "feat(observe): carry the leg seat id onto the live leg row (v4.8 
 
 **Interfaces:**
 - Consumes: `row.seat` from T4.4.
-- Produces: `seat.seat` on every live-tick seat — the field `live-dead-seats.js:207` reads.
+- Produces: `seat.seat` on every live-tick seat — the field `live-dead-seats.js:209` reads.
 
 - [ ] **Step 1: Write the failing tests — INCLUDING the end-to-end one that is the point**
 
@@ -924,7 +924,7 @@ report — do not adjust the expectation to match what you got.**
 
 ```js
     role: leg.role || null,
-    // ⚠️ v4.8 R5: the leg's seat id, and the reason live-dead-seats.js:207's
+    // ⚠️ v4.8 R5: the leg's seat id, and the reason live-dead-seats.js:209's
     // `if (s.seat)` arm is reachable at all. Null on a unique-alias bench, so the
     // guard there stays load-bearing — see the comment at that line.
     seat: leg.seat || null,
@@ -1142,7 +1142,7 @@ npm test
 
 - [ ] All seven gates exit 0, each measured with its own exit code.
 - [ ] `npm test` green, **one** `Test Suites:` block, suite count >= 542 and **0 failed**.
-- [ ] `live-dead-seats.js:207`'s `if (s.seat)` arm **executes on the live path**, proved by the
+- [ ] `live-dead-seats.js:209`'s `if (s.seat)` arm **executes on the live path**, proved by the
       end-to-end dead-twin test in T4.5, not by reading.
 - [ ] A unique-alias bench changes **nothing on disk**: the `id !== alias` predicate of §0.7 is
       false for every seat, so nothing is stamped and `metadata.json` is byte-identical to pre-R5.
