@@ -72,7 +72,22 @@ no seat information.** It is the mirror of the Important-1 defect the T3.3 task 
 
 ### 0.4 The two rules, PROTOTYPED and measured — not proposed
 
-Both were run at BASE against the live modules. **Neither changes any shape the engine produces.**
+Both were run at BASE against the live modules. ~~**Neither changes any shape the engine
+produces.**~~
+
+> ⚠️ **ANNOTATED 2026-08-21 (T4.1 review) — that sentence is FALSE, and the table below is why.**
+> Every case in it keeps a repeated alias **ADJACENT**, so it never exercised the shape that moves.
+> On a NON-ADJACENT repeat — `--models a,b,a`, an ordinary bench `seats.js :: buildSeats` handles,
+> assigning `a#1` pos 1, `b` pos 2, `a#2` pos 3 — Rule A reorders `streetCred[]`:
+> HEAD `["a#1","b","a#2"]` against BASE `["a#1","a#2","b"]`. Fuzzed over 2178 engine-shaped cases:
+> **1368 divergences, ALL order-only, ZERO content divergences, ZERO length-invariant violations.**
+> Order reaches `tally.json`, `verdict.json` (`verdict.js :: buildVerdict`), and both renderers.
+> **RULING: the new order is ACCEPTED**, because BASE's grouping was an accident of the buggy
+> `expanded.has(m) → continue` loop rather than a specified property, while models order is what
+> `ledger.js`'s own docblock names as the driver and matches `meta.seats`/`position`. Pinned by a
+> non-adjacent fixture in T4.1's fix round and disclosed in the CHANGELOG.
+> **Constraint S-1 is amended accordingly: content-identical on every engine shape; row ORDER
+> follows `models` where a repeated alias is non-adjacent.**
 
 **Rule A — `credSeats`: exactly one row per `models` entry.** The k-th occurrence of alias `m`
 takes the k-th registered seat id for `m`, else no seat. `seats` NAMES rows; it never changes how
@@ -111,8 +126,17 @@ must never read narrower than none.
 
 Rule A can now emit an alias-keyed row (`seat: null`) for an unnamed bench position — e.g. the
 `partial` case emits `a#1` **and** `a`. `ledger.js` indexes street cred as
-`new Map(streetCred.map(s => [s.seat || s.model, s]))`, so that row lands under key `a`, and
+~~`new Map(streetCred.map(s => [s.seat || s.model, s]))`~~, so that row lands under key `a`, and
 `credFor`'s alias fallback filters `s.model === model`, so it picks up both.
+
+> ⚠️ **ANNOTATED 2026-08-21 (T4.1) — the index expression above is WRONG and the implementer
+> caught it.** At BASE `src/council/ledger.js` reads
+> `new Map(streetCred.filter(s => s && s.seat).map(s => [s.seat, s]))` — **seated rows only** — and
+> has since PR #176's own fix round (`8027391b`). I carried a stale reading of code I had worked on
+> rather than re-opening the line, in the very paragraph flagging the reasoning as unverified. The
+> conclusion survived only because T4.1 measured the composition instead of trusting the premise:
+> the alias-keyed row is correctly EXCLUDED from `sc` and correctly picked up by `credFor`'s
+> `s.model === model` filter.
 
 **That composition is reasoned, not measured. The task must measure it end to end** through
 `tally()` → `buildLedgerRows()`, not unit-test the two functions in isolation.
