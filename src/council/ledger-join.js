@@ -17,12 +17,14 @@
  * build, so adding them to that module's export list would only risk the
  * AUTO:modules truncation its own comment warns about. Tests import them here.
  *
- * ⚠️ Three named mutants guard these, alongside LEDGERALIAS on ledger.js's
+ * ⚠️ FOUR named mutants guard these, alongside LEDGERALIAS on ledger.js's
  * join key. Each mutation and its MEASURED red set is recorded with the rest:
  * tests/council/street-cred-mutants.js :: CHAIRWINS guards benchLegs, while
- * tests/council/street-cred-mutants.js :: CREDALIAS guards which lookup credFor
- * uses and tests/council/street-cred-mutants.js :: ALIASLASTWINS guards how it
- * combines what that lookup returns. RE-RUN them, never renumber them.
+ * tests/council/street-cred-mutants.js :: CREDALIAS guards WHETHER the seat
+ * lookup can ever win, tests/council/street-cred-mutants.js :: ANYSEATED
+ * (v4.8 follow-up) guards HOW COMPLETE a group's seats must be before it does,
+ * and tests/council/street-cred-mutants.js :: ALIASLASTWINS guards how the
+ * lookup combines what it finds. RE-RUN them, never renumber them.
  */
 
 /**
@@ -108,8 +110,40 @@ function meanCred(rows, field) {
  * TWO LOOKUPS, TRIED IN THAT ORDER, because the two sides are indexed by
  * INDEPENDENT producers and either can be seated without the other:
  *   1. the group's own seats, named by `runStats[].seat` (emit-when-DIFFERENT),
- *      resolved through `sc` — which holds ONLY the seated street-cred rows;
- *   2. failing that, every street-cred row carrying this ALIAS.
+ *      resolved through `sc` — which holds ONLY the seated street-cred rows —
+ *      and ONLY when EVERY row in the group resolves this way;
+ *   2. failing that (including a PARTIAL resolution), every street-cred row
+ *      carrying this ALIAS.
+ *
+ * ⚠️ (1) IS ALL-OR-NOTHING. v4.8 follow-up (2026-08-21), council finding 3 on
+ * PR #176, reproduced at BASE `13cd0a2d`: this function used to take lookup
+ * (1) the moment ANY of the group's seats resolved through `sc`, discarding
+ * the numbers of any OTHER row in the SAME group whose seat did not resolve.
+ * A MIXED group — one seated row, one not — then read NARROWER than a group
+ * with NO seat information at all, which falls straight to (2)'s alias mean.
+ * Partial seat information produced a narrower read than no information,
+ * which is backwards — the mirror image of fix round 1's defect just above.
+ * MEASURED on a two-row `a` group, seat A resolving to peersOnly 1 and seat B
+ * — same alias, unresolvable through `sc` — to peersOnly 5:
+ *
+ *   before : MIXED group (A seated, B not)   peersOnly 1   (A alone)
+ *            NEITHER seated                  peersOnly 3   (mean of A, B)
+ *   after  : MIXED group (A seated, B not)   peersOnly 3   (== neither seated)
+ *
+ * FIX: lookup (1) now requires EVERY row's seat to resolve in `sc` —
+ * `ids.length > 0 && ids.every(id => id && sc.has(id))`. Anything short of
+ * that — one row unseated, one row seated to an id `sc` does not hold, or an
+ * empty group — falls through to (2), the same alias mean a fully-unseated
+ * group already read. ⚠️ `ids.length > 0` is load-bearing on its own:
+ * `[].every(...)` is vacuously `true` in JavaScript, so without that guard an
+ * EMPTY group would count as "fully identified", resolve through an empty
+ * `ids` to an empty seated array, and return `{}` (via the `!rows.length`
+ * guard below) instead of falling through to the alias mean the empty-group
+ * case already relied on. Killed by the named mutant
+ * tests/council/street-cred-mutants.js :: ANYSEATED, which reverts the gate
+ * to its pre-fix "any resolves" form and reproduces the MIXED regression
+ * above; CREDALIAS (below the function) is the narrower mutant forcing the
+ * seat lookup to never win AT ALL, fully-seated groups included.
  *
  * ⚠️ WHY (2) IS A FILTER AND NOT AN ALIAS KEY IN `sc`. Fix round 1, Important 1
  * — this function REGRESSED that quadrant and the regression was measured, not
@@ -167,9 +201,19 @@ function meanCred(rows, field) {
  * @param {Array<object>} streetCred the record's street-cred rows, for (2)
  */
 function credFor(sc, group, model, streetCred) {
-  const seated = [...new Set(group.map(r => r.seat).filter(Boolean))]
-    .map(id => sc.get(id)).filter(Boolean);
-  const rows = seated.length ? seated
+  // Named mutant "ANYSEATED": revert this gate to its pre-fix "any resolves"
+  // form —
+  //   const seated = [...new Set(group.map(r => r.seat).filter(Boolean))]
+  //     .map(id => sc.get(id)).filter(Boolean);
+  //   const rows = seated.length ? seated : (streetCred || []).filter(...);
+  // tests/council/street-cred-mutants.js :: ANYSEATED.
+  const ids = group.map(r => r.seat);
+  const fully = ids.length > 0 && ids.every(id => id && sc.has(id));
+  // Named mutant "CREDALIAS": force `fully` to never be true, so the seat
+  // lookup can never win even on a genuinely fully-seated group —
+  //   const rows = fully ? [...] : fallback;  ->  const rows = false ? [...] : fallback;
+  // tests/council/street-cred-mutants.js :: CREDALIAS.
+  const rows = fully ? [...new Set(ids)].map(id => sc.get(id))
     : (streetCred || []).filter(s => s && s.model === model);
   if (!rows.length) { return {}; }
   return { withSelf: meanCred(rows, 'withSelf'), peersOnly: meanCred(rows, 'peersOnly') };

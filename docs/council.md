@@ -571,7 +571,7 @@ under "Stage-2 → tally assembly recipe"). It needs **all five top-level keys**
 | Field | Type | Meaning |
 |---|---|---|
 | `meta.runId` | string | Run identifier (conventionally the run-folder stem). |
-| `meta.models` | string[] | Every reviewed model id, including `"claude"` when "Claude in the council" is on — this is the street-cred universe. |
+| `meta.models` | string[] | Every reviewed model id, including `"claude"` when "Claude in the council" is on — this is the street-cred universe: `streetCred[]` has exactly one row per `meta.models` entry, always (`streetCred.length === meta.models.length`, holds on any input — **v4.8 follow-up**, closing a case where a `meta.seats` table that disagreed with `meta.models` in count used to drop or invent a row), in `meta.models` order — the k-th occurrence of a repeated alias takes the k-th row, so a non-adjacent repeat (e.g. `["a","b","a"]`) is never grouped by alias. |
 | `meta.chair` | string | The confirmed chair model id. |
 | `meta.claudeInCouncil` | boolean | The Stage-0 toggle. |
 | `meta.runType`, `meta.date` | string (optional) | Free-form labels carried through to `verdict.json`. |

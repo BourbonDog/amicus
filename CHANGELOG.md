@@ -75,6 +75,35 @@ All notable changes to Amicus are documented here. Format follows
   earlier designs inferred the answer instead (a per-alias budget, then a roster pigeonhole) and
   both hid a real dead seat when the inference was wrong. A duplicate a reader can see is
   preferred to a loss they cannot.
+- **`streetCred[]` no longer drops or invents a row when a document's `meta.seats` table disagrees
+  with `meta.models` in count, and a reliability-ledger pair group with partial seat information no
+  longer reads narrower than one with none.** Both defects are unreachable on the engine path —
+  `seats.js :: buildSeats` derives `meta.seats` from the same bench array that becomes `meta.models`,
+  so the two agree by construction — and reachable only on the two hand-assembled `appendRun` paths:
+  the `amicus_council_tally` MCP tool, whose schema declares `meta.seats` independently of
+  `meta.models`, and `cli-handlers-council.js`'s `runTally`, which parses user-supplied JSON with no
+  schema at all. Both write into `council-ledger.jsonl`, a file that is never migrated.
+  `street-cred.js :: credSeats` used to expand the *first* `models` occurrence of an alias the seat
+  table named into every id registered for it at once — inventing a row when the table over-registers
+  a non-repeated alias — while skipping every *later* occurrence of that alias outright — dropping a
+  row when the table under-registers a repeated one. The k-th occurrence of alias `m` now takes the
+  k-th id the table registered for `m`; once that list is exhausted (or the table never named `m` at
+  all), the occurrence gets an alias-keyed row (`seat: null`) instead of vanishing, and a surplus
+  registered id simply goes unused instead of manufacturing an extra row.
+  `streetCred.length === meta.models.length` now holds always, on any input.
+  `ledger-join.js :: credFor` used to resolve a pair group's street cred through the seat table the
+  moment *any* row in the group resolved that way, discarding the numbers of any other row in the
+  *same* group whose seat did not resolve — so a MIXED group (one seated row, one not) read narrower
+  than a group with NO seat information at all, which fell straight to the honest alias-mean
+  fallback. The seat lookup now wins only when *every* row in the group resolves
+  (`ids.length > 0 && ids.every(id => id && sc.has(id))`); anything short of that — one row unseated,
+  one seated to an id the table doesn't hold, or an empty group — falls through to the same
+  alias-mean fallback a fully-unseated group already used. A mixed group now reads identically to a
+  fully-unseated one.
+  ⚠️ Fixing the row-count side of this also moves `streetCred[]` row *order* on an ordinary engine
+  bench that repeats a non-adjacent alias — a real, disclosed, accepted behaviour change, not a
+  malformed-input-only one. See the street-cred entry under **Changed**, below, for the measurement
+  and the ruling.
 
 ### Changed
 
@@ -429,6 +458,23 @@ All notable changes to Amicus are documented here. Format follows
   field-by-field notes. ⚠️ Disclosed side effect, filed not fixed: the same release's ledger-join
   change means a chair-synthesis leg's own conformance can fall out of the reliability ledger
   entirely on a mixed bench/chair group — see the merged-rows entry above.
+  ⚠️ **This is a visible change to `streetCred[]` row order, and it is a correction.** Fixing the
+  row-count defect described under Fixed, above, also moves row order on a repeated alias that is
+  **not adjacent** in `meta.models` — `--models a,b,a`, which `seats.js :: buildSeats` assigns
+  `a#1`/`b`/`a#2` without complaint, an ordinary three-seat bench, no rejection. `credSeats` now
+  pushes one row per `models` occurrence at that occurrence's own index, so the order is
+  `["a#1","b","a#2"]` where it previously read `["a#1","a#2","b"]` — the old order grouped a
+  repeated alias's rows at its *first* occurrence, an accident of the pre-fix expand-then-skip loop,
+  never a documented property. The new order already agrees with `meta.seats`, whose own `.position`
+  field is in `meta.models` order by construction (`seats.js :: buildSeats` is `aliases.map(...)`
+  over the bench). This reaches `tally.json`, `verdict.json` (`verdict.js :: buildVerdict`) and both
+  report renderers' street-cred tables (`report-md.js :: renderMd`, `report-html.js :: renderHtml`).
+  Fuzzed over 2178 engine-shaped cases (a repeated alias, adjacent or not, over every bench
+  `buildSeats` accepts without complaint): 1368 divergences from the old order, **all order-only —
+  zero content divergences, zero length-invariant violations**. Every fixture in the tree before this
+  fix kept a repeated alias adjacent, where the two orders coincide, which is why nothing caught it
+  earlier. Content is identical either way; only row order moves, and only on a non-adjacent repeat —
+  a bench with no repeated alias, or one whose repeat is adjacent, is byte-for-byte unaffected.
 - **Known limitations after this release — filed, not fixed, except street cred.** Street cred no
   longer collapses twins: its rank map, the street-cred driver and the ledger's street-cred join are
   all seat-keyed now, so a repeated alias emits one `streetCred` row per seat instead of two

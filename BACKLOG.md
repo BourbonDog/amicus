@@ -2572,6 +2572,25 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   done: `briefings-chair.js :: buildChairPacket`'s `rankingLines` still renders `${r.judge}`
   alias-keyed and was not touched by this PR. T3.3's fix-round-1 baseline: 542 suites / 7782 passed
   / 8 skipped / 4 snapshots / 0 failed.
+  - **Council review of PR #177 (2026-08-21) — the first FULLY CLEAN run of this release.**
+    `run complete · stage1 → stage2 → chair → tally → verdict all complete`, 390s, all four bench
+    models produced street cred, **chair verdict "Ship it"**. Three Confirmed, all minor/nit, filed
+    here rather than fixed in that PR because the chair cleared it and none is a correctness defect.
+    - [ ] **A1 [minor] (glm, a3/d0/n0) — the `ids.length > 0` guard in `ledger-join.js :: credFor`
+      is DESCRIBED as load-bearing but no dedicated test or mutant catches its removal in
+      isolation.** ⚠️ The guard IS load-bearing — verified during T4.1's review by executing the
+      guard-less variant, which returns `{}` on an empty group instead of the alias mean. The
+      finding is about the PIN, not the guard: nothing would go red if a future edit dropped it.
+      This is the same class the release calls "an empty red set means UNPINNED, not safe".
+    - [ ] **B1 [minor] (qwen, a2/d1/n0 — note the ONE dispute, the only non-unanimous finding in
+      this run) — duplicated-but-resolved seat ids within one pair group are unmeasured under the
+      new all-or-nothing gate.** `credFor` dedupes with `[...new Set(ids)]`, so a group whose rows
+      repeat a seat id contributes that seat once; the two branches' statistical behaviour differs
+      more than T4.1's brief acknowledged. Measure before deciding — it may be correct as-is.
+    - [ ] **B2 [nit] (qwen, a3/d0/n0) — `docs/council.md`'s `meta.models` table cell is now a dense
+      paragraph** that renders poorly and is hostile to future editors. T4.2 added the row-count and
+      order invariant there because it was the existing "street-cred universe" anchor; the content
+      is right, the placement is cramped. Consider lifting it to prose beneath the table.
   - **Council review of PR #176 (2026-08-21) — the run was PARTIAL; two findings, both raised by
     one model and neither peer-adjudicated.** ⚠️ **The job passed and the review is still not
     clean** — read the verdict comment, not the status. Recorded state:
@@ -2588,7 +2607,7 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       in the merged-rows entry. The council rediscovering it independently is corroboration that
       disclosing it was right. **Still awaiting an owner ruling**; repairing it means giving the
       chair its own ledger identity, which changes the row SET.
-    - [ ] **B2 [major] — an inconsistent `meta.seats` silently drops or invents street-cred rows
+    - [x] **B2 [major] — an inconsistent `meta.seats` silently drops or invents street-cred rows
       relative to `meta.models`. CONFIRMED BY MEASUREMENT, filed not fixed.** Measured 2026-08-21
       against the shipped `street-cred.js :: credSeats`:
 
@@ -2617,6 +2636,24 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       in a reviewed green PR. A fix belongs with its own tests and named mutant. Cost if wrong: a
       hand-assembled document with a bad seat table writes a wrong row count to the ledger until
       that fix lands.
+      ✅ **CLOSED 2026-08-21 — v4.8 seat-resolution follow-up (`884e8e15`), Rule A.** `credSeats` no
+      longer expands the first occurrence of an alias into every id the table registered for it
+      while skipping every later occurrence: the k-th occurrence of alias `m` in `models` now takes
+      the k-th id `byAlias.get(m)` registered for it, and once that list is exhausted (or the table
+      never named `m` at all) the occurrence gets an alias-keyed row (`seat: null`) instead of being
+      dropped. MEASURED against this item's own table, on the shipped `credSeats`: `partial` now
+      returns `["a#1","a","b"]` (3 rows, was 2 — the DROP is closed) and `over-specified` now
+      returns `["a#1","b"]` (2 rows, was 3 — the INVENT is closed).
+      `rows.length === models.length` holds always, pinned as one invariant over a case list
+      (consistent / partial / over-specified / alien-alias / no-seats / claude-tail) and killed by
+      the named mutant `EXPANDONCE`, which reverts `credSeats` to this exact pre-fix algorithm.
+      ⚠️ **Fix round 1 (`e21a660c`) found and disclosed one more consequence — not a defect this
+      item ever claimed, and not part of what it closes.** On a NON-ADJACENT repeat — an ordinary
+      engine bench, e.g. `--models a,b,a` — row ORDER also moves (`["a#1","b","a#2"]`, was
+      `["a#1","a#2","b"]`); content is identical either way, only order changed. Fuzzed over 2178
+      engine-shaped cases: 1368 order-only divergences, zero content divergences, zero
+      length-invariant violations. Accepted by owner ruling — see `CHANGELOG.md`'s `[Unreleased]`
+      street-cred entries (Fixed and Changed) for the full measurement and reasoning.
   - **⚠️ SUPERSEDED BY A REAL RUN — the council was RE-RUN on `4b2b5416` after the owner added
     OpenRouter credits, and this time it produced a verdict.** Run `32481536014`, **17m44s**
     (vs 36s credit-death and 337s degraded), `chair:complete`. **Chair verdict: "Fix these
@@ -2640,7 +2677,7 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       return `judge`. **So the finding is true about the FUNCTION in isolation and false about the
       SYSTEM** — the function is permissive, its only caller is fail-closed. If a future producer
       is ever added to `LEDGER_JOIN_ROLES`, re-open this.
-    - [ ] **A1 (qwen) [minor] — REAL, NEW, and the only unfiled one. `credFor` reads only the
+    - [x] **A1 (qwen) [minor] — REAL, NEW, and the only unfiled one. `credFor` reads only the
       IDENTIFIABLE seats of a pair group that mixes seated and seatless runStats rows.** Measured
       2026-08-21 against the shipped `ledger-join.js :: credFor`, with `a#1` at 1 and `a#2` at 5:
 
@@ -2669,6 +2706,17 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       than a late behaviour change bolted onto a 17-commit branch that is already green and
       four-times reviewed, and nothing here is reachable from the engine. The fix needs its own
       RED-before-GREEN tests and named mutants — treat it as a task, not a patch.
+      ✅ **CLOSED 2026-08-21 — v4.8 seat-resolution follow-up (`884e8e15`), Rule B.** `credFor`'s
+      seat lookup now wins only when EVERY row in the group resolves through `sc`
+      (`ids.length > 0 && ids.every(id => id && sc.has(id))`); anything short of that — including
+      the MIXED group this item measured — falls through to the same alias-mean fallback a
+      fully-unseated group already used. MEASURED against this item's own scenario (`a#1` at 1,
+      `a#2` at 5, `a#2` unresolvable through `sc`): `MIXED` now returns `{withSelf:3, peersOnly:3}`,
+      identical to `none seated`, where it previously returned `{withSelf:1, peersOnly:1}` — `a#1`
+      alone. Killed by the named mutant `ANYSEATED`, which reverts the gate to this exact pre-fix
+      `seated.length ?` form. `ids.length > 0` is load-bearing on its own: `[].every(...)` is
+      vacuously `true` in JavaScript, so without it an empty group would wrongly read as "fully
+      identified" instead of falling through to the alias mean.
   ⚠️ **BUDGET AN EXTRACTION BEFORE TOUCHING `report.js`.** Measured at `0cb2d4d9` with the gate's
   own `checkFileSize`: **277/300, 23 free** (197 at the branch point; T2.4 added ~80 lines carrying
   roughly 10 of executable code — this file's comment style inflates fast). The next

@@ -13,13 +13,13 @@
  * precedent: this is a leaf, so the dependency runs one way (tally.js ->
  * street-cred.js) and cannot cycle.
  *
- * ⚠️ SIX named mutants guard the expressions below — RANKALIAS, ALIASSELF,
- * JUDGEALIAS, SEATALWAYS, ALIASDRIVER and NOFALLBACK. Each mutation and its
- * MEASURED red set is recorded beside the others, in
- * tests/council/street-cred-mutants.js :: RANKALIAS and its five siblings
- * there, following the tests/council/peer-split-mutants.js :: SPLITDROP
- * precedent. RE-RUN them, never renumber them, whenever anything here or any
- * of its consumers changes.
+ * ⚠️ SEVEN named mutants guard the expressions below — RANKALIAS, ALIASSELF,
+ * JUDGEALIAS, SEATALWAYS, ALIASDRIVER, NOFALLBACK and EXPANDONCE (v4.8
+ * follow-up). Each mutation and its MEASURED red set is recorded beside the
+ * others, in tests/council/street-cred-mutants.js :: RANKALIAS and its six
+ * siblings there, following the tests/council/peer-split-mutants.js ::
+ * SPLITDROP precedent. RE-RUN them, never renumber them, whenever anything
+ * here or any of its consumers changes.
  */
 
 function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
@@ -65,23 +65,72 @@ function rankPositions(order, orderSeats) {
 }
 
 /**
- * The street-cred universe: one entry per SEAT, plus an alias entry for
- * everything the seat table does not name (`claude`, hand-assembled input).
+ * The street-cred universe: exactly one entry per `models` OCCURRENCE, never
+ * fewer and never more. `seats` NAMES rows; it never changes how many exist.
+ *
+ * v4.8 follow-up (2026-08-21) — council findings 1+2 on PR #176, reproduced at
+ * BASE `13cd0a2d`. The row count used to follow `seats` wherever it disagreed
+ * with `models`'s repeat count for an alias: the FIRST occurrence the table
+ * named expanded into ALL of that alias's registered ids at once, and every
+ * LATER occurrence of the same alias was skipped outright. So an alias the
+ * table OVER-registers (more ids than `models` repeats it) INVENTED an extra
+ * row on its first occurrence, and an alias it UNDER-registers (fewer ids than
+ * `models` repeats it) DROPPED a row on its later occurrence(s) once the
+ * table's ids for it ran out. Both are reachable only on the two
+ * hand-assembled `appendRun` paths — `mcp-tools.js :: amicus_council_tally`
+ * declares `meta.seats` independently of `meta.models` and
+ * `cli-handlers-council.js` passes user JSON through verbatim — never on the
+ * engine's own output. ⚠️ NOT because `seats[]` and `models` always agree —
+ * they do not: `meta.models` carries a `claude` tail on a `claudeInCouncil`
+ * run (synthesized downstream of `buildSeats`, seats.js:44-45) that `seats[]`
+ * never names, so the two can differ in LENGTH. What DOES hold, for every
+ * alias `seats[]` was built FROM: `seats.js :: buildSeats` is
+ * `aliases.map(...)` over the bench array `models` is built from, so it is
+ * structurally one-to-one with that bench and cannot itself over- or
+ * under-register any bench alias, independent of anything `preflightSeats`
+ * separately rejects (id collisions, critic placement). The `claude` tail
+ * falls to the `!ids` branch below exactly like an alien alias does — a
+ * shortfall this function already handles by design, not a counterexample to
+ * it (pinned as the "claude tail" case, both here and in the invariant table
+ * at street-cred.test.js).
+ *
+ * FIX: the k-th occurrence of alias `m` in `models` takes the k-th id
+ * `byAlias.get(m)` registered for it, in table order. Once that list is
+ * exhausted (or the table never named `m` at all) the occurrence gets an
+ * ALIAS-KEYED row (`key: m, seat: null`) instead of being dropped, and a
+ * surplus registered id simply goes unused instead of being invented into an
+ * extra row — so `credSeats(models, seats).length === models.length` always.
+ *
+ * ⚠️ ROW ORDER, SEPARATELY — review round 1 of this task, Important 1. This
+ * function's row order is now `models` order, always: each occurrence pushes
+ * exactly where its own index puts it. The pre-fix loop ALSO happened to
+ * group an alias's rows at its first occurrence (`expanded.has(m) ->
+ * continue` skipped every later one), so on a NON-ADJACENT repeat — an
+ * ordinary engine bench, e.g. `['a','b','a']`, `buildSeats` handles it fine —
+ * this function's order now differs from BASE's even though every ADJACENT
+ * case in this file's own tests (and the ones street-cred.test.js pins) never
+ * showed it. Content is identical either way, only order moves; RULING
+ * (owner): the new `models`-order form is correct — BASE's grouping was an
+ * accident of the buggy loop, never a stated doctrine, and this order already
+ * agrees with `meta.seats`/`position`, which are in `models` order too. Full
+ * measurement, the mutant that pins it (EXPANDONCE), and the ruling's
+ * reasoning are at street-cred.test.js's "non-adjacent repeat" tests and
+ * tests/council/street-cred-mutants.js :: EXPANDONCE.
  *
  * ⚠️ JOINED BY VALUE — never positionally. run-assemble.js :: buildTallyInput
  * forbids the positional join in-code and the reasons are all live here:
  * `seats[]` is BENCH-ONLY, `meta.models` carries a `claude` tail it never has,
  * and two of appendRun's three call sites feed hand-assembled input no seat
- * machinery touches. So an alias the table does NOT name keeps exactly today's
- * shape — one entry per occurrence in `models`, duplicates included — and an
- * alias it does name expands ONCE, into its seats in table order.
+ * machinery touches — exactly the input shape where `models` and `seats` can
+ * disagree in COUNT, not merely in content.
  * @param {string[]} models meta.models (the ALIAS list)
  * @param {?Array<{id: string, alias: string}>} seats meta.seats, absent on most runs
- * @returns {Array<{model: string, key: string, seat: ?string}>} `key` is what
- *   rankPositions keyed by; `seat` is the id, null unless it DIFFERS from the
- *   alias — the emit-when-DIFFERENT predicate every seat producer shares
- *   (run-stats-entry.js :: buildRunStatsEntry), so a unique-alias bench emits
- *   no seat field anywhere and its documents stay byte-identical.
+ * @returns {Array<{model: string, key: string, seat: ?string}>} always
+ *   `models.length` entries. `key` is what rankPositions keyed by; `seat` is
+ *   the id, null unless it DIFFERS from the alias — the emit-when-DIFFERENT
+ *   predicate every seat producer shares (run-stats-entry.js ::
+ *   buildRunStatsEntry), so a unique-alias bench emits no seat field anywhere
+ *   and its documents stay byte-identical.
  */
 function credSeats(models, seats) {
   const byAlias = new Map();
@@ -90,13 +139,23 @@ function credSeats(models, seats) {
     if (!byAlias.has(s.alias)) { byAlias.set(s.alias, []); }
     byAlias.get(s.alias).push(s.id);
   }
-  const rows = [], expanded = new Set();
+  // Named mutant "EXPANDONCE": revert this whole loop to the pre-fix form —
+  // the first occurrence of a named alias expands into EVERY id it has
+  // registered, and `expanded.has(m) -> continue` skips every later
+  // occurrence outright. That is a wholesale swap rather than a token flip
+  // because the two algorithms track different state (a Set of aliases
+  // already expanded vs. a per-alias occurrence count) — there is no smaller
+  // edit that reproduces the drop/invent pair. tests/council/street-cred-mutants.js :: EXPANDONCE.
+  const seen = new Map(), rows = [];
   for (const m of models) {
-    const ids = byAlias.get(m);
-    if (!ids) { rows.push({ model: m, key: m, seat: null }); continue; }
-    if (expanded.has(m)) { continue; }
-    expanded.add(m);
-    for (const id of ids) { rows.push({ model: m, key: id, seat: id === m ? null : id }); }
+    const k = seen.get(m) || 0;
+    seen.set(m, k + 1);
+    // Named mutant "ALIASDRIVER": force `id` to always be falsy, so the table
+    // built above is never consulted and every row is alias-keyed —
+    // tests/council/street-cred-mutants.js :: ALIASDRIVER.
+    const id = (byAlias.get(m) || [])[k];
+    rows.push(id ? { model: m, key: id, seat: id === m ? null : id }
+                 : { model: m, key: m, seat: null });
   }
   return rows;
 }
