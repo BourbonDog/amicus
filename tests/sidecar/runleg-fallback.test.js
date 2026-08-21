@@ -199,6 +199,18 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     expect(waveEvents.some(e => e.event === 'leg-terminal' && e.legId === 'w9-1')).toBe(true);
   });
 
+  // MUTANT SEATDROP (v4.8 R5 T4.3) — revert fanout-leg.js:101's write to drop
+  // the `seat` key entirely:
+  //   writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
+  // Hand-applied, measured, hand-reverted; `git diff --stat
+  // src/sidecar/fanout-leg.js` was empty (byte-identical to HEAD) both before
+  // applying and after reverting. Red set (1, exactly): 'writes the leg seat
+  // into metadata.json when the leg carries one (v4.8 R5)' below —
+  // `meta.seat` comes back `undefined` instead of `'opus#2'`. The seatless-leg
+  // pin that follows it stays green under this mutant too: it asserts
+  // ABSENCE, and the mutant never adds a seat key either — that is the
+  // preservation half being vacuously true under the mutant, not a coverage
+  // gap in this pin.
   test('writes the leg seat into metadata.json when the leg carries one (v4.8 R5)', async () => {
     const project = tmp();
     const { getSessionDir } = require('../../src/session-manager');
