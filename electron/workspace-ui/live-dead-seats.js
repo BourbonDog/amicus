@@ -201,9 +201,11 @@
       var alias = s.modelInput || s.model; // F36: alias space, never resolved ids
       reviewing[alias] = true;
       // Both spaces. The alias arm keeps legacy/alias-only candidates suppressible; the seat
-      // arm is what lets a dead twin survive beside a live one. Guarded: a bare insert would
-      // write the STRING key 'undefined' on the live-tick path, whose payload carries no seat
-      // identity at all (live-normalize.js seatOf emits a per-LEG taskId).
+      // arm is what lets a dead twin survive beside a live one. Guarded: `s.seat` is null on a
+      // unique-alias bench on BOTH paths — the terminal one (run-stats-entry.js ::
+      // buildRunStatsEntry) and, since v4.8 R5, the live tick (live-normalize.js :: seatOf).
+      // Both spell the same emit-when-DIFFERENT predicate, `seat.id !== seat.alias`, so the two
+      // producers cannot disagree. A bare insert would write a STRING key for every such seat.
       if (s.seat) { reviewing[s.seat] = true; }
       byRole[alias + '|' + s.role] = true;
     });

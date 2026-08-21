@@ -26,9 +26,9 @@ const { resolveUsage, sumWaveUsage } = require('../utils/pricing');
 //                 a timed-out single session never exited (watch-render.js:138 polls until
 //                 TERMINAL.has(doc.status), and amicus_status stamps metadata.status straight onto
 //                 the doc — mcp-server.js:687); a timed-out leg skipped the "prefer metadata.usage
-//                 over the stale progress.json snapshot" branch in council-legs.js:162 and reported
-//                 an under-counted cost; and markLive kept stamping view:'live' on a finished
-//                 single-session doc.
+//                 over the stale progress.json snapshot" branch in council-legs.js :: buildLegRow
+//                 and reported an under-counted cost; and markLive kept stamping view:'live' on a
+//                 finished single-session doc.
 // NOTE this is deliberately NOT the same list as src/utils/result-schema.js:13 TERMINAL_STATUSES
 // (the leg set, no 'partial'). Two mirrors of THIS list exist — src/workspace/run-detail.js:26 and
 // electron/workspace-ui/live-model.js:14 — byte-identical, held by drift pins. Edit all three.

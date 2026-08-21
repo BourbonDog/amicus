@@ -162,8 +162,9 @@ describe('buildLegRows', () => {
     });
 
     // ⚠️ v4.4.1 A1, second reachable consequence. The metadata-preference branch above is gated on
-    // `TERMINAL.has(row.status)` (src/observe/council-legs.js:162) reading a leg's metadata.status
-    // — which for a timed-out leg is 'timed-out' (session-finalize.js resolveTerminalState), a
+    // `TERMINAL.has(row.status)` (src/observe/council-legs.js :: buildLegRow) reading a leg's
+    // metadata.status — which for a timed-out leg is 'timed-out' (session-finalize.js
+    // resolveTerminalState), a
     // spelling the TERMINAL set did not contain. So a timed-out leg fell through to the stale
     // 'receiving' progress snapshot and reported an under-counted cost: exactly the B3 defect,
     // still live on one status.
@@ -509,6 +510,31 @@ describe('buildLegRows', () => {
       const out = buildLegRows(runDir, ['leg-done'], RUN_CTX);
       expect(out.stalled).toBeUndefined();
       expect(out.stalledForSeconds).toBeUndefined();
+    });
+  });
+
+  describe('v4.8 R5: the leg row carries the seat id read back off metadata.json', () => {
+    test('buildLegRow carries the seat off metadata.json (v4.8 R5)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-seat');
+      const d = legDir(runDir, 'leg-seated');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-seated', status: 'running', model: 'openrouter/x/y',
+        modelInput: 'gemini', seat: 'gemini#2',
+      }));
+      const { rows } = buildLegRows(runDir, ['leg-seated'], RUN_CTX);
+      expect(rows[0].seat).toBe('gemini#2');
+    });
+
+    test('buildLegRow reports a truthful null when metadata.json has no seat (v4.8 R5)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-unseated');
+      const d = legDir(runDir, 'leg-unseated');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-unseated', status: 'running', model: 'openrouter/x/y', modelInput: 'gemini',
+      }));
+      const { rows } = buildLegRows(runDir, ['leg-unseated'], RUN_CTX);
+      expect(rows[0].seat).toBeNull();
     });
   });
 });

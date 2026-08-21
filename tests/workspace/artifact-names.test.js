@@ -6,7 +6,7 @@
 // a rule about filenames validated on benches where every leg BINDS. The on-disk
 // namespace only collides when one does not, because the engine names an artifact
 // from the seat when a leg binds and from the leg's alias when it does not
-// (run-launch.js:205-207). Every case below that matters drives an ORPHAN.
+// (run-launch.js :: materializeReviews). Every case below that matters drives an ORPHAN.
 //
 // The suite had ZERO coverage of this function's seat behaviour before this file:
 // artifact-guard.test.js contains no `seats` key at all, which is why the whole

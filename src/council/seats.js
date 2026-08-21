@@ -119,8 +119,9 @@ function roleAt(seats, seatId) {
  * old wording as a live hazard; it was a defensive note, not a dependency.
  *
  * `bound` says nothing about USABILITY: a leg that ran and died still binds
- * (run-launch.js:202-204 drops non-complete legs later). PR2's dead-seat set is
- * `unbound ∪ deadWave.seats ∪ {bound seats materializeReviews rejected}`.
+ * (run-launch.js :: materializeReviews drops non-complete legs later).
+ * PR2's dead-seat set is `unbound ∪ deadWave.seats ∪ {bound seats
+ * materializeReviews rejected}`.
  *
  * @param {string} waveId
  * @param {?Array<object>} seats the wave's launch roster, in launch order

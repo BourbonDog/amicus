@@ -15,9 +15,9 @@
 const LS = require('../../electron/workspace-ui/live-seats');
 
 describe('T1 — twin-bench row identity', () => {
-  // `seat` is emit-when-set upstream: run-assemble.js:89 stamps it only when
-  // `seat.id !== seat.alias`, which seats.js:67 makes true exactly when the bench repeats
-  // that alias. So a twin bench carries it and a unique bench does not.
+  // `seat` is emit-when-set upstream: src/council/run-stats-entry.js :: buildRunStatsEntry stamps
+  // it only when `seat.id !== seat.alias`, which seats.js:67 makes true exactly when the bench
+  // repeats that alias. So a twin bench carries it and a unique bench does not.
   const twinRows = [
     { model: 'deepseek', seat: 'deepseek#1', role: 'seat', status: 'ok', costDisplay: '$0.01' },
     { model: 'deepseek', seat: 'deepseek#2', role: 'seat', status: 'error', costDisplay: '$0.02' },
@@ -42,7 +42,8 @@ describe('T1 — twin-bench row identity', () => {
   // GREEN AT HEAD by construction and its passing is not progress. What makes it a pin rather
   // than decoration is Task 1 Step 5's Mutant 2: dropping the `|| r.model` fallback collapses
   // every id on this bench to `[null,"seat"]` and turns it red. That fallback is the clause
-  // keeping unique benches byte-identical (run-assemble.js:89 emits `seat` only for twins).
+  // keeping unique benches byte-identical (src/council/run-stats-entry.js :: buildRunStatsEntry
+  // emits `seat` only for twins).
   //
   // ⚠️ This assertion deliberately does NOT include `seat === null`. Rev 3's first draft folded
   // that in and the "control" went red at HEAD — a preservation pin asserting new behaviour is

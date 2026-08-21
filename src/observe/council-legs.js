@@ -22,7 +22,7 @@
  * em-dash) and blind mode's labelOf(alias) lookup never matches (real model
  * id leaks). The alias IS on disk per-leg, though: every council leg goes
  * through src/sidecar/fanout-leg.js's runSingleAttempt, which calls
- * `writeLegPatch(legDir, { parentWave, modelInput })` synchronously,
+ * `writeLegPatch(legDir, { parentWave, modelInput, seat })` synchronously,
  * immediately after leg creation (fanout-leg.js:101) — well before any
  * status poll could reasonably observe it missing. So this module reads
  * `modelInput` straight off the leg's own metadata.json, no run.json join
@@ -127,6 +127,12 @@ function buildLegRow(project, legId, runCtx) {
   const row = {
     taskId: legId, model: meta.model || null, status: meta.status || 'unknown',
     modelInput, role,
+    // v4.8 R5: the leg's seat id (`alias#N`), written at launch by
+    // fanout-leg.js :: runSingleAttempt. Null on a unique-alias bench, where
+    // buildSeats sets id === alias and the shared emit-when-DIFFERENT predicate
+    // therefore stamps nothing — the same rule run-stats-entry.js ::
+    // buildRunStatsEntry applies on the terminal path.
+    seat: meta.seat || null,
   };
   let stalledMs = null;
   let p = null;

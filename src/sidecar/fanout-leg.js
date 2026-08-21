@@ -98,7 +98,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     });
     waveDir = getSessionDir(project, waveId);
     emitLegStarted(waveDir, waveId, legId, leg.model, leg.modelInput, follow);
-    writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
+    writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput, seat: leg.seat });
     saveInitialContext(legDir, systemPrompt, userMessage);
 
     // Per-leg watchdog: a BACKSTOP strictly behind runHeadless's own deadline

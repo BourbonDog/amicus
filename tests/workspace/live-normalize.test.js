@@ -58,6 +58,28 @@ describe('normalizeLive', () => {
     expect(m.costAmount).toBeCloseTo(0.06);
   });
 
+  // v4.8 R5 (T4.5): carry the leg's seat id (T4.2 stampLegAttribution -> T4.3 metadata.json ->
+  // T4.4 buildLegRow's `meta.seat || null`) through to the live seat row — the field
+  // electron/workspace-ui/live-dead-seats.js:209's `if (s.seat)` arm reads.
+  // Named mutant LIVESEATBLIND (delete seatOf's `seat: leg.seat || null,` line): measured to red
+  // BOTH this test (received `undefined`) and dead-seat-rows.test.js's "a live seat suppresses
+  // its OWN revived seat id, and only that one (v4.8 R5)" (received `['a#1','a#2']`) — a red set
+  // of 2, confirming the two tests jointly pin the seatOf -> deadSeats wiring end-to-end.
+  test('normalizeLive carries each leg seat onto its live seat row (v4.8 R5)', () => {
+    const doc = {
+      type: 'council-run', view: 'live', taskId: 'seat3333', status: 'running',
+      stages: [{ name: 'stage1', status: 'running', waveId: 'seat3333-s1' }],
+      legsTotal: 2, legsComplete: 0,
+      legs: [
+        { taskId: 'seat3333-s1-1', model: 'x/y', modelInput: 'a', status: 'running', seat: 'a#2' },
+        { taskId: 'seat3333-s1-2', model: 'x/y', modelInput: 'b', status: 'running' },
+      ],
+    };
+    const m = normalizeLive(doc);
+    expect(m.seats[0].seat).toBe('a#2');
+    expect(m.seats[1].seat).toBeNull();
+  });
+
   // ⚠️ v4.4.1 RN-7: this test used to be "wave-nested legs and legId spellings are tolerated
   // (shape seam)" and asserted the exact opposite of what it now asserts. Both fallbacks were
   // dead code that ASSERTED A SHAPE NO PRODUCER EMITS — the WAVE composed doc

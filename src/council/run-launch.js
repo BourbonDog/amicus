@@ -67,12 +67,16 @@ function createLaunchers(deps = {}) {
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
    *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
-   *   councilRunId?: string, councilName?: string, tag?: string, fallback?: object,
-   *   catalog?: Array, noOutputBackstopMs?: number}} opts
+   *   councilRunId?: string, councilName?: string, tag?: string, seats?: Array<object>,
+   *   fallback?: object, catalog?: Array, noOutputBackstopMs?: number}} opts
    *   councilRunId/councilName (v4.3 Task 3, spec §7.2) are additive attribution
    *   ids forwarded verbatim into the runFanout call so it can stamp them onto
    *   every leg. tag (v4.7 F8 D16) rides the same forward — every call site
    *   below that sets councilRunId/councilName sets `tag: o.tag` alongside it.
+   *   seats (v4.8 R5 T4.1) rides the same forward again: the wave's launch
+   *   roster, index-parallel with `models`. stampLegAttribution
+   *   (fanout-wave-io.js, T4.2) consumes it to name each leg's seat; it is
+   *   `undefined` for every caller that does not set it.
    *   fallback/catalog (v4.3 Task 18, spec §6.2) are likewise
    *   additive/opt-in — omitted by callers that must never substitute (the
    *   chair, debate legs); run-stages.js's Stage-1/Stage-2 launches pass them.
@@ -125,6 +129,11 @@ function createLaunchers(deps = {}) {
       // undefined when no --tag, so stampLegAttribution's `if (options.tag)`
       // guard (fanout-wave-io.js) simply no-ops, byte-identical to today.
       tag: opts.tag,
+      // v4.8 R5 T4.1: the per-wave roster, index-parallel with `models`.
+      // stampLegAttribution (fanout-wave-io.js, T4.2) consumes this key to
+      // name each leg's seat; `undefined` for every caller that does not set
+      // it (every non-council caller, and the chair/debate/repair launches).
+      seats: opts.seats,
       // Task 5 (#129): spread-guarded on Number.isFinite, NOT on truthiness —
       // an explicit 0 is this knob's documented disable hatch
       // (no-output-backstop.js:13-15) and a truthiness guard would silently

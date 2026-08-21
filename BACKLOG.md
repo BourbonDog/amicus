@@ -2998,16 +2998,108 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 - [ ] **NEXT TASK — Phase 4: R5, seat id on the live leg row.** Filed 2026-08-21 (v4.8 Phase 3 T3.4)
   as the correct resume point, replacing the Phase 3 entry above (now ✅ COMPLETED). Per the phasing
   doc's own task list (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 4):
-  extend `writeLegPatch` (`src/sidecar/fanout-leg.js :: runLeg`) so `src/observe/council-legs.js ::
+  extend `writeLegPatch` (`src/sidecar/fanout-leg.js :: runSingleAttempt`) so `src/observe/council-legs.js ::
   buildLegRow` reads the seat off `metadata.json`, threading from `run-stage1-launch.js`'s
   `seated[].roster`; then through `live-normalize.js :: seatOf`. Makes
-  `electron/workspace-ui/live-dead-seats.js:207`'s `if (s.seat)` arm — re-verified 2026-08-21, still
-  permanently dead on the live path, since neither `buildLegRow` nor any live-tick payload emits
-  `.seat` today — actually live.
+  `electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — re-verified 2026-08-21 at
+  BASE (`1832b9c7`), dead on the live path at every measurement before this phase, since neither
+  `buildLegRow` nor any live-tick payload emitted `.seat` there — actually live.
   ⚠️ **Ordering is PREFERENCE ONLY, not a hard gate.** The phasing doc's own §6 lists "Phase 3 vs
   Phase 4 order" among preference-only orderings, so nothing in Phase 3's closure forces Phase 4
   next over Phase 5 (SI-10/SI-13, the debate join) or Phase 6's independents — this entry follows
   the phasing doc's own §5 listing order, not a discovered dependency. Re-derive before starting.
+  ⚠️ **Citation correction (v4.8 T4.6):** the symbol above read `:: runLeg` until this pass —
+  measured, `runLeg` is a 6-line dispatcher with no `writeLegPatch` call; the write sites are both
+  inside `runSingleAttempt`. Corrected here and in the phasing doc's own Phase 4 line, case-
+  insensitive repo sweep confirmed clean. The line number in the sentence above was also stale
+  (`:207` → `:209`, the arm moved when T4.5's comment rewrite grew the file above it) and is
+  corrected the same way. The mechanism this line describes was, and remains, correct — a
+  citation repair, not a truth repair. ⚠️ **Fix round (reviewer finding):** this annotation
+  previously said the sentence's CLAIM "was, and remains, accurate" — that overclaimed. Only the
+  citation was repaired; the "still dead" claim is now explicitly scoped to BASE, immediately
+  above, because it stopped being true the moment T4.1–T4.5 shipped — three lines below it, in
+  this same paragraph.
+  ✅ **COMPLETED 2026-08-21 — v4.8 Phase 4: T4.1 (`e42b6aaa`) + T4.2 (`49c2313d`+`41d6f793`) + T4.3
+  (`3c95bd18`+`94fdb76b`+`2294ce8a`+`c009c7eb`+`3e5ad689`) + T4.4 (`40b26dde`+`2d69a987`) + T4.5
+  (`b9c760a5`+`6a944404`) + T4.6 (this bookkeeping pass, no behaviour change).** The Stage-1 roster
+  now threads through the fanout transport (`fanout-wave-io.js :: stampLegAttribution`, stamping
+  `leg.seat` emit-when-DIFFERENT against the seat's own alias — the same predicate
+  `run-stats-entry.js :: buildRunStatsEntry` and the three `run-assemble.js` sites already share) to
+  `metadata.json` (`fanout-leg.js :: runSingleAttempt`), and back out through
+  `council-legs.js :: buildLegRow` / `live-normalize.js :: seatOf`.
+  `electron/workspace-ui/live-dead-seats.js:209`'s `if (s.seat)` arm — dead on the live path at
+  every measurement before this phase — **now executes there**, pinned end to end by the named
+  mutant `LIVESEATBLIND` (red set 2). A unique-alias bench writes nothing new to `metadata.json`
+  (byte-identical to pre-R5); the composed live doc is **not** byte-identical regardless — every
+  leg row gains an explicit `seat: null` (T4.4's annotation). Four named mutants recorded and
+  hand-reverted end to end: `SEATALIAS` 2 · `SEATSLOPPY` (the surgical form) 1 · `SEATDROP` 2 ·
+  `LIVESEATBLIND` 2. Threaded only from Stage 1's initial launch, per scope — chair, debate,
+  repair, and the Stage-1 retry wave (`run-retry.js :: retryStage1Losses`, a separate Stage-1
+  launch site) all launch without a roster and are unchanged; a retried twin's live row still
+  reports `seat: null` (filed below, not fixed here). T4.6 also re-anchored two rotted citations by
+  symbol: `:: runLeg` (this
+  entry, above) and `run-assemble.js:89` (`electron/workspace-ui/live-seats.js`,
+  `workspace-seats.js`, `tests/workspace/seat-panel-twins.test.js` — that line is
+  `labelClaudeReview`'s docblock, unrelated to seats; the real producer is
+  `run-stats-entry.js :: buildRunStatsEntry`). Final measured state (`npm test`, this task, not
+  T4.3's mid-phase baseline): 544 suites / 7810 passed / 8 skipped / 0 failed.
+
+- [ ] **Filed, not fixed (v4.8 Phase 4 final whole-branch review, 2026-08-21) — the Stage-1 retry
+  wave still launches without a seat roster.** R5 (above) threads the seat roster from
+  `run-stage1-launch.js`'s `seated[].roster` through to the live leg row — spec-compliant, since
+  the spec named only that launch site. But `run-retry.js :: retryStage1Losses` is ALSO a Stage-1
+  launch, and its own launch `common` object (`run-retry.js:90-96`) forwards `councilRunId`,
+  `councilName`, `tag`, `fallback`, `catalog` and `retryOfWaveId` — and no `seats`. User-visible
+  consequence: on a twin bench where `a#1` dies and is retried, the retried leg's live row still
+  reports `seat: null`, so `live-dead-seats.js:209`'s `if (s.seat)` suppression arm stays dark for
+  exactly the seat that most needed it. Forwarding `unit.seats` (index-parallel with `unit.models`)
+  is NOT the one-liner it looks like: `run-retry.js:138`'s own comment already warns the two are
+  "NOT lockstep by construction" — only emergently so, on invariants that comment states but this
+  task never measured. That index-parallelism must be MEASURED with its own probe before any
+  `seats` key rides this launch, plus RED-before-GREEN and a named mutant of its own — a task, not
+  a fix-wave line.
+
+- [ ] **Filed, not fixed (v4.8 Phase 4 council review, PR #178, 2026-08-21) —
+  `stampLegAttribution`'s index-parallel contract is unenforced at the function boundary and has no
+  MISALIGNMENT test.** Council findings **A1** [major, glm] and **B1** [minor, qwen] are one
+  mechanism, both unanimous (a3/d0/n0). `src/sidecar/fanout-wave-io.js :: stampLegAttribution`
+  stamps `legs[i].seat` from `options.seats[i]`, so the two arrays being index-parallel is
+  load-bearing: a misaligned roster silently attributes a leg to the **wrong** seat, which is worse
+  than no seat at all — a wrong `alias#N` on a live row would make `live-dead-seats.js:209`'s
+  suppression arm hide the wrong dead candidate.
+  ⚠️ **Correct A1's own wording before acting on it: the property is NOT "asserted only by
+  comment".** It was measured twice — v4.8 T4.1 ran a probe against the real `launchStage1` across
+  five bench shapes (including a non-adjacent repeated alias and a critic that is also a bench
+  alias), and the whole-branch reviewer independently traced all three Stage-1 launch shapes
+  (seat wave, lens, critic solo) plus `fanout-validate.js`'s one-leg-per-model loop. The accurate
+  statement is B1's narrower one: **the contract is unenforced at the boundary, and no committed
+  test ever feeds `stampLegAttribution` a misaligned roster.** Every committed fixture is aligned,
+  so the mutants pin the predicate and the bounds guard but not the ordering.
+  Cheapest useful fix is a test that passes a deliberately permuted `seats` and pins what happens,
+  plus a decision on whether the function should detect it at all (it currently cannot — seat
+  objects carry `alias`, so `s.alias !== leg.modelInput` IS a detectable misalignment signal, but
+  reading `modelInput` there would couple this function to leg shape; that trade-off is the
+  task's real question, not a foregone conclusion).
+
+- [ ] **NEXT TASK — Phase 5: Debate join.** Filed 2026-08-21 (v4.8 Phase 4 T4.6) as the correct
+  resume point, replacing the Phase 4 entry above (now ✅ COMPLETED). Per the phasing doc's own
+  task list (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 5, and owner
+  ruling **R8**): SI-10 — refuse a `-rv` re-vote whose seat is unknown, and announce it; SI-13
+  collapses to a JSDoc edit inside `debate.js :: applyDebate`'s own docblock once SI-10 lands
+  (the phasing doc's R8 row names `debate.js:44` — a line, not the symbol; re-derive it before
+  trusting it, this file's own T3.4/PF-3 lessons say why). Re-derive both anchors before starting
+  — this file is not re-derived as later work lands.
+  ⚠️ **Ordering is PREFERENCE ONLY, not a hard gate — carried forward from Phase 4's own §0.9 so
+  the next controller does not re-derive it.** Phase 4's plan measured, at its own BASE: R5 (Phase
+  4) was the only phase discharging a hard gate for later work, and nothing in the "genuinely
+  gating" list (phasing doc §6) forces Phase 5 ahead of Phase 6's independents (SI-22.4 trim, SI-23,
+  SI-24 both sites, SI-14 twin pin, T6.5 repair-row seat, T6.6 `skills/` doc-fact gate, SI-25 sites
+  (1)+(2)) or the reverse — "Phase 3 vs Phase 4 order" was the only preference-only pair the
+  phasing doc's §6 named, and it is moot now that both phases are merged. Phase 5 is named here
+  only because it is next in the phasing doc's own §5 listing order, not because anything requires
+  it before Phase 6. Re-derive before starting, exactly as this same paragraph asked of Phase 4.
+  ⚠️ **Never tick SI-18** — an earlier phase closed only its street-cred half; see SI-18's own entry
+  above.
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 

@@ -153,6 +153,43 @@ describe('runLegWithFallback (spec 6.2)', () => {
     expect(doc.status).toBe('error');
     expect(doc.attempts.length).toBe(2);   // primary + 1 substitution (capped)
   });
+
+  // This is the ONLY test in this describe that does NOT inject `runOnce`.
+  // Every test above passes its own `runOnce: fakeRunOnce`, and this file's
+  // own header (:5) says outright that doing so makes the runHeadless mock
+  // inert for them — they never reach the real `runSingleAttempt` (grep
+  // confirms these are the only runLegWithFallback callers in the whole
+  // suite, and all five inject runOnce). Leaving `runOnce` unset here falls
+  // through to fanout-leg-fallback.js:160's default — the real
+  // `runSingleAttempt`, driven by this file's module-level runHeadless mock —
+  // so this is the only test that actually EXECUTES the claim T4.3's commit
+  // made by construction: that `{ ...leg, model: currentModel }`
+  // (fanout-leg-fallback.js:186) preserves `leg.seat` through the fallback
+  // loop, reaching metadata.json through the SAME write site a plain leg
+  // uses, with no second write site anywhere in the loop.
+  test('a leg run with no injected runOnce (the real runSingleAttempt) still writes its seat to metadata.json', async () => {
+    const project = tmp();
+    // No mkdirSync here: runLegWithFallback itself defensively creates the
+    // wave dir (fanout-leg-fallback.js:170) before the loop starts, unlike
+    // the runSingleAttempt describe below, which calls runSingleAttempt
+    // directly and so must create the wave dir itself.
+    const doc = await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', seat: 'opus#2' },
+      legId: 'w12-1', waveId: 'w12', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    }, { spendDir: project });
+
+    expect(doc.status).toBe('complete');  // primary succeeds — no substitution, one attempt
+    expect(doc.attempts).toHaveLength(1);
+
+    const { getSessionDir } = require('../../src/session-manager');
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w12-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.seat).toBe('opus#2');
+  });
 });
 
 describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize extraction)', () => {
@@ -197,6 +234,58 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     const waveEvents = createEventTail(path.join(getSessionDir(project, 'w9'), EVENTS_FILE)).poll();
     expect(waveEvents.some(e => e.event === 'leg-started' && e.legId === 'w9-1')).toBe(true);
     expect(waveEvents.some(e => e.event === 'leg-terminal' && e.legId === 'w9-1')).toBe(true);
+  });
+
+  // MUTANT SEATDROP (v4.8 R5 T4.3) — revert fanout-leg.js:101's write to drop
+  // the `seat` key entirely:
+  //   writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
+  // Hand-applied, measured, hand-reverted; `git diff --stat -- src/` was
+  // empty (byte-identical to HEAD) after every revert.
+  //
+  // RE-MEASURED after the fallback test below (`runLegWithFallback (spec
+  // 6.2)` describe, above) was added. Current red set (2, exactly):
+  //   - 'writes the leg seat into metadata.json when the leg carries one
+  //     (v4.8 R5)' (this describe, immediately below) — meta.seat undefined
+  //     instead of 'opus#2'.
+  //   - 'a leg run with no injected runOnce (the real runSingleAttempt)
+  //     still writes its seat to metadata.json' (runLegWithFallback (spec
+  //     6.2) describe, above) — the same failure shape, confirming that
+  //     test genuinely enters this write site through the real
+  //     runSingleAttempt rather than a stub, not just by construction.
+  // Before that fallback test existed, this same mutant reded only the first
+  // of the two (red set 1, recorded in commit 94fdb76b, superseded by this
+  // comment). The seatless-leg pin that follows stays green under this
+  // mutant in both measurements: it asserts ABSENCE, and the mutant never
+  // adds a seat key either — that is the preservation half being vacuously
+  // true under the mutant, not a coverage gap in this pin.
+  test('writes the leg seat into metadata.json when the leg carries one (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w10'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', seat: 'opus#2' },
+      legId: 'w10-1', waveId: 'w10', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w10-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.seat).toBe('opus#2');
+  });
+
+  test('a seatless leg leaves metadata.json without a seat key at all (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w11'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' },
+      legId: 'w11-1', waveId: 'w11', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w11-1'), 'metadata.json'), 'utf-8'));
+    expect('seat' in meta).toBe(false);
   });
 
   // v4.4 B4 — the two leg-level truth signals runHeadless now returns must reach
