@@ -239,15 +239,25 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
   // MUTANT SEATDROP (v4.8 R5 T4.3) — revert fanout-leg.js:101's write to drop
   // the `seat` key entirely:
   //   writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
-  // Hand-applied, measured, hand-reverted; `git diff --stat
-  // src/sidecar/fanout-leg.js` was empty (byte-identical to HEAD) both before
-  // applying and after reverting. Red set (1, exactly): 'writes the leg seat
-  // into metadata.json when the leg carries one (v4.8 R5)' below —
-  // `meta.seat` comes back `undefined` instead of `'opus#2'`. The seatless-leg
-  // pin that follows it stays green under this mutant too: it asserts
-  // ABSENCE, and the mutant never adds a seat key either — that is the
-  // preservation half being vacuously true under the mutant, not a coverage
-  // gap in this pin.
+  // Hand-applied, measured, hand-reverted; `git diff --stat -- src/` was
+  // empty (byte-identical to HEAD) after every revert.
+  //
+  // RE-MEASURED after the fallback test below (`runLegWithFallback (spec
+  // 6.2)` describe, above) was added. Current red set (2, exactly):
+  //   - 'writes the leg seat into metadata.json when the leg carries one
+  //     (v4.8 R5)' (this describe, immediately below) — meta.seat undefined
+  //     instead of 'opus#2'.
+  //   - 'a leg run with no injected runOnce (the real runSingleAttempt)
+  //     still writes its seat to metadata.json' (runLegWithFallback (spec
+  //     6.2) describe, above) — the same failure shape, confirming that
+  //     test genuinely enters this write site through the real
+  //     runSingleAttempt rather than a stub, not just by construction.
+  // Before that fallback test existed, this same mutant reded only the first
+  // of the two (red set 1, recorded in commit 94fdb76b, superseded by this
+  // comment). The seatless-leg pin that follows stays green under this
+  // mutant in both measurements: it asserts ABSENCE, and the mutant never
+  // adds a seat key either — that is the preservation half being vacuously
+  // true under the mutant, not a coverage gap in this pin.
   test('writes the leg seat into metadata.json when the leg carries one (v4.8 R5)', async () => {
     const project = tmp();
     const { getSessionDir } = require('../../src/session-manager');
