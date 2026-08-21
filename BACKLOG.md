@@ -2572,6 +2572,51 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   done: `briefings-chair.js :: buildChairPacket`'s `rankingLines` still renders `${r.judge}`
   alias-keyed and was not touched by this PR. T3.3's fix-round-1 baseline: 542 suites / 7782 passed
   / 8 skipped / 4 snapshots / 0 failed.
+  - **Council review of PR #176 (2026-08-21) — the run was PARTIAL; two findings, both raised by
+    one model and neither peer-adjudicated.** ⚠️ **The job passed and the review is still not
+    clean** — read the verdict comment, not the status. Recorded state:
+    `stage1:partial -> stage2:complete -> chair:error -> tally:complete`, **chair verdict
+    unavailable** (no parseable VERDICT line, `overallVerdict: null`), and street-cred `n/a` for
+    all four bench models, i.e. no usable rankings. Both findings scored `a0/d0/n0 - thin`
+    (Singleton: no peer corroborated OR disputed either). Run duration 337s, so this is NOT the
+    ~26s all-legs-dead OpenRouter key-limit signature — the legs ran, the chair failed.
+    - **B1 [major] — "chair-synthesis conformance is discarded from reliability history whenever
+      the chair shares a pair group with a bench leg." ALREADY OURS, not a new finding.** This is
+      the exact consequence T3.3 measured, disclosed and filed: `ledger-join.js :: benchLegs`'
+      docblock carries it with the end-to-end measurement (`{unstructured:1}` -> `{clean:1}`
+      through `appendRun` -> `ledger-stats.js :: deriveReliability`), and `CHANGELOG.md` states it
+      in the merged-rows entry. The council rediscovering it independently is corroboration that
+      disclosing it was right. **Still awaiting an owner ruling**; repairing it means giving the
+      chair its own ledger identity, which changes the row SET.
+    - [ ] **B2 [major] — an inconsistent `meta.seats` silently drops or invents street-cred rows
+      relative to `meta.models`. CONFIRMED BY MEASUREMENT, filed not fixed.** Measured 2026-08-21
+      against the shipped `street-cred.js :: credSeats`:
+
+      ```
+      models ['a','a','b'] + seats [a#1,a#2,b]  -> 3 rows   delta  0   (engine path, consistent)
+      models ['a','a','b'] + seats [a#1,b]      -> 2 rows   delta -1   (a row is DROPPED)
+      models ['a','b']     + seats [a#1,a#2,b]  -> 3 rows   delta +1   (a row is INVENTED)
+      models ['a','b']     + seats [z#1,z#2]    -> 2 rows   delta  0   (alien alias ignored)
+      ```
+
+      The mechanism is `credSeats`' `expanded.has(m) -> continue`: the first occurrence of an
+      alias expands to ONE ROW PER SEAT ID, and every later occurrence is skipped, so the row
+      count follows `seats` rather than `models` wherever the two disagree.
+      ⚠️ **This IS a surface v4.8 Phase 3 created.** At base `006bdec5` the signature was
+      `computeStreetCred(rankings, models)` — `meta.seats` could not influence street cred at all,
+      so a malformed seat table was simply ignored. Verified by opening the base file.
+      ⚠️ **Unreachable on the engine path**, where `seats.js :: buildSeats` derives `meta.seats`
+      from the same bench that becomes `meta.models`, so they agree by construction. Reachable on
+      the two hand-assembled `appendRun` paths: `mcp-tools.js` declares `meta.seats` on
+      `amicus_council_tally`, and `cli-handlers-council.js` passes user JSON verbatim. Those rows
+      reach the append-only ledger.
+      **Ruling (2026-08-21): FILE with the measurement, do not fix in PR #176.** Malformed-input
+      only, and ruling **R2** governs — attribute nothing where there is nothing to attribute.
+      This follows the T2.4 precedent exactly: the phantom `UNATTRIBUTED` column was likewise
+      malformed-input-only, filed with its measurement, and fixed in a later task rather than late
+      in a reviewed green PR. A fix belongs with its own tests and named mutant. Cost if wrong: a
+      hand-assembled document with a bad seat table writes a wrong row count to the ledger until
+      that fix lands.
   ⚠️ **BUDGET AN EXTRACTION BEFORE TOUCHING `report.js`.** Measured at `0cb2d4d9` with the gate's
   own `checkFileSize`: **277/300, 23 free** (197 at the branch point; T2.4 added ~80 lines carrying
   roughly 10 of executable code — this file's comment style inflates fast). The next
