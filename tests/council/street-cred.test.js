@@ -184,7 +184,7 @@ describe('computeStreetCred — the two channels are INDEPENDENT', () => {
     expect(mixed[0].withSelf).not.toBe(3);
   });
 
-  test('orderSeats but NO seat table: rows stay alias-driven and read the seated map', () => {
+  test('orderSeats but NO seat table: rows stay alias-driven and find nothing in the seated map', () => {
     // rankPositions keys on `a#1`/`a#2`, credSeats has no table so the rows are
     // keyed `a`; the fallback misses and both alias rows report null rather
     // than silently adopting one twin's numbers.

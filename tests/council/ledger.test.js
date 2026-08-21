@@ -818,7 +818,7 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
 
   // The SEATED half of the replacement — the fixture the old T12 could not
   // build, because `runStats[].seat` did not exist when it was written.
-  describe('T12b — the seat-aware street-cred join (v4.8 T3.3, SI-18/SI-20)', () => {
+  describe('T12b — the seat-aware street-cred join (v4.8 T3.3, SI-20)', () => {
     // Two seats of alias `a`, DIVERGENT street cred — which is what
     // street-cred.js starts producing the moment rankPositions is seat-keyed,
     // and what the old `new Map(s => [s.model, s])` silently dropped one of.

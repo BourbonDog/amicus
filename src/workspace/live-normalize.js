@@ -42,7 +42,7 @@ function seatOf(leg) {
     // ⚠️ DE-ROT (F34/F36): `model` and `modelInput` are TWO SEPARATE fields, never collapsed.
     // A live leg's `model` is the resolved executable id (e.g. `google/gemini-2.5`); `modelInput`
     // is the council ALIAS (e.g. `gemini`) that run.json's labelMap and blind mode's labelFor()
-    // key on (src/council/anonymize.js:30 stamps labelMap values from the alias, never the
+    // key on (src/council/anonymize.js :: assignLabels stamps labelMap values from the alias, never the
     // resolved id). The already-shipped electron/workspace-ui/live-model.js:55 reads
     // `seat.modelInput || seat.model` to pick the alias for its label lookup — collapsing the two
     // into one field here would silently break blind mode (a resolved-id lookup never matches

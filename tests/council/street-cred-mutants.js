@@ -95,12 +95,12 @@
   // plus the quadrant that round added.
   //
   // ⚠️ THE ASYMMETRY IS THE POINT, and it is measured, not argued: the
-  // "unique-alias bench: on-disk artifact parity" describe in that same file
-  // stays GREEN. It drives the real `runCouncil` over a three-alias `--debate`
-  // bench and reads all five documents off disk; this mutant is invisible
-  // there because every key in `sc` is the alias in both spellings. If it ever
-  // starts reding on a unique-alias bench, the byte-identity property is what
-  // broke, not the join.
+  // "unique-alias bench: on-disk artifact parity" describe in
+  // tests/council/seat-parity-ondisk.test.js stays GREEN. It drives the real
+  // `runCouncil` over a three-alias `--debate` bench and reads all five
+  // documents off disk; this mutant is invisible there because every key in
+  // `sc` is the alias in both spellings. If it ever starts reding on a
+  // unique-alias bench, the byte-identity property is what broke, not the join.
   //
   // NO PIN THAT PRE-DATES T3.3 REDS. Stated plainly rather than left to be
   // inferred — see the header.

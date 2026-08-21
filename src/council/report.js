@@ -51,16 +51,16 @@ const UNATTRIBUTED = 'UNATTRIBUTED';
  * ⚠️ EXPORTED AND SHARED, not copied (council A3/B1). `workspace/matrix-model.js`
  * makes the identical decision over `tally.meta.seats`, and two verbatim copies
  * are a maintenance coupling: edit one and the two renderers disagree about
- * which space a document is in. This is NOT `ledger.js:61-69`'s
- * documented-copy case — that copy is paid for because `ledger.js` requires
- * only fs/path/utils-config while its sibling pulls findings → anonymize →
- * seats. Measured here: requiring `workspace/matrix-model.js` already loads
+ * which space a document is in. This is NOT `ledger.js :: CONFORMANCE_RANK`'s
+ * documented-copy case — that copy is paid for because `ledger.js` (plus its two
+ * extractions) never reaches findings/anonymize/seats, while its sibling pulls
+ * all three. Measured here: requiring `workspace/matrix-model.js` already loads
  * four first-party modules (v4.8 Phase 1 T1.2 moved renderMd's own
- * pricing/format-duration/degrade requires out to report-md.js, which this
- * path never reaches — report-md is required lazily from inside buildReport,
- * not at module load) and THIS file is one of them (it has imported SYMBOL
- * since v4.4, for the same single-source reason), so sharing costs ZERO new
- * require edges. Guarded by tests/council/seat-matrix.test.js's A3/B1 table.
+ * pricing/format-duration/degrade requires out to report-md.js, which this path
+ * never reaches — report-md is required lazily from inside buildReport, not at
+ * module load) and THIS file is one of them (it has imported SYMBOL since v4.4,
+ * for the same single-source reason), so sharing costs ZERO new require edges.
+ * Guarded by tests/council/seat-matrix.test.js's A3/B1 table.
  */
 function isSeatSpace(seats) {
   return Array.isArray(seats) && seats.length > 0

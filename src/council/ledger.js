@@ -64,7 +64,11 @@ function countSeverity(findings) {
 
 // v4.8 PR4b (R4b-4): a LOCAL COPY of run-assemble.js's CONFORMANCE_RANK +
 // worseConformance. Deliberately copied, not imported: this module requires
-// only fs/path/utils-config, while run-assemble pulls findings → anonymize →
+// fs/path/utils-config directly, plus its own two size-gate extractions —
+// ./ledger-stats and ./ledger-join (v4.8 T3.0/T3.3) — and neither deepens the
+// graph: ./ledger-join is require-free and ./ledger-stats requires only the
+// same three, plus a LAZY require('./tally') inside buildStatsDoc that never
+// runs at module load. run-assemble pulls findings → anonymize →
 // seats, atomic-write, and — since v4.8 PR4c moved writeVerdictFiles out —
 // run-verdict-files → verdict → report. The graph is one hop longer than the
 // comment PR4b wrote, not one hop shorter. The duplication is paid for

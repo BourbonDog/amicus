@@ -83,7 +83,7 @@ describe('pickFallbackChair under resolved-id keys (v4.7 GOA-7 D11)', () => {
 // alias on the CURRENT bench.)
 //
 // WHY `runs` IS ONLY A TIE-BREAK. `runs` is the group's TOTAL ledger row count
-// (`ledger.js:137`) and includes `judged:false` runs that wrote no street cred.
+// (`ledger-stats.js :: countRuns`) and includes `judged:false` runs that wrote no street cred.
 // A model with 10 runs of which 2 were judged therefore outranks one with 5 all
 // judged, on a tie — so `runs` proxies operational history, NOT the sample
 // behind the mean, and must never be read as a ranking signal. The model-id term
@@ -102,7 +102,7 @@ describe('pickFallbackChair tie-break is explicit and order-independent (v4.8 PR
     expect(forward).toBe(reversed);
   });
 
-  // `runs` is total ledger appearances (ledger.js:137), including judged:false
+  // `runs` is total ledger appearances (ledger-stats.js :: countRuns), including judged:false
   // runs that contributed no street cred — a tie-break, not a ranking signal.
   test('on a tie the group with more council appearances wins', () => {
     const a = agg('alpha', 2, 1);

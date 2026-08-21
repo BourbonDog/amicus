@@ -631,7 +631,7 @@ groups by `resolvedModel || model` — see the stats section below.
   "type": "council-tally",
   "meta": { "...": "echoed from input" },
   "judged": true,
-  "streetCred": [ { "model": "gpt", "withSelf": 1, "peersOnly": 1, "perJudgeRank": { "...": "..." } } ],
+  "streetCred": [ { "model": "gpt", "withSelf": 1, "peersOnly": 1, "perJudgeRank": { "...": "..." }, "seat": "gpt#1" } ],
   "findings": [
     { "id": "A1", "raiser": "deepseek", "severity": "major", "tier": "Confirmed",
       "basis": { "a": 1, "d": 0, "n": 0 }, "confidence": "thin",
@@ -647,8 +647,9 @@ groups by `resolvedModel || model` — see the stats section below.
 | `schemaVersion` | Tally-record schema version (currently `2`, council family v2 — see `type` below). This is a *separate* version line from the `--json` **error-envelope** schema version used by `BAD_ARGS` failures (also currently `2`) — the two happen to share a value right now but evolve independently; don't conflate them when scripting against output. |
 | `type` | Document-type discriminator; always `"council-tally"` (council family v2 envelope). |
 | `judged` | `true` only when `rankings.length >= 2`. `false` (1 or 0 rankings) means street-cred numbers exist but rest on thin cross-review. |
-| `streetCred[].withSelf` | Mean rank position across **all** judges' rankings (lower = better). |
+| `streetCred[].withSelf` | Mean rank position across **all** judges' rankings (lower = better). **v4.8: `streetCred[]` is now one row per SEAT, not one row per alias** — a bench that repeats an alias used to emit two byte-identical rows under that shared alias; each seat now gets its own row, with its own numbers. A unique-alias bench is unaffected: one alias is one seat there, so the row set and every number stay byte-identical to before. |
 | `streetCred[].peersOnly` | Mean rank position excluding this row's own ranking of itself (lower = better). **v4.8: the exclusion is seat-conditional.** When this row and a judge both carry a seat id, the engine compares **seats** — so on a bench that repeats an alias, a twin's OTHER seat is a real peer and its ranking of this seat counts, even though it shares this row's alias. Only when either side lacks a seat id (a unique-alias bench, or a document with no seat channel) does it fall back to comparing **aliases**, which is the pre-v4.8 behaviour and the only case a document without seats can produce. This is the number used everywhere else (ledger, `stats`, bench recommendations). |
+| `streetCred[].seat` | **v4.8**, optional. This row's own seat id, on the same emit-when-**different**-from-the-alias terms as the tally-input schema's `rankings[].seat` above. Absent unless the bench repeated an alias. |
 | `findings[].tier` | One of `Confirmed \| Contested \| Singleton \| Disputed` — see the cascade below. |
 | `findings[].basis` | `{a, d, n}` = peer agree/dispute/neutral counts (the raiser's own vote is excluded when a raiser is known). **v4.8: the exclusion is seat-conditional.** When the vote *and* the finding both carry a seat id the engine excludes by **seat**, so a twin's real vote on its twin's finding now counts; otherwise it falls back to excluding by **alias**, exactly as before. Consequence on a bench that repeats an alias: findings move tier in **both** directions — a lone twin corroboration promotes `Singleton → Confirmed` and `thin → solid`, and a twin *dispute* can demote `Confirmed → Contested` or `Contested → Disputed`. ⚠️ **v4.8: the seat comparison decides first, and it no longer needs a known raiser.** When the vote *and* the finding both carry a seat id, that pair settles it however `raiser` reads: same seat means the raiser's own vote (excluded), different seats mean a real peer (counted). Only when the seats cannot decide does the raiser's name matter. ⚠️ **And when the raiser is *not* known, every vote whose `judge` is equally unidentifiable is excluded too.** An empty-string or missing `raiser` is not an identity, so a vote with an empty-string or missing `judge` cannot be told apart from the raiser's own and does not count as peer signal; every **named** judge still counts. Together these close the case where a finding's own raiser voted its finding up — a document with `raiser: ""` and a `judge: ""` vote used to score that vote into `basis`, and so did one whose vote carried the raiser's own seat id. Votes excluded because nobody could attribute them are announced in `unattributedPeerDrops` below; votes the seats attributed are not, because nothing about them is ambiguous. The tier can fall as a result — a finding whose only votes are unidentifiable is `Singleton`, not `Confirmed` or `Disputed`. |
 | `findings[].confidence` | `"thin"` when `a + d <= 1` (only one peer engaged), else `"solid"`. Thin-confidence findings are the ones Claude may override before Stage 4. |
@@ -747,7 +748,7 @@ named here. That is why the v4.8 keys below each needed their own line.
       "duplicateOf": null, "adjudications": [ "..." ],
       "decision": "accepted", "applied": true }
   ],
-  "streetCred": [ { "model": "gpt", "withSelf": 1, "peersOnly": 1 } ],
+  "streetCred": [ { "model": "gpt", "withSelf": 1, "peersOnly": 1, "seat": "gpt#1" } ],
   "runStats": [ "..." ],
   "tierCounts": { "Confirmed": 1, "Contested": 1, "Singleton": 1, "Disputed": 0 }
 }

@@ -112,7 +112,7 @@ function claudeRunStatsRow() {
  * Assemble the five-keys tally input (spec §5 / SKILL.md Stage-2 recipe).
  * @param {{runId: string, date: string, bench: string[], chair: string,
  *   reviews: Array<{model, role, conformance, leg, globalFindings}>,
- *   judgeResults: Array<{judge, ok, order, adjudications}>,
+ *   judgeResults: Array<{judge, seat, ok, order, orderSeats, adjudications, conformance, leg}>,
  *   chairStats: object|null, claudeReview?: object|null, extraRows?: Array<object>,
  *   seats?: Array<object>}} args
  *   `claudeReview` (v4.1 §4.4) amends the v4.0 meta pin: present ⇒ claudeInCouncil
