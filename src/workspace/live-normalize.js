@@ -10,7 +10,7 @@
  * awareness.js) is UNVERSIONED (F63) and carries: {taskId, type, runId,
  * runDir, status, currentStage, stages:[{name,status,waveId}], legsTotal,
  * legsComplete, elapsed, exitCode, version, view:'live', usage?, reason?,
- * legs:[{taskId, model, modelInput, role, status, messages, stage,
+ * legs:[{taskId, model, modelInput, role, seat, status, messages, stage,
  * latestPreview, lastActivityAt, stalled, usage?}], stalled?,
  * stalledForSeconds?}. Do NOT copy the WAVE doc's shape (src/mcp-server.js:
  * 592-662) — that is a different document, gated on metadata.type === 'wave'.
@@ -50,6 +50,10 @@ function seatOf(leg) {
     model: leg.model || null,
     modelInput: leg.modelInput || null,
     role: leg.role || null,
+    // ⚠️ v4.8 R5: the leg's seat id, and the reason live-dead-seats.js:209's
+    // `if (s.seat)` arm is reachable at all. Null on a unique-alias bench, so the
+    // guard there stays load-bearing — see the comment at that line.
+    seat: leg.seat || null,
     status: leg.status || 'unknown',
     // ⚠️ PRE-FLIGHT (P5): `leg.phase` is dead weight — Task 0.5 does not emit it. `leg.stage` IS
     // emitted (src/observe/council-legs.js:88), so it is the only source; no fallback to invent.

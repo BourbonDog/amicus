@@ -77,6 +77,40 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     return tbody;
   }
 
+  // v4.8 R5 (T4.5) — THE POINT OF THE WHOLE PHASE. This fixture went through three corrected
+  // drafts before landing (PF-4, PF-7, PF-10 in the v4.8 Phase 4 plan). The load-bearing lesson,
+  // kept here since .superpowers/ (where the plan lives) is deleted once this branch finishes:
+  // liveSeats MUST be derived from the real normalizeLive, never hand-built with `.seat` already
+  // set — hand-building it takes seatOf (the function this task changes) out of the path
+  // entirely, so the test would pass at HEAD regardless of whether seatOf does anything. That
+  // was measured, not reasoned: an earlier draft did exactly this and was caught green at HEAD
+  // (with zero production code changed) before it shipped.
+  test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5)', () => {
+    // Derive liveSeats through the REAL normalizeLive so seatOf — the function this
+    // task changes — is genuinely in the path. Hand-building `.seat` here would take
+    // it out and the test would pass at HEAD (measured; see the plan's PF-10).
+    const { normalizeLive } = require('../../src/workspace/live-normalize');
+    const doc = {
+      type: 'council-run', view: 'live', taskId: 'seat3333', status: 'running',
+      stages: [{ name: 'stage1', status: 'running', waveId: 'seat3333-s1' }],
+      legs: [
+        { taskId: 'seat3333-s1-1', model: 'x/y', modelInput: 'a', role: 'seat',
+          status: 'running', seat: 'a#2' },
+      ],
+    };
+    const liveSeats = normalizeLive(doc).seats;
+    const degrades = [
+      { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#1', seat: 'a' } },
+      { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#2', seat: 'a' } },
+    ];
+    const rows = AmicusLive.deadSeats(degrades, null, liveSeats, {});
+    // At HEAD the live seat carried no `.seat`, so `reviewing` held only the alias
+    // `a` and BOTH dead rows survived — including a#2, which is alive. With the
+    // seat arm live, `reviewing['a#2']` suppresses its own row, while the genuinely
+    // dead twin a#1 still survives beside it.
+    expect(rows.map((r) => r.seat)).toEqual(['a#1']);
+  });
+
   test('(a) a dead critic with firstFailure+retryWaveId renders exactly one seat-dead row, "did not review — retried once", after five live rows', () => {
     const bench = ['alpha', 'bravo', 'charlie', 'delta', 'echo'];
     const costRows = bench.map((m) => (
