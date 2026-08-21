@@ -103,6 +103,20 @@ why it becomes FALSE when this plan lands (see §0.6).
    `const runOnce = deps.runOnce || ((a) => require('./fanout-leg').runSingleAttempt(a, deps));`
    — the fallback loop calls `runSingleAttempt`, the same function that owns the `writeLegPatch` at
    `fanout-leg.js:101`. **Hop 6 is ONE edit site covering BOTH paths**, not two.
+
+   > ⚠️ **ANNOTATED 2026-08-21 (T4.3) — the CLAIM is true but the PROOF this section originally
+   > cited was NOT.** This plan told T4.3 to prove it by running `runleg-fallback.test.js`'s
+   > fallback describe. **All five of its `runLegWithFallback` calls inject `runOnce: fakeRunOnce`,
+   > so not one of them reaches the real `runSingleAttempt`** — the file's own header says so at
+   > `:5` ("The injected-runOnce tests below never call runHeadless, so the mock is inert for
+   > them"). The implementer caught it; the controller had asserted a verification site without
+   > opening it. This is the plan-authoring **verification-site error**: right claim, wrong proof.
+   >
+   > **Closed by MEASUREMENT, not by argument.** T4.3 added a test that drives
+   > `runLegWithFallback` with NO injected `runOnce`, and then re-ran the `SEATDROP` mutant:
+   > its red set **grew from 1 to 2**, the second red being exactly that new test. A red set that
+   > grows when a test is added is proof the test entered the write site — construction and
+   > runtime-timing arguments are not.
 2. **`writeLegPatch` already gives absent-not-null for free.** `fanout-leg.js:29` is
    `Object.entries(patch).filter(([, v]) => v !== undefined)`. A leg with no seat contributes
    `seat: undefined`, which is filtered out — so a unique-alias bench writes a **byte-identical**
@@ -683,19 +697,40 @@ git commit -m "feat(fanout): persist the leg seat id to metadata.json (v4.8 R5 T
 
 - [ ] **Step 1: Write the failing test**
 
-```js
-test('buildLegRow carries the seat off metadata.json (v4.8 R5)', () => {
-  writeMeta(legDir, { taskId: 'w-1', status: 'running', model: 'm', modelInput: 'a', seat: 'a#2' });
-  const { rows } = buildLegRows(project, ['w-1'], runCtx);
-  expect(rows[0].seat).toBe('a#2');
-});
+⚠️ **Corrected mid-flight (controller ruling PF-6).** An earlier draft used a `writeMeta(...)`
+helper and the signature `buildLegRows(project, ids, runCtx)`. **No `writeMeta` helper exists**,
+and the real idiom in `tests/observe/council-legs.test.js` is: a per-test
+`runDir = path.join(projectDir, '<name>')`, a **function** `legDir(runDir, legId)` (`:31`) that
+mkdirs and returns the path, an inline `fs.writeFileSync`, and the uppercase const `RUN_CTX`
+(`:37`). Add these two inside the existing `describe('buildLegRows')`:
 
-test('buildLegRow reports a truthful null when metadata.json has no seat', () => {
-  writeMeta(legDir, { taskId: 'w-2', status: 'running', model: 'm', modelInput: 'a' });
-  const { rows } = buildLegRows(project, ['w-2'], runCtx);
-  expect(rows[0].seat).toBeNull();
-});
+```js
+    test('buildLegRow carries the seat off metadata.json (v4.8 R5)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-seat');
+      const d = legDir(runDir, 'leg-seated');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-seated', status: 'running', model: 'openrouter/x/y',
+        modelInput: 'gemini', seat: 'gemini#2',
+      }));
+      const { rows } = buildLegRows(runDir, ['leg-seated'], RUN_CTX);
+      expect(rows[0].seat).toBe('gemini#2');
+    });
+
+    test('buildLegRow reports a truthful null when metadata.json has no seat (v4.8 R5)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-unseated');
+      const d = legDir(runDir, 'leg-unseated');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-unseated', status: 'running', model: 'openrouter/x/y', modelInput: 'gemini',
+      }));
+      const { rows } = buildLegRows(runDir, ['leg-unseated'], RUN_CTX);
+      expect(rows[0].seat).toBeNull();
+    });
 ```
+
+⚠️ **`modelInput` must be `'gemini'` or `'gpt'`** — `RUN_CTX.bench` is `['gemini', 'gpt']`, and an
+off-bench alias makes `legRole` derive `null`, changing what the row means.
 
 ⚠️ **`null`, not absent, on this row** — deliberately unlike hops 4 and 6. `buildLegRow`'s existing
 literal already emits truthful nulls for `model`/`modelInput` (`:123`, `:128`), and every consumer
@@ -768,10 +803,25 @@ git commit -m "feat(observe): carry the leg seat id onto the live leg row (v4.8 
 
 - [ ] **Step 1: Write the failing tests — INCLUDING the end-to-end one that is the point**
 
+⚠️ **Corrected mid-flight (controller ruling PF-7).** `seatOf` is **module-private** —
+`src/workspace/live-normalize.js` ends `module.exports = { normalizeLive };`. **Do not export it
+just to test it**; assert through `normalizeLive`, which is the real seam and what the suite's
+existing tests use:
+
 ```js
-test('seatOf carries the leg seat (v4.8 R5)', () => {
-  expect(seatOf({ taskId: 't1', model: 'm', modelInput: 'a', seat: 'a#2' }).seat).toBe('a#2');
-  expect(seatOf({ taskId: 't2', model: 'm', modelInput: 'a' }).seat).toBeNull();
+test('normalizeLive carries each leg seat onto its live seat row (v4.8 R5)', () => {
+  const doc = {
+    type: 'council-run', view: 'live', taskId: 'seat3333', status: 'running',
+    stages: [{ name: 'stage1', status: 'running', waveId: 'seat3333-s1' }],
+    legsTotal: 2, legsComplete: 0,
+    legs: [
+      { taskId: 'seat3333-s1-1', model: 'x/y', modelInput: 'a', status: 'running', seat: 'a#2' },
+      { taskId: 'seat3333-s1-2', model: 'x/y', modelInput: 'b', status: 'running' },
+    ],
+  };
+  const m = normalizeLive(doc);
+  expect(m.seats[0].seat).toBe('a#2');
+  expect(m.seats[1].seat).toBeNull();
 });
 ```
 
@@ -781,6 +831,17 @@ SUPPRESS. A test whose dead candidate is keyed `a#1` while the live seat is `a#2
 `reviewing['a#1']` in either world and proves nothing. **The arm changes the outcome exactly when
 a dead candidate's key EQUALS a live seat's id** — a seat that died and came back.
 
+⚠️ **Also corrected by PF-7.** `deadSeats` is not importable directly — it is reached as
+`AmicusLive.deadSeats` off the fake-DOM harness that `dead-seat-rows.test.js` already sets up in
+its `beforeEach` (`:43-57`: `makeFakeDom()`, then the three renderer IIFEs in canonical
+script-load order). Use the ambient `AmicusLive` that `beforeEach` assigns.
+
+⚠️⚠️ **DO NOT write this test through that file's `paint()` helper (`:70-77`).** `paint()` builds
+its `liveSeats` with `AmicusLive.seatsFromRunStats(costRows)` — the **TERMINAL** path, where
+`.seat` already works today. A test routed through `paint()` is green at HEAD and proves nothing.
+**Call `AmicusLive.deadSeats(...)` directly with a hand-built LIVE-shaped `liveSeats`** (the
+`seatOf` shape: `role`/`model`/`modelInput`/`seat`), exactly as the file already does at `:75`.
+
 ```js
 // tests/workspace/dead-seat-rows.test.js — THE POINT OF THE WHOLE PHASE.
 test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5)', () => {
@@ -788,8 +849,9 @@ test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5
     { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#1', seat: 'a' } },
     { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#2', seat: 'a' } },
   ];
-  const liveSeats = [{ role: 'seat', model: 'm', modelInput: 'a', seat: 'a#2' }];
-  const rows = deadSeats(degrades, null, liveSeats, {});
+  // LIVE-tick shape (live-normalize.js :: seatOf) — NOT seatsFromRunStats.
+  const liveSeats = [{ role: 'seat', model: 'x/y', modelInput: 'a', seat: 'a#2' }];
+  const rows = AmicusLive.deadSeats(degrades, null, liveSeats, {});
   // At HEAD the live seat carried no `.seat`, so `reviewing` held only the alias
   // `a` and BOTH dead rows survived — including a#2, which is alive. With the
   // seat arm live, `reviewing['a#2']` suppresses its own row, while the genuinely
@@ -879,7 +941,7 @@ git commit -m "feat(workspace): normalize the seat id onto live seats, making th
 - Modify: `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md` (§5 Phase 4, §1 status table)
 - Modify: `BACKLOG.md` (the NEXT TASK entry → completed; file the next resume point)
 - Modify: `CHANGELOG.md`
-- Modify: `docs/council.md` and/or `docs/where-things-live.md` if either enumerates the leg row
+- Modify: `docs/council.md` if it enumerates the leg row (⚠️ PF-8: an earlier draft also named `docs/where-things-live.md` — that file DOES NOT EXIST)
 - Modify: `electron/workspace-ui/live-seats.js:88-90`, `workspace-seats.js:150/160-161/173-174` —
   **only if measured false**
 
@@ -899,10 +961,33 @@ Correct every hit to `src/sidecar/fanout-leg.js :: runSingleAttempt`. ⚠️ **S
 grep -rni "run-assemble\.js:89" --include=*.md --include=*.js . | grep -v node_modules
 ```
 
-Known carriers: `electron/workspace-ui/live-seats.js:88-90` and
-`electron/workspace-ui/workspace-seats.js:160`. **Open `src/council/run-assemble.js:89` first and
-confirm for yourself that it is `labelClaudeReview`'s docblock** — do not take §0.8's word for it.
-Re-anchor each hit by SYMBOL to `src/council/run-stats-entry.js :: buildRunStatsEntry`.
+**Open `src/council/run-assemble.js:89` first and confirm for yourself that it is
+`labelClaudeReview`'s docblock** — do not take §0.8's word for it. Re-anchor by SYMBOL to
+`src/council/run-stats-entry.js :: buildRunStatsEntry`.
+
+⚠️ **Corrected mid-flight (controller ruling PF-8): there are THREE live-code carriers, not the
+two §0.8 named** — `electron/workspace-ui/live-seats.js:88-90`,
+`electron/workspace-ui/workspace-seats.js:160`, **and `tests/workspace/seat-panel-twins.test.js`**,
+plus `BACKLOG.md`.
+
+⚠️⚠️ **EVERYTHING ELSE THAT MATCHES IS OUT OF SCOPE AND MUST NOT BE EDITED.** The bare grep also
+hits:
+- **~45 files under `output/`** — council RUN ARTIFACTS (briefings, chair packets, `review-*.md`,
+  session transcripts, `initial_context.md`). These are the generated record of what each model was
+  actually told and actually said. **Editing them falsifies history that exists to be auditable.**
+- **Two dated release-plan snapshots**, `docs/superpowers/plans/2026-08-15-v48-pr5b-live-seat-path.md`
+  and `-pr5c-dead-seat-path.md`. House precedent is explicit — `BACKLOG.md`'s T-A8 note leaves the
+  `seedSession` rot in a dated plan alone because "it predates this PR."
+
+**So: scope the sweep with an explicit exclusion, never a bare repo-wide replace.**
+
+```bash
+grep -rn "run-assemble\.js:89" --include=*.js --include=*.md . \
+  | grep -v node_modules | grep -v '^\./output/' | grep -v '2026-08-15-v48-pr5'
+```
+
+`BACKLOG.md`'s hit is a HISTORICAL sentence about what the stamp was; re-anchor it only if it
+reads as a live pointer. If in doubt, leave it and say so.
 
 ⚠️ **The surrounding prose is TRUE — do not edit it.** "stamps it only when seat.id differs from
 seat.alias, which seats.js:67 makes true exactly for a repeated alias" is exactly right. This is a
@@ -945,11 +1030,26 @@ Under the v4.8.0 unreleased section, state the behaviour change **and its limit*
   roster and are unchanged.
 ```
 
-- [ ] **Step 5: Update the phasing doc §1 status table and §5 Phase 4 entry**
+- [ ] **Step 5: Update the phasing doc §1 and §5 — THREE obligations, not one**
+
+⚠️ **Corrected mid-flight (controller ruling PF-8). §1's own preamble sets a trap and names it**:
+the table "is the live record", and its "changes since" list *"is affirmative and enumerative, so
+it must be extended whenever a verdict moves — it is not covered by the 'not re-derived' caveat
+above."* It currently enumerates THREE changes and a re-counted total
+(`8 DONE · 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 18 OPEN`). Therefore:
+
+1. Move the Phase 4 / R5 row in the live table.
+2. **EXTEND the affirmative "changes since" enumeration** with this change, in the same form as
+   the three already there (verdict move, task id, date, commit).
+3. **RE-COUNT the totals directly off the live table** — do not adjust the old numbers by
+   arithmetic.
+
+Then update §5's Phase 4 entry.
 
 ⚠️ **Failure mode #10 (THE FALSIFIED RECORD).** Flipping a status-table cell has twice in this
-release falsified a sentence elsewhere that read the table. **After editing the table, grep for
-prose that describes it** and confirm each such sentence still holds.
+release falsified a sentence elsewhere that read the table. **After editing, grep for prose that
+describes the table** and confirm each such sentence still holds. Doing only (1) is exactly the
+defect that paragraph exists to prevent.
 
 - [ ] **Step 6: `BACKLOG.md` — close Phase 4, file the next resume point**
 
