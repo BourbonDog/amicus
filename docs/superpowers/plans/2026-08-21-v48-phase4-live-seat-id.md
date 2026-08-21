@@ -316,7 +316,7 @@ the full ● block verbatim before re-running.**
 
 ## 3. Tasks
 
-### T4.1 — Thread the roster into the transport
+### Task 1: T4.1 — Thread the roster into the transport
 
 **Files:**
 - Modify: `src/council/run-stage1-launch.js:47`, `:60-61`, `:69-70`
@@ -417,7 +417,7 @@ git commit -m "feat(council): forward the per-wave seat roster into the fanout t
 
 ---
 
-### T4.2 — Stamp `leg.seat` at the attribution seam
+### Task 2: T4.2 — Stamp `leg.seat` at the attribution seam
 
 **Files:**
 - Modify: `src/sidecar/fanout-wave-io.js:80-85` (`stampLegAttribution`)
@@ -549,7 +549,7 @@ The `git diff --stat` must show **only** the T4.2 addition before the `git add`.
 
 ---
 
-### T4.3 — Persist the seat to `metadata.json`
+### Task 3: T4.3 — Persist the seat to `metadata.json`
 
 **Files:**
 - Modify: `src/sidecar/fanout-leg.js:101` (inside **`runSingleAttempt`**, ⚠️ **not** `runLeg` — see §0.5)
@@ -633,7 +633,7 @@ git commit -m "feat(fanout): persist the leg seat id to metadata.json (v4.8 R5 T
 
 ---
 
-### T4.4 — Read it back on the leg row, and declare it in the schema
+### Task 4: T4.4 — Read it back on the leg row, and declare it in the schema
 
 **Files:**
 - Modify: `src/observe/council-legs.js:127-130` (`buildLegRow`)
@@ -718,7 +718,7 @@ git commit -m "feat(observe): carry the leg seat id onto the live leg row (v4.8 
 
 ---
 
-### T4.5 — Normalize it to the renderer, and make the dead arm live
+### Task 5: T4.5 — Normalize it to the renderer, and make the dead arm live
 
 **Files:**
 - Modify: `src/workspace/live-normalize.js:35-68` (`seatOf`) and its header (`:9-16`)
@@ -738,24 +738,40 @@ test('seatOf carries the leg seat (v4.8 R5)', () => {
 });
 ```
 
+⚠️ **This fixture was corrected mid-flight (controller ruling PF-4) after the first one was traced
+and found to be green at HEAD.** The arm only ever ADDS keys to `reviewing`, so it can only ever
+SUPPRESS. A test whose dead candidate is keyed `a#1` while the live seat is `a#2` never touches
+`reviewing['a#1']` in either world and proves nothing. **The arm changes the outcome exactly when
+a dead candidate's key EQUALS a live seat's id** — a seat that died and came back.
+
 ```js
 // tests/workspace/dead-seat-rows.test.js — THE POINT OF THE WHOLE PHASE.
-test('a dead twin survives beside a live one on the LIVE path (v4.8 R5)', () => {
-  const degrades = [{ kind: 'degrade', channel: 'dead-leg',
-    data: { seatId: 'a#1', seat: 'a' } }];
+test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5)', () => {
+  const degrades = [
+    { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#1', seat: 'a' } },
+    { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#2', seat: 'a' } },
+  ];
   const liveSeats = [{ role: 'seat', model: 'm', modelInput: 'a', seat: 'a#2' }];
   const rows = deadSeats(degrades, null, liveSeats, {});
-  // Before R5 the live seat carried no `.seat`, so `reviewing['a']` alone
-  // suppressed the dead twin a#1. Now a#2 registers separately and a#1 survives.
+  // At HEAD the live seat carried no `.seat`, so `reviewing` held only the alias
+  // `a` and BOTH dead rows survived — including a#2, which is alive. With the
+  // seat arm live, `reviewing['a#2']` suppresses its own row, while the genuinely
+  // dead twin a#1 still survives beside it.
   expect(rows.map((r) => r.seat)).toEqual(['a#1']);
 });
 ```
 
+⚠️ **Both halves are load-bearing.** `['a#1']` — not `[]` and not `['a#1','a#2']`. Dropping `a#1`
+would mean the alias arm had over-suppressed; keeping `a#2` would mean the seat arm never fired.
+
 - [ ] **Step 2: Run and confirm they FAIL**
 
 Run: `npx jest tests/workspace/live-normalize.test.js tests/workspace/dead-seat-rows.test.js -t 'v4.8 R5' --silent`
-Expected: both FAIL. ⚠️ **The dead-seat-rows test must fail for the RIGHT reason** — the dead twin
-suppressed, i.e. `[]` not `['a#1']`. If it fails some other way, the fixture is wrong, not the code.
+Expected: both FAIL. ⚠️ **The dead-seat-rows test must fail for the RIGHT reason** — the received
+value must be **`['a#1', 'a#2']`** (the revived seat not yet suppressed). Any other failure means
+the fixture is wrong, not the code: `[]` would mean over-suppression, and a shape error means the
+`add()` dedup rejected the second candidate. **If you see anything but `['a#1','a#2']`, STOP and
+report — do not adjust the expectation to match what you got.**
 
 - [ ] **Step 3: Implement `seatOf`**
 
@@ -806,9 +822,9 @@ Expected: PASS.
     role: leg.role || null,
 ```
 
-Expected: reds the `seatOf` test **and** the dead-twin test of Step 1. **Two reds.** If only one
-reds, the end-to-end property is unpinned — say so and add the pin. Hand-revert; byte-verify with
-`git diff --stat`.
+Expected: reds the `seatOf` test **and** the suppression test of Step 1 (which should go back to
+returning `['a#1','a#2']`). **Two reds.** If only one reds, the end-to-end property is unpinned —
+say so and add the pin. Hand-revert; byte-verify with `git diff --stat`.
 
 - [ ] **Step 8: Commit**
 
@@ -820,7 +836,7 @@ git commit -m "feat(workspace): normalize the seat id onto live seats, making th
 
 ---
 
-### T4.6 — The record: truth pass, citation correction, bookkeeping
+### Task 6: T4.6 — The record: truth pass, citation correction, bookkeeping
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md` (§5 Phase 4, §1 status table)
