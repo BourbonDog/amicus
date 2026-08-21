@@ -94,8 +94,10 @@ function stampLegAttribution(legs, options) {
   // run-assemble.js also spell. buildSeats mints `alias#N` ONLY when an alias
   // repeats (seats.js:67), so `id !== alias` IS "the bench repeats this alias",
   // and on a unique bench `id` IS the alias — a bare `if (s.id)` would stamp an
-  // alias-valued seat onto every leg of every run, the exact defect
-  // run-assemble.js:165-169 records having already fixed once.
+  // alias-valued seat onto every leg of every run: the same wrong output shape
+  // run-assemble.js:165-169 records having already fixed once there (a
+  // wrong-comparator bug, `!== j.judge` rather than `!== alias`, with a
+  // narrower trigger — only a leg/seat alias drift, not every leg).
   // Comparing against the seat's own alias and never against `model` also makes
   // this immune to the two cases where `model` is NOT the alias (a leg reporting
   // no modelInput; a padded --council member).

@@ -104,8 +104,8 @@ describe('fanout validation helpers', () => {
     // tests/council/run-debate.test.js — but the MIDDLE was not, on the default
     // rail: the only other twin call to validateFanoutModels lives in
     // local-provider-e2e.integration.test.js, which jest.config.js excludes.
-    // It is the seat spine's business because run-launch.js:111 is
-    // `models: opts.models.join(',')`, so a twin council bench arrives here as
+    // It is the seat spine's business because run-launch.js :: launchWave
+    // contains `models: opts.models.join(',')`, so a twin council bench arrives here as
     // the literal 'deepseek,deepseek'. A dedupe would strand seat #2 unbound and
     // the seat spine would report a seat loss caused by a layer that has no seat
     // awareness at all. NOTE: validateFanoutModels is an AsyncFunction — the

@@ -491,8 +491,10 @@ All notable changes to Amicus are documented here. Format follows
 - Live council-run leg rows now carry the leg's seat id (`alias#N`) when the bench repeats an
   alias, threaded from the Stage-1 roster through the fanout transport to `metadata.json` and back
   out via the composed live doc. On a unique-alias bench nothing is written — `metadata.json` is
-  unchanged — and every live leg row reports an explicit `seat: null`. Stage 1 only; chair, debate
-  and repair legs launch without a roster and are unchanged.
+  unchanged — and every live leg row reports an explicit `seat: null`. Threaded only from Stage 1's
+  initial launch; chair, debate, repair, and the Stage-1 retry wave (a separate launch site,
+  `run-retry.js`) all launch without a roster and are unchanged — a retried twin's live row still
+  reports `seat: null`, filed in BACKLOG.md, not fixed here.
 
 ## [4.7.1] - 2026-08-09
 

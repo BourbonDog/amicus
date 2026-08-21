@@ -140,7 +140,7 @@ describe('launchSolo (single-leg wave)', () => {
   });
 
   // v4.8 R5 T4.1 Step 6: launchSolo sets no explicit `seats` key of its own —
-  // `{ ...opts }` (src/council/run-launch.js's launchSolo, :174) is what has to
+  // `{ ...opts }` (src/council/run-launch.js :: launchSolo) is what has to
   // carry it through to launchWave and on to fanoutFn. Proven by EXECUTION here
   // rather than by reading the spread, per the brief.
   test('forwards seats through to the transport via the opts spread (v4.8 R5)', async () => {

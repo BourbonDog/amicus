@@ -167,9 +167,10 @@
       //
       // ⚠️ The pre-PR expression was `retried[s.modelInput || s.model]` (council B1). The
       // `modelInput` arm is dropped on purpose: this loop only ever iterates
-      // `seatsFromRunStats(...)` output (assigned at :101), and that projection emits no
-      // `modelInput` at all — live payload seats, which DO carry it, reach `deadSeats` at :217
-      // and never reach here. The invariant is pinned by test (12) in workspace-seats.test.js;
+      // `seatsFromRunStats(...)` output (assigned in workspace-seats.js :: renderSeatsPanel), and
+      // that projection emits no `modelInput` at all — live payload seats, which DO carry it,
+      // reach `deadSeats` in workspace-seats.js :: appendDeadRows and never reach here. The
+      // invariant is pinned by test (12) in workspace-seats.test.js;
       // if that test ever fails, restore the `s.modelInput` arm rather than deleting the test.
       // ⚠️ `s.seat &&` is LOAD-BEARING (council A1). `s.seat` is null on a unique bench, and a
       // bare `retried[s.seat]` coerces null to the STRING key 'null' — so a seat with no seat id

@@ -1088,8 +1088,10 @@ Under the v4.8.0 unreleased section, state the behaviour change **and its limit*
 - Live council-run leg rows now carry the leg's seat id (`alias#N`) when the bench repeats an
   alias, threaded from the Stage-1 roster through the fanout transport to `metadata.json` and back
   out via the composed live doc. On a unique-alias bench nothing is written — `metadata.json` is
-  unchanged — and every live leg row reports an explicit `seat: null`. Stage 1 only; chair, debate
-  and repair legs launch without a roster and are unchanged.
+  unchanged — and every live leg row reports an explicit `seat: null`. Threaded only from Stage 1's
+  initial launch; chair, debate, repair, and the Stage-1 retry wave (a separate launch site,
+  `run-retry.js`) all launch without a roster and are unchanged — a retried twin's live row still
+  reports `seat: null`, filed in BACKLOG.md, not fixed here.
 ```
 
 ⚠️ **Corrected before dispatch (T4.4's annotation).** The draft of this entry said "the document is
@@ -1097,6 +1099,14 @@ byte-identical to before." **False** — every leg row gains an explicit `seat: 
 THIRD twin of that sentence; the first was caught by an implementer refusing to paste it into the
 schema, and this one would have shipped the same false claim to users in the CHANGELOG. **Do not
 reintroduce "byte-identical" about the composed doc.**
+
+⚠️ **Corrected again — final whole-branch review (2026-08-21).** This entry's own sample also said
+"Stage 1 only; chair, debate and repair legs launch without a roster and are unchanged" — true of
+chair/debate/repair, but silent about the Stage-1 **retry** wave (`run-retry.js ::
+retryStage1Losses`), which is a separate Stage-1 launch site that ships in this same phase WITHOUT
+a seat roster in its launch `common`. Corrected above, in `CHANGELOG.md` itself, in `BACKLOG.md`'s
+matching Phase 4 entry, and in the phasing doc's own Phase 4 block. The gap is filed in
+`BACKLOG.md` as its own follow-up task, not fixed on this branch.
 
 - [ ] **Step 5: Update the phasing doc §1 and §5 — THREE obligations, not one**
 

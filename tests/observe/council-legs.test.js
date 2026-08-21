@@ -162,8 +162,9 @@ describe('buildLegRows', () => {
     });
 
     // ⚠️ v4.4.1 A1, second reachable consequence. The metadata-preference branch above is gated on
-    // `TERMINAL.has(row.status)` (src/observe/council-legs.js:162) reading a leg's metadata.status
-    // — which for a timed-out leg is 'timed-out' (session-finalize.js resolveTerminalState), a
+    // `TERMINAL.has(row.status)` (src/observe/council-legs.js :: buildLegRow) reading a leg's
+    // metadata.status — which for a timed-out leg is 'timed-out' (session-finalize.js
+    // resolveTerminalState), a
     // spelling the TERMINAL set did not contain. So a timed-out leg fell through to the stale
     // 'receiving' progress snapshot and reported an under-counted cost: exactly the B3 defect,
     // still live on one status.

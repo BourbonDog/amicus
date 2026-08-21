@@ -288,16 +288,6 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     expect('seat' in meta).toBe(false);
   });
 
-  // Correction to commit 3c95bd18's message, which miscounted this task's
-  // `{ parentWave, modelInput }` enumeration-sweep: re-verified count of hits
-  // outside council-legs.js (fixed above to `{ parentWave, modelInput, seat }`)
-  // is 10 lines across 7 files, not "five" as that message claimed --
-  // progress.md (2), task-3-brief.md (1), v47p3/task-8-report.md (1), this
-  // phase's plan doc (3), and the three output/v44-council-briefing*.md files
-  // (1 each). All 7 are controller-owned planning/ledger docs or dated
-  // historical reports, as that commit correctly described; only the number
-  // was wrong. No code or test behavior is affected by this correction.
-
   // v4.4 B4 — the two leg-level truth signals runHeadless now returns must reach
   // the leg's usage block and metadata.json, or they die with the process.
   test('a leg that made a SUBAGENT call is marked subtreeUnknown on its usage block', async () => {

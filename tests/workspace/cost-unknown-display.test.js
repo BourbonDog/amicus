@@ -11,7 +11,7 @@
  *   - the --max-cost gauge (workspace-app.js) read `costAmount` alone, so it
  *     drew "50% of budget" for a run with an unpriced seat — affirmatively
  *     misleading, and the single most dangerous surface in the diagnosis;
- *   - live-normalize.js:54 had the same gap on the live path.
+ *   - live-normalize.js :: seatOf had the same gap on the live path.
  *
  * `usageError` (from the earlier C3 pass) is a DIFFERENT statement — "pricing
  * resolution threw for this leg" — and is left exactly as it was; the unknown

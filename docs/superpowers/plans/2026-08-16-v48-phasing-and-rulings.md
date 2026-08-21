@@ -415,8 +415,11 @@ runSingleAttempt`, and back out through `council-legs.js :: buildLegRow` and
 live path**, pinned end to end by the named mutant `LIVESEATBLIND` (red set 2). A unique-alias
 bench writes nothing new to `metadata.json` — byte-identical to pre-R5 — but the composed live doc
 is **not** byte-identical regardless: every leg row gains an explicit `seat: null` (T4.4's
-annotation corrected a false "byte-identical" claim about this same doc before it shipped). Stage 1
-only, as scoped: chair, debate and repair legs launch without a roster and are unchanged. Four
+annotation corrected a false "byte-identical" claim about this same doc before it shipped). Stage
+1's initial launch only, as scoped: chair, debate, repair, and the Stage-1 retry wave
+(`run-retry.js :: retryStage1Losses`, a separate Stage-1 launch site) all launch without a roster
+and are unchanged — a retried twin's live row still reports `seat: null` (filed in `BACKLOG.md`,
+not fixed here). Four
 named mutants recorded and hand-reverted end to end: `SEATALIAS` (the predicate pin, red set 2),
 `SEATSLOPPY` (the surgical index pin, red set 1), `SEATDROP` (the persistence pin, red set 2) and
 `LIVESEATBLIND` (the end-to-end pin, red set 2). T4.6 also re-anchored `run-assemble.js:89` by

@@ -58,9 +58,9 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     // this alias": the single predicate all four seat-emit producers now share,
     // which is what stops them disagreeing. `model` is the LEG's modelInput,
     // which is NOT the alias when a leg reports none (it falls back to the
-    // RESOLVED id, run-launch.js:205) or when a --council preset carries a
-    // padded member — either would ship a seat id with no seat table behind it,
-    // on a bench with no twin at all.
+    // RESOLVED id, the same fallback run-launch.js :: materializeReviews uses)
+    // or when a --council preset carries a padded member — either would ship a
+    // seat id with no seat table behind it, on a bench with no twin at all.
     ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,

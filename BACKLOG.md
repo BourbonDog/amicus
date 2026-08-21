@@ -3033,13 +3033,31 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   (byte-identical to pre-R5); the composed live doc is **not** byte-identical regardless — every
   leg row gains an explicit `seat: null` (T4.4's annotation). Four named mutants recorded and
   hand-reverted end to end: `SEATALIAS` 2 · `SEATSLOPPY` (the surgical form) 1 · `SEATDROP` 2 ·
-  `LIVESEATBLIND` 2. Stage 1 only, per scope — chair, debate and repair legs launch without a
-  roster and are unchanged. T4.6 also re-anchored two rotted citations by symbol: `:: runLeg` (this
+  `LIVESEATBLIND` 2. Threaded only from Stage 1's initial launch, per scope — chair, debate,
+  repair, and the Stage-1 retry wave (`run-retry.js :: retryStage1Losses`, a separate Stage-1
+  launch site) all launch without a roster and are unchanged; a retried twin's live row still
+  reports `seat: null` (filed below, not fixed here). T4.6 also re-anchored two rotted citations by
+  symbol: `:: runLeg` (this
   entry, above) and `run-assemble.js:89` (`electron/workspace-ui/live-seats.js`,
   `workspace-seats.js`, `tests/workspace/seat-panel-twins.test.js` — that line is
   `labelClaudeReview`'s docblock, unrelated to seats; the real producer is
   `run-stats-entry.js :: buildRunStatsEntry`). Final measured state (`npm test`, this task, not
   T4.3's mid-phase baseline): 544 suites / 7810 passed / 8 skipped / 0 failed.
+
+- [ ] **Filed, not fixed (v4.8 Phase 4 final whole-branch review, 2026-08-21) — the Stage-1 retry
+  wave still launches without a seat roster.** R5 (above) threads the seat roster from
+  `run-stage1-launch.js`'s `seated[].roster` through to the live leg row — spec-compliant, since
+  the spec named only that launch site. But `run-retry.js :: retryStage1Losses` is ALSO a Stage-1
+  launch, and its own launch `common` object (`run-retry.js:90-96`) forwards `councilRunId`,
+  `councilName`, `tag`, `fallback`, `catalog` and `retryOfWaveId` — and no `seats`. User-visible
+  consequence: on a twin bench where `a#1` dies and is retried, the retried leg's live row still
+  reports `seat: null`, so `live-dead-seats.js:209`'s `if (s.seat)` suppression arm stays dark for
+  exactly the seat that most needed it. Forwarding `unit.seats` (index-parallel with `unit.models`)
+  is NOT the one-liner it looks like: `run-retry.js:138`'s own comment already warns the two are
+  "NOT lockstep by construction" — only emergently so, on invariants that comment states but this
+  task never measured. That index-parallelism must be MEASURED with its own probe before any
+  `seats` key rides this launch, plus RED-before-GREEN and a named mutant of its own — a task, not
+  a fix-wave line.
 
 - [ ] **NEXT TASK — Phase 5: Debate join.** Filed 2026-08-21 (v4.8 Phase 4 T4.6) as the correct
   resume point, replacing the Phase 4 entry above (now ✅ COMPLETED). Per the phasing doc's own

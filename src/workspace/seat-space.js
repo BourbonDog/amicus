@@ -59,7 +59,8 @@ function isSeatTable(seats) {
  * The alias names an ORPHANED leg wrote, taken from run.json's own degrade notes.
  *
  * The engine names an artifact from the seat when a leg binds and from the leg's
- * `modelInput || model` when it does not (run-launch.js:205-207). Only the second case puts
+ * `modelInput || model` when it does not (run-launch.js :: materializeReviews).
+ * Only the second case puts
  * an alias-named file on disk, and `run-degrade.js` records exactly that case: channel
  * 'seat-unbound' with `data.legId` set. `data.seat` on such a note IS the string the writer
  * used, so the name derived here matches the file byte-for-byte — including where the leg

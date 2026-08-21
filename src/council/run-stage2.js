@@ -140,7 +140,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     const judge = leg.modelInput || leg.model;
     const seat = judgeSeatOf.get(leg) || null;
     if (leg.status === 'complete' && leg.summary) {
-      // Mirrors materializeReviews' shipped shape (run-launch.js:207) exactly:
+      // Mirrors the shape run-launch.js :: materializeReviews ships exactly:
       // seat filename when bound, alias filename (today's behaviour) otherwise.
       const name = seat ? artifactName(seat, 'judge') : `judge-${sanitizeName(judge)}.md`;
       fs.writeFileSync(path.join(o.runDir, name), leg.summary, { mode: 0o600 });

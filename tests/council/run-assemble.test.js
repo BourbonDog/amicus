@@ -325,9 +325,9 @@ describe('v4.8 PR4c: runStats[].seat on the primary review rows (§3.1, T12)', (
 // (plan §1.2 verbatim, on the engine path).
 describe('v4.8 PR4c: the guard compares the seat to its OWN alias, never to `model` (§3.1, T12b)', () => {
   test('(a) a leg that reports no modelInput still emits NO seat', () => {
-    // result-schema.js:63 can yield modelInput: null; materializeReviews
-    // (run-launch.js:205) then falls back to `leg.model`, the RESOLVED
-    // executable id, and run-stages.js:264 copies that onto the review as
+    // result-schema.js:63 can yield modelInput: null; then
+    // run-launch.js :: materializeReviews falls back to `leg.model`, the
+    // RESOLVED executable id, and run-stages.js:264 copies that onto the review as
     // `model`. So rowModel is the resolved id here while the seat is a
     // perfectly ordinary unique alias — two strings that never coincide.
     const [seat] = buildSeats(['gemini', 'gpt'], null, null);
