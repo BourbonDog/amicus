@@ -2617,6 +2617,58 @@ lines. Whoever takes this on needs an extraction first, not an edit.
       in a reviewed green PR. A fix belongs with its own tests and named mutant. Cost if wrong: a
       hand-assembled document with a bad seat table writes a wrong row count to the ledger until
       that fix lands.
+  - **⚠️ SUPERSEDED BY A REAL RUN — the council was RE-RUN on `4b2b5416` after the owner added
+    OpenRouter credits, and this time it produced a verdict.** Run `32481536014`, **17m44s**
+    (vs 36s credit-death and 337s degraded), `chair:complete`. **Chair verdict: "Fix these
+    first" — 5 Confirmed, 0 Contested, 0 Disputed, 0 Singleton**, every one `a2/d0/n0 solid`.
+    Still `stage1:partial`: kimi's leg died, so its street cred reads `n/a`. The block above is
+    kept as the record of the two FAILED attempts — do not read it as this PR's review.
+    ⚠️ **Collapsed to MECHANISMS per the standing rule that a repeated finding is not a stronger
+    one: FIVE findings became THREE mechanisms, one of them new and one of them FALSE.**
+    - **B1 (gpt) + C1 (glm) are the SAME mechanism** — the inconsistent-`meta.seats` defect filed
+      immediately above, found INDEPENDENTLY by two models. Double-discovery is corroboration that
+      the filing was right, not two problems.
+    - **C3 (glm)** — SI-17's conformance time-inconsistency. Already disclosed in
+      `ledger-join.js :: benchLegs`, in `CHANGELOG.md`, and in this entry.
+    - **C2 (glm) — MEASURED FALSE. Recorded so nobody re-raises it.** Claim: `benchLegs` treats
+      `judge`, `repair`, `superseded` and give-up roles as bench legs for the role/conformance
+      decision. Measured end to end through `buildLedgerRows` on a group carrying `seat` + `judge`
+      + `repair` + `superseded` rows: `conformance` came out **`clean`**, not `unstructured`.
+      Those roles never reach `benchLegs`, because `ledger.js :: joinsLedger`'s fail-closed
+      allowlist (`seat/critic/chair/claude/council/redteam` + `lens:*` + absent) drops them
+      upstream. Direct control: `benchLegs([{role:'judge'},{role:'chair'},{role:'seat'}])` DOES
+      return `judge`. **So the finding is true about the FUNCTION in isolation and false about the
+      SYSTEM** — the function is permissive, its only caller is fail-closed. If a future producer
+      is ever added to `LEDGER_JOIN_ROLES`, re-open this.
+    - [ ] **A1 (qwen) [minor] — REAL, NEW, and the only unfiled one. `credFor` reads only the
+      IDENTIFIABLE seats of a pair group that mixes seated and seatless runStats rows.** Measured
+      2026-08-21 against the shipped `ledger-join.js :: credFor`, with `a#1` at 1 and `a#2` at 5:
+
+      ```
+      both seated -> {withSelf:3, peersOnly:3}   mean of both seats
+      MIXED       -> {withSelf:1, peersOnly:1}   a#1 only; the seatless row contributes nothing
+      none seated -> {withSelf:3, peersOnly:3}   alias fallback reads BOTH
+      ```
+
+      ⚠️ **The inconsistency is the finding, not the drop:** a group that identifies ZERO seats
+      reads MORE seats than one that identifies ONE. **Partial seat information produces a
+      NARROWER read than no seat information.** It is the mirror of the Important-1 defect the
+      T3.3 task review caught (seated streetCred + unseated runStats), and it is defensible under
+      ruling **R2** — a seatless row has no identifiable street-cred row to contribute — but it is
+      SILENT, and it lands in the append-only ledger.
+      **⚠️ THESE THREE ARE ONE FOLLOW-UP PR, not three.** A1 above, plus the
+      inconsistent-`meta.seats` mechanism filed immediately before it (council B1 = C1), are the
+      same subject: how `ledger-join.js :: credFor` and `street-cred.js :: credSeats` resolve
+      seats when the document's seat information is partial, inconsistent, or mixed. All three
+      are unreachable on the engine path — `seats.js :: buildSeats` derives `meta.seats` from the
+      same bench that becomes `meta.models`, and the engine always emits `runStats[].seat` for
+      both twins — and all three are reachable on the two hand-assembled `appendRun` paths, whose
+      rows reach a file that is never migrated.
+      **Owner ruling 2026-08-21: MERGE Phase 3, fix this cluster in its own PR.** The chair said
+      *"Fix these first"*, and that was weighed: the counter is that a focused PR reviews better
+      than a late behaviour change bolted onto a 17-commit branch that is already green and
+      four-times reviewed, and nothing here is reachable from the engine. The fix needs its own
+      RED-before-GREEN tests and named mutants — treat it as a task, not a patch.
   ⚠️ **BUDGET AN EXTRACTION BEFORE TOUCHING `report.js`.** Measured at `0cb2d4d9` with the gate's
   own `checkFileSize`: **277/300, 23 free** (197 at the branch point; T2.4 added ~80 lines carrying
   roughly 10 of executable code — this file's comment style inflates fast). The next
