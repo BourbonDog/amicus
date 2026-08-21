@@ -2572,6 +2572,25 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   done: `briefings-chair.js :: buildChairPacket`'s `rankingLines` still renders `${r.judge}`
   alias-keyed and was not touched by this PR. T3.3's fix-round-1 baseline: 542 suites / 7782 passed
   / 8 skipped / 4 snapshots / 0 failed.
+  - **Council review of PR #177 (2026-08-21) — the first FULLY CLEAN run of this release.**
+    `run complete · stage1 → stage2 → chair → tally → verdict all complete`, 390s, all four bench
+    models produced street cred, **chair verdict "Ship it"**. Three Confirmed, all minor/nit, filed
+    here rather than fixed in that PR because the chair cleared it and none is a correctness defect.
+    - [ ] **A1 [minor] (glm, a3/d0/n0) — the `ids.length > 0` guard in `ledger-join.js :: credFor`
+      is DESCRIBED as load-bearing but no dedicated test or mutant catches its removal in
+      isolation.** ⚠️ The guard IS load-bearing — verified during T4.1's review by executing the
+      guard-less variant, which returns `{}` on an empty group instead of the alias mean. The
+      finding is about the PIN, not the guard: nothing would go red if a future edit dropped it.
+      This is the same class the release calls "an empty red set means UNPINNED, not safe".
+    - [ ] **B1 [minor] (qwen, a2/d1/n0 — note the ONE dispute, the only non-unanimous finding in
+      this run) — duplicated-but-resolved seat ids within one pair group are unmeasured under the
+      new all-or-nothing gate.** `credFor` dedupes with `[...new Set(ids)]`, so a group whose rows
+      repeat a seat id contributes that seat once; the two branches' statistical behaviour differs
+      more than T4.1's brief acknowledged. Measure before deciding — it may be correct as-is.
+    - [ ] **B2 [nit] (qwen, a3/d0/n0) — `docs/council.md`'s `meta.models` table cell is now a dense
+      paragraph** that renders poorly and is hostile to future editors. T4.2 added the row-count and
+      order invariant there because it was the existing "street-cred universe" anchor; the content
+      is right, the placement is cramped. Consider lifting it to prose beneath the table.
   - **Council review of PR #176 (2026-08-21) — the run was PARTIAL; two findings, both raised by
     one model and neither peer-adjudicated.** ⚠️ **The job passed and the review is still not
     clean** — read the verdict comment, not the status. Recorded state:
