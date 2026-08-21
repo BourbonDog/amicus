@@ -17,11 +17,12 @@
  * build, so adding them to that module's export list would only risk the
  * AUTO:modules truncation its own comment warns about. Tests import them here.
  *
- * ⚠️ Two named mutants guard these, alongside LEDGERALIAS on ledger.js's join
- * key. Each mutation and its MEASURED red set is recorded with the rest:
- * tests/council/street-cred-mutants.js :: CHAIRWINS guards benchLegs, and
- * tests/council/street-cred-mutants.js :: CREDALIAS guards credFor. RE-RUN
- * them, never renumber them.
+ * ⚠️ Three named mutants guard these, alongside LEDGERALIAS on ledger.js's
+ * join key. Each mutation and its MEASURED red set is recorded with the rest:
+ * tests/council/street-cred-mutants.js :: CHAIRWINS guards benchLegs, while
+ * tests/council/street-cred-mutants.js :: CREDALIAS guards which lookup credFor
+ * uses and tests/council/street-cred-mutants.js :: ALIASLASTWINS guards how it
+ * combines what that lookup returns. RE-RUN them, never renumber them.
  */
 
 /**
@@ -144,7 +145,8 @@ function meanCred(rows, field) {
  * hand-assembled input that hands us two differing rows under one alias — where
  * last-wins would silently discard one, which is the whole defect class this
  * task exists to close. Pinned by ledger.test.js T12b, "the alias fallback
- * MEANS its rows, it does not take the last one".
+ * MEANS its rows, it does not take the last one", and killed by the named
+ * mutant tests/council/street-cred-mutants.js :: ALIASLASTWINS.
  *
  * ⚠️ A group can cover MORE THAN ONE SEAT — two twins that resolved to the same
  * executable are one (alias, resolvedModel) pair — and a ledger row has ONE
