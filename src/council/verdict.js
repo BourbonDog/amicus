@@ -158,8 +158,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // guard slipped — silently, since nothing else guards this closed literal.
     // This check is deliberate defense in depth: buildVerdict is also reachable
     // on externally-supplied records that never touched computeStreetCred
-    // in-process at all — amicus_verdict's MCP `record` param is
-    // `z.record(z.any())` (mcp-tools.js:461), fully permissive — so this
+    // in-process at all — the MCP `record` param of mcp-tools.js ::
+    // amicus_verdict is `z.record(z.any())`, fully permissive — so this
     // literal's own byte-identity cannot be contingent on that producer alone;
     // this file's own tests exercise that exact shape (hand-built rec objects,
     // never calling tally()). tally.json keeps its own pin regardless — a
