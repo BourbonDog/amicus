@@ -862,15 +862,43 @@ its `liveSeats` with `AmicusLive.seatsFromRunStats(costRows)` — the **TERMINAL
 **Call `AmicusLive.deadSeats(...)` directly with a hand-built LIVE-shaped `liveSeats`** (the
 `seatOf` shape: `role`/`model`/`modelInput`/`seat`), exactly as the file already does at `:75`.
 
+⚠️⚠️ **CORRECTED A THIRD TIME (controller ruling PF-10) — and this version was RUN, not reasoned.**
+The previous draft hand-built `liveSeats` with `seat: 'a#2'` already set. **But `.seat` is exactly
+the field `seatOf` is supposed to start producing** — hard-coding it takes the change under test
+OUT of the path, leaving only `deadSeats`, whose suppression arm has existed since 2026-08-15
+(PR5c). That draft passed at HEAD. An implementer caught it and stopped rather than adjust the
+expectation.
+
+**The general rule: an end-to-end test must not hand-build the intermediate value the change
+produces.** Derive it from the real upstream — here, `normalizeLive`.
+
+Measured against the real modules before this was written:
+```
+liveSeats[0] = {"role":"seat","model":"x/y","modelInput":"a"}   <- no `seat` key at HEAD
+AT HEAD  -> ["a#1","a#2"]   (RED)
+AFTER    -> ["a#1"]         (GREEN)
+```
+
 ```js
 // tests/workspace/dead-seat-rows.test.js — THE POINT OF THE WHOLE PHASE.
 test('a live seat suppresses its OWN revived seat id, and only that one (v4.8 R5)', () => {
+  // Derive liveSeats through the REAL normalizeLive so seatOf — the function this
+  // task changes — is genuinely in the path. Hand-building `.seat` here would take
+  // it out and the test would pass at HEAD (measured; see the plan's PF-10).
+  const { normalizeLive } = require('../../src/workspace/live-normalize');
+  const doc = {
+    type: 'council-run', view: 'live', taskId: 'seat3333', status: 'running',
+    stages: [{ name: 'stage1', status: 'running', waveId: 'seat3333-s1' }],
+    legs: [
+      { taskId: 'seat3333-s1-1', model: 'x/y', modelInput: 'a', role: 'seat',
+        status: 'running', seat: 'a#2' },
+    ],
+  };
+  const liveSeats = normalizeLive(doc).seats;
   const degrades = [
     { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#1', seat: 'a' } },
     { kind: 'degrade', channel: 'dead-leg', data: { seatId: 'a#2', seat: 'a' } },
   ];
-  // LIVE-tick shape (live-normalize.js :: seatOf) — NOT seatsFromRunStats.
-  const liveSeats = [{ role: 'seat', model: 'x/y', modelInput: 'a', seat: 'a#2' }];
   const rows = AmicusLive.deadSeats(degrades, null, liveSeats, {});
   // At HEAD the live seat carried no `.seat`, so `reviewing` held only the alias
   // `a` and BOTH dead rows survived — including a#2, which is alive. With the
