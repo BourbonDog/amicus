@@ -22,7 +22,7 @@
  * em-dash) and blind mode's labelOf(alias) lookup never matches (real model
  * id leaks). The alias IS on disk per-leg, though: every council leg goes
  * through src/sidecar/fanout-leg.js's runSingleAttempt, which calls
- * `writeLegPatch(legDir, { parentWave, modelInput })` synchronously,
+ * `writeLegPatch(legDir, { parentWave, modelInput, seat })` synchronously,
  * immediately after leg creation (fanout-leg.js:101) — well before any
  * status poll could reasonably observe it missing. So this module reads
  * `modelInput` straight off the leg's own metadata.json, no run.json join

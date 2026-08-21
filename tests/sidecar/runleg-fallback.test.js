@@ -199,6 +199,36 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     expect(waveEvents.some(e => e.event === 'leg-terminal' && e.legId === 'w9-1')).toBe(true);
   });
 
+  test('writes the leg seat into metadata.json when the leg carries one (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w10'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', seat: 'opus#2' },
+      legId: 'w10-1', waveId: 'w10', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w10-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.seat).toBe('opus#2');
+  });
+
+  test('a seatless leg leaves metadata.json without a seat key at all (v4.8 R5)', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w11'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' },
+      legId: 'w11-1', waveId: 'w11', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w11-1'), 'metadata.json'), 'utf-8'));
+    expect('seat' in meta).toBe(false);
+  });
+
   // v4.4 B4 — the two leg-level truth signals runHeadless now returns must reach
   // the leg's usage block and metadata.json, or they die with the process.
   test('a leg that made a SUBAGENT call is marked subtreeUnknown on its usage block', async () => {
