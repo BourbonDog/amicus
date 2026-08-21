@@ -4,7 +4,7 @@ const { assignLabels, toGlobalId, toGlobalFindings, rankingToOrder } =
   require('../../src/council/anonymize');
 
 describe('assignLabels', () => {
-  test('assigns Review A/B/C in model order with both maps', () => {
+  test('assigns Review A/B/C in model order and builds the label map', () => {
     const { entries, labelMap } = assignLabels(['deepseek', 'gemini', 'gpt']);
     expect(entries).toEqual([
       { label: 'Review A', letter: 'A', model: 'deepseek' },
