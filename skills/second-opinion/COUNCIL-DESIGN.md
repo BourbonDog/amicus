@@ -142,7 +142,10 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 
 **Street cred** — computed two ways by `amicus council tally`:
 - **withSelf** = each model's mean rank position across **all** judges' `FINAL RANKING:` blocks (lower = better).
-- **peersOnly** = mean rank across judges **other than** that model (self-vote excluded).
+- **peersOnly** = mean rank across judges **other than** that row's own vote on itself — **by seat,
+  not by model, whenever seat ids are present** (v4.8, see the ⚠️ note below): a twin's OTHER seat
+  is a real peer and counts, so only that row's own seat is excluded. Falls back to excluding by
+  alias when seat ids are unavailable.
 The cross-review matrix shows both; the ledger and Stage-0 bench recommendations consume **peersOnly** only.
 
 **Per-finding peer-confidence tier** — determined by a **peers-only** cascade: for a finding raised by model R, peers are all judges except R (the raiser's own adjudication is excluded — consistent with the peers-only street-cred rule). Let `a` = peer agrees, `d` = peer disputes. The cascade is exhaustive and mutually exclusive:
