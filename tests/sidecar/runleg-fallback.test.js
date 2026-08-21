@@ -153,6 +153,43 @@ describe('runLegWithFallback (spec 6.2)', () => {
     expect(doc.status).toBe('error');
     expect(doc.attempts.length).toBe(2);   // primary + 1 substitution (capped)
   });
+
+  // This is the ONLY test in this describe that does NOT inject `runOnce`.
+  // Every test above passes its own `runOnce: fakeRunOnce`, and this file's
+  // own header (:5) says outright that doing so makes the runHeadless mock
+  // inert for them — they never reach the real `runSingleAttempt` (grep
+  // confirms these are the only runLegWithFallback callers in the whole
+  // suite, and all five inject runOnce). Leaving `runOnce` unset here falls
+  // through to fanout-leg-fallback.js:160's default — the real
+  // `runSingleAttempt`, driven by this file's module-level runHeadless mock —
+  // so this is the only test that actually EXECUTES the claim T4.3's commit
+  // made by construction: that `{ ...leg, model: currentModel }`
+  // (fanout-leg-fallback.js:186) preserves `leg.seat` through the fallback
+  // loop, reaching metadata.json through the SAME write site a plain leg
+  // uses, with no second write site anywhere in the loop.
+  test('a leg run with no injected runOnce (the real runSingleAttempt) still writes its seat to metadata.json', async () => {
+    const project = tmp();
+    // No mkdirSync here: runLegWithFallback itself defensively creates the
+    // wave dir (fanout-leg-fallback.js:170) before the loop starts, unlike
+    // the runSingleAttempt describe below, which calls runSingleAttempt
+    // directly and so must create the wave dir itself.
+    const doc = await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', seat: 'opus#2' },
+      legId: 'w12-1', waveId: 'w12', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    }, { spendDir: project });
+
+    expect(doc.status).toBe('complete');  // primary succeeds — no substitution, one attempt
+    expect(doc.attempts).toHaveLength(1);
+
+    const { getSessionDir } = require('../../src/session-manager');
+    const meta = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, 'w12-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.seat).toBe('opus#2');
+  });
 });
 
 describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize extraction)', () => {
