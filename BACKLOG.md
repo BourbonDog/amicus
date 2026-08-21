@@ -3059,6 +3059,28 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   `seats` key rides this launch, plus RED-before-GREEN and a named mutant of its own — a task, not
   a fix-wave line.
 
+- [ ] **Filed, not fixed (v4.8 Phase 4 council review, PR #178, 2026-08-21) —
+  `stampLegAttribution`'s index-parallel contract is unenforced at the function boundary and has no
+  MISALIGNMENT test.** Council findings **A1** [major, glm] and **B1** [minor, qwen] are one
+  mechanism, both unanimous (a3/d0/n0). `src/sidecar/fanout-wave-io.js :: stampLegAttribution`
+  stamps `legs[i].seat` from `options.seats[i]`, so the two arrays being index-parallel is
+  load-bearing: a misaligned roster silently attributes a leg to the **wrong** seat, which is worse
+  than no seat at all — a wrong `alias#N` on a live row would make `live-dead-seats.js:209`'s
+  suppression arm hide the wrong dead candidate.
+  ⚠️ **Correct A1's own wording before acting on it: the property is NOT "asserted only by
+  comment".** It was measured twice — v4.8 T4.1 ran a probe against the real `launchStage1` across
+  five bench shapes (including a non-adjacent repeated alias and a critic that is also a bench
+  alias), and the whole-branch reviewer independently traced all three Stage-1 launch shapes
+  (seat wave, lens, critic solo) plus `fanout-validate.js`'s one-leg-per-model loop. The accurate
+  statement is B1's narrower one: **the contract is unenforced at the boundary, and no committed
+  test ever feeds `stampLegAttribution` a misaligned roster.** Every committed fixture is aligned,
+  so the mutants pin the predicate and the bounds guard but not the ordering.
+  Cheapest useful fix is a test that passes a deliberately permuted `seats` and pins what happens,
+  plus a decision on whether the function should detect it at all (it currently cannot — seat
+  objects carry `alias`, so `s.alias !== leg.modelInput` IS a detectable misalignment signal, but
+  reading `modelInput` there would couple this function to leg shape; that trade-off is the
+  task's real question, not a foregone conclusion).
+
 - [ ] **NEXT TASK — Phase 5: Debate join.** Filed 2026-08-21 (v4.8 Phase 4 T4.6) as the correct
   resume point, replacing the Phase 4 entry above (now ✅ COMPLETED). Per the phasing doc's own
   task list (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 5, and owner
