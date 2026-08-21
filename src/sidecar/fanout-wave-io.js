@@ -75,13 +75,36 @@ async function finishWave({ wave, waveDir, waveId, project, exitCode, completedA
 /**
  * v4.3 §7.2 (moved here v4.7 PR3 Task 1): stamp council attribution onto every
  * leg — fanout-leg's appendSpend reads it; no-op for every non-council caller.
- * v4.7 F8 (Task 7) adds tag stamping in the same pass.
+ * v4.7 F8 (Task 7) adds tag stamping in the same pass. v4.8 R5 (T4.2) adds
+ * seat stamping in the same pass.
  */
 function stampLegAttribution(legs, options) {
   if (options.councilRunId || options.councilName) {
     legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
   }
   if (options.tag) { legs.forEach(l => { l.tag = options.tag; }); }
+  // v4.8 R5: seat identity for the LIVE path. `options.seats` is the launching
+  // wave's roster, index-parallel with `options.models` by construction
+  // (run-stage1-launch.js builds `roster` and `models` from the same filter, and
+  // fanout-validate.js:66-87 pushes exactly one leg per model on BOTH its ok and
+  // its unroutable branch, so a leg that never routed still holds its slot).
+  //
+  // ⚠️ emit-when-DIFFERENT, against the seat's OWN alias — the shared predicate
+  // stated at run-stats-entry.js :: buildRunStatsEntry, which the three sites in
+  // run-assemble.js also spell. buildSeats mints `alias#N` ONLY when an alias
+  // repeats (seats.js:67), so `id !== alias` IS "the bench repeats this alias",
+  // and on a unique bench `id` IS the alias — a bare `if (s.id)` would stamp an
+  // alias-valued seat onto every leg of every run, the exact defect
+  // run-assemble.js:165-169 records having already fixed once.
+  // Comparing against the seat's own alias and never against `model` also makes
+  // this immune to the two cases where `model` is NOT the alias (a leg reporting
+  // no modelInput; a padded --council member).
+  if (Array.isArray(options.seats)) {
+    legs.forEach((l, i) => {
+      const s = options.seats[i];
+      if (s && s.id !== s.alias) { l.seat = s.id; }
+    });
+  }
 }
 
 module.exports = { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution };
