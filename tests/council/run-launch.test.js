@@ -138,6 +138,22 @@ describe('launchSolo (single-leg wave)', () => {
     expect(seen[0].directory).toBe(tmp);
     expect(seen[0].noMcp).toBe(true);
   });
+
+  // v4.8 R5 T4.1 Step 6: launchSolo sets no explicit `seats` key of its own —
+  // `{ ...opts }` (src/council/run-launch.js's launchSolo, :174) is what has to
+  // carry it through to launchWave and on to fanoutFn. Proven by EXECUTION here
+  // rather than by reading the spread, per the brief.
+  test('forwards seats through to the transport via the opts spread (v4.8 R5)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [mkLeg('deepseek', 'x')] }, exitCode: 0 };
+    };
+    const { launchSolo } = createLaunchers({ fanoutFn });
+    const seats = [{ id: 'deepseek', alias: 'deepseek', role: 'critic', lens: null, position: 1 }];
+    await launchSolo({ model: 'deepseek', prompt: 'p', project: tmp, waveId: 'abc123-c1', seats });
+    expect(seen[0].seats).toBe(seats);
+  });
 });
 
 describe('materializeReviews', () => {

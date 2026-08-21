@@ -46,7 +46,7 @@ async function launchStage1(ctx) {
       record(waveId);
       seated.push({ waveId, models: [m], roster: seats.slice(i, i + 1) });
       launches.push(launchers.launchSolo({
-        ...common, model: m, waveId,
+        ...common, model: m, waveId, seats: seated[seated.length - 1].roster,
         prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
       }));
     });
@@ -60,7 +60,7 @@ async function launchStage1(ctx) {
       seated.push({ waveId: `${o.runId}-s1`, models: seats1.slice(),
         roster: seats.filter(s => s.alias !== o.critic) });
       launches.push(launchers.launchWave({
-        ...common, models: seats1, waveId: `${o.runId}-s1`,
+        ...common, models: seats1, waveId: `${o.runId}-s1`, seats: seated[seated.length - 1].roster,
         prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
       }));
     }
@@ -69,7 +69,7 @@ async function launchStage1(ctx) {
       seated.push({ waveId: `${o.runId}-c1`, models: [o.critic],
         roster: seats.filter(s => s.alias === o.critic).slice(0, 1) });
       launches.push(launchers.launchSolo({
-        ...common, model: o.critic, waveId: `${o.runId}-c1`,
+        ...common, model: o.critic, waveId: `${o.runId}-c1`, seats: seated[seated.length - 1].roster,
         prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
       }));
     }
