@@ -181,7 +181,11 @@ async function runCouncil(options, deps = {}) {
 
     // ---- Stage 2: anonymized cross-review ----
     // A file-sourced Claude review is ALWAYS the last label — review N+1 (§4.4).
-    const labels = assignLabels(s1.reviews.map(r => r.model).concat(claudeReview ? ['claude'] : []));
+    // v4.8 T3.2: seats travel in lockstep with models — both are s1.reviews in
+    // the same pass, not the positional join anonymize.js :: assignLabels's
+    // own docblock explains is forbidden elsewhere.
+    const labels = assignLabels(s1.reviews.map(r => r.model).concat(claudeReview ? ['claude'] : []),
+      s1.reviews.map(r => r.seat).concat(claudeReview ? [null] : []));
     runState.checkpoint(o.runDir, { labelMap: labels.labelMap });
     // Attach each review's run-global findings (buildTallyInput reads
     // r.globalFindings per review, not a bare parallel array).

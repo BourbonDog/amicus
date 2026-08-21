@@ -144,7 +144,14 @@ function buildVerdict(record, decisions = [], opts = {}) {
       if (f.debate) { out.debate = f.debate; }   // v4.1: additive debate decoration carry-through (spec §5.6)
       return out;
     }),
-    streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly })),
+    // v4.8 T3.2: this literal is CLOSED (§3.4 precedent above) — carry `seat`
+    // through NOW, emit-when-SET (mirroring tally.js's own runStats/adjudications
+    // carry-through, not a fresh id!==alias decision — computeStreetCred, T3.3,
+    // is the producer that decides), so a future row that carries one is never
+    // silently stripped here. Inert today: computeStreetCred emits no `seat` yet,
+    // so every row's `s.seat` is undefined and this document stays byte-identical.
+    streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly,
+      ...(s.seat ? { seat: s.seat } : {}) })),
     runStats: record.runStats,
     tierCounts: record.tierCounts,
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic

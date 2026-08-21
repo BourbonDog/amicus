@@ -161,9 +161,11 @@ test('v4.8 PR4c T9b: meta.seats is a pure tail; the six-key order is untouched',
 
 // v4.8 PR3 Task 5: buildTallyInput's adjudications carry `seat` alongside the
 // unchanged alias-valued `judge` — emit-when-DIFFERENT (§3.3), mirroring Task
-// 4's judgeResults[].seat guard. `judge: j.judge` stays the alias; rankings
-// (street-cred) are untouched.
-describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-different)', () => {
+// 4's judgeResults[].seat guard. `judge: j.judge` stays the alias.
+// v4.8 T3.2: rankings[] now carries the SAME judge seat, under the identical
+// predicate — see the block below. `order`'s VALUES stay alias-valued; only
+// the row gains a sibling `seat` key (street-cred NUMBERS are still T3.3's).
+describe('buildTallyInput adjudications + rankings seat (v4.8 PR3 Task 5 / T3.2, emit-when-different)', () => {
   const judgesWithSeat = (seat) => [
     { judge: 'gemini', ok: true, order: ['gemini'], seat,
       adjudications: [{ id: 'A1', verdict: 'agree' }] },
@@ -197,13 +199,35 @@ describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-differe
     expect('seat' in input.adjudications[0]).toBe(false);
   });
 
-  test('rankings (street-cred) stay alias-valued — unchanged by seat', () => {
+  // v4.8 T3.2 (was: "rankings (street-cred) stay alias-valued — unchanged by
+  // seat" — that claim is what this task changes; replaced rather than left
+  // to rot, since a stale assertion here would be exactly the falsified-
+  // comment/pin trap this release keeps tripping on). `order`'s VALUES are
+  // still alias-valued (unchanged); the row now ALSO carries the judge's seat.
+  test('rankings order stays alias-valued; the row now carries the JUDGE seat (v4.8 T3.2)', () => {
     const input = asm.buildTallyInput({
       runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x',
       reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini#2', alias: 'gemini' }),
       chairStats: null,
     });
-    expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
+    expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'], seat: 'gemini#2' }]);
+  });
+
+  test('v4.8 T3.2: rankings seat is emit-when-DIFFERENT, matching adjudications exactly', () => {
+    const unique = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini', alias: 'gemini' }),
+      chairStats: null,
+    });
+    expect(unique.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
+    expect('seat' in unique.rankings[0]).toBe(false);
+
+    const noSeat = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat(null),
+      chairStats: null,
+    });
+    expect('seat' in noSeat.rankings[0]).toBe(false);
   });
 });
 

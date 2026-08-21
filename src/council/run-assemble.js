@@ -168,7 +168,11 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
       // the two strings drifted (a padded --council member; a leg with no
       // modelInput), i.e. exactly where the field carries no information.
       ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) })));
-  const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
+  // v4.8 T3.2: the SAME predicate as the adjudication map one line above —
+  // the judge's own seat, emit-when-DIFFERENT. `order` itself is untouched
+  // (still alias-valued; T3.3's job, not this one's).
+  const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order,
+    ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
     findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused, seat: r.seat,

@@ -140,6 +140,40 @@ describe('v4.8 PR4c §3.4: findings[] carry raiserSeat and sameModelCorroboratio
   });
 });
 
+// v4.8 T3.2: verdict.js's CLOSED streetCred literal must carry a seat
+// through, or a future producer (computeStreetCred, T3.3) loses it silently —
+// found by measurement, filed nowhere before this task (mirrors the §3.4
+// raiserSeat/sameModelCorroboration precedent above). computeStreetCred does
+// not emit `.seat` yet, so these rows are hand-built (same idiom as :90-94
+// above) to prove the CARRY-THROUGH in isolation from its future producer.
+describe('v4.8 T3.2: streetCred[].seat survives the closed verdict literal', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek'], chair: 'gemini', claudeInCouncil: false };
+
+  test('a seat-carrying row keeps its seat in the VERDICT document', () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek#1' }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1, seat: 'deepseek#1' });
+  });
+
+  test("a row with no seat (today's only shape) emits NO seat key — byte-identity", () => {
+    const rec = { meta, findings: [], runStats: [], tierCounts: {},
+      streetCred: [{ model: 'deepseek', withSelf: 1.5, peersOnly: 1 }] };
+    const v = buildVerdict(rec, []);
+    expect(v.streetCred[0]).toEqual({ model: 'deepseek', withSelf: 1.5, peersOnly: 1 });
+    expect('seat' in v.streetCred[0]).toBe(false);
+  });
+
+  test('the real producer chain (unique-alias fixture at the top of this file) stays byte-identical', () => {
+    // `record` is tally(avInput)'s OWN output — computeStreetCred emits no
+    // seat yet (T3.3), so this is the byte-identity control the whole task is
+    // judged on, driven through the real producer, not a hand-built stand-in.
+    const v = buildVerdict(record, []);
+    for (const s of v.streetCred) { expect('seat' in s).toBe(false); }
+  });
+});
+
 test('writeVerdictAtomic writes valid JSON via rename', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdict-'));
   const file = path.join(dir, 'verdict.json');

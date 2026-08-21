@@ -188,7 +188,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       if (parsed.ok) { conformance = 'repaired'; }
     }
     if (!parsed.ok) {
-      judgeResults.push({ judge, seat, ok: false, order: null, adjudications: null,
+      judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
         // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
         // Stage-1's convention (reviews carry the original wave leg even when a
@@ -199,9 +199,12 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         leg: leg || null });
       continue;
     }
-    const { order } = rankingToOrder(parsed.ranking, labels.labelMap);
-    judgeResults.push({ judge, seat, ok: true, order, adjudications: parsed.adjudications, conformance,
-      leg: leg || null });
+    // v4.8 T3.2: labels.seatMap (anonymize.js :: assignLabels) threads through
+    // so orderSeats can disambiguate a twin bench's `order`, which stays
+    // alias-only — T3.3 wires this into rankPositions, not this task.
+    const { order, orderSeats } = rankingToOrder(parsed.ranking, labels.labelMap, labels.seatMap);
+    judgeResults.push({ judge, seat, ok: true, order, orderSeats, adjudications: parsed.adjudications,
+      conformance, leg: leg || null });
   }
   return { aborted: null, judgeResults, extraRows };
 }

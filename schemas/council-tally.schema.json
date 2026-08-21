@@ -34,7 +34,11 @@
           "model": { "type": "string" },
           "withSelf": { "type": ["number", "null"] },
           "peersOnly": { "type": ["number", "null"] },
-          "perJudgeRank": { "type": "object" }
+          "perJudgeRank": { "type": "object" },
+          "seat": {
+            "type": "string",
+            "description": "v4.8, optional, documentation-only ahead of its producer. One row per SEAT rather than per alias, and this row's seat id, when it differs from `model` (its alias) — emitted by computeStreetCred (v4.8 T3.3, not yet shipped when this property was declared). verdict.js :: buildVerdict already carries it through its own streetCred projection (T3.2) so the field is never silently stripped once T3.3 starts emitting it. No `additionalProperties: false` above means an additive field always validated here even before this declaration; this documents the shape rather than changing what is accepted."
+          }
         }
       }
     },

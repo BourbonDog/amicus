@@ -740,6 +740,19 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
     expect(out[1].seat).toBeNull();
   });
 
+  // v4.8 T3.2: rankings[].seat is a FOURTH seat key, added when run-assemble.js's
+  // buildTallyInput started emitting the judge's own seat on rankings[]. Same
+  // reasoning as the three above: undeclared here, zod strips it silently and a
+  // hand-assembled MCP call can seat its adjudications but not its rankings.
+  test('rankings[].seat survives, including the `|| null` idiom', () => {
+    const out = schema().rankings.parse([
+      { judge: 'deepseek', order: ['deepseek'], seat: 'deepseek#2' },
+      { judge: 'gpt', order: ['deepseek'], seat: null },
+    ]);
+    expect(out[0].seat).toBe('deepseek#2');
+    expect(out[1].seat).toBeNull();
+  });
+
   // ⚠️ Council C1: the `|| null` idiom was spelled `.nullable().optional()` for
   // `raiserSeat` and `seat` and left bare `.optional()` for `seats` — two of
   // three. Measured at that spelling: the MCP path fails the WHOLE call with
