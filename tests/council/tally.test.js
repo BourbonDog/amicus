@@ -159,6 +159,49 @@ describe('tally() — defensive basis handling', () => {
   });
 });
 
+// v4.8 Phase 6 PR1 (SI-24): VERDICTS was a plain object literal, so it
+// resolved Object.prototype's keys — VERDICTS['toString'] is a function, not
+// undefined, and the `!== undefined` skip in tally() let it through. Fixed on
+// the table (`__proto__: null`), not with a guard at either read site.
+describe('tally() — VERDICTS is prototype-safe (SI-24)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 't', models: ['m1', 'm2'] },
+    findings: [{ id: 'A1', raiser: 'm1', severity: 'high' }],
+    rankings: [],
+  };
+
+  test.each(['toString', '__proto__', 'constructor', 'valueOf'])(
+    'P1: %s as a verdict string leaves basis at exactly a/d/n, all zero',
+    (verdict) => {
+      const record = tally({
+        ...baseInput,
+        adjudications: [{ judge: 'm2', findingId: 'A1', verdict }],
+      });
+      const basis = record.findings[0].basis;
+      expect(Object.keys(basis)).toEqual(['a', 'd', 'n']);
+      expect(JSON.stringify(basis)).toBe('{"a":0,"d":0,"n":0}');
+    },
+  );
+
+  test('P2: the three real verdicts still count — agree→a, dispute→d, neutral→n', () => {
+    const basisFor = (verdict) => tally({
+      ...baseInput,
+      adjudications: [{ judge: 'm2', findingId: 'A1', verdict }],
+    }).findings[0].basis;
+    expect(basisFor('agree')).toEqual({ a: 1, d: 0, n: 0 });
+    expect(basisFor('dispute')).toEqual({ a: 0, d: 1, n: 0 });
+    expect(basisFor('neutral')).toEqual({ a: 0, d: 0, n: 1 });
+  });
+
+  test('P3: an ordinary unknown verdict (bogus) is identical to an inherited one', () => {
+    const basisFor = (verdict) => tally({
+      ...baseInput,
+      adjudications: [{ judge: 'm2', findingId: 'A1', verdict }],
+    }).findings[0].basis;
+    expect(basisFor('bogus')).toEqual(basisFor('toString'));
+  });
+});
+
 describe('tally() — runStats carries what qualifies `conformance` (review F3)', () => {
   const baseInput = {
     meta: { runId: 'r', runType: 'review', date: 'd', models: ['x'], chair: 'x', claudeInCouncil: false },

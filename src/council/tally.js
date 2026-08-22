@@ -34,7 +34,7 @@ function assignTier(a, d) {
 
 // v4.0 §7: council family v2 — every council doc carries {schemaVersion, type}.
 const COUNCIL_SCHEMA_VERSION = 2;
-const VERDICTS = { agree: 'a', dispute: 'd', neutral: 'n' };
+const VERDICTS = { __proto__: null, agree: 'a', dispute: 'd', neutral: 'n' };
 
 function countTiers(findings) {
   const counts = { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 };
@@ -75,7 +75,11 @@ function tally(input) {
     const drops = unattributedPeerDrops(f, votes);
     const basis = { a: 0, d: 0, n: 0 };
     // Skip unknown verdict strings so a stray value can't corrupt the basis via
-    // basis[undefined] = NaN (L9).
+    // basis[undefined] = NaN (L9). Guaranteed by VERDICTS's `__proto__: null`,
+    // not `!== undefined` alone — measured, all four Object.prototype keys
+    // (toString/__proto__/constructor/valueOf) read undefined on it. VERDICTS
+    // is module-local, absent from module.exports, so this isn't observable
+    // outside this file.
     for (const v of peers) {
       const key = VERDICTS[v.verdict];
       if (key !== undefined) { basis[key] += 1; }
