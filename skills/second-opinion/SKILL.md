@@ -268,8 +268,9 @@ below needs both sides of the join.
 Every finding already carries the **peer-confidence tier** the
 engine's tally computed (see *Key mechanics → §5.2 Scoring*, and COUNCIL-DESIGN.md for the full
 cascade): **Disputed** (strong peer pushback — `d ≥ 2` and `d > a`), **Confirmed** (≥ 2 peer
-agreements, agrees dominate), **Contested** (at least one live dispute), **Singleton** (at most one
-endorsement, no pushback). `confidence: thin` cells `(0,0)/(1,0)/(0,1)` are override-eligible —
+agreements, agrees dominate — or a lone corroborating peer with zero disputes), **Contested** (at
+least one live dispute), **Singleton** (no peer engagement at all — zero agreements, zero
+disputes). `confidence: thin` cells `(0,0)/(1,0)/(0,1)` are override-eligible —
 record any override in `tierOverride: {from, to, reason}` on that finding's decision entry. Present
 the tiers in this order: Confirmed first (bulk decision), then Disputed and Contested and Singleton
 individually in the judgment tier.
@@ -296,7 +297,7 @@ This is one tier with three sub-types presented separately. Present each finding
 
 - **Disputed** (`d ≥ 2` and `d > a` — strong peer pushback, the finding itself may be wrong): For each finding show the claim, severity, which model raised it, which peers dispute it and why. Ask for a decision before proceeding to the next: **accept / deny / modify**.
 - **Contested** (`d ≥ 1` with a meaningful split): For each finding show the claim and severity, which model raised it, who agreed, who disputed, and the one-line reasons from the adjudications. Ask for a decision before proceeding to the next: **accept / deny / modify**.
-- **Singleton** (only the original raiser; all other judges were neutral or silent — `d = 0` and `a < 2`): For each finding show the claim and severity and that no other judge engaged with it. Name the sole raiser. Ask for a decision before proceeding to the next: **accept / deny / modify**.
+- **Singleton** (only the original raiser; all other judges were neutral or silent — `a === 0` and `d === 0`): For each finding show the claim and severity and that no other judge engaged with it. Name the sole raiser. Ask for a decision before proceeding to the next: **accept / deny / modify**.
 
 **Recording decisions.** Keep a running decision log throughout this stage — every finding's
 outcome (accepted / denied / modified, with any modification noted) — and write it to
