@@ -3987,7 +3987,7 @@ deliberately left alone:
     roster slot", which is false in precisely the case that motivated the deletion — a leg that DID
     bind to a placeholder slot while carrying a foreign alias; it now reads "its join key '…' (judge
     alias '…') names none of the judges this wave launched", pinned by two assertions in the T5.5
-    refusal test and measured RED against the old text. (c) `src/workspace/seat-space.js`'s
+    refusal test and measured RED against the old text — named mutant **`WHYSTALE`**, red set 1. (c) `src/workspace/seat-space.js`'s
     `orphanExonerations` docblock quoted the two-arm predicate verbatim in a DIFFERENT file; its
     conclusion survives (a roster hole's own alias is still a `judgeKey`, so both silent shapes it
     names still land) but the predicate it quoted did not.

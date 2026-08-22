@@ -1424,7 +1424,10 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
     // ⚠️ And the note's own `why` must not claim the leg bound to nothing — THIS one
     // bound, to the placeholder's slot, which is what the taskId above shows. That
     // sentence read "it bound to no roster slot, and … names no seat there either"
-    // until T5.5 deleted the arm that made the first half true.
+    // until T5.5 deleted the arm that made the first half true — an ANNOUNCED string
+    // the correct edit turned false. Named mutant WHYSTALE (restore the old `why`
+    // literal in run-debate-revote.js :: reVoteUnboundNote): red set (1), this test,
+    // measured 2026-08-22 across the same six suites as the others.
     expect(notes[0].why).toMatch(/names none of the judges this wave launched/);
     expect(notes[0].why).not.toMatch(/bound to no roster slot/);
   });

@@ -608,7 +608,7 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
    that motivated the deletion — a leg that DID bind to a placeholder slot while carrying a foreign
    alias — so it now reads "its join key '…' (judge alias '…') names none of the judges this wave
    launched", pinned by two assertions in the T5.5 refusal test and measured red against the old
-   text; (c) one precision fix in the guard comment. So the call site, publish site, function span,
+   text (named mutant **`WHYSTALE`**, red set 1); (c) one precision fix in the guard comment. So the call site, publish site, function span,
    padding block, `repairId` and every harness anchor moved — and the citation repairs CASCADED
    TWICE, each round written against a tree the next source edit invalidated. Every value in
    §0.7's table, `BACKLOG.md` and the phasing doc was finally **re-opened at its stated line after
