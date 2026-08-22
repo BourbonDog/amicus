@@ -438,7 +438,10 @@ describe('runDebate — the parseDebateDefense allowlist keeps a foreign action 
 // once. See "DOUBLEBREACH" below, the compound mutant that actually covers
 // them, and the updated PROTOACTION record in debate.test.js.
 //
-// NO PIN THAT PRE-DATES THIS TASK REDS.
+// ONE PIN THAT PRE-DATES THIS TASK REDS, and it is the only red above:
+// tests/council/parse-debate.test.js — "present-but-invalid entries become
+// no-response without triggering a repair", deliberately, because it is
+// the allowlist's own pre-existing coverage.
 
 // Named mutant "DOUBLEBREACH" (v4.8 Phase 6 PR1 Task 3 fix round 2, SI-24): a
 // COMPOUND mutant — ACTIONPASSTHRU (above) applied TOGETHER with PROTOACTION
@@ -476,7 +479,11 @@ describe('runDebate — the parseDebateDefense allowlist keeps a foreign action 
 // the 5 additional reds: 544 suites (541 passed / 3 failed), 7847 tests
 // (7833 passed / 6 failed / 8 skipped), 4 snapshots passed and unchanged.
 //
-// NO PIN THAT PRE-DATES THIS TASK REDS.
+// ONE PIN THAT PRE-DATES THIS TASK REDS, unioned in from ACTIONPASSTHRU:
+// tests/council/parse-debate.test.js — "present-but-invalid entries become
+// no-response without triggering a repair", deliberately, because it is
+// the allowlist's own pre-existing coverage. The other five reds above are
+// new at this task.
 
 // ---- carry-forward gap 3b: withdrawn findings NEVER reach the re-vote bundle (spec §5.1) ----
 describe('runDebate — withdrawn findings are excluded from the re-vote bundle', () => {

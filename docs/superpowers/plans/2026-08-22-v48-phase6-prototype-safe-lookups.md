@@ -128,7 +128,7 @@ argument, and the difference is the *field*, not the path:
 |---|---|---|---|
 | A, B | `adjudications[].verdict` | **reachable** — no schema at all | **BLOCKED** — `z.enum(['agree','dispute','neutral'])` at `:420` |
 | C | `rankings[].seat \|\| .judge` | **reachable** | **reachable** — both are `z.string()` |
-| D | a verdict string read back off `tally.json` | **reachable** | inherits A/B's enum on the write path |
+| D | a verdict string read back off `tally.json` | **reachable** | **reachable** — `amicus_verdict`'s `record: z.record(z.any())` bypasses A/B's enum |
 | E | `resp.action`, the model's own parsed defense response | **reachable** | **reachable** |
 
 ### ⚠️ §0.3-E RETRACTED — `PAST_TENSE` is NOT reachable with a foreign key on ANY path
@@ -172,7 +172,7 @@ pinning, because loosening it would make the table's null prototype load-bearing
 |---|---|---|---|
 | A, B | reachable | blocked (`z.enum`) | no |
 | C | reachable | reachable (`z.string()`) | no |
-| D | reachable | inherits A/B's enum | no |
+| D | reachable | **reachable** — `amicus_verdict`'s `record: z.record(z.any())` bypasses the enum | no |
 | **E** | **no** | **no** | **no — allowlist normalises first** |
 
 ⚠️ **Method note, and it is the sharpest one this PR produced.** The false claim survived a
@@ -231,7 +231,7 @@ tree reads `basis` by anything but `a`/`d`/`n`.
 `Object.prototype.hasOwnProperty.call(VERDICTS, v.verdict)` "at both sites". Rejected: that is
 one guard per consumer, and this release has already been burned by that shape (plan-authoring
 failure mode #7 — *a rule needing a third spelling means the defect is in a consumer*; here it
-would need **seven** spellings across 5 files). One `__proto__: null` per table closes all seven
+would need **seven** spellings across 6 files). One `__proto__: null` per table closes all seven
 index sites with no guard to keep in sync. *Cost if wrong:* a future reader adds a consumer and
 assumes the guard is local. Mitigated by a comment at each table.
 
@@ -242,8 +242,9 @@ fixes it for free with **zero behaviour change**. The PR body must not claim it 
 defects when one was never live.
 
 **R-D — D and E are pulled into this PR rather than deferred.** They are the same mechanism, the
-same one-token fix, and the same review surface; both measured live above; E is reachable from a
-real run. Per the standing ruling that category-based deferral is ceremony, the per-item test
+same one-token fix, and the same review surface; D was measured live above (§0.3 D); E's null
+prototype is defense-in-depth, not a fix for a reachable defect (§0.3-E RETRACTED). Per the
+standing ruling that category-based deferral is ceremony, the per-item test
 applies: doing them now is cheaper than a second plan/council/review cycle for a two-token change,
 and — decisively — shipping SI-24 alone would let this PR's own headline ("the council's
 document-keyed lookups no longer resolve inherited keys") ship **false**, with the report renderer

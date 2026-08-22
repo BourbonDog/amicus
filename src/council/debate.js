@@ -17,7 +17,10 @@ const { peersOf, unattributedPeerDrops } = require('./peer-split');
 // through the `|| 'no-response'` guards below and in run-debate.js, never
 // resolve off Object.prototype: a function value there survives in memory
 // but JSON.stringify drops it, silently deleting `action` from the finding.
-// Reachable from a real run: `d.action` is the model's own parsed response.
+// Defense-in-depth: `parse-stage2.js :: parseDebateDefense` is an
+// allowlist that normalises every foreign action to `'no-response'`
+// before this table is consulted — no real run reaches it with a
+// foreign key. See `run-debate.test.js :: DOUBLEBREACH`.
 const PAST_TENSE = { __proto__: null, defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
 // The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,

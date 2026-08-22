@@ -177,15 +177,20 @@ All notable changes to Amicus are documented here. Format follows
   meant to catch an unrecognized value. Fixed at the table itself (`__proto__: null`, or
   `Object.create(null)` for the one write-site accumulator), not at each consumer, so no future
   caller can reintroduce the hole by forgetting a guard.
-  Two of the four are reachable today. `tally.js`'s `VERDICTS`: an unknown verdict used to serialize
+  Three of the four are reachable today. `tally.js`'s `VERDICTS`: an unknown verdict used to serialize
   `basis["function toString() { [native code] }"] = NaN` as `null` in both `tally.json` and
   `verdict.json` — reachable on the CLI path only, since the MCP schema's `adjudications[].verdict`
   is `z.enum(['agree','dispute','neutral'])` and rejects the value before `tally()` ever runs.
   `street-cred.js`'s `perJudgeRank`: a judge or seat id of `__proto__` silently lost its rank to the
   inherited setter instead of being recorded as an own key — reachable on **both** the CLI and MCP
-  paths, since `judge`/`seat` there are unconstrained `z.string()`.
-  The other two close a latent hole rather than a live one. `report.js`'s `SYMBOL` (the vote glyph
-  read by all three matrix renderers) is CLI-path-only, like `VERDICTS`. `debate.js`'s `PAST_TENSE`
+  paths, since `judge`/`seat` there are unconstrained `z.string()`. `report.js`'s `SYMBOL` (the vote
+  glyph read by all three matrix renderers) is reachable on **both** paths too — the CLI path
+  (`council report`/`council verdict --render`, raw `JSON.parse`) and a second, independent MCP
+  tool, `amicus_verdict`, whose `record: z.record(z.any())` input is wholly unvalidated because that
+  tool never calls `tally()` and so never meets the `z.enum` guarding `VERDICTS`. With `render: true`,
+  `amicus_verdict` feeds that record straight into `buildReport()`, so an adjudication `verdict` of
+  `toString` used to render the literal `function toString() { [native code] }` into `report.html`.
+  Only one of the four closes a latent hole rather than a live one. `debate.js`'s `PAST_TENSE`
   guards an `action` key that a separate, pre-existing allowlist (`parse-stage2.js`'s
   `parseDebateDefense`) already normalizes to the literal `'no-response'` before this table is ever
   consulted by a real defense response — the two guards are independent and each is individually
