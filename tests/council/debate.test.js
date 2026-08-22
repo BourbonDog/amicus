@@ -325,6 +325,39 @@ describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited a
 // HEAD:src/council/debate.js`, sha256 match.
 //
 // NO PIN THAT PRE-DATES THIS TASK REDS.
+//
+// ⚠️ RE-RUN at fix round 1 (SI-24 review): PAST_TENSE has a SECOND consumer,
+// run-debate.js:262's `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
+// inside runDebate's addendumOutcomes, which the three tests above never
+// reach (they call decorateRecord directly). Added
+// tests/council/run-debate.test.js coverage driving a REAL defense response
+// through the actual runDebate -> parseDebateDefense -> applyDebate path with
+// an inherited action ('toString', '__proto__') — see that file's "a defense
+// action a model cannot make PAST_TENSE-inherited" describe block.
+//
+// RE-RUN command `npx jest --no-coverage` (the FULL suite, with the new
+// run-debate.test.js pins in place): RED remains 3 tests / 1 suite —
+// UNCHANGED. The new tests do NOT enter the set. THIS IS NOT AN EMPTY-SET
+// FAILURE TO CHASE; it is a chased and CONFIRMED non-reachability: measured
+// directly (a scratch script calling the real parseDebateDefense, then the
+// full runDebate pipeline under this exact mutation, both before recording),
+// parseDebateDefense (src/council/parse-stage2.js:142-153) is an ALLOWLIST —
+// only 'defend'/'amend'/'withdraw' ever overwrite a per-id default of
+// `{action: 'no-response'}`. Every other action string a model could emit,
+// inherited-key or ordinary junk alike, is ALREADY the literal 'no-response'
+// before `debateFindings` (and therefore `df.action`) exists — regardless of
+// PROTOACTION. `PAST_TENSE[df.action]` at run-debate.js:262 is an own-key hit
+// on every input the real pipeline can deliver, mutated or not. Denominator
+// at this re-run: 544 suites (543/1), 7847 tests (7836 passed / 3 failed / 8
+// skipped — +3 over the prior 7844, exactly the three new tests, all
+// passing), 4 snapshots passed and unchanged. Same guard, same hand-revert
+// discipline, confirmed clean.
+//
+// This narrows, rather than fills, the WHY-NOT-4 note above: run-debate.js's
+// addendumOutcomes is real, exported-table-consuming code, and the new tests
+// are a legitimate regression pin on it — but the property they prove is
+// "parseDebateDefense's allowlist protects this call site", not "PAST_TENSE's
+// null prototype protects this call site". Full chase in task-3-report.md.
 
 describe('debateRunStatsRows', () => {
   test('emits rebuttal + revote rows tagged with the debate roles', () => {
