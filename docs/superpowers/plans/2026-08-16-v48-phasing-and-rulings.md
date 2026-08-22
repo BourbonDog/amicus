@@ -71,8 +71,9 @@ shapes, so the true open work-item count is **20**, not 16.
 > every Verdict cell, not by arithmetic on the line above: **15 DONE · 3 PARTIAL · 1 SUPERSEDED ·
 > 1 HOLD · 11 OPEN**.
 > ⚠️ Row **16's Verdict did not move** (still OPEN → v4.9) and it is not part of that count change —
-> but its anchor column's three function lengths were re-measured in the same pass and **two of the
-> three were wrong**; see the row.
+> but its anchor column's three function lengths were re-measured in the same pass and **all three
+> were wrong**; see the row. ⚠️ This line read *"two of the three"* until T5.4 fix round 1 — it did
+> not resolve against the row's own enumeration, which names three corrections.
 
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
@@ -91,7 +92,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 13 | **DONE** (T5.3 `f885c1ea`+`7c46d282`, 2026-08-21, ruling R8) | ~~`applyDebate` writes seat id into `judge`~~ collapsed to the JSDoc edit R8 predicted, once row 10 landed: the `aliasOf` contract — what an omitted `aliasOf` writes, and which two joins that value reaches — is now stated in `applyDebate`'s own docblock. **No behaviour change and no thrown error**; making `aliasOf` required was considered and NOT taken. ⚠️ R8's *"a JSDoc edit at `debate.js:44`"* is a LINE, and `:44` is not the `aliasOf` param — anchor by symbol | `debate.js :: applyDebate` |
 | 14 | PARTIAL | nothing pins "launcher must not dedupe" | `tests/council/run-launch.test.js` |
 | 15 | **SUPERSEDED** | seatKey + padding duplication | by PR5c-SEATKEY + SI-27 |
-| 16 | OPEN → **v4.9** | function lengths. ⚠️ **All three counts re-measured 2026-08-21 (T5.4) by brace-matching the current tree; two were wrong.** `runStage2` was recorded as 161 and is **165** (`:47-211`) — stale before v4.8 Phase 5, which never touches that file; `runRevoteWave` was 91 and is **129** (`:119-247`) after T5.1; `runDebate` was recorded here as 165 and is **166** (`:106-271`) | `run-stage2.js :: runStage2` 165 · `run-debate.js :: runDebate` 166 · `run-debate-revote.js :: runRevoteWave` 129 |
+| 16 | OPEN → **v4.9** | function lengths. ⚠️ **All three counts re-measured 2026-08-21 (T5.4) by brace-matching the current tree, and ALL THREE were wrong** (this said "two" until fix round 1, contradicting its own list): `runStage2` was recorded as 161 and is **165** (`:47-211`) — stale before v4.8 Phase 5, which never touches that file; `runRevoteWave` was 91 and is **129** (`:119-247`) after T5.1; `runDebate` was recorded here as 165 and is **166** (`:106-271`) — ⚠️ note the BACKLOG's twin entry recorded `runDebate` as 166 and was right, so the two documents disagreed, and only this one was wrong about it | `run-stage2.js :: runStage2` 165 · `run-debate.js :: runDebate` 166 · `run-debate-revote.js :: runRevoteWave` 129 |
 | 17 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21, ruling R4) | ~~chair-on-bench, no engine guard~~ normalised at the ledger join instead of guarded: a chair-synthesis row never decides a bench seat's `role`/`conformance` when the group also holds a bench leg; `wasChair` stays any-wins | `ledger-join.js :: benchLegs` |
 | 18 | OPEN | findings attributed by alias — **only this half of `buildLedgerRows` is still open**; T3.3 closed the OTHER half of the same anchor (the street-cred join, row 20) but `findings.filter(f => f.raiser === model)` is byte-unchanged | `ledger.js :: buildLedgerRows` |
 | 19 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21) | ~~never-ran aggregate stays chair-promotable~~ closes as a side effect of seat-attributed street cred (row 20): a dead seat now gets its OWN seat-keyed row, which resolves to `null`/`null` rather than borrowing its live twin's number | `run-chair.js :: pickFallbackChair` |

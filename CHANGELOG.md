@@ -131,8 +131,11 @@ All notable changes to Amicus are documented here. Format follows
   ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
   task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
   than a live regression. It is reachable through a resumed or hand-assembled run.
-  Pinned end to end through the real debate round, and by four named mutants each hand-applied and
-  then reverted: `JOINBLIND` (red set 1), `REFUSEALL` (3), `LEGDROP` (1) and `E2EBLIND` (2).
+  Pinned end to end through the real debate round, and by named mutants each hand-applied and then
+  reverted: `REFUSEALL` (red set 3), `LEGDROP` (1), and the guard-deletion mutant — recorded twice
+  under two names because it was measured at two points in the work. As `JOINBLIND` it red **1**
+  test when the unit-level pin was all that existed; the **same deletion**, re-measured as
+  `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
   The companion change is documentation only: `applyDebate`'s docblock now states what an omitted
   `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
   in this package omits it, the package's `exports` map blocks a deep require from outside, and the

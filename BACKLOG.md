@@ -4017,8 +4017,14 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   anywhere in the gate). File as a follow-up, noting the seat/placeholder-roster logic inside all
   three is the same safety-critical logic named above, which is what makes them worth splitting
   rather than just noting.
-  ⚠️ **Every number in this entry was re-measured 2026-08-21 (v4.8 Phase 5 T5.4), and FOUR of the
-  six were wrong.** The three spans were re-derived by brace-matching each function in the current
+  ⚠️ **Every number in this entry was re-measured 2026-08-21 (v4.8 Phase 5 T5.4). Counting rule,
+  stated because a bare number without one is exactly what SI-DUP below exists to record: by
+  ANCHOR — three function anchors (each a span plus its own line count, wrong or right together)
+  and two `CLAUDE.md` line citations, FIVE in all, of which FOUR were wrong.** Counted by
+  individual VALUE instead it is **six of eight** — two spans, two line counts and both `CLAUDE.md`
+  lines — and the "what changed" list below enumerates exactly those six. ⚠️ **An earlier draft of
+  this sentence said "FOUR of the six", which resolves under neither rule; corrected in T5.4 fix
+  round 1.** The three spans were re-derived by brace-matching each function in the current
   tree, and the two `CLAUDE.md` anchors by opening the only two lines in that file that name the
   50-line rule. What changed and why: `runStage2` was `:47-207`/161 — the close brace is `:211`, so
   it is **165**, and that value was stale before this branch (`run-stage2.js` is untouched by it);

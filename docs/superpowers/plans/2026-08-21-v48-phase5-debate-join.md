@@ -316,8 +316,12 @@ Re-read at BASE:
 **Conclusion: Phase 5 is unblocked and is the resume point `BACKLOG.md:3084` itself names.**
 ⚠️ **True when written; superseded 2026-08-21 by T5.4.** That slot now names **Phase 6:
 Independents** — the entry was replaced, not appended, and this section's finding was carried into
-it verbatim so the next controller does not derive it a third time. The line number happens to
-still land on the entry, but read the title, not the number.
+it verbatim so the next controller does not derive it a third time. ⚠️ **The line number no longer
+lands on that entry, and no replacement number is given here on purpose.** An earlier draft of this
+very sentence claimed it did still land — false: T5.4's own `BACKLOG.md` edits *above* the entry had
+already pushed it down, and `:3084` is a blank line. **Find it by its TITLE,
+`NEXT TASK — Phase 6: Independents`, and by nothing else** — every number written here has been
+falsified by the next insertion above it, twice, inside one task.
 Proceeding with it is a preference exercised on a measured tie, exactly as Phase 4's §0.9 recorded
 for itself — not a discovered dependency. Stated plainly so the next controller need not re-derive
 it.
