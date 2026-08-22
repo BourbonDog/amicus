@@ -3129,7 +3129,11 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     PR1 (2026-08-22).** Four carriers closed at the table, not two sites; see status-table row
     `| 24 |` and the dedicated entry below (`VERDICTS[v.verdict]` resolves INHERITED keys).
   - **SI-14** — the twin pin ("nothing pins that the launcher must NOT de-duplicate `models`").
-  - **T6.5** — repair-row seat.
+  - ~~**T6.5** — repair-row seat.~~ **DROPPED 2026-08-22 (v4.8 release inventory, owner
+    ruling) — it was never specified.** A repo-wide grep for `T6.5` returned exactly two
+    hits: this line and its twin in the phasing doc's Phase 6 list. No filed defect, no
+    anchor, no description of what "repair-row seat" meant. Struck rather than carried —
+    if it named something real it will resurface with an actual defect behind it.
   - **T6.6** — the `skills/` doc-fact gate.
   - **SI-25 sites (1)+(2)**, ruling **R15**; site (3) rode Phase 3 and is unblocked.
   ⚠️ **Ordering is PREFERENCE ONLY — re-derived at Phase 5's own BASE and carried forward here so
@@ -3153,10 +3157,80 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   of this cites `COUNCIL-DESIGN.md:155`, which is the *Disputed* row — corrected there and here in
   the same pass; and its `docs/council.md:662` is the cascade heading, not the deciding row.**
   ⚠️ **Never tick SI-18** — an earlier phase closed only its street-cred half; see SI-18's own entry
-  **below**, titled *"Findings are attributed by ALIAS, not by seat"* (searched for by title, not
+  **below**, titled *"Findings are attributed by ALIAS, not by seat"*
+  (⚠️ **still true, but no longer the whole story as of 2026-08-22: SI-18 is now SCHEDULED for
+  v4.8.0** — see *"v4.8 release inventory"* below. Do not tick it until that PR ships; do not read
+  this line as saying it is out of scope) (searched for by title, not
   cited by line — a line number here would rot on the next insertion above it). ⚠️ **That
   back-reference read "above" until 2026-08-21 (T5.4); the entry is below this line, not above it.** ⚠️ **Do not tick SI-12 either** (ruling **R19**) — it is row `| 12 |`, *double-orphan
   conformance collapse*, and is not what T2.4 closed.
+
+### v4.8 release inventory — what remains for 4.8.0, MEASURED (2026-08-22)
+
+Ordered before starting Phase 7, on the owner's instruction to inventory first. **Every item below
+was measured against the tree, not read off its row** — and that was the right call: one row was
+already stale and one task turned out never to have been specified.
+
+**Working scope for v4.8.0, after the owner's rulings on this inventory:**
+Phase 6 remainder (**5**, T6.5 dropped) · Phase 7 (~7) · SI-27 (1) · **SI-18 (1, newly promoted)**.
+
+#### The four items that were OPEN in neither a phase list nor §7's deferred list
+
+They sat in limbo: not scheduled, not deferred. The owner ruled **fix SI-18 only**. What the
+measurements found, and why that ruling is the right shape:
+
+- **SI-18 — LIVE, real, and now IN SCOPE for v4.8.0.** `ledger.js :: buildLedgerRows` filters
+  `findings.filter(f => f.raiser === model)` (`:142`) while iterating a **de-duplicated** alias
+  list, so on any twin bench both seats' findings collapse into a single alias row. Reachable on
+  ordinary engine output — no hand-assembly needed. ⚠️ This is the half T3.3 did **not** close;
+  T3.3 closed the street-cred join (row 20) at the same anchor. **The standing "never tick SI-18"
+  warning still applies until this ships** — it is now scheduled, not closed.
+- **SI-12 — LATENT, unreachable in production. NOT fixed in v4.8, deliberately.** Verified by
+  reading all three write paths: `sidecar/leg-ids.js :: deriveLegIds` stamps every leg
+  `${waveId}-${i+1}`, and `sidecar/fanout-leg.js` writes `taskId: legId` on the routing-failure
+  path (`:61`), the error path (`:127`) **and** the normal path (`:191`). A real `-s2` wave cannot
+  produce even ONE unbindable leg, let alone the two the collapse needs. The state is constructible
+  only by deleting ids in a fixture. A guard here would be **defense-in-depth, not a bug fix** —
+  the same character as v4.8 Phase 6 PR1's `PAST_TENSE` change, which shipped honestly labelled as
+  such. Ruling **R19** stands: leave SI-12 open, do not mint a new identifier.
+- **SI-22.1 / SI-22.2 — NOT FIXABLE WHERE THEY ARE FILED. Staying open under R2.** These are one
+  defect wearing two numbers, and it is **information-theoretic, not a coding error**: when exactly
+  one side of the comparison carries a seat id, the vote is genuinely ambiguous — a twin's real
+  signal or the raiser's own — and *nothing in the document distinguishes them*. `peer-split.js ::
+  peersOf`'s own comment says so. R2 already governs (*mark explicitly, attribute nothing*) and the
+  drop is announced via `findings[].unattributedPeerDrops`.
+  ⚠️ **Their only real cure is upstream: stop orphaning the leg, so both sides always carry a
+  seat.** That is **SI-27**'s consolidation of the padding/bind/placeholder core into
+  `stage1-bind.js`. Anyone tempted to "fix SI-22.1" locally is choosing between guessing (which R2
+  rejected) and doing SI-27. **Point them at SI-27, not at `tally.js`.**
+
+#### Corrections this inventory made
+
+- **SI-05's status row was STALE and is now DONE.** It read *PARTIAL — `debate.js` second copy of
+  the filter*. There is no second copy: `debate.js :: debateTargets` calls `peer-split.js ::
+  peersOf` at `debate.js:254`, and that function's docblock states it was *"the last hand-rolled
+  peer filter left in this file"*. Closed by Phase 2 T-B2 (`e23e56cd`); the row was simply never
+  moved. Found by opening the file rather than trusting the row — which is the whole reason this
+  inventory was ordered.
+- **T6.5 was DROPPED** — never specified anywhere. See the struck line in the Phase 6 resume point
+  above.
+
+#### Measured-real, unchanged, and still to do
+
+`SI-23` (the tally `findings` z.object declares only `id`/`raiser`/`severity`/`claim`/`raiserSeat`,
+so zod strips `location`/`evidence`/`file`/`line` — confirmed) · `T6.6` (confirmed live:
+`skills/second-opinion/SKILL.md:299` defines Singleton as `d = 0` and `a < 2` while
+`tally.js :: assignTier` returns **Confirmed** for `(a=1, d=0)`) · `SI-25` sites (1)+(2) (confirmed
+alias-keyed at `briefings-chair.js:88` and `:93`) · `SI-14` (confirmed: **no** such pin exists —
+pure test addition) · `SI-22.4` (real, with the twin-bench knock-on as filed) · `#135 C0`
+(confirmed trivial: `utils/no-output-backstop.js:23` is `120000`, `.github/workflows/
+council-review.yml:242` overrides to `300000`; change the default, delete the override).
+
+⚠️ **NOT individually measured, reported from the phasing doc only:** `#135 C5`, the `#135 C2`
+probe, `#138` Pieces 1+2, and the three carried Phase 7 items (the 13-rail leak fix, the
+`mcp-server.js:684` one-liner, the `listCouncilRuns` dedupe). Re-derive each before planning it —
+this section's whole point is that unmeasured rows go stale.
+
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
 
