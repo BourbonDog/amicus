@@ -36,10 +36,12 @@ const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
  * ⚠️ SI-13: when `aliasOf` is omitted, the fail-open push below uses the raw
  * key unchanged (`alias = key`), leaving the SEAT id in the alias-space
  * `judge` field instead of projecting it to its alias. `judge` must stay
- * alias-space — it reaches `peer-split.js :: peersOf`'s `v.judge !== f.raiser`
- * and `report.js`'s `byJudge[adj.judge]`, both alias-space joins — so a seat
- * id there can silently retier a finding. `applyDebate` has no seat roster of
- * its own, so building that projection stays the caller's obligation.
+ * alias-space: via `peer-split.js :: peersOf`'s `v.judge !== f.raiser`, a
+ * seat id there can silently retier a finding. `report.js :: toModel` never
+ * retiers — it copies `f.tier`, never recomputes it — but the same seat id
+ * still reaches its `columnFor` join as an out-of-contract `judge`.
+ * `applyDebate` has no seat roster of its own, so building that projection
+ * stays the caller's obligation.
  *
  * The gap needs a caller that both omits `aliasOf` and hits a repeated alias,
  * and none exists today: the sole non-test caller, `run-debate.js`, always
@@ -98,9 +100,11 @@ function applyDebate({ tallyInput, defenseByRaiser, revoteByJudge, aliasOf }) {
       if (entry) { entry.verdict = rv.verdict; }
       else {
         // Fail-open push (a stateless leg re-voting an id it never adjudicated).
-        // `judge` MUST stay alias-space: it reaches
-        // peer-split.js :: peersOf's `v.judge !== f.raiser` and report.js's
-        // `byJudge[adj.judge]`, where a seat id silently retiers the finding.
+        // `judge` MUST stay alias-space: via peer-split.js :: peersOf's
+        // `v.judge !== f.raiser`, a seat id there can silently retier a
+        // finding. report.js :: toModel never retiers — it copies `f.tier`,
+        // never recomputes it — but the same seat id still reaches its
+        // `columnFor` join as an out-of-contract `judge`.
         // The seat rides beside it, emitted only when it differs — so a unique
         // bench pushes today's exact row.
         const alias = aliasOf ? aliasOf(key) : key;
