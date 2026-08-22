@@ -65,6 +65,22 @@ describe('consecutive poll-failure fast-exit (F4)', () => {
     expect(result.error).toMatch(/3 consecutive/);
   });
 
+  // #133 P1: this fixture is the codebase's existing route to the
+  // failedWithNoUsableOutput return (headless.js :1298) — sessionError set,
+  // mirror.output empty. createSession resolved in beforeEach, so
+  // opencodeSessionId must be threaded onto this return too, not just the
+  // normal-completion one.
+  it('carries opencodeSessionId on the no-usable-output return (#133 P1, :1298)', async () => {
+    mockGetMessages.mockRejectedValue(new Error('ECONNREFUSED'));
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, maxConsecutivePollFailures: 3 }
+    );
+    expect(result.completed).toBe(false);
+    expect(result.opencodeSessionId).toBe('session-1');
+  });
+
   it('classifies partial-output + dead-server as error (never complete), keeping the partial summary', async () => {
     const partialMsg = [{
       info: { role: 'assistant', id: 'm1', time: {} },

@@ -158,6 +158,22 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     reason: result.error || undefined,
     completedAt: new Date().toISOString(),
     usage: usage || undefined,
+    // #133 P1: `|| undefined`, matching status/reason/usage above — NOT the
+    // `toolSettleAborted` carve-out below, because a session id has no
+    // meaningful-falsy value the way `false` does there. A clean/failed
+    // attempt (no session ever created) therefore carries neither key on
+    // disk, rather than writing an explicit `null` that could clobber a
+    // PRIOR attempt's real session id: fallback substitution reruns
+    // runSingleAttempt against the SAME legId/legDir (fanout-leg-fallback.js
+    // "SAME leg dir under the SAME legId"), and writeLegPatch's read-merge-
+    // write only drops keys that are `undefined`, not ones explicitly set to
+    // `null`. This does not disagree with result-schema.js:72's
+    // `metadata.opencodeSessionId || null` — that coercion runs downstream,
+    // on the per-request OUTPUT run document, where run.schema.json requires
+    // the field always present as string|null. The two layers do different
+    // jobs (omit-if-absent on disk here vs. always-present in the emitted
+    // doc there) and compose without conflict.
+    opencodeSessionId: result.opencodeSessionId || undefined,
     // v4.4 B4 part 1: the leg completed with tool calls still live, so its
     // OpenCode session may have kept working (and billing) afterwards. Travels
     // with the leg so it is readable long after the run's stderr is gone.

@@ -417,6 +417,35 @@ describe('runFanout orchestrator', () => {
     expect(legSummary).toBe('summary cafe1234-1');
   });
 
+  // #133 P1: opencodeSessionId is promised by schemas/run.schema.json and
+  // already set by the interactive path, but runHeadless never carried it
+  // through to a fanout leg. This pins BOTH ends: the leg's on-disk
+  // metadata.json (legPatch, fanout-leg.js) and the in-memory wave doc
+  // (result-schema.js's buildRunResult) agree, for a leg that HAS a session
+  // and one that does not (the "clean leg carries neither key" convention —
+  // see the comment on legPatch's opencodeSessionId field).
+  it('threads a leg\'s opencodeSessionId from runHeadless onto its on-disk leg patch and the wave doc (#133 P1)', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), opencodeSessionId: 'ses_leg1' }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // no session on this leg
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'sess1234' });
+
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'sess1234-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.opencodeSessionId).toBe('ses_leg1');
+    expect(wave.legs[0].opencodeSessionId).toBe('ses_leg1');
+
+    // A leg with no session id still produces a well-formed document: the
+    // key is absent on disk (undefined, not a written null — the
+    // read-merge-write convention) but the emitted wave doc coerces the
+    // absence to schema-valid null (result-schema.js:72), never undefined.
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'sess1234-2', 'metadata.json'), 'utf-8'));
+    expect(legMeta2.status).toBe('complete');
+    expect('opencodeSessionId' in legMeta2).toBe(false);
+    expect(wave.legs[1].opencodeSessionId).toBeNull();
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))
