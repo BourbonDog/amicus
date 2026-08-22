@@ -1481,10 +1481,6 @@ describe('runRevoteWave — T5.5: a seat-unbound refusal reaches terminal exit 2
     const records = ctx.degrade.all();
     expect(records).toHaveLength(1);
     expect(records[0].channel).toBe('seat-unbound');
-    // `kind` is never set by reVoteUnboundNote; makeDegrade defaults it. That
-    // default is the whole load-bearing link in this chain.
-    expect(records[0].kind).toBe('degrade');
-    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* matches no seat/);
 
     // Half 1 — the production sink flipped the run's flag.
     expect(degraded.value).toBe(true);
@@ -1496,6 +1492,16 @@ describe('runRevoteWave — T5.5: a seat-unbound refusal reaches terminal exit 2
     // the refusal's doing and not the shape of these arguments.
     expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded: { value: false },
       degrade: ctx.degrade, inexactUnderCeiling: () => false })).toBe(0);
+
+    // ⚠️ These two are LAST on purpose. `kind` is the load-bearing link in the
+    // chain (reVoteUnboundNote never sets it; `utils/degrade.js :: makeDegrade`
+    // defaults it to 'degrade'), and BOTH of these read it — `formatDegrade`
+    // leads with "Recovered" instead of "Notice" for a 'heal'. Asserted ABOVE,
+    // either one would let NOTEHEAL red on a PROXY and leave the composition
+    // itself unproven; both were measured in that position and did exactly that.
+    // Measured in this position: NOTEHEAL reds on `degraded.value` above.
+    expect(records[0].kind).toBe('degrade');
+    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* matches no seat/);
   });
 });
 
