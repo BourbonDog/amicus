@@ -880,8 +880,16 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 
 // ============================================================================
 // T5.1 (SI-10/R8): refuse a re-vote whose key this wave cannot account for —
-// it neither bound to any roster slot nor names one of the judges this wave
-// actually launched — and announce it. Driving runRevoteWave DIRECTLY (Task 1 of
+// its key names none of the judges this wave actually launched — and announce
+// it. ⚠️ This read "it NEITHER bound to any roster slot NOR names one of the
+// judges this wave actually launched" until T5.5 deleted the `boundLegs` arm.
+// Binding is no longer part of the condition and the refusal set is now the
+// strict superset. That sentence was the verbatim TWIN of the one repaired in
+// run-debate-revote.js :: reVoteUnboundNote's docblock — same branch, same
+// commit, different file — and this file's own T5.5 block below already
+// contradicted it. Grep the distinctive phrase repo-wide when you edit a
+// sentence like this; a same-file sweep cannot find twins, and a whole-repo
+// one found no fifth copy. Driving runRevoteWave DIRECTLY (Task 1 of
 // docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md),
 // never through runDebate/runCouncil's fakeLaunchers. fakeLaunchers'
 // run-debate.test.js :: stampFanout (above) re-stamps taskId/waveId on every
@@ -1426,8 +1434,10 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
     // sentence read "it bound to no roster slot, and … names no seat there either"
     // until T5.5 deleted the arm that made the first half true — an ANNOUNCED string
     // the correct edit turned false. Named mutant WHYSTALE (restore the old `why`
-    // literal in run-debate-revote.js :: reVoteUnboundNote): red set (1), this test,
-    // measured 2026-08-22 across the same six suites as the others.
+    // literal in run-debate-revote.js :: reVoteUnboundNote): red set (2) — this test
+    // and the "NEITHER modelInput NOR model" test below, which pins the exact string.
+    // It was (1) before that test existed; re-measured 2026-08-22 across the same six
+    // suites as the others.
     expect(notes[0].why).toMatch(/names none of the judges this wave launched/);
     expect(notes[0].why).not.toMatch(/bound to no roster slot/);
   });
@@ -1442,6 +1452,70 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
     // displaced it, and no re-vote of its own ever arrived to replace it.
     expect(a1.find(a => a.judge === 'deepseek' && !a.seat))
       .toEqual({ findingId: 'A1', judge: 'deepseek', verdict: 'dispute' });
+  });
+});
+
+// ============================================================================
+// T5.5 — the note's own FALLBACKS, and the one T5.5 nearly shipped missing.
+// `reVoteUnboundNote` normalizes three values before rendering: `legId`, the
+// judge `alias`, and — only since T5.5 started interpolating it — the join
+// `key`. That third one was raw for one commit, and the review caught it:
+// measured against the real runRevoteWave with a leg carrying NEITHER
+// `modelInput` NOR `model`, the record rendered "its join key 'undefined' …"
+// and `data.key` fell out of the JSON entirely — precisely the "reads like a
+// bug in the announcer instead of a fact about the leg" shape that the alias
+// fallback exists to prevent (run-debate-revote.js :: reVoteUnboundNote's own
+// comment says so, and now covers both interpolations).
+//
+// Why `key` goes undefined with `judge`: the caller computes
+// `key = seatKey(seat, judge)`, which RETURNS `judge` whenever `seat` is null —
+// and `seat` is null in every refusal runDebate can produce.
+//
+// Named mutants:
+//   KEYRAW    drop `|| 'unknown'` from `joinKey`. Red set (1): this test.
+//   WHYSTALE  restore the pre-T5.5 `why` literal ("it bound to no roster slot,
+//             and its judge alias '${alias}' names no seat there either").
+//             Red set (2) now that this block exists — it was (1) before.
+// Both hand-applied to the committed file, run across the same six suites as
+// this branch's other mutants, then restored from a `cp` copy and byte-verified
+// with `git diff --quiet`.
+// ============================================================================
+describe('runRevoteWave — T5.5: a leg carrying NEITHER modelInput NOR model still announces cleanly', () => {
+  test('the note renders `unknown`, never `undefined`, in the sentence AND in `data`', async () => {
+    const tmp = mkTmp('run-revote-noalias-');
+    const seats = buildSeats(TWIN_BENCH, null, null);
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'deepseek#1'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    // No model, no modelInput, no taskId, no waveId. bindSeats keeps it in `mine`
+    // (`!l.waveId`), finds no id to match and skips the alias fallback (which
+    // needs `leg.waveId === waveId`), so it binds to nothing; `judge` is
+    // undefined, and `seatKey(null, undefined)` carries that into `key`.
+    const nameless = { status: 'complete', summary: revoteOut([{ id: 'A1', verdict: 'agree' }]) };
+    const ctx = ctxFor(tmp, {
+      launchWave: async () => ({ wave: wave([nameless]), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: the leg parses cleanly'); },
+    }, TWIN_BENCH);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    // EXACT strings, because this pins two decisions at once: the join-key
+    // fallback, and T5.5's removal of the "(judge alias '…')" parenthetical —
+    // which printed the SAME string twice in every refusal runDebate can produce,
+    // since a real seat's id is always a judgeKey and so a real-seat bind is
+    // always published, leaving `key === judge` in every refusal.
+    expect(notes[0].why).toBe("its join key 'unknown' names none of the judges this wave launched");
+    expect(notes[0].what)
+      .toBe("re-vote leg unidentified in wave r-rv matches no seat on that wave's roster");
+    expect(notes[0].data)
+      .toEqual({ waveId: 'r-rv', legId: 'unidentified', judge: 'unknown', key: 'unknown' });
+    // Belt and braces over the WHOLE record: nothing anywhere renders `undefined`.
+    expect(JSON.stringify(notes[0])).not.toMatch(/undefined/);
   });
 });
 

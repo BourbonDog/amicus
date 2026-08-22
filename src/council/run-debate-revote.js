@@ -97,19 +97,34 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
   const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
   // `|| 'unknown'` mirrors stage1-bind.js:55's alias fallback, and for the same
   // reason: the caller derives `judge` as `leg.modelInput || leg.model`, so a leg
-  // carrying NEITHER renders the note as "its judge alias 'undefined'" — a degrade
-  // record that reads like a bug in the announcer instead of a fact about the leg.
+  // carrying NEITHER renders the note as "… 'undefined'" — a degrade record that
+  // reads like a bug in the announcer instead of a fact about the leg.
+  // ⚠️ BOTH interpolations need it, not just the alias. The caller's `key` is
+  // `seatKey(seat, judge)`, which returns that same `judge` whenever the leg bound
+  // to no real seat — i.e. in every refusal reachable through runDebate — so an
+  // undefined `judge` makes `key` undefined too. T5.5 started interpolating `key`
+  // and, for one commit, did it raw: measured against the real runRevoteWave, that
+  // rendered "its join key 'undefined'" AND dropped `data.key` out of the JSON
+  // entirely. Pinned by run-debate.test.js's "a leg carrying NEITHER modelInput
+  // NOR model" test; named mutant KEYRAW.
   const alias = judge || 'unknown';
+  const joinKey = key || 'unknown';
   return {
     channel: 'seat-unbound',
     what: `re-vote leg ${legId} in wave ${waveId} matches no seat on that wave's roster`,
-    // ⚠️ T5.5: this said "it bound to no roster slot, and its judge alias … names no seat there
-    // either". Both halves stopped being the condition when the `boundLegs` arm was deleted — and
-    // the FIRST half is now false in the very case that motivated the deletion, a leg that DID bind
-    // to a §3.4 placeholder slot while carrying a foreign alias. The refusal turns on one thing.
-    why: `its join key '${key}' (judge alias '${alias}') names none of the judges this wave launched`,
+    // ⚠️ T5.5 rewrote this. It said "it bound to no roster slot, and its judge alias … names no
+    // seat there either", whose FIRST half is false in exactly the case that motivated deleting the
+    // `boundLegs` arm (this function's docblock has it). One condition, one clause.
+    // ⚠️ It also carried "(judge alias '${alias}')" for one commit. Dropped, measured: through
+    // runDebate every refusal has `seat === null`, because run-debate.js builds `judgeSeats` as
+    // `judgeKeys.map(k => seatById.get(k) || null)` off an id-keyed table — so a real seat's id is
+    // always a `judgeKeys` entry and a real-seat bind is always PUBLISHED, never refused. That
+    // makes `key === judge` in every reachable refusal, and the parenthetical printed the same
+    // string twice. The two differ only for a direct-require caller passing an inconsistent
+    // `judgeSeats`, and `data` carries both values for that reader anyway.
+    why: `its join key '${joinKey}' names none of the judges this wave launched`,
     effect: "the re-vote was NOT applied; the judge's provisional verdict stands",
-    data: { waveId, legId, judge: alias, key },
+    data: { waveId, legId, judge: alias, key: joinKey },
   };
 }
 
