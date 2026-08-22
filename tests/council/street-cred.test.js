@@ -3,7 +3,8 @@
 
 /**
  * v4.8 T3.3 — seat-keyed street cred (SI-06, SI-19, SI-20; the phasing doc's
- * unfiled `| 24 |` perJudgeRank site).
+ * `| 24 |` perJudgeRank site — the alias-collapse half; the write-site/
+ * prototype half T3.3 left unfiled is closed below, v4.8 Phase 6 PR1 Task 2).
  *
  * Every number asserted here was MEASURED, at BASE `b341b273` for the
  * "before" values and against this tree for the "after" ones. The mutants that
@@ -259,6 +260,92 @@ describe('computeStreetCred — one row per SEAT (SI-20 sites 2+3)', () => {
       expect(vals).toHaveLength(3);
       expect(vals.reduce((s, x) => s + x, 0) / vals.length).toBeCloseTo(row.withSelf);
     }
+  });
+});
+
+describe('computeStreetCred — perJudgeRank is prototype-safe (SI-24)', () => {
+  // v4.8 Phase 6 PR1, Task 2 — the WRITE-site half of SI-24. Distinct from
+  // tally.js's `VERDICTS`, a READ site Task 1 closed there: all four
+  // `Object.prototype` keys (toString/__proto__/constructor/valueOf) read a
+  // live inherited value back on a plain lookup. Here the write
+  // `perJudgeRank[j.seat || j.judge] = rank` is an ASSIGNMENT, and only
+  // `__proto__` is destructive — it is the one Object.prototype key that is
+  // an ACCESSOR (a getter/setter pair), and its setter silently discards a
+  // non-object value instead of creating an own property. `toString` /
+  // `constructor` / `valueOf` are ordinary inherited DATA properties, so
+  // assigning to them shadows harmlessly and DOES create an own key either
+  // way — the third test below pins that this is still true on the fixed map.
+  const TWO_JUDGES_ORDER = ['a', 'b'];
+
+  test('a __proto__ JUDGE alias keeps its rank as an OWN key, not lost to the setter', () => {
+    // ⚠️ A bare `expect(row.perJudgeRank.__proto__).toBe(1)` can PASS FOR THE
+    // WRONG REASON on a plain object — it reads the live prototype chain back
+    // regardless of whether an own key was ever created. hasOwnProperty is
+    // what actually distinguishes fixed from broken.
+    const rankings = [
+      { judge: '__proto__', order: TWO_JUDGES_ORDER },
+      { judge: 'j2', order: TWO_JUDGES_ORDER },
+    ];
+    const rows = computeStreetCred(rankings, ['a', 'b']);
+    const a = rows.find(r => r.model === 'a');
+    expect(Object.prototype.hasOwnProperty.call(a.perJudgeRank, '__proto__')).toBe(true);
+    expect(Object.keys(a.perJudgeRank)).toEqual(['__proto__', 'j2']);
+    expect(a.perJudgeRank['__proto__']).toBe(1);
+    for (const row of rows) {
+      const vals = Object.values(row.perJudgeRank);
+      expect(vals).toHaveLength(2);
+      expect(vals.reduce((s, x) => s + x, 0) / vals.length).toBeCloseTo(row.withSelf);
+    }
+  });
+
+  test('a __proto__ SEAT id keeps its rank the same way — both channels feed one assignment', () => {
+    // `[j.seat || j.judge]` means a __proto__ SEAT id is exactly as
+    // destructive as a __proto__ judge alias — the previous test covers the
+    // judge channel, this one covers the seat channel.
+    const rankings = [
+      { judge: 'j1', seat: '__proto__', order: TWO_JUDGES_ORDER },
+      { judge: 'j2', order: TWO_JUDGES_ORDER },
+    ];
+    const rows = computeStreetCred(rankings, ['a', 'b']);
+    const a = rows.find(r => r.model === 'a');
+    expect(Object.prototype.hasOwnProperty.call(a.perJudgeRank, '__proto__')).toBe(true);
+    expect(a.perJudgeRank['__proto__']).toBe(1);
+    for (const row of rows) {
+      const vals = Object.values(row.perJudgeRank);
+      expect(vals).toHaveLength(2);
+      expect(vals.reduce((s, x) => s + x, 0) / vals.length).toBeCloseTo(row.withSelf);
+    }
+  });
+
+  test('toString and constructor still land as own keys with their ranks — unaffected by the fix', () => {
+    const rankings = [
+      { judge: 'toString', order: TWO_JUDGES_ORDER },
+      { judge: 'constructor', order: TWO_JUDGES_ORDER },
+    ];
+    const rows = computeStreetCred(rankings, ['a', 'b']);
+    const a = rows.find(r => r.model === 'a');
+    expect(Object.keys(a.perJudgeRank)).toEqual(['toString', 'constructor']);
+    expect(a.perJudgeRank.toString).toBe(1);
+    expect(a.perJudgeRank.constructor).toBe(1);
+  });
+
+  test('JSON round-trip: the __proto__ entry survives serialisation — this is what tally.json actually writes', () => {
+    // The pin that matters most: computeStreetCred's return value is written
+    // to tally.json via JSON.stringify, so in-memory correctness alone would
+    // not close the defect if serialisation dropped the key some other way.
+    const rankings = [
+      { judge: '__proto__', order: TWO_JUDGES_ORDER },
+      { judge: 'j2', order: TWO_JUDGES_ORDER },
+    ];
+    const rows = computeStreetCred(rankings, ['a', 'b']);
+    const a = rows.find(r => r.model === 'a');
+    const roundTripped = JSON.parse(JSON.stringify(a));
+    expect(Object.prototype.hasOwnProperty.call(roundTripped.perJudgeRank, '__proto__')).toBe(true);
+    expect(roundTripped.perJudgeRank['__proto__']).toBe(1);
+    // JSON.parse always returns an ordinary Object.prototype object — the
+    // round-tripped map is no longer null-prototype, which is expected and
+    // fine; only the IN-MEMORY accumulator needs to be prototype-free.
+    expect(Object.getPrototypeOf(roundTripped.perJudgeRank)).toBe(Object.prototype);
   });
 });
 

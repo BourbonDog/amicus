@@ -3124,8 +3124,10 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     `meta.seats` starts emitting. Budget for that, it is not a pure input-hygiene fix.
   - **SI-23** — `location` stripped on the MCP tally path. Own PR, ruling **R10**: fix the closed
     `z.object` properly, so `evidence`/`file`/`line` stop dropping too.
-  - **SI-24** — both sites, **including the unfiled `computeStreetCred` data-loss site**. Row 24 of
-    the status table records that T3.3 closed only the `perJudgeRank` half.
+  - ~~**SI-24** — both sites, **including the unfiled `computeStreetCred` data-loss site**. Row 24 of
+    the status table records that T3.3 closed only the `perJudgeRank` half.~~ **DONE — v4.8 Phase 6
+    PR1 (2026-08-22).** Four carriers closed at the table, not two sites; see status-table row
+    `| 24 |` and the dedicated entry below (`VERDICTS[v.verdict]` resolves INHERITED keys).
   - **SI-14** — the twin pin ("nothing pins that the launcher must NOT de-duplicate `models`").
   - **T6.5** — repair-row seat.
   - **T6.6** — the `skills/` doc-fact gate.
@@ -4571,19 +4573,73 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   (`src/cli-handlers-council.js`, a raw `JSON.parse` with no schema) keeps it — so this is a live
   CLI/MCP fork. PR4c widened the same schema for the three seat keys (R4c-5) and deliberately did
   not widen it further; the fix is one more optional field, but it wants its own test.
-- [ ] **`VERDICTS[v.verdict]` resolves INHERITED keys.** `src/council/tally.js:103-104` (**was
-  `:114-115`, already stale at `8e97faaf` — it pointed at the return literal**) claims unknown
-  verdict strings are skipped so a stray value cannot corrupt the basis — but `VERDICTS`
-  (`tally.js:72`, **was `:71`**) is a plain object literal, so `verdict: 'toString'` resolves through the prototype chain
-  and `basis["function toString() { [native code] }"] = NaN`, serialized as `null` in both
-  `tally.json` and `verdict.json`. Reachable on the schema-free CLI path. Pre-existing, and PR4c's
-  `sameModelCorroboration` stamp (`tally.js :: sameModelCorroboration`) reads the **same
-  expression**, so it inherits the hole. ⚠️ Anchored BY NAME because the line form rotted twice
-  inside one task: `:141` (already stale at `8e97faaf`) → `:122-124` (T-B2 fix round 1) →
-  `:129-131` (T-B2 fix round 2, when a comment was added above it). The
-  fix is an `Object.prototype.hasOwnProperty.call(VERDICTS, v.verdict)` guard at both sites — cheap,
-  but it changes `basis` on a document that currently produces a `null`, so it needs a decision
-  about whether that is a fix or a shape change.
+- [x] **`VERDICTS[v.verdict]` resolves INHERITED keys.** `tally.js :: tally`'s comment — anchored BY
+  SYMBOL, not by line: the numeric citation rotted repeatedly across this item's history (`:141` →
+  `:122-124` → `:129-131` → `:103-104`, each already wrong by the time the next was written, per
+  this item's own prior text) and is deleted outright here rather than corrected a further time —
+  claimed unknown verdict strings are skipped so a stray value cannot corrupt the basis, but
+  `VERDICTS` (`tally.js :: VERDICTS`, likewise de-numbered — its own `:72`/`:71` citations were the
+  same class of rot) was a plain object literal, so `verdict: 'toString'` resolved through the
+  prototype chain and `basis["function toString() { [native code] }"] = NaN`, serialized as `null`
+  in both `tally.json` and `verdict.json`. Reachable on the schema-free CLI path only — the MCP
+  path's `adjudications[].verdict` is `z.enum(['agree','dispute','neutral'])`
+  (`src/mcp-tools.js:420`), which rejects every `Object.prototype` key before `tally()` ever runs.
+  PR4c's `sameModelCorroboration` stamp (`tally.js :: sameModelCorroboration`) reads the same
+  `VERDICTS[v.verdict]` expression — measured harmless: it resolves the same `undefined`, so
+  nothing downstream corrupts.
+  ✅ **CLOSED 2026-08-22 — v4.8 Phase 6 PR1 Task 1 (`36297e18` fix + tests, `41733c58` mutant
+  record; SI-24).** Fixed at the table, not at either read site:
+  `VERDICTS = { __proto__: null, agree: 'a', dispute: 'd', neutral: 'n' }`. Named mutant
+  `PROTOVERDICT` (delete `__proto__: null,`) reds **5 tests / 1 suite** in
+  `tests/council/tally.test.js` (the 4 Object.prototype-key cases, plus one equality pin — `bogus`
+  no longer equal to `toString`), measured over `npx jest tests/council/ --no-coverage` (75 suites
+  / 1418 tests at that scope). The `hasOwnProperty` guard this entry once proposed was not the fix
+  taken. Three more carriers of the identical shape closed in the same PR — `street-cred.js ::
+  perJudgeRank`, `report.js :: SYMBOL`, `debate.js :: PAST_TENSE` — see status-table row `| 24 |`.
+- [ ] **Filed, not fixed — the three vote-symbol renderers disagree on how they display an
+  unrecognized verdict, and this PR's `report.js :: SYMBOL` fix does not touch it.** MEASURED
+  2026-08-22 against the final tree with a plain unknown string, `bogus` (no `Object.prototype`
+  collision involved, so this is unaffected by `SYMBOL`'s `__proto__: null` either before or after):
+  `report-md.js:50` and `report-html.js:42` both render the literal text `undefined` into the cell
+  (`v ? SYMBOL[v] : ''`/`' '` takes the truthy branch, and `SYMBOL['bogus']` is `undefined`);
+  `matrix-model.js:201`'s `SYMBOL[vote] || '?'` renders `?`. ⚠️ **This PR's own task brief claimed a
+  three-way split (`''` / `"undefined"` / `'?'`) — measured wrong.** `report-md.js` and
+  `report-html.js` agree with each other (both `undefined`); only `matrix-model.js` differs. The
+  `''` value the brief expected belongs to a *different* scenario it conflated with this one — a
+  judge who cast no vote at all (`byJudge[j]` seeded `null`), where `report-html.js` renders empty
+  and `report-md.js`/`matrix-model.js` render a literal space instead. **Not caused here**: `bogus`
+  produced the identical `undefined`/`undefined`/`?` split at the commit before this PR started
+  (`d0e03fb0`) — a non-`Object.prototype` string was never affected by the missing null prototype,
+  and none of `report-md.js`/`report-html.js`/`matrix-model.js` were touched by this PR. Reconciling
+  the three is a rendering-contract decision (what SHOULD an unrecognized verdict show — blank, a
+  placeholder glyph, or the raw string?), not a bug fix.
+- [ ] **Filed, not fixed — the wider module-level lookup-table family, and the discriminator that
+  makes a sweep of it tractable.** `grep -rn "^const [A-Z_0-9]* = {" src/` returns **34** hits
+  (re-measured 2026-08-22 against the final tree, independently confirmed with two different tools;
+  re-run it, this number will move as the codebase does — the plan that scoped this PR said 35).
+  Three of this PR's four carriers are module-level tables and appear in that count (`tally.js ::
+  VERDICTS`, `report.js :: SYMBOL`, `debate.js :: PAST_TENSE`); the fourth, `street-cred.js ::
+  perJudgeRank`, is a **write-site accumulator local to a single function call**, not a module-level
+  `const`, so it never appears in this grep at all — a different shape, same as the ad-hoc
+  in-function maps filed below.
+  The discriminator that matters before spending a task on any of the other ~31 tables: **is the
+  table keyed by a string a council DOCUMENT carries from a model's own response** (a verdict, an
+  action, a raiser id — the SI-24 shape, where an unlucky or adversarial model response can supply
+  the literal string `"toString"`) **or by an internal enum the engine itself assigns** (a tier, a
+  run stage, a conformance class, an exit signal, a CLI/MCP param-map key) **that no external input
+  can ever widen?** Skimming the 34, the large majority are the latter. Each still wants its own
+  measurement, not an assumption, before it earns an edit.
+  Precedent this generalizes: `electron/workspace-ui/live-seats.js :: SEATS_PANEL_EXCLUDED_ROLES`
+  already shipped as `Object.create(null)` (v4.7, D6/E1) — that fix covered the seats-panel's
+  role-exclusion table only, not this wider family.
+- [ ] **Filed, not fixed — ad-hoc in-function object-literal maps are a third shape, distinct from
+  both the module-level table family above and `perJudgeRank`'s accumulator.** `debate.js ::
+  applyDebate`'s local `byId = {}` (flattens the per-raiser defense map to a per-finding-id lookup)
+  and `debate.js :: allNoResponse`'s own separate `byId = {}` are both plain object literals keyed
+  by finding id, not by a verdict/action/vote string — a different reachability argument (finding
+  ids are assigned by the orchestrator, "already A1/B2/C3-prefixed," not raw model text) that this
+  PR did not evaluate and did not fix. Anchor by symbol, not by line — the same rot class as SI-24's
+  own citations, above.
 - [ ] **The chair packet is assembled entirely in alias space, so on a twin bench it is internally
   unreconcilable.** `src/council/run-assemble.js :: buildChairPacketFile` (re-anchored BY SYMBOL
   2026-08-16 — it was cited as `run-assemble.js:263-277`, but v4.8 Phase 1 T1.1 lifted

@@ -13,7 +13,15 @@
 
 const { peersOf, unattributedPeerDrops } = require('./peer-split');
 
-const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
+// __proto__: null — an inherited/unknown action (e.g. "toString") must fall
+// through the `|| 'no-response'` guards below and in run-debate.js, never
+// resolve off Object.prototype: a function value there survives in memory
+// but JSON.stringify drops it, silently deleting `action` from the finding.
+// Defense-in-depth: `parse-stage2.js :: parseDebateDefense` is an
+// allowlist that normalises every foreign action to `'no-response'`
+// before this table is consulted — no real run reaches it with a
+// foreign key. See `run-debate.test.js :: DOUBLEBREACH`.
+const PAST_TENSE = { __proto__: null, defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
 // The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,
 // never an extra ledger row and never that model's ledger identity. Through v4.6 this Set

@@ -231,6 +231,160 @@ describe('decorateRecord — additive past-tense debate field', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// v4.8 Phase 6 PR1 Task 3 (SI-24) — PAST_TENSE is prototype-safe.
+// ---------------------------------------------------------------------------
+
+/**
+ * PAST_TENSE was a plain object literal, so an inherited/unknown `action`
+ * (e.g. "toString", "constructor", "__proto__") resolved Object.prototype's
+ * own value instead of `undefined`, defeating the `|| 'no-response'` guard
+ * here and at run-debate.js's addendumOutcomes. JSON.stringify drops function
+ * values, so toString/constructor SILENTLY DELETE `debate.action` from the
+ * serialized document; __proto__ resolves to Object.prototype itself, which
+ * stringifies as `{}` — wrong either way, and both close identically to an
+ * ordinary unknown action ("bogus") once the table carries `__proto__: null`.
+ *
+ * ⚠️ CORRECTED at fix round 2 (task-3-report.md) — the sentence this replaced
+ * claimed a real paid run could hit this with no hand-assembled document.
+ * MEASURED FALSE: `parseDebateDefense` (src/council/parse-stage2.js:142-153)
+ * is an ALLOWLIST. Only 'defend'/'amend'/'withdraw' (each gated on its own
+ * required field) ever overwrite a per-id default of `{action:'no-response'}`;
+ * every other action a model could emit, inherited-key or ordinary junk
+ * alike, is ALREADY the literal 'no-response' before `debateFindings` (and
+ * therefore `d.action`) exists. Traced and verified: `debateFindings` has
+ * exactly ONE producer (`debate.js :: applyDebate`), which has ONE caller in
+ * src/ (`run-debate.js:203`); `decorateRecord` has ONE caller
+ * (`run-finish.js:50`, fed by `run.js`'s own `runDebate` result). No MCP or
+ * CLI entry hands either function a hand-assembled document. So this table's
+ * null prototype is DEFENSE-IN-DEPTH here, not a fix for a reachable defect —
+ * what actually protects today's document is `parseDebateDefense`'s
+ * allowlist. See run-debate.test.js's "a defense action a model cannot make
+ * PAST_TENSE-inherited" describe block (its ACTIONPASSTHRU named mutant pins
+ * the allowlist itself, since PROTOACTION cannot reach this path).
+ */
+describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited action', () => {
+  test('D1 — action "toString" maps to "no-response", and the key survives JSON.stringify', () => {
+    const record = { findings: [{ id: 'A1', tier: 'Confirmed' }] };
+    decorateRecord(record, [{ id: 'A1', action: 'toString', previousTier: 'Contested' }]);
+    // ⚠️ THE SINGLE MOST IMPORTANT PIN IN THIS TASK. toEqual() alone can miss
+    // this: a MISSING key and an `undefined` value compare equal under
+    // toEqual, but the BASE failure was the key vanishing from the
+    // serialized document (JSON.stringify drops a function value outright).
+    // Assert the type explicitly, then round-trip for real.
+    expect(typeof record.findings[0].debate.action).toBe('string');
+    expect(record.findings[0].debate.action).toBe('no-response');
+    const onDisk = JSON.parse(JSON.stringify(record));
+    expect(onDisk.findings[0].debate).toHaveProperty('action');
+    expect(onDisk.findings[0].debate.action).toBe('no-response');
+  });
+
+  test.each([['__proto__'], ['constructor']])(
+    'D2 — action %j also maps to "no-response", and the key survives JSON.stringify',
+    (action) => {
+      const record = { findings: [{ id: 'A1', tier: 'Confirmed' }] };
+      decorateRecord(record, [{ id: 'A1', action, previousTier: 'Contested' }]);
+      expect(typeof record.findings[0].debate.action).toBe('string');
+      expect(record.findings[0].debate.action).toBe('no-response');
+      const onDisk = JSON.parse(JSON.stringify(record));
+      expect(onDisk.findings[0].debate).toHaveProperty('action');
+      expect(onDisk.findings[0].debate.action).toBe('no-response');
+    },
+  );
+
+  test('D3 — the four real actions still map to defended / amended / withdrawn / no-response', () => {
+    const record = { findings: ['A1', 'A2', 'A3', 'A4'].map(id => ({ id, tier: 'Confirmed' })) };
+    const debateFindings = [
+      { id: 'A1', action: 'defend', previousTier: 'Contested' },
+      { id: 'A2', action: 'amend', previousTier: 'Contested' },
+      { id: 'A3', action: 'withdraw', previousTier: 'Contested' },
+      { id: 'A4', action: 'no-response', previousTier: 'Contested' },
+    ];
+    decorateRecord(record, debateFindings);
+    expect(record.findings.map(f => f.debate.action)).toEqual(['defended', 'amended', 'withdrawn', 'no-response']);
+  });
+});
+
+// Named mutant "PROTOACTION": revert PAST_TENSE's literal to drop its null
+// prototype (v4.8 Phase 6 PR1 Task 3, SI-24) — the debate.js half of this
+// task. Mirrors Task 1's PROTOVERDICT (tests/council/tally.test.js) and Task
+// 2's PROTORANK (tests/council/street-cred-mutants.js); this one's own
+// sibling is PROTOSYMBOL, in tests/council/seat-matrix.test.js.
+//   const PAST_TENSE = { __proto__: null, defend: 'defended', amend: 'amended',
+//     withdraw: 'withdrawn', 'no-response': 'no-response' };
+//   -> const PAST_TENSE = { defend: 'defended', amend: 'amended',
+//     withdraw: 'withdrawn', 'no-response': 'no-response' };
+//
+// Introduced at this task. RED: 3 tests / 1 suite (command `npx jest
+// --no-coverage`, the FULL suite, per this task's brief).
+//   tests/council/debate.test.js — "D1 — action 'toString' maps to
+//     'no-response', and the key survives JSON.stringify" · "D2 — action
+//     '__proto__' also maps to 'no-response', and the key survives
+//     JSON.stringify" · "D2 — action 'constructor' also maps to
+//     'no-response', and the key survives JSON.stringify"
+//
+// ⚠️ WHY NOT 4: D3 (the four real actions) does NOT red. defend/amend/
+// withdraw/no-response are OWN properties on PAST_TENSE either way, so a pin
+// built entirely from real actions cannot see a mutation that only changes
+// what happens to a key PAST_TENSE never owned.
+//
+// Measured with the concurrency guard this task was briefed on (a second
+// agent was mutating src/council/street-cred.js in this same checkout):
+// `git status --porcelain -- src/ tests/` immediately before AND after this
+// run showed ONLY src/council/debate.js (this mutation) modified — no
+// contamination. Full-suite denominator at this measurement: 544 suites (543
+// passed / 1 failed), 7844 tests (7833 passed / 3 failed / 8 skipped), 4
+// snapshots passed and UNCHANGED — identical denominator to PROTOSYMBOL's
+// run, measured separately. Hand-revert byte-verified against `git show
+// HEAD:src/council/debate.js`, sha256 match.
+//
+// NO PIN THAT PRE-DATES THIS TASK REDS.
+//
+// ⚠️ RE-RUN at fix round 1 (SI-24 review): PAST_TENSE has a SECOND consumer,
+// run-debate.js:262's `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
+// inside runDebate's addendumOutcomes, which the three tests above never
+// reach (they call decorateRecord directly). Added
+// tests/council/run-debate.test.js coverage driving a REAL defense response
+// through the actual runDebate -> parseDebateDefense -> applyDebate path with
+// an inherited action ('toString', '__proto__') — see that file's "a defense
+// action a model cannot make PAST_TENSE-inherited" describe block.
+//
+// RE-RUN command `npx jest --no-coverage` (the FULL suite, with the new
+// run-debate.test.js pins in place): RED remains 3 tests / 1 suite —
+// UNCHANGED. The new tests do NOT enter the set. THIS IS NOT AN EMPTY-SET
+// FAILURE TO CHASE; it is a chased and CONFIRMED non-reachability: measured
+// directly (a scratch script calling the real parseDebateDefense, then the
+// full runDebate pipeline under this exact mutation, both before recording),
+// parseDebateDefense (src/council/parse-stage2.js:142-153) is an ALLOWLIST —
+// only 'defend'/'amend'/'withdraw' ever overwrite a per-id default of
+// `{action: 'no-response'}`. Every other action string a model could emit,
+// inherited-key or ordinary junk alike, is ALREADY the literal 'no-response'
+// before `debateFindings` (and therefore `df.action`) exists — regardless of
+// PROTOACTION. `PAST_TENSE[df.action]` at run-debate.js:262 is an own-key hit
+// on every input the real pipeline can deliver, mutated or not. Denominator
+// at this re-run: 544 suites (543/1), 7847 tests (7836 passed / 3 failed / 8
+// skipped — +3 over the prior 7844, exactly the three new tests, all
+// passing), 4 snapshots passed and unchanged. Same guard, same hand-revert
+// discipline, confirmed clean.
+//
+// This narrows, rather than fills, the WHY-NOT-4 note above: run-debate.js's
+// addendumOutcomes is real, exported-table-consuming code, and the new tests
+// are a legitimate regression pin on it — but the property they prove is
+// "parseDebateDefense's allowlist protects this call site", not "PAST_TENSE's
+// null prototype protects this call site". Full chase in task-3-report.md.
+//
+// FIX ROUND 2: why PROTOACTION stays at 3/1 rather than growing. The two
+// run-debate.test.js tests cannot red under PROTOACTION alone (measured) --
+// with the allowlist intact, no action ever reaches this table as an
+// inherited key, mutated or not. They also cannot red under ACTIONPASSTHRU
+// alone (run-debate.test.js's own record) for the mirror reason: with THIS
+// table's null prototype intact, a passed-through inherited action resolves
+// to a safe `undefined` here regardless. Only the COMPOUND mutant
+// "DOUBLEBREACH" (run-debate.test.js, both mutations applied together)
+// covers them -- measured RED 6/3, listed there. PROTOACTION's own record is
+// therefore complete and correct as originally measured; it is not the
+// mutant those two tests need.
+
 describe('debateRunStatsRows', () => {
   test('emits rebuttal + revote rows tagged with the debate roles', () => {
     const rows = debateRunStatsRows({

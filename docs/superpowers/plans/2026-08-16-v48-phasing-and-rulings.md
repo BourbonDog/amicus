@@ -74,6 +74,15 @@ shapes, so the true open work-item count is **20**, not 16.
 > but its anchor column's three function lengths were re-measured in the same pass and **all three
 > were wrong**; see the row. ⚠️ This line read *"two of the three"* until T5.4 fix round 1 — it did
 > not resolve against the row's own enumeration, which names three corrections.
+> ⚠️ **ONE MORE change since Phase 5 — v4.8 Phase 6 PR1 (2026-08-22): row 24 moved OPEN → DONE.**
+> Four `Object.prototype`-collision carriers on the council document path closed at the table:
+> `tally.js :: VERDICTS` (`36297e18`+`41733c58`), `street-cred.js :: perJudgeRank`
+> (`46b89f75`+`3e1a09a7`, closing the half T3.3 left unfiled), and `report.js :: SYMBOL` +
+> `debate.js :: PAST_TENSE` (`7ebe91ca`+`faccd178`, plus follow-up rounds `551f8366`+`7bacef50` and
+> `308e90d1`+`8aab4059`) — the `PAST_TENSE` half is defense-in-depth, not a live-bug fix (see the
+> row). Named mutants: `PROTOVERDICT`, `PROTORANK`, `PROTOSYMBOL`, `PROTOACTION`, `ACTIONPASSTHRU`,
+> `DOUBLEBREACH`. Re-counted directly off the 31-row table by bucketing every Verdict cell, not by
+> arithmetic on the line above: **16 DONE · 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 10 OPEN**.
 
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
@@ -104,7 +113,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
 | 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
 | 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |
-| 24 | OPEN | `VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first) | `tally.js :: tally` **+ `street-cred.js :: computeStreetCred`** (perJudgeRank half closed) |
+| 24 | **DONE** (v4.8 Phase 6 PR1, 2026-08-22, SI-24) | ~~`VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first)~~ four `Object.prototype`-collision carriers closed at the table (`__proto__: null` / `Object.create(null)`), not two sites: **A** `tally.js :: VERDICTS` (read, CLI-only — MCP's `adjudications[].verdict` is `z.enum`) `36297e18`+`41733c58`; **C** `street-cred.js :: perJudgeRank` (write/accumulator, CLI **and** MCP — closes the half T3.3 left unfiled) `46b89f75`+`3e1a09a7`; **D** `report.js :: SYMBOL` (read, 3 renderers, CLI **and** MCP — `amicus_verdict`'s unvalidated `record: z.record(z.any())` bypasses A/B's `tally()`-gated enum) and **E** `debate.js :: PAST_TENSE` (read, defense-in-depth ONLY — `parse-stage2.js`'s allowlist already makes a real defense response unreachable, so this closes a latent hole, not a live bug) both `7ebe91ca`+`faccd178`, plus two follow-up rounds `551f8366`+`7bacef50` and `308e90d1`+`8aab4059` that retracted a born-false reachability claim for E. Named mutants `PROTOVERDICT` · `PROTORANK` · `PROTOSYMBOL` · `PROTOACTION` · `ACTIONPASSTHRU` · `DOUBLEBREACH` — the last two are a compound pair: `PAST_TENSE`'s null prototype and the allowlist are each independently sufficient, so only breaching BOTH reds the pin | `tally.js :: VERDICTS` · `street-cred.js :: perJudgeRank` · `report.js :: SYMBOL` · `debate.js :: PAST_TENSE` |
 | 25 | OPEN | chair packet in alias space | `briefings-chair.js :: buildChairPacket` — three sites, three sizes |
 | 26 | **DONE** (T3.1 `13ae8cf6`, 2026-08-20) | ~~`letterByModel` dead code~~ deleted — the JSDoc `@returns` clause, the `const`, the populate line and the return-literal key; `labelMap`/`entries` untouched | `anonymize.js :: assignLabels` |
 | 27 | OPEN | roster-padding ×3 | `run-retry.js` · `run-stage2.js` · `run-debate-revote.js` |
@@ -508,8 +517,9 @@ degrade note is what explains why).
 
 ### Phase 6 · Independents — ~6 PRs, each ships alone
 SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin bench, so artifact
-filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · SI-24 both sites
-including the unfiled `computeStreetCred` **data-loss** site · SI-14 twin pin · T6.5 repair-row
+filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · ~~SI-24 both sites
+including the unfiled `computeStreetCred` **data-loss** site~~ **DONE (PR1, 2026-08-22) — see
+status-table row `| 24 |`** · SI-14 twin pin · T6.5 repair-row
 seat · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
 
 > T6.6 is a live defect, not scaffolding: `tally.js :: assignTier` (`:28`) returns **Confirmed**

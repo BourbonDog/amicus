@@ -18,7 +18,8 @@
 const { sumWaveUsage } = require('../utils/pricing');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
-const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
+// __proto__: null — an inherited/unknown vote key (e.g. "toString") must fold as unrecognized, never resolve off Object.prototype.
+const SYMBOL = { __proto__: null, agree: '✓', dispute: '✗', neutral: '–' };
 // v4.8 T-C1 (SI-22.5, ruling R18): the ONE column every vote whose key names no
 // column folds into. Deliberately NOT exported: R17 took the narrow option —
 // src/workspace/matrix-model.js gets the same rule as a SEPARATE implementation

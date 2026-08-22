@@ -13,13 +13,14 @@
  * precedent: this is a leaf, so the dependency runs one way (tally.js ->
  * street-cred.js) and cannot cycle.
  *
- * ⚠️ SEVEN named mutants guard the expressions below — RANKALIAS, ALIASSELF,
- * JUDGEALIAS, SEATALWAYS, ALIASDRIVER, NOFALLBACK and EXPANDONCE (v4.8
- * follow-up). Each mutation and its MEASURED red set is recorded beside the
- * others, in tests/council/street-cred-mutants.js :: RANKALIAS and its six
- * siblings there, following the tests/council/peer-split-mutants.js ::
- * SPLITDROP precedent. RE-RUN them, never renumber them, whenever anything
- * here or any of its consumers changes.
+ * ⚠️ EIGHT named mutants guard the expressions below — RANKALIAS, ALIASSELF,
+ * JUDGEALIAS, SEATALWAYS, ALIASDRIVER, NOFALLBACK, EXPANDONCE (v4.8
+ * follow-up) and PROTORANK (SI-24). Each mutation and its MEASURED red set is
+ * recorded beside the others, in tests/council/street-cred-mutants.js ::
+ * RANKALIAS and its seven siblings there, following the
+ * tests/council/peer-split-mutants.js :: SPLITDROP precedent. RE-RUN them,
+ * never renumber them, whenever anything here or any of its consumers
+ * changes.
  */
 
 function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
@@ -192,6 +193,21 @@ function credSeats(models, seats) {
  *    MCP input that repeats a judge alias and carries NO seat still collapses,
  *    because nothing in that document can tell the two judges apart. Ruling R2
  *    governs — attribute nothing where there is nothing to attribute.
+ * 4. `perJudgeRank` is ALSO `Object.create(null)` now, not a bare `{}` — a
+ *    WRITE-site defect, separate from item 3's alias-collapse one and unlike
+ *    a READ-site one (this release's other prototype fix, tally.js ::
+ *    VERDICTS). `perJudgeRank[j.seat || j.judge] = rank` assigning through
+ *    the string key `__proto__` invokes the INHERITED `Object.prototype`
+ *    `__proto__` setter instead of creating an own property; the setter
+ *    silently ignores a non-object value, so the rank is discarded — no
+ *    throw, no own key to read back. `toString`/`constructor`/`valueOf` are
+ *    unaffected — they shadow harmlessly and DO create own keys — so only
+ *    `__proto__` was ever lost here. MEASURED at BASE, judge `__proto__`:
+ *    `perJudgeRank` came back `{}` (`Object.keys` empty) while `all`/
+ *    `withSelf` still counted the vote (`withSelf` 1) — map and average
+ *    disagreeing about the SAME row, exactly as item 3 describes for the
+ *    alias-collapse half. A `__proto__` SEAT id is lost the same way: both
+ *    channels feed the one assignment.
  *
  * @param {Array<{judge:string, order:Array<string|string[]>, seat?:string,
  *   orderSeats?:Array<?string|Array<?string>>}>} rankings
@@ -203,7 +219,7 @@ function computeStreetCred(rankings, models, seats) {
     judge: r.judge, seat: r.seat || null, pos: rankPositions(r.order, r.orderSeats),
   }));
   return credSeats(models, seats).map(({ model, key, seat }) => {
-    const all = [], peers = [], perJudgeRank = {};
+    const all = [], peers = [], perJudgeRank = Object.create(null);
     for (const j of judgePos) {
       // Seat key first, ALIAS SECOND. `meta.seats` and `rankings[].orderSeats`
       // are independent channels: a document can carry the seat table while its

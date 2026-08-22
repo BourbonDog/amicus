@@ -170,6 +170,38 @@ All notable changes to Amicus are documented here. Format follows
   `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
   in this package omits it, the package's `exports` map blocks a deep require from outside, and the
   parameter was deliberately **not** made required.
+- **Four object-literal lookup tables on the council document path no longer resolve
+  `Object.prototype`'s own keys.** A verdict, action, or vote string of `toString`, `__proto__`,
+  `constructor`, or `valueOf` used to resolve an inherited function instead of `undefined` when read
+  as a lookup key — silently corrupting or discarding data instead of falling through the guard
+  meant to catch an unrecognized value. Fixed at the table itself (`__proto__: null`, or
+  `Object.create(null)` for the one write-site accumulator), not at each consumer, so no future
+  caller can reintroduce the hole by forgetting a guard.
+  Three of the four are reachable today. `tally.js`'s `VERDICTS`: an unknown verdict used to serialize
+  `basis["function toString() { [native code] }"] = NaN` as `null` in both `tally.json` and
+  `verdict.json` — reachable on the CLI path only, since the MCP schema's `adjudications[].verdict`
+  is `z.enum(['agree','dispute','neutral'])` and rejects the value before `tally()` ever runs.
+  `street-cred.js`'s `perJudgeRank`: a judge or seat id of `__proto__` silently lost its rank to the
+  inherited setter instead of being recorded as an own key — reachable on **both** the CLI and MCP
+  paths, since `judge`/`seat` there are unconstrained `z.string()`. `report.js`'s `SYMBOL` (the vote
+  glyph read by all three matrix renderers) is reachable on **both** paths too — the CLI path
+  (`council report`/`council verdict --render`, raw `JSON.parse`) and a second, independent MCP
+  tool, `amicus_verdict`, whose `record: z.record(z.any())` input is wholly unvalidated because that
+  tool never calls `tally()` and so never meets the `z.enum` guarding `VERDICTS`. With `render: true`,
+  `amicus_verdict` feeds that record straight into `buildReport()`, so an adjudication `verdict` of
+  `toString` used to render the literal `function toString() { [native code] }` into `report.html`.
+  Only one of the four closes a latent hole rather than a live one. `debate.js`'s `PAST_TENSE`
+  guards an `action` key that a separate, pre-existing allowlist (`parse-stage2.js`'s
+  `parseDebateDefense`) already normalizes to the literal `'no-response'` before this table is ever
+  consulted by a real defense response — the two guards are independent and each is individually
+  sufficient, confirmed by a compound mutant (`DOUBLEBREACH`) that reds only when both are removed
+  at once. This closes a hole behind an allowlist that already covers it, not a bug a real run could
+  hit today.
+  ⚠️ **Not a rendering fix.** `report.js`'s three renderers already disagreed on how they display any
+  unrecognized verdict, `Object.prototype` key or not — `report-md.js` and `report-html.js` both
+  print the literal string `undefined`, and the Workspace's `matrix-model.js` prints `?`. That
+  disagreement pre-dates this change and is unchanged by it; reconciling the three is a
+  rendering-contract decision, filed separately in `BACKLOG.md`.
 
 ### Changed
 

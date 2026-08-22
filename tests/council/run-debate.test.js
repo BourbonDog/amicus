@@ -330,6 +330,161 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
   });
 });
 
+// v4.8 Phase 6 PR1 Task 3, fix rounds 1-2 (SI-24) — WHAT ACTUALLY PROTECTS
+// addendumOutcomes' `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
+// (run-debate.js:262) is NOT PAST_TENSE's null prototype. It is
+// parseDebateDefense's ALLOWLIST, one file upstream.
+//
+// Fix round 1 set out to pin PAST_TENSE's SECOND consumer here (the FIRST is
+// debate.js's decorateRecord, pinned in debate.test.js's D1-D3 — which call
+// decorateRecord directly with a hand-built debateFindings array and so never
+// touch this file at all). MEASURED, NOT ASSUMED: driving a REAL defense
+// response through the ACTUAL runDebate -> parseDebateDefense -> applyDebate
+// -> addendumOutcomes path (the same fixture shape as the happy-path describe
+// above, :212-215) with an inherited `action` does NOT exercise PAST_TENSE's
+// null prototype at this call site. parseDebateDefense
+// (src/council/parse-stage2.js:142-153) is an ALLOWLIST: only
+// 'defend'/'amend'/'withdraw' ever overwrite the per-id default of
+// `{action: 'no-response'}` — every other action string a model could emit,
+// inherited-key or ordinary junk alike, is already the literal 'no-response'
+// before `debateFindings` (and therefore `df.action`) exists.
+// `PAST_TENSE[df.action]` at this call site is therefore ALWAYS an own-key
+// hit on any input the real pipeline can deliver — confirmed by running the
+// two tests below under the PROTOACTION mutation: neither reds (see the
+// updated PROTOACTION record in debate.test.js).
+//
+// So what DO the two tests below pin? The allowlist itself — that no defense
+// action, however adversarial, ever reaches PAST_TENSE un-normalised. That is
+// a real and worth-keeping invariant; it earns its own named mutant,
+// ACTIONPASSTHRU (below), which removes the allowlist's fallthrough so
+// `r.action` passes through verbatim instead of defaulting to 'no-response'.
+// The two tests DO red under ACTIONPASSTHRU — see its record for the measured
+// set. Full chase in task-3-report.md's "Fix round 1" and "Fix round 2"
+// sections.
+describe('runDebate — the parseDebateDefense allowlist keeps a foreign action away from PAST_TENSE (addendumOutcomes)', () => {
+  /** Drives a real (raw-text, parseDebateDefense-parsed) defense response —
+   * same shape as the happy-path fixture above — with the given `action`. */
+  async function runWithAction(action) {
+    const tmp = mkTmp('run-debate-proto-');
+    const input = provisionalInput();
+    const provisionalRecord = tally(input);
+    const script = {
+      solos: { 'r-d1': { wave: wave([leg('gemini', defenseOut([{ id: 'A1', action, argument: 'caps at 5' }]))]),
+                         leg: leg('gemini', defenseOut([{ id: 'A1', action, argument: 'caps at 5' }])) } },
+      waves: { 'r-rv': wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }])),
+                             leg('qwen', revoteOut([{ id: 'A1', verdict: 'dispute' }]))]) },
+    };
+    return runDebate(ctxFor(tmp, fakeLaunchers(script, null)), { provisionalRecord, tallyInput: input });
+  }
+
+  test.each([['toString'], ['__proto__']])(
+    'a defense action of %j is normalised to "no-response" by the parseDebateDefense allowlist before PAST_TENSE ever sees it — addendumOutcomes[].action is a STRING, surviving JSON.stringify',
+    async (action) => {
+      const result = await runWithAction(action);
+      const a1 = result.addendumOutcomes.find(o => o.id === 'A1');
+      // Same shape as debate.test.js's D1/D2: toEqual alone cannot tell a
+      // MISSING key from an undefined value, so assert the type explicitly
+      // and round-trip through JSON.stringify — debate.json is exactly what
+      // addendumOutcomes feeds (briefings-debate.js's chair addendum).
+      expect(typeof a1.action).toBe('string');
+      expect(a1.action).toBe('no-response');
+      const onDisk = JSON.parse(JSON.stringify(result.addendumOutcomes));
+      const a1OnDisk = onDisk.find(o => o.id === 'A1');
+      expect(a1OnDisk).toHaveProperty('action');
+      expect(a1OnDisk.action).toBe('no-response');
+    },
+  );
+
+  test('CONTROL: the harness really does deliver a recognised action end to end (defend -> defended)', () => {
+    // Guards the two tests above against a fixture bug that would make EVERY
+    // action normalise to 'no-response' regardless of parseDebateDefense's
+    // allowlist (e.g. a missing `argument`, which silently fails the 'defend'
+    // branch) — exactly the failure this control caught while this test was
+    // being written: an early draft omitted `argument` and 'defend' itself
+    // read back as 'no-response', which would have made the two tests above
+    // pass for the wrong reason.
+    return runWithAction('defend').then((result) => {
+      expect(result.debateFindings[0]).toMatchObject({ action: 'defend' });
+      expect(result.addendumOutcomes.find(o => o.id === 'A1').action).toBe('defended');
+    });
+  });
+});
+
+// Named mutant "ACTIONPASSTHRU" (v4.8 Phase 6 PR1 Task 3 fix round 2, SI-24):
+// remove parseDebateDefense's allowlist fallthrough so an unmatched action
+// passes through verbatim instead of defaulting to 'no-response'.
+//   } // else leave as no-response
+//   -> } else { byId[id] = { action: r.action }; }
+// (src/council/parse-stage2.js, inside parseDebateDefense's response loop.)
+//
+// Introduced at this task. RED: 1 test / 1 suite (command `npx jest
+// --no-coverage`, the FULL suite):
+//   tests/council/parse-debate.test.js — "parseDebateDefense — good input ›
+//     present-but-invalid entries become no-response without triggering a
+//     repair" (PRE-EXISTING coverage, not written by this task — its
+//     "present-but-invalid" fixture omits `argument` on a `'defend'` entry,
+//     which the allowlist rejects and this mutant lets through unchanged).
+//
+// ⚠️ THIS ALONE DOES NOT RED THE TWO TESTS ABOVE — measured, not assumed, and
+// exactly the outcome the brief for this fix round anticipated as a possible
+// finding ("if they still do not red under ACTIONPASSTHRU... chase it and
+// report, do not force it"). Chased: with PAST_TENSE still `__proto__: null`
+// (unmutated), an unmatched action passed through by this mutant (e.g.
+// 'toString') reaches `PAST_TENSE['toString']`, which is a safe `undefined`
+// — the null prototype alone is sufficient to keep `addendumOutcomes[].action`
+// a string even once the allowlist stops normalising. The two tests above pin
+// a DEFENSE-IN-DEPTH property (either guard alone is enough), which by
+// construction has no SINGLE-mutation red — it needs both guards broken at
+// once. See "DOUBLEBREACH" below, the compound mutant that actually covers
+// them, and the updated PROTOACTION record in debate.test.js.
+//
+// ONE PIN THAT PRE-DATES THIS TASK REDS, and it is the only red above:
+// tests/council/parse-debate.test.js — "present-but-invalid entries become
+// no-response without triggering a repair", deliberately, because it is
+// the allowlist's own pre-existing coverage.
+
+// Named mutant "DOUBLEBREACH" (v4.8 Phase 6 PR1 Task 3 fix round 2, SI-24): a
+// COMPOUND mutant — ACTIONPASSTHRU (above) applied TOGETHER with PROTOACTION
+// (debate.test.js's record: revert PAST_TENSE's literal to drop
+// `__proto__: null`). Neither guard alone is a live defect (both are
+// defense-in-depth, per ACTIONPASSTHRU's record above and PROTOACTION's own
+// "why it does not grow" note) — this is the mutant that actually reaches the
+// two tests in the describe block above, because it breaks BOTH layers at
+// once, the only way `addendumOutcomes[].action` can become a non-string.
+//
+// Introduced at this task. RED: 6 tests / 3 suites (command `npx jest
+// --no-coverage`, the FULL suite, both mutations hand-applied together):
+//   tests/council/run-debate.test.js — the two tests THIS record exists for:
+//     'a defense action of "toString" is normalised to "no-response" by the
+//     parseDebateDefense allowlist before PAST_TENSE ever sees it —
+//     addendumOutcomes[].action is a STRING, surviving JSON.stringify' ·
+//     the same test for "__proto__"
+//   tests/council/parse-debate.test.js — "present-but-invalid entries become
+//     no-response without triggering a repair" (ACTIONPASSTHRU's own red,
+//     unioned in — it does not depend on PROTOACTION)
+//   tests/council/debate.test.js — D1 ('toString'), D2 ('__proto__'), D2
+//     ('constructor') (PROTOACTION's own red, unioned in — it does not
+//     depend on ACTIONPASSTHRU)
+//
+// The CONTROL test ('defend' -> 'defended') does NOT red under either mutant
+// alone or combined — it never touches the allowlist's fallthrough branch or
+// an inherited PAST_TENSE key, by construction.
+//
+// Applied and reverted together as a pair, never independently, for this
+// record: guard clean before, both hand-applied, guard clean after (only
+// these two files modified — no contamination from the concurrent Task 2
+// review agent), both hand-reverted and byte-verified separately against
+// `git show HEAD:<path>` (sha256 match, both files) before re-confirming
+// green. Same full-suite denominator as ACTIONPASSTHRU's own run except for
+// the 5 additional reds: 544 suites (541 passed / 3 failed), 7847 tests
+// (7833 passed / 6 failed / 8 skipped), 4 snapshots passed and unchanged.
+//
+// ONE PIN THAT PRE-DATES THIS TASK REDS, unioned in from ACTIONPASSTHRU:
+// tests/council/parse-debate.test.js — "present-but-invalid entries become
+// no-response without triggering a repair", deliberately, because it is
+// the allowlist's own pre-existing coverage. The other five reds above are
+// new at this task.
+
 // ---- carry-forward gap 3b: withdrawn findings NEVER reach the re-vote bundle (spec §5.1) ----
 describe('runDebate — withdrawn findings are excluded from the re-vote bundle', () => {
   let tmp, result, launched;
