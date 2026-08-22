@@ -47,7 +47,7 @@ const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
  * and none exists today: the sole non-test caller, `run-debate.js`, always
  * supplies `aliasOf` (see the warning comment at its call site), and
  * `package.json`'s `exports` map publishes only `./opencode-client`, blocking
- * a deep `require('amicus/src/council/debate')` from outside this package.
+ * a deep import of `amicus/src/council/debate` from outside this package.
  *
  * ⚠️ This block used to declare a `provisionalRecord` param the destructure has
  * never taken (pre-existing doc rot). Callers still pass one and it is still
