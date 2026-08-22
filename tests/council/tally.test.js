@@ -336,6 +336,39 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
   });
 });
 
+// SI-23 (R10): `location` is the one field of the four R10 named that is real
+// — MEASURED against findings.js :: REQUIRED, briefings.js ::
+// FINDINGS_JSON_SHAPE and anonymize.js :: toGlobalFindings (see the comment
+// above `findings:` in mcp-tools.js). Declaring it on the MCP schema alone is
+// not enough: tally.js :: tally's findings return was ALSO dropping it (and
+// still drops `claim`, out of this task's scope — see the comment above this
+// return). Same additive-passthrough shape as raiserSeat above.
+describe('tally() — findings[].location passthrough (SI-23, R10)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['deepseek', 'gpt'],
+      chair: 'gpt', claudeInCouncil: false },
+    rankings: [], runStats: [],
+  };
+
+  test('a finding carrying location survives tally() with it intact', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'deepseek', severity: 'minor', claim: 'c', location: 'src/foo.js line 12' }],
+      adjudications: [],
+    });
+    expect(record.findings[0].location).toBe('src/foo.js line 12');
+  });
+
+  test('a finding with no location key emits no location key on the survived finding', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'x', severity: 'minor', claim: 'c' }],
+      adjudications: [],
+    });
+    expect('location' in record.findings[0]).toBe(false);
+  });
+});
+
 // v4.8 PR4c Task 1 (plan §3.1, T13): tally.js :: tally's `runStats` map is an allowlist
 // that builds a FRESH object literal, so a `seat` key on an input row is
 // stripped before it can reach tally.json — and verdict.js :: buildVerdict copies

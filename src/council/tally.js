@@ -111,8 +111,19 @@ function tally(input) {
     // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats
     // resolved to different executables. PR4b's ledger treats
     // (alias, resolvedModel) as identity; this stamp is same-ALIAS only.
+    // SI-23 (R10): `location` is declared on the MCP schema now
+    // (mcp-tools.js :: getTools) so it survives zod validation, but
+    // surviving validation and reaching THIS document are two different
+    // properties — the round-trip pin below only holds if this map also
+    // forwards it, emit-when-present, the same convention as `raiserSeat`
+    // two lines up. Scoped to `location` alone: `claim` was already
+    // reaching this function on both the CLI and MCP paths (declared on the
+    // MCP schema since before this task) and was ALREADY not forwarded here
+    // — a separate, pre-existing gap this task does not widen its mandate to
+    // close.
     return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
              tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
+             ...(f.location ? { location: f.location } : {}),
              ...(f.raiser
                && peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge === f.raiser)
                ? { sameModelCorroboration: true } : {}),

@@ -795,3 +795,46 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
     expect(strip(record)).toEqual(strip(tally(JSON.parse(JSON.stringify(base)))));
   });
 });
+
+// SI-23 (R10): `findings[].location` was silently stripped by the same closed
+// z.object, one key later than the seat keys above. MEASURED (see the
+// comment above `findings:` in mcp-tools.js): `location` is the one real
+// field of the four R10 named — `evidence`/`file`/`line` do not exist
+// anywhere in this codebase's finding shape (no producer, no consumer).
+// The property that matters, per the brief, is that the field reaches
+// tally()'s OUTPUT document, not merely that it survives zod — so the pin
+// below exercises the schema's own `.parse()` (not a hand-built object that
+// bypasses it) and feeds the parsed result into `tally()`, the same recipe
+// as 'a null seats table reaches tally()' above. SCHEMASTRIP (remove the
+// `location` declaration in mcp-tools.js) turns this red: zod strips the key
+// before `tally()` ever runs, so `record.findings[0].location` goes missing.
+describe('amicus_council_tally retains findings[].location (SI-23, R10)', () => {
+  const { getTools } = require('../src/mcp-tools');
+  const { tally } = require('../src/council/tally');
+  const schema = () => getTools().find(t => t.name === 'amicus_council_tally').inputSchema;
+
+  test('findings[].location survives the schema parse', () => {
+    const out = schema().findings.parse([
+      { id: 'A1', raiser: 'deepseek', severity: 'major', location: 'src/foo.js line 12' },
+      { id: 'A2', raiser: 'gpt', severity: 'minor' },
+    ]);
+    expect(out[0].location).toBe('src/foo.js line 12');
+    expect('location' in out[1]).toBe(false);
+  });
+
+  test('round-trip: a hand-assembled MCP-shaped input carrying location still carries it after tally()', () => {
+    const s = schema();
+    const record = tally({
+      meta: s.meta.parse({ runId: 'r', models: ['deepseek', 'gpt'], chair: 'gpt' }),
+      findings: s.findings.parse([
+        { id: 'A1', raiser: 'deepseek', severity: 'major', claim: 'c', location: 'src/foo.js line 12' },
+      ]),
+      adjudications: s.adjudications.parse([
+        { judge: 'gpt', findingId: 'A1', verdict: 'agree' },
+      ]),
+      rankings: s.rankings.parse([]),
+      runStats: s.runStats.parse([]),
+    });
+    expect(record.findings[0].location).toBe('src/foo.js line 12');
+  });
+});
