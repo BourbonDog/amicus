@@ -231,6 +231,66 @@ describe('decorateRecord — additive past-tense debate field', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// v4.8 Phase 6 PR1 Task 3 (SI-24) — PAST_TENSE is prototype-safe.
+// ---------------------------------------------------------------------------
+
+/**
+ * PAST_TENSE was a plain object literal, so an inherited/unknown `action`
+ * (e.g. "toString", "constructor", "__proto__") resolved Object.prototype's
+ * own value instead of `undefined`, defeating the `|| 'no-response'` guard
+ * here and at run-debate.js's addendumOutcomes. JSON.stringify drops function
+ * values, so toString/constructor SILENTLY DELETE `debate.action` from the
+ * serialized document; __proto__ resolves to Object.prototype itself, which
+ * stringifies as `{}` — wrong either way, and both close identically to an
+ * ordinary unknown action ("bogus") once the table carries `__proto__: null`.
+ *
+ * ⚠️ `d.action` is the model's own parsed defense response (`resp.action` in
+ * `applyDebate` above) with no operator in between — of every carrier in this
+ * PR, this is the one a real paid run can hit with no hand-assembled document.
+ */
+describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited action', () => {
+  test('D1 — action "toString" maps to "no-response", and the key survives JSON.stringify', () => {
+    const record = { findings: [{ id: 'A1', tier: 'Confirmed' }] };
+    decorateRecord(record, [{ id: 'A1', action: 'toString', previousTier: 'Contested' }]);
+    // ⚠️ THE SINGLE MOST IMPORTANT PIN IN THIS TASK. toEqual() alone can miss
+    // this: a MISSING key and an `undefined` value compare equal under
+    // toEqual, but the BASE failure was the key vanishing from the
+    // serialized document (JSON.stringify drops a function value outright).
+    // Assert the type explicitly, then round-trip for real.
+    expect(typeof record.findings[0].debate.action).toBe('string');
+    expect(record.findings[0].debate.action).toBe('no-response');
+    const onDisk = JSON.parse(JSON.stringify(record));
+    expect(onDisk.findings[0].debate).toHaveProperty('action');
+    expect(onDisk.findings[0].debate.action).toBe('no-response');
+  });
+
+  test.each([['__proto__'], ['constructor']])(
+    'D2 — action %j also maps to "no-response", and the key survives JSON.stringify',
+    (action) => {
+      const record = { findings: [{ id: 'A1', tier: 'Confirmed' }] };
+      decorateRecord(record, [{ id: 'A1', action, previousTier: 'Contested' }]);
+      expect(typeof record.findings[0].debate.action).toBe('string');
+      expect(record.findings[0].debate.action).toBe('no-response');
+      const onDisk = JSON.parse(JSON.stringify(record));
+      expect(onDisk.findings[0].debate).toHaveProperty('action');
+      expect(onDisk.findings[0].debate.action).toBe('no-response');
+    },
+  );
+
+  test('D3 — the four real actions still map to defended / amended / withdrawn / no-response', () => {
+    const record = { findings: ['A1', 'A2', 'A3', 'A4'].map(id => ({ id, tier: 'Confirmed' })) };
+    const debateFindings = [
+      { id: 'A1', action: 'defend', previousTier: 'Contested' },
+      { id: 'A2', action: 'amend', previousTier: 'Contested' },
+      { id: 'A3', action: 'withdraw', previousTier: 'Contested' },
+      { id: 'A4', action: 'no-response', previousTier: 'Contested' },
+    ];
+    decorateRecord(record, debateFindings);
+    expect(record.findings.map(f => f.debate.action)).toEqual(['defended', 'amended', 'withdrawn', 'no-response']);
+  });
+});
+
 describe('debateRunStatsRows', () => {
   test('emits rebuttal + revote rows tagged with the debate roles', () => {
     const rows = debateRunStatsRows({

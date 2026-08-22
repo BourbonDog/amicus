@@ -1796,3 +1796,78 @@ describe('ONE shared predicate decides seat space for BOTH renderers (council A3
     expect(workspaceJudges(rWith, vWith)).toEqual(workspaceJudges(rNone, vNone));
   });
 });
+
+// ---------------------------------------------------------------------------
+// v4.8 Phase 6 PR1 Task 3 (SI-24) — SYMBOL is prototype-safe.
+// ---------------------------------------------------------------------------
+
+/**
+ * `report.js`'s SYMBOL was a plain object literal, so an inherited/unknown
+ * vote key (e.g. "toString") resolved Object.prototype's own method instead
+ * of `undefined` — report-md.js and report-html.js have no fallback at all,
+ * and matrix-model.js's `|| '?'` is defeated because a function is truthy.
+ * Fixed on the table (`__proto__: null`), the same shape as tally.js's
+ * VERDICTS (Task 1) and street-cred.js's perJudgeRank (Task 2).
+ *
+ * These fixtures are hand-built, alias-space (no seats table) documents —
+ * the defect and its fix are keyed on the vote VALUE at three fixed
+ * consumers, not on which space the roster is in; T17-T22 and SI-22.5 above
+ * already cover the roster/column-space behaviour exhaustively.
+ */
+describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resolve off Object.prototype', () => {
+  const RAISER = 'nobody'; // never equals the sole judge, so no '*' rides the cell and the glyph stays bare.
+
+  /** ONE minimal verdict.json-shaped doc, one judge, one finding. */
+  function verdictFor(vote) {
+    return {
+      runId: 't3-symbol', runType: 'headless', date: '2026-08-22',
+      council: ['gpt'], claudeInCouncil: false,
+      findings: [{ id: 'F1', raiser: RAISER, severity: 'major', tier: 'Contested',
+        adjudications: [{ judge: 'gpt', verdict: vote }] }],
+    };
+  }
+  /** The tally.json-shaped twin, for the workspace consumer. */
+  function tallyFor(vote) {
+    return {
+      meta: { runId: 't3-symbol', runType: 'headless', date: '2026-08-22', models: ['gpt'] },
+      findings: [{ id: 'F1', raiser: RAISER, severity: 'major', tier: 'Contested',
+        adjudications: [{ judge: 'gpt', verdict: vote }] }],
+    };
+  }
+
+  test('S1 — markdown: a vote of "toString" renders the SAME cell as a vote of "bogus"', () => {
+    // ⚠️ Assert the EQUIVALENCE, not the literal. The literal is "undefined"
+    // and is a separate, pre-existing defect (BASE already renders it for
+    // ANY unknown verdict, "bogus" included) — out of scope here, and a test
+    // hard-coding it would read as an endorsement of that rendering.
+    const mdToString = buildReport({ verdict: verdictFor('toString') }, { format: 'md' });
+    const mdBogus = buildReport({ verdict: verdictFor('bogus') }, { format: 'md' });
+    expect(rowFor(mdToString, 'F1')).toBe(rowFor(mdBogus, 'F1'));
+  });
+
+  test('S2 — html: the same equivalence at the report-html.js consumer', () => {
+    const htmlToString = buildReport({ verdict: verdictFor('toString') }, { format: 'html' });
+    const htmlBogus = buildReport({ verdict: verdictFor('bogus') }, { format: 'html' });
+    const rowToString = htmlToString.match(/<tr[^>]*><td>F1<\/td>.*?<\/tr>/)[0];
+    const rowBogus = htmlBogus.match(/<tr[^>]*><td>F1<\/td>.*?<\/tr>/)[0];
+    expect(rowToString).toBe(rowBogus);
+  });
+
+  test('S3 — buildMatrixModel: a vote of "toString" yields sym: "?" — the || fallback is no longer defeated', () => {
+    // This one CAN assert the literal: '?' is the intended value here, not a
+    // pre-existing defect shared with an ordinary unknown vote.
+    const m = buildMatrixModel(tallyFor('toString'), {}, null);
+    expect(m.rows[0].cells[0].sym).toBe('?');
+  });
+
+  test('S4 — the three real verdicts still render ✓ / ✗ / – at all three consumers', () => {
+    for (const [vote, glyph] of [['agree', '✓'], ['dispute', '✗'], ['neutral', '–']]) {
+      const md = buildReport({ verdict: verdictFor(vote) }, { format: 'md' });
+      expect(rowFor(md, 'F1')).toBe(`| F1 | major | ${RAISER} | ${glyph} | Contested |  |`);
+      const html = buildReport({ verdict: verdictFor(vote) }, { format: 'html' });
+      expect(html).toContain(`<td class="c">${glyph}</td>`);
+      const m = buildMatrixModel(tallyFor(vote), {}, null);
+      expect(m.rows[0].cells[0].sym).toBe(glyph);
+    }
+  });
+});

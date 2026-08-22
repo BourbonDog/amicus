@@ -13,7 +13,12 @@
 
 const { peersOf, unattributedPeerDrops } = require('./peer-split');
 
-const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
+// __proto__: null — an inherited/unknown action (e.g. "toString") must fall
+// through the `|| 'no-response'` guards below and in run-debate.js, never
+// resolve off Object.prototype: a function value there survives in memory
+// but JSON.stringify drops it, silently deleting `action` from the finding.
+// Reachable from a real run: `d.action` is the model's own parsed response.
+const PAST_TENSE = { __proto__: null, defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
 // The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,
 // never an extra ledger row and never that model's ledger identity. Through v4.6 this Set
