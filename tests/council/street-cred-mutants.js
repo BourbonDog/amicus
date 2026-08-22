@@ -24,11 +24,12 @@
 // set with this file removed, every one reports `no tracked file matches`:
 // ledger.js -> LEDGERALIAS, ledger-join.js -> CHAIRWINS, CREDALIAS,
 // ALIASLASTWINS and ANYSEATED, street-cred.js -> RANKALIAS, ALIASDRIVER and
-// EXPANDONCE, run-assemble.js -> EMITSET. NINE of the thirteen records below
-// are anchored that way (re-measured at this task, which added a citation for
-// ALIASDRIVER that did not exist before, alongside its two new siblings); the
-// other four (ALIASSELF, JUDGEALIAS, SEATALWAYS, NOFALLBACK) are named in
-// prose beside them and ride those anchors' protection of the FILE rather
+// EXPANDONCE, run-assemble.js -> EMITSET. NINE of the fourteen records below
+// are anchored that way (re-measured at the v4.8 follow-up task, which added
+// a citation for ALIASDRIVER that did not exist before, alongside its two new
+// siblings); the other five (ALIASSELF, JUDGEALIAS, SEATALWAYS, NOFALLBACK
+// and PROTORANK — the last added at v4.8 Phase 6 PR1 Task 2, SI-24) are named
+// in prose beside them and ride those anchors' protection of the FILE rather
 // than of their own names.
 // A citation must also sit on ONE line — the regex does not span a wrapped
 // comment, which is how two of these anchors were silently inert when first
@@ -308,8 +309,12 @@
   //   for (let k = 0; k < group.length; k += 1) { pos.set(seatGroup[k] || group[k], meanPos); }
   //   -> ...                                    { pos.set(group[k], meanPos); }
   //
-  // RE-RUN at this task. RED: 14 tests / 3 suites — GREW from 13/2, the
-  // widest set here, because every downstream number is computed off this map.
+  // RE-RUN at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`. RED: 14 tests /
+  // 3 suites — UNCHANGED, the widest set here, because every downstream
+  // number is computed off this map. (The 4 new SI-24 perJudgeRank tests do
+  // not enter this red set: none of them pass a seats table or orderSeats, so
+  // `rankPositions` never sees a seat channel to key by in the first place.)
   //   tests/council/street-cred.test.js — all four seated `rankPositions`
   //     cases, plus "a twin bench emits one row per seat, and the two rows
   //     DIVERGE", "SI-06 / ruling C-2 …", "`| 24 |`: perJudgeRank now has one
@@ -335,7 +340,11 @@
   //   if ((j.seat && seat) ? j.seat !== seat : j.judge !== model) { peers.push(rank); }
   //   -> if (j.judge !== model) { peers.push(rank); }
   //
-  // RE-RUN at this task. RED: 6 tests / 3 suites — GREW from 5/2.
+  // RE-RUN at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`. RED: 6 tests /
+  // 3 suites — UNCHANGED. (Not entered by the 4 new SI-24 perJudgeRank tests
+  // either — none of them seat two judges as the same alias/seat, so the peer
+  // split's alias-vs-seat branch never diverges on their fixtures.)
   //   tests/council/street-cred.test.js — "SI-06 / ruling C-2: only the judge
   //     that IS this seat is excluded; the TWIN counts"
   //   tests/council/seat-parity-ondisk.test.js — all three of the asymmetric
@@ -362,34 +371,88 @@
   // — the phasing doc's unfiled `| 24 |` data-loss site.
   //   perJudgeRank[j.seat || j.judge] = rank;  ->  perJudgeRank[j.judge] = rank;
   //
-  // RE-RUN at this task. RED: 3 tests / 2 suites — UNCHANGED. `perJudgeRank`
-  // is not read by anything this task's new tests assert on.
+  // RE-RUN at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`. RED: 4 tests /
+  // 2 suites — GREW from 3/2: this task's new "a __proto__ SEAT id keeps its
+  // rank the same way" test enters this red set too — reverting to
+  // `perJudgeRank[j.judge]` drops the `j.seat ||` fallback this mutant
+  // targets, so a seat-keyed `__proto__` write collapses onto the ordinary
+  // judge key instead. ⚠️ Its sibling "a __proto__ JUDGE alias …" does NOT
+  // enter: with no seat on that fixture, `j.seat || j.judge` already reduces
+  // to `j.judge`, so the mutation is a no-op for it.
   //   tests/council/street-cred.test.js — "`| 24 |`: perJudgeRank now has one
-  //     entry per JUDGE, and agrees with withSelf"
+  //     entry per JUDGE, and agrees with withSelf" · "a __proto__ SEAT id
+  //     keeps its rank the same way — both channels feed one assignment"
   //   tests/council/seat-parity-ondisk.test.js — "the two seats report
   //     DIFFERENT numbers, and each row names which seat it is" · "T3.3:
   //     tally.json carries one street-cred row per SEAT, with a per-judge map
   //     each"
   //
-  // ⚠️ SMALLEST SET HERE, and deliberately so: `perJudgeRank` feeds no
-  // arithmetic — `withSelf`/`peersOnly` accumulate into arrays independently —
-  // so collapsing it changes only the map itself. That is exactly the defect
-  // (the map and the averages disagreed about the same row), and it also means
-  // three pins are the whole of its coverage. Do not thin them.
+  // ⚠️ SMALLEST SET HERE UNTIL THIS TASK, and still nearly so: `perJudgeRank`
+  // feeds no arithmetic — `withSelf`/`peersOnly` accumulate into arrays
+  // independently — so collapsing it changes only the map itself. That is
+  // exactly the defect (the map and the averages disagreed about the same
+  // row), and it also means four pins are the whole of its coverage — the
+  // original three, plus this task's seat-channel SI-24 pin, which happens to
+  // guard the same `j.seat ||` fallback from the other direction. Do not thin
+  // them.
   //
   // NO PIN THAT PRE-DATES T3.3 REDS.
+
+  // Named mutant "PROTORANK": revert `perJudgeRank`'s accumulator to a bare
+  // object literal — the WRITE-site half of SI-24 (v4.8 Phase 6 PR1 Task 2).
+  // Distinct from JUDGEALIAS just above, which reverts the KEY on an
+  // already-safe accumulator; this one reverts the accumulator itself, on
+  // the unmutated key. Also distinct from tally.js's PROTOVERDICT: that is a
+  // READ-site mutant on a different function, guarding a different failure
+  // mode (an inherited value read back) rather than this WRITE-site one (an
+  // inherited setter silently discarding the write).
+  //   const all = [], peers = [], perJudgeRank = Object.create(null);
+  //   -> const all = [], peers = [], perJudgeRank = {};
+  //
+  // Introduced at this task. RED: 3 tests / 1 suite (command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`).
+  //   tests/council/street-cred.test.js — "a __proto__ JUDGE alias keeps its
+  //     rank as an OWN key, not lost to the setter" · "a __proto__ SEAT id
+  //     keeps its rank the same way — both channels feed one assignment" ·
+  //     "JSON round-trip: the __proto__ entry survives serialisation …"
+  //
+  // ⚠️ WHY NOT 4: "toString and constructor still land as own keys …" does
+  // NOT red. `toString`/`constructor` are ordinary inherited DATA
+  // properties, so a bracket assignment shadows them and creates an own key
+  // on a bare `{}` exactly as it does on `Object.create(null)` — that test
+  // is a deliberate CONTROL, pinning that the fix changes nothing for the
+  // two keys that were never broken. Only `__proto__` is an ACCESSOR on
+  // `Object.prototype`, and only its setter silently discards a non-object
+  // value instead of creating an own property. MEASURED, on a bare `{}`:
+  // `perJudgeRank['__proto__'] = 1` leaves `Object.keys(perJudgeRank)` empty
+  // and `hasOwnProperty.call(perJudgeRank, '__proto__')` false, while
+  // `perJudgeRank.toString = 1` / `perJudgeRank.constructor = 1` both create
+  // real own keys on that same bare object.
+  //
+  // NO PIN THAT PRE-DATES THIS TASK REDS.
 
   // Named mutant "SEATALWAYS": emit `seat` on every street-cred row instead of
   // only when it differs from the alias.
   //   ...(seat ? { seat } : {}),  ->  seat,
   //
-  // RE-RUN at this task. RED: 11 tests / 5 suites — GREW from 10/5 (which was
-  // 9/4 before fix round 1, which added the first end-to-end quadrant test).
-  // The suite count is unchanged; ledger.test.js gains a second test. The ONLY
-  // mutant here with real pre-existing coverage, and the four older pins are
-  // named because that is the point:
+  // RE-RUN at v4.8 Phase 6 PR1 Task 2 (SI-24). Command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage` (this task's
+  // mandated scope) measures RED: 10 tests / 4 suites — reads as a SHRINK
+  // from the recorded 11/5, but is NOT one: `tests/schemas.test.js` lives
+  // outside both `tests/council/` and `tests/workspace/`, so it was never in
+  // this command's reach. CHASED, not assumed: ran
+  // `npx jest tests/schemas.test.js --no-coverage` directly with the same
+  // mutation still applied — "council-tally.schema.json accepts tally()
+  // output" still reds there too. TRUE red set, all suites: 11 tests / 5
+  // suites, UNCHANGED from the prior recording (which was 10/5, 9/4 before
+  // fix round 1, which added the first end-to-end quadrant test). The suite
+  // count is unchanged there too; ledger.test.js gains a second test. The
+  // ONLY mutant here with real pre-existing coverage, and the four older
+  // pins are named because that is the point:
   //   tests/schemas.test.js — "council-tally.schema.json accepts tally()
-  //     output"                                          (PRE-DATES T3.3)
+  //     output"     (PRE-DATES T3.3; outside this task's mandated
+  //     tests/council/+tests/workspace/ command — confirmed separately, above)
   //   tests/council/run-schema-debate.test.js — "a REAL tally() document
   //     carrying the mark validates, and really carries it" · "a document that
   //     does not orphan a twin leg omits the key and still validates"
@@ -433,10 +496,16 @@
   // a genuinely different property from the one EXPANDONCE (below) guards; the
   // two do not overlap in what a shrink would mean.
   //
-  // RE-RUN at this task (twice — once at the substantive commit, once more at
-  // review round 1 after `['a','b','a']` was added). RED: 16 tests / 3 suites
-  // — GREW from 15/3 (12/3 before that, 11/2 before fix round 1). Suite count
-  // unchanged; street-cred.test.js gained one more test.
+  // RE-RUN at the v4.8 follow-up task (twice — once at the substantive
+  // commit, once more at review round 1 after `['a','b','a']` was added),
+  // and again at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`. RED: 16 tests /
+  // 3 suites — UNCHANGED at Task 2 (15/3 -> 16/3 GREW at the follow-up task;
+  // 12/3 before that, 11/2 before fix round 1). Suite count unchanged;
+  // street-cred.test.js gained one more test at the follow-up task, none at
+  // Task 2 — the 4 new SI-24 perJudgeRank tests never build a seats table, so
+  // ALIASDRIVER's forced `id = undefined` is a no-op on their fixtures either
+  // way.
   //   tests/council/street-cred.test.js (9, up from 8) — both original
   //     `credSeats` per-occurrence cases ("a seated alias: each occurrence
   //     takes its OWN seat …" — RETITLED at review round 1, Minor 1: its old
@@ -494,8 +563,14 @@
    * drop/invent pair this mutant exists to pin, and — unlike ALIASDRIVER —
    * this mutation DOES change the row count on the two shapes that matter.
    *
-   * RE-RUN at review round 1 (Important 1, after `['a','b','a']` was added).
-   * RED: 7 tests / 2 suites — GREW from 6/2. Suite count unchanged.
+   * RE-RUN at review round 1 (Important 1, after `['a','b','a']` was added),
+   * and again at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+   * `npx jest tests/council/ tests/workspace/ --no-coverage`.
+   * RED: 7 tests / 2 suites — UNCHANGED at Task 2 (GREW from 6/2 at review
+   * round 1). Suite count unchanged; none of the 4 new SI-24 perJudgeRank
+   * tests enter this set — they call `computeStreetCred` with no seats table
+   * at all, so `credSeats` never reaches the id-table code this mutant
+   * reverts.
    *   tests/council/street-cred.test.js (5, up from 3) — "credSeats — Rule A:
    *     exactly one row per `models` entry" — the `partial` and
    *     `over-specified` length-invariant cases from the `test.each` table,
@@ -557,9 +632,9 @@
   //   const rank = j.pos.has(key) ? j.pos.get(key) : j.pos.get(model);
   //   -> const rank = j.pos.get(key);
   //
-  // RE-RUN at this task. RED: 4 tests / 2 suites — GREW from 3/2 (which was
-  // 2/1 before fix round 1). Suite count unchanged. Two are in the "the
-  // two channels are INDEPENDENT" describe of
+  // RE-RUN at the v4.8 follow-up task. RED: 4 tests / 2 suites — GREW from
+  // 3/2 (which was 2/1 before fix round 1). Suite count unchanged. Two are in
+  // the "the two channels are INDEPENDENT" describe of
   // tests/council/street-cred.test.js: "seat table but alias-only rankings:
   // rows are seated, NUMBERS stay at BASE" and "⚠️ RESIDUAL, pinned
   // deliberately: alias-only judges still collapse perJudgeRank". The third,
@@ -576,6 +651,13 @@
   // pin. ⚠️ The OTHER composition test does NOT red here — its seated row's
   // key `a#1` resolves through the REAL fallback (`orderSeats` names it), which
   // is exactly what this mutant removes only when the direct lookup misses.
+  //
+  // RE-RUN AGAIN at v4.8 Phase 6 PR1 Task 2 (SI-24), command
+  // `npx jest tests/council/ tests/workspace/ --no-coverage`: still RED
+  // 4 tests / 2 suites, UNCHANGED. None of the 4 new SI-24 perJudgeRank tests
+  // enter this set — none of their fixtures pass a seats table, so `key`
+  // already equals the model alias directly and `j.pos.has(key)` is true
+  // regardless of whether the `pos.get(model)` fallback exists.
   //
   // ⚠️ THIS MUTANT EXISTS BECAUSE THE FALLBACK LOOKS LIKE DECORATION AND IS
   // NOT. `meta.seats` and `rankings[].orderSeats` come from different
