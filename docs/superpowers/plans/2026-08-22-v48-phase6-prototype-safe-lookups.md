@@ -255,13 +255,28 @@ diff than the phasing doc's row 24 describes. Task 4 records the widening in the
 renders the literal string `"undefined"` for **any** unknown verdict — `bogus` does it at BASE,
 before this PR touches anything (§0.3 D). After the fix, inherited keys render exactly like
 `bogus` does: the fix makes them **consistent with existing unknown-key behaviour**, not
-well-rendered. The three renderers disagree with each other (`''`/`undefined`/`'?'`), and
-reconciling them is a rendering-contract change, not a prototype change. Filed in Task 4.
+well-rendered. Reconciling that is a rendering-contract change, not a prototype change. Filed in
+Task 4.
+
+⚠️ **This ruling first read "the three renderers disagree with each other (`''`/`undefined`/`'?'`)".
+That is WRONG — corrected 2026-08-22 after Task 4 measured it.** The `''` is `report-html.js`'s
+**no-vote** branch, a different case I conflated in. Measured by executing the three verbatim
+expressions:
+
+| vote | `report-md.js:50` | `report-html.js:42` | `matrix-model.js:201` |
+|---|---|---|---|
+| `'toString'` (inherited) | `"undefined"` | `"undefined"` | `"?"` |
+| `'bogus'` (ordinary unknown) | `"undefined"` | `"undefined"` | `"?"` |
+
+So it is **two renderers agreeing and one differing**, not a three-way split — and at every one of
+them the inherited key and the ordinary unknown are already identical, which is exactly what this
+PR set out to make true. The filed defect is real but smaller than stated.
 ⚠️ **The PR must not claim it "fixed the rendering".** It removed one class of garbage and left
 a measured, pre-existing, differently-caused one.
 
 **R-F — the wider table family is FILED, not swept.** `grep "^const [A-Z_0-9]* = {" src/`
-returns **35** module-level tables. The great majority are keyed by internal enums, not by
+returns **34** module-level tables (⚠️ **this read 35 until 2026-08-22 — a miscount of my
+own grep output, caught by Task 4 re-running it and confirmed two independent ways**). The great majority are keyed by internal enums, not by
 document strings, and each needs its own reachability measurement before it deserves an edit.
 A blanket sweep would ship 30-odd unmeasured claims. Filed in Task 4 with the discriminator that
 makes the sweep tractable. ⚠️ Also filed, deliberately unfixed: the **ad-hoc** `byId = {}` maps
@@ -424,7 +439,7 @@ Record both measured red sets.
 3. **File** in `BACKLOG.md`, each with its measurement:
    - R-E's renderer disagreement (`''` / `"undefined"` / `'?'` across three renderers for an
      unknown verdict) — **measured at BASE with `bogus`**, so it is explicitly not caused here.
-   - R-F's 35-table family, with the discriminator (document-keyed vs enum-keyed) that makes the
+   - R-F's 34-table family (re-measure it; the plan said 35 and was wrong), with the discriminator (document-keyed vs enum-keyed) that makes the
      sweep tractable, and the note that the v4.7 PR6 `Object.create(null)` family item covered the
      seats-panel only.
    - The ad-hoc in-function `byId = {}` maps (`debate.js:71` named as one instance, by symbol).
