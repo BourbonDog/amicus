@@ -118,11 +118,23 @@ action="__proto__"   -> {"action":{},"previousTier":"Confirmed"}
 `|| 'no-response'` at `debate.js:131` exists **precisely** to normalise unknown actions, and an
 inherited key walks straight past it.
 
-⚠️ **E is reachable from a real paid run, not only from hand-assembled input.** `d.action`
-originates at `debate.js:77` as `resp.action`, straight off the model's parsed defense response —
-a model that emits `"action": "toString"` produces it. A, B, C and D need the two hand-assembled
-paths (`cli-handlers-council.js`'s raw `JSON.parse`, and `mcp-tools.js`'s `z.string()`, which
-accepts every string including `'__proto__'`).
+**Reachability, per carrier — corrected 2026-08-22 after Task 1 measured the MCP schema.**
+⚠️ **This paragraph shipped WRONG in the plan's first commit (`d0e03fb0`)**, which said all of
+A–D need "`mcp-tools.js`'s `z.string()`, which accepts every string". That is true of the
+`judge`/`seat` fields and **false of `verdict`**. The carriers do not share one reachability
+argument, and the difference is the *field*, not the path:
+
+| carrier | keyed by | CLI path (`cli-handlers-council.js`, raw `JSON.parse`) | MCP path (`mcp-tools.js`) |
+|---|---|---|---|
+| A, B | `adjudications[].verdict` | **reachable** — no schema at all | **BLOCKED** — `z.enum(['agree','dispute','neutral'])` at `:420` |
+| C | `rankings[].seat \|\| .judge` | **reachable** | **reachable** — both are `z.string()` |
+| D | a verdict string read back off `tally.json` | **reachable** | inherits A/B's enum on the write path |
+| E | `resp.action`, the model's own parsed defense response | **reachable** | **reachable** |
+
+⚠️ **E is reachable from a real paid run, not from hand-assembled input at all.** `d.action`
+originates at `debate.js:77` as `resp.action`, straight off the model's parsed output — a model
+that emits `"action": "toString"` produces it with no operator involvement. E is the only carrier
+of which that is true, and it is the one whose failure shape is a **missing key** in the document.
 
 ### §0.4 The fix, measured
 
