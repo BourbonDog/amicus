@@ -202,6 +202,30 @@ describe('tally() — VERDICTS is prototype-safe (SI-24)', () => {
   });
 });
 
+// Named mutant "PROTOVERDICT": delete `__proto__: null,` from the VERDICTS
+// literal — the fix this task ships, reverted.
+//   const VERDICTS = { __proto__: null, agree: 'a', dispute: 'd', neutral: 'n' };
+//   -> const VERDICTS = { agree: 'a', dispute: 'd', neutral: 'n' };
+//
+// Command: `npx jest tests/council/ --no-coverage` (denominator at this
+// commit: 75 suites / 1418 tests).
+//
+// MEASURED. RED: 5 tests / 1 suite.
+//   tests/council/tally.test.js — all four P1 cases (toString, __proto__,
+//     constructor, valueOf) AND P3 ("an ordinary unknown verdict (bogus) is
+//     identical to an inherited one"). P3 reds too: 'bogus' is unaffected by
+//     the mutation (still skipped by `!== undefined` alone) so it no longer
+//     matches the now-four-keyed basis the mutated inherited keys produce —
+//     that divergence is exactly what P3 measures, so its red set is not
+//     curated away.
+//   P2 (the three real verdicts) stays GREEN — agree/dispute/neutral are own
+//     keys, unaffected by the prototype either way.
+//
+// Hand-reverted (no git checkout/restore/stash) and byte-verified: `git diff
+// --quiet -- src/council/tally.js` clean, and `sha256sum` matches `git show
+// HEAD:src/council/tally.js`. Suite confirmed green after revert: 106 suites
+// / 1918 tests (`npx jest tests/council/ tests/workspace/ --no-coverage`).
+
 describe('tally() — runStats carries what qualifies `conformance` (review F3)', () => {
   const baseInput = {
     meta: { runId: 'r', runType: 'review', date: 'd', models: ['x'], chair: 'x', claudeInCouncil: false },
