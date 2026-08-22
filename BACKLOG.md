@@ -3111,6 +3111,11 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 - [ ] **NEXT TASK — Phase 6: Independents.** Filed 2026-08-21 (v4.8 Phase 5 T5.4) as the correct
   resume point, replacing the Phase 5 entry that stood here (now ✅ COMPLETED — SI-10 closed by T5.1+T5.2, SI-13 by
   T5.3; both ticked in this file and both moved OPEN → DONE in the phasing doc's §1 status table).
+  ⚠️ **T5.5 landed on the same branch on 2026-08-22, after this entry was written** (`f19624c4` +
+  `8d40f4f5`), closing the two mechanisms a paid council confirmed against PR #179: the guard's
+  `boundLegs` arm is deleted, and the refusal's exit-2 consequence is pinned end to end. It does
+  **not** move the resume point — Phase 6 is still next — but the Phase 5 commit list above is
+  T5.1–T5.3 only, and this is the rest of it.
   Per the phasing doc's own task list
   (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 6): **~6 PRs, each ships
   alone** —
@@ -3635,8 +3640,13 @@ joins on the seat at every hop — `debate.js :: debateTargets` (**was `:201`**)
 `debate.js :: disputingJudges` (**was `:175`**), `debate.js :: applyDebate` (**was `:81`**),
 the re-vote repair id
 (`run-debate-revote.js :: repairId`, **was `:139`; re-anchored BY SYMBOL 2026-08-21 after v4.8
-Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the rest) — `:139` now holds the `isAbortExit` return and the repair id
-is `:203`**) and all four launcher call sites, each projecting seat → alias
+Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the rest), and T5.5
+took it to **260** on 2026-08-22 (−33 deleting the `boundLegs` arm and its comment block, +11
+across three comment repairs the deletion forced — including the announced `why` string, which
+still said the refused leg "bound to no roster slot"). The repair id is `:197` today, re-opened
+2026-08-22 against the FINAL tree. ⚠️ The "`:139` now holds the `isAbortExit`
+return" clause that stood here was true at T5.4 and rotted at the round-2 fix wave, which added
+five lines above it — dropped rather than re-guessed**) and all four launcher call sites, each projecting seat → alias
 through the single `aliasOf` built at `run-debate.js :: aliasOf` (**was `:116-117`, which is now
 the comment ABOVE it; the build is `:129` — re-opened in the same pass**). `runRevoteWave` moved to
 `src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
@@ -3836,9 +3846,13 @@ deliberately left alone:
 - [x] **DONE (v4.8 Phase 5 T5.1 + T5.2, 2026-08-21) · PR4 · an `-rv` leg that binds to NO seat makes
   `applyDebate` invent an adjudication row —
   fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js :: seatKey`,
-  **was `:124`; re-anchored BY SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282. What was
-  re-verified, by opening each line: `:124` now holds the `revote-bundle.md` `writeFileSync`, the
-  `seatKey` definition is `:64` (unmoved) and its one call site is `:188`**)
+  **was `:124`; re-anchored BY SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282, then
+  T5.5 took it to 260 on 2026-08-22. Re-opened against the FINAL tree: `:124` is docblock prose
+  inside `runRevoteWave`'s docblock, the signature `async function runRevoteWave(` is `:134`, the
+  `revote-bundle.md` `writeFileSync` is `:139`, the `seatKey`
+  definition is `:64` (unmoved through all of it) and its one call site is `:182` — **was `:188`**.
+  ⚠️ The T5.4 reading "`:124` now holds the `writeFileSync`" was true when written and rotted at
+  the round-2 fix wave, before T5.5 touched anything**)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
   keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
   seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:99`, **was `:81`,
@@ -3863,11 +3877,13 @@ deliberately left alone:
   whole-branch review, F3. That ledger is a local working note and is not committed to this repo,
   so the measured evidence is restated above rather than cited.)*
   - ✅ **CLOSED 2026-08-21 — v4.8 Phase 5 T5.1 (`9868be06` + fix round `6b452c99`) + T5.2
-    (`4eee59fa` + `c9b9c541`) (SI-10).** The remedy is the one **owner ruling R8** picked, taken at
-    the join: `runRevoteWave` publishes `byJudge[key]` only when the leg bound to some roster slot
-    (a real seat, or a §3.4 placeholder) **or** its key names a judge this wave actually launched —
-    the `boundLegs.has(leg) || judgeKeys.includes(key)` guard in
-    `run-debate-revote.js :: runRevoteWave`. Otherwise the parsed votes are **withheld** and the
+    (`4eee59fa` + `c9b9c541`); NARROWED 2026-08-22 by T5.5 (`f19624c4`) (SI-10).** The remedy is the
+    one **owner ruling R8** picked, taken at the join: `runRevoteWave` publishes `byJudge[key]` only
+    when the key names a judge this wave actually launched — the `judgeKeys.includes(key)` guard in
+    `run-debate-revote.js :: runRevoteWave` (`:248`). ⚠️ **It shipped with a SECOND arm,
+    `boundLegs.has(leg) ||`, which T5.5 deleted** — that arm admitted the very SI-10 shape this
+    entry closes everywhere else; see the T5.5 sub-entry below for the mechanism and the
+    measurement. Otherwise the parsed votes are **withheld** and the
     refusal is announced on the **`seat-unbound`** channel
     (`run-debate-revote.js :: reVoteUnboundNote`). The leg itself is untouched: it still gets its
     `runStats` row, its `revote-<name>.md` and its `conformance` — only the votes are withheld.
@@ -3875,67 +3891,124 @@ deliberately left alone:
     carries no `kind`; `src/utils/degrade.js:34` defaults it to `'degrade'` (`KINDS` is only
     `degrade`/`heal`), `run-degrade.js :: createDegradeSink`'s `note()` sets `degraded.value = true`
     for that kind, and `run-finalize.js :: resolveTerminalExit` turns that into **2** on an
-    otherwise-clean run. Measured by execution 2026-08-21 — the exact `reVoteUnboundNote` literal
-    driven through the real sink gives `degraded.value === true` and
-    `resolveTerminalExit({exitCode: 0}) === 2`, byte-for-byte the same result as the
-    `stage1-bind.js :: orphanLegNote` control. Measured end to end through the real `runDebate`, twin
+    otherwise-clean run. That chain was measured by probe on 2026-08-21 and is **pinned end to end
+    since T5.5** — see the closed exit-2 follow-up below. Measured end to end through the real
+    `runDebate`, twin
     bench, one unbindable `-rv` leg: **3 adjudications → 2**, the seat-less phantom row gone, `C1`
     `Confirmed {a:2,d:1}` → `Contested {a:1,d:1}`, exactly one `seat-unbound` note — and the **bound**
     twin's re-vote still applies, so the refusal is **surgical**, not a blanket revert. Pinned by
-    named mutants recorded in `tests/council/run-debate.test.js`: `JOINBLIND` (red set 1 as measured
-    at T5.1), `REFUSEALL` (3), `LEGDROP` (1), and — the identical `JOINBLIND` deletion re-measured
-    once T5.2's end-to-end pin existed — `E2EBLIND` (2).
+    named mutants recorded in `tests/council/run-debate.test.js`. ⚠️ **All five older counts were RE-MEASURED at T5.5 (2026-08-22)** across six suites
+    (`run-debate.test.js` + `debate.test.js` + `run-stages.test.js` + `seat-space.test.js` +
+    `degrade-sink.test.js` + `run-finalize.test.js`, 243 tests), because T5.5 added three tests
+    to the guard's path and Global Constraint 3 says a red set that GROWS is the proof they
+    entered it. **Three moved.**
+    Deleting the guard — recorded as `JOINBLIND` (1) at T5.1 and, for the identical deletion once
+    T5.2's end-to-end pin existed, `E2EBLIND` (2) — now reds **5**; `LEGDROP` was 1 and is **2**;
+    `REFUSEALL` is **3**, unchanged. T5.5's own two: `BOUNDREADD` **2** and `NOTEHEAL` **1**. The
+    earlier numbers are kept above as DATED readings, not live values. ⚠️ Deleting "the guard"
+    is also a smaller edit than it was: T5.5 removed its first arm.
     ⚠️ **What this did NOT do:** *resolving* an ambiguous bare-alias key to a seat (the other remedy
     this entry names — R8 ruled for refusal over resolution), and `debate.json` still gets no
     `applied: false` row for a refused leg, so `revoteJudges` and `revoteApplied` will visibly
     disagree and the degrade note is what explains why.
-  - [ ] **FOLLOW-UP filed 2026-08-21 (v4.8 Phase 5 whole-branch review) — the exit-2 consequence of
-    a `seat-unbound` re-vote refusal is NOT pinned end-to-end by any single test.** Both halves of
-    the chain are independently pinned; the composition is not.
+  - [x] ✅ **CLOSED 2026-08-22 — v4.8 Phase 5 T5.5 (`f19624c4`, assertion order `8d40f4f5`).
+    Filed 2026-08-21 (v4.8 Phase 5 whole-branch review): the exit-2 consequence of a `seat-unbound`
+    re-vote refusal was NOT pinned end-to-end by any single test.** Both halves of the chain were
+    pinned independently; the composition was not.
     **Half 1** — a default-kind note flips the flag:
     `tests/council/degrade-sink.test.js` :: *"note() writes stderr, appends run.json, and flips
     degraded"*, which asserts `degraded.value === true`.
     **Half 2** — the flag turns a clean 0 into 2: `tests/council/run-finalize.test.js` ::
     *"the degrade flag turns 0 into 2 (a shrunken bench, a thin cross-review, …)"*.
-    **The gap:** the Phase 5 tests drive `runRevoteWave` with `ctxFor`'s `degrade`, which is a
-    RECORDING DOUBLE (`{ note: (rec) => notes.push(rec), all: () => notes }`), not
-    `run-degrade.js :: createDegradeSink` — so no committed test carries a refusal all the way to an
-    exit code. The composition WAS measured by probe during T5.4 (the exact `reVoteUnboundNote`
-    literal through the real sink gives `degraded.value === true`, and
-    `resolveTerminalExit({exitCode: 0}) === 2`, matching the `stage1-bind.js :: orphanLegNote`
-    control) — but a probe is not a pin, and nothing stops a future edit to the note's `kind` from
-    silently making the refusal exit-code-neutral. ⚠️ **Deliberately NOT closed on the Phase 5
-    branch, by ruling:** adding a composition fixture at the end of a branch is exactly the
-    rushed-fixture shape that produced three fix rounds there. Cheapest useful form is one test that
-    puts a real `createDegradeSink` into that file's `ctxFor`, runs the twin-bench refusal, and
-    asserts the flag — the exit code itself is already `resolveTerminalExit`'s pinned job.
-  - [ ] **SI-10 is NOT fully closed for one shape — a `taskId`-bound leg carrying a FOREIGN alias
-    still invents a phantom adjudication row. Discovered and measured 2026-08-21 (v4.8 Phase 5
-    whole-branch fix wave, round 2); disclosed and pinned, deliberately NOT fixed.**
+    **The gap was:** every Phase 5 `-rv` fixture drives `runRevoteWave` with `ctxFor`'s `degrade`,
+    which is a RECORDING DOUBLE (`{ note: (rec) => notes.push(rec), all: () => notes }`), not
+    `run-degrade.js :: createDegradeSink` — so no committed test carried a refusal all the way to
+    an exit code. The composition WAS measured by probe during T5.4, but a probe is not a pin.
+    **The pin:** `tests/council/run-debate.test.js` :: *"runRevoteWave — T5.5: a seat-unbound
+    refusal reaches terminal exit 2"*. It is T5.1's twin-bench refusal fixture with exactly ONE
+    substitution — `ctx.degrade` swapped from the double to the production `createDegradeSink`,
+    wired to the same `{value:false}` flag `run.js:64-65` gives it — and the record under test is
+    **derived from the real `runRevoteWave`**, never hand-built (plan Global Constraint 5). It
+    asserts `degraded.value === true` and
+    `resolveTerminalExit({signalled: null, exitCode: 0, degraded, …}) === 2` (arguments mirroring
+    the sole production call, `run.js:111`), with an unflipped-flag control returning 0.
+    ⚠️ **Named mutant `NOTEHEAL`** — add `kind: 'heal'` to the record `reVoteUnboundNote` returns.
+    A deliberately QUIET edit: `makeDegrade` accepts 'heal', every channel/what/why/effect/data
+    assertion in that file still passes, and only `createDegradeSink`'s
+    `if (record.kind === 'degrade' && degraded)` stops firing. Red set (**1**): that test and
+    nothing else, across `run-debate.test.js` + `debate.test.js` + `run-stages.test.js` +
+    `seat-space.test.js` + `degrade-sink.test.js` + `run-finalize.test.js`.
+    ⚠️ **Assertion ORDER inside that test is load-bearing, and was measured rather than assumed.**
+    Both `records[0].kind` and the emitted `"Notice:"` lead READ the kind (`formatDegrade` leads
+    with `"Recovered"` for a heal), so with either asserted BEFORE the composition, NOTEHEAL red on
+    a **proxy** and left the composition itself unproven — measured in both of those orders, and
+    both did exactly that. Composition first, kind-sensitive detail last: NOTEHEAL now reds on
+    `expect(degraded.value).toBe(true)`, and with that line also disabled it reds on the
+    `resolveTerminalExit` assertion (0 returned where 2 is wanted). Both conjuncts pinned.
+  - [x] ✅ **CLOSED 2026-08-22 — v4.8 Phase 5 T5.5 (`f19624c4`), on owner ruling. Filed 2026-08-21
+    (v4.8 Phase 5 whole-branch fix wave, round 2) as a disclosed, pinned, deliberately-unfixed
+    defect: SI-10 was not fully closed for one shape — a `taskId`-bound leg carrying a FOREIGN
+    alias still invented a phantom adjudication row.**
     `src/council/seats.js:139-141` binds a leg to a roster slot from `leg.legId || leg.taskId`
     alone — `roster[Number(m[2]) - 1]`, **no alias check** — and the alias fallback under it only
-    runs `if (!seat && …)`. So a `-rv` leg stamped into a §3.4 **placeholder's** slot while
-    carrying an alias that is in no roster and no `judgeKeys` **binds**, satisfying
-    `run-debate-revote.js :: runRevoteWave`'s first guard arm, while its key satisfies neither.
+    runs `if (!seat && …)` (`seats.js:142`). So a `-rv` leg stamped into a §3.4 **placeholder's**
+    slot while carrying an alias that is in no roster and no `judgeKeys` **bound**, satisfying
+    `run-debate-revote.js :: runRevoteWave`'s first guard arm, while its key satisfied neither.
     **Measured end to end through the real `runDebate`** (the §3.4 roster-hole fixture with the
-    hole leg's alias `'deepseek'` → `'zzz'`): the key is published, **zero** degrade notes, and
-    `applyDebate` fails open and pushes a phantom `{judge: 'zzz'}` row while the hole's own
-    seat-less row keeps its stale `dispute` — **1 adjudication in, 3 out**. That is exactly the
-    SI-10 shape T5.1 closed everywhere else, surviving through the `boundLegs` arm.
-    **Control, measured beside it:** the same fixture with the hole's own alias takes 1 in to
-    **2** out, the seat-less row correctly replaced, no phantom — which is why that arm exists and
-    why deleting it is not the fix either. ⚠️ **Both arms are wrong alone.** The candidate fix is
-    to narrow arm 1 from "bound to any roster slot" to "bound to a REAL seat", which is a
-    **behaviour change** and is why it was filed rather than taken in a record round.
-    **Pinned as known-wrong** by `tests/council/run-debate.test.js`'s `BOUNDDROP` block, so it
-    cannot rot silently; named mutant **`BOUNDDROP`** (drop the `boundLegs.has(leg) ||` arm) has a
-    **red set of 2** — both tests in that block and nothing else, measured across
-    `run-debate.test.js` + `debate.test.js` + `seat-space.test.js` + `run-stages.test.js`.
-    ⚠️ **Not reachable from the production launcher:** `runRevoteWave` launches
-    `models: judgeKeys.map(aliasOf)` and `src/sidecar/fanout-leg.js` carries `leg.modelInput`
-    straight from that request (`:62`, `:101`), so a real `-rv` leg's alias is always one the wave
-    asked for. Same latency class as SI-10 itself — which is not a reason to leave the join
-    alias-shaped, exactly as this file already says of SI-10.
+    hole leg's alias `'deepseek'` → `'zzz'`): the key was published, **zero** degrade notes, and
+    `applyDebate` failed open and pushed a phantom `{judge: 'zzz'}` row while the hole's own
+    seat-less row kept its stale `dispute` — finding A1 went **2 adjudication rows in, 3 out**.
+    That is exactly the SI-10 shape T5.1 closed everywhere else, surviving through the `boundLegs`
+    arm.
+    ⚠️ **CORROBORATION, not a new finding.** A paid multi-model council reviewing PR #179 raised
+    this same mechanism from **three independent seats** (kimi's C1 filed it a **blocker**) and
+    **independently reproduced this branch's own measured out-count of 3** — a phantom row *plus*
+    the roster hole's own row stranded on its stale `dispute`. It is recorded because the
+    reproduction is what moved the owner from "disclosed" to "fix it", not because it added a fact.
+    ⚠️ **Half of this entry's own figure was wrong and is corrected here.** It read
+    *"1 adjudication in, 3 out"*, and the control sentence beside it read *"1 in to 2 out"*. The
+    **out**-counts are exact and were re-measured. The "1 in" is not the A1 row count: the fixture
+    puts **2** A1 adjudications in (gpt's `dispute` plus the hole's seat-less `deepseek`
+    `dispute`) — which `run-debate.test.js`'s §3.4 control block already stated correctly as
+    "2 rows in, 2 rows out". A mixed-unit slip, not a wrong measurement.
+    **The fix:** the arm is **deleted**. The predicate is `judgeKeys.includes(key)` alone, and the
+    `boundLegs` Set and the comment block justifying it are gone. Before ordering it the owner
+    measured that removing arm 1 red **exactly 2 tests across all 544 suites** (7814 pass) and that
+    both were this entry's own `BOUNDDROP` pin — nothing else depended on it.
+    Because this is a **behaviour** change it got RED-before-GREEN, not a preservation mutant: the
+    `BOUNDDROP` block's assertions were **inverted** first (the foreign key is refused · exactly one
+    `seat-unbound` note · A1 **2 rows in → 2 out**, the roster hole's own row intact, no phantom
+    `zzz`), confirmed **RED at `269badf1`** — 0 notes where 1 is wanted, 3 rows where 2 are wanted —
+    and green after.
+    ⚠️ **The deletion falsified three sentences elsewhere, all repaired in the same work — the
+    branch's own failure mode #10, caught by re-reading, not by any gate.** (a) `reVoteUnboundNote`'s
+    docblock still described the note as firing when a leg "neither bound to any roster slot NOR
+    names one of the judges". (b) The **announced `why` string** still told the user "it bound to no
+    roster slot", which is false in precisely the case that motivated the deletion — a leg that DID
+    bind to a placeholder slot while carrying a foreign alias; it now reads "its join key '…' (judge
+    alias '…') names none of the judges this wave launched", pinned by two assertions in the T5.5
+    refusal test and measured RED against the old text. (c) `src/workspace/seat-space.js`'s
+    `orphanExonerations` docblock quoted the two-arm predicate verbatim in a DIFFERENT file; its
+    conclusion survives (a roster hole's own alias is still a `judgeKey`, so both silent shapes it
+    names still land) but the predicate it quoted did not.
+    **The §3.4 roster hole is NOT regressed.** A hole's own alias IS one of `judgeKeys`
+    (`run-debate.js` builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so a hole
+    keeps its `judgeKeys` slot and loses only its seat), so it still publishes and still emits no
+    note. `run-debate.test.js`'s *"roster hole whose leg is ALSO unbindable"* test and its
+    *"§3.4 placeholder contract"* block both cover it; both are untouched and green.
+    ⚠️ **The named mutant INVERTS with the fix.** `BOUNDDROP` meant "drop the bound arm", which is
+    now the shipped behaviour, so it is replaced by **`BOUNDREADD`**: restore the Set
+    (`const boundLegs = new Set(bindRes.bound.map(b => b.leg));`) and widen the predicate back to
+    `boundLegs.has(leg) || judgeKeys.includes(key)`. Red set (**2**) — both tests in
+    `run-debate.test.js`'s T5.5 refusal block and nothing else, measured across that file +
+    `debate.test.js` + `run-stages.test.js` + `seat-space.test.js` + `degrade-sink.test.js` +
+    `run-finalize.test.js`. Hand-applied to the committed file, run, then restored from a `cp`
+    backup and byte-verified with `git diff --quiet`.
+    ⚠️ **Was never reachable from the production launcher, and still is not:** `runRevoteWave`
+    launches `models: judgeKeys.map(aliasOf)` and `src/sidecar/fanout-leg.js` carries
+    `leg.modelInput` straight from that request (`:62`, `:101`), so a real `-rv` leg's alias is
+    always one the wave asked for. Same latency class as SI-10 itself — which was never a reason
+    to leave the join alias-shaped, exactly as this file already says of SI-10.
 - [x] **DONE (v4.8 — verified by execution 2026-08-16) · PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
@@ -4067,8 +4140,15 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   (was `run-retry.js:123-133` at T-A2's base `3b8cf781` — this entry first said `:118-130`, which
   was T-A2's own arithmetic slip; measured 2026-08-17 — lifted verbatim by T-A2),
   `run-stage2.js:89-106`, `run-debate-revote.js :: placeholders` (**was `:106-117`; re-anchored BY
-  SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the rest). Re-verified by opening: the
-  block is `:155-162` today and `:106-117` now holds `runRevoteWave`'s `@param` lines**) — this
+  SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix
+  waves added the rest), and T5.5 took it to 260 on 2026-08-22. Re-opened against the FINAL tree:
+  the block is `:165-172` — T5.5's deletion sat entirely BELOW it, but its comment repairs pushed it
+  down ten lines from `:155-162` — while `:106-117` straddles the tail of `reVoteUnboundNote` (a
+  comment inside its returned record) and the head of `runRevoteWave`'s docblock, and the `@param`
+  lines are `:128-132`.
+  ⚠️ The T5.4 reading that put the `@param` lines at `:106-117` was true when written and rotted at
+  the round-2 fix wave**)
+  — this
   time `run.js` is the one that does
   NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
@@ -4083,7 +4163,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
     disposition (b) defers the `seatKey` half to **v4.9**. Read those, not this clause.
 - [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js :: runStage2`,
   `:47-211` = **165 lines**), `runDebate` (`run-debate.js :: runDebate`, `:106-271` = **166 lines**),
-  and `runRevoteWave` (`run-debate-revote.js :: runRevoteWave`, `:124-280` = **157 lines**) all
+  and `runRevoteWave` (`run-debate-revote.js :: runRevoteWave`, `:134-258` = **125 lines**) all
   exceed CLAUDE.md's 50-line-per-function guideline
   (`CLAUDE.md:821`; the limit is also named at `CLAUDE.md:733`). Nothing in CI enforces it —
   `scripts/check-file-sizes.js` is file-level only (300 lines/file; no per-function check exists
@@ -4101,7 +4181,8 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   tree, and the two `CLAUDE.md` anchors by opening the only two lines in that file that name the
   50-line rule. What changed and why: `runStage2` was `:47-207`/161 — the close brace is `:211`, so
   it is **165**, and that value was stale before this branch (`run-stage2.js` is untouched by it);
-  `runRevoteWave` was `:76-166`/91 — v4.8 Phase 5 grew it to `:124-280`/**157**;
+  `runRevoteWave` was `:76-166`/91 — v4.8 Phase 5 grew it to `:124-280`/**157**, and T5.5 cut it
+  back to `:134-258`/**125** (re-brace-matched 2026-08-22 against the final tree);
   `CLAUDE.md:793`/`:705` are now `:821` (*"No function >50 lines"*) and `:733` (*"File size limits
   (300 lines/file, 50 lines/function)"*), that file having gained 28 lines above them.
   `runDebate`'s `:106-271`/166 was re-opened and is **unchanged**. Spans are now anchored BY SYMBOL
@@ -4525,8 +4606,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   still unmoved and were re-confirmed:** `run-debate-revote.js:64` (`function seatKey`),
   `run-stages.js:96` (`keyOf`) / `:106`, `run-retry-notes.js:58` (`return so ? so.id : null;`),
   `seats.js:165` (`artifactName`) / `:179` (`displayName`). **Four moved.**
-  `run-debate-revote.js:132` — the `seatKey(seat, judge)` CALL — is **`:188`** since v4.8 Phase 5
-  v4.8 Phase 5 grew that file 176→282; `:132` now holds `emitStageStarted(...)`. And `run.js`
+  `run-debate-revote.js:132` — the `seatKey(seat, judge)` CALL — became **`:188`** when v4.8
+  Phase 5 grew that file 176→282, and is **`:182`** since T5.5 took it to 260 (re-opened
+  2026-08-22). ⚠️ The "`:132` now holds `emitStageStarted(...)`" clause was true at T5.4 and
+  rotted at the round-2 fix wave two commits later: `:132` is the LAST `@param` line of
+  `runRevoteWave`'s docblock today and `emitStageStarted(...)` is `:147`. And `run.js`
   `:228`/`:229`/`:231` — the spelling, its one caller and the hand-inlined third copy — are
   **`:232`/`:233`/`:235`**; `:228`–`:231` are now the comment block above them. That `run.js` shift
   is **not** this branch's doing and was already stale on 2026-08-17's pass; it is corrected here
@@ -4569,8 +4653,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     **four** citations into these two files — **three** of the eight spellings below
     (`run-retry-group.js:52`, `run-stage1-rows.js:42` and `:85`) plus **one** excluded site
     (`run-retry-group.js:109`) — and added a tenth call site:
-    `run-debate-revote.js:64` (named `function seatKey`, one caller `:188` — **was `:132`; v4.8
-    Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the rest), and `:64` itself is unmoved, re-opened 2026-08-21**), `run-retry-keys.js:15`
+    `run-debate-revote.js:64` (named `function seatKey`, one caller `:182` — **was `:132`, then
+    `:188`; v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the
+    rest) and T5.5 took it to 260, and `:64` itself is unmoved through all of it, re-opened
+    2026-08-22**), `run-retry-keys.js:15`
     (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` (**was `:42`/`:45`/`:55`/`:57`**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias;`
@@ -4652,14 +4738,16 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `src/council/run-retry-launch.js:50-60` (`:: bindRetryWave` — the block T-A2, 2026-08-17, lifted
     out of `run-retry.js` unchanged; **it is still ONE of the three sites, not a consolidation**),
     `src/council/run-stage2.js:91-107` and `src/council/run-debate-revote.js :: placeholders`
-    (**was `:115-126`; `:155-162` today — re-anchored BY SYMBOL 2026-08-21, v4.8 Phase 5 T5.1
-    v4.8 Phase 5 having grown that file 176→282**) each build the
+    (**was `:115-126`, then `:155-162`; `:165-172` today, re-opened 2026-08-22 — re-anchored
+    BY SYMBOL 2026-08-21, v4.8 Phase 5 T5.1 having grown that file 176→282; T5.5 then took it to
+    260 — its deletion sat entirely BELOW this block, but its comment repairs pushed the block
+    down ten lines**) each build the
     same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filter the
     placeholders back out — ~11 lines apiece, and all three already `require('./seats')` (as does
     the proposed home), so the consolidation costs no new dependency. All three citations re-derived
     2026-08-16; the first re-derived again 2026-08-17 after the lift. ⚠️ These are a **different set
     of three files** from Count 1's —
-    overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:115-126`, a
+    overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:165-172`, a
     `seatKey` spelling at `:64`), while `run.js` carries no padding (it consumes `s2.judgeResults`,
     already padded by Stage 2) and `run-stage2.js` spells no `seatKey`. Read "three files" in either
     filing as naming a set, never a count of the whole. Home is `stage1-bind.js`, parameterised on
@@ -4675,8 +4763,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `const seatKey = (s, alias) => (s ? s.id : alias);` — but `run.js`'s copy has exactly **one**
     caller (`:233`, **was `:229`**); `run-debate-revote.js:64` is a
     *different* form — a named `function seatKey(seat, alias)` with different parameter names — and
-    also has one caller (`:188`, **was `:132`; v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the rest) and
-    `:132` is `emitStageStarted(...)` now**); and `run.js:235` (**was `:231`**) is a **third,
+    also has one caller (`:182`, **was `:132`, then `:188`; v4.8 Phase 5 grew that file 176→282
+    (T5.1 took it to 249; the two fix waves added the rest) and T5.5 took it to 260. `:132` is
+    the last `@param` line of `runRevoteWave`'s docblock today and `emitStageStarted(...)` is
+    `:147`**); and `run.js:235`
+    (**was `:231`**) is a **third,
     hand-inlined** copy that must stay,
     because its `|| byJudge.get(r.model)` fallback is load-bearing (an orphaned Stage-2 leg's
     conformance becomes unreachable without it). Only the **exported** copy earns its keep, with

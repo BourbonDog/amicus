@@ -128,6 +128,22 @@ All notable changes to Amicus are documented here. Format follows
   **The refusal is surgical, not a blanket revert.** On the same wave a twin whose leg *did* bind
   still has its re-vote applied. A bench with no repeated alias is unaffected in every case: a seat
   id there *is* its alias, so the key still joins and the vote still lands, byte-for-byte as before.
+  ⚠️ **The refusal first shipped one case short, and that case is now closed too.** The original
+  guard also published a leg that had *bound* to a roster slot, on the reasoning that a bound leg is
+  an accounted-for leg. It is not: a leg is matched to a slot by its task id alone, with no check
+  that its model name is one the wave asked for. A re-vote leg carrying a **foreign** model name
+  could therefore land in a slot, be published under that foreign name, and invent exactly the
+  phantom voter this entry is about — the defect surviving through the guard meant to close it. On
+  the fixture that reproduces it: the finding went from two votes to **three**, the extra one
+  attributed to a model that never sat on the bench, while the seat it displaced kept its stale
+  verdict. That arm is now **deleted**: a re-vote is published only when its key names a judge the
+  wave actually launched. The one shape the arm existed to protect — a judge left unseated by an
+  earlier stage — is unaffected, because such a judge is still one the wave launched.
+  ⚠️ **The wording of the announcement changed with it.** It used to explain the refusal as "it
+  bound to no roster slot, and its judge alias '…' names no seat there either" — whose first half is
+  false for exactly the case just described, since that leg *did* bind. It now names the join key
+  and the judge alias and says they match none of the judges the wave launched. The channel, the
+  effect line and the machine-readable fields are unchanged.
   ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
   task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
   than a live regression. It is reachable through a resumed or hand-assembled run.
@@ -136,6 +152,14 @@ All notable changes to Amicus are documented here. Format follows
   under two names because it was measured at two points in the work. As `JOINBLIND` it red **1**
   test when the unit-level pin was all that existed; the **same deletion**, re-measured as
   `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
+  The follow-up work above adds two more: `BOUNDREADD` (2), which puts the deleted arm back, and
+  `NOTEHEAL` (1), which makes the refusal's announcement non-degrading. ⚠️ The four counts in the
+  paragraph before this one are the readings taken when each mutant was first recorded; the
+  follow-up added three tests to the same path, and re-measuring moved three of them — deleting the
+  guard now reds **5** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because
+  the exit-2 consequence — announced above and true since the first release of this fix — had been
+  measured but never pinned by a test that ran the whole chain; it now is, through the real
+  announcement sink and the real exit-code resolver.
   The companion change is documentation only: `applyDebate`'s docblock now states what an omitted
   `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
   in this package omits it, the package's `exports` map blocks a deep require from outside, and the

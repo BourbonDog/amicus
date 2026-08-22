@@ -96,9 +96,17 @@ function isSeatTable(seats) {
  *     Two shapes land here SILENTLY — measured through the real runRevoteWave, not
  *     reasoned: a leg bound to a §3.4 PLACEHOLDER, and a leg bound to nothing whose
  *     bare-alias key IS one of the `judgeKeys` this wave launched. runRevoteWave publishes
- *     BOTH (`boundLegs.has(leg) || judgeKeys.includes(key)`) and notes neither, while
+ *     BOTH and notes neither, while
  *     `seatOf` still filters the placeholder back out — so `seat` is null in all three
- *     shapes and a note exists for exactly one of them. Pinned by run-debate.test.js's
+ *     shapes and a note exists for exactly one of them.
+ *     ⚠️ The PREDICATE that publishes both is `judgeKeys.includes(key)` ALONE. This read
+ *     `boundLegs.has(leg) || judgeKeys.includes(key)` until v4.8 T5.5 deleted the first
+ *     arm; the §3.4 placeholder shape survives that deletion on the SECOND arm, because a
+ *     roster hole's own bare alias IS one of the judgeKeys — so both shapes above still
+ *     land here, and this bullet is unchanged in substance. What no longer lands silently
+ *     is a placeholder-bound leg carrying a FOREIGN alias: it is now refused and noted
+ *     (run-debate.test.js's "T5.5: a taskId-bound leg carrying a FOREIGN alias is
+ *     REFUSED" block), so the silent set shrank by exactly that shape. Pinned by run-debate.test.js's
  *     test named "roster hole whose leg is ALSO unbindable: the key IS published and the
  *     re-vote still applies", whose `ctx.degrade.all()` is `[]`; the placeholder shape is
  *     pinned for its seat (`['gpt', null]`) by that file's "§3.4 placeholder contract at

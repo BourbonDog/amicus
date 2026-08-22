@@ -64,9 +64,15 @@ function legRow(model, leg, conformance) {
 function seatKey(seat, alias) { return seat ? seat.id : alias; }
 
 /**
- * T5.1 (owner ruling R8): announce a re-vote leg whose key this wave cannot
- * account for — it neither bound to any roster slot (a real seat or a §3.4
- * placeholder) nor names one of the judges this wave actually launched. The
+ * T5.1 (owner ruling R8), narrowed by T5.5: announce a re-vote leg whose key
+ * this wave cannot account for — its key names none of the judges this wave
+ * actually launched. ⚠️ This read "it NEITHER bound to any roster slot (a real
+ * seat or a §3.4 placeholder) NOR names one of the judges…" until T5.5 deleted
+ * the `boundLegs` arm of the guard below. Binding is no longer part of the
+ * condition, and must not be re-added: seats.js :: bindSeats binds on
+ * `leg.legId || leg.taskId` with NO alias check, so a leg bound that way can
+ * still carry a name this wave never asked for — which is exactly the shape
+ * that kept inventing a phantom adjudication row. The
  * leg itself is unaffected — it still gets its runStats row, its
  * revote-<name>.md and its conformance — only its parsed votes are
  * withheld, so `revoteByJudge` never carries this key at all and
@@ -97,7 +103,11 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
   return {
     channel: 'seat-unbound',
     what: `re-vote leg ${legId} in wave ${waveId} matches no seat on that wave's roster`,
-    why: `it bound to no roster slot, and its judge alias '${alias}' names no seat there either`,
+    // ⚠️ T5.5: this said "it bound to no roster slot, and its judge alias … names no seat there
+    // either". Both halves stopped being the condition when the `boundLegs` arm was deleted — and
+    // the FIRST half is now false in the very case that motivated the deletion, a leg that DID bind
+    // to a §3.4 placeholder slot while carrying a foreign alias. The refusal turns on one thing.
+    why: `its join key '${key}' (judge alias '${alias}') names none of the judges this wave launched`,
     effect: "the re-vote was NOT applied; the judge's provisional verdict stands",
     data: { waveId, legId, judge: alias, key },
   };
@@ -208,9 +218,10 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     //
     // T5.1 (owner ruling R8), narrowed by T5.5: publish IFF the key names one of
     // the judges THIS WAVE actually launched. `judgeSeats` is positionally bound
-    // to `judgeKeys` (this function's own docblock), and `seatById` is keyed on
-    // the seat id, so every REAL seat id that can reach `key` here is already a
-    // `judgeKeys` entry. Two further shapes are deliberately admitted: a
+    // to `judgeKeys` (this function's own docblock) and run-debate.js builds it
+    // from an id-keyed table — `judgeKeys.map(k => seatById.get(k) || null)` — so
+    // every REAL seat id that can reach `key` here is already a `judgeKeys`
+    // entry. Two further shapes are deliberately admitted: a
     // unique-alias bench, where `seatKey(null, 'qwen') === 'qwen'` IS that seat's
     // own judgeKey; and a §3.4 roster hole (a Stage-2-orphaned judge, padded with
     // a placeholder here) whose -rv leg is ALSO unbindable — its bare-alias key is

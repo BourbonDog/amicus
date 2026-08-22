@@ -897,14 +897,22 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 // byte-verified against a `cp` backup taken before mutating (diff empty) —
 // red sets measured by running tests/council/run-debate.test.js +
 // debate.test.js. Re-measured after review round 1 collapsed the guard's
-// second arm from `rosterIds.has(key)` to `judgeKeys.includes(key)`:
+// second arm from `rosterIds.has(key)` to `judgeKeys.includes(key)`, and
+// AGAIN at T5.5 (2026-08-22) when the guard lost its `boundLegs` arm and
+// three tests were added — that pass ran all six of run-debate.test.js +
+// debate.test.js + run-stages.test.js + seat-space.test.js +
+// degrade-sink.test.js + run-finalize.test.js (243 tests):
 //   JOINBLIND  delete the new guard, restoring BASE's unconditional
 //              `byJudge[key] = parsed.byId`. Red set (1): this file's "twin
 //              bench, one twin leg unbindable" test below. ⚠️ GREW to (2)
 //              once T5.2's end-to-end test existed further down this file
 //              (re-measured there, under that task's own name E2EBLIND —
 //              identical deletion, cross-checked against this one so this
-//              count is not left stale).
+//              count is not left stale). ⚠️ GREW AGAIN to (5) at T5.5,
+//              re-measured 2026-08-22 across the six suites above: the two
+//              T5.5 refusal tests and the T5.5 exit-2 composition test all
+//              entered the path. Deleting the guard now reds FIVE tests;
+//              any smaller number written here is stale.
 //   REFUSEALL  weaken the guard to `if (seat)` (refuse on bare `!seat`). Red
 //              set (3): this file's "unique-alias bench, leg equally
 //              unbindable" test AND its "roster hole whose leg is ALSO
@@ -922,6 +930,10 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 //              whose `rv.legs` length/conformance/seat assertions are what
 //              closes it — LEGDROP survived the entire suite (544 suites /
 //              7812 tests, exit 0) before those assertions existed.
+//              ⚠️ GREW to (2) at T5.5, re-measured 2026-08-22: that task's
+//              "it BINDS to the placeholder slot … and is refused anyway"
+//              test asserts the refused leg is STILL recorded
+//              (`revoteLegs` seats `['gpt', null]`), so it reds too.
 // ============================================================================
 describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names no seat', () => {
   // No waveId argument -> run-debate.test.js :: leg (above) omits taskId/waveId entirely.
@@ -1043,10 +1055,12 @@ describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names
   // the bare 'deepseek' key, and applyDebate takes 2 adjudications in to 2
   // out — the seat-less provisional row's dispute correctly replaced by
   // agree, NO phantom row. `judgeKeys.includes(key)` is what preserves that:
-  // 'deepseek' names no REAL seat (this leg is absent from `boundLegs` too —
-  // it never bound to anything), but it IS one of the judges this wave
-  // launched (`judgeKeys` itself), so refusing it would discard a re-vote
-  // BASE already joined correctly.
+  // 'deepseek' names no REAL seat, and this leg bound to nothing at all —
+  // not even the §3.4 placeholder — but the key IS one of the judges this
+  // wave launched (`judgeKeys` itself), so refusing it would discard a
+  // re-vote BASE already joined correctly. ⚠️ This sentence also said the
+  // leg was "absent from `boundLegs`"; T5.5 deleted that Set, and the fact
+  // it named is carried by the clause before it.
   test('roster hole whose leg is ALSO unbindable: the key IS published and the re-vote still applies', async () => {
     const tmp = mkTmp('run-revote-hole-unbound-');
     const seats = buildSeats(TWIN_BENCH, null, null);
@@ -1122,15 +1136,23 @@ describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names
 //
 // Named mutant E2EBLIND — the IDENTICAL deletion to T5.1's JOINBLIND above
 // (restore run-debate-revote.js's BASE-shape unconditional
-// `byJudge[key] = parsed.byId`, dropping the `if (boundLegs.has(leg) ||
-// judgeKeys.includes(key))` guard) — hand-applied to the committed file, run
-// against this file + debate.test.js, then reverted from a `cp` backup and
-// byte-verified (`git diff --quiet`) against HEAD:
-//   Red set (2): this block's "the re-vote refusal is surgical" test below,
-//   AND T5.1's "twin bench, one twin leg unbindable" test above. Global
+// `byJudge[key] = parsed.byId`, dropping the guard entirely) — hand-applied to
+// the committed file, run, then reverted from a `cp` backup and byte-verified
+// (`git diff --quiet`) against HEAD:
+//   Red set (2) as measured at T5.2, against this file + debate.test.js: this
+//   block's "the re-vote refusal is surgical" test below, AND T5.1's "twin
+//   bench, one twin leg unbindable" test above. Global
 //   Constraint 3 — a red set that GROWS when a test is added is proof the new
 //   test entered the path: T5.1's own commit recorded JOINBLIND's red set as
-//   (1 test) before this block existed; it is (2) now.
+//   (1 test) before this block existed; it was (2) then.
+//   ⚠️ **(5) since T5.5**, re-measured 2026-08-22 across all six suites named
+//   at the JOINBLIND entry: the two T5.5 refusal tests and the T5.5 exit-2
+//   composition test joined it. Two things about the mutant itself also
+//   changed and are recorded so nobody re-derives them: the guard it deletes
+//   is now `if (judgeKeys.includes(key))` — T5.5 removed the
+//   `boundLegs.has(leg) ||` arm, so deleting "the guard" is a SMALLER edit
+//   than it was — and the count above is the one that must not be trusted
+//   stale.
 // ============================================================================
 describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudication basis from being corrupted', () => {
   let tmp, result, ctx;
@@ -1399,6 +1421,12 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
     expect(notes[0].data.waveId).toBe('r-rv');
     // The taskId that bound it to the placeholder slot, carried on the record.
     expect(notes[0].data.legId).toBe('r-rv-2');
+    // ⚠️ And the note's own `why` must not claim the leg bound to nothing — THIS one
+    // bound, to the placeholder's slot, which is what the taskId above shows. That
+    // sentence read "it bound to no roster slot, and … names no seat there either"
+    // until T5.5 deleted the arm that made the first half true.
+    expect(notes[0].why).toMatch(/names none of the judges this wave launched/);
+    expect(notes[0].why).not.toMatch(/bound to no roster slot/);
   });
 
   test('refusing that key invents no phantom row and leaves the roster hole its own', () => {
