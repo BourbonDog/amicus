@@ -131,10 +131,56 @@ argument, and the difference is the *field*, not the path:
 | D | a verdict string read back off `tally.json` | **reachable** | inherits A/B's enum on the write path |
 | E | `resp.action`, the model's own parsed defense response | **reachable** | **reachable** |
 
-⚠️ **E is reachable from a real paid run, not from hand-assembled input at all.** `d.action`
-originates at `debate.js:77` as `resp.action`, straight off the model's parsed output — a model
-that emits `"action": "toString"` produces it with no operator involvement. E is the only carrier
-of which that is true, and it is the one whose failure shape is a **missing key** in the document.
+### ⚠️ §0.3-E RETRACTED — `PAST_TENSE` is NOT reachable with a foreign key on ANY path
+
+**This plan claimed, twice, that carrier E is "reachable from a real paid run with no operator
+involved". That is FALSE, and the second statement of it was written in the very commit
+(`61260f30`) that corrected the first reachability error.** Found 2026-08-22 by the Task 3
+implementer during fix round 1, after the claim had already propagated into brief 3 and shipped as
+a comment in `tests/council/debate.test.js` (commit `7ebe91ca`).
+
+**The measurement.** `parse-stage2.js :: parseDebateDefense` is an **allowlist**, not a parser:
+
+```js
+  const byId = allNoResponse();                          // every expected id defaults to no-response
+  for (const r of parsed.responses) {
+    if (r.action === 'defend' && …)       { byId[id] = { action: 'defend', … }; }
+    else if (r.action === 'amend' && …)   { byId[id] = { action: 'amend',  … }; }
+    else if (r.action === 'withdraw')     { byId[id] = { action: 'withdraw' }; }
+    // else leave as no-response
+  }
+```
+
+Any action a model emits that is not one of those three — inherited-key or ordinary garbage — is
+already the literal string `'no-response'` before `debateFindings` exists.
+
+**The trace, and it has exactly one producer.** `debateFindings` is built in exactly one place,
+`debate.js :: applyDebate` (`:77-85`), from `defenseByRaiser`. On the engine path that argument
+comes only from `parseDebateDefense` (`run-debate.js:65,85` → `:203`). `applyDebate` has **one**
+caller in `src/` (`run-debate.js:203`), and `decorateRecord` has **one** (`run-finish.js:50`, fed
+from `run.js:277`). There is no MCP or CLI entry point that hands either a hand-assembled
+`defenseByRaiser` or a hand-assembled `debateFindings`.
+
+**So E's corrected status: the foreign-key path is UNREACHABLE in the current tree.** The
+`__proto__: null` on `PAST_TENSE` is **defense-in-depth**, not a live-defect fix. What actually
+protects the document today is `parseDebateDefense`'s allowlist — and *that* is the invariant worth
+pinning, because loosening it would make the table's null prototype load-bearing overnight.
+
+**Corrected reachability table** (superseding the one above for row E only):
+
+| carrier | CLI path | MCP path | real engine run |
+|---|---|---|---|
+| A, B | reachable | blocked (`z.enum`) | no |
+| C | reachable | reachable (`z.string()`) | no |
+| D | reachable | inherits A/B's enum | no |
+| **E** | **no** | **no** | **no — allowlist normalises first** |
+
+⚠️ **Method note, and it is the sharpest one this PR produced.** The false claim survived a
+reachability *correction* because I corrected the field I had misread (`verdict`) and never
+re-derived the claim about the *other* carrier standing in the same paragraph. **A correction pass
+that touches one row of a table must re-derive every row of it.** The tell was available and I
+walked past it: I cited `debate.js:77` as the origin of `resp.action` without once asking what
+built `resp`.
 
 ### §0.4 The fix, measured
 
