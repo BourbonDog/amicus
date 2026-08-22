@@ -240,20 +240,33 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // described. Only a leg bound to nothing at all, whose key ALSO names no
     // judge this wave launched, is the unnameable case R8 asks to refuse.
     //
-    // ⚠️ THE `boundLegs` ARM IS DEFENSIVE REDUNDANCY, NOT A LOAD-BEARING
-    // CONDITION — say so rather than let the next reviewer read its EMPTY red
-    // set as an unpinned property. Measured in the whole-branch fix wave:
-    // collapsing this to `judgeKeys.includes(key)` alone reds NOTHING across
-    // run-debate.test.js + debate.test.js + run-stages.test.js. That is
-    // expected, and the reason is at the sole caller — run-debate.js builds
-    // `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so every
-    // real seat id here is a `judgeKeys` entry, and a placeholder-padded hole
-    // keys on the very alias its `judgeKeys` slot holds. The second arm
-    // therefore SUBSUMES the first at that caller, and no fixture can separate
-    // them. The arm stays because a future caller assembling `judgeSeats` from
-    // any other source (a resumed run, a hand-built tallyInput, a second wave
-    // type) breaks that subsumption, and losing it there would silently refuse
-    // a leg that genuinely bound. Do not delete it for want of a red set.
+    // ⚠️ THE `boundLegs` ARM IS LOAD-BEARING AT THIS CALLER, AND ITS EFFECT IS
+    // NOT ALL GOOD. An earlier revision of this comment claimed the opposite —
+    // "defensive redundancy, NOT a load-bearing condition", and "no fixture can
+    // separate them". Both were FALSE and are corrected here, measured.
+    // What is true: no COMMITTED fixture separated the two arms until the
+    // whole-branch fix wave, so collapsing this to `judgeKeys.includes(key)`
+    // alone red NOTHING. The reason that reads like subsumption is real but
+    // partial — run-debate.js builds `judgeSeats` as
+    // `judgeKeys.map(k => seatById.get(k) || null)`, so every REAL seat id here
+    // is a `judgeKeys` entry, and a placeholder-padded hole keys on the alias
+    // its `judgeKeys` slot holds **whenever the leg bound by ALIAS**.
+    // ⚠️ It does NOT hold for a leg bound by `taskId`. seats.js:139-141 matches
+    // `leg.legId || leg.taskId` to a roster SLOT with no alias check at all, so
+    // a leg stamped into the placeholder's slot while carrying a foreign alias
+    // binds (arm 1 true) and still keys on that alias (arm 2 false). Measured
+    // end to end: that key is published, no note is emitted, and applyDebate
+    // then invents a phantom adjudication row for it while the hole's own
+    // seat-less row keeps its stale verdict — 1 adjudication in, 3 out, which
+    // is the SI-10 shape T5.1 exists to close, surviving through THIS arm.
+    // Pinned, as known-wrong, by run-debate.test.js's `BOUNDDROP` block, whose
+    // named mutant (drop this arm) has red set 2. Filed in BACKLOG.md.
+    // The arm stays for now because deleting it would ALSO refuse the §3.4
+    // roster hole this comment's paragraph above documents (measured control:
+    // 1 adjudication in, 2 out, the seat-less row correctly replaced, no
+    // phantom). Neither arm is right on its own; narrowing arm 1 to "bound to a
+    // REAL seat" is the candidate fix, and it is a behaviour change, which is
+    // why it is filed rather than taken here.
     if (boundLegs.has(leg) || judgeKeys.includes(key)) {
       byJudge[key] = parsed.byId;
     } else {

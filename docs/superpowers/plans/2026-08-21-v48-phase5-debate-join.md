@@ -269,10 +269,12 @@ with `conformance: 'clean'`, so `run-debate.js :: runDebate`'s
   measured across `src/` and `electron/`, has **no runtime consumer**. (`workspace-matrix.js:172`'s
   `d.applied` was checked directly and is `vp.decisions` — **chair decisions**, a different
   document.)
-- Adding refused rows would drag **three** knock-on edits into the file with **26 lines** of
-  headroom: `debateSummary.revoteApplied = revotesJson.length` (`:243`) would start counting
+- Adding refused rows would drag **three** knock-on edits into the file with **27 lines** of
+  headroom (this said 26 under the misstated size rule — see §0.2): `debateSummary.revoteApplied = revotesJson.length` (`:243`) would start counting
   refusals as applied; `addendumOutcomes`' `revotes:` projection (`:265`) would show the chair a
-  vote that was refused; and the exact-key-set pin at `run-debate.test.js:1020` guards that row
+  vote that was refused; and the exact-key-set pin in `run-debate.test.js` — the test named *"a
+  unique-alias bench writes revotes[] rows with NO seat key at all"*, cited as `:1020` here and
+  re-anchored by NAME in §0.7 after it moved twice — guards that row
   shape.
 - The record is **not** lost without it: the leg, its cost and its `conformance` still land in
   `runStats`, its raw output still lands in `revote-<name>.md`, and the refusal itself is announced
@@ -311,10 +313,10 @@ nobody re-derives them:
 
 | this plan says | current, measured at T5.4 |
 |---|---|
-| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call `:188` · publish `:258` |
+| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call `:188` · publish `:271` |
 | §0.3 `(a.seat \|\| a.judge)` at `debate.js:83`, push at `debate.js:93` | `debate.js:99` · `debate.js:111` |
 | §0.4 "described in `debate.js:86-88`'s own comment" | the fail-open comment is `debate.js:102-109` |
-| §0.6 the exact-key-set pin at `run-debate.test.js:1020` | `run-debate.test.js:1357` |
+| §0.6 the exact-key-set pin at `run-debate.test.js:1020` | ⚠️ **anchored by TEST NAME, no number** — `run-debate.test.js`'s *"a unique-alias bench writes revotes[] rows with NO seat key at all"*. It was `:1020` at BASE, `:1357` after T5.1/T5.2, and `:1457` after the BOUNDDROP block; three values in one branch is the argument against writing a fourth |
 | §3 Task 1's harness list — `ctxFor` `:126`, `TWIN_BENCH` `:55`, `twinInput` `:38`, `leg`/`wave` `:104`/`:108`, `revoteOut` `:110` | `:133` · `:62` · `:45` · `:111`/`:115` · `:117` |
 | §3 Tasks 1–2's `stampFanout` at `run-debate.test.js:64` | `run-debate.test.js:72` |
 
@@ -497,7 +499,7 @@ number was corrected by running the fixture, not by reasoning — do not "restor
 ### Task 3 — T5.3: SI-13 — the JSDoc edit
 
 **File:** `src/council/debate.js`, inside **`debate.js :: applyDebate`'s own docblock** (headroom
-43). ⚠️ The phasing doc's `debate.js:44` is a **line**, and it is the `defenseByRaiser` param;
+44 — this said 43 under the misstated size rule; see §0.2). ⚠️ The phasing doc's `debate.js:44` is a **line**, and it is the `defenseByRaiser` param;
 `aliasOf` is at **`:46`** (§0.7).
 
 Document the `aliasOf` contract: when it is omitted, the fail-open push at `:93` writes the raw key

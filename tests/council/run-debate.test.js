@@ -1292,6 +1292,106 @@ describe('runDebate — §3.4 placeholder contract at the -rv call site (a ROSTE
   });
 });
 
+// ============================================================================
+// BOUNDDROP (whole-branch fix wave, round 2) — the `boundLegs` arm of T5.1's
+// guard IS separable by a fixture. The comment above it used to say "no fixture
+// can separate them" and called the arm "NOT A LOAD-BEARING CONDITION"; both
+// were FALSE, and this block is the six lines that disprove them.
+//
+// The mechanism: seats.js:139-141 binds a leg to a roster slot from
+// `leg.legId || leg.taskId` alone — `roster[Number(m[2]) - 1]` with NO alias
+// check — and the alias fallback below it only runs `if (!seat && ...)`. So a
+// leg stamped into the PLACEHOLDER's slot while carrying an alias that is not
+// in `judgeKeys` BINDS (arm 1 true) and still keys on that foreign alias
+// (arm 2 false). This is the §3.4 fixture above with exactly ONE change: the
+// hole leg's alias 'deepseek' -> 'zzz'.
+//
+// ⚠️ WHAT THIS PINS IS A DISCLOSED DEFECT, NOT A DESIRED OUTCOME — read the
+// assertions that way. Measured end to end, not reasoned: the foreign key is
+// PUBLISHED, NO note is emitted, and applyDebate then fails open and pushes a
+// phantom `zzz` adjudication row while the roster hole's own seat-less row
+// keeps its stale `dispute`. One adjudication in, THREE out. That is the same
+// SI-10 shape T5.1 set out to close, surviving through arm 1 — so at this
+// caller the arm's measured effect is to ADMIT a phantom row, not to prevent a
+// regression. Pinned as known-wrong so it cannot rot silently, and filed in
+// BACKLOG.md for the owner to rule on; deliberately NOT fixed here, because
+// changing the predicate is a behaviour change and this is a record round.
+// Control, measured beside it: the same fixture with the hole's own alias
+// ('deepseek', §3.4's shape) takes 1 adjudication in to 2 out with the
+// seat-less row correctly REPLACED and no phantom — which is why arm 1 exists
+// and why deleting it outright is not the answer either.
+//
+// ⚠️ NOT reachable from the production launcher: runRevoteWave launches
+// `models: judgeKeys.map(aliasOf)` and fanout-leg.js carries `leg.modelInput`
+// straight from that request (`:62`, `:101`), so a real -rv leg's alias is
+// always one the wave asked for. Same latency class as SI-10 itself.
+//
+// Named mutant BOUNDDROP — collapse the guard to `judgeKeys.includes(key)`
+// alone, dropping the `boundLegs.has(leg) ||` arm. **Red set (2): BOTH tests
+// in this block and nothing else**, measured across run-debate.test.js +
+// debate.test.js + seat-space.test.js + run-stages.test.js (2 failed / 223
+// passed). The first reds on its degrade assertion (0 notes -> 1), the second
+// on its row assertions (3 rows -> 2, phantom gone). Hand-applied to the
+// committed file, run, then reverted from a `cp` backup and byte-verified with
+// `git diff --quiet`. ⚠️ Before this block existed that same collapse red
+// NOTHING, which is what the prose it replaces mistook for "unreachable".
+// ============================================================================
+describe('runDebate — BOUNDDROP: a taskId-bound leg carrying a FOREIGN alias', () => {
+  let tmp, result, ctx;
+  // The §3.4 roster hole again: A1's deepseek dispute with its `seat` removed,
+  // so `disputingJudges` yields the bare alias 'deepseek', which is no seat id
+  // on a twin bench, so runRevoteWave pads slot 2 with a placeholder.
+  function holedInput() {
+    const input = twinInput();
+    input.adjudications = input.adjudications.map(a =>
+      (a.findingId === 'A1' && a.judge === 'deepseek')
+        ? { findingId: 'A1', judge: 'deepseek', verdict: 'dispute' }
+        : a);
+    return input;
+  }
+
+  beforeAll(async () => {
+    tmp = mkTmp('run-debate-rv-foreign-');
+    const input = holedInput();
+    const provisionalRecord = tally(input);
+    const script = {
+      solos: {
+        'r-d1': { wave: wave([leg('deepseek', defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]))]) },
+        'r-d2': { wave: wave([leg('deepseek', defenseOut([{ id: 'B1', action: 'withdraw' }]))]) },
+      },
+      // 'zzz' is in NO roster and NO judgeKeys. stampFanout's `k < 0` arm still
+      // stamps it `r-rv-2` by POSITION, which is the whole point.
+      waves: {
+        'r-rv': wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }])),
+          leg('zzz', revoteOut([{ id: 'A1', verdict: 'agree' }]))]),
+      },
+    };
+    ctx = ctxFor(tmp, fakeLaunchers(script, []), TWIN_BENCH);
+    result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
+  });
+
+  test('it BINDS to the placeholder slot yet keys on the foreign alias — arm 1 alone publishes it', () => {
+    // Bound (so `boundLegs` holds it) but the placeholder is filtered back out,
+    // so the leg's seat is null and its key is the bare 'zzz'.
+    expect(result.revoteLegs.map(l => l.seat && l.seat.id)).toEqual(['gpt', null]);
+    // Arm 2 is false here — 'zzz' names no seat and no launched judge — so a
+    // note WOULD be emitted if arm 1 were gone. That is BOUNDDROP's red edge.
+    expect(ctx.degrade.all()).toEqual([]);
+  });
+
+  test('⚠️ DISCLOSED DEFECT: publishing that key invents a phantom row and strands the real one', () => {
+    const a1 = result.debatedInput.adjudications.filter(a => a.findingId === 'A1');
+    // 1 in -> 3 out. Asserting the WRONG number on purpose, so it cannot rot
+    // silently; the day this becomes 2 the guard was fixed and this pin should
+    // be replaced, not deleted.
+    expect(a1).toHaveLength(3);
+    expect(a1.find(a => a.judge === 'zzz')).toEqual({ findingId: 'A1', judge: 'zzz', verdict: 'agree' });
+    // The roster hole's own re-vote never landed: its seat-less row still says
+    // dispute, exactly the "paid re-vote silently discarded" half of SI-10.
+    expect(a1.find(a => a.judge === 'deepseek' && !a.seat).verdict).toBe('dispute');
+  });
+});
+
 // F2. `seatById` used to be built from `ctx.o.seats || []`, so an absent seat
 // table made `aliasOf` the identity over COMPOSED seat ids and sent
 // `deepseek#1` to three launchers as a model name (measured: r-d1
