@@ -916,11 +916,13 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 //              once T5.2's end-to-end test existed further down this file
 //              (re-measured there, under that task's own name E2EBLIND —
 //              identical deletion, cross-checked against this one so this
-//              count is not left stale). ⚠️ GREW AGAIN to (5) at T5.5,
-//              re-measured 2026-08-22 across the six suites above: the two
-//              T5.5 refusal tests and the T5.5 exit-2 composition test all
-//              entered the path. Deleting the guard now reds FIVE tests;
-//              any smaller number written here is stale.
+//              count is not left stale). ⚠️ GREW AGAIN at T5.5 — to (5)
+//              when its two refusal tests and its exit-2 composition test
+//              entered the path, and to **(6)** in review round 1 when the
+//              note-fallback test joined them (it asserts an exact `why`, and
+//              with the guard gone there is no note at all). Re-measured
+//              2026-08-22 across the six suites above. Deleting the guard reds
+//              SIX tests; any smaller number written here is stale.
 //   REFUSEALL  weaken the guard to `if (seat)` (refuse on bare `!seat`). Red
 //              set (3): this file's "unique-alias bench, leg equally
 //              unbindable" test AND its "roster hole whose leg is ALSO
@@ -1153,9 +1155,10 @@ describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names
 //   Constraint 3 — a red set that GROWS when a test is added is proof the new
 //   test entered the path: T5.1's own commit recorded JOINBLIND's red set as
 //   (1 test) before this block existed; it was (2) then.
-//   ⚠️ **(5) since T5.5**, re-measured 2026-08-22 across all six suites named
-//   at the JOINBLIND entry: the two T5.5 refusal tests and the T5.5 exit-2
-//   composition test joined it. Two things about the mutant itself also
+//   ⚠️ **(6) since T5.5's review round 1**, re-measured 2026-08-22 across all
+//   six suites named at the JOINBLIND entry: the two T5.5 refusal tests, the
+//   T5.5 exit-2 composition test and the T5.5 note-fallback test joined it —
+//   (5) before that last one existed. Two things about the mutant itself also
 //   changed and are recorded so nobody re-derives them: the guard it deletes
 //   is now `if (judgeKeys.includes(key))` — T5.5 removed the
 //   `boundLegs.has(leg) ||` arm, so deleting "the guard" is a SMALLER edit

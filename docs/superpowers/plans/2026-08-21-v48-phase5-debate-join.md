@@ -338,7 +338,7 @@ nobody re-derives them:
 
 | this plan says | current — measured at T5.4, re-opened at T5.5 (2026-08-22) |
 |---|---|
-| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call **`:182`** · publish **`:249`** (were `:188`/`:271` at T5.4; T5.5 took the file 282→**260** — −33 removing the `boundLegs` arm and its comment block, **+11** across three comment repairs the deletion forced) |
+| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call **`:197`** · publish **`:264`** (were `:188`/`:271` at T5.4; T5.5 took the file 282→**275** — −33 removing the `boundLegs` arm and its comment block, **+26** across the four repairs the deletion forced, over two review rounds) |
 | §0.3 `(a.seat \|\| a.judge)` at `debate.js:83`, push at `debate.js:93` | `debate.js:99` · `debate.js:111` |
 | §0.4 "described in `debate.js:86-88`'s own comment" | the fail-open comment is `debate.js:102-109` |
 | §0.6 the exact-key-set pin at `run-debate.test.js:1020` | ⚠️ **anchored by TEST NAME, no number** — `run-debate.test.js`'s *"a unique-alias bench writes revotes[] rows with NO seat key at all"*. It was `:1020` at BASE, `:1357` after T5.1/T5.2, and `:1457` after the BOUNDDROP block; three values in one branch is the argument against writing a fourth |
@@ -560,8 +560,10 @@ the sole non-test caller is `run-debate.js :: applyDebate` and it **does** pass 
 
 ### Task 5 — T5.5: the two mechanisms the paid council confirmed (added 2026-08-22, owner ruling)
 
-✅ **DONE** — `f19624c4` (fix + tests), `8d40f4f5` (assertion order), and the record commit,
-which also carries the two source-comment repairs the deletion falsified (see item 5).
+✅ **DONE** — `f19624c4` (fix + tests), `8d40f4f5` (assertion order), `4e3c8e3b` (the record +
+two of the falsified sentences), `030e73d4` (`WHYSTALE` named), then **review round 1**:
+`31491f11` (the FOURTH twin, and the join-key fallback the first `why` rewrite dropped) and this
+record commit. See item 5 for all four falsified sentences.
 Added AFTER T5.4 closed the phase, because a paid multi-model council review of PR #179 raised two
 mechanisms and the owner ruled fix-both. Neither is a new discovery: mechanism 1 was already filed,
 disclosed and pinned in `BACKLOG.md` by the round-2 fix wave, and mechanism 2 was already filed
@@ -593,31 +595,51 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
 3. **Re-measure the four PRE-EXISTING mutants — three of their counts moved.** T5.5 adds three
    tests to the guard's path, so Global Constraint 3 applies in reverse: a stale count is now a
    false one. Re-measured 2026-08-22 across the six suites (243 tests): deleting the guard
-   (`JOINBLIND` 1 at T5.1, `E2EBLIND` 2 at T5.2) now reds **5**; `LEGDROP` was 1 and is **2**;
+   (`JOINBLIND` 1 at T5.1, `E2EBLIND` 2 at T5.2) reds **6**; `LEGDROP` was 1 and is **2**;
    `REFUSEALL` is **3**, unchanged. Recorded at each mutant's own comment block, with the earlier
-   values kept as dated readings.
+   values kept as dated readings. ⚠️ **Re-measured a SECOND time after review round 1** added the
+   fallback test: the guard-deletion count went 5 → **6** and `WHYSTALE` 1 → **2**, because that
+   test also loses its note when the guard goes. The full HEAD set is guard-deletion **6** ·
+   `REFUSEALL` **3** · `LEGDROP` **2** · `BOUNDREADD` **2** · `WHYSTALE` **2** · `NOTEHEAL` **1**
+   · `KEYRAW` **1**.
 4. **The record:** this plan, the phasing doc rows 10 and 16, `BACKLOG.md`'s SI-10 sub-entries, and
    `CHANGELOG.md`.
-5. ⚠️ **The citation sweep is the expensive half, and it CASCADED once.** `run-debate-revote.js`
-   went 282→**260** (−33 at the guard, then **+11** across three comment repairs the deletion
-   FORCED) and `run-debate.test.js` +5 at the top. The three repairs, because each is a sentence the
-   correct edit turned false — this project's most expensive recurring defect, caught here by
-   re-reading rather than by any gate: (a) `reVoteUnboundNote`'s docblock still said the note fires
-   when a leg "neither bound to any roster slot NOR names one of the judges"; (b) the ANNOUNCED
-   `why` string still told the user "it bound to no roster slot", which is false in exactly the case
-   that motivated the deletion — a leg that DID bind to a placeholder slot while carrying a foreign
-   alias — so it now reads "its join key '…' (judge alias '…') names none of the judges this wave
-   launched", pinned by two assertions in the T5.5 refusal test and measured red against the old
-   text (named mutant **`WHYSTALE`**, red set 1); (c) one precision fix in the guard comment. So the call site, publish site, function span,
-   padding block, `repairId` and every harness anchor moved — and the citation repairs CASCADED
-   TWICE, each round written against a tree the next source edit invalidated. Every value in
-   §0.7's table, `BACKLOG.md` and the phasing doc was finally **re-opened at its stated line after
-   the last source edit**, which is the only ordering that works. Two pre-existing claims were also
-   found already false — true at T5.4, rotted at the round-2 fix wave, before T5.5 touched
-   anything: `run-debate-revote.js:132` "now holds `emitStageStarted(...)`" (it is the last
-   `@param` line of `runRevoteWave`'s docblock; the call is `:147`) and `:124` "now holds the
-   `revote-bundle.md` `writeFileSync`" (it is docblock prose; the signature is `:134` and the write
-   is `:139`). Both corrected in place.
+5. ⚠️ **FOUR sentences the correct edit turned false — this project's most expensive recurring
+   defect, and none of them caught by a gate.** Each was found by re-reading, and the fourth only by
+   the T5.5 review:
+   - (a) **`reVoteUnboundNote`'s docblock** still said the note fires when a leg "neither bound to
+     any roster slot NOR names one of the judges".
+   - (b) **The ANNOUNCED `why` string** still told the user "it bound to no roster slot", false in
+     exactly the case that motivated the deletion — a leg that DID bind to a placeholder slot while
+     carrying a foreign alias. Rewritten, then rewritten AGAIN in review round 1, because the first
+     rewrite interpolated `key` raw and so re-introduced the `'undefined'` render the fallback two
+     lines above it exists to prevent (`key` is `seatKey(seat, judge)`, which returns `judge`
+     whenever `seat` is null). It now reads "its join key '…' names none of the judges this wave
+     launched", with `joinKey = key || 'unknown'` feeding both the sentence and `data.key`.
+     ⚠️ **The "(judge alias '…')" parenthetical was dropped, measured:** through `runDebate` every
+     refusal has `seat === null`, so `key === judge` and it printed the same string twice. Named
+     mutants **`WHYSTALE`** (2) and **`KEYRAW`** (1).
+   - (c) **`src/workspace/seat-space.js`'s `orphanExonerations` docblock** quoted the two-arm
+     predicate verbatim, in a DIFFERENT file. Its conclusion survives; the predicate did not.
+   - (d) **`run-debate.test.js`'s T5.1 describe header** — the VERBATIM TWIN of (a), in the file
+     T5.5 had just edited, contradicted by that file's own T5.5 block below it. Missed by the first
+     sweep, which landed on (c) and never grepped the phrase. Repaired in review round 1, after a
+     repo-wide case-insensitive grep confirmed no fifth copy. **Grep the distinctive phrase, always:
+     a same-file sweep cannot find twins and a different-file find is not proof there is only one.**
+
+   ⚠️ **The citation sweep is the expensive half, and it CASCADED THREE TIMES.**
+   `run-debate-revote.js` went 282→**275** (−33 at the guard, **+26** across those repairs), and
+   `run-debate.test.js` +5 at the top, so the call site, publish site, function span, padding block,
+   `repairId` and every harness anchor moved — three separate times, each round written against a
+   tree the next source edit invalidated (249 → 256 → 260 → 275). Every value in §0.7's table,
+   `BACKLOG.md` and the phasing doc was finally **re-opened at its stated line after the last source
+   edit**, which is the only ordering that works. Two pre-existing claims were also found already
+   false — true at T5.4, rotted at the round-2 fix wave, before T5.5 touched anything:
+   `run-debate-revote.js:132` "now holds `emitStageStarted(...)`" (it is docblock prose today; the
+   call is `:162`) and `:124` "now holds the `revote-bundle.md` `writeFileSync`" (it is a comment
+   inside `reVoteUnboundNote`'s `why` block today; the write is `:154`). Both corrected in place.
+   ⚠️ **Headroom note:** that file was 176/300 at BASE and is **275/300** now — 25 lines, not 124.
+   The next task to touch it should extract, not squeeze.
 
 ---
 
@@ -628,10 +650,12 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
 - The test count has **grown** from 7810 and no suite regressed.
 - Named mutants **`JOINBLIND`** and **`REFUSEALL`** each have a **non-empty** red set, recorded in a
   **committed** file. ⚠️ An empty or shrinking red set means the property is unpinned.
-- **T5.5:** named mutants **`BOUNDREADD`** (2) and **`NOTEHEAL`** (1) each have a **non-empty** red
-  set, recorded in `tests/council/run-debate.test.js` and in the commit messages. ⚠️ Because T5.5
-  is a behaviour change, its own assertions were additionally confirmed **RED at `269badf1`** before
-  the source edit — a mutant is not a substitute for that.
+- **T5.5:** named mutants **`BOUNDREADD`** (2), **`WHYSTALE`** (2), **`NOTEHEAL`** (1) and
+  **`KEYRAW`** (1) each have a **non-empty** red set, recorded in
+  `tests/council/run-debate.test.js` and in the commit messages, and the four PRE-EXISTING counts
+  were re-measured with them (guard-deletion **6**, `REFUSEALL` **3**, `LEGDROP` **2**). ⚠️ Because
+  T5.5 is a behaviour change, its own assertions were additionally confirmed **RED at `269badf1`**
+  before the source edit — a mutant is not a substitute for that.
 - `tests/council/debate.test.js:65` is **still green and untouched** — §0.4. ⚠️ **The parenthetical
   here read "(stateless fail-open)" and was FALSE; corrected 2026-08-21 (T5.4).** That test takes
   `applyDebate`'s **found-entry** branch, not its fail-open push — measured, 4 adjudications in and

@@ -142,8 +142,10 @@ All notable changes to Amicus are documented here. Format follows
   ⚠️ **The wording of the announcement changed with it.** It used to explain the refusal as "it
   bound to no roster slot, and its judge alias '…' names no seat there either" — whose first half is
   false for exactly the case just described, since that leg *did* bind. It now names the join key
-  and the judge alias and says they match none of the judges the wave launched. The channel, the
-  effect line and the machine-readable fields are unchanged.
+  and says it matches none of the judges the wave launched. The channel, the effect line and the
+  machine-readable fields are unchanged — except that a leg reporting no model name at all now
+  reads `unknown` there, where a first pass at this rewrite briefly printed `undefined` and dropped
+  the key out of the record's JSON.
   ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
   task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
   than a live regression. It is reachable through a resumed or hand-assembled run.
@@ -152,11 +154,13 @@ All notable changes to Amicus are documented here. Format follows
   under two names because it was measured at two points in the work. As `JOINBLIND` it red **1**
   test when the unit-level pin was all that existed; the **same deletion**, re-measured as
   `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
-  The follow-up work above adds two more: `BOUNDREADD` (2), which puts the deleted arm back, and
-  `NOTEHEAL` (1), which makes the refusal's announcement non-degrading. ⚠️ The four counts in the
+  The follow-up work above adds four more: `BOUNDREADD` (2), which puts the deleted arm back;
+  `WHYSTALE` (2), which restores the old announcement wording; `NOTEHEAL` (1), which makes the
+  refusal's announcement non-degrading; and `KEYRAW` (1), which drops the join key's fallback so a
+  leg with no model name renders `undefined`. ⚠️ The four counts in the
   paragraph before this one are the readings taken when each mutant was first recorded; the
-  follow-up added three tests to the same path, and re-measuring moved three of them — deleting the
-  guard now reds **5** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because
+  follow-up added four tests to the same path, and re-measuring moved three of them — deleting the
+  guard now reds **6** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because
   the exit-2 consequence — announced above and true since the first release of this fix — had been
   measured but never pinned by a test that ran the whole chain; it now is, through the real
   announcement sink and the real exit-code resolver.
