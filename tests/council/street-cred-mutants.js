@@ -368,7 +368,8 @@
   // NO PIN THAT PRE-DATES T3.3 REDS.
 
   // Named mutant "JUDGEALIAS": revert `perJudgeRank`'s key to the judge alias
-  // — the phasing doc's unfiled `| 24 |` data-loss site.
+  // — the phasing doc's `| 24 |` data-loss site (the alias-collapse half;
+  // PROTORANK below closes the write-site/prototype half this left unfiled).
   //   perJudgeRank[j.seat || j.judge] = rank;  ->  perJudgeRank[j.judge] = rank;
   //
   // RE-RUN at v4.8 Phase 6 PR1 Task 2 (SI-24), command

@@ -3,7 +3,8 @@
 
 /**
  * v4.8 T3.3 — seat-keyed street cred (SI-06, SI-19, SI-20; the phasing doc's
- * unfiled `| 24 |` perJudgeRank site).
+ * `| 24 |` perJudgeRank site — the alias-collapse half; the write-site/
+ * prototype half T3.3 left unfiled is closed below, v4.8 Phase 6 PR1 Task 2).
  *
  * Every number asserted here was MEASURED, at BASE `b341b273` for the
  * "before" values and against this tree for the "after" ones. The mutants that
