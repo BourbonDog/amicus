@@ -291,6 +291,41 @@ describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited a
   });
 });
 
+// Named mutant "PROTOACTION": revert PAST_TENSE's literal to drop its null
+// prototype (v4.8 Phase 6 PR1 Task 3, SI-24) — the debate.js half of this
+// task. Mirrors Task 1's PROTOVERDICT (tests/council/tally.test.js) and Task
+// 2's PROTORANK (tests/council/street-cred-mutants.js); this one's own
+// sibling is PROTOSYMBOL, in tests/council/seat-matrix.test.js.
+//   const PAST_TENSE = { __proto__: null, defend: 'defended', amend: 'amended',
+//     withdraw: 'withdrawn', 'no-response': 'no-response' };
+//   -> const PAST_TENSE = { defend: 'defended', amend: 'amended',
+//     withdraw: 'withdrawn', 'no-response': 'no-response' };
+//
+// Introduced at this task. RED: 3 tests / 1 suite (command `npx jest
+// --no-coverage`, the FULL suite, per this task's brief).
+//   tests/council/debate.test.js — "D1 — action 'toString' maps to
+//     'no-response', and the key survives JSON.stringify" · "D2 — action
+//     '__proto__' also maps to 'no-response', and the key survives
+//     JSON.stringify" · "D2 — action 'constructor' also maps to
+//     'no-response', and the key survives JSON.stringify"
+//
+// ⚠️ WHY NOT 4: D3 (the four real actions) does NOT red. defend/amend/
+// withdraw/no-response are OWN properties on PAST_TENSE either way, so a pin
+// built entirely from real actions cannot see a mutation that only changes
+// what happens to a key PAST_TENSE never owned.
+//
+// Measured with the concurrency guard this task was briefed on (a second
+// agent was mutating src/council/street-cred.js in this same checkout):
+// `git status --porcelain -- src/ tests/` immediately before AND after this
+// run showed ONLY src/council/debate.js (this mutation) modified — no
+// contamination. Full-suite denominator at this measurement: 544 suites (543
+// passed / 1 failed), 7844 tests (7833 passed / 3 failed / 8 skipped), 4
+// snapshots passed and UNCHANGED — identical denominator to PROTOSYMBOL's
+// run, measured separately. Hand-revert byte-verified against `git show
+// HEAD:src/council/debate.js`, sha256 match.
+//
+// NO PIN THAT PRE-DATES THIS TASK REDS.
+
 describe('debateRunStatsRows', () => {
   test('emits rebuttal + revote rows tagged with the debate roles', () => {
     const rows = debateRunStatsRows({

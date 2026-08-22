@@ -1871,3 +1871,39 @@ describe('SYMBOL is prototype-safe: an inherited/unknown vote key must not resol
     }
   });
 });
+
+// Named mutant "PROTOSYMBOL": revert SYMBOL's literal to drop its null
+// prototype (v4.8 Phase 6 PR1 Task 3, SI-24) — the report.js half of this
+// task. Mirrors Task 1's PROTOVERDICT (a different READ-site table,
+// tests/council/tally.test.js) and Task 2's PROTORANK (a WRITE-site table,
+// tests/council/street-cred-mutants.js).
+//   const SYMBOL = { __proto__: null, agree: '✓', dispute: '✗', neutral: '–' };
+//   -> const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
+//
+// Introduced at this task. RED: 3 tests / 1 suite (command `npx jest
+// --no-coverage`, the FULL suite, per this task's brief — a correction over
+// Task 2's own brief, which mandated the narrower `tests/council/
+// tests/workspace/` scope and mismeasured one red set as a shrink).
+//   tests/council/seat-matrix.test.js — "S1 — markdown: a vote of 'toString'
+//     renders the SAME cell as a vote of 'bogus'" · "S2 — html: the same
+//     equivalence at the report-html.js consumer" · "S3 — buildMatrixModel:
+//     a vote of 'toString' yields sym: '?' — the || fallback is no longer
+//     defeated"
+//
+// ⚠️ WHY NOT 4: S4 (the three real verdicts) does NOT red. agree/dispute/
+// neutral are OWN properties on SYMBOL either way, so a pin built entirely
+// from real verdicts cannot see a mutation that only changes what happens to
+// a key SYMBOL never owned.
+//
+// Measured with the concurrency guard this task was briefed on (a second
+// agent was mutating src/council/street-cred.js in this same checkout):
+// `git status --porcelain -- src/ tests/` immediately before AND after this
+// run showed ONLY src/council/report.js (this mutation) modified — no
+// contamination. Full-suite denominator at this measurement: 544 suites (543
+// passed / 1 failed), 7844 tests (7833 passed / 3 failed / 8 skipped), 4
+// snapshots passed and UNCHANGED (report-claude-column.test.js.snap and
+// report-debate.test.js.snap included) — neither this mutation nor its
+// hand-revert (byte-verified against `git show HEAD:src/council/report.js`,
+// sha256 match) touched a snapshot.
+//
+// NO PIN THAT PRE-DATES THIS TASK REDS.
