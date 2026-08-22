@@ -139,10 +139,11 @@ All notable changes to Amicus are documented here. Format follows
   verdict. That arm is now **deleted**: a re-vote is published only when its key names a judge the
   wave actually launched. The one shape the arm existed to protect — a judge left unseated by an
   earlier stage — is unaffected, because such a judge is still one the wave launched.
-  ⚠️ **The wording of the announcement changed with it.** It used to explain the refusal as "it
-  bound to no roster slot, and its judge alias '…' names no seat there either" — whose first half is
-  false for exactly the case just described, since that leg *did* bind. It now names the join key
-  and says it matches none of the judges the wave launched. The channel, the effect line and the
+  ⚠️ **The wording of the announcement changed with it — all three sentences of it.** It used to
+  say the leg "matches no seat on that wave's roster" and explain the refusal as "it bound to no
+  roster slot, and its judge alias '…' names no seat there either". Both are false for exactly the
+  case just described, since that leg *did* match a slot. All three now state the one condition:
+  the leg's join key names none of the judges that wave launched. The channel, the effect line and the
   machine-readable fields are unchanged — except that a leg reporting no model name at all now
   reads `unknown` there, where a first pass at this rewrite briefly printed `undefined` and dropped
   the key out of the record's JSON.
@@ -156,8 +157,9 @@ All notable changes to Amicus are documented here. Format follows
   `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
   The follow-up work above adds four more: `BOUNDREADD` (2), which puts the deleted arm back;
   `WHYSTALE` (2), which restores the old announcement wording; `NOTEHEAL` (1), which makes the
-  refusal's announcement non-degrading; and `KEYRAW` (1), which drops the join key's fallback so a
-  leg with no model name renders `undefined`. ⚠️ The four counts in the
+  refusal's announcement non-degrading; `KEYRAW` (1), which drops the join key's fallback so a
+  leg with no model name renders `undefined`; and `WHATSTALE` (3), which restores the old
+  "matches no seat" wording. ⚠️ The four counts in the
   paragraph before this one are the readings taken when each mutant was first recorded; the
   follow-up added four tests to the same path, and re-measuring moved three of them — deleting the
   guard now reds **6** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because

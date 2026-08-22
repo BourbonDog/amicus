@@ -338,7 +338,7 @@ nobody re-derives them:
 
 | this plan says | current — measured at T5.4, re-opened at T5.5 (2026-08-22) |
 |---|---|
-| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call **`:197`** · publish **`:264`** (were `:188`/`:271` at T5.4; T5.5 took the file 282→**275** — −33 removing the `boundLegs` arm and its comment block, **+26** across the four repairs the deletion forced, over two review rounds) |
+| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call **`:196`** · publish **`:263`** (were `:188`/`:271` at T5.4; T5.5 took the file 282→**274** — −33 removing the `boundLegs` arm and its comment block, **+25** across the in-file comment repairs those corrections forced, over three review rounds) |
 | §0.3 `(a.seat \|\| a.judge)` at `debate.js:83`, push at `debate.js:93` | `debate.js:99` · `debate.js:111` |
 | §0.4 "described in `debate.js:86-88`'s own comment" | the fail-open comment is `debate.js:102-109` |
 | §0.6 the exact-key-set pin at `run-debate.test.js:1020` | ⚠️ **anchored by TEST NAME, no number** — `run-debate.test.js`'s *"a unique-alias bench writes revotes[] rows with NO seat key at all"*. It was `:1020` at BASE, `:1357` after T5.1/T5.2, and `:1457` after the BOUNDDROP block; three values in one branch is the argument against writing a fourth |
@@ -561,9 +561,11 @@ the sole non-test caller is `run-debate.js :: applyDebate` and it **does** pass 
 ### Task 5 — T5.5: the two mechanisms the paid council confirmed (added 2026-08-22, owner ruling)
 
 ✅ **DONE** — `f19624c4` (fix + tests), `8d40f4f5` (assertion order), `4e3c8e3b` (the record +
-two of the falsified sentences), `030e73d4` (`WHYSTALE` named), then **review round 1**:
-`31491f11` (the FOURTH twin, and the join-key fallback the first `why` rewrite dropped) and this
-record commit. See item 5 for all four falsified sentences.
+two of the falsified sentences), `030e73d4` (`WHYSTALE` named); **review round 1** `31491f11` (the
+FOURTH twin, and the join-key fallback the first `why` rewrite dropped) + `94753a0e`; **round 2**
+`2110ddac` (the falsified-sentence COUNT was itself false); **round 3** `b6256aff` (the `what`
+field, caught by a fresh council that otherwise said "Ship it") + this record commit. See item 5
+for all five falsified sentences.
 Added AFTER T5.4 closed the phase, because a paid multi-model council review of PR #179 raised two
 mechanisms and the owner ruled fix-both. Neither is a new discovery: mechanism 1 was already filed,
 disclosed and pinned in `BACKLOG.md` by the round-2 fix wave, and mechanism 2 was already filed
@@ -601,12 +603,14 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
    fallback test: the guard-deletion count went 5 → **6** and `WHYSTALE` 1 → **2**, because that
    test also loses its note when the guard goes. The full HEAD set is guard-deletion **6** ·
    `REFUSEALL` **3** · `LEGDROP` **2** · `BOUNDREADD` **2** · `WHYSTALE` **2** · `NOTEHEAL` **1**
-   · `KEYRAW` **1**.
+   · `KEYRAW` **1**, joined in round 3 by `WHATSTALE` **3** — all eight re-measured there, and only
+   the new one moved.
 4. **The record:** this plan, the phasing doc rows 10 and 16, `BACKLOG.md`'s SI-10 sub-entries, and
    `CHANGELOG.md`.
-5. ⚠️ **FOUR sentences the correct edit turned false — this project's most expensive recurring
-   defect, and none of them caught by a gate.** Each was found by re-reading, and the fourth only by
-   the T5.5 review:
+5. ⚠️ **FIVE sentences the correct edit turned false — this project's most expensive recurring
+   defect, and not one of them caught by a gate.** Each was found by reading, the fourth only by the
+   T5.5 review and the fifth only by a fresh paid council three rounds later — three lines from a
+   sentence that had by then been corrected twice:
    - (a) **`reVoteUnboundNote`'s docblock** still said the note fires when a leg "neither bound to
      any roster slot NOR names one of the judges".
    - (b) **The ANNOUNCED `why` string** still told the user "it bound to no roster slot", false in
@@ -627,18 +631,28 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
      repo-wide case-insensitive grep confirmed no fifth copy. **Grep the distinctive phrase, always:
      a same-file sweep cannot find twins and a different-file find is not proof there is only one.**
 
-   ⚠️ **The citation sweep is the expensive half, and it CASCADED THREE TIMES.**
-   `run-debate-revote.js` went 282→**275** (−33 at the guard, **+26** across those repairs), and
+   - (e) **The note's own `what` field**, three lines above the corrected `why` and in the SAME
+     object literal, still said the leg "matches no seat on that wave's roster" — the exact claim
+     `why` had been rewritten twice to drop, false for the same reason, and it survived all three
+     rounds of correcting its neighbour. A fresh paid council caught it (gpt, a3/d0, "Ship it" with
+     three minors). All three strings now state the one condition the guard tests; `effect` carried
+     the same class ("the JUDGE's provisional verdict stands") and was tightened with it; `data` was
+     checked and deliberately left alone. Named mutant **`WHATSTALE`** (3).
+     ⚠️ `stage1-bind.js :: orphanLegNote` KEEPS that wording and must — true there, false here —
+     which is why the refusal test also asserts `not.toMatch(/matches no seat/)`.
+
+   ⚠️ **The citation sweep is the expensive half, and it CASCADED FOUR TIMES.**
+   `run-debate-revote.js` went 282→**274** (−33 at the guard, **+25** across those repairs), and
    `run-debate.test.js` +5 at the top, so the call site, publish site, function span, padding block,
-   `repairId` and every harness anchor moved — three separate times, each round written against a
-   tree the next source edit invalidated (249 → 256 → 260 → 275). Every value in §0.7's table,
+   `repairId` and every harness anchor moved — four separate times, each round written against a
+   tree the next source edit invalidated (249 → 256 → 260 → 275 → 274). Every value in §0.7's table,
    `BACKLOG.md` and the phasing doc was finally **re-opened at its stated line after the last source
    edit**, which is the only ordering that works. Two pre-existing claims were also found already
    false — true at T5.4, rotted at the round-2 fix wave, before T5.5 touched anything:
-   `run-debate-revote.js:132` "now holds `emitStageStarted(...)`" (it is docblock prose today; the
-   call is `:162`) and `:124` "now holds the `revote-bundle.md` `writeFileSync`" (it is a comment
-   inside `reVoteUnboundNote`'s `why` block today; the write is `:154`). Both corrected in place.
-   ⚠️ **Headroom note:** that file was 176/300 at BASE and is **275/300** now — 25 lines, not 124.
+   `run-debate-revote.js:132` "now holds `emitStageStarted(...)`" (it is inside `runRevoteWave`'s
+   docblock today; the call is `:161`) and `:124` "now holds the `revote-bundle.md` `writeFileSync`"
+   (it is `reVoteUnboundNote`'s `why` line today; the write is `:153`). Both corrected in place.
+   ⚠️ **Headroom note:** that file was 176/300 at BASE and is **274/300** now — 26 lines, not 124.
    The next task to touch it should extract, not squeeze.
 
 ---
@@ -650,8 +664,8 @@ which is what moved mechanism 1 from "disclosed" to "fixed".
 - The test count has **grown** from 7810 and no suite regressed.
 - Named mutants **`JOINBLIND`** and **`REFUSEALL`** each have a **non-empty** red set, recorded in a
   **committed** file. ⚠️ An empty or shrinking red set means the property is unpinned.
-- **T5.5:** named mutants **`BOUNDREADD`** (2), **`WHYSTALE`** (2), **`NOTEHEAL`** (1) and
-  **`KEYRAW`** (1) each have a **non-empty** red set, recorded in
+- **T5.5:** named mutants **`BOUNDREADD`** (2), **`WHYSTALE`** (2), **`WHATSTALE`** (3),
+  **`NOTEHEAL`** (1) and **`KEYRAW`** (1) each have a **non-empty** red set, recorded in
   `tests/council/run-debate.test.js` and in the commit messages, and the four PRE-EXISTING counts
   were re-measured with them (guard-deletion **6**, `REFUSEALL` **3**, `LEGDROP` **2**). ⚠️ Because
   T5.5 is a behaviour change, its own assertions were additionally confirmed **RED at `269badf1`**
