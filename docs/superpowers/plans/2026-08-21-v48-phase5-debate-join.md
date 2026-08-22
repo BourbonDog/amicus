@@ -115,6 +115,26 @@ the intended shape.
 ⚠️ **Case 2 must keep working. A test that refuses on "no matching adjudication" is wrong** and
 will red `debate.test.js:65`.
 
+⚠️ **CORRECTED 2026-08-21 (T5.4) — a FALSE CLAIM, not a stale number, and it appears three times in
+this document (`:107`, `:116` and §4's definition of done).** `tests/council/debate.test.js:65`
+does **not** pin the fail-open push. Measured by executing `applyDebate` against that test's exact
+fixture: `baseInput()` already carries `{ findingId: 'A2', judge: 'gpt', verdict: 'dispute' }`
+(`debate.test.js:20`), so re-voting `gpt` on `A2` takes the **found-entry** branch and updates in
+place — **4 adjudications in, 4 out; the array never grows.** The test is *named* "a re-vote on an
+id the judge never disputed"; its fixture is not that shape. The two tests that really do exercise
+the push, re-derived by test NAME rather than by number and re-opened at this head, are
+`debate.test.js:156` :: *"a genuinely new row carries the ALIAS in `judge` and the seat in `seat`"*
+(1 in → 2 out) and `debate.test.js:169` :: *"a unique bench pushes the byte-identical {findingId,
+judge, verdict} row"* (4 in → 5 out). The test file's own comment above `:156` has said so verbatim
+since PR3.
+⚠️ **This exact trap was already filed in this repo** —
+`docs/superpowers/plans/2026-08-13-v48-pr3-stage2-debate-binding.md:577` records it — **and this
+plan walked into it anyway.** The durable lesson, recorded where the next reader will hit it:
+**re-deriving that a citation POINTS somewhere is not re-deriving that it SAYS what you claim.**
+`:65` resolves, is green, and is untouched; it simply never described the branch this section
+attached it to. What §0.4's *argument* needs is only that case 2 exists and is supported — which it
+is, in `debate.js :: applyDebate`'s own fail-open comment — not that `:65` pins it.
+
 ### 0.5 The refusal predicate — measured on BOTH bench shapes, not reasoned
 
 `seat === null` is **NOT** the predicate. On a unique-alias bench `seat.id` **is** the alias string
@@ -150,6 +170,26 @@ because the row it must replace has no seat either. **The two facts are coupled 
 Refusing it would discard a re-vote that would have joined perfectly, and reds that fixture's `M1`
 assertion. Measured: the `REFUSEALL` mutant reds **both** that pre-existing test and the new
 unique-alias one.
+
+⚠️ **THE "Shipped:" BLOCK ABOVE IS NOT WHAT SHIPPED — corrected 2026-08-21 (T5.4), in place, per
+this document's own convention.** It was written by the note that landed at `9a525af1`, one commit
+*before* T5.1's own review round `6b452c99` collapsed the guard again — and it was never brought
+forward. The predicate in the tree today is:
+
+```js
+    if (boundLegs.has(leg) || judgeKeys.includes(key)) { /* publish */ } else { /* refuse + announce */ }
+```
+
+`rosterIds` **no longer exists**; `6b452c99` deleted it. Its second arm was *broader* than
+`rosterIds.has(key)`, not narrower, and the collapse was itself a defect fix: a roster hole whose
+own `-rv` leg is ALSO unbindable is covered by neither `boundLegs` (it binds to nothing, not even
+the placeholder) nor `rosterIds` (its bare alias names no REAL seat) — and BASE joined that case
+**correctly** (measured: 2 adjudications in, 2 out, the seat-less row's verdict replaced, no phantom
+row), so refusing it was a regression. `judgeKeys` is a superset of the real seat ids, because
+`judgeSeats` is positionally bound to it, and it additionally contains the bare alias a roster hole
+keys on. Everything the paragraph above says about `boundLegs` and the §3.4 roster-hole case stays
+true; only the name and reach of the second arm changed. `REFUSEALL`'s red set grew from 2 to 3 in
+that same round, which is what proved the added roster-hole test entered the path.
 
 ⚠️ **One deliberate, measured over-refusal, stated so nobody re-derives it.** If a wave's roster
 happens to carry only ONE seat of a twinned alias (the other twin raised the finding, so it is not
@@ -237,6 +277,31 @@ only checks a number is **in range** — it cannot catch a number that now point
 Task 4 corrects the stale one **by symbol**. ⚠️ It corrects the *number*; the surrounding prose is
 true and must not be "corrected" with it.
 
+⚠️ **THIS TABLE BECAME SELF-FALSIFYING WHILE THE PHASE RAN — corrected in place 2026-08-21 (T5.4),
+not silently rewritten.** Its two ✅ rows were true when written at BASE `9ef275e5` and are **FALSE
+now**, because T5.3 grew `debate.js` 257→275. `BACKLOG.md`'s `(a.seat || a.judge) === key` is
+`debate.js:99`, and the fail-open push is `debate.js:111` — both re-opened, both repaired in
+`BACKLOG.md` by T5.4, and both now carry their `was`-chain there. (The third row's own row numbers
+also drifted: the two `BACKLOG.md` citations it calls `:3787` are `:3787` and `:3788`, and the
+whole file has since moved anyway — which is why T5.4 anchored the repairs by symbol.)
+
+⚠️ **Every OTHER anchor in this document that points into a file this branch grew, re-opened in the
+same pass.** `§0` is dated at BASE and its narrative is unchanged; these are the current values, so
+nobody re-derives them:
+
+| this plan says | current, measured at T5.4 |
+|---|---|
+| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call `:183` · publish `:238` |
+| §0.3 `(a.seat \|\| a.judge)` at `debate.js:83`, push at `debate.js:93` | `debate.js:99` · `debate.js:111` |
+| §0.4 "described in `debate.js:86-88`'s own comment" | the fail-open comment is `debate.js:102-109` |
+| §0.6 the exact-key-set pin at `run-debate.test.js:1020` | `run-debate.test.js:1357` |
+| §3 Task 1's harness list — `ctxFor` `:126`, `TWIN_BENCH` `:55`, `twinInput` `:38`, `leg`/`wave` `:104`/`:108`, `revoteOut` `:110` | `:133` · `:62` · `:45` · `:111`/`:115` · `:117` |
+| §3 Tasks 1–2's `stampFanout` at `run-debate.test.js:64` | `run-debate.test.js:72` |
+
+⚠️ **`§0.6`'s `run-debate.js` anchors were re-opened too and are ALL still true** — `:231`
+(`applied: true`), `:243` (`revoteApplied`), `:250`/`:251` (`bad`/`degraded`), `:265` (the
+`addendumOutcomes` projection): this branch never edited that file's line count.
+
 ### 0.8 Ordering — re-derived at THIS base, not carried
 
 The phasing doc's §6 splits orderings into "genuinely gating (mechanical)" and "preference only".
@@ -249,6 +314,10 @@ Re-read at BASE:
 - Nothing forces Phase 5 ahead of Phase 6's independents, or the reverse.
 
 **Conclusion: Phase 5 is unblocked and is the resume point `BACKLOG.md:3084` itself names.**
+⚠️ **True when written; superseded 2026-08-21 by T5.4.** That slot now names **Phase 6:
+Independents** — the entry was replaced, not appended, and this section's finding was carried into
+it verbatim so the next controller does not derive it a third time. The line number happens to
+still land on the entry, but read the title, not the number.
 Proceeding with it is a preference exercised on a measured tie, exactly as Phase 4's §0.9 recorded
 for itself — not a discovered dependency. Stated plainly so the next controller need not re-derive
 it.
@@ -441,7 +510,10 @@ the sole non-test caller is `run-debate.js :: applyDebate` and it **does** pass 
 - The test count has **grown** from 7810 and no suite regressed.
 - Named mutants **`JOINBLIND`** and **`REFUSEALL`** each have a **non-empty** red set, recorded in a
   **committed** file. ⚠️ An empty or shrinking red set means the property is unpinned.
-- `tests/council/debate.test.js:65` (stateless fail-open) is **still green and untouched** — §0.4.
+- `tests/council/debate.test.js:65` is **still green and untouched** — §0.4. ⚠️ **The parenthetical
+  here read "(stateless fail-open)" and was FALSE; corrected 2026-08-21 (T5.4).** That test takes
+  `applyDebate`'s **found-entry** branch, not its fail-open push — measured, 4 adjudications in and
+  4 out. See §0.4's own correction block for the two tests that do reach the push.
 - Probe 3's shape is pinned end-to-end through `runDebate`, and the fixture was executed by the
   controller before dispatch.
 - No file in scope crosses 300 by `content.split('\n').length`.

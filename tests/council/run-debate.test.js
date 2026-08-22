@@ -955,7 +955,7 @@ describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names
     const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
 
     // No bare-alias 'deepseek' key — applyDebate's fail-open push would
-    // otherwise turn it into a phantom adjudication row (debate.js:93).
+    // otherwise turn it into a phantom adjudication row (debate.js :: applyDebate).
     expect(Object.keys(rv.byJudge).sort()).toEqual(['deepseek#1', 'gpt']);
     expect(rv.byJudge.deepseek).toBeUndefined();
     expect(rv.byJudge.gpt).toEqual({ A1: { verdict: 'agree' } });

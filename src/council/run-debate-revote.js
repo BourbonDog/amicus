@@ -71,7 +71,7 @@ function seatKey(seat, alias) { return seat ? seat.id : alias; }
  * revote-<name>.md and its conformance — only its parsed votes are
  * withheld, so `revoteByJudge` never carries this key at all and
  * applyDebate never has to decide whether it belongs to an existing row or
- * is new (the fail-open push at debate.js:93, unchanged and untouched for a
+ * is new (that fail-open push in debate.js :: applyDebate is untouched for a
  * key this wave DOES account for).
  *
  * Field shape follows stage1-bind.js:53 :: orphanLegNote's

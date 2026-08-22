@@ -105,6 +105,39 @@ All notable changes to Amicus are documented here. Format follows
   malformed-input-only one. See the street-cred entry under **Changed**, below, for the measurement
   and the ruling.
 
+- **A debate re-vote the engine cannot attribute to a bench seat is now refused and announced,
+  instead of silently inventing a voter.** On a bench that repeats an alias, a re-vote leg that
+  matched no seat on its wave's roster fell back to keying on the bare alias — which matches none of
+  the seat-attributed adjudications already on record — so the round **appended a brand-new
+  adjudication row** rather than replacing one. Two things went wrong at once: the judge's paid
+  re-vote was discarded and its stale provisional verdict stood, *and* a phantom voter corresponding
+  to no bench position was counted beside it. Measured end to end on a twin bench, on a finding with
+  two eligible judges: **three votes**, basis `{a:2, d:1}`, tier **Confirmed**. Those counts feed
+  the tally and the verdict, so this was a correctness defect in the basis, not a rendering blemish.
+  Now such a leg's votes are **withheld** and the refusal is announced on the **`seat-unbound`**
+  channel — the same channel a Stage-1 leg that matches no seat already uses. The same fixture
+  now yields **two** adjudications, no seat-less row, basis `{a:1, d:1}`, tier **Contested**, and one
+  degrade note naming the leg and the wave.
+  ⚠️ **A refusal degrades the run, so an otherwise-clean run exits 2** — exactly as an
+  unattributable Stage-1 leg already made it. That is the announcement working, not a new failure
+  mode: nothing crashes and every artifact is still written.
+  **The leg itself is untouched.** It ran and it cost money, so it still contributes its `runStats`
+  row, its `revote-<model>.md` and its `conformance`; only the parsed votes are withheld.
+  `debate.json` gains no "refused" row, so on such a run `revoteJudges` and `revoteApplied` will
+  visibly disagree — the degrade note is what explains the difference.
+  **The refusal is surgical, not a blanket revert.** On the same wave a twin whose leg *did* bind
+  still has its re-vote applied. A bench with no repeated alias is unaffected in every case: a seat
+  id there *is* its alias, so the key still joins and the vote still lands, byte-for-byte as before.
+  ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
+  task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
+  than a live regression. It is reachable through a resumed or hand-assembled run.
+  Pinned end to end through the real debate round, and by four named mutants each hand-applied and
+  then reverted: `JOINBLIND` (red set 1), `REFUSEALL` (3), `LEGDROP` (1) and `E2EBLIND` (2).
+  The companion change is documentation only: `applyDebate`'s docblock now states what an omitted
+  `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
+  in this package omits it, the package's `exports` map blocks a deep require from outside, and the
+  parameter was deliberately **not** made required.
+
 ### Changed
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per
