@@ -13,7 +13,7 @@ const { pickFallbackChair } = require('../../src/council/run-chair');
 // v4.8 T3.3: the join semantics ledger.js delegates to — SI-17's normalise and
 // the seat-aware street-cred join. Imported from their own module because
 // ledger.js deliberately does not re-export them (see that file's docblock).
-const { benchLegs, meanCred } = require('../../src/council/ledger-join');
+const { benchLegs, meanCred, splitFindingsBySeat } = require('../../src/council/ledger-join');
 const avInput = require('./fixtures/av-receiver-input');
 
 // A provisional tally-input: 3 findings, judges gpt+qwen adjudicated. Carried
@@ -1113,6 +1113,163 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
       const row = rows.find(r => r.model === 'a');
       expect(row.streetCredWithSelf).toBeCloseTo(record.streetCred[0].withSelf);
       expect(row.streetCredPeersOnly).toBeCloseTo(record.streetCred[0].peersOnly);
+    });
+  });
+
+  /**
+   * v4.8 SI-18 — the half T3.3 did not close. `findings.filter(f => f.raiser
+   * === model)` was byte-unchanged since PR4b; it dumped every raised finding
+   * onto the block's FIRST pair group regardless of how many rows PR4b's
+   * fan-out already gave the alias. These pin `ledger-join.js ::
+   * splitFindingsBySeat` through the real `buildLedgerRows`, plus a few
+   * direct unit tests of the function itself.
+   */
+  describe('SI-18 — findings attributed by SEAT, not by alias', () => {
+    test('a twin bench with DIVERGENT resolutions splits findings by seat, not by alias', () => {
+      // T11's shape (two rows already exist, findings used to concentrate on
+      // the first) — now with a seat channel on both sides.
+      const rows = buildLedgerRows(rec({
+        models: ['gpt', 'gpt'],
+        findings: [
+          { id: 'A1', raiser: 'gpt', raiserSeat: 'gpt#1', severity: 'major', tier: 'Confirmed' },
+          { id: 'A2', raiser: 'gpt', raiserSeat: 'gpt#2', severity: 'nit', tier: 'Disputed' },
+        ],
+        runStats: [
+          rsRow({ model: 'gpt', seat: 'gpt#1', resolvedModel: 'v/x' }),
+          rsRow({ model: 'gpt', seat: 'gpt#2', resolvedModel: 'v/y' }),
+        ],
+      }));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ model: 'gpt', resolvedModel: 'v/x',
+        findingsRaised: 1, confirmRate: 1, factErrorRate: 0 });
+      expect(rows[0].bySeverity).toEqual({ blocker: 0, major: 1, minor: 0, nit: 0 });
+      expect(rows[1]).toMatchObject({ model: 'gpt', resolvedModel: 'v/y',
+        findingsRaised: 1, confirmRate: 0, factErrorRate: 1 });
+      expect(rows[1].bySeverity).toEqual({ blocker: 0, major: 0, minor: 0, nit: 1 });
+    });
+
+    test('twins SHARING one executable still combine onto the one row — the row SET does not move', () => {
+      // T1's shape. One pair group, two seats, ONE findings slot — the same
+      // constraint credFor's street-cred mean lives under (ledger-join.js ::
+      // credFor). Combining is not a residual bug here; it is what "the row
+      // set is not this task's to change" means for a discrete item.
+      const rows = buildLedgerRows(rec({
+        models: ['gpt', 'gpt'],
+        findings: [
+          { id: 'A1', raiser: 'gpt', raiserSeat: 'gpt#1', severity: 'major', tier: 'Confirmed' },
+          { id: 'A2', raiser: 'gpt', raiserSeat: 'gpt#2', severity: 'nit', tier: 'Disputed' },
+        ],
+        runStats: [
+          rsRow({ model: 'gpt', seat: 'gpt#1', resolvedModel: 'v/x' }),
+          rsRow({ model: 'gpt', seat: 'gpt#2', resolvedModel: 'v/x' }),
+        ],
+      }));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ model: 'gpt', resolvedModel: 'v/x', findingsRaised: 2 });
+      expect(rows[0].bySeverity).toEqual({ blocker: 0, major: 1, minor: 0, nit: 1 });
+    });
+
+    test('raiserSeat present but NO runStats row carries a seat: falls back to the OLD concentration (the asymmetric quadrant)', () => {
+      // tally.js's own comment names this quadrant: both hand-assembled
+      // appendRun callers can seed meta.seats (hence streetCred) without ever
+      // seeding a seat onto a runStats row. T11's exact fixture, but with
+      // raiserSeat now present on the findings — proving the gate is about
+      // whether THIS ALIAS'S OWN runStats rows carry seats, not merely
+      // whether the findings do.
+      const rows = buildLedgerRows(rec({
+        models: ['gpt', 'other'],
+        findings: [
+          { id: 'A1', raiser: 'gpt', raiserSeat: 'gpt#1', severity: 'major', tier: 'Confirmed' },
+          { id: 'A2', raiser: 'gpt', raiserSeat: 'gpt#2', severity: 'nit', tier: 'Disputed' },
+        ],
+        runStats: [
+          rsRow({ model: 'gpt', resolvedModel: 'v/x' }),    // no seat
+          rsRow({ model: 'gpt', resolvedModel: 'v/y' }),    // no seat
+          rsRow({ model: 'other', resolvedModel: 'v/o' }),
+        ],
+      }));
+      expect(rows).toHaveLength(3);
+      expect(rows[0]).toMatchObject({ model: 'gpt', resolvedModel: 'v/x', findingsRaised: 2 });
+      expect(rows[1]).toMatchObject({ model: 'gpt', resolvedModel: 'v/y', findingsRaised: 0 });
+    });
+
+    test('raiserSeat absent entirely: behaves EXACTLY as before, even when runStats DOES carry seats', () => {
+      // Every pre-seat document, every hand-assembled one that never set
+      // raiserSeat. The runStats side is fully seated here — proving the
+      // mirror image of the test above: a seat channel on ONE side alone is
+      // not enough, so nothing about this pre-seat document's numbers moves.
+      const rows = buildLedgerRows(rec({
+        models: ['gpt', 'gpt'],
+        findings: [
+          { id: 'A1', raiser: 'gpt', severity: 'major', tier: 'Confirmed' },
+          { id: 'A2', raiser: 'gpt', severity: 'nit', tier: 'Disputed' },
+        ],
+        runStats: [
+          rsRow({ model: 'gpt', seat: 'gpt#1', resolvedModel: 'v/x' }),
+          rsRow({ model: 'gpt', seat: 'gpt#2', resolvedModel: 'v/y' }),
+        ],
+      }));
+      expect(rows).toHaveLength(2);
+      expect(rows[0].findingsRaised).toBe(2);
+      expect(rows[1].findingsRaised).toBe(0);
+    });
+
+    test('a raiserSeat matching no group in the block anchors on the FIRST pair group; a matching one still routes precisely', () => {
+      // PER-FINDING, not block-gated like credFor's ANYSEATED all-or-nothing
+      // — deliberately different, and the difference is principled, not an
+      // inconsistency: credFor MEANS several numbers into one slot, where a
+      // partial resolution can read narrower than no information at all.
+      // Findings are discrete items with an unambiguous true home wherever
+      // one is known (seat ids are unique within an alias's own table), so
+      // resolving what CAN be resolved is strictly more informative than the
+      // all-or-nothing fallback, never narrower.
+      const rows = buildLedgerRows(rec({
+        models: ['gpt', 'gpt'],
+        findings: [
+          { id: 'A1', raiser: 'gpt', raiserSeat: 'gpt#9', severity: 'major', tier: 'Confirmed' },  // unregistered
+          { id: 'A2', raiser: 'gpt', raiserSeat: 'gpt#2', severity: 'nit', tier: 'Disputed' },      // resolves
+        ],
+        runStats: [
+          rsRow({ model: 'gpt', seat: 'gpt#1', resolvedModel: 'v/x' }),
+          rsRow({ model: 'gpt', seat: 'gpt#2', resolvedModel: 'v/y' }),
+        ],
+      }));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ resolvedModel: 'v/x', findingsRaised: 1 });   // A1 anchors here
+      expect(rows[1]).toMatchObject({ resolvedModel: 'v/y', findingsRaised: 1 });   // A2 routes precisely
+    });
+
+    test('a unique-alias bench stays byte-identical: the golden gpt row is unchanged', () => {
+      // Same fixture and same assertions as the pre-SI-18 golden pin above
+      // ("buildLedgerRows computes raw rates …") — restated under SI-18's own
+      // banner because avInput never sets raiserSeat (a unique-alias bench
+      // never emits it — emit-when-DIFFERENT), so every finding is
+      // unresolved and concentrates on the block's one row exactly as before.
+      const rows = buildLedgerRows(tally(avInput));
+      const gpt = rows.find(r => r.model === 'gpt');
+      expect(gpt.findingsRaised).toBe(12);
+      expect(gpt.confirmRate).toBeCloseTo(1);
+      expect(gpt.bySeverity).toEqual({ blocker: 1, major: 5, minor: 5, nit: 1 });
+    });
+
+    describe('splitFindingsBySeat — direct unit tests', () => {
+      test('empty groups: returns [], never throws, regardless of what raised carries', () => {
+        expect(splitFindingsBySeat([], [])).toEqual([]);
+        expect(splitFindingsBySeat([], [{ id: 'A1', raiserSeat: 'x#1' }])).toEqual([]);
+      });
+
+      test('a lone seatless group absorbs everything, matching the pre-SI-18 i===0 rule', () => {
+        const raised = [{ id: 'A1' }, { id: 'A2', raiserSeat: 'x#9' }];
+        expect(splitFindingsBySeat([[{ model: 'x' }]], raised)).toEqual([raised]);
+      });
+
+      test('two seat-carrying groups route their own findings; an unresolvable one anchors on group 0', () => {
+        const a1 = { id: 'A1', raiserSeat: 'x#1' };
+        const a2 = { id: 'A2', raiserSeat: 'x#2' };
+        const a3 = { id: 'A3' };   // no raiserSeat
+        const groups = [[{ model: 'x', seat: 'x#1' }], [{ model: 'x', seat: 'x#2' }]];
+        expect(splitFindingsBySeat(groups, [a1, a2, a3])).toEqual([[a1, a3], [a2]]);
+      });
     });
   });
 
