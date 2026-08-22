@@ -330,6 +330,76 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
   });
 });
 
+// v4.8 Phase 6 PR1 Task 3 fix round 1 (SI-24) — addendumOutcomes, PAST_TENSE's
+// SECOND consumer (run-debate.js:262's `PAST_TENSE[df.action] ||
+// PAST_TENSE['no-response']`), which debate.test.js's D1-D3 never reach (those
+// call decorateRecord directly with a hand-built debateFindings array).
+//
+// ⚠️ MEASURED, NOT ASSUMED: driving a REAL defense response through the ACTUAL
+// runDebate -> parseDebateDefense -> applyDebate -> addendumOutcomes path (the
+// same fixture shape as the happy-path describe above, :212-215) with an
+// inherited `action` does NOT exercise PAST_TENSE's null prototype at this call
+// site. parseDebateDefense (src/council/parse-stage2.js:142-153) is an
+// ALLOWLIST: only 'defend'/'amend'/'withdraw' ever overwrite the per-id default
+// of `{action: 'no-response'}` — every other action string a model could emit,
+// inherited-key or ordinary junk alike, is already normalised to the literal
+// 'no-response' before `debateFindings` (and therefore `df.action`) exists.
+// `PAST_TENSE[df.action]` at this call site is therefore ALWAYS an own-key hit
+// in practice; the two tests below pin exactly that (a real string survives,
+// including the JSON.stringify round-trip), but they hold identically with or
+// without PAST_TENSE's `__proto__: null` — confirmed by running both under the
+// PROTOACTION mutation (see the updated record below): neither reds. This
+// narrows fix round 1's finding rather than closing it as originally framed —
+// see task-3-report.md's "Fix round 1" section for the full chase.
+describe('runDebate — a defense action a model cannot make PAST_TENSE-inherited (addendumOutcomes, the SECOND PAST_TENSE consumer)', () => {
+  /** Drives a real (raw-text, parseDebateDefense-parsed) defense response —
+   * same shape as the happy-path fixture above — with the given `action`. */
+  async function runWithAction(action) {
+    const tmp = mkTmp('run-debate-proto-');
+    const input = provisionalInput();
+    const provisionalRecord = tally(input);
+    const script = {
+      solos: { 'r-d1': { wave: wave([leg('gemini', defenseOut([{ id: 'A1', action, argument: 'caps at 5' }]))]),
+                         leg: leg('gemini', defenseOut([{ id: 'A1', action, argument: 'caps at 5' }])) } },
+      waves: { 'r-rv': wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }])),
+                             leg('qwen', revoteOut([{ id: 'A1', verdict: 'dispute' }]))]) },
+    };
+    return runDebate(ctxFor(tmp, fakeLaunchers(script, null)), { provisionalRecord, tallyInput: input });
+  }
+
+  test.each([['toString'], ['__proto__']])(
+    'a defense action of %j still yields addendumOutcomes[].action: "no-response" as a STRING, surviving JSON.stringify',
+    async (action) => {
+      const result = await runWithAction(action);
+      const a1 = result.addendumOutcomes.find(o => o.id === 'A1');
+      // Same shape as debate.test.js's D1/D2: toEqual alone cannot tell a
+      // MISSING key from an undefined value, so assert the type explicitly
+      // and round-trip through JSON.stringify — debate.json is exactly what
+      // addendumOutcomes feeds (briefings-debate.js's chair addendum).
+      expect(typeof a1.action).toBe('string');
+      expect(a1.action).toBe('no-response');
+      const onDisk = JSON.parse(JSON.stringify(result.addendumOutcomes));
+      const a1OnDisk = onDisk.find(o => o.id === 'A1');
+      expect(a1OnDisk).toHaveProperty('action');
+      expect(a1OnDisk.action).toBe('no-response');
+    },
+  );
+
+  test('CONTROL: the harness really does deliver a recognised action end to end (defend -> defended)', () => {
+    // Guards the two tests above against a fixture bug that would make EVERY
+    // action normalise to 'no-response' regardless of parseDebateDefense's
+    // allowlist (e.g. a missing `argument`, which silently fails the 'defend'
+    // branch) — exactly the failure this control caught while this test was
+    // being written: an early draft omitted `argument` and 'defend' itself
+    // read back as 'no-response', which would have made the two tests above
+    // pass for the wrong reason.
+    return runWithAction('defend').then((result) => {
+      expect(result.debateFindings[0]).toMatchObject({ action: 'defend' });
+      expect(result.addendumOutcomes.find(o => o.id === 'A1').action).toBe('defended');
+    });
+  });
+});
+
 // ---- carry-forward gap 3b: withdrawn findings NEVER reach the re-vote bundle (spec §5.1) ----
 describe('runDebate — withdrawn findings are excluded from the re-vote bundle', () => {
   let tmp, result, launched;
