@@ -132,6 +132,25 @@ TWIN bench, twin leg unbindable  seat ids: deepseek#1, deepseek#2, gpt
   byJudge key "deepseek"  names a seat? false  -> REFUSE  (the defect)
 ```
 
+⚠️ **REFINED DURING T5.1 — the shipped predicate is broader than the line above, and the line above
+alone would have caused a REGRESSION.** Recorded rather than silently fixed. The implementer raised
+it; the controller verified it against a pre-existing fixture and ruled for the refinement. Shipped:
+
+```js
+    if (boundLegs.has(leg) || rosterIds.has(key)) { /* publish */ } else { /* refuse + announce */ }
+```
+
+`rosterIds` is the set of **real** (non-placeholder) seat ids; `boundLegs` is every leg `bindSeats`
+placed on **any** roster slot, placeholder included. The extra `boundLegs` arm exists because of
+the **§3.4 roster-hole** case, pinned today by `run-debate.test.js`'s *"§3.4 placeholder contract at
+the -rv call site (a ROSTER HOLE)"*: a judge orphaned at **Stage 2** leaves a provisional
+adjudication row carrying **no `seat`**, so `disputingJudges` yields a bare alias, a placeholder
+seat is minted for it — and that bare-alias key **joins correctly** against `(a.seat || a.judge)`,
+because the row it must replace has no seat either. **The two facts are coupled by construction.**
+Refusing it would discard a re-vote that would have joined perfectly, and reds that fixture's `M1`
+assertion. Measured: the `REFUSEALL` mutant reds **both** that pre-existing test and the new
+unique-alias one.
+
 ⚠️ **One deliberate, measured over-refusal, stated so nobody re-derives it.** If a wave's roster
 happens to carry only ONE seat of a twinned alias (the other twin raised the finding, so it is not
 a judge), an unbindable leg still keys on the bare alias and is still refused, even though the
@@ -153,16 +172,36 @@ is passed to `runDebateStage` → `runDebate` → `runRevoteWave`. The test fixt
 scratchDir}` — it omits both `degrade` and `overBudget`. That is an **under-specification of a
 contract that already holds**, not a contradiction. Widening that `@param` is part of Task 1.
 
-**A degrade note does NOT flip the exit code.** Measured at
-`run-finalize.js :: resolveTerminalExit`: the terminal expression is
-`return (exitCode === 0 && degraded && degraded.value) ? 2 : exitCode;` — it keys on the separate
-`degraded.value` flag, never on whether a note was emitted. And a refused leg is `status:
-'complete'` with `conformance: 'clean'`, so `run-debate.js :: runDebate`'s
+⚠️ **A DRAFT OF THIS SECTION WAS WRONG — announcing DOES flip the run to exit 2.** Recorded rather
+than silently fixed, per this repo's plan-annotation convention. **The T5.1 implementer pushed back
+on the draft claim and was right; the controller re-measured and overruled itself.**
+
+The draft said *"a degrade note does NOT flip the exit code"*, reasoning from
+`run-finalize.js :: resolveTerminalExit`, whose terminal expression
+(`return (exitCode === 0 && degraded && degraded.value) ? 2 : exitCode;`) keys on `degraded.value`
+and not on whether a note was emitted. **That is true and it is not the whole path.** The half never
+measured is the sink itself — `src/council/run-degrade.js :: createDegradeSink`'s `note()` ends:
+
+```js
+    if (record.kind === 'degrade' && degraded) { degraded.value = true; }
+```
+
+and `src/utils/degrade.js:34` defaults `kind` to `'degrade'` (`KINDS` is only `degrade`/`heal`).
+**So any default-kind note sets `degraded.value = true`, and a clean run exits 2.**
+
+**This is correct behaviour and is what ships.** `stage1-bind.js:53 :: orphanLegNote` passes no
+`kind` either, so an unattributable **Stage-1** leg already degrades the run today — the
+`seat-unbound` channel's established meaning. A discarded paid re-vote is a real degradation, and
+`heal` (the only alternative kind) would be a lie: nothing recovered.
+
+⚠️ **Do not repeat the draft's claim.** Task 4's CHANGELOG entry must say the refusal **degrades the
+run (exit 2)** on the `seat-unbound` channel, exactly as a Stage-1 orphan does.
+
+⚠️ Note the separate, still-true fact this does NOT change: a refused leg is `status: 'complete'`
+with `conformance: 'clean'`, so `run-debate.js :: runDebate`'s
 `bad = (l) => l.status !== 'complete' || l.conformance === 'unstructured'` (`:250`, feeding
-`degraded` at `:251`) stays false for it.
-**Announcing therefore costs no behaviour change** — which is precisely what R8 asks for and
-nothing more. This matches the established `seat-unbound` precedent: `stage1-bind.js:53 ::
-orphanLegNote` announces an unattributable Stage-1 leg without treating it as a loss.
+`degraded` at `:251`) stays false for it. The exit-2 comes from the **note**, not from `dbg.degraded`
+— two different routes to the same flag.
 
 **Ruling — `debate.json` gets NO `applied: false` rows.** Considered and rejected:
 
