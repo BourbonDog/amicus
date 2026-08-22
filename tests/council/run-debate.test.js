@@ -1083,6 +1083,117 @@ describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names
 });
 
 // ============================================================================
+// T5.2 (SI-10/R8): the END-TO-END pin — the CONSEQUENCE of T5.1's refusal, not
+// its mechanism. T5.1 above drives runRevoteWave directly; this drives the real
+// runDebate, so the bare-alias key T5.1 withholds is produced by the real
+// function, never hand-built (docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md
+// Global Constraint 5 / Task 2).
+//
+// ⚠️ fakeLaunchers CANNOT build this fixture: stampFanout (top of file) re-stamps
+// taskId/waveId onto EVERY leg it returns, including the one this fixture needs
+// to come back unbound — routed through it, this test would be green at HEAD
+// regardless of whether the guard exists, proving nothing (same trap as T5.1,
+// noted above it). This block supplies its own launchSolo/launchWave instead,
+// mirroring the task brief's own controller-verified fixture — a throwaway
+// script under .superpowers/, deleted at branch end; this test is its
+// permanent, committed form, and the plan doc above is the durable citation.
+//
+// Bench: TWIN_BENCH. Finding C1 is raised by 'gpt' — unlike twinInput() above
+// (where each twin raises its OWN finding and so never judges the other's),
+// that makes BOTH deepseek twins legitimate judges of C1, both disputing it
+// provisionally. Both re-vote 'agree'; only deepseek#1's -rv leg comes back
+// unstamped (no taskId, no waveId) and so cannot bind; deepseek#2's leg is
+// stamped to roster slot 2 and binds normally. Measured at this plan's BASE
+// (Task 1's guard absent): 3 adjudications out of 2 in (rows deepseek#1:dispute
+// | deepseek#2:agree | a phantom seat-less deepseek:agree), tier Confirmed,
+// basis {a:2,d:1}. Measured at HEAD (guard present, below): 2 out, no phantom
+// row, tier Contested, basis {a:1,d:1} — the refusal is SURGICAL: deepseek#2's
+// leg still binds and its re-vote still applies; only deepseek#1's unbindable
+// leg is withheld.
+//
+// Named mutant E2EBLIND — the IDENTICAL deletion to T5.1's JOINBLIND above
+// (restore run-debate-revote.js's BASE-shape unconditional
+// `byJudge[key] = parsed.byId`, dropping the `if (boundLegs.has(leg) ||
+// judgeKeys.includes(key))` guard) — hand-applied to the committed file, run
+// against this file + debate.test.js, then reverted from a `cp` backup and
+// byte-verified (`git diff --quiet`) against HEAD:
+//   Red set (2): this block's "the re-vote refusal is surgical" test below,
+//   AND T5.1's "twin bench, one twin leg unbindable" test above. Global
+//   Constraint 3 — a red set that GROWS when a test is added is proof the new
+//   test entered the path: T5.1's own commit recorded JOINBLIND's red set as
+//   (1 test) before this block existed; it is (2) now.
+// ============================================================================
+describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudication basis from being corrupted', () => {
+  let tmp, result, ctx;
+  const defended = defenseOut([{ id: 'C1', action: 'defend', argument: 'bounded' }]);
+  const agree = revoteOut([{ id: 'C1', verdict: 'agree' }]);
+
+  // C1 raised by 'gpt' -> both deepseek twins are legitimate judges (the shape
+  // task-2-verified-fixture.js's `input()` measured, not twinInput() above).
+  function e2eJoinInput() {
+    return {
+      meta: { runId: 'r', models: TWIN_BENCH, chair: 'gemini', claudeInCouncil: false, date: '2026-07-19' },
+      findings: [{ id: 'C1', raiser: 'gpt', raiserSeat: 'gpt', severity: 'major', claim: 'leaks fd' }],
+      adjudications: [
+        { findingId: 'C1', judge: 'deepseek', seat: 'deepseek#1', verdict: 'dispute' },
+        { findingId: 'C1', judge: 'deepseek', seat: 'deepseek#2', verdict: 'dispute' },
+      ],
+      rankings: [], runStats: [],
+    };
+  }
+
+  beforeAll(async () => {
+    tmp = mkTmp('run-debate-e2e-join-');
+    const input = e2eJoinInput();
+    const provisionalRecord = tally(input);
+    // gpt is the sole raiser -> one defense solo, stamped so it binds normally.
+    // The -rv wave: deepseek#1's leg comes back UNSTAMPED -> bindSeats cannot
+    // attribute it on a twin bench. deepseek#2's leg (stamped to slot 2) and
+    // gpt's defense solo bind normally.
+    const launchers = {
+      launchSolo: async (o) => {
+        const l = { model: 'gpt', modelInput: 'gpt', status: 'complete', summary: defended,
+          taskId: `${o.waveId}-1`, waveId: o.waveId };
+        return { exitCode: 0, wave: wave([l]), leg: l };
+      },
+      launchWave: async (o) => {
+        const legs = [
+          { model: 'deepseek', modelInput: 'deepseek', status: 'complete', summary: agree },  // deepseek#1: unbindable
+          { model: 'deepseek', modelInput: 'deepseek', status: 'complete', summary: agree,
+            taskId: `${o.waveId}-2`, waveId: o.waveId },                                      // deepseek#2: binds
+        ];
+        return { exitCode: 0, wave: wave(legs) };
+      },
+    };
+    ctx = ctxFor(tmp, launchers, TWIN_BENCH);
+    result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
+  });
+
+  // One test, bundling all three assertions from the ONE fixture above — this
+  // file's own convention (T5.1's "twin bench, one twin leg unbindable" test
+  // does the same) and what makes the E2EBLIND cross-check below an exact
+  // count rather than an approximation.
+  test('the re-vote refusal is surgical: adjudications back to 2, no seat-less row, basis/tier corrected, one degrade note', () => {
+    const rows = result.debatedInput.adjudications.filter(a => a.findingId === 'C1');
+    expect(rows).toHaveLength(2);
+    expect(rows.some(a => a.judge === 'deepseek' && !a.seat)).toBe(false);
+    expect(rows.map(a => `${a.seat}:${a.verdict}`).sort()).toEqual(['deepseek#1:dispute', 'deepseek#2:agree']);
+
+    // The point of the whole task: three votes on a two-judge finding (and a
+    // tier of Confirmed) at BASE becomes two votes and Contested at HEAD.
+    const c1 = tally(result.debatedInput).findings.find(f => f.id === 'C1');
+    expect(c1.basis).toEqual({ a: 1, d: 1, n: 0 });
+    expect(c1.tier).toBe('Contested');
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('deepseek');
+    expect(notes[0].data.waveId).toBe('r-rv');
+  });
+});
+
+// ============================================================================
 // Final whole-branch review, fix wave — F1 (§3.4 placeholder contract at the
 // -rv call site), F2 (an absent `o.seats`) and F4 (emit-when-different).
 // ============================================================================
