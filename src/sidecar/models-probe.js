@@ -17,7 +17,7 @@
  */
 
 /** Probe backstop override (spec D5) — a fixed constant, NOT env-configurable;
- * the env knob (AMICUS_NO_OUTPUT_BACKSTOP_MS) stays the ordinary 120s leg default. */
+ * the env knob (AMICUS_NO_OUTPUT_BACKSTOP_MS) stays the ordinary 300s leg default. */
 const PROBE_WINDOW_MS = 30000;
 
 /** Fixed tiny prompt — a probe leg only needs to prove the model answers at all. */

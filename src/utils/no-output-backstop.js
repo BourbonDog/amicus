@@ -20,7 +20,7 @@
 
 const { envNumber } = require('./env-num');
 
-const DEFAULT_NO_OUTPUT_BACKSTOP_MS = 120000;
+const DEFAULT_NO_OUTPUT_BACKSTOP_MS = 300000;
 
 /** @param {object} [env] test seam; defaults to process.env */
 function resolveNoOutputBackstopMs(env) {
