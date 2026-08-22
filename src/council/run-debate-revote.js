@@ -64,6 +64,26 @@ function legRow(model, leg, conformance) {
 function seatKey(seat, alias) { return seat ? seat.id : alias; }
 
 /**
+ * T5.1 (owner ruling R8): announce a re-vote leg whose key names no seat on
+ * this wave's roster. The leg itself is unaffected — it still gets its
+ * runStats row, its revote-<name>.md and its conformance — only its parsed
+ * votes are withheld, because publishing them under this key would let
+ * applyDebate's fail-open push (debate.js:93) invent a phantom adjudication
+ * row instead of joining a real one. Field shape follows
+ * stage1-bind.js:53 :: orphanLegNote.
+ */
+function reVoteUnboundNote(waveId, judge, key, leg) {
+  const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
+  return {
+    channel: 'seat-unbound',
+    what: `re-vote leg ${legId} in wave ${waveId} matches no seat on that wave's roster`,
+    why: `it bound to no roster slot, and its judge alias '${judge}' names no seat there either`,
+    effect: "the re-vote was NOT applied; the judge's provisional verdict stands",
+    data: { waveId, legId, judge, key },
+  };
+}
+
+/**
  * The re-vote mini-wave (spec §5.1).
  *
  * v4.8 PR3 Task 6 — the parallel-array discipline this function now runs on:
@@ -75,7 +95,7 @@ function seatKey(seat, alias) { return seat ? seat.id : alias; }
  * is what every launcher argument and every runStats `model` carries. That is
  * not an inconsistency — a seat id is not a routable model name.
  *
- * @param {object} ctx run.js's {o, launchers, addWave, scratchDir}
+ * @param {object} ctx run.js's {o, launchers, addWave, overBudget, degrade, scratchDir}
  * @param {Array<string>} judgeKeys seat ids, in launch order
  * @param {Array<object>} bundleFindings defended/amended findings
  * @param {Array<?object>} judgeSeats seat objects positionally bound to judgeKeys
@@ -120,10 +140,22 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     placeholders.add(p);
     return p;
   });
+  // T5.1 (§0.5): the REAL (non-placeholder) seat ids this wave expected to
+  // fill. A bare alias equals its own seat id whenever that alias holds
+  // exactly one seat on the bench (seats.js:67 mints `alias#N` only for a
+  // repeat) — which is why an unbindable leg's bare-alias key still names a
+  // seat, and must still publish, on a bench with no repeated alias.
+  const rosterIds = new Set((judgeSeats || []).filter(Boolean).map(s => s.id));
   const bindRes = bindSeats(waveId, roster, rawLegs);
   const seatOf = new Map(bindRes.bound
     .filter(b => !placeholders.has(b.seat))
     .map(b => [b.leg, b.seat]));
+  // Every leg bindSeats placed on SOME roster slot — a real seat OR a §3.4
+  // placeholder — belongs here too: a placeholder-holed judge bound cleanly,
+  // it simply has no real seat to bind TO, and that hole is announced at
+  // Stage 2 (stage1-bind.js), not here. A leg absent from this set matched no
+  // slot at all — bindSeats could not place it anywhere, real or padded.
+  const boundLegs = new Set(bindRes.bound.map(b => b.leg));
   for (const leg of rawLegs) {
     // The council ALIAS, not the resolved executable id — runStats rows join
     // meta.models by exact string (run-assemble.js's buildRunStatsEntry).
@@ -165,7 +197,20 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // R3-1 promises every runStats `model` is alias-valued on every bench.
     // `seat` rides along for materializeDebate's filename only; debateRunStatsRows'
     // `mk` copies an explicit field list and never picks it up.
-    byJudge[key] = parsed.byId;
+    //
+    // T5.1 (owner ruling R8): refuse to publish under a key that names no seat
+    // on this wave's roster — NOT `seat === null` (§0.5): that would ALSO
+    // refuse a leg bound to a §3.4 placeholder, and a unique-alias bench's
+    // unbindable leg, whose bare alias IS its seat's own id (`boundLegs`/
+    // `rosterIds` cover those two cases respectively). Only a leg bindSeats
+    // could place nowhere at all, whose alias ALSO names no roster seat, is
+    // the unnameable case R8 asks to refuse: publishing it here is exactly
+    // what lets applyDebate's fail-open push invent the phantom row.
+    if (boundLegs.has(leg) || rosterIds.has(key)) {
+      byJudge[key] = parsed.byId;
+    } else {
+      ctx.degrade.note(reVoteUnboundNote(waveId, judge, key, leg));
+    }
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
       conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
       ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });

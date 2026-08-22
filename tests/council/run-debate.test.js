@@ -4,6 +4,10 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { runDebate, nothingToDebate, disputingJudges } = require('../../src/council/run-debate');
+// T5.1 (SI-10/R8): runRevoteWave and applyDebate driven DIRECTLY, not through
+// runDebate/runCouncil — the unit-level seam task-1-brief.md asks for.
+const { runRevoteWave } = require('../../src/council/run-debate-revote');
+const { applyDebate } = require('../../src/council/debate');
 const { tally } = require('../../src/council/tally');
 const runState = require('../../src/council/run-state');
 const { runCouncil } = require('../../src/council/run');
@@ -140,6 +144,12 @@ function ctxFor(tmp, launchers, models = ['gemini', 'gpt', 'qwen']) {
     // drags in fs writes this fixture doesn't need.
     degrade: { note: (rec) => notes.push(rec), all: () => notes },
   };
+}
+
+// T5.1: seat id -> bench alias, built the same way run-debate.js:129 does.
+function aliasOfFor(seats) {
+  const byId = new Map(seats.map(s => [s.id, s]));
+  return (key) => { const s = byId.get(key); return s ? s.alias : key; };
 }
 
 function mkTmp(prefix) {
@@ -857,6 +867,115 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
     expect(rows.find(a => (a.seat || a.judge) === 'deepseek#1'))
       .toEqual({ findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#1' });
     expect(rows).toHaveLength(3);
+  });
+});
+
+// ============================================================================
+// T5.1 (SI-10/R8): refuse a re-vote whose key names no seat on this wave's
+// roster, and announce it — driving runRevoteWave DIRECTLY (task-1-brief.md),
+// never through runDebate/runCouncil's fakeLaunchers. fakeLaunchers'
+// run-debate.test.js :: stampFanout (above) re-stamps taskId/waveId on every
+// leg it sees (including its `k < 0` arm), so ANY leg routed through it
+// always binds and a fixture built on it would be green at HEAD, proving
+// nothing. Both tests below supply a bespoke launchWave that returns its
+// wave's legs untouched, and make one leg unbindable by omitting BOTH
+// waveId and taskId (leg()'s waveId argument left undefined) —
+// seats.js :: bindSeats then has no id to match a roster slot AND its alias
+// fallback requires leg.waveId === waveId, so omitting both skips it entirely.
+// ============================================================================
+describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names no seat', () => {
+  // No waveId argument -> run-debate.test.js :: leg (above) omits taskId/waveId entirely.
+  const unboundLeg = (model, summary) => leg(model, summary);
+
+  // RED-before-GREEN, measured directly against this test: with the new
+  // guard removed (restoring BASE — the JOINBLIND mutant below), byJudge
+  // gains a bare 'deepseek' key here and ctx.degrade.all() stays empty,
+  // reproducing the SI-10 defect (task-1-brief.md §0.3's shape).
+  test('twin bench, one twin leg unbindable: its key is withheld and announced, not invented', async () => {
+    const tmp = mkTmp('run-revote-twin-unbound-');
+    const seats = buildSeats(TWIN_BENCH, null, null);      // deepseek#1 / deepseek#2 / gpt
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    // All THREE judgeKeys are REAL, resolvable seat ids (unlike the §3.4
+    // placeholder-hole fixture above, where 'deepseek' is not a seat id at
+    // all) — this wave's roster is fully real; only the deepseek#2 LEG fails
+    // to bind, which is the defect this task fixes.
+    const judgeKeys = ['gpt', 'deepseek#1', 'deepseek#2'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 2),   // deepseek#1: binds
+      unboundLeg('deepseek', revoteOut([{ id: 'A1', verdict: 'dispute' }])),    // deepseek#2: orphaned
+    ];
+    const launchers = {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: both legs parse cleanly'); },
+    };
+    const ctx = ctxFor(tmp, launchers, TWIN_BENCH);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    // No bare-alias 'deepseek' key — applyDebate's fail-open push would
+    // otherwise turn it into a phantom adjudication row (debate.js:93).
+    expect(Object.keys(rv.byJudge).sort()).toEqual(['deepseek#1', 'gpt']);
+    expect(rv.byJudge.deepseek).toBeUndefined();
+    expect(rv.byJudge.gpt).toEqual({ A1: { verdict: 'agree' } });
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('deepseek');
+    expect(notes[0].data.waveId).toBe('r-rv');
+    expect(notes[0].effect).toMatch(/not applied/i);
+    expect(notes[0].effect).toMatch(/provisional verdict stands/i);
+  });
+
+  // Preservation: an unbindable leg on a bench with NO repeated alias must
+  // still publish and still apply — seatKey(null, 'qwen') === 'qwen', which
+  // IS that seat's own id (seats.js:67), so refusing it would be a
+  // regression, not a fix (plan §0.5's "NOT `seat === null`" warning).
+  // Named mutant REFUSEALL (weaken the guard to `!seat`) must red THIS test.
+  test('unique-alias bench, leg equally unbindable: the key IS published and the re-vote still applies', async () => {
+    const tmp = mkTmp('run-revote-unique-unbound-');
+    const bench = ['gemini', 'gpt', 'qwen'];               // plan §0.5's own measured shape
+    const seats = buildSeats(bench, null, null);
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'qwen'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      unboundLeg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }])),   // qwen: orphaned
+    ];
+    const launchers = {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: both legs parse cleanly'); },
+    };
+    const ctx = ctxFor(tmp, launchers, bench);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    expect(rv.byJudge.qwen).toEqual({ A1: { verdict: 'agree' } });
+    expect(ctx.degrade.all()).toEqual([]);
+
+    // And it still APPLIES through the real applyDebate join: qwen's
+    // provisional dispute is REPLACED, not left standing and not duplicated.
+    const tallyInput = {
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'qwen', verdict: 'dispute' },
+      ],
+    };
+    const { input } = applyDebate({ tallyInput, defenseByRaiser: {}, revoteByJudge: rv.byJudge, aliasOf });
+    expect(input.adjudications).toHaveLength(2);   // no invented row
+    expect(input.adjudications.find(a => (a.seat || a.judge) === 'qwen').verdict).toBe('agree');
   });
 });
 
