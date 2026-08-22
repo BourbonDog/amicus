@@ -3984,8 +3984,9 @@ deliberately left alone:
     `seat-unbound` note · A1 **2 rows in → 2 out**, the roster hole's own row intact, no phantom
     `zzz`), confirmed **RED at `269badf1`** — 0 notes where 1 is wanted, 3 rows where 2 are wanted —
     and green after.
-    ⚠️ **The deletion falsified three sentences elsewhere, all repaired in the same work — the
-    branch's own failure mode #10, caught by re-reading, not by any gate.** (a) `reVoteUnboundNote`'s
+    ⚠️ **The deletion falsified FOUR sentences elsewhere, all repaired within T5.5 — (a)–(c) in
+    the original work, (d) only in review round 1 — the branch's own failure mode #10, caught by
+    re-reading, not by any gate.** (a) `reVoteUnboundNote`'s
     docblock still described the note as firing when a leg "neither bound to any roster slot NOR
     names one of the judges". (b) The **announced `why` string** still told the user "it bound to no
     roster slot", which is false in precisely the case that motivated the deletion — a leg that DID
@@ -4002,14 +4003,16 @@ deliberately left alone:
     "(judge alias '…')" parenthetical is **dropped** — measured redundant, because `key === judge` in
     every reachable refusal. The live string is
     "its join key '…' names none of the judges this wave launched".
+    (c) `src/workspace/seat-space.js`'s
+    `orphanExonerations` docblock quoted the two-arm predicate verbatim in a DIFFERENT file; its
+    conclusion survives (a roster hole's own alias is still a `judgeKey`, so both silent shapes it
+    names still land) but the predicate it quoted did not.
     ⚠️ **(d) A FOURTH twin, in the file T5.5 had just edited:** `run-debate.test.js`'s T5.1 describe
     header carried (a)'s sentence verbatim, contradicted by that same file's T5.5 block below it.
     Repaired in review round 1 after a repo-wide, case-insensitive grep of the distinctive phrase
     confirmed no fifth copy. A same-file sweep cannot find twins, and finding one in a different
-    file is not proof there is only one. (c) `src/workspace/seat-space.js`'s
-    `orphanExonerations` docblock quoted the two-arm predicate verbatim in a DIFFERENT file; its
-    conclusion survives (a roster hole's own alias is still a `judgeKey`, so both silent shapes it
-    names still land) but the predicate it quoted did not.
+    file is not proof there is only one — and (c) is exactly how that goes wrong: the first sweep
+    found the DIFFERENT-file twin and stopped there.
     **The §3.4 roster hole is NOT regressed.** A hole's own alias IS one of `judgeKeys`
     (`run-debate.js` builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so a hole
     keeps its `judgeKeys` slot and loses only its seat), so it still publishes and still emits no
