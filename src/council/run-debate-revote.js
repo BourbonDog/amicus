@@ -89,12 +89,17 @@ function seatKey(seat, alias) { return seat ? seat.id : alias; }
  */
 function reVoteUnboundNote(waveId, judge, key, leg) {
   const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
+  // `|| 'unknown'` mirrors stage1-bind.js:55's alias fallback, and for the same
+  // reason: the caller derives `judge` as `leg.modelInput || leg.model`, so a leg
+  // carrying NEITHER renders the note as "its judge alias 'undefined'" — a degrade
+  // record that reads like a bug in the announcer instead of a fact about the leg.
+  const alias = judge || 'unknown';
   return {
     channel: 'seat-unbound',
     what: `re-vote leg ${legId} in wave ${waveId} matches no seat on that wave's roster`,
-    why: `it bound to no roster slot, and its judge alias '${judge}' names no seat there either`,
+    why: `it bound to no roster slot, and its judge alias '${alias}' names no seat there either`,
     effect: "the re-vote was NOT applied; the judge's provisional verdict stands",
-    data: { waveId, legId, judge, key },
+    data: { waveId, legId, judge: alias, key },
   };
 }
 
@@ -234,6 +239,21 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // either way, but that predicate wrongly refuses both cases just
     // described. Only a leg bound to nothing at all, whose key ALSO names no
     // judge this wave launched, is the unnameable case R8 asks to refuse.
+    //
+    // ⚠️ THE `boundLegs` ARM IS DEFENSIVE REDUNDANCY, NOT A LOAD-BEARING
+    // CONDITION — say so rather than let the next reviewer read its EMPTY red
+    // set as an unpinned property. Measured in the whole-branch fix wave:
+    // collapsing this to `judgeKeys.includes(key)` alone reds NOTHING across
+    // run-debate.test.js + debate.test.js + run-stages.test.js. That is
+    // expected, and the reason is at the sole caller — run-debate.js builds
+    // `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so every
+    // real seat id here is a `judgeKeys` entry, and a placeholder-padded hole
+    // keys on the very alias its `judgeKeys` slot holds. The second arm
+    // therefore SUBSUMES the first at that caller, and no fixture can separate
+    // them. The arm stays because a future caller assembling `judgeSeats` from
+    // any other source (a resumed run, a hand-built tallyInput, a second wave
+    // type) breaks that subsumption, and losing it there would silently refuse
+    // a leg that genuinely bound. Do not delete it for want of a red set.
     if (boundLegs.has(leg) || judgeKeys.includes(key)) {
       byJudge[key] = parsed.byId;
     } else {

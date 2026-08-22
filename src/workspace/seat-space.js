@@ -88,11 +88,25 @@ function isSeatTable(seats) {
  *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser/judge key names no
  *     seat takes materializeDebate's alias branch (run-debate.js :: runDebate;
  *     run-debate-revote.js :: runRevoteWave, `seat = seatOf.get(leg) || null`). A rebuttal
- *     leg's unbound raiser still has no note recording it. A revote leg's unbound judge DOES
- *     get one since v4.8 T5.1 (channel `seat-unbound`, run-debate-revote.js's
- *     reVoteUnboundNote) — but its `data` deliberately omits `seat`, carrying only
- *     `judge`/`key`, so this function's own `const alias = d.data.seat;` read (below) still
- *     finds nothing and this leg stays un-exonerated, the same net effect as before
+ *     leg's unbound raiser still has no note recording it. A revote leg's unbound judge
+ *     SOMETIMES gets one, since v4.8 T5.1 (channel `seat-unbound`, run-debate-revote.js's
+ *     reVoteUnboundNote). ⚠️ SOMETIMES, not always — this read "DOES" until the
+ *     whole-branch fix wave, and that was FALSE. The bullet's subject is EVERY debate leg
+ *     with `seat === null`, and that set is STRICTLY LARGER than the set that gets a note.
+ *     Two shapes land here SILENTLY — measured through the real runRevoteWave, not
+ *     reasoned: a leg bound to a §3.4 PLACEHOLDER, and a leg bound to nothing whose
+ *     bare-alias key IS one of the `judgeKeys` this wave launched. runRevoteWave publishes
+ *     BOTH (`boundLegs.has(leg) || judgeKeys.includes(key)`) and notes neither, while
+ *     `seatOf` still filters the placeholder back out — so `seat` is null in all three
+ *     shapes and a note exists for exactly one of them. Pinned by run-debate.test.js's
+ *     test named "roster hole whose leg is ALSO unbindable: the key IS published and the
+ *     re-vote still applies", whose `ctx.degrade.all()` is `[]`; the placeholder shape is
+ *     pinned for its seat (`['gpt', null]`) by that file's "§3.4 placeholder contract at
+ *     the -rv call site" block, which asserts nothing about notes either way.
+ *     ⚠️ The CONCLUSION is identical in all three shapes, which is why this bullet still
+ *     holds: even when the note IS emitted, its `data` deliberately omits `seat`, carrying
+ *     only `judge`/`key`, so this function's own `const alias = d.data.seat;` read (below)
+ *     still finds nothing and this leg stays un-exonerated, the same net effect as before
  *     (reVoteUnboundNote's own docblock states why `seat` is withheld on purpose).
  *   - an unmatchable waveId exonerates nothing.
  * @returns {Map<string, Set<string>>} orphan alias -> the kinds it provably did NOT write,

@@ -34,19 +34,35 @@ would report the last stage's status instead):
 file contains **exactly ONE** `Test Suites:` block (`grep -c` = 1) and **zero** `●` failure markers,
 so the summary above is the final one and not a first-run block above a retry.
 
-### 0.2 Sizes — by the gate's OWN rule (`content.split('\n').length`), not `wc -l`
+### 0.2 Sizes — by the gate's OWN rule, which is the ADJUSTED count (equivalently `wc -l`)
 
-`scripts/check-file-sizes.js:19` sets `maxLines: 300`; `:54` counts `content.split('\n').length`.
+`scripts/check-file-sizes.js:19` sets `maxLines: 300`. ⚠️ **THIS SECTION STATED THE RULE WRONG, and
+so did Global Constraint 10 and the definition of done — corrected in the whole-branch fix wave.**
+The heading read *"by the gate's OWN rule (`content.split('\n').length`), not `wc -l`"* and this
+line cited `:54` alone. `:54` is only half the computation: `:54-55` is
 
-| file | gate-count | headroom |
+```js
+  const lineCount = content.split('\n').length;
+  const adjustedCount = content.endsWith('\n') ? lineCount - 1 : lineCount;
+```
+
+and `:57` compares the **adjusted** count. Every file here ends with a newline, so the gate's number
+is `wc -l` — **exactly what this heading said it was NOT.** ⚠️ Note the shape of the error, because
+it is this branch's own documented failure mode wearing a different hat: **the citation POINTED at
+`:54` correctly and did not SAY what `:54-55` says.** A green `check:citations` cannot see that,
+and neither did three reviews.
+
+| file | gate-count (adjusted, at BASE) | headroom |
 |---|---|---|
-| `src/council/run-debate-revote.js` | 177 | **123** |
-| `src/council/debate.js` | 257 | 43 |
-| `src/council/run-debate.js` | 274 | **26** |
+| `src/council/run-debate-revote.js` | 176 | **124** |
+| `src/council/debate.js` | 256 | 44 |
+| `src/council/run-debate.js` | 273 | **27** |
 
-⚠️ **`run-debate.js` has 26 lines of headroom.** That is the binding design constraint of this
-phase and it is why §0.6 rules the way it does. If a task finds itself needing to add more than a
-few lines there, **extract — do not shave comments** (house rule).
+⚠️ **`run-debate.js` has 27 lines of headroom** (this said 26). That is the binding design
+constraint of this phase and it is why §0.6 rules the way it does. If a task finds itself needing to
+add more than a few lines there, **extract — do not shave comments** (house rule). Every figure in
+this table was one too high while the wrong rule stood; each was re-measured against
+`checkFileSize`'s own expression, not adjusted by arithmetic.
 
 ### 0.3 The defect, reproduced by execution — three probes
 
@@ -116,7 +132,11 @@ the intended shape.
 will red `debate.test.js:65`.
 
 ⚠️ **CORRECTED 2026-08-21 (T5.4) — a FALSE CLAIM, not a stale number, and it appears three times in
-this document (`:107`, `:116` and §4's definition of done).** `tests/council/debate.test.js:65`
+this document: §0.4's numbered item 2, §0.4's "Case 2 must keep working" warning, and §4's
+definition of done.** ⚠️ **This sentence cited those first two as `:107` and `:116` until the
+whole-branch fix wave, when §0.2's own repair pushed them down and falsified it — the third
+self-inflicted line-number rot on this branch, and the reason all three are now named
+structurally.** `tests/council/debate.test.js:65`
 does **not** pin the fail-open push. Measured by executing `applyDebate` against that test's exact
 fixture: `baseInput()` already carries `{ findingId: 'A2', judge: 'gpt', verdict: 'dispute' }`
 (`debate.test.js:20`), so re-voting `gpt` on `A2` takes the **found-entry** branch and updates in
@@ -279,7 +299,7 @@ true and must not be "corrected" with it.
 
 ⚠️ **THIS TABLE BECAME SELF-FALSIFYING WHILE THE PHASE RAN — corrected in place 2026-08-21 (T5.4),
 not silently rewritten.** Its two ✅ rows were true when written at BASE `9ef275e5` and are **FALSE
-now**, because T5.3 grew `debate.js` 257→275. `BACKLOG.md`'s `(a.seat || a.judge) === key` is
+now**, because T5.3 grew `debate.js` 256→274. `BACKLOG.md`'s `(a.seat || a.judge) === key` is
 `debate.js:99`, and the fail-open push is `debate.js:111` — both re-opened, both repaired in
 `BACKLOG.md` by T5.4, and both now carry their `was`-chain there. (The third row's own row numbers
 also drifted: the two `BACKLOG.md` citations it calls `:3787` are `:3787` and `:3788`, and the
@@ -291,7 +311,7 @@ nobody re-derives them:
 
 | this plan says | current, measured at T5.4 |
 |---|---|
-| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call `:183` · publish `:238` |
+| §0.3 `run-debate-revote.js:64`, "called at `:132`", publish at `:168` | `:64` unmoved · call `:188` · publish `:258` |
 | §0.3 `(a.seat \|\| a.judge)` at `debate.js:83`, push at `debate.js:93` | `debate.js:99` · `debate.js:111` |
 | §0.4 "described in `debate.js:86-88`'s own comment" | the fail-open comment is `debate.js:102-109` |
 | §0.6 the exact-key-set pin at `run-debate.test.js:1020` | `run-debate.test.js:1357` |
@@ -376,8 +396,12 @@ against); `applied: false` rows in `debate.json` (§0.6); everything in §0.9.
    dated plan snapshots `docs/superpowers/plans/2026-08-15-*`. Scope every sweep with explicit
    exclusions, and state the rationale as *"deliberate quotation"* or *"dated snapshot / run
    artifact"* — **never "gitignored"**; `docs/superpowers/plans/*.md` is tracked.
-10. **Size gate is 300 by `content.split('\n').length`.** `run-debate.js` has **26** lines of
-    headroom (§0.2). If a file approaches 300, **EXTRACT — never shave comments.**
+10. **Size gate is 300 by `checkFileSize`'s ADJUSTED count** — `content.split('\n').length`, minus
+    one when the file ends with a newline, i.e. `wc -l` for every file here
+    (`scripts/check-file-sizes.js:54-57`). ⚠️ **This constraint stated the UNADJUSTED rule until the
+    whole-branch fix wave, so every figure derived from it was one too high** — see §0.2.
+    `run-debate.js` has **27** lines of headroom (this said 26). If a file approaches 300,
+    **EXTRACT — never shave comments.**
 11. **No subagent dispatches subagents**, and no implementer runs a reviewer.
 
 ### Gates — all seven must exit 0 before the PR is opened
@@ -392,7 +416,7 @@ foreground** — `.husky/pre-push` blocks unless `.test-passed` matches HEAD exa
 
 ### Task 1 — T5.1: refuse the unnameable re-vote, and announce it
 
-**File:** `src/council/run-debate-revote.js` (headroom 123).
+**File:** `src/council/run-debate-revote.js` (headroom 124 — this said 123 under the misstated size rule; see §0.2).
 
 **Change.** At the `byJudge[key] = parsed.byId;` site (`:168`), gate the publish on whether `key`
 names a seat on this wave's roster. When it does not: **do not publish the votes**, and emit
@@ -520,5 +544,8 @@ the sole non-test caller is `run-debate.js :: applyDebate` and it **does** pass 
   4 out. See §0.4's own correction block for the two tests that do reach the push.
 - Probe 3's shape is pinned end-to-end through `runDebate`, and the fixture was executed by the
   controller before dispatch.
-- No file in scope crosses 300 by `content.split('\n').length`.
+- No file in scope crosses 300 by the gate's ADJUSTED count (`scripts/check-file-sizes.js:54-57`
+  — `content.split('\n').length` minus one when the file ends with a newline). ⚠️ This line said
+  `content.split('\n').length` unqualified until the whole-branch fix wave; that is the pre-adjust
+  value the gate never compares.
 - `output/` and `docs/superpowers/plans/2026-08-15-*` are untouched.
