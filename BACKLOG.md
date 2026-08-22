@@ -3128,14 +3128,25 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     the status table records that T3.3 closed only the `perJudgeRank` half.~~ **DONE — v4.8 Phase 6
     PR1 (2026-08-22).** Four carriers closed at the table, not two sites; see status-table row
     `| 24 |` and the dedicated entry below (`VERDICTS[v.verdict]` resolves INHERITED keys).
-  - **SI-14** — the twin pin ("nothing pins that the launcher must NOT de-duplicate `models`").
+  - ~~**SI-14** — the twin pin ("nothing pins that the launcher must NOT de-duplicate
+    `models`").~~ **DONE — v4.8 Wave 1 (2026-08-22, `424cb63d`).** Named test pin in
+    `tests/sidecar/fanout.test.js` plus an invariant comment; `parseModelsList` itself is
+    byte-unchanged (W1-2: a pin, not a code change). Named mutant `MODELSUNIQ`, red set 3 tests /
+    1 suite. See the dedicated entry below (§ "A hardening note — nothing pins...").
   - ~~**T6.5** — repair-row seat.~~ **DROPPED 2026-08-22 (v4.8 release inventory, owner
     ruling) — it was never specified.** A repo-wide grep for `T6.5` returned exactly two
     hits: this line and its twin in the phasing doc's Phase 6 list. No filed defect, no
     anchor, no description of what "repair-row seat" meant. Struck rather than carried —
     if it named something real it will resurface with an actual defect behind it.
-  - **T6.6** — the `skills/` doc-fact gate.
+  - ~~**T6.6** — the `skills/` doc-fact gate.~~ **DONE — v4.8 Wave 1 (2026-08-22, `c0a7c728`).**
+    See the dedicated warning block below, now annotated.
   - **SI-25 sites (1)+(2)**, ruling **R15**; site (3) rode Phase 3 and is unblocked.
+
+  ⚠️ **Phase 6 is now down to THREE independents: SI-22.4, SI-23, SI-25 sites (1)+(2).** SI-24
+  shipped at PR1, T6.5 was dropped, and T6.6 + SI-14 shipped together in v4.8 Wave 1
+  (T-W1.1/T-W1.2, 2026-08-22) alongside #135 C0 (Phase 7). ⚠️ **The resume point past this point is
+  no longer "Phase 6 then Phase 7" — see "NEXT TASK — Wave 2" below**, which supersedes the
+  Phase-6-then-Phase-7 sequencing with the owner's wave-structure ruling.
   ⚠️ **Ordering is PREFERENCE ONLY — re-derived at Phase 5's own BASE and carried forward here so
   the next controller need not derive it a third time.** Nothing in the phasing doc §6 "genuinely
   gating (mechanical)" list forces any particular order **among Phase 6's independents**, and
@@ -3156,6 +3167,18 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   `a === 1 && d === 0` at `:667`, and `:671` states it in prose. ⚠️ **The phasing doc's own quote
   of this cites `COUNCIL-DESIGN.md:155`, which is the *Disputed* row — corrected there and here in
   the same pass; and its `docs/council.md:662` is the cascade heading, not the deciding row.**
+
+  ✅ **DONE — v4.8 Wave 1, T-W1.1 (2026-08-22, `c0a7c728`).** Re-verified `assignTier` by
+  execution (not by reading source) across ten boundary `(a,d)` pairs before writing the fix.
+  Both files now read Confirmed as "`a ≥ 2` and `a > d`, or `a = 1` and `d = 0`" and Singleton as
+  "else (`a = 0` and `d = 0`)", matching `docs/council.md`'s cascade table, which was already
+  correct and is unchanged. **A second, uncited twin surfaced while fixing this**: `SKILL.md` also
+  carried a prose paraphrase two paragraphs from the cited line — "at most one endorsement, no
+  pushback" — asserting the same false claim in different words; fixed in the same commit.
+  `COUNCIL-DESIGN.md`'s Confirmed row was independently incomplete (it never listed the `a=1,d=0`
+  case at all) and was corrected alongside its Singleton row, in the same commit. A repo-wide grep
+  for the old definition and the "at most one endorsement" phrase, across live (non-dated-snapshot)
+  `.md` files, found no further occurrence.
   ⚠️ **Never tick SI-18** — an earlier phase closed only its street-cred half; see SI-18's own entry
   **below**, titled *"Findings are attributed by ALIAS, not by seat"*
   (⚠️ **still true, but no longer the whole story as of 2026-08-22: SI-18 is now SCHEDULED for
@@ -3165,6 +3188,50 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   back-reference read "above" until 2026-08-21 (T5.4); the entry is below this line, not above it.** ⚠️ **Do not tick SI-12 either** (ruling **R19**) — it is row `| 12 |`, *double-orphan
   conformance collapse*, and is not what T2.4 closed.
 
+- [ ] **NEXT TASK — Wave 2.** Filed 2026-08-22 (v4.8 Wave 1 T-W1.2) as the correct resume point,
+  superseding the Phase-6-then-Phase-7 sequencing above (that entry is now ✅ PARTIALLY COMPLETED —
+  T6.6 + SI-14 + `#135 C0` closed by Wave 1; `SI-22.4`, `SI-23`, `SI-25` sites (1)+(2), `SI-18`,
+  `#133 Piece 1` and `#138` remain, redistributed into the wave structure below).
+
+  **Owner ruling (2026-08-22) — the wave structure for the remainder of v4.8.0:**
+  - **Wave 1** — batched, one PR. **DONE** (this PR: `T6.6`, `SI-14`, `#135 C0`).
+  - **Wave 2** — run **3-wide in isolated worktrees**: `SI-23` (own PR, ruling R10) · `#133 Piece 1`
+    (ruling R13, `opencodeSessionId`) · `SI-18` (`ledger.js :: buildLedgerRows`'s
+    `findings.filter(f => f.raiser === model)` alias-collapse, newly promoted into v4.8.0 scope by
+    the release inventory below) — **then** `SI-25` sites (1)+(2) (ruling R15) · `#138` Pieces 1+2.
+    The "then" is a real ordering, not a fourth parallel slot — re-derive why before starting; this
+    line does not carry the reason.
+  - **Wave 2.5** — `R16` (`sessions-index.json` leak). Scope it from the growth entry under
+    *"Carried from the dropped v4.7.2 scope"* (below), **not** from the owner-rulings table's own
+    "pin all 13 unpinned rails" wording — see **W1-4** in the v4.8 release inventory section below;
+    the number 13 is unsourced.
+  - **Wave 3** — **strictly serial**: `SI-27` **first** (consolidates the padding/bind/placeholder
+    core into `stage1-bind.js`, the useful slice of rulings R11/R14), `SI-22.4` **LAST**.
+    ⚠️ **SI-22.4 is ordered last on purpose**: its trim knock-on turns a whitespace-padded preset
+    member into a **real twin bench**, which changes artifact filenames and starts `meta.seats`
+    emission — sequencing it before `SI-27` would make `SI-27`'s consolidation absorb that shape
+    change instead of the other way around.
+  Not in any wave, **deferred to v4.9** per **W1-4**: `#135 C5`, the `#135 C2` probe. **Dropped**
+  per **W1-3**: the `mcp-server.js:684` one-liner, the `listCouncilRuns` "dedupe" claim (6 rows / 5
+  ids) — ⚠️ **not** the same as the live *"Council runs are invisible to CLI `amicus list`"* entry
+  (`mcp-council-awareness.js:205`, filed under v4.7 PR3 rider findings), which stays filed.
+
+### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
+
+Measured while adding a **one-line** comment for council A1: the file was at **299**, a
+3-line note took it to 302 and failed `check:sizes`, and the surviving one-liner leaves it
+at exactly **300/300**. **The next line added to that file breaks the gate.**
+
+Release Constraint 6 is *EXTRACT, never shave a comment* — so the next change there must
+extract first, and no comment already in the file may be trimmed to buy room.
+⚠️ **This lands directly on SI-27**, which consolidates the padding/bindSeats/placeholder
+core out of `run-retry.js`, `run-stage2.js` and `run-debate-revote.js` into
+`stage1-bind.js`. That work IS the extraction this file needs — but its implementer must
+know there is no room to add even a single explanatory line before the extraction lands.
+Filed rather than fixed here: extracting from `run-retry.js` on a Wave 1 comment PR would
+be exactly the *"consolidation must not ride a defect PR"* inversion SI-27's own ruling
+forbids.
+
 ### v4.8 release inventory — what remains for 4.8.0, MEASURED (2026-08-22)
 
 Ordered before starting Phase 7, on the owner's instruction to inventory first. **Every item below
@@ -3173,6 +3240,14 @@ already stale and one task turned out never to have been specified.
 
 **Working scope for v4.8.0, after the owner's rulings on this inventory:**
 Phase 6 remainder (**5**, T6.5 dropped) · Phase 7 (~7) · SI-27 (1) · **SI-18 (1, newly promoted)**.
+
+⚠️ **Superseded 2026-08-22 by v4.8 Wave 1 (T-W1.1/T-W1.2) and the owner's wave-structure ruling —
+read as history, not current scope.** T6.6 and SI-14 shipped (Phase 6 remainder is now 3: SI-22.4,
+SI-23, SI-25 sites (1)+(2)); `#135 C0` shipped (Phase 7); `#135 C5` and the `#135 C2` probe are
+deferred to v4.9 (**W1-4**); the `mcp-server.js:684` one-liner and the `listCouncilRuns` dedupe are
+dropped as never-specified (**W1-3**); R16 is retained but rescoped (**W1-4**). The remaining work
+is no longer phrased as "Phase 6 remainder then Phase 7" — see **"NEXT TASK — Wave 2"** in the
+Phase 6 resume point above for the owner's wave structure, which is now the live resume point.
 
 #### The four items that were OPEN in neither a phase list nor §7's deferred list
 
@@ -3218,18 +3293,46 @@ measurements found, and why that ruling is the right shape:
 #### Measured-real, unchanged, and still to do
 
 `SI-23` (the tally `findings` z.object declares only `id`/`raiser`/`severity`/`claim`/`raiserSeat`,
-so zod strips `location`/`evidence`/`file`/`line` — confirmed) · `T6.6` (confirmed live:
+so zod strips `location`/`evidence`/`file`/`line` — confirmed) · ~~`T6.6` (confirmed live:
 `skills/second-opinion/SKILL.md:299` defines Singleton as `d = 0` and `a < 2` while
-`tally.js :: assignTier` returns **Confirmed** for `(a=1, d=0)`) · `SI-25` sites (1)+(2) (confirmed
-alias-keyed at `briefings-chair.js:88` and `:93`) · `SI-14` (confirmed: **no** such pin exists —
-pure test addition) · `SI-22.4` (real, with the twin-bench knock-on as filed) · `#135 C0`
+`tally.js :: assignTier` returns **Confirmed** for `(a=1, d=0)`)~~ **DONE — v4.8 Wave 1
+(`c0a7c728`)** · `SI-25` sites (1)+(2) (confirmed
+alias-keyed at `briefings-chair.js:88` and `:93`) · ~~`SI-14` (confirmed: **no** such pin exists —
+pure test addition)~~ **DONE — v4.8 Wave 1 (`424cb63d`)** · `SI-22.4` (real, with the twin-bench
+knock-on as filed) · ~~`#135 C0`
 (confirmed trivial: `utils/no-output-backstop.js:23` is `120000`, `.github/workflows/
-council-review.yml:242` overrides to `300000`; change the default, delete the override).
+council-review.yml:242` overrides to `300000`; change the default, delete the override)~~ **DONE —
+v4.8 Wave 1 (`4391f0b4` + ripple fix `b0d8e232`).**
 
-⚠️ **NOT individually measured, reported from the phasing doc only:** `#135 C5`, the `#135 C2`
-probe, `#138` Pieces 1+2, and the three carried Phase 7 items (the 13-rail leak fix, the
-`mcp-server.js:684` one-liner, the `listCouncilRuns` dedupe). Re-derive each before planning it —
-this section's whole point is that unmeasured rows go stale.
+⚠️ **Still to do after v4.8 Wave 1 (2026-08-22):** `SI-23` · `SI-25` sites (1)+(2) · `SI-22.4` — the
+three remaining Phase 6 independents; measurements above unchanged. Redistributed into **Wave 2**
+and **Wave 3** — see "NEXT TASK — Wave 2" in the Phase 6 resume point above.
+
+**W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to
+v4.9.** #135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and
+neither item has a measured target. ⚠️ **R16 is NOT deferred** — its `sessions-index.json` growth
+defect is measured and real (see *"Carried from the dropped v4.7.2 scope"*, below: a full
+read→parse→mutate→write of the whole index on every session start). But R16's own phrase *"pin all
+13 unpinned rails"* (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, owner-rulings
+table, row R16) appears nowhere else in the tree — **the number 13 is unsourced.** Scope R16 at
+Wave 2.5 from the growth entry, not from the ruling's wording.
+
+**W1-3 — v4.8 Wave 1 ruling (2026-08-22): the other two "carried" Phase 7 items are DROPPED as
+never-specified, on the T6.5 precedent.** `mcp-server.js:684` one-liner and the `listCouncilRuns`
+dedupe (6 rows / 5 ids on real data) each appeared **only** in the phasing doc's `Carried:` line
+(`:551`–`:552`) and in this inventory quoting it — no filed defect, no anchor, no description; the
+"6 rows / 5 ids" measurement exists nowhere else in the tree. The owner dropped T6.5 on exactly
+this reasoning (§ "Corrections this inventory made", above) and that precedent is applied here
+rather than re-asked.
+⚠️ **This is NOT the same as the live entry "Council runs are invisible to CLI `amicus list`"**
+(`mcp-council-awareness.js:205`, filed under v4.7 PR3 rider findings) — that entry is properly
+filed, carries two open design decisions (the `sanitizePreview` width parameter and the MODEL
+column's rendering), and **stays**. Both the dropped "dedupe" claim and the live CLI-invisibility
+entry cite the same function, `listCouncilRuns`, but they are different claims about it — only one
+of them was ever filed with a defect behind it.
+
+`#138` Pieces 1+2 remain **NOT individually measured, reported from the phasing doc only.**
+Re-derive before planning it — this section's whole point is that unmeasured rows go stale.
 
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
@@ -4240,7 +4343,7 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
     taken. What was re-derived at writing time rather than copied from the plan: the sole non-test
     caller is `run-debate.js :: applyDebate` and it does pass `aliasOf`, and `package.json:34-36` is
     exactly the `exports` block publishing only `./opencode-client`.
-- [ ] **A hardening note — nothing pins that the launcher must NOT de-duplicate `models`.** Owner
+- [x] **A hardening note — nothing pins that the launcher must NOT de-duplicate `models`.** Owner
   ruling R3-2 (one re-vote leg per seat) depends on `['gpt', 'deepseek', 'deepseek']` producing
   THREE legs, not two. Verified end-to-end through the real `runFanout`: three legs actually spawn,
   and `fanout-validate.js:18`'s `parseModelsList` docblock says "duplicates allowed" (line 18, not
@@ -4249,10 +4352,16 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   would silently drop a twin's leg and break R3-2 with no error, no test failure outside this one
   area, and a plausible-looking diff. `tests/council/run-debate.test.js`'s
   `describe('runDebate — twin bench: joins on the seat, launches on the alias', ...)` (from
-  `TWIN_BENCH = ['deepseek', 'deepseek', 'gpt']`, line 55) already pins the twin `-rv` shape at the
-  `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
-  dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
-  survive to leg construction."
+  `TWIN_BENCH = ['deepseek', 'deepseek', 'gpt']`, line **67**, not 55 — a twin of the same stale
+  citation this task's own plan carried, both corrected 2026-08-22) already pins the twin `-rv`
+  shape at the `runDebate` level, so the invariant is exercised — just not named. Worth an explicit
+  comment (or a dedicated unit test on `parseModelsList`) stating the invariant in one place:
+  "duplicates must survive to leg construction."
+  ✅ **DONE — SI-14, v4.8 Wave 1 (2026-08-22, `424cb63d`).** Shipped exactly as scoped here: a
+  named test in `tests/sidecar/fanout.test.js` plus an invariant comment; `parseModelsList` itself
+  is byte-unchanged (confirmed by diffing against this task's own start point). Named mutant
+  `MODELSUNIQ` (wraps the return in `[...new Set(...)]`): red set **3 tests / 1 suite**, non-empty
+  at full `npx jest --no-coverage` scope.
 - [x] **SI-15 · SUPERSEDED by SI-DUP** — ~~A maintainability note (from the auto-review).~~ `seatKey(seat, alias) => seat ? seat.id : alias`
   (or the arrow-function equivalent) is independently redefined in **three files**:
   `run-debate-revote.js:64`, `run.js :: seatKey` (**was `:228`; `:232` today, re-opened

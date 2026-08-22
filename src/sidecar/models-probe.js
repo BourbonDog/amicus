@@ -17,7 +17,7 @@
  */
 
 /** Probe backstop override (spec D5) — a fixed constant, NOT env-configurable;
- * the env knob (AMICUS_NO_OUTPUT_BACKSTOP_MS) stays the ordinary 120s leg default. */
+ * the env knob (AMICUS_NO_OUTPUT_BACKSTOP_MS) stays the ordinary 300s leg default. */
 const PROBE_WINDOW_MS = 30000;
 
 /** Fixed tiny prompt — a probe leg only needs to prove the model answers at all. */
@@ -28,9 +28,12 @@ const PROBE_PROMPT = 'Reply with exactly: OK';
  * schema.js) per the plan's Global Constraints classification contract.
  * Precedence matters: 'complete' wins outright; otherwise a NO_OUTPUT_
  * BACKSTOP error (PR2's silent-leg detector, armed here at PROBE_WINDOW_MS
- * instead of its 120s default) is the one specific error shape that means
- * "the model accepted the request and never produced a token" rather than an
- * ordinary routing/auth/timeout failure.
+ * instead of its 300s default) is the one specific error shape that means
+ * NOTHING arrived in the window — no output, no reasoning, no tool call —
+ * rather than an ordinary routing/auth/timeout failure. ⚠️ It does NOT prove
+ * the model "accepted the request": a stalled gateway or a dropped connection
+ * fires the same backstop. `accepted-but-silent` names the classification, not
+ * a fact about the endpoint (council B1 on PR #182).
  * @param {{status?:string, error?:string|null}} leg
  * @returns {'served'|'accepted-but-silent'|'error'}
  */

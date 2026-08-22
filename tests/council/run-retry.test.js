@@ -746,7 +746,7 @@ describe('SL-2 Task 6: sink invariant (source pin)', () => {
 
 describe('v4.6.2 PR2 Task 3: backstop reason inherits the SL-2 retry + degrade chain (pin)', () => {
   // Consumes the reason-string contract from PR2 Task 2 (src/headless.js's
-  // no-output backstop, 120s default). This suite is generic over error
+  // no-output backstop, 300s default). This suite is generic over error
   // strings (see the 'leg dies' tests above, which use short fixtures like
   // 'boom') -- this pin proves that genericity holds for the real backstop
   // text end to end: the SL-2 retry launch, the enriched both-attempts
@@ -824,12 +824,12 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
 
   test('retries with double the resolved backstop window', async () => {
     // Council never sets the field, so there is nothing on `o` to double —
-    // the retry resolves it itself. Must be COMPUTED: hardcoding 240000 would
+    // the retry resolves it itself. Must be COMPUTED: hardcoding 600000 would
     // make AMICUS_NO_OUTPUT_BACKSTOP_MS stop applying to retries, so an operator
-    // who set 300000 would get a SHORTER retry window than the first attempt.
+    // who set 900000 would get a SHORTER retry window than the first attempt.
     delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
     const launched = await runRetryCapturingLaunchOpts({ timeout: 15 });
-    expect(launched.noOutputBackstopMs).toBe(240000);
+    expect(launched.noOutputBackstopMs).toBe(600000);
   });
 
   test('honours AMICUS_NO_OUTPUT_BACKSTOP_MS when doubling', async () => {
@@ -845,7 +845,7 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
   });
 
   test('clamps the doubled window to the leg timeout', async () => {
-    // At --timeout 3 (180_000ms) an unclamped 240_000 can never fire, so the
+    // At --timeout 3 (180_000ms) an unclamped 600_000 can never fire, so the
     // retry would silently reclassify from NO_OUTPUT_BACKSTOP to an ordinary
     // timeout — a different diagnosis, arrived at silently.
     delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
@@ -857,16 +857,16 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
   // every test above passes an explicit timeout, and fakeCtx's own default is
   // timeout:5, so nothing previously drove o.timeout actually being unset.
   // If `|| 15` were ever dropped, o.timeout undefined -> legTimeoutMs is NaN
-  // -> Math.min(240000, NaN) is NaN -> headless.js's Number.isFinite check
-  // rejects it -> silent fallback to the 120000 default, with every other
+  // -> Math.min(600000, NaN) is NaN -> headless.js's Number.isFinite check
+  // rejects it -> silent fallback to the 300000 default, with every other
   // test in this describe block still green (they all pin an explicit
   // timeout, never the default).
   test('an unset o.timeout falls back to the 15-minute leg default', async () => {
-    // 240000 (the doubled default backstop) < 900000 (15min leg timeout), so
+    // 600000 (the doubled default backstop) < 900000 (15min leg timeout), so
     // the clamp does not bind here — this isolates the `|| 15` default itself.
     delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
     const launched = await runRetryCapturingLaunchOpts({ timeout: undefined });
-    expect(launched.noOutputBackstopMs).toBe(240000);
+    expect(launched.noOutputBackstopMs).toBe(600000);
   });
 
   // Companion: the Number.isFinite(o.noOutputBackstopMs) TRUE branch at :154

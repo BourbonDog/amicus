@@ -5,8 +5,8 @@ const {
 } = require('../src/utils/no-output-backstop');
 
 describe('resolveNoOutputBackstopMs', () => {
-  test('default 120000 when unset', () => {
-    expect(resolveNoOutputBackstopMs({})).toBe(120000);
+  test('default 300000 when unset', () => {
+    expect(resolveNoOutputBackstopMs({})).toBe(300000);
   });
   test('explicit value wins', () => {
     expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: '30000' })).toBe(30000);
@@ -15,8 +15,8 @@ describe('resolveNoOutputBackstopMs', () => {
     expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: '0' })).toBe(0);
   });
   test('blank and non-finite fall back to the default', () => {
-    expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: '' })).toBe(120000);
-    expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: 'Infinity' })).toBe(120000);
+    expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: '' })).toBe(300000);
+    expect(resolveNoOutputBackstopMs({ AMICUS_NO_OUTPUT_BACKSTOP_MS: 'Infinity' })).toBe(300000);
   });
 });
 

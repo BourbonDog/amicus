@@ -153,9 +153,9 @@ The cross-review matrix shows both; the ledger and Stage-0 bench recommendations
 | Priority | Tier | Rule | Meaning |
 |---|---|---|---|
 | 1 | **Disputed** | `d ≥ 2` and `d > a` | Strong peer pushback — the finding itself is likely wrong |
-| 2 | **Confirmed** | `a ≥ 2` and `a > d` | ≥ 2 independent corroborations, agrees dominate |
+| 2 | **Confirmed** | `a ≥ 2` and `a > d`, or `a = 1` and `d = 0` | ≥ 2 independent corroborations, agrees dominate — or a lone corroborating peer (thin) |
 | 3 | **Contested** | `d ≥ 1` (whatever remains) | At least one live dispute — in question |
-| 4 | **Singleton** | else (`d = 0` and `a < 2`) | At most one endorsement, no pushback — thin |
+| 4 | **Singleton** | else (`a = 0` and `d = 0`) | No peer engaged at all — thin |
 
 `confidence` is `thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, and `(0,1)`. **Claude may override the tier at `thin` margins** (recorded as `tierOverride: {from, to, reason}` and surfaced in the matrix and `verdict.json`). These four tiers drive Stage 4. `amicus council tally` assigns them deterministically; judgment at the margins remains Claude's.
 

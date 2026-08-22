@@ -380,7 +380,7 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
  * not "does AMICUS_NO_OUTPUT_BACKSTOP_MS influence this window" — those
  * diverge on a Stage-1 retry (`run-retry.js :: retryStage1Losses`'s `escalatedBackstopMs`
  * doubles the resolved/direct value, and its `common` forwards it as a direct option), so a
- * retry-fired 240s backstop is `fromEnv: false` while still genuinely
+ * retry-fired 600s backstop (the 300s default, doubled) is `fromEnv: false` while still genuinely
  * governed by the env var. The original version of these tests asserted the
  * ABSENCE of the variable NAME on the caller-set branch; the real
  * requirement was always the absence of a FALSE CLAIM that the window IS the
@@ -421,7 +421,7 @@ describe('formatNoOutputBackstopReason: reports only what the deadline observed,
     expect(msg).toMatch(/30s/);
   });
 
-  test('the seconds count derives from ms, not a hardcoded 120 — proof: fails if a future edit hardcodes "120s" instead of deriving from the ms argument, which would silently mis-report Task 5\'s doubled retry window (120s -> 240s)', () => {
+  test('the seconds count derives from ms, not a hardcoded 120 — proof: fails if a future edit hardcodes "120s" instead of deriving from the ms argument, which would silently mis-report Task 5\'s doubled retry window (the real one is now 300s -> 600s since #135 C0 raised the default; the 240000 fixture below is illustrative and deliberately NOT the live default, which is what keeps this pin independent of it)', () => {
     const msg = formatNoOutputBackstopReason({ ms: 240000, fromEnv: true });
     expect(msg).toMatch(/240s/);
     expect(msg).not.toMatch(/\b120s\b/);

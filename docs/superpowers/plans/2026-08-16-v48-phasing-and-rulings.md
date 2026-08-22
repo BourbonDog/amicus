@@ -273,6 +273,14 @@ moved (T5.3 grew that file 256→274). **Anchor by symbol: `debate.js :: applyDe
 substance — refuse rather than resolve, and SI-13 collapses to documentation — shipped exactly as
 ruled; see rows 10 and 13 and the Phase 5 section of §5.
 
+⚠️ **R16's own phrase is unsourced — corrected 2026-08-22 (v4.8 Wave 1, T-W1.2), and the ruling
+itself is unchanged.** R16 reads *"Pin all 13 unpinned rails."* A repo-wide grep for that phrase
+and for "13" near `sessions-index`/`unpinned rails` found only this table row — no filing, no
+count, no enumeration of what the 13 rails are, anywhere else in the tree. The underlying defect is
+real and measured (`BACKLOG.md`'s `sessions-index.json` growth entry: a full
+read→parse→mutate→write of the whole index on every session start), and R16 stands — **scope it
+from that growth entry, not from this row's "13."**
+
 ⚠️ **R17–R20 were ruled 2026-08-20, not 2026-08-16** — appended here rather than renumbered, so
 R1–R16 keep the numbers every other document cites them by. R17/R18 were taken before T2.4 / PR C
 wrote any code; R19 and R20 during its fix round.
@@ -519,10 +527,14 @@ degrade note is what explains why).
 SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin bench, so artifact
 filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · ~~SI-24 both sites
 including the unfiled `computeStreetCred` **data-loss** site~~ **DONE (PR1, 2026-08-22) — see
-status-table row `| 24 |`** · SI-14 twin pin · ~~T6.5 repair-row
-seat~~ **DROPPED** · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
+status-table row `| 24 |`** · ~~SI-14 twin pin~~ **DONE (v4.8 Wave 1, 2026-08-22)** · ~~T6.5 repair-row
+seat~~ **DROPPED** · ~~T6.6 `skills/` doc-fact gate~~ **DONE (v4.8 Wave 1, 2026-08-22)** · SI-25 sites (1)+(2) (R15)
 
 > ⚠️ **T6.5 was DROPPED 2026-08-22 (v4.8 release inventory, owner ruling) because it was never specified.** `grep -rn "T6\.5"` over the whole repo returned exactly two hits — this line and its twin in `BACKLOG.md`'s Phase 6 resume point — and nothing else: no filed defect, no anchor, no description of what "repair-row seat" meant. It is struck rather than carried, on the reasoning that if it named something real it will resurface with an actual defect behind it. **Phase 6 is therefore ~6 PRs, of which SI-24 has shipped and 5 remain.**
+> ⚠️ **Superseded 2026-08-22 (v4.8 Wave 1) — T6.6 and SI-14 also shipped, in the same PR as `#135
+> C0` below. Phase 6 is down to 3: SI-22.4, SI-23, SI-25 sites (1)+(2).** See "Wave structure for
+> the v4.8.0 remainder" after Phase 7, below, which is now the live resume point — the "each ships
+> alone" ordering above is superseded by the owner's wave grouping.
 
 > T6.6 is a live defect, not scaffolding: `tally.js :: assignTier` (`:28`) returns **Confirmed**
 > (`confidence: thin`) for `(a=1, d=0)` — measured by execution 2026-08-21 — while
@@ -535,6 +547,13 @@ seat~~ **DROPPED** · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
 > Singleton one — `:158` is Singleton; and `docs/council.md:662` is the cascade **heading**, not the
 > row that decides `(1, 0)`. `SKILL.md:299` was correct as cited. The defect itself is unchanged —
 > this is a citation repair, not a truth repair.
+> ✅ **DONE — v4.8 Wave 1, T-W1.1 (2026-08-22, `c0a7c728`).** `assignTier` re-verified by execution
+> across ten boundary `(a,d)` pairs before the fix. Both files now read Confirmed as "`a ≥ 2` and
+> `a > d`, or `a = 1` and `d = 0`" and Singleton as "else (`a = 0` and `d = 0`)". A second, uncited
+> twin surfaced while fixing this — a `SKILL.md` prose paraphrase ("at most one endorsement, no
+> pushback") two paragraphs from the cited line, asserting the same false claim — fixed in the same
+> commit, along with `COUNCIL-DESIGN.md`'s Confirmed row, which was independently missing the
+> `a=1,d=0` case entirely. Full detail: `BACKLOG.md`'s T6.6 entry in the Phase 6 resume point.
 
 ### Phase 7 · Repairs — ~7 PRs
 - #135 **C0**: `DEFAULT_NO_OUTPUT_BACKSTOP_MS` 120000 → 300000, delete `council-review.yml:242`.
@@ -550,6 +569,50 @@ seat~~ **DROPPED** · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
   lacks readline's clobber guard. Both are repairs to already-shipped v4.2 code
 - Carried: leak fix across **all 13** unpinned rails (R16) · `mcp-server.js:684` one-liner ·
   `listCouncilRuns` dedupe (6 rows / 5 ids on real data)
+
+✅ **`#135 C0` DONE — v4.8 Wave 1 (2026-08-22, `4391f0b4` + ripple fix `b0d8e232`).** Shipped
+exactly as scoped: `DEFAULT_NO_OUTPUT_BACKSTOP_MS` 120000 → 300000, `council-review.yml:242`'s
+override and its comment deleted, the owner's `900000` untouched (confirmed: it exists nowhere in
+the tracked tree). ⚠️ **Scope grew from the 2 files measured above to 11**, forced rather than
+chosen: the retry path doubles the backstop, so `run-retry.test.js`'s hardcoded `240000` assertions
+had to become `600000` or CI would ship red, and several docs/tests asserted the old "120s" as a
+live fact the change falsified. Named mutant `BACKSTOPDEFAULT`, red set 4 tests / 2 suites. A
+review pass found one instance the first sweep missed (`src/sidecar/models-probe.js:31`, a second
+"120s" claim in the same file already edited for this class) plus two more the controller's own
+sweep added (`tests/no-output-backstop-wiring.test.js:383` and `:424`); all three closed in the
+same follow-up commit. Full detail: `BACKLOG.md`'s `#135 C0` entries in the v4.8 release inventory.
+
+**W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to v4.9.**
+#135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and neither
+item has a measured target.
+
+**W1-3 — v4.8 Wave 1 ruling (2026-08-22): the `mcp-server.js:684` one-liner and the
+`listCouncilRuns` dedupe (6 rows / 5 ids) are DROPPED as never-specified, on the T6.5 precedent
+(§5 Phase 6, above).** Both appeared only in this section's own `Carried:` line and in
+`BACKLOG.md`'s release inventory quoting it — no filed defect, no anchor, no description; the "6
+rows / 5 ids" measurement exists nowhere else in the tree. ⚠️ **Not the same as `BACKLOG.md`'s live
+entry "Council runs are invisible to CLI `amicus list`"** (`mcp-council-awareness.js:205`), which
+is properly filed with two open design decisions and stays. **R16 is retained**, not dropped — see
+its own §4 row and annotation: its "13 unpinned rails" phrase is unsourced, scope it from
+`BACKLOG.md`'s `sessions-index.json` growth entry instead.
+
+### Wave structure for the v4.8.0 remainder — owner ruling, v4.8 Wave 1 (2026-08-22)
+
+Supersedes the Phase-6-then-Phase-7 sequencing above as the **resume point**; Phases 6 and 7 above
+remain the measured substrate for what each item IS, not for what order to take them in.
+
+- **Wave 1** — batched, one PR. **DONE**: T6.6, SI-14, `#135 C0` (this PR).
+- **Wave 2** — run **3-wide in isolated worktrees**: SI-23 · `#133 Piece 1` · SI-18 (newly promoted
+  into v4.8.0 scope by `BACKLOG.md`'s release inventory, not part of Phase 6/7 as originally
+  scoped) — **then** SI-25 sites (1)+(2) · `#138` Pieces 1+2.
+- **Wave 2.5** — R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from this
+  document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation).
+- **Wave 3** — **strictly serial**: SI-27 **first**, SI-22.4 **LAST** — SI-22.4's trim knock-on
+  turns a whitespace-padded preset member into a REAL twin bench (changed artifact filenames,
+  `meta.seats` starts emitting), which SI-27's consolidation should absorb rather than the other
+  way around.
+
+Full detail and citations: `BACKLOG.md`'s "NEXT TASK — Wave 2" entry in the Phase 6 resume point.
 
 ### Post-Phase-2 · SI-27 — 1 PR
 Padding/bindSeats/placeholder-filter core → `stage1-bind.js`, parameterised on
