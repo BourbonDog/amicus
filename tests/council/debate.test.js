@@ -245,9 +245,23 @@ describe('decorateRecord — additive past-tense debate field', () => {
  * stringifies as `{}` — wrong either way, and both close identically to an
  * ordinary unknown action ("bogus") once the table carries `__proto__: null`.
  *
- * ⚠️ `d.action` is the model's own parsed defense response (`resp.action` in
- * `applyDebate` above) with no operator in between — of every carrier in this
- * PR, this is the one a real paid run can hit with no hand-assembled document.
+ * ⚠️ CORRECTED at fix round 2 (task-3-report.md) — the sentence this replaced
+ * claimed a real paid run could hit this with no hand-assembled document.
+ * MEASURED FALSE: `parseDebateDefense` (src/council/parse-stage2.js:142-153)
+ * is an ALLOWLIST. Only 'defend'/'amend'/'withdraw' (each gated on its own
+ * required field) ever overwrite a per-id default of `{action:'no-response'}`;
+ * every other action a model could emit, inherited-key or ordinary junk
+ * alike, is ALREADY the literal 'no-response' before `debateFindings` (and
+ * therefore `d.action`) exists. Traced and verified: `debateFindings` has
+ * exactly ONE producer (`debate.js :: applyDebate`), which has ONE caller in
+ * src/ (`run-debate.js:203`); `decorateRecord` has ONE caller
+ * (`run-finish.js:50`, fed by `run.js`'s own `runDebate` result). No MCP or
+ * CLI entry hands either function a hand-assembled document. So this table's
+ * null prototype is DEFENSE-IN-DEPTH here, not a fix for a reachable defect —
+ * what actually protects today's document is `parseDebateDefense`'s
+ * allowlist. See run-debate.test.js's "a defense action a model cannot make
+ * PAST_TENSE-inherited" describe block (its ACTIONPASSTHRU named mutant pins
+ * the allowlist itself, since PROTOACTION cannot reach this path).
  */
 describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited action', () => {
   test('D1 — action "toString" maps to "no-response", and the key survives JSON.stringify', () => {

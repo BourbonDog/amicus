@@ -330,28 +330,38 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
   });
 });
 
-// v4.8 Phase 6 PR1 Task 3 fix round 1 (SI-24) — addendumOutcomes, PAST_TENSE's
-// SECOND consumer (run-debate.js:262's `PAST_TENSE[df.action] ||
-// PAST_TENSE['no-response']`), which debate.test.js's D1-D3 never reach (those
-// call decorateRecord directly with a hand-built debateFindings array).
+// v4.8 Phase 6 PR1 Task 3, fix rounds 1-2 (SI-24) — WHAT ACTUALLY PROTECTS
+// addendumOutcomes' `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
+// (run-debate.js:262) is NOT PAST_TENSE's null prototype. It is
+// parseDebateDefense's ALLOWLIST, one file upstream.
 //
-// ⚠️ MEASURED, NOT ASSUMED: driving a REAL defense response through the ACTUAL
-// runDebate -> parseDebateDefense -> applyDebate -> addendumOutcomes path (the
-// same fixture shape as the happy-path describe above, :212-215) with an
-// inherited `action` does NOT exercise PAST_TENSE's null prototype at this call
-// site. parseDebateDefense (src/council/parse-stage2.js:142-153) is an
-// ALLOWLIST: only 'defend'/'amend'/'withdraw' ever overwrite the per-id default
-// of `{action: 'no-response'}` — every other action string a model could emit,
-// inherited-key or ordinary junk alike, is already normalised to the literal
-// 'no-response' before `debateFindings` (and therefore `df.action`) exists.
-// `PAST_TENSE[df.action]` at this call site is therefore ALWAYS an own-key hit
-// in practice; the two tests below pin exactly that (a real string survives,
-// including the JSON.stringify round-trip), but they hold identically with or
-// without PAST_TENSE's `__proto__: null` — confirmed by running both under the
-// PROTOACTION mutation (see the updated record below): neither reds. This
-// narrows fix round 1's finding rather than closing it as originally framed —
-// see task-3-report.md's "Fix round 1" section for the full chase.
-describe('runDebate — a defense action a model cannot make PAST_TENSE-inherited (addendumOutcomes, the SECOND PAST_TENSE consumer)', () => {
+// Fix round 1 set out to pin PAST_TENSE's SECOND consumer here (the FIRST is
+// debate.js's decorateRecord, pinned in debate.test.js's D1-D3 — which call
+// decorateRecord directly with a hand-built debateFindings array and so never
+// touch this file at all). MEASURED, NOT ASSUMED: driving a REAL defense
+// response through the ACTUAL runDebate -> parseDebateDefense -> applyDebate
+// -> addendumOutcomes path (the same fixture shape as the happy-path describe
+// above, :212-215) with an inherited `action` does NOT exercise PAST_TENSE's
+// null prototype at this call site. parseDebateDefense
+// (src/council/parse-stage2.js:142-153) is an ALLOWLIST: only
+// 'defend'/'amend'/'withdraw' ever overwrite the per-id default of
+// `{action: 'no-response'}` — every other action string a model could emit,
+// inherited-key or ordinary junk alike, is already the literal 'no-response'
+// before `debateFindings` (and therefore `df.action`) exists.
+// `PAST_TENSE[df.action]` at this call site is therefore ALWAYS an own-key
+// hit on any input the real pipeline can deliver — confirmed by running the
+// two tests below under the PROTOACTION mutation: neither reds (see the
+// updated PROTOACTION record in debate.test.js).
+//
+// So what DO the two tests below pin? The allowlist itself — that no defense
+// action, however adversarial, ever reaches PAST_TENSE un-normalised. That is
+// a real and worth-keeping invariant; it earns its own named mutant,
+// ACTIONPASSTHRU (below), which removes the allowlist's fallthrough so
+// `r.action` passes through verbatim instead of defaulting to 'no-response'.
+// The two tests DO red under ACTIONPASSTHRU — see its record for the measured
+// set. Full chase in task-3-report.md's "Fix round 1" and "Fix round 2"
+// sections.
+describe('runDebate — the parseDebateDefense allowlist keeps a foreign action away from PAST_TENSE (addendumOutcomes)', () => {
   /** Drives a real (raw-text, parseDebateDefense-parsed) defense response —
    * same shape as the happy-path fixture above — with the given `action`. */
   async function runWithAction(action) {
@@ -368,7 +378,7 @@ describe('runDebate — a defense action a model cannot make PAST_TENSE-inherite
   }
 
   test.each([['toString'], ['__proto__']])(
-    'a defense action of %j still yields addendumOutcomes[].action: "no-response" as a STRING, surviving JSON.stringify',
+    'a defense action of %j is normalised to "no-response" by the parseDebateDefense allowlist before PAST_TENSE ever sees it — addendumOutcomes[].action is a STRING, surviving JSON.stringify',
     async (action) => {
       const result = await runWithAction(action);
       const a1 = result.addendumOutcomes.find(o => o.id === 'A1');
