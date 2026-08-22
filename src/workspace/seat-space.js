@@ -85,9 +85,15 @@ function isSeatTable(seats) {
  *     Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that `judgeSeatOf` filters out
  *     (:105-107), so its judge leg takes the alias branch too — and emits no -s2 note,
  *     because it BOUND. Measured: run-stages.test.js :: "M2: the placeholder never becomes…".
- *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser key names no seat
- *     takes materializeDebate's alias branch (run-debate.js :: runDebate,
- *     run-debate-revote.js:169-171 pass `seatById.get(key) || null`) and NO note records it.
+ *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser/judge key names no
+ *     seat takes materializeDebate's alias branch (run-debate.js :: runDebate;
+ *     run-debate-revote.js :: runRevoteWave, `seat = seatOf.get(leg) || null`). A rebuttal
+ *     leg's unbound raiser still has no note recording it. A revote leg's unbound judge DOES
+ *     get one since v4.8 T5.1 (channel `seat-unbound`, run-debate-revote.js's
+ *     reVoteUnboundNote) — but its `data` deliberately omits `seat`, carrying only
+ *     `judge`/`key`, so this function's own `const alias = d.data.seat;` read (below) still
+ *     finds nothing and this leg stays un-exonerated, the same net effect as before
+ *     (reVoteUnboundNote's own docblock states why `seat` is withheld on purpose).
  *   - an unmatchable waveId exonerates nothing.
  * @returns {Map<string, Set<string>>} orphan alias -> the kinds it provably did NOT write,
  *   in first-occurrence order (what keeps the emitted name list byte-identical).

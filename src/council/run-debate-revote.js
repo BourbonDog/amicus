@@ -64,13 +64,28 @@ function legRow(model, leg, conformance) {
 function seatKey(seat, alias) { return seat ? seat.id : alias; }
 
 /**
- * T5.1 (owner ruling R8): announce a re-vote leg whose key names no seat on
- * this wave's roster. The leg itself is unaffected — it still gets its
- * runStats row, its revote-<name>.md and its conformance — only its parsed
- * votes are withheld, because publishing them under this key would let
- * applyDebate's fail-open push (debate.js:93) invent a phantom adjudication
- * row instead of joining a real one. Field shape follows
- * stage1-bind.js:53 :: orphanLegNote.
+ * T5.1 (owner ruling R8): announce a re-vote leg whose key this wave cannot
+ * account for — it neither bound to any roster slot (a real seat or a §3.4
+ * placeholder) nor names one of the judges this wave actually launched. The
+ * leg itself is unaffected — it still gets its runStats row, its
+ * revote-<name>.md and its conformance — only its parsed votes are
+ * withheld, so `revoteByJudge` never carries this key at all and
+ * applyDebate never has to decide whether it belongs to an existing row or
+ * is new (the fail-open push at debate.js:93, unchanged and untouched for a
+ * key this wave DOES account for).
+ *
+ * Field shape follows stage1-bind.js:53 :: orphanLegNote's
+ * channel/what/why/effect/data — with ONE deliberate divergence: `data`
+ * carries no `seat` field. orphanLegNote's `data.seat` (confusingly named —
+ * it holds the ALIAS, not a seat object) is exactly what
+ * seat-space.js :: orphanExonerations reads to attribute a note to an
+ * alias. This note's `waveId` is always `<runId>-rv`, never `<runId>-s2`, so
+ * if it carried that field too it would enter that function's alias map and
+ * CLEAR — not extend — that alias's already-proven Stage-2 exonerations,
+ * via the non-`-s2` branch of the intersection there: a re-vote-stage
+ * anomaly wrongly invalidating a Stage-2 review-authorship proof. Do not add
+ * `seat` here to "complete" the parity with orphanLegNote; it is withheld
+ * on purpose.
  */
 function reVoteUnboundNote(waveId, judge, key, leg) {
   const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
@@ -140,21 +155,25 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     placeholders.add(p);
     return p;
   });
-  // T5.1 (§0.5): the REAL (non-placeholder) seat ids this wave expected to
-  // fill. A bare alias equals its own seat id whenever that alias holds
-  // exactly one seat on the bench (seats.js:67 mints `alias#N` only for a
-  // repeat) — which is why an unbindable leg's bare-alias key still names a
-  // seat, and must still publish, on a bench with no repeated alias.
-  const rosterIds = new Set((judgeSeats || []).filter(Boolean).map(s => s.id));
   const bindRes = bindSeats(waveId, roster, rawLegs);
   const seatOf = new Map(bindRes.bound
     .filter(b => !placeholders.has(b.seat))
     .map(b => [b.leg, b.seat]));
   // Every leg bindSeats placed on SOME roster slot — a real seat OR a §3.4
   // placeholder — belongs here too: a placeholder-holed judge bound cleanly,
-  // it simply has no real seat to bind TO, and that hole is announced at
-  // Stage 2 (stage1-bind.js), not here. A leg absent from this set matched no
-  // slot at all — bindSeats could not place it anywhere, real or padded.
+  // it simply has no real seat to bind TO. When that hole traces back to a
+  // Stage-2 orphan leg, it was already announced there (run-stage2.js:110
+  // calls stage1-bind.js's orphanLegNote — that module only DEFINES the
+  // note, it does not itself announce); a seat-less provisional row arriving
+  // any other way (a resumed or hand-built tallyInput) produces the same
+  // roster hole here with no note at all. Either way it is not this
+  // function's hole to raise. A leg absent from this set failed for any of
+  // seats.js :: bindSeats' own reasons, not only "no id/alias match": a
+  // foreign waveId is filtered out (`mine`'s `!l.waveId || l.waveId ===
+  // waveId`) before any matching is even attempted — such a leg reaches
+  // neither `bound` nor `orphanLegs`, it is simply invisible to bindSeats —
+  // while a leg that DID match a slot another leg already claimed lands in
+  // bindRes.orphanLegs too, on a collision, not a miss.
   const boundLegs = new Set(bindRes.bound.map(b => b.leg));
   for (const leg of rawLegs) {
     // The council ALIAS, not the resolved executable id — runStats rows join
@@ -198,15 +217,24 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // `seat` rides along for materializeDebate's filename only; debateRunStatsRows'
     // `mk` copies an explicit field list and never picks it up.
     //
-    // T5.1 (owner ruling R8): refuse to publish under a key that names no seat
-    // on this wave's roster — NOT `seat === null` (§0.5): that would ALSO
-    // refuse a leg bound to a §3.4 placeholder, and a unique-alias bench's
-    // unbindable leg, whose bare alias IS its seat's own id (`boundLegs`/
-    // `rosterIds` cover those two cases respectively). Only a leg bindSeats
-    // could place nowhere at all, whose alias ALSO names no roster seat, is
-    // the unnameable case R8 asks to refuse: publishing it here is exactly
-    // what lets applyDebate's fail-open push invent the phantom row.
-    if (boundLegs.has(leg) || rosterIds.has(key)) {
+    // T5.1 (owner ruling R8): publish IFF the leg bound to some roster slot
+    // (a real seat, or a §3.4 placeholder — `boundLegs`), OR the key names
+    // one of the judges THIS WAVE actually launched (`judgeKeys` — `judgeSeats`
+    // is positionally bound to it, per this function's own docblock, so every
+    // REAL seat id here is already a `judgeKeys` entry too). The second arm
+    // covers two shapes: a unique-alias bench, where `seatKey(null, 'qwen')
+    // === 'qwen'` IS that seat's own judgeKey; and a roster hole (a
+    // Stage-2-orphaned judge, padded with a placeholder here) whose -rv leg
+    // is ALSO unbindable — its bare-alias key is still in `judgeKeys`, and
+    // BASE already joins it correctly (the provisional row for that same
+    // orphaned judge is ALSO keyed on the bare alias), so refusing it would
+    // be a regression, not a fix — measured: BASE takes 2 adjudications in
+    // to 2 out, the seat-less row's verdict correctly replaced, no phantom
+    // row. NOT `seat === null` (§0.5) — a real-seat bind is unaffected
+    // either way, but that predicate wrongly refuses both cases just
+    // described. Only a leg bound to nothing at all, whose key ALSO names no
+    // judge this wave launched, is the unnameable case R8 asks to refuse.
+    if (boundLegs.has(leg) || judgeKeys.includes(key)) {
       byJudge[key] = parsed.byId;
     } else {
       ctx.degrade.note(reVoteUnboundNote(waveId, judge, key, leg));
