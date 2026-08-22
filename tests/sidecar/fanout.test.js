@@ -79,9 +79,27 @@ describe('fanout validation helpers', () => {
     // depends on a twin bench producing one leg PER OCCURRENCE, not per unique
     // value: ['gpt','deepseek','deepseek'] must stay three entries all the way
     // to leg construction, or seat #2 of the repeated alias silently loses its
-    // leg with no error. Nothing enforces this beyond NOT transforming the
-    // list — a future `uniq()` or `new Set(...)` anywhere on this path would
-    // break it invisibly. This pin exists so that change is loud.
+    // leg with no error.
+    //
+    // ⚠️ WHAT THIS PIN ACTUALLY COVERS, and what it does NOT — corrected after a
+    // paid council raised it as C1 (major, a3/d0/n0) against the first wording,
+    // which claimed this pin makes a `uniq()` "anywhere on this path" loud. It
+    // does not. It covers `parseModelsList` ONLY. Coverage of the rest of the
+    // path is real but comes from a DIFFERENT test, and the boundary is
+    // measured, not argued:
+    //   named mutant "MODELSUNIQ" — `[...new Set(...)]` on this function's
+    //     return. RED: 3 tests / 1 suite (this pin, `allows duplicates
+    //     (distinct legs)`, and validateFanoutModels' `keeps a duplicated model
+    //     as two distinct legs (no dedupe)`).
+    //   named mutant "DOWNSTREAMUNIQ" — `const raw = [...new Set(
+    //     parseModelsList(modelsArg))]` inside `validateFanoutModels`, i.e. a
+    //     dedupe introduced DOWNSTREAM of this function. RED: 1 test / 1 suite —
+    //     `validateFanoutModels > keeps a duplicated model as two distinct legs
+    //     (no dedupe)` ONLY. This pin stays GREEN against it.
+    // Both measured at full `npx jest --no-coverage` scope, 2026-08-22.
+    // So the invariant IS guarded at both points, by two different tests — and
+    // a dedupe introduced anywhere with no test at all (leg construction inside
+    // runFanout, say) would still be silent. Do not thin either test.
     it('SI-14: preserves every duplicate occurrence for leg construction (R3-2)', () => {
       expect(parseModelsList('gpt,deepseek,deepseek')).toEqual(['gpt', 'deepseek', 'deepseek']);
     });
