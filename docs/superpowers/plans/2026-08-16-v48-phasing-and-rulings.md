@@ -90,7 +90,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 02 | OPEN → **v4.9** | `deriveSeatLoss` + renderers blind to `seat-unbound` | `verdict.js :: deriveSeatLoss` · `live-dead-seats.js :: deadSeats` · `workspace-seats.js :: retriedSeats` |
 | 03 | PARTIAL → ruled | Stage-2 judge roster from `modelInput` | `run-stage2.js :: runStage2` |
 | 04 | **DONE** | tally peer filter | `tally.js :: tally` |
-| 05 | PARTIAL | `debate.js` second copy of the filter | `debate.js :: debateTargets` |
+| 05 | **DONE** (v4.8 Phase 2 T-B2 `e23e56cd`; row corrected 2026-08-22 by the v4.8 release inventory, which found it STALE) | ~~`debate.js` second copy of the filter~~ there is no second copy: `debate.js :: debateTargets` calls `peer-split.js :: peersOf` at `debate.js:254`, and that function's own docblock states it was **"the last hand-rolled peer filter left in this file"**. Measured by opening the file, not inferred from T-B2's commit message | `debate.js :: debateTargets` |
 | 06 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21) | ~~`computeStreetCred` peer split~~ the third alias comparison now compares SEATS when both sides carry one, aliases otherwise (ruling ledger C-2), reusing `peer-split.js :: peersOf`'s shape | `street-cred.js :: computeStreetCred` |
 | 07 | **DONE** | R8 `sameModelCorroboration` stamp | `tally.js :: tally` |
 | 08 | **DONE** | `meta.seats` in tally input | `run-assemble.js :: buildTallyInput` |
@@ -519,8 +519,10 @@ degrade note is what explains why).
 SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin bench, so artifact
 filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · ~~SI-24 both sites
 including the unfiled `computeStreetCred` **data-loss** site~~ **DONE (PR1, 2026-08-22) — see
-status-table row `| 24 |`** · SI-14 twin pin · T6.5 repair-row
-seat · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
+status-table row `| 24 |`** · SI-14 twin pin · ~~T6.5 repair-row
+seat~~ **DROPPED** · T6.6 `skills/` doc-fact gate · SI-25 sites (1)+(2) (R15)
+
+> ⚠️ **T6.5 was DROPPED 2026-08-22 (v4.8 release inventory, owner ruling) because it was never specified.** `grep -rn "T6\.5"` over the whole repo returned exactly two hits — this line and its twin in `BACKLOG.md`'s Phase 6 resume point — and nothing else: no filed defect, no anchor, no description of what "repair-row seat" meant. It is struck rather than carried, on the reasoning that if it named something real it will resurface with an actual defect behind it. **Phase 6 is therefore ~6 PRs, of which SI-24 has shipped and 5 remain.**
 
 > T6.6 is a live defect, not scaffolding: `tally.js :: assignTier` (`:28`) returns **Confirmed**
 > (`confidence: thin`) for `(a=1, d=0)` — measured by execution 2026-08-21 — while
