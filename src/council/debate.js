@@ -33,6 +33,20 @@ const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
  * seat id, so a direct-require caller with no seats and the reserved 'claude'
  * key both behave exactly as before.
  *
+ * ⚠️ SI-13: when `aliasOf` is omitted, the fail-open push below uses the raw
+ * key unchanged (`alias = key`), leaving the SEAT id in the alias-space
+ * `judge` field instead of projecting it to its alias. `judge` must stay
+ * alias-space — it reaches `peer-split.js :: peersOf`'s `v.judge !== f.raiser`
+ * and `report.js`'s `byJudge[adj.judge]`, both alias-space joins — so a seat
+ * id there can silently retier a finding. `applyDebate` has no seat roster of
+ * its own, so building that projection stays the caller's obligation.
+ *
+ * The gap needs a caller that both omits `aliasOf` and hits a repeated alias,
+ * and none exists today: the sole non-test caller, `run-debate.js`, always
+ * supplies `aliasOf` (see the warning comment at its call site), and
+ * `package.json`'s `exports` map publishes only `./opencode-client`, blocking
+ * a deep `require('amicus/src/council/debate')` from outside this package.
+ *
  * ⚠️ This block used to declare a `provisionalRecord` param the destructure has
  * never taken (pre-existing doc rot). Callers still pass one and it is still
  * ignored — the DOC is what was wrong, so only the doc was fixed. Deliberately
