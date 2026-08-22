@@ -59,6 +59,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   // the leg timeout so the failure CLASS stays NO_OUTPUT_BACKSTOP rather than
   // silently becoming an ordinary timeout at a low --timeout. 2*0 === 0 keeps
   // the disable hatch. (o.timeout || 15) * 60 * 1000 mirrors fanout.js:254.
+  // ⚠️ #135 C0 took this 240s -> 600s; deliberate, see CHANGELOG (council A1, PR #182).
   const legTimeoutMs = (o.timeout || 15) * 60 * 1000;
   const escalatedBackstopMs = Math.min(
     2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs : resolveNoOutputBackstopMs()),

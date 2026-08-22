@@ -3216,6 +3216,22 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ids) — ⚠️ **not** the same as the live *"Council runs are invisible to CLI `amicus list`"* entry
   (`mcp-council-awareness.js:205`, filed under v4.7 PR3 rider findings), which stays filed.
 
+### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
+
+Measured while adding a **one-line** comment for council A1: the file was at **299**, a
+3-line note took it to 302 and failed `check:sizes`, and the surviving one-liner leaves it
+at exactly **300/300**. **The next line added to that file breaks the gate.**
+
+Release Constraint 6 is *EXTRACT, never shave a comment* — so the next change there must
+extract first, and no comment already in the file may be trimmed to buy room.
+⚠️ **This lands directly on SI-27**, which consolidates the padding/bindSeats/placeholder
+core out of `run-retry.js`, `run-stage2.js` and `run-debate-revote.js` into
+`stage1-bind.js`. That work IS the extraction this file needs — but its implementer must
+know there is no room to add even a single explanatory line before the extraction lands.
+Filed rather than fixed here: extracting from `run-retry.js` on a Wave 1 comment PR would
+be exactly the *"consolidation must not ride a defect PR"* inversion SI-27's own ruling
+forbids.
+
 ### v4.8 release inventory — what remains for 4.8.0, MEASURED (2026-08-22)
 
 Ordered before starting Phase 7, on the owner's instruction to inventory first. **Every item below

@@ -236,6 +236,21 @@ All notable changes to Amicus are documented here. Format follows
   and `:424`); all three closed in a follow-up commit. Deliberately left alone: `run-retry.test.js`'s
   `'in 120s'` fixture string, which is arbitrary generic test data for a genericity pin, not a claim
   about the default.
+  ⚠️ **The 600 s worst case is a DELIBERATE TRADE, not an oversight** — raised by a paid
+  council as A1 against PR #182 (`a3/d0/n0`) and adjudicated by arithmetic:
+  `min(2 * 300000, 900000) = 600000`, and the 15-minute leg-timeout clamp does **not** bind,
+  so the failure CLASS stays `NO_OUTPUT_BACKSTOP` rather than degrading into an ordinary
+  timeout. Worst-case silent-leg latency on a retry is therefore 10 minutes. That is the
+  price of accommodating models that legitimately take minutes to first token — the kimi
+  case #135 exists for — and the alternative is killing slow-but-healthy legs.
+- **The live-probe docs no longer claim a fired backstop proves the endpoint accepted the
+  request.** Council B1 against PR #182 (`a3/d0/n0`). A `NO_OUTPUT_BACKSTOP` shows only that
+  no output, reasoning or tool call arrived in the window — a stalled gateway or a dropped
+  connection fires it just as readily. `accepted-but-silent` is the classification's NAME,
+  not a fact about the endpoint. Corrected in `docs/usage.md` **and** in
+  `src/sidecar/models-probe.js`'s docblock, which stated the same thing and which the first
+  pass at this finding missed — the twin was only caught because the council re-reviewed the
+  fix. ⚠️ Pre-existing wording in both places; this release did not introduce it.
 
 ### Changed
 
