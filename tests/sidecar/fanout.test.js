@@ -74,6 +74,17 @@ describe('fanout validation helpers', () => {
     it('allows duplicates (distinct legs)', () => {
       expect(parseModelsList('a/b,a/b')).toEqual(['a/b', 'a/b']);
     });
+    // SI-14: duplicates must survive to leg construction. Owner ruling R3-2
+    // (one re-vote leg per disputing SEAT — tests/council/run-debate.test.js:967)
+    // depends on a twin bench producing one leg PER OCCURRENCE, not per unique
+    // value: ['gpt','deepseek','deepseek'] must stay three entries all the way
+    // to leg construction, or seat #2 of the repeated alias silently loses its
+    // leg with no error. Nothing enforces this beyond NOT transforming the
+    // list — a future `uniq()` or `new Set(...)` anywhere on this path would
+    // break it invisibly. This pin exists so that change is loud.
+    it('SI-14: preserves every duplicate occurrence for leg construction (R3-2)', () => {
+      expect(parseModelsList('gpt,deepseek,deepseek')).toEqual(['gpt', 'deepseek', 'deepseek']);
+    });
     it('returns [] for empty/boolean input', () => {
       expect(parseModelsList('')).toEqual([]);
       expect(parseModelsList(true)).toEqual([]);
