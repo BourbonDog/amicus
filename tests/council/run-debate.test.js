@@ -1432,6 +1432,16 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
     expect(notes[0].data.waveId).toBe('r-rv');
     // The taskId that bound it to the placeholder slot, carried on the record.
     expect(notes[0].data.legId).toBe('r-rv-2');
+    // ⚠️ EXACT `what`, pinned HERE because this is the leg the old wording lied about:
+    // it DID match a roster slot (the §3.4 placeholder's, by taskId) and was refused
+    // anyway, so "matches no seat on that wave's roster" was false for three rounds while
+    // the `why` three lines under it had already been corrected twice. Named mutant
+    // WHATSTALE. The negative assertion is the load-bearing half — it is what stops the
+    // old sentence being reinstated from stage1-bind.js :: orphanLegNote, where the same
+    // words are TRUE.
+    expect(notes[0].what)
+      .toBe('re-vote leg r-rv-2 in wave r-rv could not be attributed to a judge on that wave');
+    expect(notes[0].what).not.toMatch(/matches no seat/);
     // ⚠️ And the note's own `why` must not claim the leg bound to nothing — THIS one
     // bound, to the placeholder's slot, which is what the taskId above shows. That
     // sentence read "it bound to no roster slot, and … names no seat there either"
@@ -1479,6 +1489,13 @@ describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REF
 //   WHYSTALE  restore the pre-T5.5 `why` literal ("it bound to no roster slot,
 //             and its judge alias '${alias}' names no seat there either").
 //             Red set (2) now that this block exists — it was (1) before.
+//   WHATSTALE restore the pre-round-2 `what` literal ("re-vote leg … matches no
+//             seat on that wave's roster"), which a paid council caught still
+//             making the claim `why` had been fixed twice to drop. A COMPANION
+//             to WHYSTALE rather than a widening of it, so a red set attributes
+//             to one string. Red set (3): this test's exact `what`, the T5.5
+//             refusal block's exact `what` + its `not.toMatch(/matches no
+//             seat/)`, and the exit-2 composition test's emitted-line regex.
 // Both hand-applied to the committed file, run across the same six suites as
 // this branch's other mutants, then restored from a `cp` copy and byte-verified
 // with `git diff --quiet`.
@@ -1514,7 +1531,7 @@ describe('runRevoteWave — T5.5: a leg carrying NEITHER modelInput NOR model st
     // always published, leaving `key === judge` in every refusal.
     expect(notes[0].why).toBe("its join key 'unknown' names none of the judges this wave launched");
     expect(notes[0].what)
-      .toBe("re-vote leg unidentified in wave r-rv matches no seat on that wave's roster");
+      .toBe('re-vote leg unidentified in wave r-rv could not be attributed to a judge on that wave');
     expect(notes[0].data)
       .toEqual({ waveId: 'r-rv', legId: 'unidentified', judge: 'unknown', key: 'unknown' });
     // Belt and braces over the WHOLE record: nothing anywhere renders `undefined`.
@@ -1609,7 +1626,7 @@ describe('runRevoteWave — T5.5: a seat-unbound refusal reaches terminal exit 2
     // itself unproven; both were measured in that position and did exactly that.
     // Measured in this position: NOTEHEAL reds on `degraded.value` above.
     expect(records[0].kind).toBe('degrade');
-    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* matches no seat/);
+    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* could not be attributed to a judge/);
   });
 });
 

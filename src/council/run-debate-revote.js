@@ -95,35 +95,34 @@ function seatKey(seat, alias) { return seat ? seat.id : alias; }
  */
 function reVoteUnboundNote(waveId, judge, key, leg) {
   const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
-  // `|| 'unknown'` mirrors stage1-bind.js:55's alias fallback, and for the same
-  // reason: the caller derives `judge` as `leg.modelInput || leg.model`, so a leg
-  // carrying NEITHER renders the note as "… 'undefined'" — a degrade record that
-  // reads like a bug in the announcer instead of a fact about the leg.
-  // ⚠️ BOTH interpolations need it, not just the alias. The caller's `key` is
-  // `seatKey(seat, judge)`, which returns that same `judge` whenever the leg bound
-  // to no real seat — i.e. in every refusal reachable through runDebate — so an
-  // undefined `judge` makes `key` undefined too. T5.5 started interpolating `key`
-  // and, for one commit, did it raw: measured against the real runRevoteWave, that
-  // rendered "its join key 'undefined'" AND dropped `data.key` out of the JSON
-  // entirely. Pinned by run-debate.test.js's "a leg carrying NEITHER modelInput
-  // NOR model" test; named mutant KEYRAW.
+  // `|| 'unknown'` mirrors stage1-bind.js:55's alias fallback, and for the same reason: the
+  // caller derives `judge` as `leg.modelInput || leg.model`, so a leg carrying NEITHER makes the
+  // record read "… 'undefined'" — a bug in the announcer rather than a fact about the leg.
+  // ⚠️ BOTH need it. `key` is `seatKey(seat, judge)`, which RETURNS that same `judge` whenever the
+  // leg bound to no real seat — i.e. in every refusal reachable through runDebate — so an undefined
+  // `judge` takes `key` with it. T5.5 interpolated `key` raw for one commit and measurably rendered
+  // "its join key 'undefined'" AND dropped `data.key` from the JSON. Pinned by
+  // run-debate.test.js's "NEITHER modelInput NOR model" test; named mutant KEYRAW.
   const alias = judge || 'unknown';
   const joinKey = key || 'unknown';
   return {
     channel: 'seat-unbound',
-    what: `re-vote leg ${legId} in wave ${waveId} matches no seat on that wave's roster`,
-    // ⚠️ T5.5 rewrote this. It said "it bound to no roster slot, and its judge alias … names no
-    // seat there either", whose FIRST half is false in exactly the case that motivated deleting the
-    // `boundLegs` arm (this function's docblock has it). One condition, one clause.
-    // ⚠️ It also carried "(judge alias '${alias}')" for one commit. Dropped, measured: through
-    // runDebate every refusal has `seat === null`, because run-debate.js builds `judgeSeats` as
-    // `judgeKeys.map(k => seatById.get(k) || null)` off an id-keyed table — so a real seat's id is
-    // always a `judgeKeys` entry and a real-seat bind is always PUBLISHED, never refused. That
-    // makes `key === judge` in every reachable refusal, and the parenthetical printed the same
-    // string twice. The two differ only for a direct-require caller passing an inconsistent
-    // `judgeSeats`, and `data` carries both values for that reader anyway.
+    // ⚠️ All three strings below now say the ONE thing the guard tests: the key names no judge
+    // this wave launched. Binding is irrelevant — this function's docblock says why.
+    // ⚠️ `what` said "matches no seat on that wave's roster" for three rounds AFTER that stopped
+    // being the condition: a leg taskId-bound to a §3.4 placeholder DOES match a roster slot and is
+    // exactly the leg now refused, so `what` contradicted the `why` three lines under it. A paid
+    // council caught it (round 2). ⚠️ stage1-bind.js :: orphanLegNote KEEPS that wording and MUST:
+    // a Stage-1 orphan really does match no roster slot. Same sentence, true there, false here.
+    // ⚠️ `effect` said "the JUDGE's provisional verdict stands" until round 2 — the very
+    // presumption a refusal denies, since a refused key names no judge of this wave.
+    // ⚠️ `why` carried "(judge alias '${alias}')" for one commit; dropped, measured — `key ===
+    // judge` in every refusal runDebate can produce, so it printed the same string twice
+    // (BACKLOG.md holds the measurement). `data` keeps orphanLegNote's field names, `judge`
+    // included: it is the leg's own CLAIM, and renaming a machine-readable field is a compat break.
+    what: `re-vote leg ${legId} in wave ${waveId} could not be attributed to a judge on that wave`,
     why: `its join key '${joinKey}' names none of the judges this wave launched`,
-    effect: "the re-vote was NOT applied; the judge's provisional verdict stands",
+    effect: 'the re-vote was NOT applied; the provisional verdict stands',
     data: { waveId, legId, judge: alias, key: joinKey },
   };
 }

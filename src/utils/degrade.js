@@ -17,10 +17,10 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
   'stage1-retry',
-  // v4.8: the seat<->leg join failed. Two shapes, one channel: a launched seat
-  // whose wave returned legs but none of them its own, and a returned leg that
-  // matches no roster slot. Never a guess — silent mis-attribution is the
-  // failure seat identity exists to kill (spec §4.4).
+  // v4.8: the seat<->leg join failed. THREE shapes, one channel: a launched seat whose wave
+  // returned legs but none its own; a returned leg matching no roster slot; and (T5.5, `-rv` only)
+  // a leg that DID match a slot but whose join key names no judge the wave launched.
+  // Never a guess — silent mis-attribution is the failure seat identity exists to kill (§4.4).
   'seat-unbound',
   'internal',
   // doctor channels
