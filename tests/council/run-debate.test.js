@@ -10,6 +10,11 @@ const { runDebate, nothingToDebate, disputingJudges } = require('../../src/counc
 // for (that plan is committed; the task brief that also asked for this lives
 // under .superpowers/, deleted at branch end — cite the file that survives).
 const { runRevoteWave } = require('../../src/council/run-debate-revote');
+// T5.5: the exit-2 composition block at the bottom of this file drives the REAL
+// degrade sink and the REAL terminal-exit resolver, not a double — that pairing
+// is the whole point of it (BACKLOG.md's SI-10 exit-2 follow-up).
+const { createDegradeSink } = require('../../src/council/run-degrade');
+const { resolveTerminalExit } = require('../../src/council/run-finalize');
 const { applyDebate } = require('../../src/council/debate');
 const { tally } = require('../../src/council/tally');
 const runState = require('../../src/council/run-state');
@@ -1293,50 +1298,59 @@ describe('runDebate — §3.4 placeholder contract at the -rv call site (a ROSTE
 });
 
 // ============================================================================
-// BOUNDDROP (whole-branch fix wave, round 2) — the `boundLegs` arm of T5.1's
-// guard IS separable by a fixture. The comment above it used to say "no fixture
-// can separate them" and called the arm "NOT A LOAD-BEARING CONDITION"; both
-// were FALSE, and this block is the six lines that disprove them.
+// T5.5 — the `boundLegs` arm is GONE, and this block pins its absence.
+// `run-debate-revote.js :: runRevoteWave` now publishes on
+// `judgeKeys.includes(key)` ALONE.
 //
-// The mechanism: seats.js:139-141 binds a leg to a roster slot from
-// `leg.legId || leg.taskId` alone — `roster[Number(m[2]) - 1]` with NO alias
-// check — and the alias fallback below it only runs `if (!seat && ...)`. So a
-// leg stamped into the PLACEHOLDER's slot while carrying an alias that is not
-// in `judgeKeys` BINDS (arm 1 true) and still keys on that foreign alias
-// (arm 2 false). This is the §3.4 fixture above with exactly ONE change: the
-// hole leg's alias 'deepseek' -> 'zzz'.
+// ⚠️ THE ASSERTIONS BELOW ARE THE INVERSE OF THE ONES THIS BLOCK SHIPPED WITH.
+// The whole-branch fix wave (round 2) added this fixture under the name
+// BOUNDDROP to pin arm 1's effect as a DISCLOSED DEFECT — it asserted 3
+// adjudication rows and ZERO degrade notes, on purpose, so the defect could not
+// rot silently. A paid multi-model council then confirmed the same mechanism
+// against PR #179 from three independent seats and reproduced this branch's own
+// measured figure, and the owner ruled: delete the arm. So the defect assertions
+// invert here, and the mutant's name inverts with them — dropping the arm WAS
+// the mutant (`BOUNDDROP`) and IS now the fix, so the mutant is `BOUNDREADD`.
 //
-// ⚠️ WHAT THIS PINS IS A DISCLOSED DEFECT, NOT A DESIRED OUTCOME — read the
-// assertions that way. Measured end to end, not reasoned: the foreign key is
-// PUBLISHED, NO note is emitted, and applyDebate then fails open and pushes a
-// phantom `zzz` adjudication row while the roster hole's own seat-less row
-// keeps its stale `dispute`. One adjudication in, THREE out. That is the same
-// SI-10 shape T5.1 set out to close, surviving through arm 1 — so at this
-// caller the arm's measured effect is to ADMIT a phantom row, not to prevent a
-// regression. Pinned as known-wrong so it cannot rot silently, and filed in
-// BACKLOG.md for the owner to rule on; deliberately NOT fixed here, because
-// changing the predicate is a behaviour change and this is a record round.
-// Control, measured beside it: the same fixture with the hole's own alias
-// ('deepseek', §3.4's shape) takes 1 adjudication in to 2 out with the
-// seat-less row correctly REPLACED and no phantom — which is why arm 1 exists
-// and why deleting it outright is not the answer either.
+// The mechanism arm 1 admitted: `seats.js :: bindSeats` binds a leg to a roster
+// slot from `leg.legId || leg.taskId` alone — `roster[Number(m[2]) - 1]`, with NO
+// alias check — and the alias fallback under it only runs `if (!seat && …)`. So a
+// leg stamped into the §3.4 PLACEHOLDER's slot while carrying an alias that is in
+// no roster and no `judgeKeys` BOUND (arm 1 true) while keying on that foreign
+// alias (arm 2 false): the foreign key was published, no note was emitted, and
+// `applyDebate`'s fail-open push invented a phantom `zzz` row while the roster
+// hole's own seat-less row kept its stale `dispute`. That is the SI-10 shape
+// T5.1 exists to close, surviving through arm 1. This is the §3.4 fixture above
+// with exactly ONE change: the hole leg's alias 'deepseek' -> 'zzz'.
+//
+// ⚠️ A BEHAVIOUR change, so these are RED-before-GREEN, not preservation pins.
+// Measured by execution against BASE `269badf1` (arm 1 present): both tests
+// below FAIL there — the first on `0 notes` where it wants 1, the second on
+// `3 rows` where it wants 2 — and both pass at HEAD.
+//
+// ⚠️ The §3.4 roster hole is NOT regressed by the deletion, which is the whole
+// reason arm 2 survives: a hole's own alias IS one of `judgeKeys` (run-debate.js
+// builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so the
+// hole keeps its `judgeKeys` slot and only loses its seat), so it still publishes
+// and still emits no note. The "§3.4 placeholder contract" block above and
+// T5.1's "roster hole whose leg is ALSO unbindable" test are that pin; both are
+// untouched by this change and both stay green.
 //
 // ⚠️ NOT reachable from the production launcher: runRevoteWave launches
 // `models: judgeKeys.map(aliasOf)` and fanout-leg.js carries `leg.modelInput`
 // straight from that request (`:62`, `:101`), so a real -rv leg's alias is
 // always one the wave asked for. Same latency class as SI-10 itself.
 //
-// Named mutant BOUNDDROP — collapse the guard to `judgeKeys.includes(key)`
-// alone, dropping the `boundLegs.has(leg) ||` arm. **Red set (2): BOTH tests
-// in this block and nothing else**, measured across run-debate.test.js +
-// debate.test.js + seat-space.test.js + run-stages.test.js (2 failed / 223
-// passed). The first reds on its degrade assertion (0 notes -> 1), the second
-// on its row assertions (3 rows -> 2, phantom gone). Hand-applied to the
-// committed file, run, then reverted from a `cp` backup and byte-verified with
-// `git diff --quiet`. ⚠️ Before this block existed that same collapse red
-// NOTHING, which is what the prose it replaces mistook for "unreachable".
+// Named mutant BOUNDREADD — re-add the deleted arm, i.e. restore BOTH halves of
+// what T5.5 removed: the Set (`const boundLegs = new Set(bindRes.bound.map(b =>
+// b.leg));`, after the `seatOf` build) and the widened predicate
+// (`if (boundLegs.has(leg) || judgeKeys.includes(key))`). Red set (2): BOTH
+// tests in this block and nothing else, measured across run-debate.test.js +
+// debate.test.js + seat-space.test.js + run-stages.test.js + degrade-sink.test.js
+// + run-finalize.test.js. Hand-applied to the committed file, run, then restored
+// from a `cp` backup and byte-verified with `git diff --quiet`.
 // ============================================================================
-describe('runDebate — BOUNDDROP: a taskId-bound leg carrying a FOREIGN alias', () => {
+describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REFUSED', () => {
   let tmp, result, ctx;
   // The §3.4 roster hole again: A1's deepseek dispute with its `seat` removed,
   // so `disputingJudges` yields the bare alias 'deepseek', which is no seat id
@@ -1370,25 +1384,118 @@ describe('runDebate — BOUNDDROP: a taskId-bound leg carrying a FOREIGN alias',
     result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
   });
 
-  test('it BINDS to the placeholder slot yet keys on the foreign alias — arm 1 alone publishes it', () => {
-    // Bound (so `boundLegs` holds it) but the placeholder is filtered back out,
-    // so the leg's seat is null and its key is the bare 'zzz'.
+  test('it BINDS to the placeholder slot yet keys on the foreign alias — and is refused anyway', () => {
+    // Bound (so arm 1 WOULD have published it) but the placeholder is filtered
+    // back out, so the leg's seat is null and its key is the bare 'zzz'.
+    // The leg itself is untouched — LEGDROP's contract: only the votes are withheld.
     expect(result.revoteLegs.map(l => l.seat && l.seat.id)).toEqual(['gpt', null]);
-    // Arm 2 is false here — 'zzz' names no seat and no launched judge — so a
-    // note WOULD be emitted if arm 1 were gone. That is BOUNDDROP's red edge.
-    expect(ctx.degrade.all()).toEqual([]);
+    // 'zzz' names no seat and no launched judge, so the ONLY surviving arm is
+    // false and the refusal is announced. This is BOUNDREADD's red edge.
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('zzz');
+    expect(notes[0].data.key).toBe('zzz');
+    expect(notes[0].data.waveId).toBe('r-rv');
+    // The taskId that bound it to the placeholder slot, carried on the record.
+    expect(notes[0].data.legId).toBe('r-rv-2');
   });
 
-  test('⚠️ DISCLOSED DEFECT: publishing that key invents a phantom row and strands the real one', () => {
+  test('refusing that key invents no phantom row and leaves the roster hole its own', () => {
     const a1 = result.debatedInput.adjudications.filter(a => a.findingId === 'A1');
-    // 1 in -> 3 out. Asserting the WRONG number on purpose, so it cannot rot
-    // silently; the day this becomes 2 the guard was fixed and this pin should
-    // be replaced, not deleted.
-    expect(a1).toHaveLength(3);
-    expect(a1.find(a => a.judge === 'zzz')).toEqual({ findingId: 'A1', judge: 'zzz', verdict: 'agree' });
-    // The roster hole's own re-vote never landed: its seat-less row still says
-    // dispute, exactly the "paid re-vote silently discarded" half of SI-10.
-    expect(a1.find(a => a.judge === 'deepseek' && !a.seat).verdict).toBe('dispute');
+    // 2 out, not 3: gpt's bound re-vote applied, and nothing invented.
+    expect(a1).toHaveLength(2);
+    expect(a1.find(a => a.judge === 'zzz')).toBeUndefined();
+    expect(a1.find(a => a.judge === 'gpt').verdict).toBe('agree');
+    // The roster hole's own seat-less row is INTACT — the phantom never
+    // displaced it, and no re-vote of its own ever arrived to replace it.
+    expect(a1.find(a => a.judge === 'deepseek' && !a.seat))
+      .toEqual({ findingId: 'A1', judge: 'deepseek', verdict: 'dispute' });
+  });
+});
+
+// ============================================================================
+// T5.5 — the exit-2 COMPOSITION. Both halves were already pinned SEPARATELY:
+// `tests/council/degrade-sink.test.js` :: "note() writes stderr, appends
+// run.json, and flips degraded" (a default-kind record sets `degraded.value`),
+// and `tests/council/run-finalize.test.js` :: "the degrade flag turns 0 into 2
+// (a shrunken bench, a thin cross-review, …)". Nothing pinned the JOIN: every
+// other -rv fixture in this file runs on `ctxFor`'s `degrade`, which is a
+// RECORDING DOUBLE (`{ note: (rec) => notes.push(rec), all: () => notes }`),
+// so no committed test carried a `seat-unbound` refusal to an exit code. Filed
+// as an open follow-up under SI-10 in BACKLOG.md; closed by this block.
+//
+// ⚠️ The record under test is DERIVED, never hand-built — it is whatever the
+// real `runRevoteWave` hands the real `createDegradeSink`. Hand-building the
+// intermediate value is precisely how earlier fixtures on this branch went
+// green at HEAD for the wrong reason (plan Global Constraint 5).
+//
+// The fixture is T5.1's "twin bench, one twin leg unbindable" shape, with ONE
+// substitution: `ctx.degrade` swapped from the recording double to the
+// production `run-degrade.js :: createDegradeSink`, wired to the same
+// `{value:false}` flag `run.js:64-65` gives it.
+//
+// Named mutant NOTEHEAL — add `kind: 'heal'` to the record `reVoteUnboundNote`
+// returns (`run-debate-revote.js :: reVoteUnboundNote`). That is the exact edit
+// this block exists to catch, and it is a QUIET one: `utils/degrade.js`'s
+// `KINDS` accepts 'heal', so `makeDegrade` does not throw, every
+// channel/what/why/effect/data assertion in this file still passes, and only
+// `createDegradeSink`'s `if (record.kind === 'degrade' && degraded)` stops
+// firing — the refusal becomes exit-code-neutral in silence. Red set (1): this
+// block's test and nothing else, measured across run-debate.test.js +
+// debate.test.js + run-stages.test.js + seat-space.test.js +
+// degrade-sink.test.js + run-finalize.test.js. Hand-applied to the committed
+// file, run, then restored from a `cp` backup and byte-verified with
+// `git diff --quiet`.
+// ============================================================================
+describe('runRevoteWave — T5.5: a seat-unbound refusal reaches terminal exit 2', () => {
+  test('the real degrade sink flips `degraded`, and resolveTerminalExit turns a clean 0 into 2', async () => {
+    const tmp = mkTmp('run-revote-exit2-');
+    const seats = buildSeats(TWIN_BENCH, null, null);      // deepseek#1 / deepseek#2 / gpt
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'deepseek#1', 'deepseek#2'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 2),  // deepseek#1: binds
+      // deepseek#2: no taskId and no waveId, so bindSeats can match neither an
+      // id nor (its alias fallback needs `leg.waveId === waveId`) an alias.
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'dispute' }])),
+    ];
+    const ctx = ctxFor(tmp, {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: every leg parses cleanly'); },
+    }, TWIN_BENCH);
+    const degraded = { value: false };
+    const emitted = [];
+    ctx.degrade = createDegradeSink({ runDir: tmp, degraded, write: (s) => emitted.push(s) });
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    // The refusal happened at all (guard against a fixture that quietly binds).
+    expect(rv.byJudge.deepseek).toBeUndefined();
+    const records = ctx.degrade.all();
+    expect(records).toHaveLength(1);
+    expect(records[0].channel).toBe('seat-unbound');
+    // `kind` is never set by reVoteUnboundNote; makeDegrade defaults it. That
+    // default is the whole load-bearing link in this chain.
+    expect(records[0].kind).toBe('degrade');
+    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* matches no seat/);
+
+    // Half 1 — the production sink flipped the run's flag.
+    expect(degraded.value).toBe(true);
+    // Half 2, and the composition this block exists for: an otherwise-clean run
+    // finalizes as 2. Arguments mirror the sole production call, run.js:111.
+    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded,
+      degrade: ctx.degrade, inexactUnderCeiling: () => false })).toBe(2);
+    // Control: the same call with an unflipped flag stays 0, so the 2 above is
+    // the refusal's doing and not the shape of these arguments.
+    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded: { value: false },
+      degrade: ctx.degrade, inexactUnderCeiling: () => false })).toBe(0);
   });
 });
 

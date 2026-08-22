@@ -164,22 +164,6 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
   const seatOf = new Map(bindRes.bound
     .filter(b => !placeholders.has(b.seat))
     .map(b => [b.leg, b.seat]));
-  // Every leg bindSeats placed on SOME roster slot — a real seat OR a §3.4
-  // placeholder — belongs here too: a placeholder-holed judge bound cleanly,
-  // it simply has no real seat to bind TO. When that hole traces back to a
-  // Stage-2 orphan leg, it was already announced there (run-stage2.js:110
-  // calls stage1-bind.js's orphanLegNote — that module only DEFINES the
-  // note, it does not itself announce); a seat-less provisional row arriving
-  // any other way (a resumed or hand-built tallyInput) produces the same
-  // roster hole here with no note at all. Either way it is not this
-  // function's hole to raise. A leg absent from this set failed for any of
-  // seats.js :: bindSeats' own reasons, not only "no id/alias match": a
-  // foreign waveId is filtered out (`mine`'s `!l.waveId || l.waveId ===
-  // waveId`) before any matching is even attempted — such a leg reaches
-  // neither `bound` nor `orphanLegs`, it is simply invisible to bindSeats —
-  // while a leg that DID match a slot another leg already claimed lands in
-  // bindRes.orphanLegs too, on a collision, not a miss.
-  const boundLegs = new Set(bindRes.bound.map(b => b.leg));
   for (const leg of rawLegs) {
     // The council ALIAS, not the resolved executable id — runStats rows join
     // meta.models by exact string (run-assemble.js's buildRunStatsEntry).
@@ -222,52 +206,35 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // `seat` rides along for materializeDebate's filename only; debateRunStatsRows'
     // `mk` copies an explicit field list and never picks it up.
     //
-    // T5.1 (owner ruling R8): publish IFF the leg bound to some roster slot
-    // (a real seat, or a §3.4 placeholder — `boundLegs`), OR the key names
-    // one of the judges THIS WAVE actually launched (`judgeKeys` — `judgeSeats`
-    // is positionally bound to it, per this function's own docblock, so every
-    // REAL seat id here is already a `judgeKeys` entry too). The second arm
-    // covers two shapes: a unique-alias bench, where `seatKey(null, 'qwen')
-    // === 'qwen'` IS that seat's own judgeKey; and a roster hole (a
-    // Stage-2-orphaned judge, padded with a placeholder here) whose -rv leg
-    // is ALSO unbindable — its bare-alias key is still in `judgeKeys`, and
-    // BASE already joins it correctly (the provisional row for that same
-    // orphaned judge is ALSO keyed on the bare alias), so refusing it would
-    // be a regression, not a fix — measured: BASE takes 2 adjudications in
-    // to 2 out, the seat-less row's verdict correctly replaced, no phantom
-    // row. NOT `seat === null` (§0.5) — a real-seat bind is unaffected
-    // either way, but that predicate wrongly refuses both cases just
-    // described. Only a leg bound to nothing at all, whose key ALSO names no
-    // judge this wave launched, is the unnameable case R8 asks to refuse.
+    // T5.1 (owner ruling R8), narrowed by T5.5: publish IFF the key names one of
+    // the judges THIS WAVE actually launched. `judgeSeats` is positionally bound
+    // to `judgeKeys` (this function's own docblock), and `seatById` is keyed on
+    // the seat id, so every REAL seat id that can reach `key` here is already a
+    // `judgeKeys` entry. Two further shapes are deliberately admitted: a
+    // unique-alias bench, where `seatKey(null, 'qwen') === 'qwen'` IS that seat's
+    // own judgeKey; and a §3.4 roster hole (a Stage-2-orphaned judge, padded with
+    // a placeholder here) whose -rv leg is ALSO unbindable — its bare-alias key is
+    // still in `judgeKeys`, and the provisional row for that same orphaned judge
+    // is ALSO keyed on the bare alias, so refusing it would discard a re-vote the
+    // join already lands correctly (measured: 2 adjudications in, 2 out, the
+    // seat-less row's verdict replaced, no phantom row). NOT `seat === null`
+    // (§0.5) — a real-seat bind is unaffected either way, but that predicate
+    // wrongly refuses both shapes just described. Only a leg whose key names no
+    // judge this wave launched is the unnameable case R8 asks to refuse.
     //
-    // ⚠️ THE `boundLegs` ARM IS LOAD-BEARING AT THIS CALLER, AND ITS EFFECT IS
-    // NOT ALL GOOD. An earlier revision of this comment claimed the opposite —
-    // "defensive redundancy, NOT a load-bearing condition", and "no fixture can
-    // separate them". Both were FALSE and are corrected here, measured.
-    // What is true: no COMMITTED fixture separated the two arms until the
-    // whole-branch fix wave, so collapsing this to `judgeKeys.includes(key)`
-    // alone red NOTHING. The reason that reads like subsumption is real but
-    // partial — run-debate.js builds `judgeSeats` as
-    // `judgeKeys.map(k => seatById.get(k) || null)`, so every REAL seat id here
-    // is a `judgeKeys` entry, and a placeholder-padded hole keys on the alias
-    // its `judgeKeys` slot holds **whenever the leg bound by ALIAS**.
-    // ⚠️ It does NOT hold for a leg bound by `taskId`. seats.js:139-141 matches
-    // `leg.legId || leg.taskId` to a roster SLOT with no alias check at all, so
-    // a leg stamped into the placeholder's slot while carrying a foreign alias
-    // binds (arm 1 true) and still keys on that alias (arm 2 false). Measured
-    // end to end: that key is published, no note is emitted, and applyDebate
-    // then invents a phantom adjudication row for it while the hole's own
-    // seat-less row keeps its stale verdict — 1 adjudication in, 3 out, which
-    // is the SI-10 shape T5.1 exists to close, surviving through THIS arm.
-    // Pinned, as known-wrong, by run-debate.test.js's `BOUNDDROP` block, whose
-    // named mutant (drop this arm) has red set 2. Filed in BACKLOG.md.
-    // The arm stays for now because deleting it would ALSO refuse the §3.4
-    // roster hole this comment's paragraph above documents (measured control:
-    // 1 adjudication in, 2 out, the seat-less row correctly replaced, no
-    // phantom). Neither arm is right on its own; narrowing arm 1 to "bound to a
-    // REAL seat" is the candidate fix, and it is a behaviour change, which is
-    // why it is filed rather than taken here.
-    if (boundLegs.has(leg) || judgeKeys.includes(key)) {
+    // ⚠️ T5.5 DELETED a second arm, `boundLegs.has(leg) ||`. Binding is not
+    // enough: seats.js :: bindSeats matches `leg.legId || leg.taskId` to a roster
+    // SLOT with NO alias check, so a leg stamped into a §3.4 placeholder's slot
+    // while carrying a foreign alias BOUND (arm 1 true) and still keyed on that
+    // foreign alias (arm 2 false) — the key was published, no note was emitted,
+    // and applyDebate's fail-open push invented a phantom adjudication row while
+    // the hole's own seat-less row kept its stale dispute. That is the SI-10 shape
+    // this guard exists to close, surviving through that arm. Measured across the
+    // deletion in run-debate.test.js's T5.5 block: 3 A1 rows out of 2 in and zero
+    // notes before, 2 out and one `seat-unbound` note after. Do not re-add the arm
+    // as "defensive redundancy" — named mutant BOUNDREADD in that block is exactly
+    // that re-addition, and it reds.
+    if (judgeKeys.includes(key)) {
       byJudge[key] = parsed.byId;
     } else {
       ctx.degrade.note(reVoteUnboundNote(waveId, judge, key, leg));
