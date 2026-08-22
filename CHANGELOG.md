@@ -202,6 +202,40 @@ All notable changes to Amicus are documented here. Format follows
   print the literal string `undefined`, and the Workspace's `matrix-model.js` prints `?`. That
   disagreement pre-dates this change and is unchanged by it; reconciling the three is a
   rendering-contract decision, filed separately in `BACKLOG.md`.
+- **The second-opinion skill's own documentation defined the wrong tier for a lone corroborating
+  peer, which could make Claude mis-present a finding while running the skill.** `tally.js ::
+  assignTier` returns **Confirmed** (`confidence: thin`) for a finding with one peer agreement and
+  no disputes (`a=1, d=0`) — verified by execution across ten boundary `(a,d)` pairs, not read off
+  the source. `skills/second-opinion/SKILL.md` stated the opposite in two places: its formal
+  Singleton definition (`d = 0` and `a < 2`) and a separate prose paraphrase ("at most one
+  endorsement, no pushback") both classified that same cell as Singleton instead of Confirmed.
+  `skills/second-opinion/COUNCIL-DESIGN.md`'s cascade table carried the same error in its Singleton
+  row and, found while fixing it, its Confirmed row was independently incomplete — it never listed
+  the `a=1, d=0` case at all, so between the two rows that cell had nowhere to land. Both files now
+  read Confirmed as "`a ≥ 2` and `a > d`, or `a = 1` and `d = 0`" and Singleton as "else (`a = 0`
+  and `d = 0`)", matching `assignTier` and `docs/council.md`'s cascade table, which was already
+  correct and is unchanged. A repo-wide grep for the old definition and the "at most one
+  endorsement" phrasing found no other occurrence stated as current fact — `BACKLOG.md` still
+  quotes the old wording verbatim, correctly, as a struck-through record of what this fixed.
+- **A headless leg with no output, reasoning, or tool calls could be killed by the no-output
+  backstop before a normal-speed model finished its first turn.** The default window was 120
+  seconds; CI carried a `300000` override because the default was too low, which is itself evidence
+  the default was wrong rather than merely conservative. `DEFAULT_NO_OUTPUT_BACKSTOP_MS` is now
+  `300000`, and the now-redundant CI override plus its explanatory comment are deleted from
+  `council-review.yml`. The owner's separate `900000` setting (3x the new default, held locally) is
+  untouched — it does not exist anywhere in the tracked tree.
+  ⚠️ **The retry path doubles this window**, so a Stage-1 retry now waits up to 600 s (was 240 s)
+  before its own backstop fires, clamped to the leg timeout. Every place that stated the old value
+  as a live fact was swept and corrected in the same change: `tests/no-output-backstop.test.js`'s
+  default-value assertions, `tests/council/run-retry.test.js`'s hardcoded `240000` (now `600000`,
+  required or CI would ship red) plus its illustrative comments, `docs/configuration.md`,
+  `docs/troubleshooting.md`, `docs/usage.md`, and `src/sidecar/models-probe.js`'s docblocks. A
+  review pass then found one instance the first sweep missed (`models-probe.js:31` — a *second*
+  "120s" claim in the same file already edited for this exact class) and a further two the
+  controller's own independent sweep added (`tests/no-output-backstop-wiring.test.js:383`
+  and `:424`); all three closed in a follow-up commit. Deliberately left alone: `run-retry.test.js`'s
+  `'in 120s'` fixture string, which is arbitrary generic test data for a genericity pin, not a claim
+  about the default.
 
 ### Changed
 
@@ -593,6 +627,15 @@ All notable changes to Amicus are documented here. Format follows
   initial launch; chair, debate, repair, and the Stage-1 retry wave (a separate launch site,
   `run-retry.js`) all launch without a roster and are unchanged — a retried twin's live row still
   reports `seat: null`, filed in BACKLOG.md, not fixed here.
+
+### Internal
+
+- **Added a named pin that `parseModelsList` preserves duplicate aliases.** Owner ruling R3-2 (one
+  re-vote leg per disputing seat) depends on `--models gpt,deepseek,deepseek` producing three legs,
+  not two after deduplication; the invariant already held but nothing enforced it going forward, so
+  a future `uniq()`/`new Set(...)` anywhere on the `--models` → leg-construction path could have
+  silently dropped a twin's leg with no error. `parseModelsList` itself is byte-unchanged — this is
+  a test plus an invariant comment, not a behaviour change.
 
 ## [4.7.1] - 2026-08-09
 

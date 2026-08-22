@@ -55,7 +55,8 @@ verified end-to-end through the real `runFanout`. But **nothing enforces it**: a
 breaking R3-2 with no error, no failure outside that area, and a plausible-looking diff.
 
 `tests/council/run-debate.test.js`'s `describe('runDebate — twin bench: joins on the seat, launches
-on the alias', …)` (from `TWIN_BENCH = ['deepseek','deepseek','gpt']`, `:55`) already *exercises*
+on the alias', …)` (from `TWIN_BENCH = ['deepseek','deepseek','gpt']`, `:55` — **corrected to `:67`
+at T-W1.2, 2026-08-22, re-opened at the file**) already *exercises*
 the invariant at the `runDebate` level — it just never **names** it.
 
 Files already touching `parseModelsList` in tests: `tests/sidecar/fanout.test.js`,
@@ -162,3 +163,14 @@ Re-derive every citation against the **final** tree by opening each file at its 
 distinctive phrase of anything corrected — a same-file sweep cannot find twins.
 ⚠️ `output/` and dated plan snapshots are **out of scope** for any sweep: run artifacts and dated
 records, never "gitignored" as the reason.
+
+✅ **DONE (2026-08-22).** T6.6/SI-14/`#135 C0` marked done in `BACKLOG.md` (Phase 6 resume point,
+the SI-14 filed entry, and the release-inventory section) and in the phasing doc (Phase 6/7
+sections). W1-3 and W1-4 recorded in both files, plus a new "Wave 2" resume point / "Wave structure
+for the v4.8.0 remainder" section recording the owner's wave-structure ruling. §0.2's `:55` citation
+corrected to `:67` above. **A repo-wide grep for this stale `:55` citation found one genuine live
+twin, now fixed**: `BACKLOG.md`'s own SI-14 filed entry carried the identical stale line number —
+same defect, independent occurrence. The grep also surfaced `docs/superpowers/plans/2026-08-21-
+v48-phase5-debate-join.md`, which cites `:55` twice more, but as an explicitly historical/dated
+value (line-movement tracked across commits at named refs) — not a twin, left alone as out of
+scope. No twins found for the T6.6 or `#135 C0` corrections beyond what T-W1.1 already fixed.
