@@ -895,7 +895,11 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 // second arm from `rosterIds.has(key)` to `judgeKeys.includes(key)`:
 //   JOINBLIND  delete the new guard, restoring BASE's unconditional
 //              `byJudge[key] = parsed.byId`. Red set (1): this file's "twin
-//              bench, one twin leg unbindable" test below.
+//              bench, one twin leg unbindable" test below. ⚠️ GREW to (2)
+//              once T5.2's end-to-end test existed further down this file
+//              (re-measured there, under that task's own name E2EBLIND —
+//              identical deletion, cross-checked against this one so this
+//              count is not left stale).
 //   REFUSEALL  weaken the guard to `if (seat)` (refuse on bare `!seat`). Red
 //              set (3): this file's "unique-alias bench, leg equally
 //              unbindable" test AND its "roster hole whose leg is ALSO
