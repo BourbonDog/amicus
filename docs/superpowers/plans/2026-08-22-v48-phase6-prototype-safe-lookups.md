@@ -39,7 +39,7 @@ The sibling shape is an **accumulator** — a bare `{}` written at a document-su
 `obj['__proto__'] = <number>` sets nothing and creates no own key: the write is silently
 discarded.
 
-### §0.3 The four carriers, each measured live
+### §0.3 The four carriers — three measured live, one (E) latent
 
 ⚠️ **Anchors are by symbol.** The BACKLOG's SI-24 entry carries `tally.js:103-104` and
 `tally.js:72`; measured today those are **`:77-78`** and **`:37`**. That is the *third* rot of
