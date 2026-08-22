@@ -372,6 +372,18 @@ describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited a
 // are a legitimate regression pin on it — but the property they prove is
 // "parseDebateDefense's allowlist protects this call site", not "PAST_TENSE's
 // null prototype protects this call site". Full chase in task-3-report.md.
+//
+// FIX ROUND 2: why PROTOACTION stays at 3/1 rather than growing. The two
+// run-debate.test.js tests cannot red under PROTOACTION alone (measured) --
+// with the allowlist intact, no action ever reaches this table as an
+// inherited key, mutated or not. They also cannot red under ACTIONPASSTHRU
+// alone (run-debate.test.js's own record) for the mirror reason: with THIS
+// table's null prototype intact, a passed-through inherited action resolves
+// to a safe `undefined` here regardless. Only the COMPOUND mutant
+// "DOUBLEBREACH" (run-debate.test.js, both mutations applied together)
+// covers them -- measured RED 6/3, listed there. PROTOACTION's own record is
+// therefore complete and correct as originally measured; it is not the
+// mutant those two tests need.
 
 describe('debateRunStatsRows', () => {
   test('emits rebuttal + revote rows tagged with the debate roles', () => {
