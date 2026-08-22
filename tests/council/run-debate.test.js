@@ -882,6 +882,19 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 // waveId and taskId (leg()'s waveId argument left undefined) —
 // seats.js :: bindSeats then has no id to match a roster slot AND its alias
 // fallback requires leg.waveId === waveId, so omitting both skips it entirely.
+//
+// Named mutants, each hand-applied to run-debate-revote.js then reverted and
+// byte-verified against committed HEAD (`git diff` empty) — red sets measured
+// by running tests/council/run-debate.test.js + debate.test.js:
+//   JOINBLIND  delete the new guard, restoring BASE's unconditional
+//              `byJudge[key] = parsed.byId`. Red set (1): this file's "twin
+//              bench, one twin leg unbindable" test below.
+//   REFUSEALL  weaken the guard to `if (seat)` (refuse on bare `!seat`). Red
+//              set (2): this file's "unique-alias bench, leg equally
+//              unbindable" test below, AND the pre-existing §3.4 fixture's
+//              "M1: no `__unbound-` sentinel reaches adjudications[].seat or
+//              the alias-space .judge (C1)" — REFUSEALL over-refuses the
+//              placeholder-hole case too, not only the unique-alias case.
 // ============================================================================
 describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names no seat', () => {
   // No waveId argument -> run-debate.test.js :: leg (above) omits taskId/waveId entirely.
