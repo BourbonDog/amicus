@@ -105,6 +105,72 @@ All notable changes to Amicus are documented here. Format follows
   malformed-input-only one. See the street-cred entry under **Changed**, below, for the measurement
   and the ruling.
 
+- **A debate re-vote the engine cannot attribute to a bench seat is now refused and announced,
+  instead of silently inventing a voter.** On a bench that repeats an alias, a re-vote leg that
+  matched no seat on its wave's roster fell back to keying on the bare alias — which matches none of
+  the seat-attributed adjudications already on record — so the round **appended a brand-new
+  adjudication row** rather than replacing one. Two things went wrong at once: the judge's paid
+  re-vote was discarded and its stale provisional verdict stood, *and* a phantom voter corresponding
+  to no bench position was counted beside it. Measured end to end on a twin bench, on a finding with
+  two eligible judges: **three votes**, basis `{a:2, d:1}`, tier **Confirmed**. Those counts feed
+  the tally and the verdict, so this was a correctness defect in the basis, not a rendering blemish.
+  Now such a leg's votes are **withheld** and the refusal is announced on the **`seat-unbound`**
+  channel — the same channel a Stage-1 leg that matches no seat already uses. The same fixture
+  now yields **two** adjudications, no seat-less row, basis `{a:1, d:1}`, tier **Contested**, and one
+  degrade note naming the leg and the wave.
+  ⚠️ **A refusal degrades the run, so an otherwise-clean run exits 2** — exactly as an
+  unattributable Stage-1 leg already made it. That is the announcement working, not a new failure
+  mode: nothing crashes and every artifact is still written.
+  **The leg itself is untouched.** It ran and it cost money, so it still contributes its `runStats`
+  row, its `revote-<model>.md` and its `conformance`; only the parsed votes are withheld.
+  `debate.json` gains no "refused" row, so on such a run `revoteJudges` and `revoteApplied` will
+  visibly disagree — the degrade note is what explains the difference.
+  **The refusal is surgical, not a blanket revert.** On the same wave a twin whose leg *did* bind
+  still has its re-vote applied. A bench with no repeated alias is unaffected in every case: a seat
+  id there *is* its alias, so the key still joins and the vote still lands, byte-for-byte as before.
+  ⚠️ **The refusal first shipped one case short, and that case is now closed too.** The original
+  guard also published a leg that had *bound* to a roster slot, on the reasoning that a bound leg is
+  an accounted-for leg. It is not: a leg is matched to a slot by its task id alone, with no check
+  that its model name is one the wave asked for. A re-vote leg carrying a **foreign** model name
+  could therefore land in a slot, be published under that foreign name, and invent exactly the
+  phantom voter this entry is about — the defect surviving through the guard meant to close it. On
+  the fixture that reproduces it: the finding went from two votes to **three**, the extra one
+  attributed to a model that never sat on the bench, while the seat it displaced kept its stale
+  verdict. That arm is now **deleted**: a re-vote is published only when its key names a judge the
+  wave actually launched. The one shape the arm existed to protect — a judge left unseated by an
+  earlier stage — is unaffected, because such a judge is still one the wave launched.
+  ⚠️ **The wording of the announcement changed with it — all three sentences of it.** It used to
+  say the leg "matches no seat on that wave's roster" and explain the refusal as "it bound to no
+  roster slot, and its judge alias '…' names no seat there either". Both are false for exactly the
+  case just described, since that leg *did* match a slot. All three now state the one condition:
+  the leg's join key names none of the judges that wave launched. The channel, the effect line and the
+  machine-readable fields are unchanged — except that a leg reporting no model name at all now
+  reads `unknown` there, where a first pass at this rewrite briefly printed `undefined` and dropped
+  the key out of the record's JSON.
+  ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
+  task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
+  than a live regression. It is reachable through a resumed or hand-assembled run.
+  Pinned end to end through the real debate round, and by named mutants each hand-applied and then
+  reverted: `REFUSEALL` (red set 3), `LEGDROP` (1), and the guard-deletion mutant — recorded twice
+  under two names because it was measured at two points in the work. As `JOINBLIND` it red **1**
+  test when the unit-level pin was all that existed; the **same deletion**, re-measured as
+  `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
+  The follow-up work above adds four more: `BOUNDREADD` (2), which puts the deleted arm back;
+  `WHYSTALE` (2), which restores the old announcement wording; `NOTEHEAL` (1), which makes the
+  refusal's announcement non-degrading; `KEYRAW` (1), which drops the join key's fallback so a
+  leg with no model name renders `undefined`; and `WHATSTALE` (3), which restores the old
+  "matches no seat" wording. ⚠️ The four counts in the
+  paragraph before this one are the readings taken when each mutant was first recorded; the
+  follow-up added four tests to the same path, and re-measuring moved three of them — deleting the
+  guard now reds **6** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because
+  the exit-2 consequence — announced above and true since the first release of this fix — had been
+  measured but never pinned by a test that ran the whole chain; it now is, through the real
+  announcement sink and the real exit-code resolver.
+  The companion change is documentation only: `applyDebate`'s docblock now states what an omitted
+  `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
+  in this package omits it, the package's `exports` map blocks a deep require from outside, and the
+  parameter was deliberately **not** made required.
+
 ### Changed
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per

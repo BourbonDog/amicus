@@ -64,6 +64,70 @@ function legRow(model, leg, conformance) {
 function seatKey(seat, alias) { return seat ? seat.id : alias; }
 
 /**
+ * T5.1 (owner ruling R8), narrowed by T5.5: announce a re-vote leg whose key
+ * this wave cannot account for — its key names none of the judges this wave
+ * actually launched. ⚠️ This read "it NEITHER bound to any roster slot (a real
+ * seat or a §3.4 placeholder) NOR names one of the judges…" until T5.5 deleted
+ * the `boundLegs` arm of the guard below. Binding is no longer part of the
+ * condition, and must not be re-added: seats.js :: bindSeats binds on
+ * `leg.legId || leg.taskId` with NO alias check, so a leg bound that way can
+ * still carry a name this wave never asked for — which is exactly the shape
+ * that kept inventing a phantom adjudication row. The
+ * leg itself is unaffected — it still gets its runStats row, its
+ * revote-<name>.md and its conformance — only its parsed votes are
+ * withheld, so `revoteByJudge` never carries this key at all and
+ * applyDebate never has to decide whether it belongs to an existing row or
+ * is new (that fail-open push in debate.js :: applyDebate is untouched for a
+ * key this wave DOES account for).
+ *
+ * Field shape follows stage1-bind.js:53 :: orphanLegNote's
+ * channel/what/why/effect/data — with ONE deliberate divergence: `data`
+ * carries no `seat` field. orphanLegNote's `data.seat` (confusingly named —
+ * it holds the ALIAS, not a seat object) is exactly what
+ * seat-space.js :: orphanExonerations reads to attribute a note to an
+ * alias. This note's `waveId` is always `<runId>-rv`, never `<runId>-s2`, so
+ * if it carried that field too it would enter that function's alias map and
+ * CLEAR — not extend — that alias's already-proven Stage-2 exonerations,
+ * via the non-`-s2` branch of the intersection there: a re-vote-stage
+ * anomaly wrongly invalidating a Stage-2 review-authorship proof. Do not add
+ * `seat` here to "complete" the parity with orphanLegNote; it is withheld
+ * on purpose.
+ */
+function reVoteUnboundNote(waveId, judge, key, leg) {
+  const legId = (leg && (leg.legId || leg.taskId)) || 'unidentified';
+  // `|| 'unknown'` mirrors stage1-bind.js:55's alias fallback, and for the same reason: the
+  // caller derives `judge` as `leg.modelInput || leg.model`, so a leg carrying NEITHER makes the
+  // record read "… 'undefined'" — a bug in the announcer rather than a fact about the leg.
+  // ⚠️ BOTH need it. `key` is `seatKey(seat, judge)`, which RETURNS that same `judge` whenever the
+  // leg bound to no real seat — i.e. in every refusal reachable through runDebate — so an undefined
+  // `judge` takes `key` with it. T5.5 interpolated `key` raw for one commit and measurably rendered
+  // "its join key 'undefined'" AND dropped `data.key` from the JSON. Pinned by
+  // run-debate.test.js's "NEITHER modelInput NOR model" test; named mutant KEYRAW.
+  const alias = judge || 'unknown';
+  const joinKey = key || 'unknown';
+  return {
+    channel: 'seat-unbound',
+    // ⚠️ All three strings below now say the ONE thing the guard tests: the key names no judge
+    // this wave launched. Binding is irrelevant — this function's docblock says why.
+    // ⚠️ `what` said "matches no seat on that wave's roster" for three rounds AFTER that stopped
+    // being the condition: a leg taskId-bound to a §3.4 placeholder DOES match a roster slot and is
+    // exactly the leg now refused, so `what` contradicted the `why` three lines under it. A paid
+    // council caught it (round 2). ⚠️ stage1-bind.js :: orphanLegNote KEEPS that wording and MUST:
+    // a Stage-1 orphan really does match no roster slot. Same sentence, true there, false here.
+    // ⚠️ `effect` said "the JUDGE's provisional verdict stands" until round 2 — the very
+    // presumption a refusal denies, since a refused key names no judge of this wave.
+    // ⚠️ `why` carried "(judge alias '${alias}')" for one commit; dropped, measured — `key ===
+    // judge` in every refusal runDebate can produce, so it printed the same string twice
+    // (BACKLOG.md holds the measurement). `data` keeps orphanLegNote's field names, `judge`
+    // included: it is the leg's own CLAIM, and renaming a machine-readable field is a compat break.
+    what: `re-vote leg ${legId} in wave ${waveId} could not be attributed to a judge on that wave`,
+    why: `its join key '${joinKey}' names none of the judges this wave launched`,
+    effect: 'the re-vote was NOT applied; the provisional verdict stands',
+    data: { waveId, legId, judge: alias, key: joinKey },
+  };
+}
+
+/**
  * The re-vote mini-wave (spec §5.1).
  *
  * v4.8 PR3 Task 6 — the parallel-array discipline this function now runs on:
@@ -75,7 +139,7 @@ function seatKey(seat, alias) { return seat ? seat.id : alias; }
  * is what every launcher argument and every runStats `model` carries. That is
  * not an inconsistency — a seat id is not a routable model name.
  *
- * @param {object} ctx run.js's {o, launchers, addWave, scratchDir}
+ * @param {object} ctx run.js's {o, launchers, addWave, overBudget, degrade, scratchDir}
  * @param {Array<string>} judgeKeys seat ids, in launch order
  * @param {Array<object>} bundleFindings defended/amended findings
  * @param {Array<?object>} judgeSeats seat objects positionally bound to judgeKeys
@@ -165,7 +229,41 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
     // R3-1 promises every runStats `model` is alias-valued on every bench.
     // `seat` rides along for materializeDebate's filename only; debateRunStatsRows'
     // `mk` copies an explicit field list and never picks it up.
-    byJudge[key] = parsed.byId;
+    //
+    // T5.1 (owner ruling R8), narrowed by T5.5: publish IFF the key names one of
+    // the judges THIS WAVE actually launched. `judgeSeats` is positionally bound
+    // to `judgeKeys` (this function's own docblock) and run-debate.js builds it
+    // from an id-keyed table — `judgeKeys.map(k => seatById.get(k) || null)` — so
+    // every REAL seat id that can reach `key` here is already a `judgeKeys`
+    // entry. Two further shapes are deliberately admitted: a
+    // unique-alias bench, where `seatKey(null, 'qwen') === 'qwen'` IS that seat's
+    // own judgeKey; and a §3.4 roster hole (a Stage-2-orphaned judge, padded with
+    // a placeholder here) whose -rv leg is ALSO unbindable — its bare-alias key is
+    // still in `judgeKeys`, and the provisional row for that same orphaned judge
+    // is ALSO keyed on the bare alias, so refusing it would discard a re-vote the
+    // join already lands correctly (measured: 2 adjudications in, 2 out, the
+    // seat-less row's verdict replaced, no phantom row). NOT `seat === null`
+    // (§0.5) — a real-seat bind is unaffected either way, but that predicate
+    // wrongly refuses both shapes just described. Only a leg whose key names no
+    // judge this wave launched is the unnameable case R8 asks to refuse.
+    //
+    // ⚠️ T5.5 DELETED a second arm, `boundLegs.has(leg) ||`. Binding is not
+    // enough: seats.js :: bindSeats matches `leg.legId || leg.taskId` to a roster
+    // SLOT with NO alias check, so a leg stamped into a §3.4 placeholder's slot
+    // while carrying a foreign alias BOUND (arm 1 true) and still keyed on that
+    // foreign alias (arm 2 false) — the key was published, no note was emitted,
+    // and applyDebate's fail-open push invented a phantom adjudication row while
+    // the hole's own seat-less row kept its stale dispute. That is the SI-10 shape
+    // this guard exists to close, surviving through that arm. Measured across the
+    // deletion in run-debate.test.js's T5.5 block: 3 A1 rows out of 2 in and zero
+    // notes before, 2 out and one `seat-unbound` note after. Do not re-add the arm
+    // as "defensive redundancy" — named mutant BOUNDREADD in that block is exactly
+    // that re-addition, and it reds.
+    if (judgeKeys.includes(key)) {
+      byJudge[key] = parsed.byId;
+    } else {
+      ctx.degrade.note(reVoteUnboundNote(waveId, judge, key, leg));
+    }
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
       conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
       ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });

@@ -68,9 +68,23 @@ describe('getRunDetail', () => {
       { label: 'Review C', model: 'qwen' },
     ]);
     // ⚠️ DE-ROT (F27): was ['stage1','stage2','tally','chair','verdict']. The engine runs the chair
-    // BEFORE the final tally — run.js:236 runChair (stamps the stage at run-chair.js:92) precedes
-    // run-finish.js:56-58 writeTallyFiles + updateStage — and stages[] is append-ordered
-    // (run-state.js:95-102). Pinned by the shipped tests/council/run-debate.test.js:616.
+    // BEFORE the final tally — `run.js :: runChair` is awaited before `run.js :: finishRun`, whose
+    // run-finish.js:56-58 does writeTallyFiles + updateStage; the chair's own stage entry is made by
+    // `run-chair.js :: runChair`'s `updateStage(o.runDir, 'chair', …)` — and stages[] is
+    // append-ordered, because `run-state.js :: updateStage` pushes an unseen name onto the TAIL
+    // and only patches in place when the name is already there. Pinned by the shipped
+    // tests/council/run-debate.test.js test named
+    // "WITHOUT --debate run.json carries no `debate` key at all (durable contract)", whose
+    // assertion is this exact array.
+    // ⚠️ CITATION REPAIR 2026-08-21 (v4.8 Phase 5 T5.4 fix round 1) — four of the five anchors in
+    // this block were re-opened and were WRONG: run.js:236 is the Stage-2 conformance merge (the
+    // runChair call is :271), run-chair.js:92 is classifyChairAttempt (the 'chair' stamps are
+    // :187/:190/:219), run-state.js:95-102 is initCouncilRun's seed (the append is inside
+    // updateStage), and run-debate.test.js:616 was a runStats-row assertion. That last one was
+    // ALREADY stale at v4.8 Phase 5's BASE 9ef275e5 — verified by opening it there, so the +337
+    // lines that phase added to that file did not cause it. Only
+    // run-finish.js:56-58 was still correct. Re-anchored by SYMBOL and by test NAME so the next
+    // growth cannot rot them. The mechanism this block describes was, and remains, correct.
     // REQUIRED COMPANION EDIT (Task 1): swap the `chair` entry ahead of `tally` in BOTH run.json
     // fixtures (complete + degraded) and shift the timestamps so chair completes before tally starts.
     expect(d.derived.stageRail.map((s) => s.name)).toEqual(['stage1', 'stage2', 'chair', 'tally', 'verdict']);

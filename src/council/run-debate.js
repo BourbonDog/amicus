@@ -198,8 +198,8 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   // ⚠️ `aliasOf` MUST ride along: without it applyDebate's fail-open push writes a
   // SEAT ID into the alias-space `judge` field, which reaches
   // peer-split.js :: peersOf's `v.judge !== f.raiser` (measured: basis {a:1,d:0} →
-  // tier Confirmed where the alias spelling gives Singleton) and report.js's
-  // `byJudge[adj.judge]`.
+  // tier Confirmed where the alias spelling gives Singleton) and, as an
+  // out-of-contract `judge`, report.js :: columnFor's vote→column join.
   const { input: debatedInput, debateFindings } = applyDebate({
     tallyInput: stampedInput, provisionalRecord, defenseByRaiser, revoteByJudge, aliasOf });
   debatedInput.runStats = [...(debatedInput.runStats || []),

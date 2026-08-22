@@ -4,6 +4,18 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { runDebate, nothingToDebate, disputingJudges } = require('../../src/council/run-debate');
+// T5.1 (SI-10/R8): runRevoteWave and applyDebate driven DIRECTLY, not through
+// runDebate/runCouncil — the unit-level seam
+// docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md's Task 1 asks
+// for (that plan is committed; the task brief that also asked for this lives
+// under .superpowers/, deleted at branch end — cite the file that survives).
+const { runRevoteWave } = require('../../src/council/run-debate-revote');
+// T5.5: the exit-2 composition block at the bottom of this file drives the REAL
+// degrade sink and the REAL terminal-exit resolver, not a double — that pairing
+// is the whole point of it (BACKLOG.md's SI-10 exit-2 follow-up).
+const { createDegradeSink } = require('../../src/council/run-degrade');
+const { resolveTerminalExit } = require('../../src/council/run-finalize');
+const { applyDebate } = require('../../src/council/debate');
 const { tally } = require('../../src/council/tally');
 const runState = require('../../src/council/run-state');
 const { runCouncil } = require('../../src/council/run');
@@ -140,6 +152,12 @@ function ctxFor(tmp, launchers, models = ['gemini', 'gpt', 'qwen']) {
     // drags in fs writes this fixture doesn't need.
     degrade: { note: (rec) => notes.push(rec), all: () => notes },
   };
+}
+
+// T5.1: seat id -> bench alias, built the same way run-debate.js:129 does.
+function aliasOfFor(seats) {
+  const byId = new Map(seats.map(s => [s.id, s]));
+  return (key) => { const s = byId.get(key); return s ? s.alias : key; };
 }
 
 function mkTmp(prefix) {
@@ -861,6 +879,363 @@ describe('runDebate — twin bench: joins on the seat, launches on the alias', (
 });
 
 // ============================================================================
+// T5.1 (SI-10/R8): refuse a re-vote whose key this wave cannot account for —
+// its key names none of the judges this wave actually launched — and announce
+// it. ⚠️ This read "it NEITHER bound to any roster slot NOR names one of the
+// judges this wave actually launched" until T5.5 deleted the `boundLegs` arm.
+// Binding is no longer part of the condition and the refusal set is now the
+// strict superset. That sentence was the verbatim TWIN of the one repaired in
+// run-debate-revote.js :: reVoteUnboundNote's docblock — same branch, same
+// commit, different file — and this file's own T5.5 block below already
+// contradicted it. Grep the distinctive phrase repo-wide when you edit a
+// sentence like this; a same-file sweep cannot find twins, and a whole-repo
+// one found no fifth copy. Driving runRevoteWave DIRECTLY (Task 1 of
+// docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md),
+// never through runDebate/runCouncil's fakeLaunchers. fakeLaunchers'
+// run-debate.test.js :: stampFanout (above) re-stamps taskId/waveId on every
+// leg it sees (including its `k < 0` arm), so ANY leg routed through it
+// always binds and a fixture built on it would be green at HEAD, proving
+// nothing. Both tests below supply a bespoke launchWave that returns its
+// wave's legs untouched, and make one leg unbindable by omitting BOTH
+// waveId and taskId (leg()'s waveId argument left undefined) —
+// seats.js :: bindSeats then has no id to match a roster slot AND its alias
+// fallback requires leg.waveId === waveId, so omitting both skips it entirely.
+//
+// Named mutants, each hand-applied to run-debate-revote.js then reverted and
+// byte-verified against a `cp` backup taken before mutating (diff empty) —
+// red sets measured by running tests/council/run-debate.test.js +
+// debate.test.js. Re-measured after review round 1 collapsed the guard's
+// second arm from `rosterIds.has(key)` to `judgeKeys.includes(key)`, and
+// AGAIN at T5.5 (2026-08-22) when the guard lost its `boundLegs` arm and
+// three tests were added — that pass ran all six of run-debate.test.js +
+// debate.test.js + run-stages.test.js + seat-space.test.js +
+// degrade-sink.test.js + run-finalize.test.js (243 tests):
+//   JOINBLIND  delete the new guard, restoring BASE's unconditional
+//              `byJudge[key] = parsed.byId`. Red set (1): this file's "twin
+//              bench, one twin leg unbindable" test below. ⚠️ GREW to (2)
+//              once T5.2's end-to-end test existed further down this file
+//              (re-measured there, under that task's own name E2EBLIND —
+//              identical deletion, cross-checked against this one so this
+//              count is not left stale). ⚠️ GREW AGAIN at T5.5 — to (5)
+//              when its two refusal tests and its exit-2 composition test
+//              entered the path, and to **(6)** in review round 1 when the
+//              note-fallback test joined them (it asserts an exact `why`, and
+//              with the guard gone there is no note at all). Re-measured
+//              2026-08-22 across the six suites above. Deleting the guard reds
+//              SIX tests; any smaller number written here is stale.
+//   REFUSEALL  weaken the guard to `if (seat)` (refuse on bare `!seat`). Red
+//              set (3): this file's "unique-alias bench, leg equally
+//              unbindable" test AND its "roster hole whose leg is ALSO
+//              unbindable" test (both below), AND the pre-existing §3.4
+//              fixture's "M1: no `__unbound-` sentinel reaches
+//              adjudications[].seat or the alias-space .judge (C1)" —
+//              REFUSEALL over-refuses the placeholder-hole and roster-hole
+//              cases too, not only the unique-alias one. (Grew from 2 to 3
+//              when the roster-hole test was added — Global Constraint 3's
+//              "proof that test entered the path.")
+//   LEGDROP    `continue` right after the degrade note, so a refused leg
+//              never reaches `legs.push` and loses its runStats row, its
+//              revote-<name>.md and its conformance. Red set (1): this
+//              file's "twin bench, one twin leg unbindable" test below,
+//              whose `rv.legs` length/conformance/seat assertions are what
+//              closes it — LEGDROP survived the entire suite (544 suites /
+//              7812 tests, exit 0) before those assertions existed.
+//              ⚠️ GREW to (2) at T5.5, re-measured 2026-08-22: that task's
+//              "it BINDS to the placeholder slot … and is refused anyway"
+//              test asserts the refused leg is STILL recorded
+//              (`revoteLegs` seats `['gpt', null]`), so it reds too.
+// ============================================================================
+describe('runRevoteWave (T5.1, SI-10/R8) — refuse an unbindable leg that names no seat', () => {
+  // No waveId argument -> run-debate.test.js :: leg (above) omits taskId/waveId entirely.
+  const unboundLeg = (model, summary) => leg(model, summary);
+
+  // RED-before-GREEN, measured directly against this test: with the new
+  // guard removed (restoring BASE — the JOINBLIND mutant below), byJudge
+  // gains a bare 'deepseek' key here and ctx.degrade.all() stays empty,
+  // reproducing the SI-10 defect
+  // (docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md §0.3's shape).
+  test('twin bench, one twin leg unbindable: its key is withheld and announced, not invented', async () => {
+    const tmp = mkTmp('run-revote-twin-unbound-');
+    const seats = buildSeats(TWIN_BENCH, null, null);      // deepseek#1 / deepseek#2 / gpt
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    // All THREE judgeKeys are REAL, resolvable seat ids (unlike the §3.4
+    // placeholder-hole fixture above, where 'deepseek' is not a seat id at
+    // all) — this wave's roster is fully real; only the deepseek#2 LEG fails
+    // to bind, which is the defect this task fixes.
+    const judgeKeys = ['gpt', 'deepseek#1', 'deepseek#2'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 2),   // deepseek#1: binds
+      unboundLeg('deepseek', revoteOut([{ id: 'A1', verdict: 'dispute' }])),    // deepseek#2: orphaned
+    ];
+    const launchers = {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: both legs parse cleanly'); },
+    };
+    const ctx = ctxFor(tmp, launchers, TWIN_BENCH);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    // No bare-alias 'deepseek' key — applyDebate's fail-open push would
+    // otherwise turn it into a phantom adjudication row (debate.js :: applyDebate).
+    expect(Object.keys(rv.byJudge).sort()).toEqual(['deepseek#1', 'gpt']);
+    expect(rv.byJudge.deepseek).toBeUndefined();
+    expect(rv.byJudge.gpt).toEqual({ A1: { verdict: 'agree' } });
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('deepseek');
+    expect(notes[0].data.waveId).toBe('r-rv');
+    expect(notes[0].effect).toMatch(/not applied/i);
+    expect(notes[0].effect).toMatch(/provisional verdict stands/i);
+
+    // Important #2 (review round 1): ONLY the parsed votes are withheld —
+    // the leg itself is still recorded (its runStats row, its
+    // revote-<name>.md, its conformance), so it must still reach `legs`.
+    // Named mutant LEGDROP (below) is what pins this: a `continue` right
+    // after the note above survived the entire suite until this existed.
+    expect(rv.legs).toHaveLength(3);
+    const refusedLeg = rv.legs.find(l => l.seat === null);
+    expect(refusedLeg).toMatchObject({ model: 'deepseek', conformance: 'clean', seat: null });
+  });
+
+  // Preservation: an unbindable leg on a bench with NO repeated alias must
+  // still publish and still apply — seatKey(null, 'qwen') === 'qwen', which
+  // IS that seat's own id (seats.js:67), so refusing it would be a
+  // regression, not a fix (plan §0.5's "NOT `seat === null`" warning).
+  // Named mutant REFUSEALL (weaken the guard to `!seat`) must red THIS test.
+  test('unique-alias bench, leg equally unbindable: the key IS published and the re-vote still applies', async () => {
+    const tmp = mkTmp('run-revote-unique-unbound-');
+    const bench = ['gemini', 'gpt', 'qwen'];               // plan §0.5's own measured shape
+    const seats = buildSeats(bench, null, null);
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'qwen'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      unboundLeg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }])),   // qwen: orphaned
+    ];
+    const launchers = {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: both legs parse cleanly'); },
+    };
+    const ctx = ctxFor(tmp, launchers, bench);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    expect(rv.byJudge.qwen).toEqual({ A1: { verdict: 'agree' } });
+    expect(ctx.degrade.all()).toEqual([]);
+
+    // And it still APPLIES through the real applyDebate join: qwen's
+    // provisional dispute is REPLACED, not left standing and not duplicated.
+    const tallyInput = {
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'qwen', verdict: 'dispute' },
+      ],
+    };
+    const { input } = applyDebate({ tallyInput, defenseByRaiser: {}, revoteByJudge: rv.byJudge, aliasOf });
+    expect(input.adjudications).toHaveLength(2);   // no invented row
+    expect(input.adjudications.find(a => (a.seat || a.judge) === 'qwen').verdict).toBe('agree');
+  });
+
+  // Important #1 (review round 1): a roster hole (a Stage-2-orphaned judge —
+  // its bare alias is no seat id at all, so runRevoteWave pads a §3.4
+  // placeholder for it) whose OWN -rv leg is ALSO unbindable. A third, distinct
+  // shape from both tests above: unlike "twin bench, one twin leg unbindable"
+  // (where every judgeKey resolves to a real seat), one judgeKey here —
+  // 'deepseek' — does not (judgeSeats has a null for it); unlike the
+  // "§3.4 placeholder contract" describe block below, this leg does not
+  // bind to the placeholder either (fakeLaunchers' stampFanout would stamp
+  // it there — this fixture deliberately withholds taskId/waveId instead,
+  // the same trap-avoidance as every test in this block).
+  //
+  // Measured against BASE (the guard removed entirely): byJudge publishes
+  // the bare 'deepseek' key, and applyDebate takes 2 adjudications in to 2
+  // out — the seat-less provisional row's dispute correctly replaced by
+  // agree, NO phantom row. `judgeKeys.includes(key)` is what preserves that:
+  // 'deepseek' names no REAL seat, and this leg bound to nothing at all —
+  // not even the §3.4 placeholder — but the key IS one of the judges this
+  // wave launched (`judgeKeys` itself), so refusing it would discard a
+  // re-vote BASE already joined correctly. ⚠️ This sentence also said the
+  // leg was "absent from `boundLegs`"; T5.5 deleted that Set, and the fact
+  // it named is carried by the clause before it.
+  test('roster hole whose leg is ALSO unbindable: the key IS published and the re-vote still applies', async () => {
+    const tmp = mkTmp('run-revote-hole-unbound-');
+    const seats = buildSeats(TWIN_BENCH, null, null);
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    // 'deepseek' is not a seat id on a twin bench (only deepseek#1/#2 are) —
+    // the same orphaned-Stage-2-judge shape the §3.4 fixture below builds via
+    // holedInput(), driven here directly through runRevoteWave's own params.
+    const judgeKeys = ['gpt', 'deepseek'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k) || null);
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      unboundLeg('deepseek', revoteOut([{ id: 'A1', verdict: 'agree' }])),   // the hole's leg, ALSO unbindable
+    ];
+    const launchers = {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: both legs parse cleanly'); },
+    };
+    const ctx = ctxFor(tmp, launchers, TWIN_BENCH);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    expect(rv.byJudge.deepseek).toEqual({ A1: { verdict: 'agree' } });
+    expect(ctx.degrade.all()).toEqual([]);
+
+    // And it still APPLIES: the orphaned judge's own provisional row — also
+    // seat-less, the same shape Stage 2 left it in — is REPLACED, not left
+    // standing and not duplicated into a phantom row.
+    const tallyInput = {
+      findings: [{ id: 'A1', raiser: 'gpt', severity: 'major', claim: 'infinite retry' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'A1', judge: 'deepseek', verdict: 'dispute' },   // seat-less, same as holedInput()
+      ],
+    };
+    const { input } = applyDebate({ tallyInput, defenseByRaiser: {}, revoteByJudge: rv.byJudge, aliasOf });
+    expect(input.adjudications).toHaveLength(2);   // no invented row
+    expect(input.adjudications.find(a => (a.seat || a.judge) === 'deepseek').verdict).toBe('agree');
+  });
+});
+
+// ============================================================================
+// T5.2 (SI-10/R8): the END-TO-END pin — the CONSEQUENCE of T5.1's refusal, not
+// its mechanism. T5.1 above drives runRevoteWave directly; this drives the real
+// runDebate, so the bare-alias key T5.1 withholds is produced by the real
+// function, never hand-built (docs/superpowers/plans/2026-08-21-v48-phase5-debate-join.md
+// Global Constraint 5 / Task 2).
+//
+// ⚠️ fakeLaunchers CANNOT build this fixture: stampFanout (top of file) re-stamps
+// taskId/waveId onto EVERY leg it returns, including the one this fixture needs
+// to come back unbound — routed through it, this test would be green at HEAD
+// regardless of whether the guard exists, proving nothing (same trap as T5.1,
+// noted above it). This block supplies its own launchSolo/launchWave instead,
+// mirroring the task brief's own controller-verified fixture — a throwaway
+// script under .superpowers/, deleted at branch end; this test is its
+// permanent, committed form, and the plan doc above is the durable citation.
+//
+// Bench: TWIN_BENCH. Finding C1 is raised by 'gpt' — unlike twinInput() above
+// (where each twin raises its OWN finding and so never judges the other's),
+// that makes BOTH deepseek twins legitimate judges of C1, both disputing it
+// provisionally. Both re-vote 'agree'; only deepseek#1's -rv leg comes back
+// unstamped (no taskId, no waveId) and so cannot bind; deepseek#2's leg is
+// stamped to roster slot 2 and binds normally. Measured at this plan's BASE
+// (Task 1's guard absent): 3 adjudications out of 2 in (rows deepseek#1:dispute
+// | deepseek#2:agree | a phantom seat-less deepseek:agree), tier Confirmed,
+// basis {a:2,d:1}. Measured at HEAD (guard present, below): 2 out, no phantom
+// row, tier Contested, basis {a:1,d:1} — the refusal is SURGICAL: deepseek#2's
+// leg still binds and its re-vote still applies; only deepseek#1's unbindable
+// leg is withheld.
+//
+// Named mutant E2EBLIND — the IDENTICAL deletion to T5.1's JOINBLIND above
+// (restore run-debate-revote.js's BASE-shape unconditional
+// `byJudge[key] = parsed.byId`, dropping the guard entirely) — hand-applied to
+// the committed file, run, then reverted from a `cp` backup and byte-verified
+// (`git diff --quiet`) against HEAD:
+//   Red set (2) as measured at T5.2, against this file + debate.test.js: this
+//   block's "the re-vote refusal is surgical" test below, AND T5.1's "twin
+//   bench, one twin leg unbindable" test above. Global
+//   Constraint 3 — a red set that GROWS when a test is added is proof the new
+//   test entered the path: T5.1's own commit recorded JOINBLIND's red set as
+//   (1 test) before this block existed; it was (2) then.
+//   ⚠️ **(6) since T5.5's review round 1**, re-measured 2026-08-22 across all
+//   six suites named at the JOINBLIND entry: the two T5.5 refusal tests, the
+//   T5.5 exit-2 composition test and the T5.5 note-fallback test joined it —
+//   (5) before that last one existed. Two things about the mutant itself also
+//   changed and are recorded so nobody re-derives them: the guard it deletes
+//   is now `if (judgeKeys.includes(key))` — T5.5 removed the
+//   `boundLegs.has(leg) ||` arm, so deleting "the guard" is a SMALLER edit
+//   than it was — and the count above is the one that must not be trusted
+//   stale.
+// ============================================================================
+describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudication basis from being corrupted', () => {
+  let tmp, result, ctx;
+  const defended = defenseOut([{ id: 'C1', action: 'defend', argument: 'bounded' }]);
+  const agree = revoteOut([{ id: 'C1', verdict: 'agree' }]);
+
+  // C1 raised by 'gpt' -> both deepseek twins are legitimate judges (the shape
+  // task-2-verified-fixture.js's `input()` measured, not twinInput() above).
+  function e2eJoinInput() {
+    return {
+      meta: { runId: 'r', models: TWIN_BENCH, chair: 'gemini', claudeInCouncil: false, date: '2026-07-19' },
+      findings: [{ id: 'C1', raiser: 'gpt', raiserSeat: 'gpt', severity: 'major', claim: 'leaks fd' }],
+      adjudications: [
+        { findingId: 'C1', judge: 'deepseek', seat: 'deepseek#1', verdict: 'dispute' },
+        { findingId: 'C1', judge: 'deepseek', seat: 'deepseek#2', verdict: 'dispute' },
+      ],
+      rankings: [], runStats: [],
+    };
+  }
+
+  beforeAll(async () => {
+    tmp = mkTmp('run-debate-e2e-join-');
+    const input = e2eJoinInput();
+    const provisionalRecord = tally(input);
+    // gpt is the sole raiser -> one defense solo, stamped so it binds normally.
+    // The -rv wave: deepseek#1's leg comes back UNSTAMPED -> bindSeats cannot
+    // attribute it on a twin bench. deepseek#2's leg (stamped to slot 2) and
+    // gpt's defense solo bind normally.
+    const launchers = {
+      launchSolo: async (o) => {
+        const l = { model: 'gpt', modelInput: 'gpt', status: 'complete', summary: defended,
+          taskId: `${o.waveId}-1`, waveId: o.waveId };
+        return { exitCode: 0, wave: wave([l]), leg: l };
+      },
+      launchWave: async (o) => {
+        const legs = [
+          { model: 'deepseek', modelInput: 'deepseek', status: 'complete', summary: agree },  // deepseek#1: unbindable
+          { model: 'deepseek', modelInput: 'deepseek', status: 'complete', summary: agree,
+            taskId: `${o.waveId}-2`, waveId: o.waveId },                                      // deepseek#2: binds
+        ];
+        return { exitCode: 0, wave: wave(legs) };
+      },
+    };
+    ctx = ctxFor(tmp, launchers, TWIN_BENCH);
+    result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
+  });
+
+  // One test, bundling all three assertions from the ONE fixture above — this
+  // file's own convention (T5.1's "twin bench, one twin leg unbindable" test
+  // does the same) and what makes the E2EBLIND cross-check below an exact
+  // count rather than an approximation.
+  test('the re-vote refusal is surgical: adjudications back to 2, no seat-less row, basis/tier corrected, one degrade note', () => {
+    const rows = result.debatedInput.adjudications.filter(a => a.findingId === 'C1');
+    expect(rows).toHaveLength(2);
+    expect(rows.some(a => a.judge === 'deepseek' && !a.seat)).toBe(false);
+    expect(rows.map(a => `${a.seat}:${a.verdict}`).sort()).toEqual(['deepseek#1:dispute', 'deepseek#2:agree']);
+
+    // The point of the whole task: three votes on a two-judge finding (and a
+    // tier of Confirmed) at BASE becomes two votes and Contested at HEAD.
+    const c1 = tally(result.debatedInput).findings.find(f => f.id === 'C1');
+    expect(c1.basis).toEqual({ a: 1, d: 1, n: 0 });
+    expect(c1.tier).toBe('Contested');
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('deepseek');
+    expect(notes[0].data.waveId).toBe('r-rv');
+  });
+});
+
+// ============================================================================
 // Final whole-branch review, fix wave — F1 (§3.4 placeholder contract at the
 // -rv call site), F2 (an absent `o.seats`) and F4 (emit-when-different).
 // ============================================================================
@@ -952,6 +1327,306 @@ describe('runDebate — §3.4 placeholder contract at the -rv call site (a ROSTE
     const rows = result.debatedInput.runStats;
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) { expect(r.model).not.toMatch(/__unbound-/); }
+  });
+});
+
+// ============================================================================
+// T5.5 — the `boundLegs` arm is GONE, and this block pins its absence.
+// `run-debate-revote.js :: runRevoteWave` now publishes on
+// `judgeKeys.includes(key)` ALONE.
+//
+// ⚠️ THE ASSERTIONS BELOW ARE THE INVERSE OF THE ONES THIS BLOCK SHIPPED WITH.
+// The whole-branch fix wave (round 2) added this fixture under the name
+// BOUNDDROP to pin arm 1's effect as a DISCLOSED DEFECT — it asserted 3
+// adjudication rows and ZERO degrade notes, on purpose, so the defect could not
+// rot silently. A paid multi-model council then confirmed the same mechanism
+// against PR #179 from three independent seats and reproduced this branch's own
+// measured figure, and the owner ruled: delete the arm. So the defect assertions
+// invert here, and the mutant's name inverts with them — dropping the arm WAS
+// the mutant (`BOUNDDROP`) and IS now the fix, so the mutant is `BOUNDREADD`.
+//
+// The mechanism arm 1 admitted: `seats.js :: bindSeats` binds a leg to a roster
+// slot from `leg.legId || leg.taskId` alone — `roster[Number(m[2]) - 1]`, with NO
+// alias check — and the alias fallback under it only runs `if (!seat && …)`. So a
+// leg stamped into the §3.4 PLACEHOLDER's slot while carrying an alias that is in
+// no roster and no `judgeKeys` BOUND (arm 1 true) while keying on that foreign
+// alias (arm 2 false): the foreign key was published, no note was emitted, and
+// `applyDebate`'s fail-open push invented a phantom `zzz` row while the roster
+// hole's own seat-less row kept its stale `dispute`. That is the SI-10 shape
+// T5.1 exists to close, surviving through arm 1. This is the §3.4 fixture above
+// with exactly ONE change: the hole leg's alias 'deepseek' -> 'zzz'.
+//
+// ⚠️ A BEHAVIOUR change, so these are RED-before-GREEN, not preservation pins.
+// Measured by execution against BASE `269badf1` (arm 1 present): both tests
+// below FAIL there — the first on `0 notes` where it wants 1, the second on
+// `3 rows` where it wants 2 — and both pass at HEAD.
+//
+// ⚠️ The §3.4 roster hole is NOT regressed by the deletion, which is the whole
+// reason arm 2 survives: a hole's own alias IS one of `judgeKeys` (run-debate.js
+// builds `judgeSeats` as `judgeKeys.map(k => seatById.get(k) || null)`, so the
+// hole keeps its `judgeKeys` slot and only loses its seat), so it still publishes
+// and still emits no note. The "§3.4 placeholder contract" block above and
+// T5.1's "roster hole whose leg is ALSO unbindable" test are that pin; both are
+// untouched by this change and both stay green.
+//
+// ⚠️ NOT reachable from the production launcher: runRevoteWave launches
+// `models: judgeKeys.map(aliasOf)` and fanout-leg.js carries `leg.modelInput`
+// straight from that request (`:62`, `:101`), so a real -rv leg's alias is
+// always one the wave asked for. Same latency class as SI-10 itself.
+//
+// Named mutant BOUNDREADD — re-add the deleted arm, i.e. restore BOTH halves of
+// what T5.5 removed: the Set (`const boundLegs = new Set(bindRes.bound.map(b =>
+// b.leg));`, after the `seatOf` build) and the widened predicate
+// (`if (boundLegs.has(leg) || judgeKeys.includes(key))`). Red set (2): BOTH
+// tests in this block and nothing else, measured across run-debate.test.js +
+// debate.test.js + seat-space.test.js + run-stages.test.js + degrade-sink.test.js
+// + run-finalize.test.js. Hand-applied to the committed file, run, then restored
+// from a `cp` backup and byte-verified with `git diff --quiet`.
+// ============================================================================
+describe('runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REFUSED', () => {
+  let tmp, result, ctx;
+  // The §3.4 roster hole again: A1's deepseek dispute with its `seat` removed,
+  // so `disputingJudges` yields the bare alias 'deepseek', which is no seat id
+  // on a twin bench, so runRevoteWave pads slot 2 with a placeholder.
+  function holedInput() {
+    const input = twinInput();
+    input.adjudications = input.adjudications.map(a =>
+      (a.findingId === 'A1' && a.judge === 'deepseek')
+        ? { findingId: 'A1', judge: 'deepseek', verdict: 'dispute' }
+        : a);
+    return input;
+  }
+
+  beforeAll(async () => {
+    tmp = mkTmp('run-debate-rv-foreign-');
+    const input = holedInput();
+    const provisionalRecord = tally(input);
+    const script = {
+      solos: {
+        'r-d1': { wave: wave([leg('deepseek', defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]))]) },
+        'r-d2': { wave: wave([leg('deepseek', defenseOut([{ id: 'B1', action: 'withdraw' }]))]) },
+      },
+      // 'zzz' is in NO roster and NO judgeKeys. stampFanout's `k < 0` arm still
+      // stamps it `r-rv-2` by POSITION, which is the whole point.
+      waves: {
+        'r-rv': wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }])),
+          leg('zzz', revoteOut([{ id: 'A1', verdict: 'agree' }]))]),
+      },
+    };
+    ctx = ctxFor(tmp, fakeLaunchers(script, []), TWIN_BENCH);
+    result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
+  });
+
+  test('it BINDS to the placeholder slot yet keys on the foreign alias — and is refused anyway', () => {
+    // Bound (so arm 1 WOULD have published it) but the placeholder is filtered
+    // back out, so the leg's seat is null and its key is the bare 'zzz'.
+    // The leg itself is untouched — LEGDROP's contract: only the votes are withheld.
+    expect(result.revoteLegs.map(l => l.seat && l.seat.id)).toEqual(['gpt', null]);
+    // 'zzz' names no seat and no launched judge, so the ONLY surviving arm is
+    // false and the refusal is announced. This is BOUNDREADD's red edge.
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    expect(notes[0].channel).toBe('seat-unbound');
+    expect(notes[0].data.judge).toBe('zzz');
+    expect(notes[0].data.key).toBe('zzz');
+    expect(notes[0].data.waveId).toBe('r-rv');
+    // The taskId that bound it to the placeholder slot, carried on the record.
+    expect(notes[0].data.legId).toBe('r-rv-2');
+    // ⚠️ EXACT `what`, pinned HERE because this is the leg the old wording lied about:
+    // it DID match a roster slot (the §3.4 placeholder's, by taskId) and was refused
+    // anyway, so "matches no seat on that wave's roster" was false for three rounds while
+    // the `why` three lines under it had already been corrected twice. Named mutant
+    // WHATSTALE. The negative assertion is the load-bearing half — it is what stops the
+    // old sentence being reinstated from stage1-bind.js :: orphanLegNote, where the same
+    // words are TRUE.
+    expect(notes[0].what)
+      .toBe('re-vote leg r-rv-2 in wave r-rv could not be attributed to a judge on that wave');
+    expect(notes[0].what).not.toMatch(/matches no seat/);
+    // ⚠️ And the note's own `why` must not claim the leg bound to nothing — THIS one
+    // bound, to the placeholder's slot, which is what the taskId above shows. That
+    // sentence read "it bound to no roster slot, and … names no seat there either"
+    // until T5.5 deleted the arm that made the first half true — an ANNOUNCED string
+    // the correct edit turned false. Named mutant WHYSTALE (restore the old `why`
+    // literal in run-debate-revote.js :: reVoteUnboundNote): red set (2) — this test
+    // and the "NEITHER modelInput NOR model" test below, which pins the exact string.
+    // It was (1) before that test existed; re-measured 2026-08-22 across the same six
+    // suites as the others.
+    expect(notes[0].why).toMatch(/names none of the judges this wave launched/);
+    expect(notes[0].why).not.toMatch(/bound to no roster slot/);
+  });
+
+  test('refusing that key invents no phantom row and leaves the roster hole its own', () => {
+    const a1 = result.debatedInput.adjudications.filter(a => a.findingId === 'A1');
+    // 2 out, not 3: gpt's bound re-vote applied, and nothing invented.
+    expect(a1).toHaveLength(2);
+    expect(a1.find(a => a.judge === 'zzz')).toBeUndefined();
+    expect(a1.find(a => a.judge === 'gpt').verdict).toBe('agree');
+    // The roster hole's own seat-less row is INTACT — the phantom never
+    // displaced it, and no re-vote of its own ever arrived to replace it.
+    expect(a1.find(a => a.judge === 'deepseek' && !a.seat))
+      .toEqual({ findingId: 'A1', judge: 'deepseek', verdict: 'dispute' });
+  });
+});
+
+// ============================================================================
+// T5.5 — the note's own FALLBACKS, and the one T5.5 nearly shipped missing.
+// `reVoteUnboundNote` normalizes three values before rendering: `legId`, the
+// judge `alias`, and — only since T5.5 started interpolating it — the join
+// `key`. That third one was raw for one commit, and the review caught it:
+// measured against the real runRevoteWave with a leg carrying NEITHER
+// `modelInput` NOR `model`, the record rendered "its join key 'undefined' …"
+// and `data.key` fell out of the JSON entirely — precisely the "reads like a
+// bug in the announcer instead of a fact about the leg" shape that the alias
+// fallback exists to prevent (run-debate-revote.js :: reVoteUnboundNote's own
+// comment says so, and now covers both interpolations).
+//
+// Why `key` goes undefined with `judge`: the caller computes
+// `key = seatKey(seat, judge)`, which RETURNS `judge` whenever `seat` is null —
+// and `seat` is null in every refusal runDebate can produce.
+//
+// Named mutants:
+//   KEYRAW    drop `|| 'unknown'` from `joinKey`. Red set (1): this test.
+//   WHYSTALE  restore the pre-T5.5 `why` literal ("it bound to no roster slot,
+//             and its judge alias '${alias}' names no seat there either").
+//             Red set (2) now that this block exists — it was (1) before.
+//   WHATSTALE restore the pre-round-2 `what` literal ("re-vote leg … matches no
+//             seat on that wave's roster"), which a paid council caught still
+//             making the claim `why` had been fixed twice to drop. A COMPANION
+//             to WHYSTALE rather than a widening of it, so a red set attributes
+//             to one string. Red set (3): this test's exact `what`, the T5.5
+//             refusal block's exact `what` + its `not.toMatch(/matches no
+//             seat/)`, and the exit-2 composition test's emitted-line regex.
+// Both hand-applied to the committed file, run across the same six suites as
+// this branch's other mutants, then restored from a `cp` copy and byte-verified
+// with `git diff --quiet`.
+// ============================================================================
+describe('runRevoteWave — T5.5: a leg carrying NEITHER modelInput NOR model still announces cleanly', () => {
+  test('the note renders `unknown`, never `undefined`, in the sentence AND in `data`', async () => {
+    const tmp = mkTmp('run-revote-noalias-');
+    const seats = buildSeats(TWIN_BENCH, null, null);
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'deepseek#1'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    // No model, no modelInput, no taskId, no waveId. bindSeats keeps it in `mine`
+    // (`!l.waveId`), finds no id to match and skips the alias fallback (which
+    // needs `leg.waveId === waveId`), so it binds to nothing; `judge` is
+    // undefined, and `seatKey(null, undefined)` carries that into `key`.
+    const nameless = { status: 'complete', summary: revoteOut([{ id: 'A1', verdict: 'agree' }]) };
+    const ctx = ctxFor(tmp, {
+      launchWave: async () => ({ wave: wave([nameless]), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: the leg parses cleanly'); },
+    }, TWIN_BENCH);
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    const notes = ctx.degrade.all();
+    expect(notes).toHaveLength(1);
+    // EXACT strings, because this pins two decisions at once: the join-key
+    // fallback, and T5.5's removal of the "(judge alias '…')" parenthetical —
+    // which printed the SAME string twice in every refusal runDebate can produce,
+    // since a real seat's id is always a judgeKey and so a real-seat bind is
+    // always published, leaving `key === judge` in every refusal.
+    expect(notes[0].why).toBe("its join key 'unknown' names none of the judges this wave launched");
+    expect(notes[0].what)
+      .toBe('re-vote leg unidentified in wave r-rv could not be attributed to a judge on that wave');
+    expect(notes[0].data)
+      .toEqual({ waveId: 'r-rv', legId: 'unidentified', judge: 'unknown', key: 'unknown' });
+    // Belt and braces over the WHOLE record: nothing anywhere renders `undefined`.
+    expect(JSON.stringify(notes[0])).not.toMatch(/undefined/);
+  });
+});
+
+// ============================================================================
+// T5.5 — the exit-2 COMPOSITION. Both halves were already pinned SEPARATELY:
+// `tests/council/degrade-sink.test.js` :: "note() writes stderr, appends
+// run.json, and flips degraded" (a default-kind record sets `degraded.value`),
+// and `tests/council/run-finalize.test.js` :: "the degrade flag turns 0 into 2
+// (a shrunken bench, a thin cross-review, …)". Nothing pinned the JOIN: every
+// other -rv fixture in this file runs on `ctxFor`'s `degrade`, which is a
+// RECORDING DOUBLE (`{ note: (rec) => notes.push(rec), all: () => notes }`),
+// so no committed test carried a `seat-unbound` refusal to an exit code. Filed
+// as an open follow-up under SI-10 in BACKLOG.md; closed by this block.
+//
+// ⚠️ The record under test is DERIVED, never hand-built — it is whatever the
+// real `runRevoteWave` hands the real `createDegradeSink`. Hand-building the
+// intermediate value is precisely how earlier fixtures on this branch went
+// green at HEAD for the wrong reason (plan Global Constraint 5).
+//
+// The fixture is T5.1's "twin bench, one twin leg unbindable" shape, with ONE
+// substitution: `ctx.degrade` swapped from the recording double to the
+// production `run-degrade.js :: createDegradeSink`, wired to the same
+// `{value:false}` flag `run.js:64-65` gives it.
+//
+// Named mutant NOTEHEAL — add `kind: 'heal'` to the record `reVoteUnboundNote`
+// returns (`run-debate-revote.js :: reVoteUnboundNote`). That is the exact edit
+// this block exists to catch, and it is a QUIET one: `utils/degrade.js`'s
+// `KINDS` accepts 'heal', so `makeDegrade` does not throw, every
+// channel/what/why/effect/data assertion in this file still passes, and only
+// `createDegradeSink`'s `if (record.kind === 'degrade' && degraded)` stops
+// firing — the refusal becomes exit-code-neutral in silence. Red set (1): this
+// block's test and nothing else, measured across run-debate.test.js +
+// debate.test.js + run-stages.test.js + seat-space.test.js +
+// degrade-sink.test.js + run-finalize.test.js. Hand-applied to the committed
+// file, run, then restored from a `cp` backup and byte-verified with
+// `git diff --quiet`.
+// ============================================================================
+describe('runRevoteWave — T5.5: a seat-unbound refusal reaches terminal exit 2', () => {
+  test('the real degrade sink flips `degraded`, and resolveTerminalExit turns a clean 0 into 2', async () => {
+    const tmp = mkTmp('run-revote-exit2-');
+    const seats = buildSeats(TWIN_BENCH, null, null);      // deepseek#1 / deepseek#2 / gpt
+    const aliasOf = aliasOfFor(seats);
+    const seatById = new Map(seats.map(s => [s.id, s]));
+    const judgeKeys = ['gpt', 'deepseek#1', 'deepseek#2'];
+    const judgeSeats = judgeKeys.map(k => seatById.get(k));
+    const waveId = 'r-rv';
+    const revoteLegs = [
+      leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 1),
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'agree' }]), waveId, 2),  // deepseek#1: binds
+      // deepseek#2: no taskId and no waveId, so bindSeats can match neither an
+      // id nor (its alias fallback needs `leg.waveId === waveId`) an alias.
+      leg('deepseek', revoteOut([{ id: 'A1', verdict: 'dispute' }])),
+    ];
+    const ctx = ctxFor(tmp, {
+      launchWave: async () => ({ wave: wave(revoteLegs), exitCode: 0 }),
+      launchSolo: async () => { throw new Error('unexpected repair: every leg parses cleanly'); },
+    }, TWIN_BENCH);
+    const degraded = { value: false };
+    const emitted = [];
+    ctx.degrade = createDegradeSink({ runDir: tmp, degraded, write: (s) => emitted.push(s) });
+    const bundleFindings = [{ id: 'A1', severity: 'major', amended: false,
+      claim: 'infinite retry', argument: 'defended without extra argument' }];
+
+    const rv = await runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf);
+
+    // The refusal happened at all (guard against a fixture that quietly binds).
+    expect(rv.byJudge.deepseek).toBeUndefined();
+    const records = ctx.degrade.all();
+    expect(records).toHaveLength(1);
+    expect(records[0].channel).toBe('seat-unbound');
+
+    // Half 1 — the production sink flipped the run's flag.
+    expect(degraded.value).toBe(true);
+    // Half 2, and the composition this block exists for: an otherwise-clean run
+    // finalizes as 2. Arguments mirror the sole production call, run.js:111.
+    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded,
+      degrade: ctx.degrade, inexactUnderCeiling: () => false })).toBe(2);
+    // Control: the same call with an unflipped flag stays 0, so the 2 above is
+    // the refusal's doing and not the shape of these arguments.
+    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded: { value: false },
+      degrade: ctx.degrade, inexactUnderCeiling: () => false })).toBe(0);
+
+    // ⚠️ These two are LAST on purpose. `kind` is the load-bearing link in the
+    // chain (reVoteUnboundNote never sets it; `utils/degrade.js :: makeDegrade`
+    // defaults it to 'degrade'), and BOTH of these read it — `formatDegrade`
+    // leads with "Recovered" instead of "Notice" for a 'heal'. Asserted ABOVE,
+    // either one would let NOTEHEAL red on a PROXY and leave the composition
+    // itself unproven; both were measured in that position and did exactly that.
+    // Measured in this position: NOTEHEAL reds on `degraded.value` above.
+    expect(records[0].kind).toBe('degrade');
+    expect(emitted.join('')).toMatch(/^Notice: re-vote leg .* could not be attributed to a judge/);
   });
 });
 
