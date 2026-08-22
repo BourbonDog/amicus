@@ -28,7 +28,7 @@ const PROBE_PROMPT = 'Reply with exactly: OK';
  * schema.js) per the plan's Global Constraints classification contract.
  * Precedence matters: 'complete' wins outright; otherwise a NO_OUTPUT_
  * BACKSTOP error (PR2's silent-leg detector, armed here at PROBE_WINDOW_MS
- * instead of its 120s default) is the one specific error shape that means
+ * instead of its 300s default) is the one specific error shape that means
  * "the model accepted the request and never produced a token" rather than an
  * ordinary routing/auth/timeout failure.
  * @param {{status?:string, error?:string|null}} leg
