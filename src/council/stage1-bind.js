@@ -83,4 +83,60 @@ function missingSeatDeadWave(m) {
   };
 }
 
-module.exports = { bindStage1Waves, orphanLegNote, missingSeatDeadWave };
+/**
+ * Bind ONE wave whose roster may have HOLES: pad the holes, bind, then drop
+ * every placeholder bind. Appended (never inserted) by v4.8 SI-27 / R14, which
+ * consolidated the block that stood byte-identical at three call sites ONCE `waveId`
+ * and the alias lookup are parameterised — site 2's callback was literally
+ * `(r, i) => { if (r.seat) … }`, reading the seat off a review, not off a roster
+ * slot. The three sites: `run-retry-launch.js :: bindRetryWave`,
+ * `run-stage2.js :: runStage2` and `run-debate-revote.js :: runRevoteWave`.
+ *
+ * How this differs from `bindStage1Waves` above: that one takes MANY waves, each
+ * with a REAL roster — no padding, no placeholders, and it owns its own missing/
+ * orphan bookkeeping. This one takes ONE wave and a roster source that may carry
+ * falsy slots, and owns nothing past the bind.
+ *
+ * A falsy entry means "we could not identify this seat"; pad it with a
+ * position-stable placeholder carrying a UNIQUE id so no slot shifts, then drop
+ * the placeholder binds so nothing is guessed. ⚠️ Never pass `rosterSource` raw
+ * and never use a null-id sentinel: `seats.js :: bindSeats` filters falsy roster
+ * entries internally (so raw === filtered, and both slide every later slot into
+ * a hole), and two `{id: null}` sentinels collide on the id-keyed dedup.
+ *
+ * Placeholders are tracked by IDENTITY, never by an id-name prefix test: a bench
+ * alias that literally began `__unbound-` would make a name test drop a REAL
+ * seat's binding — a name-collision channel inside the one mechanism whose whole
+ * contract is "never guess".
+ *
+ * `bindRes` and `placeholders` come back raw because the ORPHAN/MISSING tail
+ * differs at every call site and STAYS there: site 1 returns `orphanLegs` to its
+ * caller, site 2 notes orphans and walks `bindRes.unbound` (skipping
+ * `placeholders`) for missing seats, site 3 has no tail at all.
+ *
+ * No argument guards by design (R27-3): each call site keeps the guard it has.
+ *
+ * @param {string} waveId
+ * @param {Array<?object>} rosterSource one entry per launched slot; falsy where the seat is unknown
+ * @param {(i: number) => string} aliasAt the alias that launched in slot i
+ * @param {Array<object>} legs the wave's returned legs
+ * @returns {{seatOf: Map<object, object>,
+ *   bindRes: {bound: Array<object>, unbound: Array<object>, orphanLegs: Array<object>},
+ *   placeholders: Set<object>}}
+ */
+function bindPaddedWave(waveId, rosterSource, aliasAt, legs) {
+  const placeholders = new Set();
+  const roster = rosterSource.map((s, i) => {
+    if (s) { return s; }
+    const p = { id: `__unbound-${waveId}-${i + 1}`, alias: aliasAt(i), role: 'seat', lens: null, position: i + 1 };
+    placeholders.add(p);
+    return p;
+  });
+  const bindRes = bindSeats(waveId, roster, legs);
+  const seatOf = new Map(bindRes.bound
+    .filter(b => !placeholders.has(b.seat))
+    .map(b => [b.leg, b.seat]));
+  return { seatOf, bindRes, placeholders };
+}
+
+module.exports = { bindStage1Waves, orphanLegNote, missingSeatDeadWave, bindPaddedWave };

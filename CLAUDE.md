@@ -552,7 +552,7 @@ evals/
 | `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
-| `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()` |
+| `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |

@@ -670,6 +670,22 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Internal
 
+- **The roster pad/bind/drop-placeholder core now lives in one place.** Three call sites
+  — the Stage-1 retry wave, the Stage-2 judge wave and the debate re-vote wave — each carried a
+  near-verbatim copy of the same eleven lines: pad every unidentified roster slot with a
+  position-stable placeholder carrying a unique synthetic id, bind, then drop the placeholder
+  binds so nothing is guessed. That block is now
+  `stage1-bind.js :: bindPaddedWave(waveId, rosterSource, aliasAt, legs)`, and each site keeps
+  only its own orphan/missing tail, which genuinely differs (one returns orphans to its caller,
+  one notes them and walks the unbound seats, one has no tail at all).
+  **Zero behaviour change**: no output, artifact, exit code, degrade note or `runStats` row
+  moves — the whole suite is green at 545 suites / 7891 passed / 8 skipped / 0 failed, and the
+  consolidation was shipped as its own PR precisely so it could not be confused with a fix.
+  The safety property this code exists for is unchanged and better pinned: placeholder ids stay
+  unique and placeholder binds never reach a seat map, a CONJUNCTION whose failure silently
+  loses a retried leg’s billed usage. Breaking the drop-filter now reds 19 tests across four
+  suites where the same edit previously reached 14 across three.
+
 - **Added a named pin that `parseModelsList` preserves duplicate aliases.** Owner ruling R3-2 (one
   re-vote leg per disputing seat) depends on `--models gpt,deepseek,deepseek` producing three legs,
   not two after deduplication; the invariant already held but nothing enforced it going forward, so

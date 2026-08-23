@@ -1398,10 +1398,23 @@ describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudicat
 // F1. The plan's §3.4 padding pattern only EXECUTES when the roster has a hole,
 // and every twin test above runs a bench where every seat is real — so the
 // placeholder branch never ran and three mutations survived all 520 suites:
-//   M1  drop `.filter(b => !placeholders.has(b.seat))` in run-debate-revote.js
-//   M2  drop the same filter in run-stage2.js          (pinned in run-stages.test.js)
+//   M1  drop `.filter(b => !placeholders.has(b.seat))` — it was its own copy in
+//       run-debate-revote.js; as of v4.8 SI-27 that line lives in
+//       `stage1-bind.js :: bindPaddedWave`, which is where it is applied now
+//   M2  the same filter, formerly its own copy in run-stage2.js — since SI-27 it is
+//       literally the SAME line as M1                  (pinned in run-stages.test.js)
 //   M3  neuter `if (placeholders.has(seat)) { continue; }` in run-stage2.js's
-//       seat-unbound loop                               (pinned in run-stages.test.js)
+//       seat-unbound loop — still a CALL-SITE mutation there, because the tail did
+//       not move; renamed `PLACEHOLDERLEAK`            (pinned in run-stages.test.js)
+// ⚠️ So M1, M2, this file's pin and run-retry-launch.test.js's "NOPLACEHOLDERFILTER"
+// are ONE mutation now. MEASURED 2026-08-23, full `npx jest --no-coverage`: it reds
+// 19 tests in FOUR suites — run-debate 4: THREE OF THE FOUR tests in the F1 describe
+// below (the `debate.json`/runStats one stays GREEN — re-measured 2026-08-23 against
+// this file alone: 4 failed / 83 passed), plus the one in `runDebate — T5.5: a
+// taskId-bound leg carrying a FOREIGN alias is REFUSED`),
+// run-retry 9, run-retry-launch 4, run-stages 2. PLACEHOLDERLEAK, measured the same
+// way, reds exactly ONE test (M3's, in run-stages.test.js) — which is what keeps the
+// consolidated mutation and the call-site one distinguishable.
 // M1's consequence is a SYNTHETIC `__unbound-…` sentinel reaching disk as
 // revote-__unbound-r-rv-N.md and — through applyDebate's fail-open push, where
 // `aliasOf` is the identity for an unknown key — `adjudications[].judge`, the

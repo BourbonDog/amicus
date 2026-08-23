@@ -76,8 +76,9 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // collapses two slots into one and the second leg comes back an ORPHAN.
     // Measured directly against bindSeats before this pin was written:
     // distinct ids -> {bound: 2, orphans: 0}; one shared id -> {bound: 1, orphans: 1}.
-    // Named mutant "COLLIDEID": in run-retry-launch.js make the placeholder id
-    // `__unbound-${unit.waveId}` (drop the `-${i + 1}` slot suffix) and this goes RED
+    // Named mutant "COLLIDEID": in `stage1-bind.js :: bindPaddedWave` (v4.8 SI-27
+    // moved the pad there; before it, run-retry-launch.js) make the placeholder id
+    // `__unbound-${waveId}` (drop the `-${i + 1}` slot suffix) and this goes RED
     // with one orphan (leg `w-2`). RUN 2026-08-17 against the FULL suite, which is why
     // the repo-wide half of this claim is stated: `npm test` gave
     // 1 failed / 7504 passed / 8 skipped, 533 of 534 suites green — this test was the
@@ -95,8 +96,9 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
   test('C1a — padding is POSITION-STABLE: a real seat after a null slot keeps its slot', () => {
     // The other reason the pad exists. seats.js filters falsy roster entries internally,
     // so passing `unit.seats` raw (or a falsy sentinel) slides slot 2 into slot 1 and
-    // leg `w-1` binds to the seat that launched in slot 2. Mutant "RAWROSTER": pass
-    // `unit.seats` straight to bindSeats — RED here, `retrySeatOf.get(legs[0]) === real`.
+    // leg `w-1` binds to the seat that launched in slot 2. Mutant "RAWROSTER": in
+    // `stage1-bind.js :: bindPaddedWave` skip the pad and pass `rosterSource` straight
+    // to bindSeats — RED here, `retrySeatOf.get(legs[0]) === real`.
     const real = { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 2 };
     const legs = [
       { legId: 'w-1', modelInput: 'deepseek' },
@@ -113,8 +115,19 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // does not, so `retrySeatOf.get(leg)` is always either undefined or a REAL
     // unit.seats entry — never a synthetic `__unbound-` object.
     // Named mutant "NOPLACEHOLDERFILTER": delete the
-    // `.filter(b => !placeholders.has(b.seat))` line in run-retry-launch.js and this
-    // goes RED with size 2 and an `__unbound-w-2` seat id.
+    // `.filter(b => !placeholders.has(b.seat))` line in `stage1-bind.js ::
+    // bindPaddedWave` and this goes RED with size 2 and an `__unbound-w-2` seat id.
+    // ⚠️ Since v4.8 SI-27 that is ONE line serving all three padding call sites.
+    // MEASURED 2026-08-23 at full `npx jest --no-coverage` scope: 19 tests RED across
+    // FOUR suites — run-retry-launch 4, run-retry 9, run-stages 2, run-debate 4;
+    // 541 of 545 suites still green. run-debate's and run-stages' shares are what
+    // were separately named M1 and M2 (run-debate.test.js's "F1." mutant list);
+    // run-retry's 9 were predicted by NO filing — SI-27 expected three suites, not four.
+    // ⚠️ The PRE-SI-27 blast radius was measured the same day and the same way, by
+    // restoring the inline un-filtered block at THIS site alone: 14 tests, THREE
+    // suites (run-retry-launch 4, run-retry 9, run-stages 1 — T2.2, a retry-path
+    // test). So this mutant was never confined to one file, and the consolidation's
+    // measured gain is +5 tests and exactly one whole new suite, run-debate.
     const real = { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 1 };
     const legs = [
       { legId: 'w-1', modelInput: 'gpt' },
@@ -132,11 +145,20 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // The placeholder set is keyed by object identity, never by an id-name prefix test.
     // A real seat whose id begins `__unbound-` is adversarial but legal, and dropping
     // its bind would be a name-collision channel inside the one mechanism whose whole
-    // contract is "never guess". Mutant: swap the filter for
-    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — named "PREFIXID",
-    // measured 2026-08-17: RED here and green on the other 171 tests of
-    // run-retry-launch/run-retry/run-stages/run-cost-bijection (4 suites). Not run
-    // repo-wide, so "green everywhere else" is stated only for that set.
+    // contract is "never guess". Mutant: in `stage1-bind.js :: bindPaddedWave` swap
+    // the filter for
+    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — named "PREFIXID".
+    // ⚠️ LOCATION as of v4.8 SI-27: that block moved OUT of this file, so the two
+    // measurements below describe DIFFERENT trees. Do not read the older as current.
+    //   2026-08-23, at the new shared location, full `npx jest --no-coverage`: reds
+    //     2 tests in 2 suites — this one AND run-stages.test.js's "Finding 3: an
+    //     adversarial `__unbound-`-prefixed alias still binds by seat IDENTITY".
+    //     One edit now kills BOTH identity pins; that is what the consolidation bought.
+    //   2026-08-17, when the block was still inline here: RED here and green on the
+    //     other 171 tests of run-retry-launch/run-retry/run-stages/run-cost-bijection
+    //     (4 suites). Not run repo-wide, so "green everywhere else" was stated only for
+    //     that set. ⚠️ Finding 3 ALREADY EXISTED then (`86eb888d`, 2026-08-13) and was
+    //     green only because the mutant sat in this file — never because it is insensitive.
     const real = { id: '__unbound-x#1', alias: '__unbound-x', role: 'seat', lens: null, position: 1 };
     const legs = [{ legId: 'w-1', modelInput: '__unbound-x' }];
     const { retrySeatOf } = launch.bindRetryWave(
@@ -163,6 +185,9 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     //
     // MEASURED 2026-08-17 against this tree — both mutants applied to run-retry-launch.js and
     // reverse-edited by hand, byte-verified against `git show HEAD:` (never `git checkout --`).
+    // ⚠️ LOCATION as of v4.8 SI-27: the pad/bind/drop block those two mutants edit now lives
+    // in `stage1-bind.js :: bindPaddedWave`. Re-apply them THERE; the 2026-08-17 numbers below
+    // are the historical measurement, taken when the block was still inline here.
     // Each reds exactly ONE of the two numbered blocks, which is how they stay distinguishable:
     //   "FAKEBIND" (BOTH halves broken — drop the `.filter(b => !placeholders.has(b.seat))`
     //     line AND spell the placeholder id `unit.models[i]`): reds (1) on the UNBOUND shape.

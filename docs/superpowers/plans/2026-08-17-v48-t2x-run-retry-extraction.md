@@ -282,6 +282,19 @@ consolidate padding/bind/placeholder logic there, parameterised across **three**
 (ruling R14). Landing a one-site partial version now would leave SI-27's filing describing work that
 is half-done — the falsified-record class this release keeps paying for.
 
+> ⚠️ **Annotation added 2026-08-23 — the prohibition above is DISCHARGED, and the sentence
+> that carried it is left standing.** SI-27 shipped that day (`80680c9f` + `ed827eaa` +
+> `68bee03e` + `d29a3462`, ruling R14): the pad/bind/placeholder core now lives in
+> `stage1-bind.js :: bindPaddedWave`, parameterised across all three sites, exactly as this
+> paragraph anticipated. **"Do NOT route this into `stage1-bind.js`" was scoped to T-A2**, whose
+> one-site partial version is what it forbade; it is not a standing rule about that file, and a
+> reader arriving here today should not treat it as one. The `bindStage1Waves` warning is still
+> live and correct: that function remains a DIFFERENT contract (many waves, a real roster, no
+> padding, no placeholders) and is not what the three padding sites call — `bindPaddedWave` is.
+> Kept rather than rewritten because this is a dated plan snapshot and `docs/CITATIONS.md`
+> governs: *"annotate it with the ref it was true at … do not silently"* overwrite. The
+> statement was true when written.
+
 **Pin:** function identity for both exported names, same idiom as T-A1.
 
 **Done when:** all four gates exit 0; identity pins pass; `run-retry.js` measures ≤262; the two C1

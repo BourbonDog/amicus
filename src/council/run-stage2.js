@@ -25,10 +25,10 @@ const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
 const { buildRunStatsEntry } = require('./run-assemble');
 // v4.8 PR3 Task 4: seat binding. artifactName is NOT re-exported from
-// run-launch.js (its exports stop at sanitizeName/isAbortExit), so both come
+// run-launch.js (its exports stop at sanitizeName/isAbortExit), so it comes
 // straight from ./seats — that module requires nothing, zero cycle risk.
-const { artifactName, bindSeats } = require('./seats');
-const { orphanLegNote } = require('./stage1-bind');
+const { artifactName } = require('./seats');
+const { orphanLegNote, bindPaddedWave } = require('./stage1-bind');
 
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
@@ -82,29 +82,19 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
   // are appended, run-stages.js:153, so `reviews` order is no longer seat order
   // — both arrays still derive from the same `reviews`).
-  // §3.4's padding pattern (run-retry-launch.js :: bindRetryWave): bindSeats filters falsy
-  // roster entries internally, so a `null` hole would slide every later slot,
-  // and two `{id:null}` sentinels would collide on its id-keyed dedup.
-  // Placeholders are tracked by IDENTITY, never an id-name prefix test — a
-  // bench alias literally beginning `__unbound-` must never drop a real bind.
+  // §3.4's padding pattern now lives in `stage1-bind.js :: bindPaddedWave`
+  // (v4.8 SI-27) — why the roster is padded rather than filtered, and why
+  // placeholders are tracked by IDENTITY rather than an id-name prefix test,
+  // are in that function's docblock. Only this site's TAIL stays here.
   const s2WaveId = `${o.runId}-s2`;
-  const placeholders = new Set();
-  const roster = reviews.map((r, i) => {
-    if (r.seat) { return r.seat; }
-    const p = { id: `__unbound-${s2WaveId}-${i + 1}`, alias: judges[i], role: 'seat', lens: null, position: i + 1 };
-    placeholders.add(p);
-    return p;
-  });
   // review F(critical): `wave` is legitimately null — a budget/args refusal
   // (run-budget.js failPre) returns `{wave: null, exitCode: 1}`, which
   // isAbortExit does NOT catch (only 130/143), so execution reaches here.
   // Guarded exactly like the leg loop below (`(wave && wave.legs) || []`) —
   // this is the only OTHER dereference of wave.legs in the file.
   const s2Legs = (wave && wave.legs) || [];
-  const bindRes = bindSeats(s2WaveId, roster, s2Legs);
-  const judgeSeatOf = new Map(bindRes.bound
-    .filter(b => !placeholders.has(b.seat))
-    .map(b => [b.leg, b.seat]));
+  const { seatOf: judgeSeatOf, bindRes, placeholders } =
+    bindPaddedWave(s2WaveId, reviews.map(r => r.seat), i => judges[i], s2Legs);
   // An orphan leg (a judge DID land, but no roster slot claims it) gets the
   // same shape as Stage 1's orphanLegNote — `data.legId` present.
   for (const leg of bindRes.orphanLegs) { ctx.degrade.note(orphanLegNote(s2WaveId, leg)); }
@@ -122,7 +112,11 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       ctx.degrade.note({
         channel: 'seat-unbound',
         what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
-        why: `the wave returned fewer judge legs than its roster of ${roster.length}`,
+        // R27-5: `reviews.length` IS the padded roster's length — bindPaddedWave
+        // maps 1:1 over the source array, and `Array.prototype.map` preserves
+        // length. Pinned (`ROSTERLEN`) in run-stages.test.js, because a
+        // substitution into unpinned prose is how a true sentence goes quietly false.
+        why: `the wave returned fewer judge legs than its roster of ${reviews.length}`,
         effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
         data: { waveId: s2WaveId, seat: seat.alias },
       });

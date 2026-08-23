@@ -155,11 +155,17 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
   }
 
   for (const [, { seat, alias, exact, join }] of deadSeats) {
-    // ⚠️ Safe only because `run-retry-launch.js :: bindRetryWave` DROPS every placeholder
-    // bind (:59) and keeps placeholder ids unique (:53) — together they guarantee a BOUND
-    // still-dead retry leg always resolves `exact` here, never the branch below. Break that
-    // conjunction and a bound retry leg's usage is lost silently. Measured unreachable
-    // today — see BACKLOG.md's PR #170 T2.2 section (the retry-leg-drop finding).
+    // ⚠️ Safe only because `stage1-bind.js :: bindPaddedWave` — which
+    // `run-retry-launch.js :: bindRetryWave` calls — DROPS every placeholder bind and keeps
+    // placeholder ids unique. Together they guarantee a BOUND still-dead retry leg always
+    // resolves `exact` here, never the branch below. Break that conjunction and a bound retry
+    // leg's usage is lost silently. Measured unreachable today — see BACKLOG.md's PR #170
+    // T2.2 section (the retry-leg-drop finding).
+    // ⚠️ Symbol anchors, never bare line numbers. This comment used to name those two
+    // guarantees as `(:59)`/`(:53)` into run-retry-launch.js; v4.8 SI-27 moved the block and
+    // both went out of range, and `check:citations` stayed GREEN — its CITATION regex
+    // requires a `.js` path immediately before `:NNN`, so a bare-paren line ref is invisible
+    // to the gate. A green citation gate proves nothing about that form.
     let finalLeg = exact ? retryLegBySeat.get(join) : undefined;
     // v4.8 council A1: claim the spare HERE, and never as `finalLeg`. It is consumed exactly
     // as before — same pool, same `shift()`, same one-apiece hand-out, so the SET of billed

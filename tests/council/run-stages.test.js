@@ -2100,6 +2100,9 @@ describe('runStage2', () => {
     // rule (`placeholders.has(b.seat)`, never an id-name prefix test) had zero
     // coverage. A bench alias literally beginning `__unbound-` proves the
     // difference: mutating the check to `!b.seat.id.startsWith('__unbound-')`
+    // — in `stage1-bind.js :: bindPaddedWave` since v4.8 SI-27, inline in
+    // run-stage2.js before it, and the same edit run-retry-launch.test.js names
+    // "PREFIXID" —
     // would drop BOTH twins' real binds (their ids legitimately start with
     // that prefix), collapsing back to RED1's one-file bug.
     test('Finding 3: an adversarial "__unbound-"-prefixed alias still binds by seat IDENTITY, never by an id-name prefix test', async () => {
@@ -2138,9 +2141,15 @@ describe('runStage2', () => {
     // Finding 3 above pins identity-vs-name-prefix on a bench where EVERY seat
     // is real, so §3.4's padding branch never executes there and two mutations
     // survived all 520 suites:
-    //   M2  drop `.filter(b => !placeholders.has(b.seat))`
+    //   M2  drop `.filter(b => !placeholders.has(b.seat))` — as of v4.8 SI-27 that
+    //       line lives in `stage1-bind.js :: bindPaddedWave`, shared with the -rv
+    //       and retry sites, so M2 == M1 == "NOPLACEHOLDERFILTER"
     //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
-    //       seat-unbound loop
+    //       seat-unbound loop — still a run-stage2.js CALL-SITE mutation (the tail
+    //       did not move); renamed `PLACEHOLDERLEAK`
+    // MEASURED 2026-08-23, full `npx jest --no-coverage`: M2 at its new shared home
+    // reds 19 tests in FOUR suites (run-stages 2, run-retry 9, run-retry-launch 4,
+    // run-debate 4); PLACEHOLDERLEAK reds exactly one — M3's test below.
     // What makes the branch run is a ROSTER HOLE: a review with no `seat`,
     // which is what an orphaned/unbound Stage-1 leg leaves behind
     // (stage1-bind.js binds; a leg it could not attribute leaves `seat` unset).
@@ -2221,6 +2230,41 @@ describe('runStage2', () => {
         // seat the run was never able to identify.
         expect(ctx._notes).toEqual([]);
         expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['deepseek#2']);
+      });
+
+      // v4.8 SI-27 / R27-5. The missing-seat note's `why` used to read
+      // `roster.length` — the LOCAL padded array. SI-27 moved the pad into
+      // `stage1-bind.js :: bindPaddedWave`, so the call site now reads
+      // `reviews.length` instead. The two are equal by a language guarantee
+      // (`Array.prototype.map` preserves length), but NOTHING asserted that
+      // string before this test — measured: the only greps for "returned fewer
+      // judge legs" were the source line itself — and a substitution into
+      // unpinned prose is exactly how a true sentence goes quietly false.
+      //
+      // The bench is chosen so the two candidate denominators DIFFER: the hole
+      // takes slot 1's leg (bound to the placeholder, then dropped) and the REAL
+      // seat's leg never returns, so `reviews.length` is 2 while
+      // `bindRes.unbound.length` is 1.
+      // Named mutant `ROSTERLEN`: in run-stage2.js spell the denominator
+      // `${bindRes.unbound.length}` — RED here ("roster of 1").
+      test('ROSTERLEN: the missing-seat note counts the LAUNCH ROSTER, not the unbound remainder', async () => {
+        const ctx = makeCtx({
+          models: ['deepseek', 'deepseek'],
+          // Only the HOLED slot comes back. It binds to the placeholder, so no
+          // orphan pre-empts the loop, and the real seat is what lands unbound.
+          onWave: (opts) => okWave([
+            mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          ]),
+          onSolo: () => { throw new Error('no repairs expected'); },
+        });
+        await runStage2(ctx,
+          { reviews: holedReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+        // Exactly one note, and it names the REAL seat — never the placeholder.
+        expect(ctx._notes.map(n => n.channel)).toEqual(['seat-unbound']);
+        expect(ctx._notes[0].data.seat).toBe('deepseek');
+        expect('legId' in ctx._notes[0].data).toBe(false);   // a missing seat, not an orphan leg
+        expect(ctx._notes[0].why).toBe('the wave returned fewer judge legs than its roster of 2');
       });
     });
   });
