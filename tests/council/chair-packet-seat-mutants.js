@@ -119,4 +119,7 @@
   // They were briefly the same name, which made two forward-looking "re-run the
   // existing mutants" lists ambiguous and made 11/5 next to 1/1 read as a
   // SHRINKING red set, this project's signature for an unpinned property. The
-  // names now share no substring, so a grep for either finds only its own.
+  // names are now such that NEITHER IS A SUBSTRING OF THE OTHER, so a grep for
+  // either full name finds only its own. (They do share `SEAT` — the earlier
+  // wording here said "share no substring", which is false and would mislead
+  // anyone who grepped a shorter key.)
