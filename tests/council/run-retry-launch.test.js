@@ -123,7 +123,11 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // 541 of 545 suites still green. run-debate's and run-stages' shares are what
     // were separately named M1 and M2 (run-debate.test.js's "F1." mutant list);
     // run-retry's 9 were predicted by NO filing — SI-27 expected three suites, not four.
-    // Before SI-27 this mutant lived in run-retry-launch.js and could red only this file.
+    // ⚠️ The PRE-SI-27 blast radius was measured the same day and the same way, by
+    // restoring the inline un-filtered block at THIS site alone: 14 tests, THREE
+    // suites (run-retry-launch 4, run-retry 9, run-stages 1 — T2.2, a retry-path
+    // test). So this mutant was never confined to one file, and the consolidation's
+    // measured gain is +5 tests and exactly one whole new suite, run-debate.
     const real = { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 1 };
     const legs = [
       { legId: 'w-1', modelInput: 'gpt' },
