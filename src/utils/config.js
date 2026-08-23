@@ -414,11 +414,28 @@ function getCouncilWithSource(name, catalog = []) {
  * at the last refresh; the leg itself fails pre-flight with the actionable
  * local_endpoint_unreachable error if it is truly down). Only a NON-EMPTY
  * catalog that omits the resolved id is a definitive drop.
- * @param {string[]} members raw council members (aliases or provider/model ids)
+ *
+ * WHITESPACE (v4.8 SI-22.4). Each member is TRIMMED before it is classified,
+ * closing a divergence: `--models` already trimmed
+ * (`sidecar/fanout-validate.js :: parseModelsList`, and `cli-council-run-bench.js
+ * :: parseList` on the council surface) while `--council` did not, so the same
+ * stray space was benign on one flag and, here, converted a typo into a dropped
+ * member and a degraded (2) exit. ⚠️ The dominant effect is RESURRECTION, not
+ * de-duplication: a padded member that is dropped today starts RUNNING, which
+ * is a new paid leg. Where the trim makes two members collide, the bench
+ * becomes a real twin and `seats.js :: buildSeats` mints `alias#N` for both.
+ * An all-whitespace member trims to `''`, which no alias table names, so gate 1
+ * below drops it — the `.filter(Boolean)` half of `parseModelsList`'s shape,
+ * reached without a third `reason` string (see the tripwire note below).
+ * @param {string[]} members council members as configured — aliases or
+ *   provider/model ids, trimmed per member here, never elsewhere
  * @param {Array<{id:string}>} [catalog]
  * @returns {{models:string[], dropped:string[], droppedMembers:Array<{member:string, reason:string}>}}
  *   `dropped` is the flat member-ref list (unchanged shape, pre-v4.5-Wave-2
  *   callers keep working); `droppedMembers` additively pairs each with WHY.
+ *   ⚠️ Both report the member RAW — untrimmed, byte-for-byte as configured
+ *   (v4.8 SI-22.4, R22.4-2) — so a user can find the offending string in their
+ *   own config. Only `models` carries the trimmed value.
  *
  *   Standing note (D18, v4.7 PR5): each `droppedMembers` entry is `{member, reason}`
  *   (that is the real key — BACKLOG.md's description of this shape had drifted to
@@ -442,18 +459,29 @@ function classifyCouncilMembers(members, catalog = []) {
   const models = [];
   const dropped = [];
   const droppedMembers = [];
-  for (const member of members) {
+  for (const raw of members) {
+    // v4.8 SI-22.4. Trim BEFORE gate 1 below, never after: a padded ALIAS
+    // ('gpt ') must reach the alias table as written in the table, and a padded
+    // full id ('openai/gpt-5 ') must reach the catalog lookup clean. Trimming
+    // downstream of either gate would leave both misses in place. Non-strings
+    // pass through untouched so their `.includes` still throws exactly as it
+    // did before this line existed. Named mutant "NOTRIM": drop the `.trim()`.
+    const member = typeof raw === 'string' ? raw.trim() : raw;
     const id = member.includes('/') ? member : aliases[member];
+    // R22.4-2: `models` gets the TRIMMED value, `dropped`/`droppedMembers` get
+    // `raw` — a member still dropped after trimming is reported as the user
+    // wrote it, or they cannot grep their own config for it. Named mutant
+    // "TRIMDROPPED": report `member` instead of `raw` in the two drop branches.
     if (!id) { // alias no longer resolves
-      dropped.push(member);
-      droppedMembers.push({ member, reason: 'alias no longer resolves to a known model' });
+      dropped.push(raw);
+      droppedMembers.push({ member: raw, reason: 'alias no longer resolves to a known model' });
       continue;
     }
     const vendor = typeof id === 'string' ? id.split('/')[0] : '';
     if (isLocalProvider(vendor)) { models.push(member); continue; }
     if (known.size > 0 && !known.has(id)) { // delisted model
-      dropped.push(member);
-      droppedMembers.push({ member, reason: 'resolved id is not present in the cached model catalog' });
+      dropped.push(raw);
+      droppedMembers.push({ member: raw, reason: 'resolved id is not present in the cached model catalog' });
       continue;
     }
     models.push(member);
@@ -465,8 +493,11 @@ function classifyCouncilMembers(members, catalog = []) {
  * Expand a saved council into a runnable members list, degrading gracefully.
  * Unresolvable aliases and delisted ids are dropped with a warning rather than
  * fail-fast-aborting the whole wave (classification: classifyCouncilMembers
- * above). Returns members RAW (alias or id) — leg-time validation resolves
- * them again.
+ * above). Returns members UNRESOLVED (the alias or id as configured, never the
+ * id an alias maps to) — leg-time validation resolves them again. ⚠️ Not
+ * byte-identical to the configured string since v4.8 SI-22.4: classification
+ * trims each member, so `models[i]` is the configured member minus any
+ * surrounding whitespace. `dropped`/`droppedMembers` still carry it raw.
  *
  * Resolution order: user config (`config.councils`) is checked first; when
  * `name` is absent there, the built-in benches (`free`/`budget`/`frontier`)

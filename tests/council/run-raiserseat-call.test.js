@@ -95,16 +95,25 @@ describe("run.js's toGlobalFindings call site (v4.8 PR3 Task 5 review finding)",
    * reverts were invisible to every other pin in the suite — including the twin
    * case above, where `seat.id !== r.model` and `seat.id !== seat.alias` agree.
    *
-   * A whitespace-padded --council member separates them on a bench with no twin
-   * at all: config.js:445-459 classifyCouncilMembers pushes the member RAW, so
-   * the seat's alias keeps its padding while fanout-validate.js:24 trims the
-   * leg's — `seat.id !== r.model` is then TRUE, and PR3 emitted a seat id that
-   * is byte-equal to its own alias into three artifacts, with nothing able to
-   * resolve it (plan §1.2, on the engine path, on a unique-alias bench).
+   * A whitespace-padded bench member separates them on a bench with no twin at
+   * all: the seat's alias keeps its padding while fanout-validate.js:24 trims
+   * the leg's — `seat.id !== r.model` is then TRUE, and PR3 emitted a seat id
+   * that is byte-equal to its own alias into three artifacts, with nothing able
+   * to resolve it (plan §1.2, on the engine path, on a unique-alias bench).
    * This drives BOTH producers at once: `raiserSeat` through the spied 4th arg,
    * and `adjudications[].seat` through the tally input it actually writes.
+   *
+   * ⚠️ THE PRODUCER MOVED, the shape did not. v4.8 SI-22.4 made
+   * `src/utils/config.js :: classifyCouncilMembers` trim each `--council`
+   * preset member, and both `--models` spellings already trimmed
+   * (`src/cli-council-run-bench.js :: parseList`,
+   * `src/sidecar/fanout-validate.js :: parseModelsList`), so a preset can no
+   * longer put padding on a bench alias. The MCP `models` ARRAY still can:
+   * `src/mcp-council-bench.js :: resolveBenchInput` returns it untrimmed —
+   * measured, not assumed. This case passes `models` straight into runCouncil,
+   * which is that shape. Do not retire it as unreachable.
    */
-  test('R4c-9: a padded --council member emits NEITHER seat field (seat.id === its own alias)', async () => {
+  test('R4c-9: a padded bench member emits NEITHER seat field (seat.id === its own alias)', async () => {
     const runId = 'pad01';
     const script = {
       [`${runId}-s1`]: (opts) => okWave(opts.models.map(m => mkLeg(m.trim(), review(m.trim())))),

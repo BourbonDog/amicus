@@ -48,8 +48,13 @@ function renderHtml(m) {
       `<td style="color:${TIER_INK[f.tier] || 'inherit'};font-weight:600">${esc(f.tier)}${f.sameModelCorroboration ? '<sup>†</sup>' : ''}</td>` +
       `<td>${esc(f.decision || '')}</td></tr>`;
   }).join('');
+  // v4.8 SI-22.4 rider (R22.4-6): the seat-keyed label, mirroring renderMd's
+  // street-cred loop. A SEPARATE test pins each renderer — a shared one would
+  // let either regress silently (the same rule the R8 marker above follows).
+  // `seat` is emit-when-DIFFERENT, so a unique-alias bench renders byte-
+  // identically to before. Named mutant: tests/council/preset-trim-mutants.js :: CREDALIAS.
   const credRows = m.streetCred.map(s =>
-    `<tr><td>${esc(s.model)}</td><td>${num(s.peersOnly)}</td><td>${num(s.withSelf)}</td></tr>`).join('');
+    `<tr><td>${esc(s.seat || s.model)}</td><td>${num(s.peersOnly)}</td><td>${num(s.withSelf)}</td></tr>`).join('');
   const tierRows = TIER_ORDER.map(t =>
     `<tr><td>${t}</td><td>${m.tierCounts[t]}</td></tr>`).join('');
   const costRows = m.cost.rows.map(r =>

@@ -340,10 +340,17 @@ describe('v4.8 PR4c: the guard compares the seat to its OWN alias, never to `mod
     expect('seat' in row).toBe(false);
   });
 
-  test('(b) a whitespace-padded --council member still emits NO seat', () => {
-    // config.js:445-459 classifyCouncilMembers pushes the member RAW, so the
-    // bench alias keeps its padding while fanout-validate.js:24 trims the leg's
-    // — rowModel and seat.id differ by a space on a bench with no twin at all.
+  test('(b) a whitespace-padded bench member still emits NO seat', () => {
+    // The bench alias keeps its padding while fanout-validate.js:24 trims the
+    // leg's — rowModel and seat.id differ by a space on a bench with no twin at
+    // all. ⚠️ NOT REACHABLE FROM `--council` ANY MORE, and still worth pinning:
+    // v4.8 SI-22.4 made `src/utils/config.js :: classifyCouncilMembers` trim
+    // each preset member, and both `--models` spellings already trimmed
+    // (`src/cli-council-run-bench.js :: parseList`,
+    // `src/sidecar/fanout-validate.js :: parseModelsList`). The producer left is
+    // the MCP `models` ARRAY: `src/mcp-council-bench.js :: resolveBenchInput`
+    // returns it untrimmed — measured, not assumed. Do not retire this case as
+    // unreachable; it is the only shape that separates the two operands.
     const [seat] = buildSeats(['openai/gpt-5 ', 'gpt'], null, null);
     expect(seat.id).toBe('openai/gpt-5 ');
     const row = asm.buildRunStatsEntry({
