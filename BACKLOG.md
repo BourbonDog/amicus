@@ -2437,9 +2437,20 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
 
 - **The mechanism.** `run-retry-launch.js :: bindRetryWave` (called by `run-retry.js ::
   retryStage1Losses`; lifted out of it verbatim by T-A2, 2026-08-17) pads an unidentified
-  retry-roster slot with a placeholder carrying a unique synthetic id (`run-retry-launch.js:53`),
+  retry-roster slot with a placeholder carrying a unique synthetic id
+  (`stage1-bind.js :: bindPaddedWave`),
   then builds `retrySeatOf` by dropping every placeholder bind:
-  `.filter(b => !placeholders.has(b.seat))` (`run-retry-launch.js:59`).
+  `.filter(b => !placeholders.has(b.seat))` (`stage1-bind.js :: bindPaddedWave`).
+  ⚠️ **Both pointers re-anchored 2026-08-23 (v4.8 SI-27).** They read
+  `run-retry-launch.js@2517a947:53` and `run-retry-launch.js@2517a947:59` when this was written; SI-27 moved the
+  pad/bind/drop CORE
+  into `stage1-bind.js :: bindPaddedWave`, which `bindRetryWave` now calls. **The measurement
+  below is unchanged and stays true of the tree it was taken on** — only the pointer rotted.
+  ⚠️ **And it had rotted ONCE ALREADY, silently:** `:53`/`:59` were exact at `2517a947`
+  (T-A2’s lift) and became `:56`/`:62` at `6709ac78` (2026-08-17), a comment-only fix three
+  lines above them — six days before SI-27 put them out of range altogether. A comment-only
+  edit rots citations too, and nothing in the gate could see either move (see the SI-27 rider
+  on the unscanned doc tree).
   So `retrySeatOf.get(leg)` is always either `undefined` or a REAL `unit.seats` entry, with a
   backstop at `run-retry.js :: retryStage1Losses` (`if (!ff) { continue; }`) dropping anything that
   can't find its `launched` entry — or, since T-A4, any leg past its key's LAST minted slot. The same real seat object that survives both gates is exactly what
@@ -2467,12 +2478,13 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
   real roster mints no placeholder. **C1 itself is NOT fixed and was not re-litigated**; this is a
   guard rail, per Global Constraint 11.
 - **Earned, not asserted.** Two mutants, scratchpad-applied and reverse-edited byte-exactly (never
-  `git checkout --`): **NOPLACEHOLDERFILTER** (drop `run-retry-launch.js:59` alone) does NOT reach
+  `git checkout --`): **NOPLACEHOLDERFILTER** (drop the placeholder-bind filter alone) does NOT
+  reach
   this shape — the leg's `launched` lookup resolves differently and the backstop drops it instead,
   `stillDeadRetryLegs = 0`, a DIFFERENT loss that happens to total the same 0.1600. **FAKEBIND**
-  (drop `run-retry-launch.js:59` AND give the placeholder the alias as its own id — a two-line
+  (drop that same filter AND give the placeholder the alias as its own id — a two-line
   change; both lines were `run-retry.js:132`/`:126` at `3b8cf781`, when the mutants were run,
-  and are `run-retry-launch.js:59`/`:53` today) reaches it
+  and both live in `stage1-bind.js :: bindPaddedWave` since v4.8 SI-27) reaches it
   exactly: 1 bound still-dead retry leg, `GAP = 0.0700`, precisely that leg's own `usage` sitting
   unconsumed in `retryLegBySeat`. The invariant is a CONJUNCTION — placeholder ids stay unique, and
   placeholder binds get dropped — break one alone and the loss lands somewhere else; break both and
@@ -2507,8 +2519,9 @@ fixed, correctly** — the brief's gate ("reachable AND loses billed usage") is 
 - **The comment this measurement earned.** The ⚠️ block immediately above `pushDeadSeatRows`'
   `let finalLeg = exact ? …` assignment (anchored BY SYMBOL at T-A5, having read
   `run-stage1-rows.js:171-175` at `5df88e26`; T-A6's split then took that file 295 ⇒ 212 and the
-  block is `:156-161` today — which is why the anchor is the symbol) now names
-  `run-retry-launch.js:53`/`:59` as the reason its `exact`
+  block was `:156-161` at that reading and is `:158-168` today, v4.8 SI-27 having rewritten it
+  — which is why the anchor is the symbol) now names
+  `stage1-bind.js :: bindPaddedWave` as the reason its `exact`
   gate is safe — the cross-file half of the invariant nothing previously enforced or documented.
 - **~~Concern for whoever extracts `run-retry.js` next~~ — DISCHARGED by T-A2 (2026-08-17).** The
   concern was that `run-retry.js` sat at 295/300, one FAKEBIND-sized change away from opening this
@@ -2532,7 +2545,8 @@ an identified bench, and the stray's own alias-based key misses. The SAME leg IS
 `run-stages.js:140`) — so this is a disclosed orphan-leg class, not a silent one, but its `usage`
 reaches no runStats row at all. Measured instance: `BOUGHT 0.1000` vs `ON ROWS 0.0600`, the 0.0400
 gap being the stray's own usage. **All three deciding lines — the placeholder-bind filter (then
-`run-retry.js:132`, now `run-retry-launch.js:59`), the `!ff` backstop (then `:216`, now
+`run-retry.js:132`, now `stage1-bind.js :: bindPaddedWave` since v4.8 SI-27), the `!ff` backstop
+(then `:216`, now
 `run-retry.js :: retryStage1Losses`), and `run-stages.js:140` — are byte-identical at `main` (`cc56f678`)**, so this
 predates T2.2 and predates this PR. It is still not fixed here (out of this PR's scope). ⚠️ **The
 size argument for deferring it is BACK.** T-A2 took `run-retry.js` from 295/300 to 263, but T-A4 and
@@ -3335,7 +3349,49 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   resume point, superseding "NEXT TASK — Wave 2.5" above (now ✅ DONE — `R16`/`T-R16.1`, commit
   above).
 
-  **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE.** Next:
+  ✅ **SI-27 — DONE 2026-08-23.** The roster pad / bind / drop-placeholder core is consolidated
+  into `stage1-bind.js :: bindPaddedWave(waveId, rosterSource, aliasAt, legs)`, which returns
+  `{seatOf, bindRes, placeholders}` and now serves all three sites —
+  `run-retry-launch.js :: bindRetryWave`, `run-stage2.js :: runStage2` and
+  `run-debate-revote.js :: runRevoteWave`. **Each site keeps its own orphan/missing tail**
+  (push / degrade.note / nothing), exactly as ruling **R14** and SI-DUP disposition (a) specified.
+  Commits `80680c9f` (extraction), `ed827eaa` and `68bee03e` (the measured red sets),
+  `d29a3462` (fix round 1), on BASE `8b06c5e5`.
+
+  **Sizes, BASE → HEAD:** `stage1-bind.js` 86 → 142 · `run-retry-launch.js` 67 → 55 ·
+  `run-stage2.js` 213 → 207 · `run-debate-revote.js` 274 → 268 · `run-stage1-rows.js` 214 → 220.
+  Suite at HEAD: **545/545 suites, 7891 passed, 8 skipped, 0 failed**; `check:sizes`,
+  `check:citations` and `lint` all exit 0.
+
+  ⚠️ **The blast-radius property — state it in these terms and not stronger.** One
+  `NOPLACEHOLDERFILTER` edit in `bindPaddedWave` now reds **19 tests across four suites**:
+  `run-retry-launch.test.js` (4), `run-retry.test.js` (9), `run-stages.test.js` (2),
+  `run-debate.test.js` (4). ⚠️ **The plan claimed that before SI-27 the same mutation "could only
+  red the first". That was FALSE and was measured false:** reconstructing the pre-SI-27 topology
+  at the retry site gave **14 tests across THREE suites** — `run-retry.test.js` and
+  `run-stages.test.js`’s T2.2 already reached `bindRetryWave` through
+  `run-retry.js :: retryStage1Losses`. **The measured gain is +5 tests and exactly ONE new suite**
+  (`run-debate.test.js`). **Never write "one file became four."** The plan asserted a blast radius
+  from where the code SAT instead of measuring which suites DRIVE it — plan-authoring failure
+  mode #8, the asserted property.
+
+  **Other measured red sets, none empty:** `PREFIXID` 2 tests / 2 suites (subsumes Finding 3) ·
+  `COLLIDEID` 1 / 1 · `RAWROSTER` 5 / 3 · `PLACEHOLDERLEAK` (ex-`M3`, still a call-site
+  mutation) 1 / 1 · `ROSTERLEN` (new pin) 1 / 1.
+
+  ⚠️ **`run-retry.js` IS in this diff, by exactly one comment line — ruling P5.** R27-1 and the
+  plan’s §0.2/§0.6 said the file "is not touched at all" / "DO NOT TOUCH"; P5 overrode that for
+  one line. `run-retry.js:22`’s comment said *"briefingFor + the retry roster pad/bind step live
+  in ./run-retry-launch"*, which SI-27 made half false. **The fence existed to prevent GROWTH in a
+  300/300 file, not to preserve a false sentence**; the reword was one line → one line and the
+  file is still exactly **300/300**, `check:sizes` exit 0. **Any sentence saying SI-27 left that
+  file untouched is false** — say instead that SI-27 changed one comment line in it and it
+  remains at 300/300 with zero headroom. ⚠️ And do not let the anchor correction rot back: SI-27’s
+  **sites** never included `run-retry.js`, and it gains no headroom from the consolidation.
+
+  **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE.** Next (as filed
+  2026-08-22; `SI-27` has since shipped — see the record above and "NEXT TASK — Wave 3
+  remainder" below):
   - **Wave 3 — strictly serial: `SI-27` first, `SI-22.4` LAST.** Same scope and ordering as stated
     in "NEXT TASK — Wave 2.5" above — not restated a second time here.
 
@@ -3344,20 +3400,87 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom**, unchanged by `R16`
   — see the dedicated warning immediately below. ⚠️ **CORRECTED 2026-08-23: this said `SI-27`
-  extracts from that very file. It does NOT** — no wave in the rest of v4.8.0 touches it.
+  extracts from that very file. It does NOT** — no wave in the rest of v4.8.0 EXTRACTS from it,
+  and nothing relieves its 300/300. ⚠️ **Precise since 2026-08-23: `SI-27` did change one comment
+  line in it (ruling P5, one line → one line, still exactly 300/300).** "Not a site" and "not
+  touched at all" are different claims; only the first is true.
 
   ⚠️ **New since Wave 2.5: the file-size gate is at saturation more broadly, and
   `cli-handlers-doctor.js` is now 299/300.** Re-measured against the final tree — see the two
   dedicated entries below (*"The file-size gate is at saturation"* and *"`cli-handlers-doctor.js`
   is at 299/300"*). Neither blocks Wave 3. ⚠️ **CORRECTED 2026-08-22: this sentence said
   `SI-27`'s own target is `run-retry.js`. It is NOT.** SI-27's three roster-padding sites are
-  `run-retry-launch.js :: bindRetryWave` (67/300), `run-stage2.js` (213/300) and
-  `run-debate-revote.js` (274/300) — `run-retry.js` holds no padding site at all. **So SI-27
+  `run-retry-launch.js :: bindRetryWave` (67/300 then; **55/300 since SI-27**), `run-stage2.js`
+  (213/300 then; **207/300**) and
+  `run-debate-revote.js` (274/300 then; **268/300**) — `run-retry.js` holds no padding site at
+  all. **So SI-27
   does not relieve its 300/300**; that file stays saturated after Wave 3 and remains a standing
   hazard for whoever next touches it. See row 27's corrected anchor for why the wrong file was
   carried: SI-27 once covered `seatKey` duplication in `run-retry.js`, PR5c/T-A1 moved that
   definition out to `run-retry-keys.js`, the item narrowed to roster-padding, and the anchor
   column never followed. A fossil, not a typo.
+
+- [ ] **NEXT TASK — Wave 3 remainder.** Filed 2026-08-23 (the SI-27 record) as the correct resume
+  point, superseding "NEXT TASK — Wave 3" above (now ✅ its `SI-27` slot DONE — commits in that
+  entry).
+
+  **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE. Wave 3: `SI-27` —
+  DONE.** Remaining, in order:
+  1. **`SI-25` sites (1)+(2)** — ruling **R15**, anchor `briefings-chair.js :: buildChairPacket`
+     (three sites; site (3) already shipped in Phase 3). ⚠️ **Not yet placed in a wave — schedule
+     it, do not assume it rides Wave 3.**
+  2. **`SI-22.4`** — anchor `utils/config.js :: classifyCouncilMembers`. **LAST**, because its
+     trim turns a whitespace-padded preset member into a REAL twin bench: artifact filenames
+     change and `meta.seats` starts emitting. That is exactly why it could not precede `SI-27`.
+  3. **Release** — version pin across 6 files → CHANGELOG → tag → `publish.yml`.
+
+  ⚠️ **Carry forward, unchanged: `src/council/run-retry.js` is at 300/300, ZERO headroom.**
+  `SI-27` changed one comment line in it (ruling P5) and it remains at exactly 300/300.
+  **Nothing in the remainder of v4.8.0 relieves it** — it is the one saturated file with no
+  scheduled extraction, and the next change to it must extract first (Release Constraint 6:
+  EXTRACT, never shave a comment). See the dedicated 300/300 entry below.
+
+- [ ] **SI-27 rider (1) — `COLLIDEID` is single-pinned repo-wide.** Measured 2026-08-23: the
+  mutant that gives a placeholder the alias as its own id — colliding on the id-keyed dedup —
+  reds **exactly one test, in one suite**, and it now guards a function serving **three** call
+  sites. The `-s2` and `-rv` benches have single roster holes, so **neither can observe an id
+  collision at all**; the pin cannot come from either without a new fixture shape. **Pre-existing,
+  honestly disclosed by the implementer, and NOT addressed by SI-27** — recorded so the single
+  pin is a known state rather than a later discovery. The conjunction’s other half
+  (`NOPLACEHOLDERFILTER`) is pinned 19-wide across four suites, and that asymmetry is the point:
+  consolidation widened one half’s blast radius and left the other exactly where it was.
+
+- [ ] **SI-27 rider (2) — `check-citations.js` cannot see a bare-paren line ref.** Its `CITATION`
+  regex requires a `.js` path immediately before the `:NNN`
+  (`scripts/check-citations.js :: CITATION`), so a bare `(:59)` is invisible to the gate.
+  Measured: `check:citations --all` exited **0** for the entire time `run-stage1-rows.js` carried
+  an out-of-range bare `(:59)`/`(:53)` pointing into `run-retry-launch.js` — a file SI-27 had
+  just taken 67→55. `d29a3462` fixed that instance and wrote the rule into the comment
+  (*"Symbol anchors, never bare line numbers"*), but the gate still cannot catch the next one.
+  ⚠️ **Re-measured 2026-08-23: 29 bare `(:NNN)` matches across 22 files in live code** — of
+  which 2 are the deliberately-quoted examples in `run-stage1-rows.js`’s new comment, leaving
+  **27 live bare-paren refs across 21 files**. (The SI-27 brief said "22 refs"; 22 is the FILE
+  count, not the ref count.) The dangerous subset is the CROSS-FILE ones — this PR’s was the
+  only one pointing into a file it moved. ⚠️ **A green citation gate proves nothing about that
+  form.**
+
+- [ ] **SI-27 rider (3) — the doc tree is unscanned, and SI-27 measured what that costs.**
+  `scripts/check-citations.js` scans only `src/`, `electron/` and `tests/`; `BACKLOG.md` and
+  `docs/` hold **3639 of the repo’s 4128 citations** and are **out of scope by design**, stated
+  as such in `docs/CITATIONS.md`. ⚠️ **File this as a cost measurement, not as an unnoticed gap**
+  — the exclusion is deliberate and documented, and a naive "just scan docs too" would fail
+  against thousands of citations that are correctly historical. The justification CITATIONS.md
+  gives is that doc-tree citations are *"overwhelmingly dated historical record"*, and for
+  `docs/superpowers/plans/*` and `specs/*` that holds. **It does not hold for SI-DUP’s
+  dispositions or SI-15’s §3.4 clause**: those are LIVE work orders whose whole job is to point
+  a future implementer at a file and a line, and SI-27 falsified **nine** such citations here
+  with not one catchable. ⚠️ **And two of the nine had already rotted six days earlier:**
+  `run-retry-launch.js@2517a947:53`/`run-retry-launch.js@2517a947:59` were exact at T-A2’s lift and became
+  `:56`/`:62`
+  at `6709ac78` (2026-08-17), a **comment-only** fix three lines above them, with nothing to
+  notice — so the cost is not only "extractions rot doc citations", it is "any edit does".
+  If this is ever addressed, the cheap version is not a full doc scan but a scan of the LIVE
+  subset — the unticked `- [ ]` entries — which is a small fraction of the 3639.
 
 ### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
 
@@ -3372,8 +3495,13 @@ extract first, and no comment already in the file may be trimmed to buy room.
 padding/bindSeats/placeholder core out of `run-retry-launch.js :: bindRetryWave`,
 `run-stage2.js` and `run-debate-revote.js` into `stage1-bind.js`. **`run-retry.js` is not one
 of its sites and gains not one line of headroom from it.** No wave in the remainder of v4.8.0
-touches this file: it is the one saturated file with NO scheduled extraction, and the next
-change to it must extract first. See row 27's corrected anchor in the phasing doc for how the
+EXTRACTS from this file: it is the one saturated file with NO scheduled extraction, and the next
+change to it must extract first. ⚠️ **One precision, 2026-08-23: SI-27 is not a no-op on this
+file either — ruling P5 let it reword ONE comment line (`run-retry.js:22`, whose sentence SI-27
+made half false), one line → one line, leaving it at exactly 300/300 with `check:sizes` at 0.
+The fence was against GROWTH, not against correcting a false sentence.** Do not write that
+SI-27 left this file untouched.
+See row 27's corrected anchor in the phasing doc for how the
 wrong file was carried — SI-27 once covered `seatKey` duplication here, PR5c/T-A1 moved that
 definition out to `run-retry-keys.js`, the item narrowed to roster-padding, and the anchor
 column never followed. A fossil, not a typo.
@@ -4239,9 +4367,14 @@ deliberately left alone:
   T5.5 took it to 274 on 2026-08-22. Re-opened against the FINAL tree: `:124` is
   `reVoteUnboundNote`'s `why` line itself, the signature `async function runRevoteWave(` is `:148`,
   the `revote-bundle.md` `writeFileSync` is `:153`, the `seatKey`
-  definition is `:64` (unmoved through all of it) and its one call site is `:196` — **was `:188`**.
+  definition is `:64` (unmoved through all of THAT) and its one call site is `:196` — **was `:188`**.
   ⚠️ The T5.4 reading "`:124` now holds the `writeFileSync`" was true when written and rotted at
-  the round-2 fix wave, before T5.5 touched anything**)
+  the round-2 fix wave, before T5.5 touched anything**
+  ⚠️ **Every line number in this parenthetical moved again on 2026-08-23, when v4.8 SI-27 took
+  the file 274→268: the signature is `:153`, the `writeFileSync` `:158`, `seatKey` `:69`,
+  its call site `:190`. The
+  2026-08-22 reading is left standing as the dated measurement it is; the ANCHOR was already a
+  symbol, which is why this entry needed an annotation and not a re-derivation.**)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
   keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
   seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:99`, **was `:81`,
@@ -4582,13 +4715,15 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   SI-DUP entry below. Entry left SUPERSEDED, but no longer carrying three wrong numbers and a count
   that is off by one. Separately, §3.4's
   roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
-  is duplicated near-verbatim in a **different** set of three files: `run-retry-launch.js:50-60`
+  WAS duplicated near-verbatim in a **different** set of three files:
+  `run-retry-launch.js@6709ac78:50-60`
   (was `run-retry.js:123-133` at T-A2's base `3b8cf781` — this entry first said `:118-130`, which
   was T-A2's own arithmetic slip; measured 2026-08-17 — lifted verbatim by T-A2),
-  `run-stage2.js:89-106`, `run-debate-revote.js :: placeholders` (**was `:106-117`; re-anchored BY
+  `run-stage2.js@9ef275e5:89-106`, `run-debate-revote.js :: runRevoteWave` (**was `:106-117`;
+  re-anchored BY
   SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix
   waves added the rest), and T5.5 took it to 274 on 2026-08-22. Re-opened against the FINAL tree:
-  the block is `:179-186` — T5.5's deletion sat entirely BELOW it, but its comment repairs pushed it
+  the block was `:179-186` — T5.5's deletion sat entirely BELOW it, but its comment repairs pushed it
   down twenty-four lines from `:155-162` — while `:106-117` now sits wholly INSIDE
   `reVoteUnboundNote` (from its `alias` fallback line to the comment above `effect`), and the
   `@param` lines are `:142-146`.
@@ -4600,6 +4735,15 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
   above. ~~Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
   `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.~~
+  ⚠️ **CLOSED 2026-08-23 by v4.8 SI-27 — the duplication is gone, so the §3.4 half of this
+  clause is now a record of where the block STOOD, not of where it is.** All three ranges above
+  (`run-retry-launch.js@6709ac78:50-60`, `run-stage2.js@9ef275e5:89-106`,
+  `run-debate-revote.js@ee7da0db:179-186` — `@ref` form, per `docs/CITATIONS.md`) were
+  true when written and are historical from here on. The pad/bind/drop core lives ONCE, in
+  `stage1-bind.js :: bindPaddedWave`; each site keeps only its own orphan/missing tail. The
+  `seatKey` half of this clause is **not** closed by SI-27 — that is SI-DUP disposition (b),
+  still v4.9. See the ticked SI-27 record under "NEXT TASK — Wave 3" for sizes, red sets and
+  commits.
   - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
     note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
     halves survive there; neither was dropped.
@@ -4616,6 +4760,12 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   anywhere in the gate). File as a follow-up, noting the seat/placeholder-roster logic inside all
   three is the same safety-critical logic named above, which is what makes them worth splitting
   rather than just noting.
+  ⚠️ **Two of the three numbers above moved on 2026-08-23 (v4.8 SI-27)**, re-brace-matched
+  against the final tree: `runStage2` `:47-211` = 165 ⇒ `:47-205` = **159**; `runRevoteWave`
+  `:148-272` = 125 ⇒ `:153-266` = **114**. `runDebate` `:106-271` = **166** is untouched — SI-27
+  has no site in that file. **The 2026-08-21 numbers above are left standing as the dated
+  measurement they are: this is an annotation, not a renumbering** (`docs/CITATIONS.md`). All
+  three still exceed the 50-line guideline, so nothing about this item’s disposition changes.
   ⚠️ **Every number in this entry was re-measured 2026-08-21 (v4.8 Phase 5 T5.4). Counting rule,
   stated because a bare number without one is exactly what SI-DUP below exists to record: by
   ANCHOR — three function anchors (each a span plus its own line count, wrong or right together)
@@ -5196,8 +5346,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     (`run-retry-group.js:109`) — and added a tenth call site:
     `run-debate-revote.js:64` (named `function seatKey`, one caller `:196` — **was `:132`, then
     `:188`; v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the
-    rest) and T5.5 took it to 274, and `:64` itself is unmoved through all of it, re-opened
-    2026-08-22**), `run-retry-keys.js:15`
+    rest) and T5.5 took it to 274, and `:64` itself was unmoved through all of THAT, re-opened
+    2026-08-22; ⚠️ **v4.8 SI-27 then took the file 274→268 and moved both — the definition is
+    `:69` and its one caller `:190` as of 2026-08-23, re-read at both lines**),
+    `run-retry-keys.js:15`
     (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` (**was `:42`/`:45`/`:55`/`:57`**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias;`
@@ -5275,26 +5427,40 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `require()` from `src/`. (The only two `require()` calls under `electron/workspace-ui/` —
     `live-model.js:58`, `live-seats.js:113` — are same-directory and guarded by
     `typeof module !== 'undefined'`, i.e. jest-only.)
-  - **Disposition (a) — roster-padding core → v4.8, ruling R14.**
-    `src/council/run-retry-launch.js:50-60` (`:: bindRetryWave` — the block T-A2, 2026-08-17, lifted
-    out of `run-retry.js` unchanged; **it is still ONE of the three sites, not a consolidation**),
-    `src/council/run-stage2.js:91-107` and `src/council/run-debate-revote.js :: placeholders`
-    (**was `:115-126`, then `:155-162`; `:179-186` today, re-opened 2026-08-22 — re-anchored
-    BY SYMBOL 2026-08-21, v4.8 Phase 5 T5.1 having grown that file 176→282; T5.5 then took it to
+  - **Disposition (a) — roster-padding core → v4.8, ruling R14. ✅ SHIPPED 2026-08-23 as
+    SI-27.** The core now lives once, in `stage1-bind.js :: bindPaddedWave`, on exactly the
+    signature this disposition specified. **Everything below is the pre-consolidation record:
+    the three anchors are where the block STOOD.**
+    `src/council/run-retry-launch.js :: bindRetryWave` (**was `:50-60`; re-anchored BY SYMBOL
+    2026-08-23, SI-27 having moved the block and taken the file 67→55** — T-A2, 2026-08-17,
+    lifted
+    it out of `run-retry.js` unchanged; **at the time of this filing still ONE of the three
+    sites, not a consolidation**),
+    `src/council/run-stage2.js :: runStage2` (**was `:91-107`; re-anchored BY SYMBOL
+    2026-08-23, 213→207**) and `src/council/run-debate-revote.js :: runRevoteWave`
+    (**was `:115-126`, then `:155-162`, then `:179-186` at the 2026-08-22 re-opening; the block
+    itself is gone since 2026-08-23, 274→268 — previously re-anchored
+    BY SYMBOL 2026-08-21 as `placeholders`, v4.8 Phase 5 T5.1 having grown that file 176→282;
+    T5.5 then took it to
     274 — its deletion sat entirely BELOW this block, but its comment repairs pushed the block
-    down twenty-four lines**) each build the
-    same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filter the
+    down twenty-four lines**) each built the
+    same `__unbound-<waveId>-<n>` placeholder roster before `bindSeats` and then filtered the
     placeholders back out — ~11 lines apiece, and all three already `require('./seats')` (as does
     the proposed home), so the consolidation costs no new dependency. All three citations re-derived
     2026-08-16; the first re-derived again 2026-08-17 after the lift. ⚠️ These are a **different set
     of three files** from Count 1's —
-    overlapping, not disjoint: `run-debate-revote.js` carries both (padding at `:179-186`, a
-    `seatKey` spelling at `:64`), while `run.js` carries no padding (it consumes `s2.judgeResults`,
+    overlapping, not disjoint: `run-debate-revote.js` carried both (padding at `:179-186`, a
+    `seatKey` spelling at `:64`, **`:69` since SI-27 shortened the file**), while `run.js`
+    carries no padding (it consumes `s2.judgeResults`,
     already padded by Stage 2) and `run-stage2.js` spells no `seatKey`. Read "three files" in either
     filing as naming a set, never a count of the whole. Home is `stage1-bind.js`, parameterised on
     `(waveId, rosterSource, aliasAt, legs)`, returning both the filtered `seatOf` Map and the raw
     `bindRes`. **The orphan tail differs at all three sites (push / degrade.note / nothing) and stays
     at the call site.** Own PR, **after Phase 2** — consolidation must not ride a defect PR.
+    ✅ **Shipped exactly that way** on 2026-08-23: own PR, after Phase 2, home
+    `stage1-bind.js :: bindPaddedWave` on the stated `(waveId, rosterSource, aliasAt, legs)`
+    signature, returning `{seatOf, bindRes, placeholders}`, and every site kept its own tail.
+    ⚠️ **Disposition (b) below is NOT closed by this** — the `seatKey` half is still v4.9.
   - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**:
