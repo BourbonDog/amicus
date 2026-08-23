@@ -3544,6 +3544,16 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ⚠️ **Fixed at the producer, not the call site** — `__proto__: null`, one line, closing **five**
   bare-indexing gates: `config.js :: resolveModel` (`:111`/`:142`), `classifyCouncilMembers`,
   `council/presets-cli.js:41`, `pack/pack-validate.js:71`, `utils/route-launch.js:205`.
+  ⚠️ **`directFormProvenance` keeps its bare `{}` deliberately — and the reason first recorded for
+  that was FALSE.** It said "its only indexed read ... never user input"; there are **two** readers
+  (`gateway-route-audit.js :: auditGatewayRoutes`, curated-keyed, and `alias-audit.js ::
+  findStaleAliases`, keyed from `collectAliasSources()` which pushes the user's own `cfg.aliases`
+  entries and a raw CLI arg). The decision survives on two independent grounds — the guard needs
+  BOTH `source === 'defaults'` (false for a user alias) and `prov.directForm === 'derived'` (false
+  for an inherited Function, which has no such property) — so it fails open, as documented. Full
+  reasoning in `tests/council/preset-trim-mutants.js`. **Same shape as this branch's other false
+  absolutes: right conclusion, premise from a sweep that found one of two.**
+
   ⚠️ **The reviewer's call-site list needed one correction, measured:** `config.js ::
   buildProviderModels` is **not** affected — its only use of the table is an `Object.entries(aliases)`
   loop, own-enumerable and therefore immune. (Anchored BY SYMBOL: this sentence originally read
@@ -5270,6 +5280,25 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   still alias-labelled — is filed under *"SI-22.4 rider (2)"* above with a **named owner
   (Christian)** and a **stated gate** (`opts.labelOf` must accept a seat id), explicitly NOT as an
   adjacency. Do not re-file it as "adjacent to" anything.
+- [ ] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
+  re-materialises the prototype.** Found by the SI-22.4 round-3 re-review, 2026-08-23, while
+  sweeping uncapped for every spelling of the alias-table hazard. `getDefaultAliases()` is
+  null-prototype at HEAD, but `electron/setup-ui.js` and `electron/setup-ui-alias-script.js`
+  `JSON.stringify` it and re-embed it as a `<script>` literal (`var defaultAliases = {…}`), which
+  the JS parser always materialises as a plain `Object.prototype` object. The seed is stripped by
+  serialization. Those files then bare-index `defaultAliases[alias]` against names the user can
+  free-type in the wizard's inline rename UI, with no reserved-word validation.
+  **Traced, and it is NOT a security bypass:** a Function value can reach `aliasEdits`, but
+  `JSON.stringify` drops Function-valued keys before the write reaches `ipc-setup.js`, and
+  `saveConfig` now rejects `__proto__` outright (SI-22.4 G-5). The worst case is a **silent,
+  self-directed no-op** — wrong revert-vs-delete bookkeeping for a user who names their own alias
+  `toString`. Filed, not fixed: it is Electron-only, behaviourally inert, and outside SI-22.4.
+  ⚠️ **The generalizable fact is the one to keep: a null-prototype table cannot be handed across a
+  serialization boundary and stay null-prototype.** Any fix of this class must be re-applied on the
+  far side, or the boundary must carry a `Map` instead.
+  **OWNER: Christian. GATE: the wizard's alias rename input gains reserved-word validation, or the
+  embedded literal is seeded on the far side of the `JSON.parse`.** Not an adjacency to anything.
+
 - [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
   does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
   which is a **different question** from "does anything else in the document carry the seat's lens".

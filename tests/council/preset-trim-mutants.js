@@ -234,10 +234,21 @@
 //   src/utils/config.js         :: getDefaultAliases `{ __proto__: null, ...D }` -> `{ ...D }`
 //
 // ⚠️ `directFormProvenance` in the same file also seeds `const out = {}` and is
-// deliberately NOT part of this mutation: its only indexed read
-// (`gateway-route-audit.js:77`, `provenance[alias]`) is keyed from
-// `Object.entries(toGatewayRoutes())`, i.e. curated aliases, never user input.
-// Recorded so a later sweep does not read the untouched line as an oversight.
+// deliberately NOT part of this mutation. ⚠️ CORRECTED 2026-08-23 — this said
+// "its ONLY indexed read ... never user input". There are TWO readers, and the
+// second IS reachable from user input:
+//   gateway-route-audit.js :: auditGatewayRoutes  — keyed from curated aliases
+//   alias-audit.js :: findStaleAliases         — keyed from `collectAliasSources()`,
+//     which pushes the user's own `cfg.aliases` entries (source:'user-config')
+//     and a raw CLI arg via cli-handlers.js.
+// The DECISION still stands, on two independent grounds rather than the one
+// claimed: that read is guarded by `source === 'defaults' && prov.directForm
+// === 'derived'`, and (a) a user-config alias carries source:'user-config', so
+// the first conjunct already fails; (b) an inherited value is a Function, whose
+// `.directForm` is undefined, so the second fails too. Fail-open either way,
+// which is that function's documented behaviour for stale provenance.
+// ⚠️ The lesson, not the fix: the conclusion was right and the stated PREMISE
+// was false — an "only reader" claim resting on a sweep that found one of two.
 //
 // WHY THREE SITES AND NOT ONE. `toDefaultAliases` derives from `toGatewayRoutes`
 // via Object.entries, so the two builders travel together. `getDefaultAliases`
