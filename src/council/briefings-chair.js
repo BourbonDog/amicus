@@ -103,6 +103,16 @@ function orNone(text, none) {
  * (measured — 0 mismatches over 24 ranking × seatMap shapes). The arm and its
  * pin guard hand-assembled input, which is why they stay.
  *
+ * ⚠️ `||`, deliberately, NOT `??`. `anonymize.js :: rankingToOrder`'s `seatOne`
+ * returns `(seatMap && seatMap[label]) || null`, so every entry this array can
+ * hold is already truthy-or-null and the two operators are behaviourally
+ * identical on it. Where they differ — a falsy-but-present id — `||` falls back
+ * to the alias and `??` would render the empty string into the packet, so `||`
+ * is never worse and sometimes safer. It is also this spine's convention
+ * (`seat || alias` at every other site). PR #189's council raised the swap as
+ * A1 (solid); declined on that measurement, and recorded here so the next
+ * reader does not re-propose it as a tidy-up.
+ *
  * Two named mutants guard the two arms — NULLLEAK the scalar fallback, FLATTIE
  * the tie arm — with their measured red sets in
  * tests/council/chair-packet-seat-mutants.js :: NULLLEAK. Re-run them, never
@@ -126,6 +136,15 @@ function seatKeyedOrder(order, orderSeats) {
 
 /**
  * De-anonymized chair packet (spec §5/§6: the chair sees identities).
+ *
+ * ⚠️ `seat` is an OBJECT on `reviews[]` and a STRING on `rankings[]` and
+ * `adjudications[]`. Deliberate, and declared as such in the @param below.
+ * Reviews carry the object because `seats.js :: displayName` is the naming seam
+ * (v4.8 SI-25 / R25-4); the other two carry `j.seat.id` because
+ * `run-assemble.js :: buildTallyInput` has emitted a string there since PR4c and
+ * changing it would move a shipped tally schema. These are three arrays each
+ * with one consistently-typed field, not one polymorphic field. PR #189's
+ * council raised it as D1 (major, CONTESTED a1/d1/n1); declined on that reading.
  * @param {{reviews: Array<{model: string, text: string, seat?: ?object}>,
  *   rankings: Array<{judge: string, seat?: ?string, order: Array<string|string[]>,
  *     orderSeats?: ?Array<?string|Array<?string>>}>,

@@ -128,8 +128,15 @@
 // SHAPESWAP — briefings-chair.js :: seatKeyedOrder, the scalar arm.
 // MUTATION: drop the `Array.isArray(seats) ?` guard, i.e. restore
 //   `: (seats || slot)`.
-// RED SET, measured 2026-08-23 at FULL `npx jest --no-coverage` scope
-// (denominator 546 suites / 7916 tests): 1 test, 1 suite —
+// RED SET, measured 2026-08-23 at FULL `npx jest --no-coverage` scope:
+// 1 test, 1 suite.
+// ⚠️ DENOMINATOR 546 suites / **7916** tests — NOT the 7914 this file's header
+// states for every mutant above it. Both are correct on their own tree: the
+// two pins added alongside this fix took the suite 7914 -> 7916, and every
+// record above was measured before them. Raised by PR #189's council as B1
+// (solid, a3/d0/n0) against an earlier draft that gave 7916 with no basis —
+// a number without its basis is not admissible, and a 2-test gap with no
+// explanation reads as a measurement error.
 //   tests/council/chair-packet-seats.test.js
 //     "a SCALAR order slot against an ARRAY orderSeats slot keeps the scalar
 //      — no null, no reshape"
