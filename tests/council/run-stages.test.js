@@ -2147,6 +2147,9 @@ describe('runStage2', () => {
     //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
     //       seat-unbound loop — still a run-stage2.js CALL-SITE mutation (the tail
     //       did not move); renamed `PLACEHOLDERLEAK`
+    // MEASURED 2026-08-23, full `npx jest --no-coverage`: M2 at its new shared home
+    // reds 19 tests in FOUR suites (run-stages 2, run-retry 9, run-retry-launch 4,
+    // run-debate 4); PLACEHOLDERLEAK reds exactly one — M3's test below.
     // What makes the branch run is a ROSTER HOLE: a review with no `seat`,
     // which is what an orphaned/unbound Stage-1 leg leaves behind
     // (stage1-bind.js binds; a leg it could not attribute leaves `seat` unset).

@@ -1407,6 +1407,12 @@ describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudicat
 // and run-retry-launch.test.js's "NOPLACEHOLDERFILTER" are all the SAME mutation.
 // M3 is unchanged: it stays a run-stage2.js CALL-SITE mutation (renamed
 // `PLACEHOLDERLEAK`), because the missing-seat tail did not move.
+// MEASURED 2026-08-23, full `npx jest --no-coverage`: the shared edit reds 19 tests
+// in FOUR suites — run-debate 4 (the three in the F1 describe below, plus the one in
+// `runDebate — T5.5: a taskId-bound leg carrying a FOREIGN alias is REFUSED`),
+// run-retry 9, run-retry-launch 4, run-stages 2. PLACEHOLDERLEAK, measured the same
+// way, reds exactly ONE test (M3's, in run-stages.test.js) — which is what keeps the
+// consolidated mutation and the call-site one distinguishable.
 // M1's consequence is a SYNTHETIC `__unbound-…` sentinel reaching disk as
 // revote-__unbound-r-rv-N.md and — through applyDebate's fail-open push, where
 // `aliasOf` is the identity for an unknown key — `adjudications[].judge`, the

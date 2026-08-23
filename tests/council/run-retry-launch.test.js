@@ -117,10 +117,13 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // Named mutant "NOPLACEHOLDERFILTER": delete the
     // `.filter(b => !placeholders.has(b.seat))` line in `stage1-bind.js ::
     // bindPaddedWave` and this goes RED with size 2 and an `__unbound-w-2` seat id.
-    // ⚠️ Since v4.8 SI-27 that is ONE line serving all three padding call sites, so
-    // the same edit also reds run-stages.test.js and run-debate.test.js (what were
-    // separately-named M2 and M1). Before SI-27 the same mutant lived in
-    // run-retry-launch.js and could only red this file.
+    // ⚠️ Since v4.8 SI-27 that is ONE line serving all three padding call sites.
+    // MEASURED 2026-08-23 at full `npx jest --no-coverage` scope: 19 tests RED across
+    // FOUR suites — run-retry-launch 4, run-retry 9, run-stages 2, run-debate 4;
+    // 541 of 545 suites still green. run-debate's and run-stages' shares are what
+    // were separately named M1 and M2 (run-debate.test.js's "F1." mutant list);
+    // run-retry's 9 were predicted by NO filing — SI-27 expected three suites, not four.
+    // Before SI-27 this mutant lived in run-retry-launch.js and could red only this file.
     const real = { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 1 };
     const legs = [
       { legId: 'w-1', modelInput: 'gpt' },
