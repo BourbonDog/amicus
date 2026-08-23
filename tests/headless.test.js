@@ -334,6 +334,50 @@ describe('Headless Mode Runner', () => {
 
         expect(mockServerClose).toHaveBeenCalled();
       });
+
+      // #133 P1: the catch-all exception return (headless.js :1392+) was
+      // measured to have `sessionId` in scope but NOT guaranteed assigned —
+      // this fixture (an exception AFTER createSession resolved) is the case
+      // where it IS assigned, and must be threaded onto the result exactly
+      // like the "should close server on error" fixture above.
+      it('carries opencodeSessionId on the outer-exception return when a session already existed (#133 P1)', async () => {
+        mockCheckHealth.mockResolvedValue(true);
+        mockCreateSession.mockResolvedValue('session-123');
+        mockSendPromptAsync.mockRejectedValue(new Error('Network error'));
+
+        const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
+
+        expect(result.error).toContain('Network error');
+        expect(result.opencodeSessionId).toBe('session-123');
+      });
+
+      // #133 P1 council fix (A2): the sibling half of the fixture above — the
+      // catch-all return's sessionId-UNSET branch. This is the exact scenario
+      // the `|| null` coercion at headless.js :1412 exists for (an exception
+      // thrown before :413/:417 ever assign sessionId) and it was measured
+      // and reasoned about but never actually pinned by a test. Fail the
+      // *second* progress write — 'server_ready' at :376, which runs inside
+      // the outer try but before createSession is ever called — so the outer
+      // catch is reached with `sessionId` still `undefined`. The first
+      // progress write ('initializing', pre-try) is left to succeed so the
+      // exception surfaces exactly where intended rather than as an unhandled
+      // rejection.
+      it('carries opencodeSessionId: null (not undefined, not absent) on the outer-exception return when no session ever existed (#133 P1)', async () => {
+        mockCheckHealth.mockResolvedValue(true);
+        fs.writeFileSync
+          .mockImplementationOnce(() => {}) // 'initializing' write — must succeed
+          .mockImplementationOnce(() => { throw new Error('disk write exploded'); }); // 'server_ready' write — the injected failure
+
+        const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
+
+        // Proof of reachability, not assumption: createSession must never have
+        // run, confirming sessionId (:365) was still unassigned at the catch.
+        expect(mockCreateSession).not.toHaveBeenCalled();
+        expect(result.error).toContain('disk write exploded');
+        expect('opencodeSessionId' in result).toBe(true);
+        expect(result.opencodeSessionId).toBeNull();
+        expect(result.opencodeSessionId).not.toBeUndefined();
+      });
     });
 
     describe('Conversation Logging', () => {
@@ -443,6 +487,41 @@ describe('Headless Mode Runner', () => {
         const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
 
         expect(result.taskId).toBe(testTaskId);
+      });
+
+      // #133 P1: opencodeSessionId was promised by schemas/run.schema.json and
+      // set by the interactive path (src/sidecar/interactive.js:204) but never
+      // by runHeadless — this pins the normal-completion return (:1313).
+      it('should return opencodeSessionId in result on normal completion (#133 P1)', async () => {
+        mockCheckHealth.mockResolvedValue(true);
+        mockCreateSession.mockResolvedValue('session-123');
+        mockSendPromptAsync.mockResolvedValue(undefined);
+        mockGetMessages.mockResolvedValue([{
+          info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+          parts: [{ type: 'text', text: `Summary\n${NONCED_MARKER}` }]
+        }]);
+
+        const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
+
+        expect(result.opencodeSessionId).toBe('session-123');
+      });
+
+      // #133 P1: a leg that never reaches session creation (:355/:384/:427 —
+      // pre-session server-start failures) has no session id to carry. Those
+      // three returns are deliberately left untouched, so the key is simply
+      // absent — this pins that the document is still well-formed (taskId,
+      // completed, error all present) rather than the field ending up as an
+      // unresolved reference error or a stray truthy placeholder.
+      it('carries no opencodeSessionId when no session was ever created, and stays well-formed (#133 P1)', async () => {
+        mockCheckHealth.mockResolvedValue(true);
+        mockCreateSession.mockRejectedValue(new Error('Failed to create session'));
+
+        const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
+
+        expect(result.opencodeSessionId).toBeUndefined();
+        expect(result.completed).toBe(false);
+        expect(result.taskId).toBe(testTaskId);
+        expect(result.error).toContain('Failed to create session');
       });
     });
   });

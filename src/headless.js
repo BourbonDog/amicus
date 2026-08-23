@@ -1306,6 +1306,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         ...settleResult,
         ...subtreeFlags,
         ...subtreeResult,
+        // #133 P1: sessionId was assigned at :413/:417, well before this
+        // return — guaranteed set here, same as `taskId` above.
+        opencodeSessionId: sessionId,
         error: sessionError
       };
     }
@@ -1321,6 +1324,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ...settleResult,
       ...subtreeFlags,
       ...subtreeResult,
+      // #133 P1: see the comment on the sibling return above — guaranteed set.
+      opencodeSessionId: sessionId,
       exitCode: 0
     };
 
@@ -1396,6 +1401,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       aborted: false,
       taskId,
       usage: emptyUsageTotals(),
+      // #133 P1: measured, not assumed — `sessionId` (:365) is in scope
+      // through this whole catch (it is already read at the `if (sessionId)`
+      // abort-on-error above) but, unlike the two returns in the try body,
+      // is NOT guaranteed assigned here: an exception thrown before session
+      // creation (e.g. during the pre-session server-readiness wait) reaches
+      // this same catch with sessionId still unset. `|| null` makes both
+      // outcomes explicit and already schema-shaped (run.schema.json:23
+      // wants string|null, never undefined).
+      opencodeSessionId: sessionId || null,
       error: error.message
     };
   }
