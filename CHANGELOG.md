@@ -686,7 +686,6 @@ All notable changes to Amicus are documented here. Format follows
   loses a retried leg’s billed usage. Breaking the drop-filter now reds 19 tests across four
   suites where the same edit previously reached 14 across three.
 
-
 - **Added a named pin that `parseModelsList` preserves duplicate aliases.** Owner ruling R3-2 (one
   re-vote leg per disputing seat) depends on `--models gpt,deepseek,deepseek` producing three legs,
   not two after deduplication; the invariant already held but nothing enforced it going forward, so
