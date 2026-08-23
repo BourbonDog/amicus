@@ -184,9 +184,25 @@ describe('SI-22.4: the rules that bound the trim', () => {
     // text. SI-22.4 deliberately did not make that decision, so this trips at
     // the commit that would have forced it instead of letting it slip through a
     // hygiene fix.
+    // ⚠️ `Function.prototype.toString()` returns the source INCLUDING comments
+    // — measured under jest, where the body comes back carrying 12 `//` lines —
+    // so a bare /reason:\s*'…'/ would be tripped by any future COMMENT that
+    // quotes a reason string. The match is therefore anchored on the EMITTING
+    // STATEMENT (`droppedMembers.push({ member: raw, reason: '…'`).
+    // ⚠️ AND IT MUST TOLERATE WHITESPACE, measured the same way: babel-jest
+    // REFORMATS the source it hands back, breaking that one-line statement across
+    // four lines, so an exact-spacing regex matches in plain node and finds
+    // NOTHING under jest. `toHaveLength(2)` below is what turns that failure mode
+    // into a red instead of a vacuous pass over an empty match set.
+    // Residual, stated rather than left to be discovered: a comment reproducing
+    // the whole statement shape would still trip this. It fails SAFE — a spurious
+    // red sends the reader straight to the tripwire note — which is why the guard
+    // is kept in this form rather than made cleverer.
     const { classifyCouncilMembers } = classifier();
     const src = classifyCouncilMembers.toString();
-    const reasons = [...src.matchAll(/reason:\s*'([^']*)'/g)].map(m => m[1]);
+    const reasons = [...src.matchAll(/droppedMembers\.push\(\s*\{\s*member:\s*raw,\s*reason:\s*'([^']*)'/g)]
+      .map(m => m[1]);
+    expect(reasons).toHaveLength(2);   // both emitting statements were actually found
     expect(new Set(reasons)).toEqual(new Set([
       'alias no longer resolves to a known model',
       'resolved id is not present in the cached model catalog',

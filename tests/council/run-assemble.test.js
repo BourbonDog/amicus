@@ -280,9 +280,14 @@ describe('buildTallyInput adjudications + rankings seat (v4.8 PR3 Task 5 / T3.2,
 // only when an alias repeats (seats.js:67), so `id !== alias` IS "the bench
 // repeats this alias" — the identical predicate every other seat-emit producer
 // uses after R4c-9. `model` is the LEG's modelInput, which is NOT the alias
-// when a leg reports none or when a --council preset carries a padded member;
-// T12b pins both of those, and the seat OBJECT (not an id string) is what makes
-// the contract structural instead of prose.
+// when a leg reports none or when a bench member carries padding; T12b pins
+// both of those, and the seat OBJECT (not an id string) is what makes the
+// contract structural instead of prose.
+// ⚠️ The padded case USED to say "a --council preset carries a padded member".
+// v4.8 SI-22.4 made `src/utils/config.js :: classifyCouncilMembers` trim each
+// preset member, so a preset can no longer produce it; the MCP `models` ARRAY
+// can, because `src/mcp-council-bench.js :: resolveBenchInput` returns it
+// untrimmed. Same correction as T12b(b) below — keep the two in step.
 describe('v4.8 PR4c: runStats[].seat on the primary review rows (§3.1, T12)', () => {
   const seats = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinReviews = seats.map(s => ({

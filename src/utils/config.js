@@ -428,7 +428,13 @@ function getCouncilWithSource(name, catalog = []) {
  * below drops it — the `.filter(Boolean)` half of `parseModelsList`'s shape,
  * reached without a third `reason` string (see the tripwire note below).
  * @param {string[]} members council members as configured — aliases or
- *   provider/model ids, trimmed per member here, never elsewhere
+ *   provider/model ids, trimmed per member here. ⚠️ This is the only place the
+ *   PRESET path trims; it is not the only trim a member meets. Both council
+ *   surfaces re-join the expanded bench and re-parse it downstream —
+ *   `cli-handlers-fanout.js:91` → `:119` → `sidecar/fanout.js ::
+ *   validateFanoutModels` → `parseModelsList`, and `mcp-council-run.js:177` →
+ *   the spawned child's `cli-council-run-bench.js :: parseList` — so a member
+ *   that somehow kept padding past this point would still be trimmed there
  * @param {Array<{id:string}>} [catalog]
  * @returns {{models:string[], dropped:string[], droppedMembers:Array<{member:string, reason:string}>}}
  *   `dropped` is the flat member-ref list (unchanged shape, pre-v4.5-Wave-2
