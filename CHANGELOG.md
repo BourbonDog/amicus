@@ -694,6 +694,21 @@ All notable changes to Amicus are documented here. Format follows
   not a specific steady-state size: most of the index size first measured against this defect was
   test residue from an already-sealed `/tmp` hermeticity leak, not something this check alone was
   ever going to shrink back to zero.
+  ⚠️ **A failure to determine is reported as a failure, not as a clean bill of health.** A paid
+  council raised (A2/A3, `a3/d0/n0`) that the check's catch-alls swallowed every exception —
+  including a programming error — making a crash indistinguishable from *"nothing to prune"*.
+  It now surfaces `status:'error'` through `doctor`'s existing `guard()` vocabulary rather
+  than returning a false all-clear, and still never throws into `doctor`. A correct-but-SILENT
+  degrade fails this project's bar as hard as a crash.
+  ⚠️ **KNOWN, documented at the write site, and deliberately NOT fixed here — a pre-existing
+  read-modify-write race.** `--fix` reads the index, drops the stale ids and rewrites the whole
+  file, so a session started inside that window can lose its entry. `recordSession` performs
+  the *identical* unlocked read-modify-write, so two concurrent session starts already clobber
+  each other: the prune **inherits** the index's existing concurrency model rather than
+  introducing it (council B1, `a3/d0/n0`). The window was narrowed to the in-memory filter
+  loop — the write target is now resolved before the read — and prune deletes only the ids it
+  was handed. A lock or compare-and-swap on `sessions-index.json` would close it properly and
+  is recommended as its own change, not folded into this one.
 
 ## [4.7.1] - 2026-08-09
 
