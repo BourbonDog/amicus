@@ -10,8 +10,9 @@
  *
  * That "verbatim" claim held for all three only through Task 1. `legOpts` and
  * `legRow` are still byte-identical to the extraction. `runRevoteWave` is NOT:
- * PR3 Task 6 gave it real seat-binding behaviour — the padded roster +
- * `bindSeats` call, the seat-keyed `byJudge`, the `sanitizeName`'d per-seat
+ * PR3 Task 6 gave it real seat-binding behaviour — the padded roster + bind
+ * (`stage1-bind.js :: bindPaddedWave` since v4.8 SI-27; an inline `bindSeats`
+ * call before it), the seat-keyed `byJudge`, the `sanitizeName`'d per-seat
  * repair id, and the `seat` field on the pushed legs (see the function's own
  * docblock below). Do not treat `runRevoteWave` as a behaviour-neutral mirror
  * of the old run-debate.js code — only `legOpts`/`legRow` still are.
@@ -29,10 +30,13 @@ const { parseRevote } = require('./parse-stage2');
 const runState = require('./run-state');
 const { emitStageStarted } = require('../observe/events');
 const { isAbortExit } = require('./run-launch');
-// v4.8 PR3 Task 6: seat binding. ./seats requires NOTHING, so taking bindSeats
-// and sanitizeName straight from it (rather than run-launch's re-export) adds
+// v4.8 PR3 Task 6: seat binding. ./seats requires NOTHING, so taking
+// sanitizeName straight from it (rather than run-launch's re-export) adds
 // zero cycle risk to this leaf — the same call run-stage2.js:30 makes.
-const { bindSeats, sanitizeName } = require('./seats');
+const { sanitizeName } = require('./seats');
+// v4.8 SI-27: the shared roster-padding core. ./stage1-bind requires only
+// ./seats, so this leaf stays cycle-free (the header at :19-23 above).
+const { bindPaddedWave } = require('./stage1-bind');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
@@ -171,23 +175,12 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
   // accumulated across every judge in this wave (most judges contribute neither).
   const supersededLegs = [], repairLegs = [];
   const rawLegs = (res.wave && res.wave.legs) || [];
-  // §3.4's roster-padding pattern (run-retry-launch.js :: bindRetryWave): bindSeats filters
-  // falsy roster entries internally, so a `null` hole would slide every later
-  // slot, and two `{id:null}` sentinels would collide on its id-keyed dedup.
-  // Placeholders are tracked by IDENTITY, never an id-name prefix test — a bench
-  // alias literally beginning `__unbound-` must never drop a real bind.
-  const placeholders = new Set();
-  const roster = (judgeSeats || []).map((s, i) => {
-    if (s) { return s; }
-    const p = { id: `__unbound-${waveId}-${i + 1}`, alias: aliasOf(judgeKeys[i]),
-      role: 'seat', lens: null, position: i + 1 };
-    placeholders.add(p);
-    return p;
-  });
-  const bindRes = bindSeats(waveId, roster, rawLegs);
-  const seatOf = new Map(bindRes.bound
-    .filter(b => !placeholders.has(b.seat))
-    .map(b => [b.leg, b.seat]));
+  // §3.4's roster-padding pattern now lives in `stage1-bind.js ::
+  // bindPaddedWave` (v4.8 SI-27) — why the roster is padded rather than
+  // filtered, and why placeholders are tracked by IDENTITY rather than an
+  // id-name prefix test, are in that function's docblock. This site has NO
+  // tail: no orphan push, no degrade note, so it destructures `seatOf` alone.
+  const { seatOf } = bindPaddedWave(waveId, judgeSeats || [], i => aliasOf(judgeKeys[i]), rawLegs);
   for (const leg of rawLegs) {
     // The council ALIAS, not the resolved executable id — runStats rows join
     // meta.models by exact string (run-assemble.js's buildRunStatsEntry).

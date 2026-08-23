@@ -1402,6 +1402,11 @@ describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudicat
 //   M2  drop the same filter in run-stage2.js          (pinned in run-stages.test.js)
 //   M3  neuter `if (placeholders.has(seat)) { continue; }` in run-stage2.js's
 //       seat-unbound loop                               (pinned in run-stages.test.js)
+// ⚠️ LOCATION as of v4.8 SI-27: the filter M1 and M2 named is now ONE line, in
+// `stage1-bind.js :: bindPaddedWave` — apply it there and M1, M2, this file's pin
+// and run-retry-launch.test.js's "NOPLACEHOLDERFILTER" are all the SAME mutation.
+// M3 is unchanged: it stays a run-stage2.js CALL-SITE mutation (renamed
+// `PLACEHOLDERLEAK`), because the missing-seat tail did not move.
 // M1's consequence is a SYNTHETIC `__unbound-…` sentinel reaching disk as
 // revote-__unbound-r-rv-N.md and — through applyDebate's fail-open push, where
 // `aliasOf` is the identity for an unknown key — `adjudications[].judge`, the

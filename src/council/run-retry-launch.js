@@ -5,12 +5,15 @@
 // byte-for-byte, the roster pad/bind block as a PURE function that returns its
 // bindings rather than mutating the orchestrator's accumulator.
 // run-retry.js requires both back, so no existing import path moved.
-// ⚠️ Not `stage1-bind.js`: `bindStage1Waves` is a different contract (one call per
-// Stage-1 wave, a real roster, no padding, no placeholders). Consolidating the three
-// padding sites is separately scheduled (BACKLOG.md's SI-27, ruling R14).
+// v4.8 SI-27 (ruling R14) landed: the pad/bind/drop CORE now lives in
+// `stage1-bind.js :: bindPaddedWave`, shared with run-stage2.js and
+// run-debate-revote.js. What stays here is retry-specific — WHICH array is the
+// roster, and the orphan tail. ⚠️ `bindStage1Waves` in that same file is still a
+// different contract (one call per Stage-1 wave, a real roster, no padding, no
+// placeholders); `bindPaddedWave` is the one this file calls.
 
 const briefings = require('./briefings');
-const { bindSeats } = require('./seats');
+const { bindPaddedWave } = require('./stage1-bind');
 
 /** The briefing a retry unit re-issues — same builders Stage 1 used. */
 function briefingFor(o, unit) {
@@ -39,29 +42,14 @@ function bindRetryWave(unit, legs) {
   // whose pair is seeded off one `o.critic` gate at creation and never grows), and
   // the legId `-N` suffix slot-indexes that same launch plan. `firstFailures` is a
   // WEAKER case and is not read here — see run-retry.js's mint.
-  // A null entry means "we could not identify this seat"; pad it with a
-  // position-stable placeholder carrying a UNIQUE id so no slot shifts, then
-  // drop the placeholder binds so nothing is guessed.
-  // ⚠️ Never pass unit.seats raw and never use a null-id sentinel: seats.js
-  // filters falsy roster entries internally (so raw === filtered, and both
-  // slide every later slot into a hole), and two `{id: null}` sentinels
-  // collide on the id-keyed dedup.
-  // Placeholders are tracked by IDENTITY, never by an id-name prefix test: a
-  // bench alias that literally began `__unbound-` would make a name test drop
-  // a REAL seat's binding — a name-collision channel inside the one mechanism
-  // whose whole contract is "never guess".
-  const placeholders = new Set();
-  const retryRoster = unit.seats.map((s, i) => {
-    if (s) { return s; }
-    const p = { id: `__unbound-${unit.waveId}-${i + 1}`, alias: unit.models[i], role: 'seat', lens: null, position: i + 1 };
-    placeholders.add(p);
-    return p;
-  });
-  const bindRes = bindSeats(unit.waveId, retryRoster, legs);
-  const retrySeatOf = new Map(bindRes.bound
-    .filter(b => !placeholders.has(b.seat))
-    .map(b => [b.leg, b.seat]));
-  return { retrySeatOf, orphanLegs: bindRes.orphanLegs };
+  // A null entry means "we could not identify this seat". Why that hole is
+  // PADDED rather than filtered, and why the placeholders are tracked by
+  // identity rather than an id-name prefix test, are in the docblock of
+  // `stage1-bind.js :: bindPaddedWave` — which owns all three steps.
+  const { seatOf, bindRes } = bindPaddedWave(unit.waveId, unit.seats, i => unit.models[i], legs);
+  // The tail: this site hands its orphans back to the caller (run-retry.js ::
+  // retryStage1Losses re-emits them with their waveId).
+  return { retrySeatOf: seatOf, orphanLegs: bindRes.orphanLegs };
 }
 
 module.exports = { briefingFor, bindRetryWave };
