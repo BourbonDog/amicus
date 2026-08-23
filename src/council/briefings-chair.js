@@ -91,7 +91,11 @@ function orNone(text, none) {
  * truthy — so a MIXED array of seat ids and `null`s is a normal shipping shape.
  * No `null` may reach the rendered JSON: this is the one artifact a paid chair
  * reads as authoritative. An absent `orderSeats` returns `order` untouched
- * (spec §4.2's byte-identity promise).
+ * (spec §4.2's byte-identity promise). ⚠️ That promise is UNCONDITIONAL as of
+ * the SHAPESWAP fix — it holds even when the two arrays DISAGREE on a slot's
+ * structure (scalar vs array), which no producer here can emit but which two
+ * independent reviewers reached for. A disagreeing slot falls back to `order`'s
+ * own value and NEVER changes that slot's shape.
  *
  * ⚠️ The SHORT-array arm is DEFENSIVE, and this docblock does not claim
  * otherwise: `rankingToOrder` mints both arrays from one `slots.map`, so no
@@ -110,7 +114,13 @@ function seatKeyedOrder(order, orderSeats) {
     const seats = orderSeats[i];
     return Array.isArray(slot)
       ? slot.map((alias, k) => (Array.isArray(seats) ? seats[k] : null) || alias)
-      : (seats || slot);
+      // ⚠️ `Array.isArray(seats)` here, NOT just `seats || slot`: a scalar `order`
+      // slot against an ARRAY `orderSeats` slot returned the seats array RAW, which
+      // both changed the slot's shape and could render `[null,null]` — breaking the
+      // no-null promise above for the one input class this arm exists to defend.
+      // Named mutant SHAPESWAP (drop this guard) in
+      // tests/council/chair-packet-seat-mutants.js :: SHAPESWAP.
+      : (Array.isArray(seats) ? slot : (seats || slot));
   });
 }
 

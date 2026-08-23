@@ -152,6 +152,25 @@ describe('SI-25 R25-3 — the rankings zip is per-slot, tie-aware and null-safe'
     expect(render({ judge: 'gemini', order: [['deepseek', 'gpt']], orderSeats: [null] }))
       .toBe('gemini: [["deepseek","gpt"]]');
   });
+
+  // Raised by the PR #189 council (A1, thin) and independently by the whole-branch
+  // reviewer, which is why a shape no producer here can emit still gets a pin: the
+  // two arrays DISAGREEING on a slot's structure. Both directions, because they
+  // failed differently — the array/scalar direction was already safe, the
+  // scalar/array direction leaked `[null,null]` AND changed the slot's shape,
+  // contradicting the docblock's unconditional no-null promise.
+  // Named mutant SHAPESWAP, recorded in chair-packet-seat-mutants.js :: SHAPESWAP.
+  test('a SCALAR order slot against an ARRAY orderSeats slot keeps the scalar — no null, no reshape', () => {
+    expect(render({ judge: 'gemini', order: ['deepseek'], orderSeats: [[null, null]] }))
+      .toBe('gemini: ["deepseek"]');
+    expect(render({ judge: 'gemini', order: ['deepseek'], orderSeats: [['a', 'b']] }))
+      .toBe('gemini: ["deepseek"]');
+  });
+
+  test('an ARRAY order slot against a SCALAR orderSeats slot keeps every alias', () => {
+    expect(render({ judge: 'gemini', order: [['deepseek', 'gpt']], orderSeats: ['x'] }))
+      .toBe('gemini: [["deepseek","gpt"]]');
+  });
 });
 
 describe('SI-25 R25-5 — buildChairPacketFile forwards the seat emit-when-DIFFERENT', () => {
