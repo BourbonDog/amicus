@@ -233,8 +233,12 @@ Move these four whole top-level functions **byte-for-byte, docblocks included** 
 - `run-stage1-rows.js:10-11` — *"run-retry-group.js is require-free, so this is a leaf import and
   cannot re-create the parent-child cycle the header above documents eliminating."*
 
-Grep the distinctive phrases (`no requires`, `require-free`, `leaf import`) **repo-wide** before
-declaring this done — a same-file sweep cannot find a twin, and that was Phase 1's Critical.
+Grep the distinctive phrases (`no requires`, `require-free`, `leaf import`, `zero requires`)
+**repo-wide** before declaring this done — a same-file sweep cannot find a twin, and that was
+Phase 1's Critical. ⚠️ **`zero requires` added 2026-08-23**: v4.8 SI-25 falsified
+`2026-08-12-v48-pr0-extractions.md:325` (*"the new file has zero requires"*, of
+`briefings-chair.js`) and a three-spelling sweep could not see it. A claim has as many spellings as
+authors; add each new one here as it is found.
 
 **Also on this commit's checklist:** correct `planStillDeadSources`' stale docblock at
 `run-retry-group.js:94-96`. It reads *"HEAD hides this downstream because the Workspace's dead-row

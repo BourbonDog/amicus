@@ -3541,6 +3541,25 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   not. Counting rule for "already stale": the `findings:` line is present in
   `git show c0745013:src/council/run-assemble.js`, this branch's BASE.
 
+- [ ] **SI-25 rider (0) — the `[Unreleased]` "Known limitations" bullet is a rot magnet; audit it at
+  every release cut.** `CHANGELOG.md`'s *"Known limitations after this release"* bullet is written
+  early in a release and then quietly outlived by the release's own later entries. Measured
+  2026-08-23: **two** of its clauses had become false against entries in the SAME `[Unreleased]`
+  section, and both would have shipped to users verbatim.
+  1. *"The chair packet is still assembled entirely in alias space…"* — falsified by SI-25 itself.
+  2. *"Findings remain attributed by **alias**, not by seat, in the ledger"* — falsified by SI-18
+     (v4.8 Wave 2, `78ed7a40`), whose own entry *"Findings in the reliability ledger are now
+     attributed to the seat that actually raised them"* sits ~420 lines above it in the same section.
+  Both are now struck in place with a pointer to the superseding entry. ⚠️ **The general defect is
+  structural, not a one-off**: a "known limitations" list is the only part of a changelog that a
+  LATER entry in the same release can invalidate, and nothing checks it. **At the release cut, read
+  that bullet clause by clause against the shipped `### Fixed` entries above it.** Counting rule for
+  "two": clauses in that bullet asserting a present-tense limitation which a `[Unreleased]` entry
+  above it contradicts, read 2026-08-23 — 2 of 4.
+  ⚠️ Recorded here rather than in `CHANGELOG.md` **because it is maintainer prose**: the changelog
+  is user-facing and an earlier draft of this note ("must be reconciled at the release cut", "is
+  flagged, not rewritten") would have shipped verbatim to readers who have no use for it.
+
 - [ ] **SI-25 rider (2) — the R25-2 byte-identity pin runs on one small bench.** The invariant is
   *"byte-identical output on every unique-alias bench"* and the pin proves it by equality (not
   `toContain`), which is the right shape — but it proves it over a single fixture. A richer bench
@@ -5332,8 +5351,8 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   packet is prose, not a launch argument, so it is safe to seat-key, but the boundary must be kept
   explicit.
   ✅ **CLOSED 2026-08-23 — v4.8 SI-25**, branch `v48-si25-chair-packet-seats`, BASE `c0745013`.
-  Commits: `f7fe180d` (code + 15 pins) · `0c06bca9` (the five named mutants) · `95ee5520` (fix
-  round 1, comment-only). Plan: `docs/superpowers/plans/2026-08-23-v48-si25-chair-packet-seat-space.md`.
+  Code commits: `f7fe180d` (code + 15 pins) · `0c06bca9` (the five named mutants) · `95ee5520` (fix
+  round 1, comment-only). The record rides separately; the plan commit `efb9c4ad` shipped nothing. Plan: `docs/superpowers/plans/2026-08-23-v48-si25-chair-packet-seat-space.md`.
   ⚠️ **ALL THREE rendering sites shipped, not the (1)+(2) this entry names — ruling R25-1, and it
   is NOT scope creep.** R15 (see the owner-rulings table above, row R15) sent site (3) — the
   **rankings** site, the MIDDLE one in the file, not the last — to "the street-cred PR". Phase 3
@@ -5374,9 +5393,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   **Named mutants** (`tests/council/chair-packet-seat-mutants.js`), each applied by hand and run at
   full `npx jest --no-coverage` scope, **denominator 546 suites / 7914 tests** (7914 = 7906 passed +
   8 skipped): `ALIASBACK` 1 suite / 3 tests · `SEATONLY` 4 / 12 · `NULLLEAK` 1 / 4 · `FLATTIE` 1 / 1
-  · `SEATALWAYS` 1 / 1. An independent reviewer re-measured all five via scratch copies and jest's
+  · `HDRSEATFWD` 1 / 1. An independent reviewer re-measured all five via scratch copies and jest's
   `moduleNameMapper`, and reproduced **every red set and the denominator exactly**.
-  ⚠️ **`SEATALWAYS` is the one to remember**: it is a named mutant of *the plan's own prescribed
+  ⚠️ **`HDRSEATFWD` is the one to remember**: it is a named mutant of *the plan's own prescribed
   implementation*, it reds 1 test — and **before this item it would have red ZERO**. The naive form
   would have shipped GREEN. A guard added to fix a defect must carry a mutant that reds on the
   defect's original shape; the plan did not ask for one and should have.

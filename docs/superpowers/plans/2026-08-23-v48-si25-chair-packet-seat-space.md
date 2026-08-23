@@ -123,6 +123,17 @@ split it out and say so — do not ship a partial zip.
 `displayName(seat) === seat.id === alias` for a unique seat. Every site therefore uses a fallback,
 never an unconditional seat read. **A test must prove the byte-identity, not assert it.**
 
+> ⚠️ **CORRECTED 2026-08-23, fix round 1 — my plan, my error.** The invariant is right and it held.
+> *"It is free"* is **not**, for site (1). It is free for **rankings and adjudications**, exactly as
+> stated. It is **not** free for the review headers, because `reviews[].model` is not the alias:
+> `run-launch.js :: materializeReviews` sets `modelInput = leg.modelInput || leg.model`, so on a
+> bench with **no twin at all** that field can hold the RESOLVED id (`google/gemini-3.5-pro`) while
+> `seat.id === seat.alias === 'gemini'`. `displayName(seat) === seat.id === alias` is true and
+> irrelevant there — the fallback never fires, because the seat is present and wins. Byte identity
+> at that site is bought by **withholding** the seat (emit-when-DIFFERENT at the projection), not by
+> the two values coinciding. See ruling **P2**, and the named mutant `HDRSEATFWD`, which reverts to
+> what this plan prescribed and reds exactly 1 test where it would previously have red **zero**.
+
 **R25-3 — site (3) renders a per-slot zip, tie-aware, null-safe.** For slot `i`: if `order[i]` is an
 array, map each element `k` to `orderSeats[i][k] || order[i][k]`; otherwise `orderSeats[i] ||
 order[i]`. If `orderSeats` is absent entirely, render `order` unchanged. ⚠️ `orderSeats` may be
@@ -137,6 +148,17 @@ says it exists for. Sites (2) and (3) receive `seat` as a **string** already (`j
 through the projection at `:248`. That file has 29 lines of headroom; keep the change to the
 projection plus a comment. ⚠️ **The Claude review keeps no seat** — the fallback must render
 `claude` unchanged.
+
+> ⚠️ **CORRECTED 2026-08-23, fix round 1 — "forward the seat" here is UNCONDITIONAL, and that is
+> the defect.** What shipped forwards it **emit-when-DIFFERENT**:
+> `...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {})`, the same spelling the
+> `rankings[]` and `runStats[]` producers in that file already use. Ruling **P2** accepted the
+> deviation; this line is what it deviates from. The rest of R25-5 stands: the change is the
+> projection plus a comment, and the Claude review still renders `claude` through the fallback.
+> ⚠️ **This was already on record before the plan was written** —
+> `2026-08-14-v48-pr5a-artifact-spine.md:340-359` measured the same mechanism, with two worked
+> counterexamples, and said it was *"carried to the descoped PR"*. This plan is that PR and did not
+> carry it. My error.
 
 ---
 
@@ -180,6 +202,11 @@ piece with real logic, and it needs to be nameable from a test and a mutant.
 the projection (R25-5). One comment line stating WHY the projection exists at all (it drops
 `findings`, `conformance`, `leg` etc. deliberately) and why `seat` now rides with it.
 
+⚠️ **CORRECTED 2026-08-23, fix round 1: "forward the seat object through the projection" must be
+GUARDED.** See the annotation under R25-5 above — an unconditional forward breaks spec §4.2 on a
+no-twin bench and is the mutation `HDRSEATFWD` performs. Ship
+`...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {})`.
+
 ⚠️ **Do not** change `order`, `orderSeats`, `tallyInput`, `verdict.json`, the report, or any launch
 argument. `run-debate.test.js`'s parity pin exists because a seat id in a model-carrying **launch**
 argument is a non-routable model name and a real paid failure. **The packet is prose, not a launch
@@ -207,6 +234,14 @@ Nothing today pins the twin-bench rendering of any site (§0.7). Add, in the nat
 - `FLATTIE` — in the zip, drop the `Array.isArray` arm. Must red the tie pin.
 
 ⚠️ **An empty red set is a finding, not a result.**
+
+⚠️ **A FIFTH MUTANT WAS REQUIRED AND THIS LIST OMITS IT — corrected 2026-08-23, fix round 1.**
+`HDRSEATFWD` (originally proposed as `SEATALWAYS`; renamed for a collision with street-cred's own
+`SEATALWAYS`) mutates the projection back to **this plan's own prescribed implementation** — the
+unconditional seat forward — and reds **1 suite / 1 test** out of 546 / 7914. Before this item it
+would have red **ZERO**: the naive form would have shipped green. Ruling **P3** called it correct
+and required. The rule the plan should have carried: **a guard added to fix a defect must carry a
+mutant that reds on the defect's ORIGINAL shape.** Five named mutants shipped, not four.
 
 ### T-SI25.3 — the record
 

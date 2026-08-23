@@ -365,7 +365,7 @@ paragraph had already measured as breaking byte identity, with both counterexamp
 since 2026-08-14. The implementer re-derived the same mechanism from
 `run-launch.js :: materializeReviews` during the task and the deviation was accepted (ruling P2);
 the emit-when-DIFFERENT predicate now lives at `run-assemble.js :: buildChairPacketFile`'s reviews
-projection, and the named mutant **`SEATALWAYS`** — which reverts it to the plan's prescription —
+projection, and the named mutant **`HDRSEATFWD`** — which reverts it to the plan's prescription —
 reds exactly 1 test out of 7914, where before SI-25 it would have red **zero**. ⚠️ **The lesson is
 about the carry, not the code:** a measured counterexample written into a descoping ruling is only
 carried if the receiving plan quotes it. This one was two files away and the plan cited this

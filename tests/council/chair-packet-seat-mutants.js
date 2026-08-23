@@ -95,9 +95,10 @@
 
 // ── on src/council/run-assemble.js :: buildChairPacketFile ───────────────────
 
-  // Named mutant "SEATALWAYS": forward the seat UNCONDITIONALLY through the
-  // packet's review projection — `...(r.seat ? { seat: r.seat } : {})` in place
-  // of the emit-when-DIFFERENT `r.seat && r.seat.id !== r.seat.alias`. This is
+  // Named mutant "HDRSEATFWD" (header seat forward): forward the seat
+  // UNCONDITIONALLY through the packet's review projection —
+  // `...(r.seat ? { seat: r.seat } : {})` in place of the
+  // emit-when-DIFFERENT `r.seat && r.seat.id !== r.seat.alias`. This is
   // the implementation SI-25's own plan prescribed, and it is WRONG: `r.model`
   // there is run-stages.js's `m.modelInput`, i.e. the leg's `modelInput ||
   // model`, which falls back to the RESOLVED id when a leg reports no
@@ -111,3 +112,11 @@
   // this item there were ZERO — the naive form would have shipped green. That is
   // the whole reason this record exists rather than a comment saying the
   // predicate "is needed".
+  // ⚠️ NAMED HDRSEATFWD, NOT "SEATALWAYS", ON PURPOSE (fix round 1, 2026-08-23).
+  // This is the chair-packet-HEADER analogue of street-cred's own SEATALWAYS
+  // (tests/council/street-cred-mutants.js :: SEATALWAYS, v4.8 Phase 3, red set
+  // 11 tests / 5 suites) — both defeat emit-when-DIFFERENT, on different files.
+  // They were briefly the same name, which made two forward-looking "re-run the
+  // existing mutants" lists ambiguous and made 11/5 next to 1/1 read as a
+  // SHRINKING red set, this project's signature for an unpinned property. The
+  // names now share no substring, so a grep for either finds only its own.

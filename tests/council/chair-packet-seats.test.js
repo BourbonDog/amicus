@@ -13,7 +13,7 @@
 // the precedent of r8-surfaced.test.js / run-raiserseat-call.test.js.
 //
 // The five named mutants these tests are the red set for — ALIASBACK, SEATONLY,
-// NULLLEAK, FLATTIE, SEATALWAYS — are recorded with their measured numbers in
+// NULLLEAK, FLATTIE, HDRSEATFWD — are recorded with their measured numbers in
 // tests/council/chair-packet-seat-mutants.js :: ALIASBACK.
 'use strict';
 const fs = require('fs');

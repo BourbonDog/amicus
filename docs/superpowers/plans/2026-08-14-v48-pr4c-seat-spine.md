@@ -1296,7 +1296,7 @@ expression — a `Object.prototype.hasOwnProperty` guard is the fix.
 > 1. ⛔ **"`buildChairPacketFile` has zero test coverage anywhere in `tests/`" is now FALSE.**
 >    `tests/council/chair-packet-seats.test.js` calls `asm.buildChairPacketFile(...)` directly in its
 >    *"SI-25 R25-5 — buildChairPacketFile forwards the seat emit-when-DIFFERENT"* block, and
->    `tests/council/chair-packet-seat-mutants.js :: SEATALWAYS` names that forward as its mutation
+>    `tests/council/chair-packet-seat-mutants.js :: HDRSEATFWD` names that forward as its mutation
 >    target with a measured red set of 1 test. Counting rule: files under `tests/` naming
 >    `buildChairPacketFile`, `grep -rn` — **2** at 2026-08-23, **0** when this block was written. An
 >    extraction of that function is no longer unpinned; plan for the pins, do not assume there are none.

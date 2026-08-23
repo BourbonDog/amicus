@@ -249,7 +249,7 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
     // SI-25 adds `seat`, ⚠️ EMIT-WHEN-DIFFERENT like rankings/adjudications above:
     // `r.model` is the leg's `modelInput || model`, which falls back to the RESOLVED
     // id, so an unconditional forward breaks §4.2 byte identity on a NO-TWIN bench.
-    // Mutant: tests/council/chair-packet-seat-mutants.js :: SEATALWAYS.
+    // Mutant: tests/council/chair-packet-seat-mutants.js :: HDRSEATFWD.
     // ⚠️ The Claude review keeps NO seat and renders `claude` via the fallback.
     reviews: reviews.map(r => ({ model: r.model, text: r.text,
       ...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {}) }))
