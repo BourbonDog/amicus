@@ -178,9 +178,9 @@ function withTimeout(promise, ms, label) {
  *     `escalatedBackstopMs` computes a Stage-1 retry's window as
  *     `2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs :
  *     resolveNoOutputBackstopMs())` and forwards it on `common` as a direct
- *     `noOutputBackstopMs` — so a 240s retry-fired backstop is
- *     "caller-set" by this predicate while still being *derived from* the
- *     env default doubled. Only src/sidecar/models-probe.js:79's hardcoded,
+ *     `noOutputBackstopMs` — so a 600s retry-fired backstop (the 300s env
+ *     default, doubled) is "caller-set" by this predicate while still being
+ *     *derived from* the env default. Only src/sidecar/models-probe.js:79's hardcoded,
  *     non-tunable 30s (PROBE_WINDOW_MS; docs/usage.md:406 promises it's "not
  *     tunable") is truly independent of the env var. Because a real
  *     `fromEnv` flag distinguishing those two cases would have to ride the

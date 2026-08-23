@@ -6265,3 +6265,49 @@ Council-3's **C1** (waveId coupling) was disputed and, per owner ruling, **not**
 to run-stage2.js's `${runId}-s2` wave-id format will silently stop `orphanExonerations` from
 exonerating anything. That direction is **fail-safe** — it contests more, never less, so it
 cannot cause misattribution — but it is a silent behaviour change with no test standing under it.
+
+## v4.8.0 release cut — filed from the CHANGELOG audit (2026-08-23)
+
+Four items surfaced while cutting `[Unreleased]` → `[4.8.0]`. None was in the cut's scope
+(`CHANGELOG.md`, `src/headless.js`, `tests/no-output-backstop-wiring.test.js`, this file).
+Each is a live statement in a **shipped** file — `package.json`'s `files` ships `src/`, `skills/`
+and top-level `docs/*.md`.
+
+- [ ] **`src/sidecar/models.js :: fmtProbeLine` still prints `(accepted but not serving)`.**
+  Owner-ruled 2026-08-23 as a product nit, **not** a release blocker: `docs/usage.md:406` quotes the
+  runtime string and adds the honest caveat beside it, and nothing in the changelog claims the CLI
+  line was corrected. What is left is that the terminal line asserts endpoint acceptance while the
+  doc row rebuts it, so the product and its own documentation disagree at the one surface a user
+  actually reads.
+  - **Owner:** whoever next touches `amicus models --check` output.
+  - **Gate:** `tests/sidecar/models-command.test.js:497` pins the current string; changing it is a
+    one-line edit plus that assertion. Do NOT change it inside a release cut.
+  - **Measured 2026-08-23:** uncapped sweep of all 22 `accepted-but-silent` occurrences —
+    `models.js:160` is the only remaining unqualified acceptance assertion in `src/`.
+
+- [ ] **`docs/ROADMAP.md:414` still states `AMICUS_NO_OUTPUT_BACKSTOP_MS`'s default as "~120s",
+  in the present tense, under the live `### Other tracked items` heading.** The default became
+  `300000` in this release (`src/utils/no-output-backstop.js :: DEFAULT_NO_OUTPUT_BACKSTOP_MS`).
+  `docs/*.md` ships, so this is a shipped false statement of a live default.
+  - This is why v4.8.0's changelog no longer claims *"every place that stated the old value as a
+    live fact was swept"* — that universal was false at HEAD for exactly this line. Fix the line,
+    and the stronger sentence becomes available again.
+  - **Gate:** none today. The sweep that produced this finding was
+    `git grep -nE "240s|120s|240000|120000"`, uncapped, over the whole tree.
+
+- [ ] **The second-opinion skill's Stage-4 consensus headings still gloss Confirmed as "(≥ 2 peer
+  agreements, agrees dominate)"**, omitting the `a = 1, d = 0` case — `skills/second-opinion/SKILL.md:285`
+  and `skills/second-opinion/COUNCIL-DESIGN.md:113`. The formal cascade rows in both files were
+  corrected in v4.8.0 (`c0a7c728`); that commit touched only the cascade table and two other
+  bullets, so the *presentation* headings — the ones a Claude running the skill actually follows —
+  still carry the old rule. A lone-corroborating-peer Confirmed finding will therefore still be
+  presented outside the bulk-accept block.
+  - **Gate:** `docs/council.md` carries no such gloss (grep: zero hits), so the correct anchor has
+    no twin. Fix both headings together and re-grep the phrase repo-wide before claiming closure.
+
+- [ ] **`electron/setup-ui.js:37` re-materialises `Object.prototype` on the alias table.**
+  `JSON.stringify(getDefaultAliases())` is re-embedded as a page literal, and the parser always
+  gives the result a normal prototype, so the null-prototype seed this release added does not reach
+  the Electron wizard. Traced and inert (`JSON.stringify` drops function values before the write,
+  and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
+  "all are now seeded" claim to the config and resolution path because of this.
