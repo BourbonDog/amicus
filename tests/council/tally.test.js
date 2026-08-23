@@ -336,6 +336,101 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
   });
 });
 
+// SI-23 (R10): `location` is the one field of the four R10 named that is real
+// — MEASURED against findings.js :: REQUIRED, briefings.js ::
+// FINDINGS_JSON_SHAPE and anonymize.js :: toGlobalFindings (see the comment
+// above `findings:` in mcp-tools.js). Declaring it on the MCP schema alone is
+// not enough: tally.js :: tally's findings return was ALSO dropping it (and,
+// at R10, still dropped `claim` too — closed in SI-23 fix round 1 below; see
+// the comment above this file's return). Same additive-passthrough shape as
+// raiserSeat above.
+describe('tally() — findings[].location passthrough (SI-23, R10)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['deepseek', 'gpt'],
+      chair: 'gpt', claudeInCouncil: false },
+    rankings: [], runStats: [],
+  };
+
+  test('a finding carrying location survives tally() with it intact', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'deepseek', severity: 'minor', claim: 'c', location: 'src/foo.js line 12' }],
+      adjudications: [],
+    });
+    expect(record.findings[0].location).toBe('src/foo.js line 12');
+  });
+
+  test('a finding with no location key emits no location key on the survived finding', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'x', severity: 'minor', claim: 'c' }],
+      adjudications: [],
+    });
+    expect('location' in record.findings[0]).toBe(false);
+  });
+});
+
+// SI-23 fix round 1 (PR #183 paid council, findings A1/B1 — two independent
+// raisers, glm and qwen): `claim` is declared on the MCP input schema
+// (mcp-tools.js, since before R10) and was already reaching tally() on both
+// the CLI and MCP paths, but tally.js :: tally's outFindings map dropped it
+// anyway — the identical R10 gap, one line away, that R10 named and left for
+// later. Same additive-passthrough shape as location above; round-trip pin
+// mirrors it exactly.
+describe('tally() — findings[].claim passthrough (SI-23 fix round 1)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['deepseek', 'gpt'],
+      chair: 'gpt', claudeInCouncil: false },
+    rankings: [], runStats: [],
+  };
+
+  test('a finding carrying claim survives tally() with it intact', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'deepseek', severity: 'minor', claim: 'the actual claim text' }],
+      adjudications: [],
+    });
+    expect(record.findings[0].claim).toBe('the actual claim text');
+  });
+
+  test('a finding with no claim key emits no claim key on the survived finding', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'x', severity: 'minor' }],
+      adjudications: [],
+    });
+    expect('claim' in record.findings[0]).toBe(false);
+  });
+});
+
+// Named mutant "CLAIMDROP": delete the `...(f.claim ? { claim: f.claim } :
+// {})` spread this fix round added to tally.js :: tally's outFindings map —
+// restores the R10-era state where `claim` reached tally() but was dropped
+// on the way out.
+//   ...(f.location ? { location: f.location } : {}),
+//   ...(f.claim ? { claim: f.claim } : {}),        <- delete this line
+//   ...(f.raiser
+//
+// Applied by hand to src/council/tally.js, never shipped. Command: `npx
+// jest --no-coverage` (full suite, this fix round's own new tests already
+// in the tree).
+//
+// MEASURED. RED: 2 suites / 2 tests, out of 544 / 7854:
+//   tests/council/tally.test.js — "a finding carrying claim survives
+//     tally() with it intact" (the presence half of the pin just above).
+//   tests/mcp-tools.test.js — the strengthened MCP round-trip test's new
+//     `claim` assertion ("round-trip: … still carries it after tally()").
+// Both BEHAVIOURAL. The absence half of the pin just above stays GREEN:
+// dropping the spread cannot make an absent `claim` wrong, so it does not
+// separate the two.
+//
+// Hand-reverted (no git checkout/restore/stash): re-added the deleted line,
+// then verified byte-identical to a file copy taken BEFORE the mutation via
+// `diff` and `sha256sum` (both matched). `git diff` against HEAD is not the
+// right check here — HEAD still predates this whole fix round, not just the
+// mutation — so the file copy is the ground truth. Full suite reconfirmed
+// green at this exact tree by the fix round's own final verification pass.
+
 // v4.8 PR4c Task 1 (plan §3.1, T13): tally.js :: tally's `runStats` map is an allowlist
 // that builds a FRESH object literal, so a `seat` key on an input row is
 // stripped before it can reach tally.json — and verdict.js :: buildVerdict copies

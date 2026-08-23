@@ -415,6 +415,37 @@ function getTools() {
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),
         raiserSeat: z.string().nullable().optional(),
+        // SI-23 (R10): `location` was silently stripped by this closed
+        // z.object too — the same #137-shaped fork as the seat keys above,
+        // one key later. R10 (as relayed) also named `evidence`/`file`/`line`
+        // as siblings to fix here; MEASURED against findings.js :: REQUIRED
+        // (Stage-1's required-field list), briefings.js ::
+        // FINDINGS_JSON_SHAPE (the JSON contract every reviewer is briefed
+        // on), and every `f.<key>` read under src/ — none of those three
+        // exist anywhere in this codebase's finding shape. Only `location`
+        // does: anonymize.js :: toGlobalFindings forwards it alongside
+        // `claim` into the exact "run-global findings" shape this tool
+        // already documents below, and briefings-debate.js ::
+        // findingBlockDefense / debate.js :: debateTargets read it on the
+        // engine's native debate stage — unreachable from this MCP tool
+        // today (no MCP debate step exists), so this is a document-shape /
+        // round-trip fix here, not an unlocked renderer. `rationale` is also
+        // Stage-1-required but toGlobalFindings does not forward it past
+        // Stage-1 either; adding it here would invent a shape the engine's
+        // own path never produces, so it stays out.
+        // Plain `.optional()`, matching `claim` immediately above — a
+        // same-shape string sibling, not a seat field, so the `.nullable()`
+        // seat idiom explained above `meta` doesn't apply here.
+        // tally.js :: tally's `outFindings` map was ALSO dropping
+        // `claim`/`location` from every finding regardless of what survived
+        // validation, on the CLI and MCP paths alike — declaring the field
+        // here alone would validate but never reach the document, so that
+        // map forwards both, the same emit-when-present way it already
+        // forwards `raiserSeat`. R10 shipped only `location`'s forward and
+        // left `claim`'s for later (`claim` was already declared above,
+        // pre-R10); SI-23 fix round 1 (PR #183 council, A1/B1) closed that
+        // gap in the same map, same convention.
+        location: z.string().optional(),
       })).describe('Run-global findings (ids already A1/B2/C3-prefixed by Claude).'),
       adjudications: z.array(z.object({
         judge: z.string(), findingId: z.string(), verdict: z.enum(['agree', 'dispute', 'neutral']),
