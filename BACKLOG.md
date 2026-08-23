@@ -6285,10 +6285,22 @@ and top-level `docs/*.md`.
   - **Measured 2026-08-23:** uncapped sweep of all 22 `accepted-but-silent` occurrences —
     `models.js:160` is the only remaining unqualified acceptance assertion in `src/`.
 
-- [ ] **`docs/ROADMAP.md:414` still states `AMICUS_NO_OUTPUT_BACKSTOP_MS`'s default as "~120s",
-  in the present tense, under the live `### Other tracked items` heading.** The default became
-  `300000` in this release (`src/utils/no-output-backstop.js :: DEFAULT_NO_OUTPUT_BACKSTOP_MS`).
-  `docs/*.md` ships, so this is a shipped false statement of a live default.
+- [x] **`docs/ROADMAP.md:414` stated `AMICUS_NO_OUTPUT_BACKSTOP_MS`'s default as "~120s" in the
+  present tense, under the live `### Other tracked items` heading — and listed as still-deferred a
+  feature the same file records as SHIPPED (#99).** The default became `300000` this release
+  (`src/utils/no-output-backstop.js :: DEFAULT_NO_OUTPUT_BACKSTOP_MS`), 600 s on a Stage-1 retry.
+  `docs/*.md` ships in the npm tarball, so it reached every installed reader.
+  ✅ **FIXED 2026-08-23** in the same PR (v4.8.0 release prep) — struck as shipped, with the live
+  numbers. Found by the PR #191 council (A1, solid) after the release-prep implementer had already
+  reported it and I ruled it out of scope; a false statement of a live default in a file that SHIPS
+  should have widened the scope the moment it was reported.
+  ⚠️ **This entry was itself FALSE for one commit, and that is the durable lesson.** It was filed in
+  the present tense (*"still states"*) in the very commit that fixed the line it describes — caught
+  by the next council as A1/C1, raised independently by two models. **A filing written in the
+  present tense is falsified by fixing the thing it files.** Either file it BEFORE the fix and leave
+  it unticked, or write it in the past tense and tick it in the same breath. See the same class
+  already recorded at this file's *"An earlier draft stated 7 and 18 in the present tense in the
+  very commit that…"* entry — twice now.
   - This is why v4.8.0's changelog no longer claims *"every place that stated the old value as a
     live fact was swept"* — that universal was false at HEAD for exactly this line. Fix the line,
     and the stronger sentence becomes available again.

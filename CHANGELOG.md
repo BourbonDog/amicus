@@ -804,8 +804,8 @@ All notable changes to Amicus are documented here. Format follows
   **Zero behaviour change**: no output, artifact, exit code, degrade note or `runStats` row moves.
   The safety property this code exists for is unchanged and better pinned: placeholder ids stay
   unique and placeholder binds never reach a seat map, a CONJUNCTION whose failure silently
-  loses a retried leg’s billed usage. It is now pinned by more tests, in more suites, than before
-  the consolidation.
+  loses a retried leg’s billed usage. Breaking the drop-filter now fails **19 tests across four
+  suites**, where the same edit reached **14 across three** before the consolidation.
 
 - **Added a regression test asserting that `parseModelsList` preserves duplicate aliases.** One
   re-vote leg per disputing seat depends on `--models gpt,deepseek,deepseek` producing three legs,

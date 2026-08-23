@@ -413,7 +413,23 @@ describe('formatNoOutputBackstopReason: reports only what the deadline observed,
     expect(msg).toMatch(/\(0 disables\)/);
   });
 
-  test('fromEnv=false still names the var but never claims direct governance — ASSERTED HERE on the PROBE\'s fixed 30s window (ms: 30000, fromEnv: false), which is what this body actually drives; a retry\'s escalated window is the MOTIVATION for the rule, not what this case measures — proof: this is the test that actually catches the review\'s Important finding. It FAILS against this suite\'s pre-review contract ("does NOT name the env var on a caller-set window"), which was true for the probe\'s fixed 30s but FALSE for a retry\'s escalated window, which is genuinely derived from the env default, doubled (600s at the live 300s default; this test asserts the derivation and deliberately names no literal) — the old assertion would have shipped a message that goes silent about the one remedy that actually applies to a retry. It also fails against a regression back to the literal "the AMICUS_NO_OUTPUT_BACKSTOP_MS window" phrasing or a reintroduced "(0 disables)", either of which would falsely claim this caller-set window tracks the env var live', () => {
+  // ⚠️ NAME KEPT SHORT ON PURPOSE (PR #191 council A2). The narrative below used to
+  // live IN the test name: ~1065 characters of mutant names, red-set counts and
+  // review-round citations that ship in the npm tarball and print on every runner
+  // line. A test name is user-facing output; this is not. Same rule the v4.8.0
+  // changelog cut applied to maintainer prose — applied here to our own test.
+  //
+  // WHAT THIS ASSERTS: on a CALLER-SET window (`fromEnv: false`) the message still
+  // names AMICUS_NO_OUTPUT_BACKSTOP_MS, but never phrases it as though the window
+  // tracks the env var live. Driven here on the probe's fixed 30s.
+  // WHY IT MATTERS: a Stage-1 retry's window IS derived from the env default
+  // (doubled), so a message that stayed silent about the var on a caller-set window
+  // would hide the one remedy that applies to a retry. That derivation is asserted
+  // in tests/council/run-retry.test.js, NOT here.
+  // ALSO GUARDS a regression to the literal "the AMICUS_NO_OUTPUT_BACKSTOP_MS
+  // window" phrasing, or a reintroduced "(0 disables)" — either would falsely claim
+  // this caller-set window tracks the env var live.
+  test('fromEnv=false names the env var without claiming it governs a caller-set window', () => {
     const msg = formatNoOutputBackstopReason({ ms: 30000, fromEnv: false });
     expect(msg).toMatch(/AMICUS_NO_OUTPUT_BACKSTOP_MS/);
     expect(msg).not.toMatch(/\(0 disables\)/);
