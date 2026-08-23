@@ -173,6 +173,11 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // the field always present as string|null. The two layers do different
     // jobs (omit-if-absent on disk here vs. always-present in the emitted
     // doc there) and compose without conflict.
+    //
+    // Raised again in the PR #185 council round (findings A3/D2) as a
+    // possible conflation of "no session" with "empty session id"; kept
+    // as-is per the reasoning above — this is `legPatch`'s existing
+    // convention (matching status/reason/usage), not a gap opened by #133 P1.
     opencodeSessionId: result.opencodeSessionId || undefined,
     // v4.4 B4 part 1: the leg completed with tool calls still live, so its
     // OpenCode session may have kept working (and billing) afterwards. Travels

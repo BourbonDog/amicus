@@ -1303,12 +1303,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         taskId,
         toolCalls: mirror.toolCalls,
         usage,
-        // #133 P1: sessionId was assigned at :413/:417, well before this
-        // return — guaranteed set here, same as `taskId` above.
-        opencodeSessionId: sessionId,
         ...settleResult,
         ...subtreeFlags,
         ...subtreeResult,
+        // #133 P1: sessionId was assigned at :413/:417, well before this
+        // return — guaranteed set here, same as `taskId` above.
+        opencodeSessionId: sessionId,
         error: sessionError
       };
     }
@@ -1321,11 +1321,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       taskId,
       toolCalls: mirror.toolCalls, // Include tool calls in result for verification
       usage,
-      // #133 P1: see the comment on the sibling return above — guaranteed set.
-      opencodeSessionId: sessionId,
       ...settleResult,
       ...subtreeFlags,
       ...subtreeResult,
+      // #133 P1: see the comment on the sibling return above — guaranteed set.
+      opencodeSessionId: sessionId,
       exitCode: 0
     };
 

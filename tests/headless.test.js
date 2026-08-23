@@ -350,6 +350,34 @@ describe('Headless Mode Runner', () => {
         expect(result.error).toContain('Network error');
         expect(result.opencodeSessionId).toBe('session-123');
       });
+
+      // #133 P1 council fix (A2): the sibling half of the fixture above — the
+      // catch-all return's sessionId-UNSET branch. This is the exact scenario
+      // the `|| null` coercion at headless.js :1412 exists for (an exception
+      // thrown before :413/:417 ever assign sessionId) and it was measured
+      // and reasoned about but never actually pinned by a test. Fail the
+      // *second* progress write — 'server_ready' at :376, which runs inside
+      // the outer try but before createSession is ever called — so the outer
+      // catch is reached with `sessionId` still `undefined`. The first
+      // progress write ('initializing', pre-try) is left to succeed so the
+      // exception surfaces exactly where intended rather than as an unhandled
+      // rejection.
+      it('carries opencodeSessionId: null (not undefined, not absent) on the outer-exception return when no session ever existed (#133 P1)', async () => {
+        mockCheckHealth.mockResolvedValue(true);
+        fs.writeFileSync
+          .mockImplementationOnce(() => {}) // 'initializing' write — must succeed
+          .mockImplementationOnce(() => { throw new Error('disk write exploded'); }); // 'server_ready' write — the injected failure
+
+        const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
+
+        // Proof of reachability, not assumption: createSession must never have
+        // run, confirming sessionId (:365) was still unassigned at the catch.
+        expect(mockCreateSession).not.toHaveBeenCalled();
+        expect(result.error).toContain('disk write exploded');
+        expect('opencodeSessionId' in result).toBe(true);
+        expect(result.opencodeSessionId).toBeNull();
+        expect(result.opencodeSessionId).not.toBeUndefined();
+      });
     });
 
     describe('Conversation Logging', () => {
