@@ -16,9 +16,17 @@ All notable changes to Amicus are documented here. Format follows
   The sharpest consequence, measured: `resolveModel('toString')` returned **the function itself**
   — `typeof 'function'` — where every caller expects a model-id string, instead of throwing
   *"Unknown model alias"* the way any other unknown name does. The table is now created with
-  `__proto__: null`, which closes all five at once — the same protection this release already gave
-  its other lookup tables. A member with one of those names is now dropped exactly like any other
-  unresolvable alias, with the same message.
+  `__proto__: null` — the same protection this release already gave its other lookup tables. A member
+  with one of those names is now dropped exactly like any other unresolvable alias, with the same
+  message, and `resolveModel` throws *"Unknown model alias"* instead of returning a function.
+  ⚠️ **One table was not enough.** The curated builders behind `DEFAULT_ALIASES`
+  (`curated-models.js :: toDefaultAliases`, `:: toGatewayRoutes`), the copy handed out by
+  `getDefaultAliases`, and the alias map the interactive `amicus setup` composes from free-form
+  input all needed the same seed — **a spread into a plain `{}` re-creates the inherited
+  prototype**, so fixing one map does not fix a map built from it. All are now seeded. On the
+  null-alias auto-repair path specifically, an alias named `toString` used to "repair" to
+  `function toString() { [native code] }` and say so on stderr; it now reports the misconfiguration
+  it actually is.
   ⚠️ **Disclosed rather than buried: the preset-member trim in this same release briefly made
   this worse, and that is why it is fixed here.** Before the trim, `"toString "` (with the trailing
   space) missed the inherited property and was correctly dropped; trimming before the lookup landed

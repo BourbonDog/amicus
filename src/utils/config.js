@@ -60,7 +60,16 @@ function saveConfig(configData) {
   if (configData && configData.aliases) {
     const cleaned = {};
     for (const [key, value] of Object.entries(configData.aliases)) {
-      if (key === 'null' || !value || typeof value !== 'string' || value === 'null') {
+      // `key === '__proto__'` — v4.8 SI-22.4 fix round 3 (council G-5). Without
+      // it the write below (`cleaned[key] = value`) hit Object.prototype's
+      // INHERITED `__proto__` setter, which ignores a string, so the alias
+      // vanished with NO "Removing invalid alias" notice — the only silent
+      // removal in this loop. Rejecting it explicitly puts it on the same
+      // footing as the `'null'` key beside it: same branch, same message.
+      // (No pollution was possible either way — only strings reach this line,
+      // and the setter ignores them — so this is an announcement fix, not a
+      // security one. Stated that way on purpose.)
+      if (key === 'null' || key === '__proto__' || !value || typeof value !== 'string' || value === 'null') {
         process.stderr.write(
           `Notice: Removing invalid alias '${key}' (value: ${JSON.stringify(value)}) from config.\n`
         );
@@ -78,7 +87,14 @@ function saveConfig(configData) {
 
 /** @returns {object} Copy of the default alias map */
 function getDefaultAliases() {
-  return { ...DEFAULT_ALIASES };
+  // ⚠️ `__proto__: null` must be RESTATED here, not inherited. A spread into a
+  // bare `{}` literal produces a plain object again, so fixing the builders in
+  // curated-models.js does NOT reach this copy — measured, not assumed. Its
+  // consumers index it: `sidecar/setup.js:479` (`getDefaultAliases()[alias]`)
+  // and `electron/setup-ui-aliases.js :: buildAliasEditorHTML`
+  // (`aliases[key] !== undefined`).
+  // Named mutant "BUILDERPROTO" covers this line too.
+  return { __proto__: null, ...DEFAULT_ALIASES };
 }
 
 /**

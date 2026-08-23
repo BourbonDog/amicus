@@ -277,7 +277,14 @@ describe('SI-22.4: the rules that bound the trim', () => {
       expect(classifyCouncilMembers(['nope '], []).models).toEqual([]);
     });
 
-    test('resolveModel stops returning a Function for an inherited key', () => {
+    test('resolveModel stops returning a Function for an inherited key (ALIAS-TABLE path)', () => {
+      // ⚠️ TITLE NARROWED IN FIX ROUND 3. This covers the `getEffectiveAliases`
+      // lookup at `:111` only. `resolveModel` has a SECOND way to return an
+      // inherited Function — the auto-repair branch at `:114`/`:145`, which reads
+      // `DEFAULT_ALIASES` directly and which this test never enters (that needs a
+      // NULL-valued alias on disk). It is pinned in
+      // tests/config-null-alias.test.js :: 'Layer 2b'. The unqualified title
+      // claimed more than the test measured.
       // The sharpest consumer: `:111` gates on `!== undefined`, which a
       // Function passes, so resolveModel RETURNED Function.prototype.toString
       // (typeof 'function') where every caller expects a model-id STRING.

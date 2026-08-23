@@ -33,6 +33,12 @@
 // the FIRST denominator and are left as taken; PROTOALIASES below is measured
 // against this one. Annotated, not renumbered.
 //
+// ⚠️ THIRD DENOMINATOR, fix round 3 (2026-08-23): **549 suites / 7940 passed /
+// 8 skipped / 4 snapshots / 0 failed (7948 collected)**. Suite count again
+// unchanged — round 3 added five tests to tests/config-null-alias.test.js
+// (21→26) and no new file. BUILDERPROTO below is measured against THIS one;
+// every record above keeps the denominator it was taken with.
+//
 // COUNTING RULE for every "red set" below: the set is the list of test-suite
 // FILES jest reports as FAIL under `npx jest --no-coverage` at FULL scope with
 // the mutation applied and nothing else changed, taken against the denominator
@@ -198,15 +204,79 @@
 // are pinned. That is the honest blast radius, recorded so a later reader does
 // not mistake the fix's reach for the pin's.
 //
-// ⚠️ A THIRD SUITE GOES RED AND IT IS NOT A KILL. `tests/scripts/check-citations.test.js`
-// ('the real tree › has no stale citations in live code') fails under the
-// mutation — and ALSO fails without it, at any tree where this record has not
-// been written yet, because the two pins cite `preset-trim-mutants.js ::
-// PROTOALIASES` by symbol. Separated by measurement, not by reasoning: a
-// LINE-NEUTRAL variant of the same mutation (same edit plus a trailing comment,
-// so no line numbers shift) reproduced the identical check-citations failure,
-// which rules out a line-shift artifact and identifies the real cause. It is
-// excluded from the red set above.
+// ⚠️ CORRECTED IN FIX ROUND 3 (council G-4). This record used to claim "a THIRD
+// SUITE GOES RED AND IT IS NOT A KILL — check-citations fails under the mutation
+// and ALSO without it". **That is FALSE at HEAD.** Re-measured with the real
+// gate at the final tree: `npm run check:citations` exits 0 and
+// tests/scripts/check-citations.test.js passes 62/62 WITH the mutation applied.
+// check-citations is not in this mutant's red set at all, and never was at a
+// tree where this file's own records exist.
+//
+// ⚠️ THE EXCLUSION WAS RIGHT; THE PREMISE AND THE CONTROL WERE NOT — and the
+// reasoning is worth more than the correction. The transient red was real, but
+// only while the PROTOALIASES record below did not yet exist: the two new pins
+// cite `preset-trim-mutants.js :: PROTOALIASES` BY SYMBOL, so the citation gate
+// failed on a symbol that had not been written. The control used to settle it
+// was a LINE-NEUTRAL variant of the same mutation — and that control CANNOT
+// settle this question. Both variants delete `__proto__: null`, so their
+// agreeing only rules out a LINE-SHIFT artifact; it says nothing about whether
+// the mutation itself is the cause. The decisive control is a run at the FINAL
+// tree with the record in place, which is exactly what this file's own COUNTING
+// RULE already demands ("with the mutation applied and NOTHING ELSE changed").
+// The rule was right and was not followed. Every red set in this file is now
+// taken that way — records first, measurement second.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MUTANT "BUILDERPROTO" — the THREE producers of the default-alias map
+//
+//   src/utils/curated-models.js :: toGatewayRoutes   `const out = { __proto__: null }` -> `{}`
+//   src/utils/curated-models.js :: toDefaultAliases  `const out = { __proto__: null }` -> `{}`
+//   src/utils/config.js         :: getDefaultAliases `{ __proto__: null, ...D }` -> `{ ...D }`
+//
+// ⚠️ `directFormProvenance` in the same file also seeds `const out = {}` and is
+// deliberately NOT part of this mutation: its only indexed read
+// (`gateway-route-audit.js:77`, `provenance[alias]`) is keyed from
+// `Object.entries(toGatewayRoutes())`, i.e. curated aliases, never user input.
+// Recorded so a later sweep does not read the untouched line as an oversight.
+//
+// WHY THREE SITES AND NOT ONE. `toDefaultAliases` derives from `toGatewayRoutes`
+// via Object.entries, so the two builders travel together. `getDefaultAliases`
+// needs its OWN seed because it spreads into a fresh literal — a spread into a
+// bare `{}` re-materialises Object.prototype, so fixing the builders alone does
+// NOT reach it. Measured, not assumed.
+//
+// WHAT IT GUARDS (council G-1, fix round 3). Round 2 closed `getEffectiveAliases`
+// and that was correct but INCOMPLETE: `resolveModel:114`/`:145` hand
+// `DEFAULT_ALIASES` ITSELF to `alias-resolver.js :: autoRepairAlias`, whose gate
+// is `defaultAliases[alias]`. That path never touches `getEffectiveAliases`, so
+// no round-2 pin could reach it. Measured on the real function with a
+// null-valued alias named `toString` on disk:
+//
+//   round 2:  resolveModel('toString') -> [Function: toString], and it ANNOUNCED
+//             "Auto-repaired null alias 'toString' -> 'function toString()
+//              { [native code] }'"
+//   round 3:  throws "Alias 'toString' is configured but has no model value"
+//
+// RED SET (measured at the FINAL tree, records in place): 1 suite, 3 tests.
+//   tests/config-null-alias.test.js — 3 of 26
+//       ('Layer 2b … throws instead of repairing a null alias to an inherited
+//        Function', '… never announces an auto-repair for one', and '… the maps
+//        the repair path reads are null-prototype at the source')
+//
+// ⚠️ 'still repairs a REAL null alias' stays GREEN, deliberately — it is the
+// control proving the fix is surgical, not a kill.
+//
+// ⚠️ WHAT IT DOES NOT PROVE. `sidecar/setup.js`'s own two literals — in
+// `:: createDefaultConfig` and `:: resolveChoice`, anchored BY SYMBOL because
+// this very record first wrote them as `:54`/`:137` and my own comment
+// insertions had already moved them to `:58`/`:142` — restate `__proto__: null`
+// themselves and are NOT covered by this mutant or any other: the readline gate
+// lives in `resolveChoice`, which
+// `setup.js` does not export, so it cannot be driven from a unit test without
+// mocking readline end to end. The FIX is measured (all four inherited keys go
+// from `!== undefined` true to false at that exact expression); the PIN is
+// absent. Filed in BACKLOG.md with an owner and a gate rather than left as an
+// unstated gap.
 
 'use strict';
 module.exports = {};

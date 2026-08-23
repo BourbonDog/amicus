@@ -3544,9 +3544,15 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ⚠️ **Fixed at the producer, not the call site** — `__proto__: null`, one line, closing **five**
   bare-indexing gates: `config.js :: resolveModel` (`:111`/`:142`), `classifyCouncilMembers`,
   `council/presets-cli.js:41`, `pack/pack-validate.js:71`, `utils/route-launch.js:205`.
-  ⚠️ **The reviewer's call-site list needed one correction, measured:** `config.js:292 ::
-  buildProviderModels` is **not** affected — its only use of the table is `Object.entries(aliases)`
-  (`:318`), own-enumerable and therefore immune. The fifth affected gate is `resolveModel`, which
+  ⚠️ **The reviewer's call-site list needed one correction, measured:** `config.js ::
+  buildProviderModels` is **not** affected — its only use of the table is an `Object.entries(aliases)`
+  loop, own-enumerable and therefore immune. (Anchored BY SYMBOL: this sentence originally read
+  `config.js:292` and `:318`, which were the BASE `6bf41071` lines and had ALREADY rotted inside the
+  very commit that wrote them — the same commit's +38 lines moved them, and at HEAD `:292`/`:318`
+  are docblock prose. **Fifth line-citation rot on this branch**, and `check:citations` gives no
+  cover: its scan set excludes `.md`, so `BACKLOG.md` and `CHANGELOG.md` are never scanned. The rule
+  that would have caught it: re-measure any line number you keep **after** your last edit to that
+  file, not before it.) The fifth affected gate is `resolveModel`, which
   the list did not name and which is the **worst** of the five: it returns the inherited `Function`
   itself where every caller expects a model-id string, instead of throwing "Unknown model alias".
   ⚠️ **Same defect class this release already closed elsewhere**, enumerated rather than counted
@@ -3560,13 +3566,57 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   take more code and deliberately preserve a known hole. Both halves fixed.
   Named mutant **`PROTOALIASES`** (drop `__proto__: null`), **RED 2 suites / 6 tests** —
   `classify-members-trim.test.js` 5 of 15, `config.test.js` 1 of 64; denominator 549 suites / 7943
-  tests. ⚠️ A third suite (`check-citations`) reds under the mutation **and without it**, from an
-  unrelated cause; separated by a LINE-NEUTRAL variant of the same mutation and excluded from the
-  set. Only **two** of the five gates are pinned — recorded so the fix's reach is not mistaken for
+  tests. ⚠️ **CORRECTED IN ROUND 3 (council G-4):** this said *"a third suite (`check-citations`)
+  reds under the mutation and without it"*. **False at HEAD** — re-measured with the real gate,
+  `check:citations` exits 0 and its suite passes 62/62 **with** the mutation applied. The exclusion
+  was right; the premise and the control were not. The transient red was real only while the mutant
+  record did not yet exist (the pins cite it BY SYMBOL), and the LINE-NEUTRAL control could never
+  settle it: both variants delete `__proto__: null`, so their agreeing rules out a *line-shift*
+  artifact and says nothing about whether the mutation is the cause. **The decisive control is a run
+  at the FINAL tree with the record in place** — which the mutant file's own counting rule already
+  demanded. Applied that way for `BUILDERPROTO` in round 3, which reproduced the same transient red
+  and then measured clean. Only **two** of the five gates are pinned — recorded so the fix's reach is not mistaken for
   the pin's. ⚠️ The reach itself is **measured, not inferred**: each of the other three gate
   expressions was evaluated directly with `'toString'` against both table shapes —
   `presets-cli.js:41` unresolved `false→true`, `pack-validate.js:71` `seatOk true→false`,
   `route-launch.js:205` `isAlias true→false`.
+
+- [x] **SI-22.4 fix round 3 (council G-1/G-2/G-5) — the prototype hole survived round 2 via
+  `DEFAULT_ALIASES`, and the fix belongs at the BUILDERS.** Closed 2026-08-23.
+  Round 2 fixed `getEffectiveAliases` and that was correct but **incomplete**: `resolveModel:114`
+  and `:145` hand `DEFAULT_ALIASES` **itself** to `alias-resolver.js :: autoRepairAlias`, whose gate
+  is `defaultAliases[alias]`. `curated-models.js :: toDefaultAliases` and `:: toGatewayRoutes` both
+  seeded `const out = {}`, so that path never saw the round-2 fix. Measured with a null-valued alias
+  named `toString` on disk:
+  `resolveModel('toString')` returned **`[Function: toString]`** and announced
+  *"Auto-repaired null alias 'toString' -> 'function toString() { [native code] }'"*. It now throws
+  *"Alias 'toString' is configured but has no model value"*.
+  ⚠️ **THREE seeds, not two.** `config.js :: getDefaultAliases` returns `{ ...DEFAULT_ALIASES }`,
+  and **a spread into a bare `{}` re-materialises `Object.prototype`** — measured, not assumed — so
+  fixing the two builders alone does NOT reach it. That is also why **G-2's `sidecar/setup.js`
+  literals had to be fixed at the literal**: `{ ...getDefaultAliases(), ...cfg.aliases }` is a plain
+  object however clean its inputs are. Its gate is `aliases[input] !== undefined` on **free-form
+  readline text**, and `toString`/`valueOf`/`constructor`/`hasOwnProperty` all measured TRUE,
+  returning `{alias: input, noUpgrade: true}`.
+  ⚠️ **G-5, and it is an ANNOUNCEMENT fix, not a security one** — stated that way deliberately.
+  `saveConfig`'s `cleaned[key] = value` hit `Object.prototype`'s inherited `__proto__` setter, which
+  ignores a string, so a `__proto__` alias vanished with **none** of the *"Removing invalid alias"*
+  notices every other removal prints — the only silent removal in that loop. It is now rejected on
+  the same branch as the `'null'` key, with the same message. No pollution was ever possible: only
+  strings reach that line and the setter ignores them.
+  ⚠️ **`directFormProvenance` in the same file still seeds `const out = {}` and is deliberately
+  NOT changed** — its one indexed read (`gateway-route-audit.js:77`) is keyed from
+  `Object.entries(toGatewayRoutes())`, i.e. curated aliases, never user input. Recorded so a later
+  sweep does not read the untouched line as an oversight.
+  Named mutant **`BUILDERPROTO`** (drop the seed from all three producers), **RED 1 suite / 3 tests**
+  — `config-null-alias.test.js` 3 of 26, measured at the FINAL tree with the record in place.
+  Denominator 549 suites / 7948 tests.
+  ⚠️ **PIN GAP, filed not hidden:** `sidecar/setup.js`'s two literals are **not pinned by anything**.
+  The readline gate lives in `:: resolveChoice`, which the module does not export, so it cannot be
+  driven without mocking readline end to end. The FIX is measured at the exact gate expression (all
+  four inherited keys `!== undefined` true→false); the PIN is absent. **OWNER: Christian. GATE:
+  export `resolveChoice` (or extract the alias-resolution step) so it can be unit-driven** — that
+  export is the work, and it is why this is filed rather than bolted on. Not an adjacency.
 
 - [ ] **The repo has NO mutant-name registry, and names have now collided TWICE in one release.
   OWNER: Christian. GATE: a single enumerated list of named mutants — file, path and red set —
