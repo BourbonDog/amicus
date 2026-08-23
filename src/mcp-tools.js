@@ -440,8 +440,11 @@ function getTools() {
         // `claim`/`location` from every finding regardless of what survived
         // validation, on the CLI and MCP paths alike — declaring the field
         // here alone would validate but never reach the document, so that
-        // map now forwards `location` the same emit-when-present way it
-        // already forwards `raiserSeat`.
+        // map forwards both, the same emit-when-present way it already
+        // forwards `raiserSeat`. R10 shipped only `location`'s forward and
+        // left `claim`'s for later (`claim` was already declared above,
+        // pre-R10); SI-23 fix round 1 (PR #183 council, A1/B1) closed that
+        // gap in the same map, same convention.
         location: z.string().optional(),
       })).describe('Run-global findings (ids already A1/B2/C3-prefixed by Claude).'),
       adjudications: z.array(z.object({

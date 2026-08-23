@@ -116,14 +116,23 @@ function tally(input) {
     // surviving validation and reaching THIS document are two different
     // properties — the round-trip pin below only holds if this map also
     // forwards it, emit-when-present, the same convention as `raiserSeat`
-    // two lines up. Scoped to `location` alone: `claim` was already
+    // two lines up. Scoped to `location` alone AT R10: `claim` was already
     // reaching this function on both the CLI and MCP paths (declared on the
-    // MCP schema since before this task) and was ALREADY not forwarded here
-    // — a separate, pre-existing gap this task does not widen its mandate to
-    // close.
+    // MCP schema since before R10) and was ALREADY not forwarded here — R10
+    // named the gap and left it for a separate PR rather than widening its
+    // own mandate to close it. SI-23 fix round 1 (paid council on PR #183,
+    // findings A1/B1, two independent raisers) ruled that indefensible one
+    // line from the fix it sits beside: `claim` is forwarded below too,
+    // same round.
+    // A2 (nit) / C1 (major, contested a0/d1/n2, thin): the truthiness checks
+    // below drop an empty string that zod would accept. Deliberate, not a
+    // bug — `raiserSeat` above uses the identical pattern, and diverging
+    // `location`/`claim` from their own immediate sibling is worse than the
+    // edge case, so "" is treated as absent on all three fields.
     return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
              tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
              ...(f.location ? { location: f.location } : {}),
+             ...(f.claim ? { claim: f.claim } : {}),
              ...(f.raiser
                && peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge === f.raiser)
                ? { sameModelCorroboration: true } : {}),

@@ -808,6 +808,12 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
 // as 'a null seats table reaches tally()' above. SCHEMASTRIP (remove the
 // `location` declaration in mcp-tools.js) turns this red: zod strips the key
 // before `tally()` ever runs, so `record.findings[0].location` goes missing.
+// The round-trip test's fixture already carried `claim: 'c'` unasserted;
+// SI-23 fix round 1 (PR #183 council A1/B1) now asserts it too, since
+// `claim` was declared on this same schema before R10 and reaches this exact
+// MCP path — it was tally.js's outFindings map, not this schema, that
+// dropped it, so this pin exercises the fix at the schema+tally() seam
+// findings A1/B1 named.
 describe('amicus_council_tally retains findings[].location (SI-23, R10)', () => {
   const { getTools } = require('../src/mcp-tools');
   const { tally } = require('../src/council/tally');
@@ -836,5 +842,6 @@ describe('amicus_council_tally retains findings[].location (SI-23, R10)', () => 
       runStats: s.runStats.parse([]),
     });
     expect(record.findings[0].location).toBe('src/foo.js line 12');
+    expect(record.findings[0].claim).toBe('c');
   });
 });
