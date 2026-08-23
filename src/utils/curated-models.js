@@ -249,7 +249,14 @@ function directFormProvenance() {
  * without corrupting divergent-vendor ids (e.g. Anthropic's dash format).
  */
 function toGatewayRoutes() {
-  const out = {};
+  // `__proto__: null` — v4.8 SI-22.4 round 3 (G-1). Read by BARE INDEXING
+  // downstream, so a plain `{}` let an alias named 'toString'/'constructor'/
+  // 'valueOf'/'hasOwnProperty' resolve off Object.prototype to a truthy
+  // Function — including on the auto-repair path (`alias-resolver.js ::
+  // autoRepairAlias`), which `getEffectiveAliases`'s own fix could never reach.
+  // Full measurement + why THREE seeds were needed:
+  // tests/council/preset-trim-mutants.js :: BUILDERPROTO (the named mutant).
+  const out = { __proto__: null };
   for (const f of FAMILIES) { out[f.alias] = gatewayRoutesFor(f.vendorPath, f.fallback); }
   for (const e of CARDLESS) { out[e.alias] = gatewayRoutesFor(vendorOf(e.routes.openrouter), e.routes); }
   return out;
@@ -269,7 +276,8 @@ function toGatewayRoutes() {
  * shipped defaults.
  */
 function toDefaultAliases() {
-  const out = {};
+  // `__proto__: null` — see toGatewayRoutes above. Becomes DEFAULT_ALIASES.
+  const out = { __proto__: null };
   for (const [alias, routes] of Object.entries(toGatewayRoutes())) {
     out[alias] = routes.direct || routes.openrouter;
   }

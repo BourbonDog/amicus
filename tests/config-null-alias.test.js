@@ -190,7 +190,76 @@ describe('Null Alias Defense', () => {
 
   // ── Layer 3: saveConfig sanitization ───────────────────────
 
+  describe('Layer 2b: an Object.prototype key on the AUTO-REPAIR path (SI-22.4 round 3, G-1)', () => {
+    // ⚠️ This branch is NOT reachable through getEffectiveAliases, so none of
+    // the round-2 pins cover it. `resolveModel:114`/`:145` hand `DEFAULT_ALIASES`
+    // ITSELF to `alias-resolver.js :: autoRepairAlias`, whose gate is
+    // `defaultAliases[alias]`. Before fix round 3 that map was built by
+    // `curated-models.js :: toDefaultAliases` as a bare `{}`, so a null-valued
+    // alias named `toString` "repaired" to Function.prototype.toString and
+    // announced: Auto-repaired null alias 'toString' -> 'function toString()
+    // { [native code] }'. Named mutant: preset-trim-mutants.js :: BUILDERPROTO.
+    const INHERITED = ['toString', 'valueOf', 'constructor', 'hasOwnProperty'];
+
+    it('throws instead of repairing a null alias to an inherited Function', () => {
+      for (const key of INHERITED) {
+        jest.resetModules();
+        writeConfig({ default: 'gemini', aliases: { [key]: null } });
+        const config = loadConfig();
+        expect(() => config.resolveModel(key)).toThrow(/configured but has no model value/);
+      }
+    });
+
+    it('never announces an auto-repair for one', () => {
+      writeConfig({ default: 'gemini', aliases: { toString: null } });
+      const config = loadConfig();
+      try { config.resolveModel('toString'); } catch { /* expected */ }
+      const said = stderrSpy.mock.calls.map(c => String(c[0])).join('');
+      expect(said).not.toMatch(/Auto-repaired null alias 'toString'/);
+      expect(said).not.toMatch(/native code/);
+    });
+
+    it('still repairs a REAL null alias, so the fix is surgical', () => {
+      writeConfig({ default: 'gemini', aliases: { gemini: null } });
+      const config = loadConfig();
+      expect(typeof config.resolveModel('gemini')).toBe('string');
+      expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Auto-repaired'));
+    });
+
+    it('the maps the repair path reads are null-prototype at the source', () => {
+      const { toDefaultAliases, toGatewayRoutes } = require('../src/utils/curated-models');
+      const { getDefaultAliases } = loadConfig();
+      // getDefaultAliases spreads into a fresh literal, so it needs its OWN
+      // seed — fixing the two builders alone does not reach it.
+      for (const m of [toDefaultAliases(), toGatewayRoutes(), getDefaultAliases()]) {
+        expect(Object.getPrototypeOf(m)).toBeNull();
+        for (const k of INHERITED) { expect(m[k]).toBeUndefined(); }
+      }
+      expect(toDefaultAliases().gemini).toBeDefined();   // the tables still work
+      expect(getDefaultAliases().gemini).toBeDefined();
+    });
+  });
+
   describe('Layer 3: saveConfig sanitization', () => {
+    it('ANNOUNCES a `__proto__` alias instead of dropping it silently (round 3, G-5)', () => {
+      // `cleaned[key] = value` hit Object.prototype's inherited `__proto__`
+      // setter, which ignores a string — so the alias vanished with none of the
+      // "Removing invalid alias" notices every other removal prints. No
+      // pollution was possible (only strings reach that line, and the setter
+      // ignores them), so this is an ANNOUNCEMENT fix, not a security one.
+      const config = loadConfig();
+      const cfg = {
+        default: 'gemini',
+        // JSON.parse, so `__proto__` is a genuine OWN property, not the setter.
+        aliases: JSON.parse('{"__proto__":"openai/gpt-5","good":"openai/gpt-5"}'),
+      };
+      config.saveConfig(cfg);
+      expect(Object.keys(cfg.aliases)).toEqual(['good']);
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Removing invalid alias '__proto__'"));
+      expect(readConfig().aliases).toEqual({ good: 'openai/gpt-5' });
+    });
+
     it('should strip null alias values on save', () => {
       const config = loadConfig();
       config.saveConfig({

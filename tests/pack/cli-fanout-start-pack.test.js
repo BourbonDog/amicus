@@ -185,12 +185,15 @@ describe('string-bench FANOUT pack expands via resolveCouncilMembers (T11-c)', (
     ]));
     expect(code).toBe(0);
     expect(runFanout).toHaveBeenCalledTimes(1);
-    // resolveCouncilMembers returns members RAW (alias, not resolved id) —
-    // pinned directly against src/utils/config.js's classifyCouncilMembers
-    // (`models.push(member)`, never the resolved `id`) and against
-    // tests/council-members-local.test.js, which proves the same contract
-    // on the council-run surface (`r.models` holds the alias, e.g. 'gemini',
-    // not the resolved provider/model id).
+    // resolveCouncilMembers returns members UNRESOLVED (the alias, never the id
+    // it maps to) — pinned directly against src/utils/config.js's
+    // classifyCouncilMembers (`models.push(member)`, never the resolved `id`)
+    // and against tests/council-members-local.test.js, which proves the same
+    // contract on the council-run surface (`r.models` holds the alias, e.g.
+    // 'gemini', not the resolved provider/model id).
+    // ⚠️ Unresolved is not untouched: since v4.8 SI-22.4 each member is TRIMMED
+    // there, so `models` is the configured alias minus surrounding whitespace.
+    // `alpha`/`beta` above carry none, so this expectation is unaffected.
     expect(runFanout.mock.calls[0][0].models).toBe('alpha,beta');
     expect(err).not.toHaveBeenCalled(); // neither --models nor --council was typed: no override notice
   });

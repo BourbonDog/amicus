@@ -51,7 +51,11 @@ function createDefaultConfig(defaultModel) {
   const cfg = {
     ...existing,
     default: existing.default || defaultModel,
-    aliases: { ...getDefaultAliases(), ...(existing.aliases || {}) },
+    // Same restatement as the readline gate below (fix round 3, G-2): a spread
+    // into `{}` re-materialises Object.prototype. `saveConfig` rebuilds this
+    // into its own literal anyway, so this one is defense in depth rather than
+    // a measured hole — recorded as such rather than claimed as a fix.
+    aliases: { __proto__: null, ...getDefaultAliases(), ...(existing.aliases || {}) },
   };
   saveConfig(cfg);
   logger.info('Default config ensured', {
@@ -128,7 +132,14 @@ function resolveChoice(input, picks, catalog) {
     return { modelId: input };
   }
   const cfg = loadConfig();
-  const aliases = { ...getDefaultAliases(), ...((cfg && cfg.aliases) || {}) };
+  // ⚠️ `__proto__: null` — v4.8 SI-22.4 fix round 3 (council G-2). `input` here
+  // is FREE-FORM readline text, and the gate below is `aliases[input] !==
+  // undefined`, so on a plain literal `toString` / `valueOf` / `constructor` /
+  // `hasOwnProperty` all measured TRUE and returned `{alias: input, noUpgrade:
+  // true}` — setup accepted them as existing aliases. Spreading a
+  // null-prototype object into a bare `{}` produces a PLAIN object again, so the
+  // curated-models fix does not reach this literal; the seed has to be restated.
+  const aliases = { __proto__: null, ...getDefaultAliases(), ...((cfg && cfg.aliases) || {}) };
   if (aliases[input] !== undefined) {
     return { alias: input, noUpgrade: true };
   }

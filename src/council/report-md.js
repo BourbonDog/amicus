@@ -67,7 +67,23 @@ function renderMd(m) {
 
   out.push('## Street-cred (peers-only; lower = better)\n');
   out.push('| Model | peers-only | with-self |\n|---|---|---|');
-  for (const s of m.streetCred) { out.push(`| ${s.model} | ${fmtNum(s.peersOnly)} | ${fmtNum(s.withSelf)} |`); }
+  // v4.8 SI-22.4 rider (R22.4-6): key the row by its SEAT, falling back to the
+  // alias — the same `s.seat || s.model` fallback SI-25 used at the chair
+  // packet's rendering sites. A twin bench emits one street-cred row PER SEAT
+  // (street-cred.js :: computeStreetCred), each with its own numbers, so keying
+  // on `s.model` printed two DIFFERENT numbers under one identical label with
+  // nothing to say which seat was which. `seat` is emit-when-DIFFERENT, so a
+  // unique-alias bench has no `seat` KEY AT ALL and this line is byte-identical
+  // to what it wrote before — which is what keeps the report snapshots green.
+  // ⚠️ The key's absence comes from `street-cred.js :: computeStreetCred`'s
+  // row literal (`...(seat ? { seat } : {})`), NOT from `credSeats`. This
+  // comment used to cite `credSeats: seat: id === m ? null : id`, which is a
+  // real expression but the wrong mechanism: credSeats emits `seat: null` —
+  // the property PRESENT and null — and computeStreetCred is what drops it.
+  // The pin asserts absence (`'seat' in r === false`), so cite the producer
+  // that actually makes it absent.
+  // Named mutant: tests/council/preset-trim-mutants.js :: ROWSEATDROP.
+  for (const s of m.streetCred) { out.push(`| ${s.seat || s.model} | ${fmtNum(s.peersOnly)} | ${fmtNum(s.withSelf)} |`); }
 
   out.push('\n## Findings by tier\n');
   // LC-10 fast-follow (review minor M3): m.findings can legitimately be EMPTY

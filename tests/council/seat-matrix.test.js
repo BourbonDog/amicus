@@ -137,7 +137,19 @@ describe('T17/T18 twin bench, on disk: one column per SEAT and the row agrees wi
     // not a column set, and re-keying it would break the meta line and the
     // street-cred join at once.
     expect(md).toContain('council: gemini, gemini');
-    expect(md).toMatch(/\|\s*gemini\s*\|\s*[\d.—]+\s*\|/); // street-cred row, alias-keyed
+    // ⚠️ v4.8 SI-22.4's rider (R22.4-6) UPDATES THIS PIN DELIBERATELY. This line
+    // used to assert the street-cred ROW was alias-keyed. Both renderers now
+    // label it `s.seat || s.model`: `street-cred.js :: computeStreetCred` emits
+    // one row PER SEAT, so the alias key printed two rows under one identical
+    // name — here, two `| gemini |` rows — with nothing to say which seat each
+    // belonged to. The Cost table above was already seat-keyed, so the whole
+    // document now agrees. `council` on the meta line did NOT move: the
+    // street-cred UNIVERSE is still the alias list, and only the row LABEL is a
+    // seat — which is why both assertions stand together here.
+    // Pinned per renderer in tests/council/report-cred-seat.test.js.
+    expect(md).toContain('| gemini#1 | 1.00 | 1.50 |');
+    expect(md).toContain('| gemini#2 | 1.00 | 1.50 |');
+    expect(md).not.toMatch(/^\| gemini \| /m);
   });
 
   test('markdown: every rendered row agrees with its own basis', () => {

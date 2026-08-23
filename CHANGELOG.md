@@ -7,6 +7,32 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **A council member literally named `toString`, `constructor`, `valueOf` or `hasOwnProperty` is
+  no longer accepted as a valid model alias.** The effective alias table
+  (`config.js :: getEffectiveAliases`) was a plain object, so it inherited `Object.prototype`, and
+  every gate that asks *"is this a known alias?"* by indexing the table read those inherited methods
+  as a **truthy** answer. Five gates were affected: `resolveModel`, `classifyCouncilMembers`
+  (`--council` presets), `amicus council save`, pack validation, and launch-time route resolution.
+  The sharpest consequence, measured: `resolveModel('toString')` returned **the function itself**
+  — `typeof 'function'` — where every caller expects a model-id string, instead of throwing
+  *"Unknown model alias"* the way any other unknown name does. The table is now created with
+  `__proto__: null` — the same protection this release already gave its other lookup tables. A member
+  with one of those names is now dropped exactly like any other unresolvable alias, with the same
+  message, and `resolveModel` throws *"Unknown model alias"* instead of returning a function.
+  ⚠️ **One table was not enough.** The curated builders behind `DEFAULT_ALIASES`
+  (`curated-models.js :: toDefaultAliases`, `:: toGatewayRoutes`), the copy handed out by
+  `getDefaultAliases`, and the alias map the interactive `amicus setup` composes from free-form
+  input all needed the same seed — **a spread into a plain `{}` re-creates the inherited
+  prototype**, so fixing one map does not fix a map built from it. All are now seeded. On the
+  null-alias auto-repair path specifically, an alias named `toString` used to "repair" to
+  `function toString() { [native code] }` and say so on stderr; it now reports the misconfiguration
+  it actually is.
+  ⚠️ **Disclosed rather than buried: the preset-member trim in this same release briefly made
+  this worse, and that is why it is fixed here.** Before the trim, `"toString "` (with the trailing
+  space) missed the inherited property and was correctly dropped; trimming before the lookup landed
+  the padded spelling on it too. Fixing only the half this release introduced would have taken more
+  code *and* knowingly left the other half open.
+
 - **A finding whose `raiser` is empty or missing no longer counts its own vote as peer
   corroboration.** `""` is not a model id, but the council-tally input schema accepts it, and the
   tally used to treat an unknown raiser as "exclude nothing" — so a document with `raiser: ""` and
@@ -300,6 +326,61 @@ All notable changes to Amicus are documented here. Format follows
   This changes what the chair reads, which can change what it concludes, on twin benches only.
 
 ### Changed
+
+- **A `--council` preset member with stray whitespace now runs instead of being silently dropped.**
+  `classifyCouncilMembers` (`src/utils/config.js`) trims each preset member **before** it is looked
+  up. The two spellings hit **different** gates: a padded **alias** (`"gpt "`) now reaches the alias
+  table clean, and a padded **full id** (`"openai/gpt-5 "`) now reaches the **model-catalog** lookup
+  clean — a full id short-circuits on `member.includes('/')` and never touches the alias table at
+  all. `--models` already
+  trimmed on both of its spellings (`sidecar/fanout-validate.js :: parseModelsList`,
+  `cli-council-run-bench.js :: parseList`), so the same stray space was benign on one flag and fatal
+  on the other: on `--council` it turned a typo into a dropped member and a **degraded exit (2)** —
+  `run.js`'s `dropped-members` note says so verbatim (*"the bench is smaller than the preset
+  requested; the run will exit degraded (2)"*).
+  ⚠️ **Which presets does this actually affect? Only hand-edited ones — stated plainly rather
+  than left to be discovered.** `amicus council save` already trimmed on the way IN
+  (`council/presets-cli.js:34`), and the only other writer of `councils` in the config (the seeded
+  `free` council) builds its members from alias keys, which cannot carry padding. So a
+  whitespace-padded member reaches `config.json` only if you edited that file by hand — which is
+  exactly the case that used to fail, silently and fatally, while the same typo on `--models` was
+  harmless.
+  ⚠️ **The dominant effect is RESURRECTION, not de-duplication: a member that is dropped today
+  starts RUNNING, which is a new paid leg.** Measured over the six shapes a padded member can take
+  (the configured `members` × whether the model-catalog cache is populated). **All six change:**
+
+  | `members` | catalog | BEFORE | AFTER |
+  |---|---|---|---|
+  | `['openai/gpt-5 ', 'openai/gpt-5']` | present | `["openai/gpt-5"]`, 1 dropped | `["openai/gpt-5","openai/gpt-5"]` |
+  | `['openai/gpt-5 ', 'openai/gpt-5']` | empty | `["openai/gpt-5 ","openai/gpt-5"]` | `["openai/gpt-5","openai/gpt-5"]` |
+  | `['openai/gpt-5 ']` | present | **`[]` — nothing runs** | `["openai/gpt-5"]` |
+  | `['openai/gpt-5 ']` | empty | `["openai/gpt-5 "]` | `["openai/gpt-5"]` |
+  | `['gpt ']` | empty | **`[]` — nothing runs** | `["gpt"]` |
+  | `['gpt ', 'gpt']` | empty | `["gpt"]`, 1 dropped | `["gpt","gpt"]` |
+
+  Counting the LENGTH of the resulting bench: **four of the six gain a leg that was not launched
+  before** (rows 1, 3, 5, 6), and **two of those four go from an empty bench to a running one**
+  (rows 3 and 5). Rows 2 and 4 keep their leg count and change the string that is launched. Only
+  row 2 is the twin-merge this was originally filed as.
+  ⚠️ **Knock-on — a padded preset becomes a REAL twin bench**, so `seats.js :: buildSeats` mints
+  `alias#N` and every seat-keyed behaviour in this release switches on for it. Proved from the
+  artifacts rather than from `buildSeats`: `meta.seats` is `['gemini#1','gemini#2']`, the run writes
+  `review-gemini-1.md`/`review-gemini-2.md` and `judge-gemini-1.md`/`judge-gemini-2.md`, and
+  `review-gemini.md` is **absent** — against a control with the same padding and no collision, which
+  emits no `seats` key at all. **Artifact filenames change**, which matters to anything scripted
+  against them.
+  - `models` carries the **trimmed** value; `dropped` and `droppedMembers` keep the member **raw**,
+    byte-for-byte as configured, so the offending string is still findable in your own config.
+  - An all-whitespace member trims to `''`, which no alias names, so it is dropped exactly as before
+    — measured identical either side of the change.
+  - **Street-cred rows in `council report`'s output are now labelled `seat || model`**, in both
+    renderers (`report-md.js :: renderMd`, `report-html.js :: renderHtml`). On a twin bench the two
+    rows read `gemini#1` / `gemini#2` instead of `gemini` twice with different numbers under one
+    identical name — which is what a padded preset now produces. A bench with no repeated alias is
+    byte-identical (measured against this branch's base: `renderMd` 733 bytes, `renderHtml` 9667,
+    both unchanged). ⚠️ **The Council Workspace's street-cred table still labels
+    from the model alias**, so on a twin bench the report and the Workspace now disagree there —
+    filed, not fixed; recorded in `docs/council.md` and `BACKLOG.md`.
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per
   bench slot.** Previously the row-building join was keyed by council alias and last-wins, so any
@@ -597,8 +678,19 @@ All notable changes to Amicus are documented here. Format follows
   vote overwrote the first's, so a finding whose `basis` was `a0/d1` could render as two
   agreements, both starred — a real dispute erased from the artifact. The rendered row and the
   finding's `basis` now agree. **Unique-alias benches are byte-identical**, and so is any verdict
-  written before this release or assembled by hand: without a `seats` table (or with a malformed
-  one) the renderer falls back to alias space whole. **Blind mode still never shows a seat id** — a
+  written before this release: without a `seats` table (or with a malformed one) the **matrix**
+  falls back to alias space whole. ⚠️ **That fence is the matrix's, not the whole document's, and
+  "assembled by hand" is where it stops holding.** The street-cred table labels each row from
+  `streetCred[].seat` when the row carries one — a predicate independent of `seats` — so a verdict
+  carrying seated `streetCred[]` rows beside an absent *or* malformed `seats` renders
+  `deepseek#1`/`deepseek#2` there while the matrix still reads `deepseek` twice. Measured on three
+  shapes (absent, non-array, array-of-strings), not reasoned from the code. In-process the two
+  fields are produced from the same twin bench and travel together; the split is reachable on a
+  hand-assembled or externally-supplied record, which `verdict.js :: buildVerdict`'s own docblock
+  names and which `amicus_verdict`'s `record: z.record(z.any())` accepts. A verdict written before
+  v4.8 carries no `streetCred[].seat` at all and is unaffected. See "A `--council` preset member
+  with stray whitespace now runs" under **Changed** for the renderer change that opened this.
+  **Blind mode still never shows a seat id** — a
   seat id contains its alias — so both twins collapse to `Review A` there exactly as before.
 - **A vote the matrix cannot attribute now renders in an `UNATTRIBUTED` column instead of vanishing.**
   In `council report` (Markdown and HTML) and in the Council Workspace, the vote→column join now
@@ -634,8 +726,20 @@ All notable changes to Amicus are documented here. Format follows
 - **Two fields shipped earlier in this release stop being emitted on two bench shapes.**
   `findings[].raiserSeat` and `adjudications[].seat` were compared against the *leg's* model input
   rather than against the seat's own alias, so they were emitted on two benches with no repeated
-  alias at all: a `--council` preset carrying a whitespace-padded member, and a bench whose leg
-  reported no model input (where the comparison saw the resolved executable id instead). In both
+  alias at all: a bench carrying a whitespace-padded member, and a bench whose leg
+  reported no model input (where the comparison saw the resolved executable id instead).
+  ⚠️ **THE PRODUCER OF THE FIRST SHAPE MOVED later in this same release; the shape did not.** This
+  read *"a `--council` preset carrying a whitespace-padded member"* until SI-22.4 made
+  `config.js :: classifyCouncilMembers` trim each preset member (see *"A `--council` preset member
+  with stray whitespace now runs"* under **Changed**), so a preset can no longer put padding on a
+  bench alias. ⚠️ **Nor can anything else, traced to the end.** `src/mcp-council-bench.js ::
+  resolveBenchInput` does return `input.models` untrimmed, but that is one hop, not the route: its
+  single consumer (`mcp-council-run.js:107`) always spawns the CLI child with
+  `--models bench.join(',')` (`:177`), and the child re-parses through
+  `cli-council-run-bench.js :: parseList`, which trims — and `runCouncil` is not exported from
+  `src/index.js`. **The surviving example is the OTHER one**: a leg that reports no model input,
+  where the comparison sees the resolved executable id. That half is live, which is why the rule and
+  the fix below are unchanged. In both
   cases the emitted value was byte-equal to the alias, carried no information, and — until now —
   had no seat table able to resolve it. All four seat-emitting producers now share one rule: emit
   when the seat's id differs from **its own alias**. This is a visible change to two fields, and it
@@ -683,9 +787,17 @@ All notable changes to Amicus are documented here. Format follows
   it cannot reconcile them against.~~ **No longer a limitation — fixed later in this same release;
   see "The chair packet now names seats on a bench that repeats a model alias" above.**
   Five seat shapes the peer fix does not close are listed in the
-  BACKLOG with their measurements, the largest being that a `--council` preset with a
+  BACKLOG with their measurements, ~~the largest being that a `--council` preset with a
   whitespace-padded member is functionally a twin bench that the seat builder treats as two
-  distinct aliases — so the undercount survives there in full, silently.
+  distinct aliases — so the undercount survives there in full, silently.~~ **The largest of those
+  five is no longer a limitation — fixed later in this same release; see "A `--council` preset
+  member with stray whitespace now runs" under Changed, above.** A preset can no longer produce that
+  shape: the padding is gone before `buildSeats` sees the members, so two members differing only by
+  whitespace are one alias and a **real** twin bench, which the seat-aware peer filter handles. All
+  five shapes remain listed in the BACKLOG with their measurements; **two of the five are still
+  open** — SI-22.1 (the raiser's own leg orphans) and SI-22.2 (a peer twin's leg orphans), both at
+  `tally.js :: tally`. Counting rule: the five numbered items under SI-22 in `BACKLOG.md`, with
+  each item's disposition read from rows 22.1–22.5 of the v4.8 phasing table.
 - Live council-run leg rows now carry the leg's seat id (`alias#N`) when the bench repeats an
   alias, threaded from the Stage-1 roster through the fanout transport to `metadata.json` and back
   out via the composed live doc. On a unique-alias bench nothing is written — `metadata.json` is
