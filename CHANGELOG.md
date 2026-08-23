@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.8.0] - 2026-08-23
 
 ### Fixed
 
@@ -23,7 +23,11 @@ All notable changes to Amicus are documented here. Format follows
   (`curated-models.js :: toDefaultAliases`, `:: toGatewayRoutes`), the copy handed out by
   `getDefaultAliases`, and the alias map the interactive `amicus setup` composes from free-form
   input all needed the same seed — **a spread into a plain `{}` re-creates the inherited
-  prototype**, so fixing one map does not fix a map built from it. All are now seeded. On the
+  prototype**, so fixing one map does not fix a map built from it. All three are now seeded.
+  One surface is deliberately out of scope and filed: the Electron
+  setup wizard re-embeds the alias table into its page through `JSON.stringify`, and the parser
+  always re-materialises `Object.prototype` on the far side. That path is behaviourally inert —
+  `JSON.stringify` drops function values before the write, and `saveConfig` rejects `__proto__`. On the
   null-alias auto-repair path specifically, an alias named `toString` used to "repair" to
   `function toString() { [native code] }` and say so on stderr; it now reports the misconfiguration
   it actually is.
@@ -45,14 +49,15 @@ All notable changes to Amicus are documented here. Format follows
   different seats mean a real peer (counted), whatever `raiser` and `judge` say. Only when the seats
   cannot decide does the name matter: a named raiser excludes by alias exactly as before, and an
   **unnamed** one keeps every **named** judge — so no real peer is dropped for want of a raiser —
-  while dropping the votes whose judge is equally unidentifiable. Those, and only those, are
-  **announced** in `findings[].unattributedPeerDrops`: a vote the seats attributed is not ambiguous,
-  so it is never counted there.
+  while dropping the votes whose judge is equally unidentifiable. Both fallback arms' unattributable
+  drops — and only those — are **announced** in `findings[].unattributedPeerDrops`: a vote the seats
+  attributed is not ambiguous, so it is never counted there. The key's presence therefore means "a
+  vote could not be placed", not "the raiser was unnamed".
   Consequences on such a document: `basis` can move and the tier with it — a finding whose only
   votes are unidentifiable now reads `Singleton` rather than `Confirmed` or `Disputed`. On a
   document that **names** its raisers, *this* fix changes nothing: the peer split there is
-  byte-identical to `64b835b8`, the commit it was written on top of, measured over 300,000
-  randomized named-raiser findings with zero differences.
+  byte-identical to the pre-fix behaviour, measured over 300,000 randomized named-raiser findings
+  with zero differences.
   ⚠️ **That is a claim about this fix, not about v4.7.1.** The `unattributedPeerDrops` mark below
   landed earlier in the same release and it fires on named-raiser documents too — where the finding
   and the vote carry a seat id on only **one** side — so a document that names its raisers can still
@@ -62,9 +67,9 @@ All notable changes to Amicus are documented here. Format follows
   The same predicate builds the defense brief,
   so the brief moved with the tally; a finding that falls off `Contested`/`Disputed` no longer
   reaches a brief at all.
-  ⚠️ **This does not close the twin-seat case** (SI-22.1 / SI-22.2). Where a *named* raiser's
-  finding and an adjudication carry seat ids on only **one** side, the vote is still excluded and
-  still only announced, deliberately, by owner ruling — unchanged by this release.
+  ⚠️ **This does not close the twin-seat case.** Where a *named* raiser's finding and an
+  adjudication carry seat ids on only **one** side, the vote is still excluded and still only
+  announced — deliberately, and unchanged by this release.
   ⚠️ What those two track is a **possible** undercount, not an established one. Such a vote is
   either a real twin's signal being discarded or the raiser's own being correctly excluded, and
   nothing in the document distinguishes them — which is exactly why the drop is announced rather
@@ -79,8 +84,8 @@ All notable changes to Amicus are documented here. Format follows
   their DOM keys are now keyed on the seat. The retry badge also lands on the seat that was
   actually retried instead of on its live twin.
   The producer carries the identity that makes this possible: still-dead notes now record a seat
-  id on every dead arm, and — deliberately — emit `null` rather than the alias for a seat the run
-  could not identify, because "unidentified" and "the alias" are different statements and
+  id on every arm this surface reads, and — deliberately — emit `null` rather than the alias for a
+  seat the run could not identify, because "unidentified" and "the alias" are different statements and
   collapsing them is what merged two dead seats into one row. Unique-alias benches are unchanged:
   a seat id there equals its alias byte-for-byte.
   ⚠️ **Disclosed residuals.** Where a degrade record does not name *which* seat died, no consumer
@@ -91,9 +96,12 @@ All notable changes to Amicus are documented here. Format follows
   filed and unfixed: the **critic** path is still alias-keyed, and during a **live run** a stale
   record naming a seat that is alive can show a dead row for it until the terminal refresh. Every
   one of these is pinned by a test asserting the known-wrong behaviour so it cannot rot silently.
-  A seat the producer could *not* name is **not** among them: it is never hidden by a live seat
-  sharing its alias, because "unidentified" and "the alias" are different statements and a
-  degrade record means that seat stayed dead after its retry.
+  A seat the producer emitted `null` for — a **dead wave** it could not identify — is not among
+  them: such a row is never hidden by a live seat sharing its alias, because "unidentified" and
+  "the alias" are different statements and a degrade record means that seat stayed dead after its
+  retry. An unidentifiable **dead leg** is a different case and *is* among them: its key falls back
+  to the alias, so it collapses with another such record and is suppressed by a live twin exactly
+  as a pre-release record is.
   ⚠️ The trade this makes, stated plainly: still-dead notes are deduplicated only where seat
   identity is **exact** — the leg was bound to a seat, or its alias holds exactly one seat, where
   the alias *is* the id. Where identity is unknown the seat is announced rather than assumed to be
@@ -103,12 +111,16 @@ All notable changes to Amicus are documented here. Format follows
   preferred to a loss they cannot.
 - **`streetCred[]` no longer drops or invents a row when a document's `meta.seats` table disagrees
   with `meta.models` in count, and a reliability-ledger pair group with partial seat information no
-  longer reads narrower than one with none.** Both defects are unreachable on the engine path —
-  `seats.js :: buildSeats` derives `meta.seats` from the same bench array that becomes `meta.models`,
-  so the two agree by construction — and reachable only on the two hand-assembled `appendRun` paths:
-  the `amicus_council_tally` MCP tool, whose schema declares `meta.seats` independently of
-  `meta.models`, and `cli-handlers-council.js`'s `runTally`, which parses user-supplied JSON with no
-  schema at all. Both write into `council-ledger.jsonl`, a file that is never migrated.
+  longer reads narrower than one with none.** The **row-count** defect is unreachable on the engine
+  path — `seats.js :: buildSeats` derives `meta.seats` from the same bench array that becomes
+  `meta.models`, so the two agree by construction — and reachable only on the two hand-assembled
+  `appendRun` paths: the `amicus_council_tally` MCP tool, whose schema declares `meta.seats`
+  independently of `meta.models`, and `cli-handlers-council.js`'s `runTally`, which parses
+  user-supplied JSON with no schema at all. The **mixed-group** defect is narrower but *is*
+  engine-reachable: a chair-synthesis row carries no seat and still joins the ledger, so on a twin
+  bench where one twin also chairs and the twins resolve to different executables, that pair group
+  is mixed on an ordinary run. All of these write into `council-ledger.jsonl`, a file that is never
+  migrated.
   `street-cred.js :: credSeats` used to expand the *first* `models` occurrence of an alias the seat
   table named into every id registered for it at once — inventing a row when the table over-registers
   a non-repeated alias — while skipping every *later* occurrence of that alias outright — dropping a
@@ -116,7 +128,8 @@ All notable changes to Amicus are documented here. Format follows
   k-th id the table registered for `m`; once that list is exhausted (or the table never named `m` at
   all), the occurrence gets an alias-keyed row (`seat: null`) instead of vanishing, and a surplus
   registered id simply goes unused instead of manufacturing an extra row.
-  `streetCred.length === meta.models.length` now holds always, on any input.
+  `streetCred.length === meta.models.length` now holds on every document the tally produces,
+  however far the seat table disagrees with the model list.
   `ledger-join.js :: credFor` used to resolve a pair group's street cred through the seat table the
   moment *any* row in the group resolved that way, discarding the numbers of any other row in the
   *same* group whose seat did not resolve — so a MIXED group (one seated row, one not) read narrower
@@ -128,8 +141,7 @@ All notable changes to Amicus are documented here. Format follows
   fully-unseated one.
   ⚠️ Fixing the row-count side of this also moves `streetCred[]` row *order* on an ordinary engine
   bench that repeats a non-adjacent alias — a real, disclosed, accepted behaviour change, not a
-  malformed-input-only one. See the street-cred entry under **Changed**, below, for the measurement
-  and the ruling.
+  malformed-input-only one. See the street-cred entry under **Changed**, below, for the measurement.
 
 - **A debate re-vote the engine cannot attribute to a bench seat is now refused and announced,
   instead of silently inventing a voter.** On a bench that repeats an alias, a re-vote leg that
@@ -165,33 +177,18 @@ All notable changes to Amicus are documented here. Format follows
   verdict. That arm is now **deleted**: a re-vote is published only when its key names a judge the
   wave actually launched. The one shape the arm existed to protect — a judge left unseated by an
   earlier stage — is unaffected, because such a judge is still one the wave launched.
-  ⚠️ **The wording of the announcement changed with it — all three sentences of it.** It used to
-  say the leg "matches no seat on that wave's roster" and explain the refusal as "it bound to no
-  roster slot, and its judge alias '…' names no seat there either". Both are false for exactly the
-  case just described, since that leg *did* match a slot. All three now state the one condition:
-  the leg's join key names none of the judges that wave launched. The channel, the effect line and the
-  machine-readable fields are unchanged — except that a leg reporting no model name at all now
-  reads `unknown` there, where a first pass at this rewrite briefly printed `undefined` and dropped
-  the key out of the record's JSON.
-  ⚠️ **Not reachable from the production launcher today** — every real fanout leg is stamped with a
-  task id and therefore always binds to its roster slot, so this is a latent-correctness fix rather
-  than a live regression. It is reachable through a resumed or hand-assembled run.
-  Pinned end to end through the real debate round, and by named mutants each hand-applied and then
-  reverted: `REFUSEALL` (red set 3), `LEGDROP` (1), and the guard-deletion mutant — recorded twice
-  under two names because it was measured at two points in the work. As `JOINBLIND` it red **1**
-  test when the unit-level pin was all that existed; the **same deletion**, re-measured as
-  `E2EBLIND` once the end-to-end pin was added, reds **2**. Three distinct mutants, four names.
-  The follow-up work above adds four more: `BOUNDREADD` (2), which puts the deleted arm back;
-  `WHYSTALE` (2), which restores the old announcement wording; `NOTEHEAL` (1), which makes the
-  refusal's announcement non-degrading; `KEYRAW` (1), which drops the join key's fallback so a
-  leg with no model name renders `undefined`; and `WHATSTALE` (3), which restores the old
-  "matches no seat" wording. ⚠️ The four counts in the
-  paragraph before this one are the readings taken when each mutant was first recorded; the
-  follow-up added four tests to the same path, and re-measuring moved three of them — deleting the
-  guard now reds **6** and `LEGDROP` **2**, while `REFUSEALL` stays 3. `NOTEHEAL` exists because
-  the exit-2 consequence — announced above and true since the first release of this fix — had been
-  measured but never pinned by a test that ran the whole chain; it now is, through the real
-  announcement sink and the real exit-code resolver.
+  ⚠️ **The announcement's wording changed with it.** It used to say the leg "matches no seat on
+  that wave's roster" and explain the refusal as "it bound to no roster slot, and its judge alias
+  '…' names no seat there either". Both are false for exactly the case just described, since that
+  leg *did* match a slot. `what` and `why` now state the one condition — the leg's join key names
+  none of the judges that wave launched — and `effect` no longer presumes a judge the refusal
+  denies: it reads *"the re-vote was NOT applied; the provisional verdict stands"*. The channel and
+  the machine-readable field names are unchanged; a leg reporting no model name at all now reads
+  `unknown` in `judge` and `key` rather than dropping the key from the record's JSON.
+  ⚠️ **Not reachable from the production launcher today** — the wave launches only the aliases its
+  own judge list names, so every real leg comes back keyed to a judge that wave launched. This is a
+  latent-correctness fix rather than a live regression, reachable through a resumed or
+  hand-assembled run.
   The companion change is documentation only: `applyDebate`'s docblock now states what an omitted
   `aliasOf` projection does — it leaves the raw seat key in the alias-space `judge` field. No caller
   in this package omits it, the package's `exports` map blocks a deep require from outside, and the
@@ -209,7 +206,7 @@ All notable changes to Amicus are documented here. Format follows
   is `z.enum(['agree','dispute','neutral'])` and rejects the value before `tally()` ever runs.
   `street-cred.js`'s `perJudgeRank`: a judge or seat id of `__proto__` silently lost its rank to the
   inherited setter instead of being recorded as an own key — reachable on **both** the CLI and MCP
-  paths, since `judge`/`seat` there are unconstrained `z.string()`. `report.js`'s `SYMBOL` (the vote
+  paths, since neither `judge` nor `seat` there carries any value constraint. `report.js`'s `SYMBOL` (the vote
   glyph read by all three matrix renderers) is reachable on **both** paths too — the CLI path
   (`council report`/`council verdict --render`, raw `JSON.parse`) and a second, independent MCP
   tool, `amicus_verdict`, whose `record: z.record(z.any())` input is wholly unvalidated because that
@@ -220,14 +217,13 @@ All notable changes to Amicus are documented here. Format follows
   guards an `action` key that a separate, pre-existing allowlist (`parse-stage2.js`'s
   `parseDebateDefense`) already normalizes to the literal `'no-response'` before this table is ever
   consulted by a real defense response — the two guards are independent and each is individually
-  sufficient, confirmed by a compound mutant (`DOUBLEBREACH`) that reds only when both are removed
-  at once. This closes a hole behind an allowlist that already covers it, not a bug a real run could
-  hit today.
+  sufficient, confirmed by two tests that go red only when both guards are removed at once. This
+  closes a hole behind an allowlist that already covers it, not a bug a real run could hit today.
   ⚠️ **Not a rendering fix.** `report.js`'s three renderers already disagreed on how they display any
   unrecognized verdict, `Object.prototype` key or not — `report-md.js` and `report-html.js` both
   print the literal string `undefined`, and the Workspace's `matrix-model.js` prints `?`. That
   disagreement pre-dates this change and is unchanged by it; reconciling the three is a
-  rendering-contract decision, filed separately in `BACKLOG.md`.
+  rendering-contract decision, filed separately.
 - **The second-opinion skill's own documentation defined the wrong tier for a lone corroborating
   peer, which could make Claude mis-present a finding while running the skill.** `tally.js ::
   assignTier` returns **Confirmed** (`confidence: thin`) for a finding with one peer agreement and
@@ -237,46 +233,36 @@ All notable changes to Amicus are documented here. Format follows
   endorsement, no pushback") both classified that same cell as Singleton instead of Confirmed.
   `skills/second-opinion/COUNCIL-DESIGN.md`'s cascade table carried the same error in its Singleton
   row and, found while fixing it, its Confirmed row was independently incomplete — it never listed
-  the `a=1, d=0` case at all, so between the two rows that cell had nowhere to land. Both files now
-  read Confirmed as "`a ≥ 2` and `a > d`, or `a = 1` and `d = 0`" and Singleton as "else (`a = 0`
-  and `d = 0`)", matching `assignTier` and `docs/council.md`'s cascade table, which was already
-  correct and is unchanged. A repo-wide grep for the old definition and the "at most one
-  endorsement" phrasing found no other occurrence stated as current fact — `BACKLOG.md` still
-  quotes the old wording verbatim, correctly, as a struck-through record of what this fixed.
+  the `a=1, d=0` case at all, so the Singleton row's `else` swept that cell up, which is exactly how
+  it landed in the wrong tier. Both files now put the lone corroborating peer in Confirmed and
+  reserve Singleton for `a = 0` and `d = 0`, matching `assignTier` and `docs/council.md`'s cascade
+  table, which was already correct and is unchanged. ⚠️ **The formal definitions are fixed; the
+  Stage-4 presentation headings are not.** Both files still gloss the consensus tier as "(≥ 2 peer
+  agreements, agrees dominate)" at the heading that drives how Claude presents findings, which omits
+  the lone-peer case — filed separately, not closed here.
 - **A headless leg with no output, reasoning, or tool calls could be killed by the no-output
   backstop before a normal-speed model finished its first turn.** The default window was 120
   seconds; CI carried a `300000` override because the default was too low, which is itself evidence
   the default was wrong rather than merely conservative. `DEFAULT_NO_OUTPUT_BACKSTOP_MS` is now
   `300000`, and the now-redundant CI override plus its explanatory comment are deleted from
-  `council-review.yml`. The owner's separate `900000` setting (3x the new default, held locally) is
-  untouched — it does not exist anywhere in the tracked tree.
+  `council-review.yml`. The owner's separate `900000` override, held locally, is untouched — no such
+  setting exists anywhere in the tracked tree.
   ⚠️ **The retry path doubles this window**, so a Stage-1 retry now waits up to 600 s (was 240 s)
-  before its own backstop fires, clamped to the leg timeout. Every place that stated the old value
-  as a live fact was swept and corrected in the same change: `tests/no-output-backstop.test.js`'s
-  default-value assertions, `tests/council/run-retry.test.js`'s hardcoded `240000` (now `600000`,
-  required or CI would ship red) plus its illustrative comments, `docs/configuration.md`,
-  `docs/troubleshooting.md`, `docs/usage.md`, and `src/sidecar/models-probe.js`'s docblocks. A
-  review pass then found one instance the first sweep missed (`models-probe.js:31` — a *second*
-  "120s" claim in the same file already edited for this exact class) and a further two the
-  controller's own independent sweep added (`tests/no-output-backstop-wiring.test.js:383`
-  and `:424`); all three closed in a follow-up commit. Deliberately left alone: `run-retry.test.js`'s
-  `'in 120s'` fixture string, which is arbitrary generic test data for a genericity pin, not a claim
-  about the default.
-  ⚠️ **The 600 s worst case is a DELIBERATE TRADE, not an oversight** — raised by a paid
-  council as A1 against PR #182 (`a3/d0/n0`) and adjudicated by arithmetic:
-  `min(2 * 300000, 900000) = 600000`, and the 15-minute leg-timeout clamp does **not** bind,
-  so the failure CLASS stays `NO_OUTPUT_BACKSTOP` rather than degrading into an ordinary
-  timeout. Worst-case silent-leg latency on a retry is therefore 10 minutes. That is the
-  price of accommodating models that legitimately take minutes to first token — the kimi
-  case #135 exists for — and the alternative is killing slow-but-healthy legs.
+  before its own backstop fires, clamped to the leg timeout. `docs/configuration.md`,
+  `docs/troubleshooting.md`, `docs/usage.md` and `src/sidecar/models-probe.js`'s docblocks were
+  corrected in the same change, as were the tests that asserted the old numbers.
+  ⚠️ **The 600 s worst case is a deliberate trade, not an oversight**, and it is arithmetic:
+  `min(2 × 300000, 900000) = 600000`, so the 15-minute leg-timeout clamp does **not** bind and the
+  failure CLASS stays `NO_OUTPUT_BACKSTOP` rather than degrading into an ordinary timeout.
+  Worst-case silent-leg latency on a retry is therefore 10 minutes. That is the price of
+  accommodating models that legitimately take minutes to first token; the alternative is killing
+  slow-but-healthy legs.
 - **The live-probe docs no longer claim a fired backstop proves the endpoint accepted the
-  request.** Council B1 against PR #182 (`a3/d0/n0`). A `NO_OUTPUT_BACKSTOP` shows only that
-  no output, reasoning or tool call arrived in the window — a stalled gateway or a dropped
-  connection fires it just as readily. `accepted-but-silent` is the classification's NAME,
-  not a fact about the endpoint. Corrected in `docs/usage.md` **and** in
-  `src/sidecar/models-probe.js`'s docblock, which stated the same thing and which the first
-  pass at this finding missed — the twin was only caught because the council re-reviewed the
-  fix. ⚠️ Pre-existing wording in both places; this release did not introduce it.
+  request.** A `NO_OUTPUT_BACKSTOP` shows only that no output, reasoning or tool call arrived in
+  the window — a stalled gateway or a dropped connection fires it just as readily.
+  `accepted-but-silent` is the classification's NAME, not a fact about the endpoint. Corrected in
+  `docs/usage.md` **and** in `src/sidecar/models-probe.js`'s docblock, which stated the same thing.
+  ⚠️ Pre-existing wording in both places; this release did not introduce it.
 - **Findings in the reliability ledger are now attributed to the seat that actually raised them,
   instead of being concentrated onto one row per alias.** On a twin bench whose two seats resolve
   to different executables, the ledger used to hand *every* finding raised by that alias to the
@@ -305,20 +291,22 @@ All notable changes to Amicus are documented here. Format follows
 
 - **The chair packet now names seats on a bench that repeats a model alias, so the chair can
   finally tell two same-model reviewers apart.** `chair-packet.md` is the one artifact a paid chair
-  reads as authoritative, and every identity in it was written as the bare alias. On a bench running
-  the same model twice, that made the packet internally unreconcilable: the chair was handed
-  *"Deterministic tier counts: {Confirmed: 1}"* — a count that only makes sense if two different
-  reviewers agreed — beside two adjudication lines both reading `deepseek:`, with nothing anywhere
-  in the document able to say which was which. The report and the Workspace matrix had already moved
-  to seat identity, so the human-facing artifact and the model-facing one disagreed.
+  reads as authoritative, and every identity its three review/ranking/adjudication blocks wrote was
+  alias-space — the review header printing the leg's reported model input, which can be a resolved
+  id. On a bench running the same model twice, that made the packet internally unreconcilable: the
+  chair was handed a deterministic tier count of one `Confirmed` — a count that only makes sense if
+  two different reviewers agreed — beside two adjudication lines both reading `deepseek:`, with
+  nothing anywhere in the document able to say which was which. The report's adjudication matrix and
+  the Workspace's had already moved to seat identity, so the human-facing artifact and the
+  model-facing one disagreed.
   All three identity-bearing blocks now resolve the seat: the **review headers**
   (`--- Review by deepseek#2 ---`), the **peer-rankings** block — both the judge it is keyed by and
   the ranked names inside it — and the **adjudication** lines. The ranked names are matched
   position by position, so a tie stays a tie and any name the run could not resolve to a seat keeps
   its alias rather than turning into a blank.
-  ⚠️ **On every bench that does not repeat an alias the packet is byte-identical** — not "should be":
-  the equality is asserted by a test. In the rankings and adjudication blocks that is because the
-  seat is simply absent whenever it would equal the alias. The review header needed more care: the
+  ⚠️ **On every bench that does not repeat an alias the packet is byte-identical** — by
+  construction, because the seat is absent wherever it would equal the alias, and pinned by a
+  whole-string equality test on a unique-alias bench. The review header needed more care: the
   name it prints is the model input a leg reported, which can be the fully resolved model id even
   when nothing about the bench is ambiguous, so the seat is deliberately **withheld** there unless
   it actually differs — rather than assumed to be identical. A `claude` review block still reads
@@ -377,10 +365,9 @@ All notable changes to Amicus are documented here. Format follows
     renderers (`report-md.js :: renderMd`, `report-html.js :: renderHtml`). On a twin bench the two
     rows read `gemini#1` / `gemini#2` instead of `gemini` twice with different numbers under one
     identical name — which is what a padded preset now produces. A bench with no repeated alias is
-    byte-identical (measured against this branch's base: `renderMd` 733 bytes, `renderHtml` 9667,
-    both unchanged). ⚠️ **The Council Workspace's street-cred table still labels
+    byte-identical. ⚠️ **The Council Workspace's street-cred table still labels
     from the model alias**, so on a twin bench the report and the Workspace now disagree there —
-    filed, not fixed; recorded in `docs/council.md` and `BACKLOG.md`.
+    filed, not fixed; recorded in `docs/council.md`.
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per
   bench slot.** Previously the row-building join was keyed by council alias and last-wins, so any
@@ -434,8 +421,9 @@ All notable changes to Amicus are documented here. Format follows
   (a seat that came back `unstructured` is no longer recorded as `clean`) and `wasChair: true` if
   **any** of them chaired. `role` still takes the last contributing row's value, scoped to that same
   (model, executable) pair. ⚠️ This is reachable
-  from plain `amicus council tally` input, not only the engine: the documented worked example puts
-  the chair on the bench, so a chair whose seat row was `unstructured` now reads `unstructured`
+  from plain `amicus council tally` input, not only the engine: the documented shape puts the chair
+  on the bench, so a hand-assembled record that also carries a `role: 'chair'` row hits it — a chair
+  whose seat row was `unstructured` now reads `unstructured`
   where it previously read the chair leg's `clean`. Conversely, on an alias whose seats resolved
   *differently*, `wasChair` no longer propagates to the seat row that did not chair.
   **Later in the same release, both `role` and `conformance` stopped counting a chair-synthesis leg
@@ -453,23 +441,24 @@ All notable changes to Amicus are documented here. Format follows
   previously one line. The legacy line accrues `runs`, clears `low-N` at three runs, and carries
   zero findings. Its street cred is no longer borrowed from its live twin: street cred is seat-keyed
   now (see below), and a seat that never ran a leg never appears in any judge's ranking, so its own
-  seat-keyed row resolves both numbers to `null` instead of adopting its live twin's — closing what
-  this entry used to describe as a filed gap, since the legacy line can no longer outrank the
-  executable it routes to for the fallback chair (that promotion excludes any group whose average
-  street cred is not a number). Findings also remain attributed by alias rather than by seat, so on a
-  split alias they are recorded against one of its rows rather than divided across them.
+  seat-keyed row resolves both numbers to `null` instead of adopting its live twin's — so the legacy
+  line can no longer outrank the executable it routes to for the fallback chair (that promotion
+  excludes any group whose average street cred is not a number).
 - **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
   when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
   because that alias occupies more than one bench seat (remove the duplicate entry, or use two
-  distinct aliases), or when two bench entries would write the same `review-<name>.md` after
-  filename sanitization (e.g. `--models deepseek,deepseek,deepseek-2`). The off-bench critic was
+  distinct aliases), or when two bench entries would write the same `review-<name>.md` **because one
+  of them is a disambiguated `alias#N` seat** (e.g. `--models deepseek,deepseek,deepseek-2`). A
+  collision between two distinct aliases that merely sanitize alike (`vendor/a` vs `vendor?a`) still
+  starts, still runs, and is surfaced by the run-integrity banner instead. The off-bench critic was
   already rejected by the CLI and MCP handlers; the engine now guards it too, closing the gap for
-  programmatic `require()` callers, where it previously launched a leg the run's own model roster
-  never mentioned. Benches whose aliases are distinct and contain no `#` are unaffected.
+  in-process `require()` callers of `runCouncil`, where it previously launched a leg the run's own
+  model roster never mentioned. Bench **shape** is unaffected for benches whose aliases are distinct
+  and contain no `#`; the critic guards apply to any bench.
 - **`--critic` together with `--lenses` is now refused before any paid leg.** The same pre-spend
-  seat validation now rejects passing both flags at once, closing the same `require()`-caller gap:
+  seat validation now rejects passing both flags at once, closing the same in-process-caller gap:
   both the CLI and MCP handlers already rejected this pair, so callers going through either see no
-  change. Only a direct programmatic `require()` call passing both flags is newly refused.
+  change. Only a direct in-process `require()` call passing both flags is newly refused.
 - **`--lenses` now assigns lenses by seat, not by first-matching alias.** Under `--lenses`, a bench
   that repeats an alias now gives each seat its own lens: `--models a,a --lenses risk,cost`
   previously gave both seats `lens:risk`, because the role lookup resolved a seat by
@@ -562,20 +551,18 @@ All notable changes to Amicus are documented here. Format follows
   record, only from the summary readers usually check first. **Still open at the end of this
   release.** The seat work later in this stack gave `verdict.json` a seat *table* and seat-stamped
   findings and `runStats` rows, but it did not touch `deriveSeatLoss`'s channel filter, so
-  `seatLoss.deadBenchSeats` still does not name a `seat-unbound` loss. Closing it remains a filed
-  BACKLOG item.
+  `seatLoss.deadBenchSeats` still does not name a `seat-unbound` loss. Closing it is filed, not
+  scheduled here.
 - **The Council Workspace now opens per-seat artifacts on a bench that repeats an alias.** The
   allowlist is built from `run.seats` rather than a de-duplicated bench, so
-  `--models deepseek,deepseek,gemini` lists `review-deepseek-1.md` / `-2.md` (and the judge,
-  rebuttal and revote families alongside) instead of a `review-deepseek.md` that bench never
-  writes. Previously **neither** twin file was reachable and every artifact family was affected.
-  (This supersedes the known-limitation wording shipped earlier in this Unreleased section. That
-  wording said the Workspace could not open *any* per-seat artifact and recorded it
-  `present:false` — true for a pure twin bench, and **measurably false** for a bench that mixes a
-  twin with a sanitize collision. On `--models "vendor/a,vendor?a,vendor/a"` the allowlist
-  attributed `review-vendor-a.md` to `vendor/a` while the file physically held `vendor?a`'s
-  review, so the Workspace opened it and labelled it with the wrong model. That is a
-  misattribution, not a refusal, and it is the sharper half of what this release fixes.)
+  `--models deepseek,deepseek,gemini` lists `review-deepseek-1.md` / `-2.md`, the matching `judge-`
+  files, and — on a `--debate` run — the `rebuttal-`/`revote-` pair, instead of a
+  `review-deepseek.md` that bench never writes. Previously neither twin file was reachable, in every
+  artifact family the run wrote.
+  ⚠️ **Two distinct aliases that sanitize to the same name are still one physical file.** On
+  `--models "vendor/a,vendor?a,vendor/a"` the allowlist attributes `review-vendor-a.md` to the
+  sorted-first alias while the file may physically hold the other's review — a misattribution rather
+  than a refusal, and the run-integrity banner says so.
   A file an *orphaned* leg wrote under its alias stays readable but is attributed to no seat:
   `run.json` cannot say which seat produced it, and guessing is the silent mis-attribution the
   seat spine exists to prevent. Where such a name collides with another seat's own artifact, the
@@ -595,26 +582,29 @@ All notable changes to Amicus are documented here. Format follows
   never removed. What you saw was a stale row that stopped at its first-tick values, beside a row
   flickering between two seats' data — with no error, no banner, and no indication either was
   wrong. Rows are now keyed on the seat, which the tally already recorded and which the run
-  detail already carried. Benches whose aliases are all distinct are byte-for-byte unaffected:
-  the seat is only recorded when it differs from the alias, so those rows key exactly as before.
+  detail already carried. Benches whose aliases are all distinct render identically: the seat is
+  only recorded when it differs from the alias, so every row resolves to the same seat it did
+  before. (The row's internal DOM key changed encoding in the same change; nothing user-visible
+  reads it.)
 - **The "↻ retried once" badge now marks the seat that was actually retried, not every seat
   sharing its alias — where the run records enough to tell them apart.** ⚠️ **It cannot always
-  tell.** Of the five ways a still-dead-after-retry note is written, exactly one records *which*
-  seat failed (`firstFailure.seatId`, on the `dead-leg` branch of a leg-origin retry). The other
-  four record only the council alias: a retry wave that died wholesale, a wave-origin loss
-  carrying `models[]`, and the two arms that route to the `seat-unbound` channel, which this
-  surface has never read. **When only an alias is recorded, every seat sharing that alias is
-  badged.** That is deliberate: the record does not say which seat failed, so nothing downstream
+  tell.** Every dead arm now records a seat id where the run could bind one: a leg-origin retry
+  carries `firstFailure.seatId`, a retry wave that died wholesale carries its own `seatId`, and a
+  wave-origin loss carries a `seats[]` array index-parallel with `models[]`. What is still
+  alias-only is a slot the producer could not identify at all, plus the two arms that route to the
+  `seat-unbound` channel, which this surface has never read. **When only an alias is recorded,
+  every seat sharing that alias is badged.** That is deliberate: the record does not say which seat failed, so nothing downstream
   can attribute it, and a badge one seat too wide is visible and self-correcting where a missing
   badge would be silent. Marking the seat exactly would need the producer to stamp the seat id on
-  every channel — a change with its own blast radius, filed in `BACKLOG.md` rather than smuggled
-  in here.
+  every channel — a change with its own blast radius, filed rather than smuggled in here.
 - **⚠️ The peers-only filter now excludes the raiser by SEAT, so findings on a bench that repeats
   an alias change tier — in BOTH directions.** Before this release the filter compared council
   aliases, so on `--models deepseek,deepseek,gpt` the *second* deepseek seat's vote was discarded
   along with the raiser's own: a finding with one genuine corroborating peer reported as the
   no-signal tier. The filter now compares seat ids when a vote and its finding both carry one, and
-  falls back to comparing aliases when either does not. This is a behaviour change by design, and
+  falls back to comparing aliases when either does not — or, when the finding names no raiser at
+  all, to keeping every **named** judge (see the raiser-less fix under **Fixed**). This is a
+  behaviour change by design, and
   it is not a one-way improvement — measured on `['deepseek','deepseek','gpt']`, a finding raised
   by `deepseek#1`:
 
@@ -677,9 +667,10 @@ All notable changes to Amicus are documented here. Format follows
   and the `*` marks that seat's column only. The old alias key was **last-wins**: the second seat's
   vote overwrote the first's, so a finding whose `basis` was `a0/d1` could render as two
   agreements, both starred — a real dispute erased from the artifact. The rendered row and the
-  finding's `basis` now agree. **Unique-alias benches are byte-identical**, and so is any verdict
-  written before this release: without a `seats` table (or with a malformed one) the **matrix**
-  falls back to alias space whole. ⚠️ **That fence is the matrix's, not the whole document's, and
+  finding's `basis` now agree. **Unique-alias benches are byte-identical**: without a `seats` table
+  (or with a malformed one) the **matrix** falls back to alias space whole. That is a statement
+  about this change only — the `UNATTRIBUTED` column below moves some alias-space documents on its
+  own terms. ⚠️ **That fence is the matrix's, not the whole document's, and
   "assembled by hand" is where it stops holding.** The street-cred table labels each row from
   `streetCred[].seat` when the row carries one — a predicate independent of `seats` — so a verdict
   carrying seated `streetCred[]` rows beside an absent *or* malformed `seats` renders
@@ -688,8 +679,8 @@ All notable changes to Amicus are documented here. Format follows
   fields are produced from the same twin bench and travel together; the split is reachable on a
   hand-assembled or externally-supplied record, which `verdict.js :: buildVerdict`'s own docblock
   names and which `amicus_verdict`'s `record: z.record(z.any())` accepts. A verdict written before
-  v4.8 carries no `streetCred[].seat` at all and is unaffected. See "A `--council` preset member
-  with stray whitespace now runs" under **Changed** for the renderer change that opened this.
+  v4.8 carries no `streetCred[].seat` at all and is unaffected. The renderer change that opened this
+  is the street-cred labelling note at the top of this section.
   **Blind mode still never shows a seat id** — a
   seat id contains its alias — so both twins collapse to `Review A` there exactly as before.
 - **A vote the matrix cannot attribute now renders in an `UNATTRIBUTED` column instead of vanishing.**
@@ -703,9 +694,8 @@ All notable changes to Amicus are documented here. Format follows
   unchanged either way**: this is a rendering fix, not a scoring one. The column is **conditional**
   — it appears only on a document that actually has a vote to fold, so a document in which every
   vote is attributable grows no column and never an empty one. ⚠️ **That last claim is scoped to
-  this change**, measured against the branch point `ed5c0c02` and not against 4.7.1: the seat re-key
-  described above is a separate, earlier change in this same release and moves such documents on its
-  own terms. All folded votes on one finding share the one cell, last-wins — the column records
+  this change, not to the release**: the seat re-key described above is a separate, earlier change
+  in this same release and moves such documents on its own terms. All folded votes on one finding share the one cell, last-wins — the column records
   one fact about the document rather than one per voter; a seat id is what tells them apart, and
   supplying one is a producer-side fix. ⚠️ **Read the header as “no column on this bench”, not
   “nobody knows who voted”** — the rule is about the column, not the voter. On a `--claude-review`
@@ -713,31 +703,33 @@ All notable changes to Amicus are documented here. Format follows
   so a hand-authored `judge: "claude"` vote folds in the report and lands in the `claude` column in
   the Workspace; no engine run emits one, and reconciling the two rosters is deliberately out of
   scope for this change. ⚠️ Not to be
-  confused with `findings[].unattributedPeerDrops`, listed earlier in this release, which counts votes the **peer filter**
-  excluded from `basis` on the raiser side and which ruling R2 deliberately leaves excluded —
-  different mechanism, different document, opposite effect on `basis`.
+  confused with `findings[].unattributedPeerDrops`, listed earlier in this release, which counts
+  votes the **peer filter** excluded from `basis` on the raiser side and which is deliberately left
+  excluded — the drop is announced rather than counted, because nothing in the document can tell a
+  real twin's signal from the raiser's own. Different mechanism, different document, opposite effect
+  on `basis`.
 - **`amicus_council_tally` (MCP) no longer strips the seat keys.** Its input schema now accepts
   `meta.seats`, `findings[].raiserSeat` and `adjudications[].seat`; previously zod silently dropped
   all three, which would have left the MCP tool permanently on the pre-fix peer-filter behaviour
-  while `amicus council tally` — a raw JSON parse with no schema — got the fix. The three are
-  declared permissively (validate the envelope, let the tally engine arbitrate shape), so anything
-  the CLI accepts the MCP path accepts too, including `null`. ⚠️ **`location` is still stripped on
-  this path** — a pre-existing gap, filed not fixed.
+  while `amicus council tally` — a raw JSON parse with no schema — got the fix. All three are
+  declared permissively (validate the envelope, let the tally engine arbitrate shape), so **for
+  these three keys** anything the CLI accepts the MCP path accepts too, including `null`. That is
+  not true of the path as a whole: `adjudications[].verdict`, for one, is a closed `z.enum` on MCP
+  and unconstrained on the CLI. ⚠️ `location` and `claim` now reach `tally.json` on this path (see
+  **Fixed**, above) but are still not forwarded into `verdict.json` — a separate, filed change.
 - **Two fields shipped earlier in this release stop being emitted on two bench shapes.**
   `findings[].raiserSeat` and `adjudications[].seat` were compared against the *leg's* model input
   rather than against the seat's own alias, so they were emitted on two benches with no repeated
   alias at all: a bench carrying a whitespace-padded member, and a bench whose leg
   reported no model input (where the comparison saw the resolved executable id instead).
-  ⚠️ **THE PRODUCER OF THE FIRST SHAPE MOVED later in this same release; the shape did not.** This
-  read *"a `--council` preset carrying a whitespace-padded member"* until SI-22.4 made
-  `config.js :: classifyCouncilMembers` trim each preset member (see *"A `--council` preset member
-  with stray whitespace now runs"* under **Changed**), so a preset can no longer put padding on a
-  bench alias. ⚠️ **Nor can anything else, traced to the end.** `src/mcp-council-bench.js ::
-  resolveBenchInput` does return `input.models` untrimmed, but that is one hop, not the route: its
-  single consumer (`mcp-council-run.js:107`) always spawns the CLI child with
-  `--models bench.join(',')` (`:177`), and the child re-parses through
+  ⚠️ **Only one of the two shapes is still reachable.** A `--council` preset can no longer put
+  padding on a bench alias — `config.js :: classifyCouncilMembers` trims each member first (see
+  *"A `--council` preset member with stray whitespace now runs"* at the top of this section).
+  ⚠️ **Nor can anything else, traced to the end.** `src/mcp-council-bench.js :: resolveBenchInput`
+  does return `input.models` untrimmed, but that is one hop, not the route: its single consumer
+  always spawns the CLI child with `--models bench.join(',')`, and the child re-parses through
   `cli-council-run-bench.js :: parseList`, which trims — and `runCouncil` is not exported from
-  `src/index.js`. **The surviving example is the OTHER one**: a leg that reports no model input,
+  `src/index.js`. **The surviving shape is the OTHER one**: a leg that reports no model input,
   where the comparison sees the resolved executable id. That half is live, which is why the rule and
   the fix below are unchanged. In both
   cases the emitted value was byte-equal to the alias, carried no information, and — until now —
@@ -773,38 +765,31 @@ All notable changes to Amicus are documented here. Format follows
   fix kept a repeated alias adjacent, where the two orders coincide, which is why nothing caught it
   earlier. Content is identical either way; only row order moves, and only on a non-adjacent repeat —
   a bench with no repeated alias, or one whose repeat is adjacent, is byte-for-byte unaffected.
-- **Known limitations after this release — filed, not fixed, except street cred.** Street cred no
-  longer collapses twins: its rank map, the street-cred driver and the ledger's street-cred join are
-  all seat-keyed now, so a repeated alias emits one `streetCred` row per seat instead of two
-  byte-identical ones, and the ledger resolves each seat's own row instead of losing one to a
-  last-wins alias key (see above). ~~Findings remain attributed by **alias**, not by seat, in the
-  ledger.~~ **No longer a limitation — fixed later in this same release; see "Findings in the
-  reliability ledger are now attributed to the seat that actually raised them" above.**
-  `lens` and `position` are still
-  unrecoverable from the tally artifacts on any bench that does *not* repeat an alias, because
-  `meta.seats` is emitted only when one does. ~~The chair packet is still assembled entirely in alias
-  space, so on a repeated-alias bench the chair sees two `A1 — deepseek:` lines beside a tier count
-  it cannot reconcile them against.~~ **No longer a limitation — fixed later in this same release;
-  see "The chair packet now names seats on a bench that repeats a model alias" above.**
-  Five seat shapes the peer fix does not close are listed in the
-  BACKLOG with their measurements, ~~the largest being that a `--council` preset with a
-  whitespace-padded member is functionally a twin bench that the seat builder treats as two
-  distinct aliases — so the undercount survives there in full, silently.~~ **The largest of those
-  five is no longer a limitation — fixed later in this same release; see "A `--council` preset
-  member with stray whitespace now runs" under Changed, above.** A preset can no longer produce that
-  shape: the padding is gone before `buildSeats` sees the members, so two members differing only by
-  whitespace are one alias and a **real** twin bench, which the seat-aware peer filter handles. All
-  five shapes remain listed in the BACKLOG with their measurements; **two of the five are still
-  open** — SI-22.1 (the raiser's own leg orphans) and SI-22.2 (a peer twin's leg orphans), both at
-  `tally.js :: tally`. Counting rule: the five numbered items under SI-22 in `BACKLOG.md`, with
-  each item's disposition read from rows 22.1–22.5 of the v4.8 phasing table.
+- **What seat identity does NOT cover after this release.** Four things, stated so they are not
+  discovered:
+  - **The raw `lens` text is not recoverable from the tally artifacts on a bench that does not
+    repeat an alias**, because `meta.seats` — which carries it — is emitted only when one does.
+    `runStats[].role` keeps the slug (`lens:cost`), not the text you passed. The seat *ordinal* is
+    recoverable on any bench: `meta.models` is the bench in seat order, so an alias's k-th
+    occurrence is its k-th seat.
+  - **Two peer-split seat shapes stay open**: the raiser's own Stage-1 leg orphaning, and a peer
+    twin's leg orphaning. In each, the finding carries a seat id and the vote does not (or the
+    reverse), so the seats cannot decide and the alias compare excludes the vote. It is excluded and
+    **announced** in `findings[].unattributedPeerDrops` rather than counted — read that count as "up
+    to N votes of peer signal may be missing here", never as "N are".
+  - **The Council Workspace's street-cred table is still labelled from the alias**, so on a twin
+    bench it and `council report` disagree there (see the street-cred labelling note at the top of
+    this section).
+  - **The Workspace's dead-seat rows are still alias-keyed on the critic path**, and
+    `verdict.json`'s `seatLoss.deadBenchSeats` still does not name a `seat-unbound` loss (both
+    detailed at their own entries above).
 - Live council-run leg rows now carry the leg's seat id (`alias#N`) when the bench repeats an
   alias, threaded from the Stage-1 roster through the fanout transport to `metadata.json` and back
   out via the composed live doc. On a unique-alias bench nothing is written — `metadata.json` is
   unchanged — and every live leg row reports an explicit `seat: null`. Threaded only from Stage 1's
-  initial launch; chair, debate, repair, and the Stage-1 retry wave (a separate launch site,
-  `run-retry.js`) all launch without a roster and are unchanged — a retried twin's live row still
-  reports `seat: null`, filed in BACKLOG.md, not fixed here.
+  initial launch; chair, **Stage 2**, debate, repair, and the Stage-1 retry wave (a separate launch
+  site, `run-retry.js`) all launch without a roster and are unchanged — a retried twin's and a
+  cross-review judge's live rows still report `seat: null`. Filed, not fixed here.
 
 ### Internal
 
@@ -816,41 +801,50 @@ All notable changes to Amicus are documented here. Format follows
   `stage1-bind.js :: bindPaddedWave(waveId, rosterSource, aliasAt, legs)`, and each site keeps
   only its own orphan/missing tail, which genuinely differs (one returns orphans to its caller,
   one notes them and walks the unbound seats, one has no tail at all).
-  **Zero behaviour change**: no output, artifact, exit code, degrade note or `runStats` row
-  moves — the whole suite is green at 545 suites / 7891 passed / 8 skipped / 0 failed, and the
-  consolidation was shipped as its own PR precisely so it could not be confused with a fix.
+  **Zero behaviour change**: no output, artifact, exit code, degrade note or `runStats` row moves.
   The safety property this code exists for is unchanged and better pinned: placeholder ids stay
   unique and placeholder binds never reach a seat map, a CONJUNCTION whose failure silently
-  loses a retried leg’s billed usage. Breaking the drop-filter now reds 19 tests across four
-  suites where the same edit previously reached 14 across three.
+  loses a retried leg’s billed usage. Breaking the drop-filter now fails **19 tests across four
+  suites**, where the same edit reached **14 across three** before the consolidation.
 
-- **Added a named pin that `parseModelsList` preserves duplicate aliases.** Owner ruling R3-2 (one
-  re-vote leg per disputing seat) depends on `--models gpt,deepseek,deepseek` producing three legs,
-  not two after deduplication; the invariant already held but nothing enforced it going forward, so
-  a future `uniq()`/`new Set(...)` anywhere on the `--models` → leg-construction path could have
-  silently dropped a twin's leg with no error. `parseModelsList` itself is byte-unchanged — this is
-  a test plus an invariant comment, not a behaviour change.
+- **Added a regression test asserting that `parseModelsList` preserves duplicate aliases.** One
+  re-vote leg per disputing seat depends on `--models gpt,deepseek,deepseek` producing three legs,
+  not two after deduplication; the invariant already held but nothing named it. `parseModelsList`
+  is now pinned directly and the downstream `validateFanoutModels` step is covered by its own test;
+  leg construction inside `runFanout` remains unpinned, so a dedupe introduced there would still be
+  silent. `parseModelsList` itself is byte-unchanged — this is a test plus an invariant comment, not
+  a behaviour change.
+
+- **Five further module extractions.** `seat-space.js` (out of `artifact-names.js`),
+  `report-md.js :: renderMd` (out of `report.js`), `run-stats-entry.js :: buildRunStatsEntry`, the
+  `run-retry` split, and a set of helper moves each relocated existing code to keep modules under
+  the repo's size gate. The moves themselves change no output, artifact or exit code; where a
+  behaviour change shipped in the same PR as a move, it is listed under **Changed** or **Fixed**
+  above.
 
 ### Added
 
 - **`doctor` gains a `sessions-index-prune` check; `--fix` removes stale `sessions-index.json`
-  rows.** `recordSession` appends a `taskId -> project` entry on every session start and nothing
-  ever removed one, so a deleted, renamed or moved project's rows outlived it forever, and every
+  rows.** `recordSession` records a `taskId -> project` entry on session start and nothing ever
+  removed one, so a deleted, renamed or moved project's rows outlived it forever, and every
   session start paid to read/parse/mutate/stringify/write the *whole* file regardless. The new
   check lists entries whose project path no longer resolves to a directory, reports both the stale
-  count and the distinct-project count (many task ids can share one project), and `--fix` prunes
-  them atomically through the same write path `recordSession` itself uses — reusing the
-  announce-then-fix shape its `sessions-index-tmp` sibling already established for this same file.
+  count and the distinct-project count (many task ids can share one project) when it announces work
+  to be done, and `--fix` prunes them atomically through the same write primitive `recordSession`
+  itself uses — a temp file plus a rename — reusing the announce-then-fix shape its
+  `sessions-index-tmp` sibling already established for that file's orphaned temp siblings.
   Liveness only, never age: a five-year-old entry for a project that still exists is left alone; a
-  one-day-old entry for a deleted one is not. Only a confirmed-gone `ENOENT`/`ENOTDIR` counts as
-  stale — a permissions error or any other unreadable-but-maybe-there condition leaves an entry
-  alone rather than risk deleting a live lookup target. ⚠️ This closes the structural growth gap,
+  one-day-old entry for a deleted one is not. Among *error* conditions, only a confirmed-gone
+  `ENOENT`/`ENOTDIR` counts as stale — a permissions error or any other unreadable-but-maybe-there
+  condition leaves an entry alone rather than risk deleting a live lookup target. (A path that
+  resolves to a plain file, and an entry with no usable project value at all, are also stale — no
+  error is involved in either.) ⚠️ This closes the structural growth gap,
   not a specific steady-state size: most of the index size first measured against this defect was
   test residue from an already-sealed `/tmp` hermeticity leak, not something this check alone was
   ever going to shrink back to zero.
-  ⚠️ **A failure to determine is reported as a failure, not as a clean bill of health.** A paid
-  council raised (A2/A3, `a3/d0/n0`) that the check's catch-alls swallowed every exception —
-  including a programming error — making a crash indistinguishable from *"nothing to prune"*.
+  ⚠️ **A failure to determine is reported as a failure, not as a clean bill of health.** A
+  pre-ship review found that the check's catch-alls swallowed every exception — including a
+  programming error — making a crash indistinguishable from *"nothing to prune"*.
   It now surfaces `status:'error'` through `doctor`'s existing `guard()` vocabulary rather
   than returning a false all-clear, and still never throws into `doctor`. A correct-but-SILENT
   degrade fails this project's bar as hard as a crash.
@@ -859,22 +853,38 @@ All notable changes to Amicus are documented here. Format follows
   file, so a session started inside that window can lose its entry. `recordSession` performs
   the *identical* unlocked read-modify-write, so two concurrent session starts already clobber
   each other: the prune **inherits** the index's existing concurrency model rather than
-  introducing it (council B1, `a3/d0/n0`). The window was narrowed to the in-memory filter
-  loop — the write target is now resolved before the read — and prune deletes only the ids it
-  was handed. A lock or compare-and-swap on `sessions-index.json` would close it properly and
-  is recommended as its own change, not folded into this one.
-  ⚠️ **Race sharpened, raised again in a second fix round by two more models (B1/D1) — still NOT
-  fixed, recorded here more precisely than above: the race is TWO-SIDED, so locking only this
-  side would be theater.** Closing it properly means locking `recordSession` too — and that lock
-  (like the `statSync`-per-entry cost of the "prune on write" alternative) is exactly the
-  hot-start-path cost ruling R16-1 rejected when it chose this doctor-check design in the first
-  place. `--fix` and `recordSession` both perform the identical unlocked read-modify-write on the
-  same file today, independent of this change — nothing here makes that worse.
-  `src/utils/session-lock.js` already provides atomic PID/staleness lock-file primitives (used
-  today for per-session-dir resume/continue, not for this file) and is the natural home for a
-  future `sessions-index.json` lock or compare-and-swap, noted here so that work is not
-  re-derived from scratch — but it is **not** wired in here; that remains its own change, beyond
-  R16.
+  introducing it. The window was narrowed to the in-memory filter loop — the write target is now
+  resolved before the read — and prune deletes only the ids it was handed.
+  ⚠️ **The race is TWO-SIDED, so locking only this side would be theater.** Closing it properly
+  means locking `recordSession` too, and that lock — like the `statSync`-per-entry cost of the
+  "prune on write" alternative — is exactly the per-session-start cost this doctor-check design was
+  chosen to avoid. `--fix` and `recordSession` both perform the identical unlocked
+  read-modify-write on the same file today, independent of this change; nothing here makes that
+  worse. `src/utils/session-lock.js` already provides atomic PID/staleness lock-file primitives
+  (used today for per-session-dir start, resume and continue, not for this file) and is the natural
+  home for a future `sessions-index.json` lock or compare-and-swap — but it is **not** wired in
+  here; that remains its own change.
+
+- **New default model alias: `inkling`** (`openrouter/thinkingmachines/inkling`), bringing the
+  shipped alias table to 21. It resolves for `--models`, `--council` presets, `amicus models` and
+  the setup wizard's alias list like any other default. Pinned to the flagship rather than
+  `inkling-small`, and deliberately not to the `:batch` variant — deferred completion is wrong for
+  an interactive council leg. No existing alias changed.
+
+### CI
+
+- **`actionlint` is now fetched as a SHA256-verified release asset instead of piped through the
+  upstream installer script**, with the version and digest pinned as a single source of truth and a
+  test that fails the build when any other mention of the version contradicts the pin.
+  Supply-chain hardening of a CI-only download; nothing in the published package changes.
+- **The council-review workflow's default bench now names models that actually resolve on a
+  runner.** A CI runner has no user config, so a bench entry that only exists as a local alias
+  resolved to nothing there — which is why `inkling` joins the shipped alias table above.
+- **A cross-file citation gate** (`scripts/check-citations.js`, wired into pre-commit and CI)
+  checks that a `file.js :: symbol` or `file:line` reference in a comment or doc still resolves to
+  what it names, so the citation rot this release repeatedly hit is caught at commit time.
+- **The pre-commit gates read the git index, not the working tree**, so a partially-staged commit
+  is checked as it will land rather than as it looks on disk.
 
 ## [4.7.1] - 2026-08-09
 
