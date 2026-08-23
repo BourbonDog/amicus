@@ -150,6 +150,69 @@
   // this mutant disables the SEAT lookup entirely, and Rule B only changes
   // WHEN that lookup is allowed to win, not what happens once it is disabled
   // — none of this task's new MIXED/composition tests depend on `sc`'s key.
+  //
+  // ⚠️ RE-RUN at v4.8 SI-18, command `npx jest --no-coverage` (full scope, per
+  // that task's own brief). UNCHANGED at 2/1, byte for byte the same two
+  // tests: SI-18's edit is the findings split a few lines below `sc`'s own
+  // definition, inside the SAME `for (const model of aliases)` loop, but it
+  // never reads or writes `sc` — NO SHRINK, so this pin did not come unmoored.
+
+// ── on src/council/ledger.js :: buildLedgerRows (the findings split) ────────
+
+  /**
+   * v4.8 SI-18 — the half T3.3 did not close. `findings.filter(f => f.raiser
+   * === model)` was byte-unchanged since PR4b: it dumped every raised finding
+   * onto the block's FIRST pair group (R4b-2's concentration) no matter how
+   * many pair groups PR4b's fan-out had already given that alias, because
+   * `findings[].raiser` is alias-valued and the loop iterated a DE-DUPLICATED
+   * alias list. `findings[].raiserSeat` (tally.js:114-115, emit-when-DIFFERENT
+   * from `raiser`) has named the seat that actually raised each finding since
+   * v4.8 PR3 Task 5; this join simply never read it — MEASURED, not assumed:
+   * `grep raiserSeat src/council/ledger.js` returned zero hits at BASE.
+   * `ledger-join.js :: splitFindingsBySeat` reads it now, crediting a finding
+   * to the ONE pair group whose own runStats rows carry a matching seat and
+   * falling back to R4b-2's anchor for anything that does not resolve — every
+   * pre-seat document, every hand-assembled one, and the asymmetric quadrant
+   * where `meta.seats` seeds `streetCred` but no `runStats` row anywhere
+   * carries `.seat` (tally.js's own comment names it). See that function's
+   * docblock for the full reasoning; this record is only the mutant.
+   *
+   * Named mutant "FINDINGALIAS": revert the seat-aware split back to the
+   * pre-fix attribution — bypass `splitFindingsBySeat` and dump every raised
+   * finding onto the block's FIRST pair group, exactly as
+   * `findings.filter(f => f.raiser === model)` did from PR4b until this task.
+   *   const mine = mineByGroup[i];
+   *   -> const mine = i === 0 ? raised : [];
+   * `mineByGroup` is still computed (dead) so the mutation is a single line —
+   * the brief's own phrasing of it ("revert your attribution to `f.raiser
+   * === model`"), not a wholesale rewrite: unlike EXPANDONCE/ANYSEATED, the
+   * pre- and post-fix code do NOT track different state here, so the smaller
+   * edit reproduces the defect exactly.
+   *
+   * RED: 2 tests / 1 suite, at full `npx jest --no-coverage` scope.
+   *   tests/council/ledger.test.js — the new "SI-18 — findings attributed by
+   *     SEAT, not by alias" describe:
+   *     "a twin bench with DIVERGENT resolutions splits findings by seat, not
+   *      by alias" · "a raiserSeat matching no group in the block anchors on
+   *      the FIRST pair group; a matching one still routes precisely"
+   *
+   * ⚠️ WHY NOT MORE. Every other new SI-18 test is a genuine no-op under this
+   * mutation, and each for a different reason, not a coverage gap:
+   *   "twins SHARING one executable still combine onto the one row" — ONE
+   *     pair group either way, so `i === 0` and the seat-aware split agree by
+   *     construction: both hand the block's single row every finding.
+   *   "raiserSeat present but NO runStats row carries a seat" and "raiserSeat
+   *     absent entirely" — both are the FALLBACK quadrant on purpose: nothing
+   *     for `splitFindingsBySeat` to resolve, so it already returns exactly
+   *     what the mutation hard-codes.
+   *   "a unique-alias bench stays byte-identical" — same reason, measured on
+   *     the golden `avInput` fixture.
+   *   The three `splitFindingsBySeat` direct unit tests — this mutation is in
+   *     `buildLedgerRows`, at the CALL site; the function itself is
+   *     untouched, so calling it directly cannot observe the mutation at all.
+   *
+   * NO PIN THAT PRE-DATES THIS TASK REDS.
+   */
 
 // ── on src/council/ledger-join.js :: credFor ─────────────────────────────────
 

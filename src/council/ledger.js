@@ -81,11 +81,12 @@ function mergeConformance(a, b) {
   return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;
 }
 
-// v4.8 T3.3: the JOIN SEMANTICS — SI-17 normalise (benchLegs) and the
-// seat-aware street-cred join (credFor) — live in ./ledger-join, the same
-// one-directional split T3.0 used for ./ledger-stats. Read their docblocks
-// there before changing either call site below.
-const { benchLegs, credFor } = require('./ledger-join');
+// v4.8 T3.3/SI-18: the JOIN SEMANTICS — SI-17 normalise (benchLegs), the
+// seat-aware street-cred join (credFor), and the seat-aware findings split
+// (splitFindingsBySeat) — live in ./ledger-join, the same one-directional
+// split T3.0 used for ./ledger-stats. Read their docblocks there before
+// changing any call site below.
+const { benchLegs, credFor, splitFindingsBySeat } = require('./ledger-join');
 
 /**
  * One row per distinct (model, resolvedModel) pair on the bench. Rates are over
@@ -146,20 +147,33 @@ function buildLedgerRows(record) {
     // `rs.get(model) || {}`; `rs` itself is gone, replaced by `byAlias`/`pairs`
     // during the R4b-2 pair-group split, but the empty-group fallback is not.
     const groups = pairs ? [...pairs.entries()] : [['', []]];
+    // v4.8 SI-18: findings now split by SEAT across this block's pair groups —
+    // ledger-join.js :: splitFindingsBySeat. R4b-2's concentration ("within a
+    // block exactly ONE row — the FIRST pair group — carries the findings
+    // statistics") is now the FALLBACK for whatever that split cannot resolve
+    // to a specific group, not the rule for every finding: a finding whose
+    // raiserSeat names a seat one of THIS alias's own runStats rows carries is
+    // credited to that seat's group; everything else — every pre-seat
+    // document, every hand-assembled one, and the asymmetric quadrant
+    // tally.js documents (`meta.seats` declared while runStats carries no seat
+    // at all) — still concentrates on the block's FIRST pair group, exactly as
+    // before. This comment used to forecast that findings were alias-attributed
+    // "until PR4c"; that forecast EXPIRED UNFULFILLED, and the comment's own
+    // claim that this join "still has no seat to split on" went unfixed until
+    // SI-18 measured it false: tally.js:114-115 has emitted `raiserSeat` since
+    // v4.8 PR3 Task 5, and this join simply never read it. Splitting on the raw
+    // executable alone would still fabricate a per-executable confirmRate —
+    // this instead reads the seat id itself, the signal that actually names
+    // which occurrence raised a finding. The row SET does not move — PR4b's
+    // (alias, resolvedModel) pairing is unchanged, only which pair group a
+    // finding's numbers land on. Street cred deliberately does NOT concentrate
+    // (§0) and is untouched by this change (ledger-join.js :: credFor). Named
+    // mutant tests/council/street-cred-mutants.js :: FINDINGALIAS.
+    const mineByGroup = splitFindingsBySeat(groups.map(([, group]) => group), raised);
     groups.forEach(([resolvedKey, group], i) => {
-      // R4b-2: within a block exactly ONE row — the FIRST pair group — carries
-      // the findings statistics. This comment used to forecast that findings were
-      // alias-attributed "until PR4c"; that forecast EXPIRED UNFULFILLED. PR4c
-      // (R4c-3) seat-keys the tally's peer filter, its runStats rows and the
-      // report matrix, but leaves `findings[].raiser` ALIAS-valued — so this join
-      // still has no seat to split on, and R4b-2's concentration stands unchanged.
-      // Splitting on the executable would fabricate a per-executable confirmRate.
-      // Seat-attributed findings are filed to BACKLOG, not scheduled. The other
-      // rows' null rates fall out of the `judged && denom` guards at denom 0.
-      // Street cred deliberately does NOT concentrate (§0): stripping it flips
-      // the launched name from the alias to the raw executable id. Since v4.8
-      // T3.3 it is also per-SEAT rather than per-alias (ledger-join.js :: credFor).
-      const mine = i === 0 ? raised : [];
+      // The other rows' null rates still fall out of the `judged && denom`
+      // guards at denom 0, exactly as before.
+      const mine = mineByGroup[i];
       const denom = mine.length;
       // SI-17's normalise: a chair-synthesis row never decides a bench leg's
       // role or conformance (ledger-join.js :: benchLegs). `group` is unchanged, so

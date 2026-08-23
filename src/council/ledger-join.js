@@ -4,27 +4,30 @@
 /**
  * @module council/ledger-join
  * How ONE pair group resolves into ONE ledger row's fields: which of its
- * runStats rows may decide `role`/`conformance` (SI-17's normalise), and which
- * street-cred rows are its own (the seat-aware join). Split out of ./ledger at
- * v4.8 T3.3, on the same seam T3.0 used for ./ledger-stats: that split took the
- * READ half out, this one takes the JOIN SEMANTICS out, and `buildLedgerRows`
- * keeps only the row assembly. Both dependencies run one way
+ * runStats rows may decide `role`/`conformance` (SI-17's normalise), which
+ * street-cred rows are its own (the seat-aware join, T3.3), and — since v4.8
+ * SI-18 — which of the alias's raised findings are its own. Split out of
+ * ./ledger at v4.8 T3.3, on the same seam T3.0 used for ./ledger-stats: that
+ * split took the READ half out, this one takes the JOIN SEMANTICS out, and
+ * `buildLedgerRows` keeps only the row assembly. Both dependencies run one way
  * (ledger.js -> ledger-join.js / ledger-stats.js) and neither can cycle.
  *
  * ⚠️ REQUIRE-FREE by design — the ./seats · ./run-stats-entry · ./peer-split
  * precedent. Nothing here reads the filesystem or the config dir.
- * ⚠️ NOT re-exported from ./ledger: none of the three is used outside the row
+ * ⚠️ NOT re-exported from ./ledger: none of the four is used outside the row
  * build, so adding them to that module's export list would only risk the
  * AUTO:modules truncation its own comment warns about. Tests import them here.
  *
- * ⚠️ FOUR named mutants guard these, alongside LEDGERALIAS on ledger.js's
+ * ⚠️ FIVE named mutants guard these, alongside LEDGERALIAS on ledger.js's
  * join key. Each mutation and its MEASURED red set is recorded with the rest:
  * tests/council/street-cred-mutants.js :: CHAIRWINS guards benchLegs, while
  * tests/council/street-cred-mutants.js :: CREDALIAS guards WHETHER the seat
  * lookup can ever win, tests/council/street-cred-mutants.js :: ANYSEATED
  * (v4.8 follow-up) guards HOW COMPLETE a group's seats must be before it does,
- * and tests/council/street-cred-mutants.js :: ALIASLASTWINS guards how the
- * lookup combines what it finds. RE-RUN them, never renumber them.
+ * tests/council/street-cred-mutants.js :: ALIASLASTWINS guards how the lookup
+ * combines what it finds, and tests/council/street-cred-mutants.js ::
+ * FINDINGALIAS (v4.8 SI-18) guards splitFindingsBySeat the same wholesale way.
+ * RE-RUN them, never renumber them.
  */
 
 /**
@@ -219,4 +222,63 @@ function credFor(sc, group, model, streetCred) {
   return { withSelf: meanCred(rows, 'withSelf'), peersOnly: meanCred(rows, 'peersOnly') };
 }
 
-module.exports = { benchLegs, credFor, meanCred };
+/**
+ * v4.8 SI-18 — the FINDINGS attribution, seat-aware. THE HAZARD THIS EXISTS
+ * FOR: ledger.js used to compute `findings.filter(f => f.raiser === model)`
+ * once per alias and hand the WHOLE result to the block's FIRST pair group
+ * (R4b-2's concentration), regardless of how many pair groups PR4b's fan-out
+ * gave that alias. On a twin bench whose two seats resolve to DIFFERENT
+ * executables — already two separate rows since PR4b — every finding still
+ * landed on the first row and the second read 0 and null rates; on a twin
+ * bench sharing ONE executable, the single row combined both seats' findings
+ * with no way to tell them apart. `findings[].raiserSeat` (tally.js:114-115,
+ * emit-when-DIFFERENT from `raiser`) has named the seat that actually raised
+ * each finding since v4.8 PR3 Task 5 (anonymize.js :: toGlobalFindings); this
+ * join simply never read it. That is the half T3.3's seat-aware `credFor`,
+ * just above, did not close.
+ *
+ * PER-FINDING, NOT PER-GROUP MEAN. Unlike `credFor`'s street-cred numbers, a
+ * finding is a discrete item with exactly one true home, not a value to
+ * average away. A finding whose `raiserSeat` names a seat exactly one pair
+ * group's own runStats rows carry (seat ids are unique within an alias's own
+ * table, so at most one group can ever match) is credited to THAT group. The
+ * row SET itself never moves — PR4b's (alias, resolvedModel) pairing is
+ * unchanged; only which existing row a finding's numbers land on can.
+ *
+ * THE FALLBACK IS R4b-2, NARROWED, NOT REPLACED. A finding that cannot be
+ * resolved to a specific group — `raiserSeat` absent (every pre-seat
+ * document, every hand-assembled one), or present but matching no group's own
+ * seat (the asymmetric quadrant tally.js's own comment names: both
+ * hand-assembled `appendRun` callers can seed `meta.seats` — and so
+ * `streetCred` — without ever being asked for a seat on a `runStats` row, so
+ * a document can carry `raiserSeat` while no runStats row anywhere carries
+ * `.seat`) — still concentrates on the block's FIRST pair group, exactly as
+ * R4b-2 always has. So: a document with no seat channel at all leaves every
+ * finding unresolved, landing exactly where it always did; a document with a
+ * full seat channel splits findings precisely across the rows PR4b's fan-out
+ * already produces, and only a genuinely unattributable finding still falls
+ * back to the anchor. On the single-row case — twins sharing one executable —
+ * every seat's findings resolve to the SAME (only) group, so they combine
+ * there exactly as they do today: the row SET, not the attribution rule, is
+ * what limits how far apart two twins' numbers can land.
+ * @param {Array<Array<object>>} groups this alias's pair groups' runStats
+ *   rows, in emission order (ledger.js's `groups.map(([, group]) => group)`)
+ * @param {Array<object>} raised this alias's raised findings
+ *   (`findings.filter(f => f.raiser === model)`)
+ * @returns {Array<Array<object>>} one findings array per group, same length
+ *   and order as `groups`; group 0 additionally absorbs every finding no
+ *   group's own seats could place
+ */
+function splitFindingsBySeat(groups, raised) {
+  const seatSets = groups.map(group => new Set(group.map(r => r.seat).filter(Boolean)));
+  const mine = groups.map(() => []);
+  const leftover = [];
+  for (const f of raised) {
+    const idx = f.raiserSeat ? seatSets.findIndex(s => s.has(f.raiserSeat)) : -1;
+    (idx === -1 ? leftover : mine[idx]).push(f);
+  }
+  if (mine.length) { mine[0] = mine[0].concat(leftover); }
+  return mine;
+}
+
+module.exports = { benchLegs, credFor, splitFindingsBySeat, meanCred };
