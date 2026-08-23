@@ -1635,6 +1635,17 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   else in the 545-suite tree — reproduced independently at full `npx jest --no-coverage` scope by
   both the implementer and, separately, review.
 
+  ⚠️ **Test count corrected 2026-08-22 (council R16 fix round 2, A1) — the `21 tests` above was
+  accurate when written, then falsified by the first fix round.** At the shipping commit
+  (`a6e8f4b3`) the file had 18 `it`/`test` declarations, which jest expands to 21 — true at the
+  time. The first council fix round (A1/A4 + A2/A3 there, commit `cf35bd9a`) added tests and took
+  the file to 26 declarations (25 single `test()` calls plus one `test.each` of 3), which jest
+  expands to **28** — verified directly with `npx jest tests/doctor-index-prune.test.js
+  --no-coverage` (`Tests: 28 passed, 28 total`), not just by counting declarations. Stated as the
+  jest **runtime** count beside the **declaration** count on purpose, so the next `test.each`
+  addition cannot make this line ambiguous again. A paid council's own figure of **33** for this
+  same count, raised in the second fix round, is wrong — do not adopt it.
+
   Two judgment calls, both matching rulings R16-2/R16-3:
   - **Liveness only, never age.** No TTL, no mtime sort — zero hits grepping the new module for
     mtime/TTL/age. Its `sessions-index-tmp` sibling carries an `AGE_THRESHOLD_MS` (60 s, so a live

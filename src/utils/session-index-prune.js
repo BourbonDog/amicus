@@ -166,18 +166,21 @@ function listStaleSessionIndexEntries(deps = {}) {
  * which also lets fs errors propagate to its caller; evaluateSessionIndexPrune
  * (below) is that catcher.
  *
- * B1 (council R16 fix round, adjudicated — real, pre-existing, NOT fixed
- * here): `target` is computed before the read so only the in-memory filter
- * below runs between the read and the write — the narrowest this window
- * gets without real synchronization. session-index.js :: recordSession does
- * the identical read-whole-file -> mutate -> write-whole-file with no lock,
- * so two concurrent session starts already clobber each other today; this
- * function inherits that pre-existing race rather than creating it, widening
- * the window it is already exposed to. Consequence: a session recorded by
- * another process between this read and this write is lost, degrading
- * `amicus read <id>` from another project into a not-found. A lock or
- * compare-and-swap would close this properly — that is a design change
- * beyond R16 and is not made here.
+ * B1/D1 (council R16 fix round 2 — raised again by two more models;
+ * adjudicated, real, pre-existing, still NOT fixed here): the race is
+ * TWO-SIDED. `target` is computed before the read so only the in-memory
+ * filter below runs between read and write — the narrowest this window gets
+ * without real synchronization — but session-index.js :: recordSession
+ * performs the IDENTICAL unlocked read-modify-write. Locking only THIS side
+ * would be theater: closing the race properly requires locking
+ * recordSession too, exactly the hot-start-path cost ruling R16-1 rejected
+ * when it chose this doctor-check design over "prune on write". Consequence,
+ * unchanged: a session recorded by another process between this read and
+ * this write is lost, degrading `amicus read <id>` from another project
+ * into a not-found. `src/utils/session-lock.js` already provides atomic
+ * PID/staleness lock-file primitives (used today per-session-dir, not for
+ * this file) — the natural home for that future lock/CAS, noted so it is
+ * not re-derived, but NOT wired in here: its own change, beyond R16.
  *
  * @param {string[]} staleTaskIds
  * @param {{readIndex?: () => Record<string,string>}} [deps] - injectable for
@@ -186,9 +189,14 @@ function listStaleSessionIndexEntries(deps = {}) {
  *   staleTaskIds.length if an id was already gone by the time this ran).
  */
 function pruneStaleSessionIndexEntries(staleTaskIds, deps = {}) {
-  const ids = staleTaskIds || [];
+  // Array.isArray, not `|| []` (council R16 fix round 2, A2/d1): the old
+  // guard caught null/undefined but let any OTHER truthy value through — a
+  // string would iterate per character below, a plain object would throw.
+  const ids = Array.isArray(staleTaskIds) ? staleTaskIds : [];
   if (ids.length === 0) { return 0; }
 
+  // Lazy requires here match session-index-tmp-sweep.js's established
+  // convention for these same deps (council R16 fix round 2, A4) — kept, not hoisted.
   const { INDEX_FILENAME, readIndex: realReadIndex } = require('./session-index');
   const readIndex = deps.readIndex || realReadIndex;
   const { getConfigDir } = require('./config');
@@ -272,8 +280,11 @@ function evaluateSessionIndexPrune(d) {
       fixDetail: `pruned ${pruned} stale session-index row(s) (${staleProjectCount} deleted project(s))`,
     };
   }
+  // Council R16 fix round 2 (A3): name the OBSERVATION (fewer removed than
+  // listed), not an inferred cause — the count can differ for reasons other
+  // than "the index changed" underneath us.
   const remaining = staleCount - pruned;
-  const reason = writeError ? `write failed: ${writeError}` : 'index changed since list';
+  const reason = writeError ? `write failed: ${writeError}` : 'fewer entries removed than expected';
   return {
     id, name, status: 'warn',
     message: `pruned ${pruned}, ${remaining} remaining (${reason})`,

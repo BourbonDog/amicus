@@ -332,6 +332,24 @@ describe('session-index-prune real fs glue', () => {
     })).toThrow('boom');
   });
 
+  // Council R16 fix round 2 (A2/d1): a non-array staleTaskIds must be
+  // treated as empty. The old `staleTaskIds || []` guard caught null/
+  // undefined but let any other truthy value through — a string iterates
+  // per character below (each char treated as a real taskId, risking an
+  // accidental single-char match and deletion) and a plain object throws at
+  // `for...of` (not iterable).
+  test('pruneStaleSessionIndexEntries treats a non-array staleTaskIds as empty: no throw, no per-character deletion (A2)', () => {
+    recordSession('a', '/proj/a'); // a real single-char taskId a string would hit if iterated char-by-char
+
+    expect(pruneStaleSessionIndexEntries('abc')).toBe(0);
+    expect(() => pruneStaleSessionIndexEntries({ not: 'an array' })).not.toThrow();
+    expect(pruneStaleSessionIndexEntries({ not: 'an array' })).toBe(0);
+
+    const indexPath = path.join(configDir, 'sessions-index.json');
+    const onDisk = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+    expect(onDisk).toEqual({ a: '/proj/a' }); // untouched — proves no per-char deletion happened
+  });
+
   // B1 (council R16 fix round, adjudicated — real pre-existing race, not
   // fixed here): confirms what the ruling relies on — prune touches ONLY the
   // ids it was handed. An entry recorded by another process between list and

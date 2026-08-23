@@ -709,6 +709,18 @@ All notable changes to Amicus are documented here. Format follows
   loop — the write target is now resolved before the read — and prune deletes only the ids it
   was handed. A lock or compare-and-swap on `sessions-index.json` would close it properly and
   is recommended as its own change, not folded into this one.
+  ⚠️ **Race sharpened, raised again in a second fix round by two more models (B1/D1) — still NOT
+  fixed, recorded here more precisely than above: the race is TWO-SIDED, so locking only this
+  side would be theater.** Closing it properly means locking `recordSession` too — and that lock
+  (like the `statSync`-per-entry cost of the "prune on write" alternative) is exactly the
+  hot-start-path cost ruling R16-1 rejected when it chose this doctor-check design in the first
+  place. `--fix` and `recordSession` both perform the identical unlocked read-modify-write on the
+  same file today, independent of this change — nothing here makes that worse.
+  `src/utils/session-lock.js` already provides atomic PID/staleness lock-file primitives (used
+  today for per-session-dir resume/continue, not for this file) and is the natural home for a
+  future `sessions-index.json` lock or compare-and-swap, noted here so that work is not
+  re-derived from scratch — but it is **not** wired in here; that remains its own change, beyond
+  R16.
 
 ## [4.7.1] - 2026-08-09
 
