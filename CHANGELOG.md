@@ -677,6 +677,24 @@ All notable changes to Amicus are documented here. Format follows
   silently dropped a twin's leg with no error. `parseModelsList` itself is byte-unchanged — this is
   a test plus an invariant comment, not a behaviour change.
 
+### Added
+
+- **`doctor` gains a `sessions-index-prune` check; `--fix` removes stale `sessions-index.json`
+  rows.** `recordSession` appends a `taskId -> project` entry on every session start and nothing
+  ever removed one, so a deleted, renamed or moved project's rows outlived it forever, and every
+  session start paid to read/parse/mutate/stringify/write the *whole* file regardless. The new
+  check lists entries whose project path no longer resolves to a directory, reports both the stale
+  count and the distinct-project count (many task ids can share one project), and `--fix` prunes
+  them atomically through the same write path `recordSession` itself uses — reusing the
+  announce-then-fix shape its `sessions-index-tmp` sibling already established for this same file.
+  Liveness only, never age: a five-year-old entry for a project that still exists is left alone; a
+  one-day-old entry for a deleted one is not. Only a confirmed-gone `ENOENT`/`ENOTDIR` counts as
+  stale — a permissions error or any other unreadable-but-maybe-there condition leaves an entry
+  alone rather than risk deleting a live lookup target. ⚠️ This closes the structural growth gap,
+  not a specific steady-state size: most of the index size first measured against this defect was
+  test residue from an already-sealed `/tmp` hermeticity leak, not something this check alone was
+  ever going to shrink back to zero.
+
 ## [4.7.1] - 2026-08-09
 
 ### Changed
