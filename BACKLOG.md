@@ -3615,9 +3615,21 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   the same branch as the `'null'` key, with the same message. No pollution was ever possible: only
   strings reach that line and the setter ignores them.
   ⚠️ **`directFormProvenance` in the same file still seeds `const out = {}` and is deliberately
-  NOT changed** — its one indexed read (`gateway-route-audit.js:77`) is keyed from
-  `Object.entries(toGatewayRoutes())`, i.e. curated aliases, never user input. Recorded so a later
-  sweep does not read the untouched line as an oversight.
+  NOT changed.** ⚠️ **CORRECTED 2026-08-23 — this paragraph said "its ONE indexed read
+  (`gateway-route-audit.js:77`) ... never user input". FALSE, and it is the TWIN of the same claim
+  corrected further up this file.** There are **two** readers:
+  `gateway-route-audit.js :: auditGatewayRoutes` (curated-keyed, as claimed) and
+  `alias-audit.js :: findStaleAliases`, whose `alias` comes from `collectAliasSources()` — which
+  pushes the user's own `cfg.aliases` entries **and** a raw CLI arg. The DECISION stands, on two
+  independent grounds rather than the one claimed: that read is guarded by `source === 'defaults'`
+  (false for a user alias) **and** `prov.directForm === 'derived'` (false for an inherited Function,
+  which carries no such property), so it fails open exactly as documented.
+  ⚠️ **How this twin survived, and it is the reusable part:** the fix above swept for
+  *"only indexed read"*. This paragraph says *"**one** indexed read"*. A different word for the same
+  claim — the third sweep on this branch defeated by SPELLING rather than by scope
+  (`councils[` vs `councils.` was the first, three vs four spellings of "no requires" the second).
+  It was caught by the PR council, not by any sweep. Recorded so a later reader does not treat the
+  untouched `{}` as an oversight — and so the next "the only X" claim gets grepped for its synonyms.
   Named mutant **`BUILDERPROTO`** (drop the seed from all three producers), **RED 1 suite / 3 tests**
   — `config-null-alias.test.js` 3 of 26, measured at the FINAL tree with the record in place.
   Denominator 549 suites / 7948 tests.
