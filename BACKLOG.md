@@ -3355,8 +3355,13 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   `run-retry-launch.js :: bindRetryWave`, `run-stage2.js :: runStage2` and
   `run-debate-revote.js :: runRevoteWave`. **Each site keeps its own orphan/missing tail**
   (push / degrade.note / nothing), exactly as ruling **R14** and SI-DUP disposition (a) specified.
-  Commits `80680c9f` (extraction), `ed827eaa` and `68bee03e` (the measured red sets),
-  `d29a3462` (fix round 1), on BASE `8b06c5e5`.
+  **The whole branch, in order** — cited as four commits until 2026-08-23, which was the CODE
+  half only. `9b059842` + `8e1c8e24` (the anchor correction and the four carriers it missed —
+  both PRE-BASE, and the reason this item's site list is trustworthy at all) · `8b06c5e5` (plan) ·
+  `80680c9f` (extraction) · `ed827eaa` + `68bee03e` (the measured red sets, the second retracting
+  a blast-radius claim the plan asserted and measurement disproved) · `d29a3462` (fix round 1) ·
+  `943a047b` (this record) · `9b712414` (rider (2)'s counting rule) · `747c3a3e` + the final-review
+  fixes. BASE for the code half is `8b06c5e5`; for the branch, `dda1b8cf`.
 
   **Sizes, BASE → HEAD:** `stage1-bind.js` 86 → 142 · `run-retry-launch.js` 67 → 55 ·
   `run-stage2.js` 213 → 207 · `run-debate-revote.js` 274 → 268 · `run-stage1-rows.js` 214 → 220.
@@ -3482,8 +3487,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   gives is that doc-tree citations are *"overwhelmingly dated historical record"*, and for
   `docs/superpowers/plans/*` and `specs/*` that holds. **It does not hold for SI-DUP’s
   dispositions or SI-15’s §3.4 clause**: those are LIVE work orders whose whole job is to point
-  a future implementer at a file and a line, and SI-27 falsified **nine** such citations here
-  with not one catchable. ⚠️ **And two of the nine had already rotted six days earlier:**
+  a future implementer at a file and a line, and **nine** such citations here were false after
+  SI-27, with not one catchable. ⚠️ **SI-27 falsified SEVEN of them; the other TWO had already
+  rotted six days earlier and SI-27 only took them out of range:**
   `run-retry-launch.js@2517a947:53`/`run-retry-launch.js@2517a947:59` were exact at T-A2’s lift and became
   `:56`/`:62`
   at `6709ac78` (2026-08-17), a **comment-only** fix three lines above them, with nothing to
@@ -4725,10 +4731,10 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   that is off by one. Separately, §3.4's
   roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
   WAS duplicated near-verbatim in a **different** set of three files:
-  `run-retry-launch.js@6709ac78:50-60`
+  `run-retry-launch.js@2517a947:50-60`
   (was `run-retry.js:123-133` at T-A2's base `3b8cf781` — this entry first said `:118-130`, which
   was T-A2's own arithmetic slip; measured 2026-08-17 — lifted verbatim by T-A2),
-  `run-stage2.js@9ef275e5:89-106`, `run-debate-revote.js :: runRevoteWave` (**was `:106-117`;
+  `run-stage2.js@9ef275e5:91-107`, `run-debate-revote.js :: runRevoteWave` (**was `:106-117`;
   re-anchored BY
   SYMBOL 2026-08-21 after v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix
   waves added the rest), and T5.5 took it to 274 on 2026-08-22. Re-opened against the FINAL tree:

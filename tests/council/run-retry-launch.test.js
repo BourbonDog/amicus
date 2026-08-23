@@ -147,10 +147,18 @@ describe('run-retry-launch — extraction pins (v4.8 Phase 2 T-A2)', () => {
     // its bind would be a name-collision channel inside the one mechanism whose whole
     // contract is "never guess". Mutant: in `stage1-bind.js :: bindPaddedWave` swap
     // the filter for
-    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — named "PREFIXID",
-    // measured 2026-08-17: RED here and green on the other 171 tests of
-    // run-retry-launch/run-retry/run-stages/run-cost-bijection (4 suites). Not run
-    // repo-wide, so "green everywhere else" is stated only for that set.
+    // `.filter(b => !String(b.seat.id).startsWith('__unbound-'))` — named "PREFIXID".
+    // ⚠️ LOCATION as of v4.8 SI-27: that block moved OUT of this file, so the two
+    // measurements below describe DIFFERENT trees. Do not read the older as current.
+    //   2026-08-23, at the new shared location, full `npx jest --no-coverage`: reds
+    //     2 tests in 2 suites — this one AND run-stages.test.js's "Finding 3: an
+    //     adversarial `__unbound-`-prefixed alias still binds by seat IDENTITY".
+    //     One edit now kills BOTH identity pins; that is what the consolidation bought.
+    //   2026-08-17, when the block was still inline here: RED here and green on the
+    //     other 171 tests of run-retry-launch/run-retry/run-stages/run-cost-bijection
+    //     (4 suites). Not run repo-wide, so "green everywhere else" was stated only for
+    //     that set. ⚠️ Finding 3 ALREADY EXISTED then (`86eb888d`, 2026-08-13) and was
+    //     green only because the mutant sat in this file — never because it is insensitive.
     const real = { id: '__unbound-x#1', alias: '__unbound-x', role: 'seat', lens: null, position: 1 };
     const legs = [{ legId: 'w-1', modelInput: '__unbound-x' }];
     const { retrySeatOf } = launch.bindRetryWave(
