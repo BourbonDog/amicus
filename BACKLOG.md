@@ -3326,9 +3326,10 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom** (see the dedicated
   warning immediately below — unchanged by `R16`, which does not touch that file).
-  **`SI-27` extracts from that very file** — its implementer must know going in that there is no
-  room to add even one explanatory line before the extraction itself lands; the next change there
-  must extract first, per Release Constraint 6.
+  ⚠️ **CORRECTED 2026-08-23: this said `SI-27` extracts from that very file. It does NOT** — see
+  the corrected paragraph at the end of this entry, and row 27's anchor in the phasing doc.
+  `run-retry.js` holds no roster-padding site, so nothing in the rest of v4.8.0 relieves it; the
+  next change there must extract first, per Release Constraint 6.
 
 - [ ] **NEXT TASK — Wave 3.** Filed 2026-08-22 (v4.8 Wave 2.5 record, `T-R16.2`) as the correct
   resume point, superseding "NEXT TASK — Wave 2.5" above (now ✅ DONE — `R16`/`T-R16.1`, commit
@@ -3342,7 +3343,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   (ruling R15 — not yet placed in a wave; schedule it, do not assume it rides Wave 3).
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom**, unchanged by `R16`
-  — see the dedicated warning immediately below. **`SI-27` extracts from that very file.**
+  — see the dedicated warning immediately below. ⚠️ **CORRECTED 2026-08-23: this said `SI-27`
+  extracts from that very file. It does NOT** — no wave in the rest of v4.8.0 touches it.
 
   ⚠️ **New since Wave 2.5: the file-size gate is at saturation more broadly, and
   `cli-handlers-doctor.js` is now 299/300.** Re-measured against the final tree — see the two
@@ -3365,13 +3367,16 @@ at exactly **300/300**. **The next line added to that file breaks the gate.**
 
 Release Constraint 6 is *EXTRACT, never shave a comment* — so the next change there must
 extract first, and no comment already in the file may be trimmed to buy room.
-⚠️ **This lands directly on SI-27**, which consolidates the padding/bindSeats/placeholder
-core out of `run-retry.js`, `run-stage2.js` and `run-debate-revote.js` into
-`stage1-bind.js`. That work IS the extraction this file needs — but its implementer must
-know there is no room to add even a single explanatory line before the extraction lands.
-Filed rather than fixed here: extracting from `run-retry.js` on a Wave 1 comment PR would
-be exactly the *"consolidation must not ride a defect PR"* inversion SI-27's own ruling
-forbids.
+⚠️ **CORRECTED 2026-08-23 — this paragraph said SI-27 "lands directly on" this file, and that
+"that work IS the extraction this file needs". BOTH ARE FALSE.** SI-27 consolidates the
+padding/bindSeats/placeholder core out of `run-retry-launch.js :: bindRetryWave`,
+`run-stage2.js` and `run-debate-revote.js` into `stage1-bind.js`. **`run-retry.js` is not one
+of its sites and gains not one line of headroom from it.** No wave in the remainder of v4.8.0
+touches this file: it is the one saturated file with NO scheduled extraction, and the next
+change to it must extract first. See row 27's corrected anchor in the phasing doc for how the
+wrong file was carried — SI-27 once covered `seatKey` duplication here, PR5c/T-A1 moved that
+definition out to `run-retry-keys.js`, the item narrowed to roster-padding, and the anchor
+column never followed. A fossil, not a typo.
 
 ### ⚠️ The file-size gate is at saturation — re-measured 2026-08-22 (v4.8 Wave 2.5, `T-R16.2`)
 

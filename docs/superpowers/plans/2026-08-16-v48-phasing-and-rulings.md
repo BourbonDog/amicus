@@ -676,8 +676,9 @@ inline (not this note) for what is actually done.
 - **Wave 3 — NEXT.** **strictly serial**: SI-27 **first**, SI-22.4 **LAST** — SI-22.4's trim knock-on
   turns a whitespace-padded preset member into a REAL twin bench (changed artifact filenames,
   `meta.seats` starts emitting), which SI-27's consolidation should absorb rather than the other
-  way around. ⚠️ `SI-27` extracts from `src/council/run-retry.js`, which is at 300/300 lines —
-  zero headroom for even one explanatory line before that extraction lands (`BACKLOG.md`). ⚠️ Since
+  way around. ⚠️ **CORRECTED 2026-08-23: this said `SI-27` extracts from `src/council/run-retry.js`
+  (300/300). It does NOT** — see row 27's corrected anchor above. That file holds no padding site,
+  gains no headroom from SI-27, and nothing else in v4.8.0 touches it (`BACKLOG.md`). ⚠️ Since
   Wave 2.5, `src/cli-handlers-doctor.js` is also at 299/300 and the file-size gate more broadly is
   at saturation (three files at 300/300, twelve within 6 lines of the cap) — re-measured detail in
   `BACKLOG.md`'s two dedicated entries; neither blocks Wave 3.
