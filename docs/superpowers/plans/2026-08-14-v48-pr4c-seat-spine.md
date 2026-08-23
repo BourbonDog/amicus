@@ -974,6 +974,14 @@ An end-to-end twin run is §5's job.
    renders `--- Review by ${r.model} ---` and `:92-93` renders `${a.findingId} — ${a.judge}:
    ${a.verdict}` — all alias-keyed. The chair is handed *"Deterministic tier counts: {Confirmed: 1}"*
    beside two `A1 — deepseek:` lines, with nothing in the packet that can reconcile them.
+   ⚠️ **ANNOTATION 2026-08-23 — this finding is CLOSED; the snapshot above is left as PR4c's own
+   record.** `SI-25` (`f7fe180d` + `0c06bca9` + `95ee5520`) seat-keyed **all three** rendering sites
+   of `briefings-chair.js :: buildChairPacket` — the two this item names **and the peer-rankings
+   render this item does not mention**, which was the same defect at `:90` (ruling **R25-1**). It
+   also forwarded `seat` through `run-assemble.js :: buildChairPacketFile`'s reviews projection,
+   without which the review-header site could not be fixed at all. **Every line number in this item
+   is a 2026-08-14 reading and has since moved** — anchor by symbol. Do not re-open this from here;
+   see `BACKLOG.md`'s ticked *"chair packet is assembled entirely in alias space"* entry.
 11. **Still broken after PR4c, filed not fixed:** street cred's last-wins rank and duplicate rows
    (`tally.js:38`, `:51`), the ledger's last-wins street-cred join (`ledger.js:104`), the ledger's
    alias-attributed findings (R4c-3), `location` stripping on the MCP tally path (§1.5), and
@@ -1283,6 +1291,19 @@ expression — a `Object.prototype.hasOwnProperty` guard is the fix.
 > **6th**, so it never appeared in the table and run-assemble's row is byte-identical after a move.
 > Stale citation to fix either way: `docs/superpowers/specs/2026-08-10-…-design.md:333` cites
 > `run-assemble.js:243 buildChairPacketFile`.
+>
+> ⚠️ **ANNOTATION 2026-08-23 (v4.8 SI-25) — two statements in this block have inverted.**
+> 1. ⛔ **"`buildChairPacketFile` has zero test coverage anywhere in `tests/`" is now FALSE.**
+>    `tests/council/chair-packet-seats.test.js` calls `asm.buildChairPacketFile(...)` directly in its
+>    *"SI-25 R25-5 — buildChairPacketFile forwards the seat emit-when-DIFFERENT"* block, and
+>    `tests/council/chair-packet-seat-mutants.js :: SEATALWAYS` names that forward as its mutation
+>    target with a measured red set of 1 test. Counting rule: files under `tests/` naming
+>    `buildChairPacketFile`, `grep -rn` — **2** at 2026-08-23, **0** when this block was written. An
+>    extraction of that function is no longer unpinned; plan for the pins, do not assume there are none.
+> 2. **The spec pointer has rotted.** `…-design.md:333` is now unrelated prose. The spec's chair-packet
+>    projection row is at `:191` (corrected 2026-08-23 — it had proposed `r.seat.displayName`, a
+>    property that never existed, where `seats.js :: displayName(seat)` is a function), and the
+>    extraction-site list entry is at `:359`. Both re-anchored by symbol.
 
 - **Every file, measured after a FULLY DOCUMENTED build of §3.1–§3.4 AND §3.6.** Revision 2's figures
   were the *undocumented floor plus three* for the §3.6 files and are corrected here:

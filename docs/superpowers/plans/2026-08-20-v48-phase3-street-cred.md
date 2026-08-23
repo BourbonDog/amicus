@@ -203,6 +203,13 @@ wrong values twice in this release.
 
 **Every one of these is converted to a SYMBOL anchor by this PR (rule 5b), not to a new number.**
 
+⚠️ **ANNOTATION 2026-08-23 — the `briefings-chair.js:88` / `:93` (SI-25) row's ✅ has expired.** Both
+numbers were exact when this table was taken (`006bdec5`) and both have since moved: `SI-25`
+(`f7fe180d`) seat-keyed those renders, so at its HEAD site (1) is `:149` and site (2) is `:154`, with
+the rankings render — site (3), which this row does not list — at `:151`. The row is left as the
+audit's own record; the durable anchor is `briefings-chair.js :: buildChairPacket`. This is the
+table's own point demonstrating itself: a ✅ on a line number is a timestamp, not a property.
+
 ### 0.9 The citation gate's blind spots — re-measured by executing its own parser
 
 Run against the real exported `parseCitations`:
@@ -271,6 +278,22 @@ alias-space sites: `:88` reviews, `:93` adjudications, and **`:90` rankings** �
 `` `${r.judge}: ${JSON.stringify(r.order)}` ``. Site (3) is the rankings one, which is why R15 has it
 riding this phase. **Phase 3 UNBLOCKS it; Phase 3 does not do it.** Nothing in this PR may claim
 SI-25 closed.
+
+⚠️ **ANNOTATION 2026-08-23 — leave this paragraph exactly as it stands; it is why the numbering is
+trustworthy.** This is the first-hand identification that fixed which site is which, and every later
+document (ruling R15, the SI-25 plan, ruling R25-1) depends on it. Two things follow it, neither of
+which changes it:
+1. **The middle sentence did exactly what it said, and that is the whole problem.** Phase 3 shipped
+   on 2026-08-21 having unblocked site (3) and not done it, so R15's home for site (3) — *"the
+   street-cred PR"*, i.e. this one — evaporated. Site (3) was then unblocked and **homeless**.
+2. **Ruling R25-1 (2026-08-23) therefore did ALL THREE sites in SI-25's own PR** (`f7fe180d` +
+   `0c06bca9` + `95ee5520`), not the (1)+(2) R15 scheduled. **That is not scope creep** — the
+   deferral had no remaining referent, and a two-of-three fix would have left the rankings block
+   alias-keyed while the record claimed SI-25 closed.
+
+⚠️ **The line numbers above are `006bdec5` readings and have moved** (site (1) `:149`, site (3)
+`:151`, site (2) `:154` at SI-25's HEAD). **The site NUMBERING has not moved and must not** — site
+(3) is the rankings render, the MIDDLE one in the file, not the last.
 
 ### Explicitly OUT of scope — nothing may claim otherwise
 
@@ -462,6 +485,13 @@ The site, re-derived: `src/council/run-assemble.js :: buildTallyInput` —
 3. `rankingToOrder` gains the optional seat map and returns the seat-valued order alongside the
    alias-valued `order`. **`order` stays exactly as today** so `briefings-chair.js` and the tally
    schema are unmoved; site (3) becomes *possible*, not *done*.
+   ⚠️ **STILL TRUE, BUT NO LONGER A FENCE — 2026-08-23.** Every clause holds: `order` is byte-for-byte
+   what it was, and the tally schema is unmoved. **Do NOT read "`briefings-chair.js` is unmoved" as
+   current state.** `SI-25` (`f7fe180d`, ruling R25-1) did site (3): `buildChairPacket`'s
+   `rankingLines` now renders `seatKeyedOrder(r.order, r.orderSeats)` — a per-slot, tie-aware,
+   null-safe zip of the two arrays this bullet created — instead of `JSON.stringify(r.order)`, and
+   the file went 182 → 243 lines. What *this* PR left unmoved, the PR two days later moved, using
+   exactly the channel this bullet opened. "Possible, not done" has become "done".
 4. `src/council/verdict.js`'s closed streetCred literal —
    `record.streetCred.map(s => ({ model, withSelf, peersOnly }))` — **must carry the seat through**,
    or `verdict.json` silently strips it. This site is filed nowhere; it was found by measurement.

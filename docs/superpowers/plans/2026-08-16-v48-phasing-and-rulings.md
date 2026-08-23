@@ -131,7 +131,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
 | 23 | **DONE** (v4.8 Wave 2, `d5378684`, 2026-08-22, ruling R10) | ~~`location` stripped on MCP tally path~~ the closed `z.object` now declares `location`; `tally.js :: tally`'s `outFindings` map — independently dropping it regardless of validation, CLI path too — now forwards it emit-when-present. A same-PR fix round (council A1/B1) closed the identical gap for `claim` one line below. ⚠️ **Closes into `tally.json` only, not `verdict.json`** — `verdict.js :: buildVerdict`'s closed `out` literal forwards neither field; filed, not fixed (`BACKLOG.md`). Named mutants: `SCHEMASTRIP` RED 2 tests/1 suite (reproduced directly for this record — the commit itself states no count); `CLAIMDROP` RED 2 suites/2 tests (commit-stated) | `mcp-tools.js :: getTools` · `tally.js :: tally` |
 | 24 | **DONE** (v4.8 Phase 6 PR1, 2026-08-22, SI-24) | ~~`VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first)~~ four `Object.prototype`-collision carriers closed at the table (`__proto__: null` / `Object.create(null)`), not two sites: **A** `tally.js :: VERDICTS` (read, CLI-only — MCP's `adjudications[].verdict` is `z.enum`) `36297e18`+`41733c58`; **C** `street-cred.js :: perJudgeRank` (write/accumulator, CLI **and** MCP — closes the half T3.3 left unfiled) `46b89f75`+`3e1a09a7`; **D** `report.js :: SYMBOL` (read, 3 renderers, CLI **and** MCP — `amicus_verdict`'s unvalidated `record: z.record(z.any())` bypasses A/B's `tally()`-gated enum) and **E** `debate.js :: PAST_TENSE` (read, defense-in-depth ONLY — `parse-stage2.js`'s allowlist already makes a real defense response unreachable, so this closes a latent hole, not a live bug) both `7ebe91ca`+`faccd178`, plus two follow-up rounds `551f8366`+`7bacef50` and `308e90d1`+`8aab4059` that retracted a born-false reachability claim for E. Named mutants `PROTOVERDICT` · `PROTORANK` · `PROTOSYMBOL` · `PROTOACTION` · `ACTIONPASSTHRU` · `DOUBLEBREACH` — the last two are a compound pair: `PAST_TENSE`'s null prototype and the allowlist are each independently sufficient, so only breaching BOTH reds the pin | `tally.js :: VERDICTS` · `street-cred.js :: perJudgeRank` · `report.js :: SYMBOL` · `debate.js :: PAST_TENSE` |
-| 25 | OPEN | chair packet in alias space | `briefings-chair.js :: buildChairPacket` — three sites, three sizes |
+| 25 | **DONE** (v4.8 SI-25, 2026-08-23, ruling R15 **as amended by R25-1**; code + 15 pins `f7fe180d`, the five named mutants `0c06bca9`, fix round 1 `95ee5520`; branch `v48-si25-chair-packet-seats`, BASE `c0745013`) | ~~chair packet in alias space~~ **all THREE rendering sites seat-keyed, not the (1)+(2) R15 scheduled** — review headers resolve the seat through `seats.js :: displayName`, adjudications and the rankings KEY fall back seat-then-alias, and the rankings VALUES go through a new per-slot, tie-aware, null-safe zip. Site (1) also needed `run-assemble.js`: its reviews projection dropped `r.seat` before the packet saw it, and the seat now rides through it under the same emit-when-DIFFERENT rule as `rankings[]`, so a no-twin bench stays byte-identical. ⚠️ **R25-1, not scope creep**: R15 sent site (3) — the **rankings** site, the middle one in the file — to Phase 3, which unblocked it and deliberately did not do it, leaving the deferral with no referent. Five named mutants, none empty (`ALIASBACK` 1 suite/3 tests · `SEATONLY` 4/12 · `NULLLEAK` 1/4 · `FLATTIE` 1/1 · `SEATALWAYS` 1/1, denominator 546 suites / 7914 tests), all five reproduced exactly by an independent re-measurement | `briefings-chair.js :: buildChairPacket` · `:: seatKeyedOrder` · `run-assemble.js :: buildChairPacketFile` |
 | 26 | **DONE** (T3.1 `13ae8cf6`, 2026-08-20) | ~~`letterByModel` dead code~~ deleted — the JSDoc `@returns` clause, the `const`, the populate line and the return-literal key; `labelMap`/`entries` untouched | `anonymize.js :: assignLabels` |
 | 27 | **DONE** (code: `80680c9f` + `ed827eaa` + `68bee03e` + `d29a3462`; record: `943a047b` + `9b712414` + `747c3a3e` + final-review fixes; and the PRE-BASE anchor corrections `9b059842` + `8e1c8e24` without which this row's site list was wrong — 2026-08-23, ruling R14; BASE `8b06c5e5`, branch BASE `dda1b8cf`) | ~~roster-padding ×3~~ the pad / bind / drop-placeholder core is consolidated into `stage1-bind.js :: bindPaddedWave(waveId, rosterSource, aliasAt, legs)` → `{seatOf, bindRes, placeholders}`, serving all three sites; **each site keeps its own orphan/missing tail** (push / degrade.note / nothing). Sizes: `stage1-bind.js` 86→142, `run-retry-launch.js` 67→55, `run-stage2.js` 213→207, `run-debate-revote.js` 274→268, `run-stage1-rows.js` 214→220; 545 suites / 7891 passed / 8 skipped / 0 failed. ⚠️ **ANCHOR CORRECTED 2026-08-22, and it held** — the first file was `run-retry.js` here and that was WRONG: it holds no padding site at all, and SI-27 confirmed it by shipping without one. ⚠️ **Consequence, unchanged: SI-27 does NOT relieve `run-retry.js`'s 300/300 saturation** — a belief carried through Wave 2.5 on the strength of this cell. That file stays saturated and is a standing hazard for whoever next touches it. ⚠️ **But it is not untouched either: ruling P5 let SI-27 reword ONE comment line in it** (`run-retry.js:22`, a sentence SI-27 made half false), one line → one line, still exactly 300/300. ⚠️ The `:36` line ref and the quoted header *"Consolidating the three"* in the pre-2026-08-23 version of this cell are both gone from the tree — SI-27 rewrote that header; anchor by symbol | `stage1-bind.js :: bindPaddedWave` ← `run-retry-launch.js :: bindRetryWave` (55/300) · `run-stage2.js :: runStage2` (207/300) · `run-debate-revote.js :: runRevoteWave` (268/300) |
 
@@ -275,7 +275,7 @@ both twins 'critic') and it is unreachable by any run v4.8 creates.
 | R12 | #135 TTFT (C2) | **Probe first** — log `firstSubstantiveAt`, read one real council run, then scope C2 |
 | R13 | #133 | **Piece 1 only** — `opencodeSessionId`; the parser and the resolver both wait |
 | R14 | Duplication | **SI-27 in v4.8, after Phase 2, home = `stage1-bind.js`**; seatKey cross-file consolidation → v4.9 |
-| R15 | SI-25 chair packet | **Sites (1)+(2) now** as a small PR; site (3) rides Phase 3 |
+| R15 | SI-25 chair packet | **Sites (1)+(2) now** as a small PR; site (3) rides Phase 3. ⚠️ **AMENDED 2026-08-23 by ruling R25-1 — the PR shipped ALL THREE sites, and that is not scope creep.** Site (3) is the **rankings** render (the MIDDLE site in `buildChairPacket`, not the last — easy to mis-assume). "Rides Phase 3" did not happen: Phase 3 UNBLOCKED site (3) and deliberately did not do it, stating so verbatim twice in its own plan, so by 2026-08-23 the deferral had no remaining referent. Fixing two of three would have left the rankings block alias-keyed while the record claimed SI-25 closed. See status-table row `\| 25 \|` above and `BACKLOG.md`'s ticked *"chair packet is assembled entirely in alias space"* entry |
 | R16 | `sessions-index` leak | **Pin all 13 unpinned rails** |
 | R17 | What is the consumer-side unidentifying-key defect? (asked as *"what is SI-12?"* — see R19) | The consumer-side sibling of PR B's council C1. **Narrow option:** the report.js/matrix-model.js strictness asymmetry is not in scope and no shared module is extracted |
 | R18 | Where does a refused vote go? | **Fold into UNATTRIBUTED** — one column, one concept; the vote stays in `basis` |
@@ -352,12 +352,22 @@ class this release files as citation-gate Mechanisms A–D. The closed work is *
 - **T1.1** `buildRunStatsEntry` out of `run-assemble.js` → **SHIPPED: 297 → 252 measured**
   (the 247 here was a projection; the 5-line gap is real and the measured value is the one Phases
   2–3 should plan against). `buildChairPacketFile` now opens at `run-assemble.js:223`.
+  ⚠️ **`:223` has rotted — re-measured 2026-08-23 (v4.8 SI-25).** Counting rule: the line of
+  `function buildChairPacketFile(` in `src/council/run-assemble.js`, read at both SI-25's BASE
+  `c0745013` and its HEAD — **`:242` at both**, so the drift happened between 2026-08-16 and that
+  BASE and SI-25 did not cause it. Anchor by symbol: `run-assemble.js :: buildChairPacketFile`.
   **Hard prereq of three things:** Phase 3's `rankings[]` seat, #135's TTFT field, carried PR1F-2
 - **T1.2** Extract from `report.js` (**298/300**) — hard prereq of **T2.4**.
   ⚠️ Corrected 2026-08-16: this line and §6 previously also claimed SI-25. They were wrong —
   SI-25's sites are `briefings-chair.js :: buildChairPacket` (182 lines) and
   `run-assemble.js :: buildChairPacketFile`; `report.js` never carried a chair packet. T1.1 is
   what mechanically gated SI-25 site (1) (`run-assemble.js` was at 297/300); at 252 it is clear
+  ⚠️ **Two notes, 2026-08-23 (v4.8 SI-25).** (a) **The sentence above is unfinished in the source** —
+  it ends at "at 252 it is clear" with no object; a dropped clause, pre-existing, left as history.
+  (b) **Both line counts have moved now that SI-25 has shipped**: `briefings-chair.js` 182 → **243**,
+  `run-assemble.js` 252 → 271 → **278** (gate's rule: `content.split('\n').length`, minus 1 if the
+  file ends in a newline). Both are still clear of the 300 gate; the *conclusion* holds, the
+  *numbers* do not — re-measure rather than quoting 182 or 252 from here.
 
 > Use the PR5b shape: byte-for-byte move, re-exported so no caller changes, pinned by function
 > **identity** (`toBe`) across import paths. That PR earned the sequence's only clean verdict.
@@ -462,7 +472,11 @@ deliberately stopped short of) and seat-keyed `rankPositions`, `computeStreetCre
 (`credSeats`, one row per SEAT), the peer split and `perJudgeRank`, plus the ledger join — now
 `ledger-join.js :: credFor`, extracted in the same commit rather than left at the `ledger.js:106`
 cited above — and SI-17's normalise (R4) via `ledger-join.js :: benchLegs`. Closes **SI-06, SI-17,
-SI-19, SI-20**; unblocks SI-25 site (3). **Does NOT close SI-18** — see the ⚠️ immediately above;
+SI-19, SI-20**; unblocks SI-25 site (3). ⚠️ **"Unblocks" is exact and stays exact — Phase 3 did not
+DO site (3), and by 2026-08-23 that had a consequence.** R15 had sent site (3) here, so unblocking
+it without doing it left it homeless; ruling **R25-1** therefore shipped all three sites in SI-25's
+own PR on 2026-08-23. **Do not read this line as "site (3) shipped in Phase 3"** — the resume points
+downstream of it did, and were wrong. **Does NOT close SI-18** — see the ⚠️ immediately above;
 the line this replaces was wrong about it from the day it was written. Release constraint 6
 (extract, never shave) fired twice: `street-cred.js` now holds
 `computeStreetCred`/`rankPositions`/`credSeats`, and `ledger-join.js` holds
@@ -571,13 +585,15 @@ SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin be
 filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · ~~SI-24 both sites
 including the unfiled `computeStreetCred` **data-loss** site~~ **DONE (PR1, 2026-08-22) — see
 status-table row `| 24 |`** · ~~SI-14 twin pin~~ **DONE (v4.8 Wave 1, 2026-08-22)** · ~~T6.5 repair-row
-seat~~ **DROPPED** · ~~T6.6 `skills/` doc-fact gate~~ **DONE (v4.8 Wave 1, 2026-08-22)** · SI-25 sites (1)+(2) (R15)
+seat~~ **DROPPED** · ~~T6.6 `skills/` doc-fact gate~~ **DONE (v4.8 Wave 1, 2026-08-22)** · ~~SI-25 sites (1)+(2) (R15)~~ **DONE (v4.8 SI-25, 2026-08-23) — all THREE sites, ruling R25-1; see status-table row `\| 25 \|`**
 
 > ⚠️ **T6.5 was DROPPED 2026-08-22 (v4.8 release inventory, owner ruling) because it was never specified.** `grep -rn "T6\.5"` over the whole repo returned exactly two hits — this line and its twin in `BACKLOG.md`'s Phase 6 resume point — and nothing else: no filed defect, no anchor, no description of what "repair-row seat" meant. It is struck rather than carried, on the reasoning that if it named something real it will resurface with an actual defect behind it. **Phase 6 is therefore ~6 PRs, of which SI-24 has shipped and 5 remain.**
 > ⚠️ **Superseded 2026-08-22 (v4.8 Wave 1) — T6.6 and SI-14 also shipped, in the same PR as `#135
 > C0` below. Phase 6 is down to 3: SI-22.4, SI-23, SI-25 sites (1)+(2).** See "Wave structure for
 > the v4.8.0 remainder" after Phase 7, below, which is now the live resume point — the "each ships
 > alone" ordering above is superseded by the owner's wave grouping.
+> ⚠️ **Superseded again 2026-08-23: SI-23 shipped in Wave 2 and SI-25 shipped as its own PR, so
+> Phase 6 is down to ONE — `SI-22.4`**, which is Wave 3's last item.
 
 > T6.6 is a live defect, not scaffolding: `tally.js :: assignTier` (`:28`) returns **Confirmed**
 > (`confidence: thin`) for `(a=1, d=0)` — measured by execution 2026-08-21 — while
@@ -669,7 +685,9 @@ inline (not this note) for what is actually done.
   ✅ **The 3-wide slot is DONE — 2026-08-22**: `SI-23` (`d5378684`, PR #183), `#133 Piece 1`
   (`86a069a6`, PR #185), `SI-18` (`78ed7a40`, PR #184) — see status-table rows 18/23 and the Phase
   7 `#133` annotation, above. ⚠️ **The "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did
-  NOT ship** and is not part of what "Wave 2 done" covers.
+  NOT ship** and is not part of what "Wave 2 done" covers. ⚠️ **`SI-25` shipped later, on 2026-08-23,
+  as its own PR outside every wave — and shipped all THREE sites (R25-1); see the annotated
+  "Not in a wave" bullet below.** `#138` Pieces 1+2 remain open.
 - **Wave 2.5 — DONE.** R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from
   this document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation). ✅ Shipped
   2026-08-22 as `T-R16.1` (`0a6a8032`) — see §4's R16 annotation, above, for the full record.
@@ -687,7 +705,11 @@ inline (not this note) for what is actually done.
   Wave 2.5, `src/cli-handlers-doctor.js` is also at 299/300 and the file-size gate more broadly is
   at saturation (three files at 300/300, twelve within 6 lines of the cap) — re-measured detail in
   `BACKLOG.md`’s two dedicated entries; neither blocks the Wave 3 remainder.
-- Not in a wave: `SI-25` sites (1)+(2) (ruling R15 — remaining Phase 6 member, not yet scheduled).
+- ~~Not in a wave: `SI-25` sites (1)+(2) (ruling R15 — remaining Phase 6 member, not yet scheduled).~~
+  ✅ **DONE 2026-08-23** — it never joined a wave; it shipped as its own PR on branch
+  `v48-si25-chair-packet-seats` (`f7fe180d` + `0c06bca9` + `95ee5520`), and it shipped **all three**
+  rendering sites, not the (1)+(2) R15 scheduled (ruling **R25-1**). ⚠️ **After this, `SI-22.4` is
+  the only item left before the release** — Wave 3's last, for the twin-bench knock-on stated above.
 
 Full detail and citations: `BACKLOG.md`’s "NEXT TASK — Wave 3 remainder" entry (2026-08-23) in
 the Phase 6 resume point — it supersedes the "NEXT TASK — Wave 3" entry this line used to name,
@@ -714,10 +736,15 @@ at the call site.** Own PR — consolidation must not ride a defect PR.
   in `briefings-chair.js` and `run-assemble.js`, never `report.js`. Its one mechanical gate was
   T1.1, which has shipped: `run-assemble.js` 297 → 252, and `briefings-chair.js` is 182 — both
   clear of the 300-line gate, so nothing now blocks SI-25 sites (1)+(2))
+  ✅ **Discharged 2026-08-23 — SI-25 has shipped**, all three sites (R25-1). The two line counts in
+  this bullet are the 2026-08-16 readings and have since moved: `briefings-chair.js` **243**,
+  `run-assemble.js` **278**, both still clear of the gate.
 - T2.1 → T2.2
 - R2's ruling → T2.2, T2.3, T2.4
 - Phase 3's internal order, and `ledger.js:106` in the same PR
-- Phase 3 → SI-25 site (3)
+- Phase 3 → SI-25 site (3) — ✅ **both ends done**: Phase 3 shipped 2026-08-21 (unblocking only),
+  site (3) shipped 2026-08-23 inside SI-25 (R25-1). ⚠️ This gate is why site (3) was homeless for two
+  days: discharging a prerequisite is not doing the work behind it.
 - SI-22.4 → SI-17's refuse branch (moot under R4's normalise ruling, but keep the edge recorded)
 - #133 Piece 1 → any future log reading (timestamp-only correlation measured 1-in-3 ambiguous on a
   3-leg wave, i.e. it fails exactly in the fanout shape #133 actually was)
