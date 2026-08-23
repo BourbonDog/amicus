@@ -123,3 +123,33 @@
   // either full name finds only its own. (They do share `SEAT` — the earlier
   // wording here said "share no substring", which is false and would mislead
   // anyone who grepped a shorter key.)
+
+// ---------------------------------------------------------------------------
+// SHAPESWAP — briefings-chair.js :: seatKeyedOrder, the scalar arm.
+// MUTATION: drop the `Array.isArray(seats) ?` guard, i.e. restore
+//   `: (seats || slot)`.
+// RED SET, measured 2026-08-23 at FULL `npx jest --no-coverage` scope
+// (denominator 546 suites / 7916 tests): 1 test, 1 suite —
+//   tests/council/chair-packet-seats.test.js
+//     "a SCALAR order slot against an ARRAY orderSeats slot keeps the scalar
+//      — no null, no reshape"
+// Discriminating output: expected `gemini: ["deepseek"]`, mutant renders
+// `gemini: [[null,null]]` — a null in the artifact a paid chair reads as
+// authoritative, AND a scalar slot silently promoted to an array.
+//
+// ⚠️ Its SIBLING pin ("an ARRAY order slot against a SCALAR orderSeats slot
+// keeps every alias") does NOT red under SHAPESWAP, and that is correct, not a
+// weak pin: that direction was already safe before the fix, because the tie arm
+// reads `Array.isArray(seats) ? seats[k] : null`. It is a PRESERVATION pin and
+// needs a mutant of its own if that arm is ever touched — FLATTIE is the closest.
+//
+// PROVENANCE: raised by PR #189's council as A1 (minor, thin — one judge on a
+// bench that returned 2 of 4 seats) AND independently by the whole-branch
+// reviewer, which called the shape unreachable. Both were right about
+// reachability: `anonymize.js :: rankingToOrder` mints `order` and `orderSeats`
+// from ONE `slots.map` off the same `Array.isArray` test, so no producer in this
+// tree can emit a disagreement. It was fixed anyway, because the docblock's
+// no-null promise was stated UNCONDITIONALLY and this arm exists precisely for
+// input that no producer minted. "Unreachable today" is the claim that rots.
+// The council proposed throwing; that was declined — crashing a paid chair
+// packet is worse than a shape-preserving fallback.
