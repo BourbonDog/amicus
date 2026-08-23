@@ -88,10 +88,16 @@ function orNone(text, none) {
  * EVERY read is a fallback, because `orderSeats` is a PARITY SHAPE, not a
  * presence: its `seatOne` returns `(seatMap && seatMap[label]) || null`, and
  * `run-assemble.js :: buildTallyInput` ships the array whenever ANY entry is
- * truthy — so a MIXED array of seat ids and `null`s is a normal shipping shape,
- * and it can also be shorter than `order`. No `null` may reach the rendered
- * JSON: this is the one artifact a paid chair reads as authoritative. An absent
- * `orderSeats` returns `order` untouched (spec §4.2's byte-identity promise).
+ * truthy — so a MIXED array of seat ids and `null`s is a normal shipping shape.
+ * No `null` may reach the rendered JSON: this is the one artifact a paid chair
+ * reads as authoritative. An absent `orderSeats` returns `order` untouched
+ * (spec §4.2's byte-identity promise).
+ *
+ * ⚠️ The SHORT-array arm is DEFENSIVE, and this docblock does not claim
+ * otherwise: `rankingToOrder` mints both arrays from one `slots.map`, so no
+ * producer in this tree can emit an `orderSeats` shorter than its `order`
+ * (measured — 0 mismatches over 24 ranking × seatMap shapes). The arm and its
+ * pin guard hand-assembled input, which is why they stay.
  *
  * Two named mutants guard the two arms — NULLLEAK the scalar fallback, FLATTIE
  * the tie arm — with their measured red sets in

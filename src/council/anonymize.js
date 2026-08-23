@@ -112,7 +112,11 @@ function toGlobalFindings(letter, raiser, findings, raiserSeat) {
  *   `order` and `errors` are UNCHANGED — same expression, same call to
  *   `mapOne`, so briefings-chair.js and the tally schema stay unmoved
  *   (SI-25 site (3) becomes *possible*, not *done*: T3.2 does not touch that
- *   call site). `orderSeats` is the NEW, separate, parallel channel: the SAME
+ *   call site). ⚠️ THAT PARENTHESIS IS T3.2's OWN HISTORY, NOT THE PRESENT
+ *   STATE — kept because it says what T3.2 did and did not do. SI-25 has since
+ *   DONE site (3): `briefings-chair.js :: seatKeyedOrder` consumes `orderSeats`
+ *   to render the chair packet's rankings block. Only the tally schema still
+ *   stays unmoved. `orderSeats` is the NEW, separate, parallel channel: the SAME
  *   slots resolved through `seatMap` instead of `labelMap` — a by-VALUE
  *   (label) lookup mirroring `order`'s own resolution, never a positional
  *   join across two independently-sourced arrays. `null` marks a slot whose

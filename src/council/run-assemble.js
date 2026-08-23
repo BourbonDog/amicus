@@ -245,18 +245,11 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
   const packet = buildChairPacket({
     // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
     // no rankings/adjudications, so it appears ONLY as one more review block.
-    // The projection is DELIBERATE — it drops findings/conformance/role/leg/file so
-    // the packet builder can render only what a packet is meant to carry. v4.8
-    // SI-25 adds `seat` to what rides through it, because the review header is the
-    // one place the packet can tell a twin bench's two `deepseek` seats apart.
-    // ⚠️ EMIT-WHEN-DIFFERENT, the same predicate as rankings/adjudications above.
-    // `r.model` here is the leg's `modelInput || model`, which falls back to the
-    // RESOLVED id when a leg reports no modelInput — so an UNCONDITIONAL forward
-    // rewrites the header from `google/gemini-3.5-pro` to `gemini` on a bench with
-    // no twin at all, breaking spec §4.2's byte-identity promise. Measured, not
-    // argued: tests/council/chair-packet-seats.test.js pins that exact bench, and
-    // the named mutant guarding this predicate is
-    // tests/council/chair-packet-seat-mutants.js :: SEATALWAYS.
+    // The projection is DELIBERATE — it drops findings/conformance/role/leg; v4.8
+    // SI-25 adds `seat`, ⚠️ EMIT-WHEN-DIFFERENT like rankings/adjudications above:
+    // `r.model` is the leg's `modelInput || model`, which falls back to the RESOLVED
+    // id, so an unconditional forward breaks §4.2 byte identity on a NO-TWIN bench.
+    // Mutant: tests/council/chair-packet-seat-mutants.js :: SEATALWAYS.
     // ⚠️ The Claude review keeps NO seat and renders `claude` via the fallback.
     reviews: reviews.map(r => ({ model: r.model, text: r.text,
       ...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {}) }))
