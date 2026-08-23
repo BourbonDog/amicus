@@ -82,12 +82,16 @@ function realDeps() {
     unlinkSessionIndexTmp: (n) => tmpSweep.unlinkSessionIndexTmp(n),
     listSessionMetadataTmpFiles: () => metaSweep.listSessionMetadataTmpFiles(), // D8
     unlinkSessionMetadataTmp: (n) => metaSweep.unlinkSessionMetadataTmp(n),
+    listStaleSessionIndexEntries: () => indexPrune.listStaleSessionIndexEntries(), // R16
+    pruneStaleSessionIndexEntries: (ids) => indexPrune.pruneStaleSessionIndexEntries(ids),
   };
 }
 // B15: sweep logic in utils/session-index-tmp-sweep.js (mirrors mcp-legacy's split).
 const tmpSweep = require('./utils/session-index-tmp-sweep');
 // D8: per-session metadata.json sibling sweep — utils/session-metadata-tmp-sweep.js.
 const metaSweep = require('./utils/session-metadata-tmp-sweep');
+// R16: stale sessions-index.json entry prune — utils/session-index-prune.js (mirrors B15 above).
+const indexPrune = require('./utils/session-index-prune');
 
 /** Run one guarded check; a thrown fn becomes an error line. */
 function guard(id, name, fn) {
@@ -204,6 +208,9 @@ async function runDoctorChecks(depsOverride = {}) {
   checks.push(guard('mcp-legacy', 'Legacy sidecar MCP entry', () => mcpChecks.evaluateLegacyMcpEntry(d)));
 
   checks.push(guard('sessions-index-tmp', 'Session index tmp files', () => tmpSweep.evaluateSessionIndexTmpSweep(d)));
+
+  // R16: beside its sibling above — same file, a different growth gap.
+  checks.push(guard('sessions-index-prune', 'Session index stale entries', () => indexPrune.evaluateSessionIndexPrune(d)));
 
   checks.push(guard('session-metadata-tmp', 'Session metadata tmp files', () => metaSweep.evaluateSessionMetadataTmpSweep(d)));
 

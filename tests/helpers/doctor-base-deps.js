@@ -81,6 +81,13 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     // D8: same rationale, one level down — without this the metadata sweep
     // would fall through to the real cwd's .claude/amicus_sessions.
     listSessionMetadataTmpFiles: () => [],
+    // R16: same rationale again — without this the stale-entry check would
+    // fall through to the real config dir's sessions-index.json. Pinning
+    // list alone (like B15/D8 above) is enough: 0 stale entries means
+    // evaluateSessionIndexPrune never calls pruneStaleSessionIndexEntries.
+    listStaleSessionIndexEntries: () => ({
+      staleTaskIds: [], entryCount: 0, distinctProjectCount: 0, staleProjectCount: 0,
+    }),
     // engine-mcp: deterministic scan — without it the check probes the real
     // machine's installs (non-deterministic). 'none' → the check reports ok.
     scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),

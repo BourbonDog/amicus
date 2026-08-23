@@ -304,6 +304,7 @@ src/
 │   ├── route-suggestions.js
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
+│   ├── session-index-prune.js
 │   ├── session-index-tmp-sweep.js
 │   ├── session-index.js  # Global session index (issue #40).
 │   ├── session-lock.js
@@ -700,6 +701,7 @@ evals/
 | `utils/route-suggestions.js` |  | `buildSuggestions()`, `applySuggestions()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `LOCK_RETRY_DELAYS_MS()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
+| `utils/session-index-prune.js` |  | `listStaleSessionIndexEntries()`, `pruneStaleSessionIndexEntries()`, `evaluateSessionIndexPrune()` |
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
 | `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()`, `readIndex()` |
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |

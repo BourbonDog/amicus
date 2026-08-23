@@ -1583,7 +1583,8 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 
 ## v4.7 PR3 rider follow-ups (2026-08-07)
 
-- [ ] **`sessions-index.json` has no maintenance step — it only ever grows** — [M, needs a design
+- [x] **`sessions-index.json` has no maintenance step — it only ever grows** — **DONE — v4.8 Wave
+  2.5 (2026-08-22, ruling R16/T-R16.1, `0a6a8032`).** [M, needs a design
   decision] `recordSession` (`src/utils/session-index.js:64`) appends a `taskId -> project` entry on
   every session start and **nothing ever removes one**. Entries outlive their subject: a project that
   is deleted, renamed, or moved leaves its rows behind forever, and the index has no TTL, cap, or
@@ -1624,6 +1625,67 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   five-year-old session in a project that still exists is still a valid lookup target, while a
   one-day-old entry for a deleted project is not. Found while measuring the `--all` output-cap rider
   during the v4.7 PR3 rider follow-ups, 2026-08-07.
+
+  ✅ **Shipped — option 1 (a `doctor` check + `--fix`), exactly as recommended above.** New module
+  `src/utils/session-index-prune.js` (221/300 lines), mirroring `session-index-tmp-sweep.js`'s
+  warn/fix/hint shape, wired into `src/cli-handlers-doctor.js` beside that sibling — which this
+  change takes to 299/300 (see the dedicated entry below). Tests in
+  `tests/doctor-index-prune.test.js`, 21 tests. Named mutant `STALEKEEP` (`projectExists` forced to
+  unconditionally report every project live): red set **5 tests, all in that one file**, nothing
+  else in the 545-suite tree — reproduced independently at full `npx jest --no-coverage` scope by
+  both the implementer and, separately, review.
+
+  ⚠️ **Test count corrected 2026-08-22 (council R16 fix round 2, A1) — the `21 tests` above was
+  accurate when written, then falsified by the first fix round.** At the shipping commit
+  (`a6e8f4b3`) the file had 18 `it`/`test` declarations, which jest expands to 21 — true at the
+  time. The first council fix round (A1/A4 + A2/A3 there, commit `cf35bd9a`) added tests and took
+  the file to 26 declarations (25 single `test()` calls plus one `test.each` of 3), which jest
+  expands to **28** — verified directly with `npx jest tests/doctor-index-prune.test.js
+  --no-coverage` (`Tests: 28 passed, 28 total`), not just by counting declarations. Stated as the
+  jest **runtime** count beside the **declaration** count on purpose, so the next `test.each`
+  addition cannot make this line ambiguous again. A paid council's own figure of **33** for this
+  same count, raised in the second fix round, is wrong — do not adopt it.
+
+  Two judgment calls, both matching rulings R16-2/R16-3:
+  - **Liveness only, never age.** No TTL, no mtime sort — zero hits grepping the new module for
+    mtime/TTL/age. Its `sessions-index-tmp` sibling carries an `AGE_THRESHOLD_MS` (60 s, so a live
+    writer's ms-lived tmp file is never swept) for a reason that does **not** apply here and was
+    deliberately not copied: age-gating a *lookup* entry the way the sibling age-gates a *tmp file*
+    would delete valid targets, not just clutter.
+  - **Only `ENOENT`/`ENOTDIR` mean "confirmed gone."** `EACCES`/`EPERM`/`EIO`/`EBUSY`/`ETIMEDOUT`/an
+    unknown or missing error code/a raw non-Error throw all mean "cannot confirm," so the entry is
+    treated as **live** — verified by injecting each, zero crashes. Mirrors the ENOENT-only split
+    `workspace/artifact-guard.js :: readRunArtifact` already uses for the identical ambiguity (its
+    RN-10 fix, `:106-121`). Getting this backwards deletes a real entry on a permissions blip.
+  - **Probes distinct projects, not entries (R16-3).** Measured: a 2000-entry index sharing 7
+    distinct projects makes exactly **7** `statSync` calls, not 2000 — `O(distinct projects)`,
+    confirmed by execution, not argued.
+
+  ⚠️ **Scope the claim honestly — do not quote 18,874 as an expected steady state.** What shipped
+  closes the **structural** gap, not the headline numbers measured above: the bulk of that
+  18,874-entry / 31.4%-dead index was test residue from the `/tmp` hermeticity leak PR #123 already
+  sealed, so a fresh index will not balloon the same way. A real user's index still accrues dead
+  entries as projects come and go, each one paying into the per-start write cost forever; this
+  check makes that accrual visible and removable via `--fix`, announced rather than silent, but
+  running it is still on the user — nothing prunes automatically.
+
+  **R16-4 reconfirmed during implementation, not just inherited:** the owner-rulings table's *"pin
+  all 13 unpinned rails"* phrase was re-grepped against the tree at T-R16.1 and still appears
+  nowhere but that one table row and the docs already annotating it as unsourced. Scope was always
+  this entry, never that wording — recorded again here so a future reader does not go looking for
+  an enumerated set of 13 that was never written down.
+
+  Filed, not fixed here:
+  - `cli-handlers-doctor.js` reached 299/300 by this change, added inline rather than extracted,
+    breaking that file's own established precedent — full detail in the dedicated entry below.
+  - The plan's "relative path" half of its `EACCES` warning (*"a relative or unreadable path is
+    not the same as a deleted one"*) is **reasoned closed, not measured closed**. Every explicit or
+    client-supplied path into `mcp-server.js :: getProjectDir`/`resolveProjectDir` is gated through
+    `project-root-allowlist.js :: isAllowedProjectRoot`, which requires a prefix match against an
+    absolute root (`homedir`/`cwd`/`tmpdir`/env) — `canonicalProjectPath` never resolves a relative
+    string to absolute, so a bare relative path structurally cannot satisfy that gate. But
+    `session-manager.js:127`'s `metadata.project || projectDir` — the actual write path into
+    `sessions-index.json` — was not traced to its own origin. Open, not exhaustively verified.
 
 - [ ] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — [S] The MCP
   `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
@@ -3242,15 +3304,12 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   1`, commits above; its "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did NOT ship and
   is not scheduled into any wave below; see the note at the end of this entry).
 
-  **Wave 1 — DONE.** **Wave 2 (3-wide slot) — DONE.** Next:
-  - **Wave 2.5 — `R16` (`sessions-index.json` leak).** Scope it from the growth entry under
-    *"Carried from the dropped v4.7.2 scope"* below — **measured and real**: 18,874 entries, 0.69
-    MB, 5,933 (31.4%) pointing at dead project paths, and a full read → `JSON.parse` → mutate →
-    `JSON.stringify` → atomic write of the ENTIRE index on **every session start**. ⚠️ **Do NOT
-    scope from R16's own "pin all 13 unpinned rails" wording** (owner-rulings table, above, and
-    the phasing doc's §4 row) — a repo-wide grep for that phrase and for "13" near
-    `sessions-index`/`unpinned rails` finds only that one table row, nowhere else in the tree; the
-    number 13 is unsourced (already flagged **W1-4**, above).
+  ✅ **DONE — 2026-08-22.** `R16` shipped as `T-R16.1` (`0a6a8032`) — see the ticked
+  `sessions-index.json` growth entry above for the full record. Suite after merge: 545 suites /
+  7882 passed / 8 skipped, all six gates exit 0. See **"NEXT TASK — Wave 3"** below for the live
+  resume point.
+
+  **Wave 1 — DONE.** **Wave 2 (3-wide slot) — DONE.** **Wave 2.5 (`R16`) — DONE.** Next:
   - **Wave 3 — strictly serial: `SI-27` first, `SI-22.4` LAST.** `SI-27` consolidates the
     padding/bind/placeholder core into `stage1-bind.js` (the useful slice of rulings R11/R14).
     ⚠️ **`SI-22.4` is ordered last on purpose**: its trim knock-on turns a whitespace-padded preset
@@ -3260,16 +3319,36 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 
   ⚠️ **Remaining Phase 6 members after Wave 2: `SI-22.4`** (now Wave 3's last item, above) **and
   `SI-25` sites (1)+(2)** (ruling R15 — small PR, sites in `briefings-chair.js`/`run-assemble.js`;
-  not yet placed in a wave below — schedule it, do not assume it rides Wave 2.5 or Wave 3). `#138`
+  not yet placed in a wave below — schedule it, do not assume it rides Wave 3). `#138`
   Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
   only — re-derive before scheduling it, on the same "measure before you plan" precedent this
   record applies throughout.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom** (see the dedicated
-  warning immediately below — unchanged by today's three PRs, none of which touch that file).
+  warning immediately below — unchanged by `R16`, which does not touch that file).
   **`SI-27` extracts from that very file** — its implementer must know going in that there is no
   room to add even one explanatory line before the extraction itself lands; the next change there
   must extract first, per Release Constraint 6.
+
+- [ ] **NEXT TASK — Wave 3.** Filed 2026-08-22 (v4.8 Wave 2.5 record, `T-R16.2`) as the correct
+  resume point, superseding "NEXT TASK — Wave 2.5" above (now ✅ DONE — `R16`/`T-R16.1`, commit
+  above).
+
+  **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE.** Next:
+  - **Wave 3 — strictly serial: `SI-27` first, `SI-22.4` LAST.** Same scope and ordering as stated
+    in "NEXT TASK — Wave 2.5" above — not restated a second time here.
+
+  ⚠️ **Remaining Phase 6 members: `SI-22.4`** (Wave 3's last item) **and `SI-25` sites (1)+(2)**
+  (ruling R15 — not yet placed in a wave; schedule it, do not assume it rides Wave 3).
+
+  ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom**, unchanged by `R16`
+  — see the dedicated warning immediately below. **`SI-27` extracts from that very file.**
+
+  ⚠️ **New since Wave 2.5: the file-size gate is at saturation more broadly, and
+  `cli-handlers-doctor.js` is now 299/300.** Re-measured against the final tree — see the two
+  dedicated entries below (*"The file-size gate is at saturation"* and *"`cli-handlers-doctor.js`
+  is at 299/300"*). Neither blocks Wave 3, but `SI-27`'s own target (`run-retry.js`) has zero
+  headroom and `cli-handlers-doctor.js` has one line — know this going in.
 
 ### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
 
@@ -3286,6 +3365,57 @@ know there is no room to add even a single explanatory line before the extractio
 Filed rather than fixed here: extracting from `run-retry.js` on a Wave 1 comment PR would
 be exactly the *"consolidation must not ride a defect PR"* inversion SI-27's own ruling
 forbids.
+
+### ⚠️ The file-size gate is at saturation — re-measured 2026-08-22 (v4.8 Wave 2.5, `T-R16.2`)
+
+Measured directly against `scripts/check-file-sizes.js`'s own `matchesPattern`/`CONFIG` — **not**
+a raw `git ls-files 'src/**/*.js'` pathspec, which silently drops every top-level `src/*.js` file
+(216 files found that way vs. **287** the gate's own matcher finds; its docstring says `'**/'
+matches zero or more directories … covers top-level src files too'`, exactly the historical "`**`
+glob bug" the exclude list's own comments describe as already fixed). Against those 287
+non-grandfathered files:
+
+- **Three are at exactly 300/300**: `src/council/run-retry.js`, `src/pack/pack-resolve.js`,
+  `src/sidecar/electron-install.js` (the first has its own dedicated entry above).
+- **Twelve sit at or within 6 lines of the cap (294–300 inclusive)** — the three above, plus
+  `src/cli-handlers-doctor.js` (299, taken there by `R16`/`T-R16.1` — see its own entry below),
+  `electron/workspace-ui/workspace-render.js` (297), `src/sidecar/context-builder.js` (297),
+  `src/council/report.js` (296), `src/sidecar/session-utils.js` (296),
+  `electron/workspace-ui/workspace-verbs.js` (294), `src/council/run-chair.js` (294),
+  `src/council/run-stages.js` (294), `src/sidecar/fanout.js` (294).
+- **Twelve files are explicitly grandfathered** in `CONFIG.exclude` (`src/utils/config.js`,
+  `src/cli.js`, `src/headless.js` [1510 lines], `src/mcp-server.js` [1569 lines],
+  `src/mcp-tools.js`, `src/opencode-client.js`, `src/session-manager.js`, `src/prompt-builder.js`,
+  `src/sidecar/setup.js`, `electron/setup-ui.js`, `electron/main.js`,
+  `electron/setup-ui-styles.js`) — most annotated "shrink below 300, then remove from this list"
+  or equivalent wording; `prompt-builder.js`'s comment gives a grandfather rationale but no shrink
+  instruction, and `config.js` (first in the list) carries no comment at all — the gate is real for
+  everything else.
+
+**Consequence:** any change touching a saturated file must EXTRACT before it can add even a
+comment line. ⚠️ This lands directly on **SI-27**, which extracts from `run-retry.js` — the file
+at exactly 300 — so its implementer has no room for an explanatory line before the extraction
+itself lands.
+
+### ⚠️ `src/cli-handlers-doctor.js` is at 299/300 — one line of headroom (2026-08-22, `R16`/`T-R16.1`)
+
+`R16` wired its check inline — two `realDeps()` mappings, a `require`, one `checks.push`, 7 lines
+— taking this file to **299/300**. ⚠️ **This breaks the file's own established precedent, only
+partially.** Five sibling check-bodies already live outside this file specifically so it stays
+under the 300-line gate, and this file's own `require`-line comments (and each sibling's own
+header) say so — but only **four of the five**, re-verified by opening each file, not assumed from
+a prior pass's count: `doctor-mcp-checks.js`, `doctor-engine-check.js`,
+`doctor-electron-mcp-check.js` and `doctor-local-providers-check.js` each read some form of "split
+out to keep this file under the [300-line] gate." **The fifth, `doctor-base-url-check.js`, does
+not** — its own header and this file's own require-comment both cite only "v4.6.2 PR1 (spec §4)";
+grepped for "gate"/"300"/"cli-handlers-doctor" inside it, zero hits. A prior review pass's claim
+that all five carry "that exact comment" does not survive opening the fifth file.
+
+**Controller ruling: filed, not fixed here.** Nothing remaining in v4.8.0 touches this file, so it
+does not block the release, and extracting inside `R16`'s own check PR would be the same
+*"consolidation must not ride a defect PR"* inversion SI-27's own ruling forbids (see the
+`run-retry.js` entry above). The next change to `cli-handlers-doctor.js` — of any kind, including
+a comment — must extract first.
 
 ### v4.8 release inventory — what remains for 4.8.0, MEASURED (2026-08-22)
 

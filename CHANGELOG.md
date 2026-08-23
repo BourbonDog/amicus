@@ -677,6 +677,51 @@ All notable changes to Amicus are documented here. Format follows
   silently dropped a twin's leg with no error. `parseModelsList` itself is byte-unchanged — this is
   a test plus an invariant comment, not a behaviour change.
 
+### Added
+
+- **`doctor` gains a `sessions-index-prune` check; `--fix` removes stale `sessions-index.json`
+  rows.** `recordSession` appends a `taskId -> project` entry on every session start and nothing
+  ever removed one, so a deleted, renamed or moved project's rows outlived it forever, and every
+  session start paid to read/parse/mutate/stringify/write the *whole* file regardless. The new
+  check lists entries whose project path no longer resolves to a directory, reports both the stale
+  count and the distinct-project count (many task ids can share one project), and `--fix` prunes
+  them atomically through the same write path `recordSession` itself uses — reusing the
+  announce-then-fix shape its `sessions-index-tmp` sibling already established for this same file.
+  Liveness only, never age: a five-year-old entry for a project that still exists is left alone; a
+  one-day-old entry for a deleted one is not. Only a confirmed-gone `ENOENT`/`ENOTDIR` counts as
+  stale — a permissions error or any other unreadable-but-maybe-there condition leaves an entry
+  alone rather than risk deleting a live lookup target. ⚠️ This closes the structural growth gap,
+  not a specific steady-state size: most of the index size first measured against this defect was
+  test residue from an already-sealed `/tmp` hermeticity leak, not something this check alone was
+  ever going to shrink back to zero.
+  ⚠️ **A failure to determine is reported as a failure, not as a clean bill of health.** A paid
+  council raised (A2/A3, `a3/d0/n0`) that the check's catch-alls swallowed every exception —
+  including a programming error — making a crash indistinguishable from *"nothing to prune"*.
+  It now surfaces `status:'error'` through `doctor`'s existing `guard()` vocabulary rather
+  than returning a false all-clear, and still never throws into `doctor`. A correct-but-SILENT
+  degrade fails this project's bar as hard as a crash.
+  ⚠️ **KNOWN, documented at the write site, and deliberately NOT fixed here — a pre-existing
+  read-modify-write race.** `--fix` reads the index, drops the stale ids and rewrites the whole
+  file, so a session started inside that window can lose its entry. `recordSession` performs
+  the *identical* unlocked read-modify-write, so two concurrent session starts already clobber
+  each other: the prune **inherits** the index's existing concurrency model rather than
+  introducing it (council B1, `a3/d0/n0`). The window was narrowed to the in-memory filter
+  loop — the write target is now resolved before the read — and prune deletes only the ids it
+  was handed. A lock or compare-and-swap on `sessions-index.json` would close it properly and
+  is recommended as its own change, not folded into this one.
+  ⚠️ **Race sharpened, raised again in a second fix round by two more models (B1/D1) — still NOT
+  fixed, recorded here more precisely than above: the race is TWO-SIDED, so locking only this
+  side would be theater.** Closing it properly means locking `recordSession` too — and that lock
+  (like the `statSync`-per-entry cost of the "prune on write" alternative) is exactly the
+  hot-start-path cost ruling R16-1 rejected when it chose this doctor-check design in the first
+  place. `--fix` and `recordSession` both perform the identical unlocked read-modify-write on the
+  same file today, independent of this change — nothing here makes that worse.
+  `src/utils/session-lock.js` already provides atomic PID/staleness lock-file primitives (used
+  today for per-session-dir resume/continue, not for this file) and is the natural home for a
+  future `sessions-index.json` lock or compare-and-swap, noted here so that work is not
+  re-derived from scratch — but it is **not** wired in here; that remains its own change, beyond
+  R16.
+
 ## [4.7.1] - 2026-08-09
 
 ### Changed

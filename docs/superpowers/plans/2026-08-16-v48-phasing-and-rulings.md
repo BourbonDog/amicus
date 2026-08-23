@@ -298,6 +298,16 @@ real and measured (`BACKLOG.md`'s `sessions-index.json` growth entry: a full
 read→parse→mutate→write of the whole index on every session start), and R16 stands — **scope it
 from that growth entry, not from this row's "13."**
 
+✅ **R16 SHIPPED — v4.8 Wave 2.5 (2026-08-22, `T-R16.1`, `0a6a8032`).** New doctor check +
+`--fix` (`src/utils/session-index-prune.js`, mirroring `session-index-tmp-sweep.js`'s shape),
+liveness-based only per R16-2 (no TTL, no mtime), probing the distinct project set per R16-3
+(measured: 7 `statSync` calls for a 2000-entry/7-project index, not 2000). Named mutant
+`STALEKEEP`, red set 5 tests, reproduced at full 545-suite scope. ⚠️ **Scope the claim honestly**:
+this closes the structural gap, not the headline 18,874-entry/31.4%-dead measurement — the bulk of
+that was test residue from the `/tmp` hermeticity leak PR #123 already sealed. R16-4's "13
+unpinned rails" phrase was re-grepped at implementation time and is still unsourced, exactly as
+annotated above. Full record: `BACKLOG.md`'s ticked `sessions-index.json` growth entry.
+
 ⚠️ **R10's own list is wrong on three of four names — corrected 2026-08-22 (v4.8 Wave 2), and the
 ruling itself is unchanged.** R10 reads *"`evidence`/`file`/`line` stop dropping too."* Measured
 across `src/`, `schemas/`, `tests/`, `findings.js :: REQUIRED`, `briefings.js ::
@@ -660,16 +670,20 @@ inline (not this note) for what is actually done.
   (`86a069a6`, PR #185), `SI-18` (`78ed7a40`, PR #184) — see status-table rows 18/23 and the Phase
   7 `#133` annotation, above. ⚠️ **The "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did
   NOT ship** and is not part of what "Wave 2 done" covers.
-- **Wave 2.5 — NEXT.** R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from
-  this document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation).
-- **Wave 3** — **strictly serial**: SI-27 **first**, SI-22.4 **LAST** — SI-22.4's trim knock-on
+- **Wave 2.5 — DONE.** R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from
+  this document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation). ✅ Shipped
+  2026-08-22 as `T-R16.1` (`0a6a8032`) — see §4's R16 annotation, above, for the full record.
+- **Wave 3 — NEXT.** **strictly serial**: SI-27 **first**, SI-22.4 **LAST** — SI-22.4's trim knock-on
   turns a whitespace-padded preset member into a REAL twin bench (changed artifact filenames,
   `meta.seats` starts emitting), which SI-27's consolidation should absorb rather than the other
   way around. ⚠️ `SI-27` extracts from `src/council/run-retry.js`, which is at 300/300 lines —
-  zero headroom for even one explanatory line before that extraction lands (`BACKLOG.md`).
+  zero headroom for even one explanatory line before that extraction lands (`BACKLOG.md`). ⚠️ Since
+  Wave 2.5, `src/cli-handlers-doctor.js` is also at 299/300 and the file-size gate more broadly is
+  at saturation (three files at 300/300, twelve within 6 lines of the cap) — re-measured detail in
+  `BACKLOG.md`'s two dedicated entries; neither blocks Wave 3.
 - Not in a wave: `SI-25` sites (1)+(2) (ruling R15 — remaining Phase 6 member, not yet scheduled).
 
-Full detail and citations: `BACKLOG.md`'s "NEXT TASK — Wave 2.5" entry in the Phase 6 resume point.
+Full detail and citations: `BACKLOG.md`'s "NEXT TASK — Wave 3" entry in the Phase 6 resume point.
 
 ### Post-Phase-2 · SI-27 — 1 PR
 Padding/bindSeats/placeholder-filter core → `stage1-bind.js`, parameterised on
