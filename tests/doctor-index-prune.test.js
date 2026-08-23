@@ -124,6 +124,36 @@ describe("doctor 'sessions-index-prune' stale-entry check (R16)", () => {
     expect(c.status).not.toBe('error');
     expect(c.message).toMatch(/pruned 0, 1 remaining/);
   });
+
+  // Council R16 fix round A3: a listing failure must read as ITS OWN status,
+  // never coalesced into "0 stale" — see session-index-prune.js's
+  // evaluateSessionIndexPrune / listStaleSessionIndexEntries catch.
+  test('list reporting an internal failure surfaces as its own status, not "0 stale" (A3)', async () => {
+    const checks = await doctor.runDoctorChecks({ ...base,
+      listStaleSessionIndexEntries: () => ({
+        staleTaskIds: [], entryCount: 0, distinctProjectCount: 0, staleProjectCount: 0,
+        error: 'boom',
+      }),
+    });
+    const c = findCheck(checks, 'sessions-index-prune');
+    expect(c.status).toBe('error');
+    expect(c.message).toMatch(/could not determine/);
+    expect(c.message).toMatch(/boom/);
+  });
+
+  // Council R16 fix round A2: the message must name the REAL cause, not
+  // conflate a thrown write failure with a benign "ids already gone" race.
+  test('a throwing prune surfaces the real error detail, not a generic guess (A2)', async () => {
+    const pruneStaleSessionIndexEntries = jest.fn(() => { throw new Error('EACCES: permission denied'); });
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      listStaleSessionIndexEntries: listResult(['t1'], 1, 1, 1),
+      pruneStaleSessionIndexEntries,
+    });
+    const c = findCheck(checks, 'sessions-index-prune');
+    expect(c.status).toBe('warn'); // still not 'error' — matches the sibling pin above
+    expect(c.message).toMatch(/pruned 0, 1 remaining/);
+    expect(c.message).toMatch(/EACCES/);
+  });
 });
 
 // Real-fs coverage for the list/prune glue itself (the describe block above
@@ -238,6 +268,17 @@ describe('session-index-prune real fs glue', () => {
     expect(result.staleTaskIds).toEqual(['gone-task']);
   });
 
+  // Council R16 fix round A3: an internal failure (here, a throwing injected
+  // readIndex — a real injection point, not hypothetical) must be reported
+  // distinctly from "0 stale", never collapsed to the same EMPTY_RESULT shape.
+  test('an internal failure (e.g. a throwing injected readIndex) is reported distinctly from "0 stale" (A3)', () => {
+    const result = listStaleSessionIndexEntries({
+      readIndex: () => { throw new Error('boom'); },
+    });
+    expect(result.staleTaskIds).toEqual([]);
+    expect(result.error).toBe('boom');
+  });
+
   test('a malformed entry (empty project string) is treated as stale dead weight', () => {
     const indexPath = path.join(configDir, 'sessions-index.json');
     fs.mkdirSync(configDir, { recursive: true });
@@ -268,6 +309,52 @@ describe('session-index-prune real fs glue', () => {
 
     expect(removed).toBe(0);
     expect(fs.statSync(indexPath).mtimeMs).toBe(before); // untouched, not just unchanged content
+  });
+
+  // Council R16 fix round A1/A4: prune now takes the same injectable
+  // `deps.readIndex` shape as list, and guards its return value the same way
+  // (`|| {}`) — closing the one asymmetry between the two siblings (list was
+  // stub-testable for a corrupt/absent readIndex; prune was not testable at
+  // all without a real config dir).
+  test('pruneStaleSessionIndexEntries treats a null readIndex() as an empty index, not a crash (A1/A4)', () => {
+    const removed = pruneStaleSessionIndexEntries(['t1'], { readIndex: () => null });
+    expect(removed).toBe(0);
+  });
+
+  test('pruneStaleSessionIndexEntries treats an undefined readIndex() as an empty index, not a crash (A1/A4)', () => {
+    const removed = pruneStaleSessionIndexEntries(['t1'], { readIndex: () => undefined });
+    expect(removed).toBe(0);
+  });
+
+  test('pruneStaleSessionIndexEntries still lets a throwing readIndex() propagate (A1/A4 — matches its documented "does not guard throws" contract)', () => {
+    expect(() => pruneStaleSessionIndexEntries(['t1'], {
+      readIndex: () => { throw new Error('boom'); },
+    })).toThrow('boom');
+  });
+
+  // B1 (council R16 fix round, adjudicated — real pre-existing race, not
+  // fixed here): confirms what the ruling relies on — prune touches ONLY the
+  // ids it was handed. An entry recorded by another process between list and
+  // prune (the exact window session-index.js :: recordSession already races
+  // on) must survive.
+  test('B1: prune deletes only the exact ids it was handed — an entry added between list and prune survives', () => {
+    const deadProject = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-idxprune-b1-'));
+    fs.rmSync(deadProject, { recursive: true, force: true });
+    recordSession('b1-dead', deadProject);
+
+    const listed = listStaleSessionIndexEntries();
+    expect(listed.staleTaskIds).toEqual(['b1-dead']);
+
+    // Simulate a concurrent session start landing between list and prune.
+    recordSession('b1-concurrent', configDir); // configDir always exists — live
+
+    pruneStaleSessionIndexEntries(listed.staleTaskIds);
+
+    // Key set only (not the path string's exact separator form) — recordSession
+    // canonicalizes backslashes to forward slashes, orthogonal to what B1 tests.
+    const indexPath = path.join(configDir, 'sessions-index.json');
+    const onDisk = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+    expect(Object.keys(onDisk)).toEqual(['b1-concurrent']);
   });
 
   test('end-to-end: list finds it, prune removes it, a second list confirms it is gone', () => {

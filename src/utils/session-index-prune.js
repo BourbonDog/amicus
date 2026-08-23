@@ -36,6 +36,9 @@ const fs = require('fs');
 const path = require('path');
 const HINTS = require('./remediation-hints');
 
+// The zeroed shape for "checked, nothing stale". Also the base (via spread)
+// for the distinguishable failure shape listStaleSessionIndexEntries returns
+// on an internal error — see that function's catch, below.
 const EMPTY_RESULT = Object.freeze({
   staleTaskIds: [], entryCount: 0, distinctProjectCount: 0, staleProjectCount: 0,
 });
@@ -78,16 +81,20 @@ function projectExists(project, statSync) {
 /**
  * List session-index entries whose project no longer exists.
  *
- * Never throws: the corrupt/missing-index case is handled exactly as
+ * Never THROWS: the corrupt/missing-index case is handled exactly as
  * session-index.js :: readIndex already handles it (corrupt/missing -> {}),
- * and any other unexpected failure degrades to the all-clear empty shape
- * rather than propagating into `doctor`.
+ * so it never reaches the catch below. An unexpected internal failure still
+ * degrades rather than propagates into `doctor` — but (council R16 fix round
+ * A3) the degraded result now carries `error`, which an all-clear result
+ * never has, so "checked, 0 stale" and "could not check" can never collapse
+ * to the same value. See evaluateSessionIndexPrune for how that distinction
+ * is read.
  *
  * @param {{statSync?: (p: string) => import('fs').Stats,
  *   readIndex?: () => Record<string,string>}} [deps] - injectable for tests
  *   (e.g. to simulate EACCES without needing real OS permissions).
  * @returns {{staleTaskIds: string[], entryCount: number,
- *   distinctProjectCount: number, staleProjectCount: number}}
+ *   distinctProjectCount: number, staleProjectCount: number, error?: string}}
  */
 function listStaleSessionIndexEntries(deps = {}) {
   try {
@@ -123,36 +130,72 @@ function listStaleSessionIndexEntries(deps = {}) {
       distinctProjectCount: projects.size,
       staleProjectCount: deadProjects.size,
     };
-  } catch {
-    return EMPTY_RESULT;
+  } catch (err) {
+    // Council R16 fix round (A3): landing here must not read the same as "0
+    // stale rows" — this project's stated north star is that a
+    // correct-but-SILENT degrade fails the bar as hard as a crash. The
+    // expected corrupt/missing-index case never reaches this catch (readIndex
+    // itself already guards to {}); what DOES land here is either a real bug
+    // or a throwing injected dep (deps.readIndex/deps.statSync are both real
+    // injection points). Tag the result so evaluateSessionIndexPrune can tell
+    // "checked, found nothing" apart from "could not check" — still never
+    // throws into doctor, just stops reporting a failure as an all-clear.
+    return { ...EMPTY_RESULT, error: (err && err.message) || String(err) };
   }
 }
 
 /**
  * Remove the given taskIds from the index, atomically, through the same
  * writeFileAtomic path session-index.js :: recordSession uses. Re-reads the
- * index fresh (never reuses a list-time snapshot) so a concurrent
- * recordSession between list and prune is never clobbered, and writes only
- * when at least one given id is still actually present.
+ * index fresh (never reuses a list-time snapshot), deletes ONLY the given
+ * ids — never any other key a concurrent writer may have added to the
+ * freshly-read index (verified: tests/doctor-index-prune.test.js's "removes
+ * only the given ids" and the B1 concurrent-add case below) — and writes
+ * only when at least one given id is still actually present.
  *
- * Unlike listStaleSessionIndexEntries, this does NOT guard its own throws —
- * matching session-index-tmp-sweep.js :: unlinkSessionIndexTmp, which also
- * lets fs errors propagate to its caller. evaluateSessionIndexPrune (below)
- * is that caller, and catches.
+ * `deps.readIndex` plus the `|| {}` guard below mirror
+ * listStaleSessionIndexEntries (council R16 fix round A1/A4): that was the
+ * one asymmetry between the two siblings — `list` was stub-testable for a
+ * corrupt/absent readIndex, `prune` was not testable at all without a real
+ * config dir, and an injected readIndex() returning null/undefined would
+ * TypeError on `Object.prototype.hasOwnProperty.call(null, ...)`. The REAL
+ * readIndex can never return null (session-index.js :: readIndex always
+ * yields a validated object or `{}`), so this never fires in production —
+ * it closes a tested gap, not a live bug. Still does NOT guard its own
+ * THROWS, matching session-index-tmp-sweep.js :: unlinkSessionIndexTmp,
+ * which also lets fs errors propagate to its caller; evaluateSessionIndexPrune
+ * (below) is that catcher.
+ *
+ * B1 (council R16 fix round, adjudicated — real, pre-existing, NOT fixed
+ * here): `target` is computed before the read so only the in-memory filter
+ * below runs between the read and the write — the narrowest this window
+ * gets without real synchronization. session-index.js :: recordSession does
+ * the identical read-whole-file -> mutate -> write-whole-file with no lock,
+ * so two concurrent session starts already clobber each other today; this
+ * function inherits that pre-existing race rather than creating it, widening
+ * the window it is already exposed to. Consequence: a session recorded by
+ * another process between this read and this write is lost, degrading
+ * `amicus read <id>` from another project into a not-found. A lock or
+ * compare-and-swap would close this properly — that is a design change
+ * beyond R16 and is not made here.
  *
  * @param {string[]} staleTaskIds
+ * @param {{readIndex?: () => Record<string,string>}} [deps] - injectable for
+ *   tests (matches listStaleSessionIndexEntries's shape/rationale above).
  * @returns {number} count actually removed (may be less than
  *   staleTaskIds.length if an id was already gone by the time this ran).
  */
-function pruneStaleSessionIndexEntries(staleTaskIds) {
+function pruneStaleSessionIndexEntries(staleTaskIds, deps = {}) {
   const ids = staleTaskIds || [];
   if (ids.length === 0) { return 0; }
 
-  const { readIndex, INDEX_FILENAME } = require('./session-index');
+  const { INDEX_FILENAME, readIndex: realReadIndex } = require('./session-index');
+  const readIndex = deps.readIndex || realReadIndex;
   const { getConfigDir } = require('./config');
   const { writeFileAtomic } = require('./atomic-write');
+  const target = path.join(getConfigDir(), INDEX_FILENAME);
 
-  const index = readIndex();
+  const index = readIndex() || {};
   let removed = 0;
   for (const taskId of ids) {
     if (Object.prototype.hasOwnProperty.call(index, taskId)) {
@@ -162,7 +205,6 @@ function pruneStaleSessionIndexEntries(staleTaskIds) {
   }
   if (removed === 0) { return 0; }
 
-  const target = path.join(getConfigDir(), INDEX_FILENAME);
   writeFileAtomic(target, JSON.stringify(index, null, 2), { mode: 0o600 });
   return removed;
 }
@@ -172,13 +214,27 @@ function pruneStaleSessionIndexEntries(staleTaskIds) {
  * logic (list/prune side effects come in via `d`); src/cli-handlers-doctor.js
  * wraps this in guard() the same way it wires the tmp-sweep check beside it.
  * @param {{listStaleSessionIndexEntries: () => {staleTaskIds:string[],
- *   entryCount:number, distinctProjectCount:number, staleProjectCount:number},
+ *   entryCount:number, distinctProjectCount:number, staleProjectCount:number,
+ *   error?:string},
  *   fix?: boolean,
  *   pruneStaleSessionIndexEntries: (ids: string[]) => number}} d
  */
 function evaluateSessionIndexPrune(d) {
   const id = 'sessions-index-prune'; const name = 'Session index stale entries';
-  const list = d.listStaleSessionIndexEntries() || EMPTY_RESULT;
+  const list = d.listStaleSessionIndexEntries();
+
+  // Council R16 fix round (A3): a listing failure gets its own status, never
+  // coalesced into the "0 stale" shape below. `status: 'error'` is the same
+  // vocabulary guard() uses for every other doctor check failure —
+  // doctor-degrade.js turns it into a 'doctor-check-failed' record; doctor
+  // still finishes and prints every other line (loud, not fatal).
+  if (!list || list.error) {
+    return {
+      id, name, status: 'error',
+      message: `could not determine stale session-index entries: ${(list && list.error) || 'unknown error'}`,
+      hint: null,
+    };
+  }
   const { staleTaskIds, entryCount, distinctProjectCount, staleProjectCount } = list;
   const staleCount = staleTaskIds.length;
 
@@ -197,11 +253,19 @@ function evaluateSessionIndexPrune(d) {
     };
   }
 
+  // Council R16 fix round (A2): capture WHY a write underperformed instead of
+  // reporting every cause as the same generic guess — a thrown exception
+  // (disk full, EACCES, a bug) is a different fact from some ids having
+  // already been removed by a racing prune, and swallowing the exception's
+  // own message was hiding that difference. Status stays 'warn' either way
+  // (never crashes doctor — see the throwing-prune test) but the message no
+  // longer lies about which one happened.
   let pruned = 0;
+  let writeError = null;
   try { pruned = d.pruneStaleSessionIndexEntries(staleTaskIds) || 0; }
-  catch { /* best-effort — report what we found, not what we could not write */ }
+  catch (e) { writeError = (e && e.message) || 'unknown error'; }
 
-  if (pruned === staleCount) {
+  if (pruned === staleCount && !writeError) {
     return {
       id, name, status: 'ok', message: `pruned ${pruned} stale row(s)`, hint: null,
       fixed: true,
@@ -209,9 +273,10 @@ function evaluateSessionIndexPrune(d) {
     };
   }
   const remaining = staleCount - pruned;
+  const reason = writeError ? `write failed: ${writeError}` : 'index changed since list';
   return {
     id, name, status: 'warn',
-    message: `pruned ${pruned}, ${remaining} remaining (index changed or write failed)`,
+    message: `pruned ${pruned}, ${remaining} remaining (${reason})`,
     hint: HINTS.pruneSessionIndex,
   };
 }
