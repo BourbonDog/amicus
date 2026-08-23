@@ -40,8 +40,16 @@ function mean(arr) { return arr.reduce((s, x) => s + x, 0) / arr.length; }
  * seat-aware in the same commit; the hazard is written out in full at
  * ledger-join.js :: credFor.
  *
- * `order` itself is UNTOUCHED: still alias-valued, still the array
- * briefings-chair.js :: buildChairPacket and the tally schema read.
+ * `order` itself is UNTOUCHED: still alias-valued, still the array the tally
+ * schema reads, and still what `briefings-chair.js :: buildChairPacket` falls
+ * back to per slot.
+ * ⚠️ DO NOT READ THAT AS "orderSeats cannot affect what the chair reads" — it
+ * could not when this was written, and v4.8 SI-25 changed it.
+ * `briefings-chair.js :: seatKeyedOrder` now zips `orderSeats` OVER `order` to
+ * render the chair packet's rankings block, so this channel has a live PROSE
+ * consumer besides this function, and a shape change here reaches the one
+ * artifact a paid chair reads as authoritative. Check that renderer and its
+ * pins (tests/council/chair-packet-seats.test.js) before altering the shape.
  * `orderSeats` mirrors `order` slot for slot — anonymize.js :: rankingToOrder
  * builds both from the same `slots` array in the same pass, so a tie group is
  * an array in both. Where it is absent, shorter, or holds `null` (every

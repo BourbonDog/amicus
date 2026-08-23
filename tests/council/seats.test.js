@@ -182,4 +182,20 @@ describe('artifactName / displayName', () => {
     expect(displayName(buildSeats(['glm'], null, null)[0])).toBe('glm');
     expect(displayName(buildSeats(['glm', 'glm'], null, null)[1])).toBe('glm#2');
   });
+
+  // PR #189 council A2 (solid): the two assertions above compare displayName's
+  // output to LITERALS, which pins the naming CONVENTION but never states the
+  // identity the callers actually rely on. v4.8 SI-25 wired this seam into
+  // briefings-chair.js :: buildChairPacket's review headers, so a change from
+  // `seat.id` to anything else (alias, `${id} (${role})`, a lens suffix) would
+  // silently move the chair packet while both literal pins above stayed green on
+  // a unique-alias bench. Asserted against the seat's OWN id, on both bench
+  // shapes, so no literal can drift out from under it.
+  test('displayName(seat) IS seat.id, by identity — not merely equal to a known literal', () => {
+    for (const bench of [['glm'], ['glm', 'glm'], ['glm', 'gpt', 'glm']]) {
+      for (const seat of buildSeats(bench, null, null)) {
+        expect(displayName(seat)).toBe(seat.id);
+      }
+    }
+  });
 });

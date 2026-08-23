@@ -277,6 +277,28 @@ All notable changes to Amicus are documented here. Format follows
   larger, multi-piece fix — reading and resolving session ids from provider logs is separate,
   future work.
 
+- **The chair packet now names seats on a bench that repeats a model alias, so the chair can
+  finally tell two same-model reviewers apart.** `chair-packet.md` is the one artifact a paid chair
+  reads as authoritative, and every identity in it was written as the bare alias. On a bench running
+  the same model twice, that made the packet internally unreconcilable: the chair was handed
+  *"Deterministic tier counts: {Confirmed: 1}"* — a count that only makes sense if two different
+  reviewers agreed — beside two adjudication lines both reading `deepseek:`, with nothing anywhere
+  in the document able to say which was which. The report and the Workspace matrix had already moved
+  to seat identity, so the human-facing artifact and the model-facing one disagreed.
+  All three identity-bearing blocks now resolve the seat: the **review headers**
+  (`--- Review by deepseek#2 ---`), the **peer-rankings** block — both the judge it is keyed by and
+  the ranked names inside it — and the **adjudication** lines. The ranked names are matched
+  position by position, so a tie stays a tie and any name the run could not resolve to a seat keeps
+  its alias rather than turning into a blank.
+  ⚠️ **On every bench that does not repeat an alias the packet is byte-identical** — not "should be":
+  the equality is asserted by a test. In the rankings and adjudication blocks that is because the
+  seat is simply absent whenever it would equal the alias. The review header needed more care: the
+  name it prints is the model input a leg reported, which can be the fully resolved model id even
+  when nothing about the bench is ambiguous, so the seat is deliberately **withheld** there unless
+  it actually differs — rather than assumed to be identical. A `claude` review block still reads
+  `--- Review by claude ---`: Claude's review carries no seat and is deliberately left alone.
+  This changes what the chair reads, which can change what it concludes, on twin benches only.
+
 ### Changed
 
 - **The reliability ledger now records one row per (model, resolved executable) pair, not one per
@@ -651,12 +673,16 @@ All notable changes to Amicus are documented here. Format follows
   longer collapses twins: its rank map, the street-cred driver and the ledger's street-cred join are
   all seat-keyed now, so a repeated alias emits one `streetCred` row per seat instead of two
   byte-identical ones, and the ledger resolves each seat's own row instead of losing one to a
-  last-wins alias key (see above). Findings remain attributed by **alias**, not by seat, in the
-  ledger. `lens` and `position` are still
+  last-wins alias key (see above). ~~Findings remain attributed by **alias**, not by seat, in the
+  ledger.~~ **No longer a limitation — fixed later in this same release; see "Findings in the
+  reliability ledger are now attributed to the seat that actually raised them" above.**
+  `lens` and `position` are still
   unrecoverable from the tally artifacts on any bench that does *not* repeat an alias, because
-  `meta.seats` is emitted only when one does. The chair packet is still assembled entirely in alias
+  `meta.seats` is emitted only when one does. ~~The chair packet is still assembled entirely in alias
   space, so on a repeated-alias bench the chair sees two `A1 — deepseek:` lines beside a tier count
-  it cannot reconcile them against. Five seat shapes the peer fix does not close are listed in the
+  it cannot reconcile them against.~~ **No longer a limitation — fixed later in this same release;
+  see "The chair packet now names seats on a bench that repeats a model alias" above.**
+  Five seat shapes the peer fix does not close are listed in the
   BACKLOG with their measurements, the largest being that a `--council` preset with a
   whitespace-padded member is functionally a twin bench that the seat builder treats as two
   distinct aliases — so the undercount survives there in full, silently.

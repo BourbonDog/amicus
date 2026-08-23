@@ -284,6 +284,29 @@ briefings-debate.js:166 `Re-vote changes: ${j}: ${prior[j]} → ${revotes[j]}` s
 run-assemble.js:270     the `claude` review block (`model: 'claude'`)       surface 6
 ```
 
+⚠️ **ANNOTATION 2026-08-23 — surfaces 1–4 are CLOSED; 5 and 6 are not, and 6 never will be.** Left
+as PR5a's own record; the disposition below is the current state, not a rewrite of the block above.
+- **Surfaces 1, 2, 3, 4** — closed by `SI-25` (`f7fe180d` + `0c06bca9` + `95ee5520`, ruling
+  **R25-1**, all three rendering sites in one PR). Surface 3, the rankings VALUES — *"the one that
+  kills R5-9"* — is now a per-slot, tie-aware, null-safe zip in `briefings-chair.js ::
+  seatKeyedOrder`, because `orderSeats` legitimately carries `null`s and may be short or absent, so
+  it is not a drop-in for `order`.
+- **Surface 5 — untouched by SI-25, and it did not need to be.** It is
+  `briefings-debate.js :: buildDebateAddendum`'s `Re-vote changes:` line (`:166` at 2026-08-23 too;
+  read it by symbol). Per the measurement at *"rev 2's premise was false"* below, it **already
+  rendered seat ids** — it is the surface that made the `--debate` twin packet internally
+  inconsistent in the first place. ⚠️ Which means the sentence *"HEAD's `--debate` twin packet is
+  **already** internally inconsistent, on the leg that costs money"* below is now **history, not
+  current state**: SI-25 moved surfaces 1–4 into the space surface 5 was already in, so the
+  inconsistency that paragraph measures is what SI-25 closed. Nothing to do here.
+- **Surface 6 — deliberately unchanged and NOT a defect.** The Claude review is concatenated as
+  `{ model: 'claude', text }` with **no seat at all**, and `SI-25` keeps it rendering as `claude`
+  through the `|| r.model` fallback — that fallback is load-bearing, pinned, and the mutant
+  `SEATONLY` (which drops it) reds 4 suites / 12 tests.
+- ⚠️ The prose above the block says *"three surfaces where there are **five**"* while the block
+  itself lists **six**. Pre-existing, unresolved, and untouched by SI-25 — flagged so a later reader
+  does not take either count as authoritative without recounting.
+
 **Surface 3 is the one that kills R5-9.** `r.order` is produced by `rankingToOrder(parsed.ranking,
 labels.labelMap)` (`run-stage2.js:202`) and is **alias-valued by construction**. Driving the real
 `buildChairPacket` with rev 2's T7 applied exactly as written:
@@ -334,6 +357,19 @@ Both are the two divergences `run-assemble.js:84-88` (R4c-9) already names in sh
 guard that fixes it is the predicate the other four producers share — title from the seat only when
 `seat.id !== seat.alias` — and it was **verified byte-identical in both counterexamples**. It is
 **carried to the descoped PR, not applied here**, because it fixes surface 1 of six.
+
+⚠️ **FOLLOW-UP 2026-08-23 — the descoped PR is `SI-25`, and the guard DID ship there, but the carry
+did not work.** SI-25's own plan prescribed surface 1 as an **unconditional** seat forward
+(`displayName(r.seat) || r.model` with `seat` always projected) — i.e. exactly the REV-1 shape this
+paragraph had already measured as breaking byte identity, with both counterexamples on record here
+since 2026-08-14. The implementer re-derived the same mechanism from
+`run-launch.js :: materializeReviews` during the task and the deviation was accepted (ruling P2);
+the emit-when-DIFFERENT predicate now lives at `run-assemble.js :: buildChairPacketFile`'s reviews
+projection, and the named mutant **`HDRSEATFWD`** — which reverts it to the plan's prescription —
+reds exactly 1 test out of 7914, where before SI-25 it would have red **zero**. ⚠️ **The lesson is
+about the carry, not the code:** a measured counterexample written into a descoping ruling is only
+carried if the receiving plan quotes it. This one was two files away and the plan cited this
+document for other things.
 
 ⚠️ And even the guard's *fallback* arm is not the alias: on `['gemini','gemini','gpt']` where the
 third leg reports no `modelInput`, the guarded title for the `gpt` seat is
@@ -722,6 +758,9 @@ was simply unbudgeted.
   line** in `run-assemble.js`.
 - **All rendering lands in `briefings-chair.js`** — 156 lines, **144 free**, the roomiest file in the
   task, and the file spec §4.6:197 names for the chair-packet wording.
+  ⚠️ **Re-measured 2026-08-23: `briefings-chair.js` is 243/300, 57 free** — PR5a's T7 and then SI-25
+  (which added `seatKeyedOrder` and its docblock) spent most of that headroom. Still the roomiest of
+  the pair, but *"144 free"* must not be planned against.
 
 The seam stays documented in case a later task needs it (`run-assemble.js:263-277` →
 `run-chair-packet.js`, measured 275 + 53; `displayName` must leave the `./seats` destructure or

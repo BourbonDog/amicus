@@ -1997,7 +1997,7 @@ sized and deferred rather than carried half-done.
 | R12 | #135 TTFT: **probe first**, then scope C2 |
 | R13 | #133: **Piece 1 only** (`opencodeSessionId`) |
 | R14 | **SI-27 in v4.8** after Phase 2, home `stage1-bind.js`; seatKey consolidation → v4.9 |
-| R15 | SI-25 chair packet: **sites (1)+(2) now**, site (3) rides the street-cred PR |
+| R15 | SI-25 chair packet: **sites (1)+(2) now**, site (3) rides the street-cred PR — ⚠️ **SUPERSEDED 2026-08-23 by ruling R25-1: ALL THREE sites shipped in one PR, and that is NOT scope creep.** Site (3) is the **rankings** site (the middle one in the file, not the last); the street-cred PR = Phase 3, which UNBLOCKED it and deliberately did not do it, so this deferral had no remaining referent. See the ticked *"chair packet is assembled entirely in alias space"* entry below for the full record |
 | R16 | `sessions-index` leak: **pin all 13 unpinned rails** |
 
 ### The durable finding was the release's centre — ✅ FIXED: slots (T2.2) and rows in ALL FOUR retry shapes (T2.2 for three, T-A4 `1e385895` for the partial return, 2026-08-17)
@@ -2649,6 +2649,12 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   done: `briefings-chair.js :: buildChairPacket`'s `rankingLines` still renders `${r.judge}`
   alias-keyed and was not touched by this PR. T3.3's fix-round-1 baseline: 542 suites / 7782 passed
   / 8 skipped / 4 snapshots / 0 failed.
+  ⚠️ **Both sentences above stay true OF PHASE 3 — do not read them as current state.** `rankingLines`
+  has been seat-keyed since **2026-08-23, v4.8 SI-25 (`f7fe180d`)**: it now renders
+  `` `${r.seat || r.judge}` `` with a per-slot `seatKeyedOrder` zip for the values. This entry's
+  "UNBLOCKED, not done" is what made site (3) **homeless** — R15 had sent it to *this* PR — which is
+  the whole reason ruling **R25-1** did all three sites at once. See the ticked *"chair packet is
+  assembled entirely in alias space"* entry below.
   - **Council review of PR #177 (2026-08-21) — the first FULLY CLEAN run of this release.**
     `run complete · stage1 → stage2 → chair → tally → verdict all complete`, 390s, all four bench
     models produced street cred, **chair verdict "Ship it"**. Three Confirmed, all minor/nit, filed
@@ -3228,8 +3234,16 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   - ~~**T6.6** — the `skills/` doc-fact gate.~~ **DONE — v4.8 Wave 1 (2026-08-22, `c0a7c728`).**
     See the dedicated warning block below, now annotated.
   - **SI-25 sites (1)+(2)**, ruling **R15**; site (3) rode Phase 3 and is unblocked.
+    ⚠️ **"rode Phase 3" is FALSE and was false when written** — Phase 3 UNBLOCKED site (3) and
+    deliberately did not do it (its own plan, verbatim, twice). This is the sentence the later
+    resume points inherited the error from. **All three sites shipped together on 2026-08-23**
+    (v4.8 SI-25, ruling **R25-1**) — see the ticked *"chair packet is assembled entirely in alias
+    space"* entry below. Note also that the same wrong reading is baked into the
+    *"`Phase 3 → SI-25 site (3)` is shipped"* clause a few lines below: what shipped there is
+    **Phase 3**, the prerequisite — not site (3).
 
-  ⚠️ **Phase 6 is now down to TWO independents: SI-22.4, SI-25 sites (1)+(2).** SI-24
+  ⚠️ **Phase 6 is now down to TWO independents: SI-22.4, SI-25 sites (1)+(2).** (⚠️ **ONE since
+  2026-08-23** — SI-25 shipped, all three sites; only `SI-22.4` remains.) SI-24
   shipped at PR1, T6.5 was dropped, T6.6 + SI-14 shipped together in v4.8 Wave 1
   (T-W1.1/T-W1.2, 2026-08-22) alongside #135 C0 (Phase 7), and SI-23 shipped in v4.8 Wave 2
   (2026-08-22, `d5378684`). ⚠️ **The resume point past this point is
@@ -3289,6 +3303,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   "then" half of this ruling — `SI-25` sites (1)+(2) and `#138` Pieces 1+2 — did NOT ship as part
   of this** and stays open; do not read "Wave 2 done" as covering it. See **"NEXT TASK — Wave
   2.5"** below for the live resume point — R16 next, then Wave 3.
+  ⚠️ **Of that "then" half, `SI-25` has since shipped** — 2026-08-23, its own PR, **all three** sites
+  (ruling R25-1), never inside a wave. `#138` Pieces 1+2 remain open and unscheduled.
 
   **Owner ruling (2026-08-22) — the wave structure for the remainder of v4.8.0:**
   - **Wave 1** — batched, one PR. **DONE** (this PR: `T6.6`, `SI-14`, `#135 C0`).
@@ -3333,7 +3349,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 
   ⚠️ **Remaining Phase 6 members after Wave 2: `SI-22.4`** (now Wave 3's last item, above) **and
   `SI-25` sites (1)+(2)** (ruling R15 — small PR, sites in `briefings-chair.js`/`run-assemble.js`;
-  not yet placed in a wave below — schedule it, do not assume it rides Wave 3). `#138`
+  not yet placed in a wave below — schedule it, do not assume it rides Wave 3). ⚠️ **`SI-25` was
+  scheduled and SHIPPED on 2026-08-23** — its own PR, outside every wave, and **all three** sites
+  rather than the two named here (ruling R25-1). `#138`
   Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
   only — re-derive before scheduling it, on the same "measure before you plan" precedent this
   record applies throughout.
@@ -3402,6 +3420,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
 
   ⚠️ **Remaining Phase 6 members: `SI-22.4`** (Wave 3's last item) **and `SI-25` sites (1)+(2)**
   (ruling R15 — not yet placed in a wave; schedule it, do not assume it rides Wave 3).
+  ⚠️ **`SI-25` SHIPPED 2026-08-23** — own PR, outside every wave, **all three** sites (R25-1). The
+  only remaining Phase 6 member is `SI-22.4`.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom**, unchanged by `R16`
   — see the dedicated warning immediately below. ⚠️ **CORRECTED 2026-08-23: this said `SI-27`
@@ -3430,13 +3450,22 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   entry).
 
   **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE. Wave 3: `SI-27` —
-  DONE.** Remaining, in order:
-  1. **`SI-25` sites (1)+(2)** — ruling **R15**, anchor `briefings-chair.js :: buildChairPacket`
+  DONE. `SI-25` — DONE (2026-08-23).** Remaining, in order:
+  1. ~~**`SI-25` sites (1)+(2)** — ruling **R15**, anchor `briefings-chair.js :: buildChairPacket`
      (three sites; site (3) already shipped in Phase 3). ⚠️ **Not yet placed in a wave — schedule
-     it, do not assume it rides Wave 3.**
+     it, do not assume it rides Wave 3.**~~ **DONE — 2026-08-23**, own PR on branch
+     `v48-si25-chair-packet-seats` (`f7fe180d` + `0c06bca9` + `95ee5520`). ⚠️ **Two corrections to
+     the struck line.** (a) **It shipped ALL THREE sites, not (1)+(2)** — ruling **R25-1**, and that
+     is not scope creep; R15's home for site (3) evaporated when Phase 3 unblocked-but-did-not-do it.
+     (b) **"site (3) already shipped in Phase 3" was FALSE when written.** Phase 3's own plan says
+     the opposite verbatim, twice — *"Phase 3 UNBLOCKS it; Phase 3 does not do it"* — and measured at
+     this branch's BASE `c0745013`, the rankings line was still `` `${r.judge}:
+     ${JSON.stringify(r.order)}` ``. Full record, mutants and sizes: the ticked *"chair packet is
+     assembled entirely in alias space"* entry below.
   2. **`SI-22.4`** — anchor `utils/config.js :: classifyCouncilMembers`. **LAST**, because its
      trim turns a whitespace-padded preset member into a REAL twin bench: artifact filenames
      change and `meta.seats` starts emitting. That is exactly why it could not precede `SI-27`.
+     It is now the **only** remaining item before the release.
   3. **Release** — version pin across 6 files → CHANGELOG → tag → `publish.yml`.
 
   ⚠️ **Carry forward, unchanged: `src/council/run-retry.js` is at 300/300, ZERO headroom.**
@@ -3444,6 +3473,10 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   **Nothing in the remainder of v4.8.0 relieves it** — it is the one saturated file with no
   scheduled extraction, and the next change to it must extract first (Release Constraint 6:
   EXTRACT, never shave a comment). See the dedicated 300/300 entry below.
+  ⚠️ **Carry forward, NEW 2026-08-23: `src/council/run-assemble.js` is now 278/300** (was 271 before
+  SI-25 added the seat forward to its reviews projection), and `src/council/briefings-chair.js` is
+  **243/300** (was 182). Both are still clear, but neither has the headroom the Phase 1 size note
+  further down this file records for them — read the sizes here, not there.
 
 - [ ] **SI-27 rider (1) — `COLLIDEID` is single-pinned repo-wide.** Measured 2026-08-23: the
   mutant that gives a placeholder the alias as its own id — colliding on the id-keyed dedup —
@@ -3496,6 +3529,47 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   notice — so the cost is not only "extractions rot doc citations", it is "any edit does".
   If this is ever addressed, the cheap version is not a full doc scan but a scan of the LIVE
   subset — the unticked `- [ ]` entries — which is a small fraction of the 3639.
+
+- [ ] **SI-25 rider (1) — `buildChairPacketFile`'s "lifted verbatim" docblock was ALREADY stale
+  before SI-25.** `src/council/run-assemble.js :: buildChairPacketFile`'s docblock claims the
+  function was *"Lifted verbatim out of run.js for the 300-line gate (v4.4.1 Task 0.5) — same
+  composition, same debate addendum, same file write"* (HEAD `:233-235`; anchor by symbol, the
+  docblock opens at `:232`). **The composition is no longer the same**: v4.8 PR5a T7 added
+  `findings: record.findings` to the `buildChairPacket` call, before SI-25 existed. ⚠️ **Filed, not
+  fixed, and recorded here specifically so a later sweep does not attribute it to SI-25** — SI-25
+  added `seat` to the same call's reviews projection, which makes it look like the culprit and it is
+  not. Counting rule for "already stale": the `findings:` line is present in
+  `git show c0745013:src/council/run-assemble.js`, this branch's BASE.
+
+- [ ] **SI-25 rider (0) — the `[Unreleased]` "Known limitations" bullet is a rot magnet; audit it at
+  every release cut.** `CHANGELOG.md`'s *"Known limitations after this release"* bullet is written
+  early in a release and then quietly outlived by the release's own later entries. Measured
+  2026-08-23: **two** of its clauses had become false against entries in the SAME `[Unreleased]`
+  section, and both would have shipped to users verbatim.
+  1. *"The chair packet is still assembled entirely in alias space…"* — falsified by SI-25 itself.
+  2. *"Findings remain attributed by **alias**, not by seat, in the ledger"* — falsified by SI-18
+     (v4.8 Wave 2, `78ed7a40`), whose own entry *"Findings in the reliability ledger are now
+     attributed to the seat that actually raised them"* sits ~420 lines above it in the same section.
+  Both are now struck in place with a pointer to the superseding entry. ⚠️ **The general defect is
+  structural, not a one-off**: a "known limitations" list is the only part of a changelog that a
+  LATER entry in the same release can invalidate, and nothing checks it. **At the release cut, read
+  that bullet clause by clause against the shipped `### Fixed` entries above it.** Counting rule for
+  "two": clauses in that bullet asserting a present-tense limitation which a `[Unreleased]` entry
+  above it contradicts, read 2026-08-23 — 2 of 4.
+  ⚠️ Recorded here rather than in `CHANGELOG.md` **because it is maintainer prose**: the changelog
+  is user-facing and an earlier draft of this note ("must be reconciled at the release cut", "is
+  flagged, not rewritten") would have shipped verbatim to readers who have no use for it.
+
+- [ ] **SI-25 rider (2) — the R25-2 byte-identity pin runs on one small bench.** The invariant is
+  *"byte-identical output on every unique-alias bench"* and the pin proves it by equality (not
+  `toContain`), which is the right shape — but it proves it over a single fixture. A richer bench
+  (more reviews, a tie in the rankings, an adjudication per finding) costs about **3 lines** and
+  would widen what the equality covers. **Not blocking**: the mutant `SEATONLY`, which drops the
+  `|| alias` fallback at all three sites, reds **4 suites / 12 tests** against the current pin set,
+  so the invariant is not resting on that one fixture alone. Filed as a cheap improvement, not a gap.
+  ⚠️ **Do not merge this with "SI-27 rider (1) — `COLLIDEID` is single-pinned"**, above. That one is
+  about a mutant with a single red test; this one is about the breadth of a fixture. Different
+  items, different files, different remedies.
 
 ### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
 
@@ -3646,8 +3720,12 @@ have no producer or consumer anywhere in this codebase's finding shape; see the 
 below. · ~~`T6.6` (confirmed live:
 `skills/second-opinion/SKILL.md:299` defines Singleton as `d = 0` and `a < 2` while
 `tally.js :: assignTier` returns **Confirmed** for `(a=1, d=0)`)~~ **DONE — v4.8 Wave 1
-(`c0a7c728`)** · `SI-25` sites (1)+(2) (confirmed
-alias-keyed at `briefings-chair.js:88` and `:93`) · ~~`SI-14` (confirmed: **no** such pin exists —
+(`c0a7c728`)** · ~~`SI-25` sites (1)+(2) (confirmed
+alias-keyed at `briefings-chair.js:88` and `:93`)~~ **DONE — v4.8 SI-25 (2026-08-23, `f7fe180d` +
+`0c06bca9` + `95ee5520`).** ⚠️ **All THREE sites shipped, not two** (ruling R25-1) — the third is
+the rankings render, which was alias-keyed at `:90` and which this measurement never listed. The
+`:88`/`:93` numbers were exact when taken and have since moved with the fix; anchor by symbol,
+`briefings-chair.js :: buildChairPacket` · ~~`SI-14` (confirmed: **no** such pin exists —
 pure test addition)~~ **DONE — v4.8 Wave 1 (`424cb63d`)** · `SI-22.4` (real, with the twin-bench
 knock-on as filed) · ~~`#135 C0`
 (confirmed trivial: `utils/no-output-backstop.js:23` is `120000`, `.github/workflows/
@@ -3658,6 +3736,9 @@ v4.8 Wave 1 (`4391f0b4` + ripple fix `b0d8e232`).**
 two remaining Phase 6 independents (`SI-23` shipped in Wave 2; measurements above for the other two
 unchanged). See "NEXT TASK — Wave 2.5" in the Phase 6 resume point above — `SI-22.4` rides Wave 3
 (last); `SI-25` sites (1)+(2) is not yet placed in a wave.
+⚠️ **SUPERSEDED 2026-08-23 — `SI-25` shipped** (own PR, all three sites, ruling R25-1). **`SI-22.4`
+is the last remaining Phase 6 independent**, and it is Wave 3's final item. The live resume point is
+"NEXT TASK — Wave 3 remainder" in the Phase 6 resume point above, not this paragraph.
 
 **W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to
 v4.9.** #135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and
@@ -3957,6 +4038,13 @@ and the follow-up record-correction commit added 9 comment lines, so `report.js`
 **197/300** today. Neither is a size-gate concern any more, and **a T2.4 or SI-25 implementer does
 not need to extract anything before editing them.** The 300-line gate blocks the COMMIT, not the edit —
 when it fires, EXTRACT. Shaving comments to fit is the documented tell.
+⚠️ **The `run-assemble.js` number above is a 2026-08-16 reading and the fence it sets has MOVED.**
+Both T2.4 and SI-25 have since shipped, and `run-assemble.js` is **278/300** at 2026-08-23 — not
+252 — because SI-25 added the seat forward and its comment to `buildChairPacketFile`'s reviews
+projection. `briefings-chair.js`, SI-25's other file, went **182 → 243/300** in the same PR. The
+conclusion ("still clear of the gate, edit without extracting first") holds for both files today,
+but the **next** editor of either must re-measure rather than read 252 here. The authoritative
+table is *Size gate — re-measured*, below.
 
 ### Deferred to v4.9.0
 
@@ -4365,7 +4453,13 @@ deliberately left alone:
   `run-assemble.js:223` for the first caller; `run-assemble.js` **does not call `buildVerdict` at
   all** (`grep -n 'buildVerdict(' src/council/run-assemble.js` — no hits) and `:223` there is
   `buildChairPacketFile`'s signature, so the number also COLLIDED with SI-25's correct
-  `run-assemble.js:223`. The real site is `run-verdict-files.js:41`. Re-opened in the same pass:
+  `run-assemble.js:223`. ⚠️ **That collision is now historical: `:223` names neither function.**
+  Counting rule — the line of `function buildChairPacketFile(` in `src/council/run-assemble.js`,
+  measured 2026-08-23 at both v4.8 SI-25's BASE `c0745013` and its HEAD: **`:242` at both**, so the
+  drift is PRE-EXISTING and nothing in SI-25 moved it. Read
+  `run-assemble.js :: buildChairPacketFile` by symbol; the point this paragraph makes — that a bare
+  number can collide across two unrelated items — survives its own example rotting.
+  The real site is `run-verdict-files.js:41`. Re-opened in the same pass:
   the field list is `src/council/verdict.js :: buildVerdict` (`:101`), whose `adjudications:
   f.adjudications` is `:128`, **not** the `:113-127`/`:121` this entry cited — read those two by
   symbol. **Not fixed in PR3** — the
@@ -4974,6 +5068,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   DIFFERENT numbers under the same alias rather than two identical ones (the rendered table is more
   truthful, but ambiguous about which seat is which). Flagged as an SI-25-adjacent follow-up, not
   fixed here — `report.js` and `matrix-model.js` are explicitly out of scope for this PR (§1).
+  ⚠️ **SI-25 has since shipped (2026-08-23) and did NOT take this** — its scope was the chair packet
+  (`briefings-chair.js` / `run-assemble.js`) and `report-md.js`/`report-html.js` were out of scope
+  there too. So this follow-up is now **homeless**, the same way SI-25's own site (3) was: it is
+  filed here and scheduled nowhere. Do not read "SI-25-adjacent" as "SI-25 will cover it".
 - [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
   does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
   which is a **different question** from "does anything else in the document carry the seat's lens".
@@ -5237,7 +5335,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   ids are assigned by the orchestrator, "already A1/B2/C3-prefixed," not raw model text) that this
   PR did not evaluate and did not fix. Anchor by symbol, not by line — the same rot class as SI-24's
   own citations, above.
-- [ ] **The chair packet is assembled entirely in alias space, so on a twin bench it is internally
+- [x] **The chair packet is assembled entirely in alias space, so on a twin bench it is internally
   unreconcilable.** `src/council/run-assemble.js :: buildChairPacketFile` (re-anchored BY SYMBOL
   2026-08-16 — it was cited as `run-assemble.js:263-277`, but v4.8 Phase 1 T1.1 lifted
   `buildRunStatsEntry` out of the lines above it and the function now opens at `:223`) passes the
@@ -5252,6 +5350,64 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   model-carrying **launch** argument is a non-routable model name and a real paid failure — the
   packet is prose, not a launch argument, so it is safe to seat-key, but the boundary must be kept
   explicit.
+  ✅ **CLOSED 2026-08-23 — v4.8 SI-25**, branch `v48-si25-chair-packet-seats`, BASE `c0745013`.
+  Code commits: `f7fe180d` (code + 15 pins) · `0c06bca9` (the five named mutants) · `95ee5520` (fix
+  round 1, comment-only). The record rides separately; the plan commit `efb9c4ad` shipped nothing. Plan: `docs/superpowers/plans/2026-08-23-v48-si25-chair-packet-seat-space.md`.
+  ⚠️ **ALL THREE rendering sites shipped, not the (1)+(2) this entry names — ruling R25-1, and it
+  is NOT scope creep.** R15 (see the owner-rulings table above, row R15) sent site (3) — the
+  **rankings** site, the MIDDLE one in the file, not the last — to "the street-cred PR". Phase 3
+  shipped and did **not** do it; its own plan says so verbatim, twice: *"Phase 3 UNBLOCKS it;
+  Phase 3 does not do it."* The deferral therefore had no remaining referent. All three sites showed
+  the same collapse, and a two-of-three fix would have left the rankings block alias-keyed while
+  this entry claimed SI-25 closed — worse than either extreme, because a packet seat-keyed in two
+  blocks and alias-keyed in a third is *still* unreconcilable and no longer looks it. **Anyone
+  reading R15 later must not conclude the third site was scope creep.**
+  Shipped, at `src/council/briefings-chair.js :: buildChairPacket` (symbol anchors are the durable
+  form; HEAD line numbers given once, for orientation only):
+  - **(1)** review-block headers, `:149` — `` `--- Review by ${displayName(r.seat) || r.model} ---` ``
+  - **(3)** peer rankings, `:151` — key `` `${r.seat || r.judge}` ``, values a per-slot, tie-aware,
+    null-safe zip through the new `briefings-chair.js :: seatKeyedOrder` (`orderSeats` legitimately
+    carries `null`s and may be short or absent, so it is **not** a drop-in for `order`)
+  - **(2)** adjudications, `:154` — `` `${a.findingId} — ${a.seat || a.judge}: ${a.verdict}` ``
+  Plus `run-assemble.js :: buildChairPacketFile` now forwards `seat` through its reviews projection:
+  that projection drops `r.seat` before the packet ever sees it, so **site (1) was not fixable
+  inside `briefings-chair.js` alone** — which is why this entry names `buildChairPacketFile` too.
+  ⚠️ **The plan's own prescription for site (1) was WRONG, and the guard that replaced it is
+  load-bearing.** The plan said `displayName(r.seat) || r.model` with an **unconditional** seat
+  forward. Measured: `run-launch.js :: materializeReviews` sets `modelInput = leg.modelInput ||
+  leg.model`, so `reviews[].model` falls back to the **resolved** id (`google/gemini-3.5-pro`) when
+  a leg reports no `modelInput`, while `seat.id === seat.alias === 'gemini'`. An unconditional
+  forward therefore rewrites that header **on a bench with no twin at all**, breaking spec §4.2's
+  byte-identity promise. The fix applies the **emit-when-DIFFERENT** predicate at the projection —
+  the same spelling as the `rankings[]`/`runStats` sites in the same file — so byte identity holds
+  by construction rather than by argument.
+  ⚠️ **`src/council/seats.js :: displayName` had ZERO production consumers until now.** Its docblock
+  has read *"How a seat is named to a human — chair packet review headers today"* since the day it
+  was written, and the only caller anywhere was `tests/council/seats.test.js`. It was built for this
+  item and never wired. Recorded so the next reader trusts a docblock's "today" a little less: at
+  HEAD its one production caller is `briefings-chair.js:149`.
+  **Invariant (R25-2): byte-identical output on every unique-alias bench**, proven by an equality
+  assertion, not asserted in prose. It is free — `seat` is absent from `rankings[]`/`adjudications[]`
+  exactly when it would equal the alias, and `displayName(seat) === seat.id === alias` for a unique
+  seat — which is why every site uses a fallback and never an unconditional seat read.
+  **Named mutants** (`tests/council/chair-packet-seat-mutants.js`), each applied by hand and run at
+  full `npx jest --no-coverage` scope, **denominator 546 suites / 7914 tests** (7914 = 7906 passed +
+  8 skipped): `ALIASBACK` 1 suite / 3 tests · `SEATONLY` 4 / 12 · `NULLLEAK` 1 / 4 · `FLATTIE` 1 / 1
+  · `HDRSEATFWD` 1 / 1. An independent reviewer re-measured all five via scratch copies and jest's
+  `moduleNameMapper`, and reproduced **every red set and the denominator exactly**.
+  ⚠️ **`HDRSEATFWD` is the one to remember**: it is a named mutant of *the plan's own prescribed
+  implementation*, it reds 1 test — and **before this item it would have red ZERO**. The naive form
+  would have shipped GREEN. A guard added to fix a defect must carry a mutant that reds on the
+  defect's original shape; the plan did not ask for one and should have.
+  **Suite at HEAD: 546 suites / 7906 passed / 8 skipped / 0 failed.** Gates: `check:sizes` 0 ·
+  `check:citations` 0 · `check:secrets` 0 · `lint` 0 · `validate-docs` 0. **Sizes** (the gate's own
+  rule — `content.split('\n').length`, minus 1 if the file ends in a newline):
+  `briefings-chair.js` 182 → **243** · `run-assemble.js` 271 → **278** · `street-cred.js` **258** ·
+  `anonymize.js` **145**, all under the 300 gate.
+  ⚠️ **This entry's own `:223` for `buildChairPacketFile` had ALREADY rotted before this PR** — not
+  caused by SI-25. Counting rule: the line of `function buildChairPacketFile(` in
+  `src/council/run-assemble.js`, measured on both branch BASE `c0745013` **and** HEAD — it is
+  `:242` at both, so nothing in this PR moved it. Read the symbol, never the number.
 - [x] **`letterByModel` is dead code that looks live, and it collapses twins.**
   `src/council/anonymize.js@5ef5048e` declares it in `assignLabels`' JSDoc (`:18`), builds it
   (`:28`), populates it keyed by MODEL (`:31`) and returns it (`:33`) — and it has **no production
