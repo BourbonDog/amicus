@@ -7,6 +7,11 @@
 // stage2 requires this module — a back-require would be a cycle that
 // resolves dateLine to undefined at load. briefings-stage2.js re-exports
 // every public name below so existing import paths stay stable.
+//
+// ./seats is the ONLY require here, and it is cycle-free by construction: that
+// module deliberately requires nothing (seats.js header), so the load-order
+// hazard above does not apply to it. Do NOT require ./briefings-stage2.
+const { displayName } = require('./seats');
 
 const CHAIR_NO_TOOLS_PREAMBLE =
   'Do NOT use any tools or read any files; everything is in this message; ' +
@@ -75,22 +80,63 @@ function orNone(text, none) {
 }
 
 /**
+ * Site (3)'s per-slot zip (v4.8 SI-25, ruling R25-3). `order` and `orderSeats`
+ * are PARALLEL per-slot arrays minted together by
+ * `anonymize.js :: rankingToOrder`, and a slot is either a scalar or an array
+ * (a tie group) — hence the two arms.
+ *
+ * EVERY read is a fallback, because `orderSeats` is a PARITY SHAPE, not a
+ * presence: its `seatOne` returns `(seatMap && seatMap[label]) || null`, and
+ * `run-assemble.js :: buildTallyInput` ships the array whenever ANY entry is
+ * truthy — so a MIXED array of seat ids and `null`s is a normal shipping shape,
+ * and it can also be shorter than `order`. No `null` may reach the rendered
+ * JSON: this is the one artifact a paid chair reads as authoritative. An absent
+ * `orderSeats` returns `order` untouched (spec §4.2's byte-identity promise).
+ */
+function seatKeyedOrder(order, orderSeats) {
+  if (!Array.isArray(order) || !Array.isArray(orderSeats)) { return order; }
+  return order.map((slot, i) => {
+    const seats = orderSeats[i];
+    return Array.isArray(slot)
+      ? slot.map((alias, k) => (Array.isArray(seats) ? seats[k] : null) || alias)
+      : (seats || slot);
+  });
+}
+
+/**
  * De-anonymized chair packet (spec §5/§6: the chair sees identities).
- * @param {{reviews: Array<{model: string, text: string}>,
- *   rankings: Array<{judge: string, order: Array<string|string[]>}>,
- *   adjudications: Array<{findingId: string, judge: string, verdict: string}>,
+ * @param {{reviews: Array<{model: string, text: string, seat?: ?object}>,
+ *   rankings: Array<{judge: string, seat?: ?string, order: Array<string|string[]>,
+ *     orderSeats?: ?Array<?string|Array<?string>>}>,
+ *   adjudications: Array<{findingId: string, judge: string, seat?: ?string, verdict: string}>,
  *   tierCounts: object}} args
  *   `rankings` and `adjudications` may both be empty — an all-clean bench (LC-10)
  *   has nothing to adjudicate, and a Stage 2 whose judges all died has nothing to
  *   rank. Each empty section says WHICH of those it is rather than rendering blank.
  */
 function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, findings }) {
-  const reviewBlocks = reviews.map(r => `--- Review by ${r.model} ---\n${r.text}`).join('\n\n');
+  // ⚠️ v4.8 SI-25: all three rendering sites below are SEAT-KEYED with an ALIAS
+  // FALLBACK. Alias-keyed, a twin bench handed the chair "tier counts:
+  // {Confirmed: 1}" beside two identical `A1 — deepseek:` lines, with nothing in
+  // the packet able to reconcile them; PR4c seat-keyed the report and the
+  // Workspace matrix but not this packet, so the human-facing artifact and the
+  // model-facing one disagreed.
+  // ⚠️ THIS PACKET IS PROSE, NEVER A LAUNCH ARGUMENT — that boundary is what
+  // makes seat ids safe here. A seat id in a model-carrying LAUNCH argument is a
+  // non-routable model name and a real paid failure, which is why `order`,
+  // `orderSeats`, `tallyInput`, verdict.json, the report and every launcher
+  // option stay alias-valued and untouched (run-debate.test.js's parity pin
+  // guards that boundary). Nothing routes on this artifact.
+  // The fallbacks are load-bearing, not defensive: on a unique-alias bench the
+  // seat channel is ABSENT at every site (spec §4.2 emit-when-DIFFERENT), so the
+  // rendering is byte-identical there by construction.
+  const reviewBlocks = reviews
+    .map(r => `--- Review by ${displayName(r.seat) || r.model} ---\n${r.text}`).join('\n\n');
   const rankingLines = (rankings || [])
-    .map(r => `${r.judge}: ${JSON.stringify(r.order)}`)
+    .map(r => `${r.seat || r.judge}: ${JSON.stringify(seatKeyedOrder(r.order, r.orderSeats))}`)
     .join('\n');
   const adjLines = (adjudications || [])
-    .map(a => `${a.findingId} — ${a.judge}: ${a.verdict}`)
+    .map(a => `${a.findingId} — ${a.seat || a.judge}: ${a.verdict}`)
     .join('\n');
   // ⚠️ v4.8 PR5a T7 (R5-3): surface R8. tally.js has stamped sameModelCorroboration since
   // PR4c and it reached verdict.json — and stopped. Spec §4.6 says the chair packet is
