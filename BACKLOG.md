@@ -3512,12 +3512,34 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   The first is still live, so the predicate, the reasoning and **the reader's action are unchanged**
   — these comments name an example that moved, not a fence that moved. All four re-read at their
   stated lines against the final tree, 2026-08-23.
-  ⚠️ **Do not "fix" these by deleting the predicate or narrowing the comment to the twin case.**
-  The padded shape is still reachable through the MCP `models` **array** —
-  `src/mcp-council-bench.js :: resolveBenchInput` returns `input.models` untrimmed — which is
-  exactly why `tests/council/run-assemble.test.js` and `tests/council/run-raiserseat-call.test.js`
-  keep their padded-bench cases and say so in place (*"THE PRODUCER MOVED, the shape did not"*).
+  ⚠️ **Do not "fix" these by deleting the predicate.** The **first** disjunct — a leg with no
+  `modelInput` — is live and is what the predicate is for.
+  ⚠️ **But do NOT restate the padded half as "still reachable via the MCP `models` array" either.**
+  Fix round 1 traced it to the end and that is FALSE: `mcp-council-bench.js :: resolveBenchInput`
+  returns `input.models` untrimmed, but its **single** consumer (`mcp-council-run.js:107`) always
+  spawns the CLI child with `--models bench.join(',')` (`:177`), the child re-parses through
+  `cli-council-run-bench.js :: parseList`, which trims, and `runCouncil` is **not exported from
+  `src/index.js`**. No padded value reaches a bench alias by any in-tree route.
+  ⚠️ **The tests keep their padded-bench cases anyway, and their "do not retire this case" note
+  STANDS — the REASON was wrong, not the coverage.** The shape is constructible at the unit
+  boundary those tests call, and it is the only shape that SEPARATES the two operands
+  (`seat.id !== r.model` vs `seat.id !== seat.alias`), which is the property they exist to pin.
   Reword opportunistically, when one of those four files is open for another reason.
+
+- [ ] **The repo has NO mutant-name registry, and names have now collided TWICE in one release.
+  OWNER: Christian. GATE: a single enumerated list of named mutants — file, path and red set —
+  that a new pin must be checked against.** Collision 1: `SEATALWAYS` → renamed `HDRSEATFWD`
+  (v4.8 SI-25). Collision 2: `CREDALIAS`, minted for SI-22.4's renderer rider in
+  `tests/council/preset-trim-mutants.js` (red 2 suites / 3 tests) while
+  `tests/council/street-cred-mutants.js` had carried that name since Phase 3 for a **different**
+  mutant on `ledger-join.js :: credFor` (red 2 suites / 1 test) — renamed `ROWSEATDROP` in fix
+  round 1. **Why this is not a nit:** a named mutant is cited BY NAME across `src/` comments, test
+  headers, `BACKLOG.md` and the phasing table, and its red set is quoted as a number. Two mutants
+  sharing a name means a reader comparing `2/1` against `2/3` reads a real regression that does not
+  exist — and neither collision was caught by any gate, because nothing enumerates the names.
+  Both were caught by a human reviewer, twice, which is the definition of an unpinned property.
+  ⚠️ Filed with an owner and a gate, deliberately NOT as an adjacency to whichever mutant work
+  comes next. The gate is the registry, not "the next PR that touches mutants".
 
 - [ ] **SI-22.4 rider (2) → v4.9 — the THIRD street-cred renderer is still alias-labelled.
   OWNER: Christian. GATE: `opts.labelOf` must accept a seat id before this can be written.**
@@ -5143,11 +5165,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   ✅ **CLOSED 2026-08-23 — v4.8 SI-22.4's rider R22.4-6 (`1c7a9087`).** The struck paragraph is now
   measurably FALSE: both renderers label the street-cred row `s.seat || s.model`
   (`report-md.js :: renderMd`, `report-html.js :: renderHtml` — re-anchored BY SYMBOL; the struck
-  `:70` and `:51-52` were exact when taken and are now `:80` and `:57`, deliberately not
+  `:70` and `:51-52` were exact when taken and are now `:80` and `:56-57`, deliberately not
   renumbered). A twin bench's two rows read `gemini#1` / `gemini#2`, so they are no longer ambiguous
   about which seat is which; a unique-alias bench is byte-identical, measured against BASE's own
   renderers loaded from `276d5a18` (`renderMd` 733/733, `renderHtml` 9667/9667). Named mutant
-  `CREDALIAS`, RED 2 suites / 3 tests.
+  `ROWSEATDROP`, RED 2 suites / 3 tests (renamed in fix round 1 — it was `CREDALIAS`, which
+  already names a DIFFERENT mutant in `tests/council/street-cred-mutants.js`).
   ⚠️ **THIS ENTRY IS THE THIRD RE-DISCOVERY OF THE SAME DEFERRAL SHAPE, and it is why the
   successor is filed differently.** *"SI-25-adjacent"* named an association, never a schedule; the
   work sat here unowned until an unrelated PR happened to touch the same renderers. The follow-up it
@@ -5326,10 +5349,13 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      `['openai/gpt-5 ','openai/gpt-5']` is two aliases, not one. Measured with both seats agreeing on
      both findings: `basis {a:0,d:0,n:0} Singleton` — **the undercount survives in full, silently.**
      The fix is upstream (trim at classification), not in the peer filter.~~
-     **Fixed exactly there.** `src/utils/config.js :: classifyCouncilMembers` — anchored BY SYMBOL;
-     the struck `:438-460` was exact when taken, is now `:461-496`, and is deliberately NOT
-     renumbered (counting rule: brace-matched from the `function classifyCouncilMembers` line to its
-     balancing `}`, inclusive, in both trees) — now trims each member **before gate 1**, so a padded
+     **Fixed exactly there.** `src/utils/config.js :: classifyCouncilMembers` — anchored BY SYMBOL.
+     Counting rule: brace-matched from the `function classifyCouncilMembers` line to its balancing
+     `}`, inclusive. By that rule the function is `:461-496` at HEAD and was **`:438-462`** both at
+     BASE `ecf90f19` and at the commit that wrote the struck citation (`c2313416`) — so the struck
+     `:438-460` was **never exact**: it stopped at the loop's closing brace two lines early. Neither
+     half is renumbered; the symbol is the anchor. The function now trims each member **before gate
+     1**, so a padded
      alias reaches the alias table clean and a padded full id reaches the catalog lookup clean.
      `buildSeats` (`src/council/seats.js:67`, re-derived against the final tree and unmoved) then
      sees ONE alias twice and mints `alias#N` for both, which the seat-aware peer filter already
@@ -5363,7 +5389,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      `judge-gemini-1.md`/`judge-gemini-2.md` on disk and `review-gemini.md` **absent** — against a
      control with the same padding and no collision, which asserts `'seats' in meta === false`.
      **Named mutants, none empty** (`tests/council/preset-trim-mutants.js`): `NOTRIM` 2 suites/9
-     tests · `TRIMDROPPED` 1/2 · `KEEPEMPTY` 1/1 · `CREDALIAS` 2/3 — all four independently
+     tests · `TRIMDROPPED` 1/2 · `KEEPEMPTY` 1/1 · `ROWSEATDROP` 2/3 — all four independently
      reproduced by a reviewer that compiled `config.js` in memory at its real path rather than
      touching the tree. Suite **549 suites / 7929 passed / 8 skipped / 0 failed** (BASE 546 / 7909
      passed — +3 suites, +20 tests). All five gates clean.

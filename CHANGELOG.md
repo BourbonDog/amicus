@@ -309,6 +309,13 @@ All notable changes to Amicus are documented here. Format follows
   on the other: on `--council` it turned a typo into a dropped member and a **degraded exit (2)** —
   `run.js`'s `dropped-members` note says so verbatim (*"the bench is smaller than the preset
   requested; the run will exit degraded (2)"*).
+  ⚠️ **Which presets does this actually affect? Only hand-edited ones — stated plainly rather
+  than left to be discovered.** `amicus council save` already trimmed on the way IN
+  (`council/presets-cli.js:34`), and the only other writer of `councils` in the config (the seeded
+  `free` council) builds its members from alias keys, which cannot carry padding. So a
+  whitespace-padded member reaches `config.json` only if you edited that file by hand — which is
+  exactly the case that used to fail, silently and fatally, while the same typo on `--models` was
+  harmless.
   ⚠️ **The dominant effect is RESURRECTION, not de-duplication: a member that is dropped today
   starts RUNNING, which is a new paid leg.** Measured over the six shapes a padded member can take
   (the configured `members` × whether the model-catalog cache is populated). **All six change:**
@@ -696,9 +703,14 @@ All notable changes to Amicus are documented here. Format follows
   read *"a `--council` preset carrying a whitespace-padded member"* until SI-22.4 made
   `config.js :: classifyCouncilMembers` trim each preset member (see *"A `--council` preset member
   with stray whitespace now runs"* under **Changed**), so a preset can no longer put padding on a
-  bench alias. The MCP `models` **array** still can — `src/mcp-council-bench.js ::
-  resolveBenchInput` returns it untrimmed, measured rather than assumed. The rule and the fix below
-  are unchanged; only the example moved. In both
+  bench alias. ⚠️ **Nor can anything else, traced to the end.** `src/mcp-council-bench.js ::
+  resolveBenchInput` does return `input.models` untrimmed, but that is one hop, not the route: its
+  single consumer (`mcp-council-run.js:107`) always spawns the CLI child with
+  `--models bench.join(',')` (`:177`), and the child re-parses through
+  `cli-council-run-bench.js :: parseList`, which trims — and `runCouncil` is not exported from
+  `src/index.js`. **The surviving example is the OTHER one**: a leg that reports no model input,
+  where the comparison sees the resolved executable id. That half is live, which is why the rule and
+  the fix below are unchanged. In both
   cases the emitted value was byte-equal to the alias, carried no information, and — until now —
   had no seat table able to resolve it. All four seat-emitting producers now share one rule: emit
   when the seat's id differs from **its own alias**. This is a visible change to two fields, and it

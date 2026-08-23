@@ -52,7 +52,7 @@ function renderHtml(m) {
   // street-cred loop. A SEPARATE test pins each renderer — a shared one would
   // let either regress silently (the same rule the R8 marker above follows).
   // `seat` is emit-when-DIFFERENT, so a unique-alias bench renders byte-
-  // identically to before. Named mutant: tests/council/preset-trim-mutants.js :: CREDALIAS.
+  // identically to before. Named mutant: tests/council/preset-trim-mutants.js :: ROWSEATDROP.
   const credRows = m.streetCred.map(s =>
     `<tr><td>${esc(s.seat || s.model)}</td><td>${num(s.peersOnly)}</td><td>${num(s.withSelf)}</td></tr>`).join('');
   const tierRows = TIER_ORDER.map(t =>

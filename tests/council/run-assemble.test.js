@@ -285,9 +285,16 @@ describe('buildTallyInput adjudications + rankings seat (v4.8 PR3 Task 5 / T3.2,
 // contract structural instead of prose.
 // ⚠️ The padded case USED to say "a --council preset carries a padded member".
 // v4.8 SI-22.4 made `src/utils/config.js :: classifyCouncilMembers` trim each
-// preset member, so a preset can no longer produce it; the MCP `models` ARRAY
-// can, because `src/mcp-council-bench.js :: resolveBenchInput` returns it
-// untrimmed. Same correction as T12b(b) below — keep the two in step.
+// preset member, so a preset can no longer produce it. ⚠️ NOTHING ELSE CAN
+// EITHER — fix round 1 traced the MCP route to the END and it does not survive:
+// `mcp-council-bench.js :: resolveBenchInput` returns `input.models` untrimmed,
+// but its single consumer (mcp-council-run.js:107) always spawns the CLI child
+// with `--models bench.join(',')` (:177), and the child's
+// `cli-council-run-bench.js :: parseList` trims. `runCouncil` is not exported
+// from src/index.js. THE CASE STAYS: it is constructible at THIS boundary, and
+// it is the only shape that separates `seat.id !== model` from
+// `seat.id !== seat.alias`. The LIVE producer is the other disjunct — a leg
+// reporting no modelInput. Same correction as T12b(b) below — keep the two in step.
 describe('v4.8 PR4c: runStats[].seat on the primary review rows (§3.1, T12)', () => {
   const seats = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
   const twinReviews = seats.map(s => ({
@@ -352,10 +359,15 @@ describe('v4.8 PR4c: the guard compares the seat to its OWN alias, never to `mod
     // v4.8 SI-22.4 made `src/utils/config.js :: classifyCouncilMembers` trim
     // each preset member, and both `--models` spellings already trimmed
     // (`src/cli-council-run-bench.js :: parseList`,
-    // `src/sidecar/fanout-validate.js :: parseModelsList`). The producer left is
-    // the MCP `models` ARRAY: `src/mcp-council-bench.js :: resolveBenchInput`
-    // returns it untrimmed — measured, not assumed. Do not retire this case as
-    // unreachable; it is the only shape that separates the two operands.
+    // `src/sidecar/fanout-validate.js :: parseModelsList`). ⚠️ AND NO OTHER
+    // PRODUCER SURVIVES: fix round 1 traced the MCP `models` ARRAY to the end —
+    // `mcp-council-bench.js :: resolveBenchInput` returns it untrimmed, but its
+    // one consumer spawns the CLI child with `--models bench.join(',')`
+    // (mcp-council-run.js:177) and `cli-council-run-bench.js :: parseList`
+    // trims there. Do not retire this case: it is constructible at THIS
+    // boundary and it is the only shape that separates the two operands. The
+    // live production route for the predicate is the OTHER disjunct — a leg
+    // reporting no modelInput.
     const [seat] = buildSeats(['openai/gpt-5 ', 'gpt'], null, null);
     expect(seat.id).toBe('openai/gpt-5 ');
     const row = asm.buildRunStatsEntry({

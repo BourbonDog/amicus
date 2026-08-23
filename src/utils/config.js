@@ -429,7 +429,15 @@ function getCouncilWithSource(name, catalog = []) {
  * reached without a third `reason` string (see the tripwire note below).
  * @param {string[]} members council members as configured — aliases or
  *   provider/model ids, trimmed per member here. ⚠️ This is the only place the
- *   PRESET path trims; it is not the only trim a member meets. Both council
+ *   preset READ path trims — NOT the only place the preset path trims at all,
+ *   and NOT the only trim a member meets. The WRITE side already trimmed:
+ *   `council/presets-cli.js:34` (`amicus council save`) stores
+ *   `.split(',').map(m => m.trim()).filter(Boolean)`, and the only other writer
+ *   of `cfg.councils` in `src/` (`sidecar/setup.js:593`, the seeded `free`
+ *   council) composes its members from generated/existing alias KEYS, which
+ *   cannot carry user padding. So a padded member in `cfg.councils` comes from
+ *   a hand-edited `config.json`, and that is the case this trim serves.
+ *   Downstream, both council
  *   surfaces re-join the expanded bench and re-parse it downstream —
  *   `cli-handlers-fanout.js:91` → `:119` → `sidecar/fanout.js ::
  *   validateFanoutModels` → `parseModelsList`, and `mcp-council-run.js:177` →

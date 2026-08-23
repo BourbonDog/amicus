@@ -105,7 +105,14 @@
 //       ('R22.4-3: an all-whitespace member never reaches `models`')
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// MUTANT "CREDALIAS" — src/council/report-md.js AND src/council/report-html.js
+// MUTANT "ROWSEATDROP" — src/council/report-md.js AND src/council/report-html.js
+//
+// ⚠️ NAMED "ROWSEATDROP", NOT "CREDALIAS". This mutant was called CREDALIAS
+// until fix round 1, which collided with tests/council/street-cred-mutants.js
+// :: CREDALIAS — a DIFFERENT mutant, on ledger-join.js :: credFor, with its
+// own red set (2 suites / 1 test). Two mutants, one name, different red
+// sets: any reader comparing counts would have read one as a regression of
+// the other. The new name shares no substring with it deliberately.
 //
 //   Revert both street-cred row labels to the alias:
 //   -  `| ${s.seat || s.model} | …`      +  `| ${s.model} | …`
@@ -131,7 +138,7 @@
 //
 // ⚠️ WHAT IT DOES NOT PROVE, measured and not merely expected — and this is
 // the reason the rider needed its own pins at all: the two BYTE-IDENTITY cases
-// stay GREEN under CREDALIAS, all 4 snapshots pass (report-claude-column,
+// stay GREEN under ROWSEATDROP, all 4 snapshots pass (report-claude-column,
 // report-debate), and every other report test stays green. That is correct —
 // they are unique-alias documents, where the two expressions agree by
 // construction — but it means the suite as it stood before this task could not

@@ -76,7 +76,7 @@ function renderMd(m) {
   // (street-cred.js :: credSeats: `seat: id === m ? null : id`), so a
   // unique-alias bench has no `seat` at all and this line is byte-identical to
   // what it wrote before — which is what keeps the report snapshots green.
-  // Named mutant: tests/council/preset-trim-mutants.js :: CREDALIAS.
+  // Named mutant: tests/council/preset-trim-mutants.js :: ROWSEATDROP.
   for (const s of m.streetCred) { out.push(`| ${s.seat || s.model} | ${fmtNum(s.peersOnly)} | ${fmtNum(s.withSelf)} |`); }
 
   out.push('\n## Findings by tier\n');

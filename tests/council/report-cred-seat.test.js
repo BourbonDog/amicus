@@ -20,12 +20,24 @@
  * rendering sites.
  *
  * WHY IT RIDES SI-22.4. The rider was deferred twice as "SI-25-adjacent" — an
- * association, not a schedule. It belongs to THIS change because SI-22.4 is what
- * makes a twin bench reachable from a saved `--council` preset (a padded member
- * now collides with its unpadded sibling instead of standing as a second
- * alias), so this is the first release in which an ordinary preset user can
- * print the ambiguous table. tests/council/preset-trim-twin-bench.test.js drives
- * that path end to end.
+ * association, not a schedule. It rides THIS change because SI-22.4 is the change
+ * that opens these two renderers, and homelessness is what kept it unwritten.
+ * That is the whole reason, and it is enough.
+ *
+ * ⚠️ WHAT THIS COMMENT USED TO CLAIM, AND WHY IT WAS FALSE (fix round 1).
+ * It said SI-22.4 "is what makes a twin bench reachable from a saved --council
+ * preset", i.e. that this is the first release an ordinary preset user can print
+ * the ambiguous table. Measured, at BASE `ecf90f19` AND at HEAD:
+ *   classifyCouncilMembers(['gemini','gemini'], []) -> models ['gemini','gemini']
+ *   buildSeats(...)                                 -> ids   ['gemini#1','gemini#2']
+ * Nothing dedupes on the preset path, so a twin bench was ALWAYS reachable from
+ * a saved preset by simply naming the same alias twice. SI-22.4 adds one more
+ * ROUTE to a twin (a padded member colliding with its unpadded sibling); it did
+ * not create the first. What made the table ambiguous-rather-than-duplicated is
+ * Phase 3 (T3.3), where computeStreetCred became one row per SEAT — before that
+ * a twin printed two byte-IDENTICAL rows, which is a different defect.
+ * The rider is right; that rationale was not. Do not restore it.
+ * tests/council/preset-trim-twin-bench.test.js drives the padded path end to end.
  *
  * BYTE-IDENTITY, measured the same way rather than argued: `seat` is
  * emit-when-DIFFERENT, so a unique-alias bench has no `seat` field and both
@@ -39,7 +51,7 @@
  * ONE TEST PER RENDERER, deliberately — a shared assertion would let either
  * regress silently (the rule report-html.js's R8 marker note already states).
  *
- * Named mutant: tests/council/preset-trim-mutants.js :: CREDALIAS.
+ * Named mutant: tests/council/preset-trim-mutants.js :: ROWSEATDROP.
  */
 
 const { toModel } = require('../../src/council/report');
