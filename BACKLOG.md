@@ -3457,12 +3457,21 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   an out-of-range bare `(:59)`/`(:53)` pointing into `run-retry-launch.js` — a file SI-27 had
   just taken 67→55. `d29a3462` fixed that instance and wrote the rule into the comment
   (*"Symbol anchors, never bare line numbers"*), but the gate still cannot catch the next one.
-  ⚠️ **Re-measured 2026-08-23: 29 bare `(:NNN)` matches across 22 files in live code** — of
-  which 2 are the deliberately-quoted examples in `run-stage1-rows.js`’s new comment, leaving
-  **27 live bare-paren refs across 21 files**. (The SI-27 brief said "22 refs"; 22 is the FILE
-  count, not the ref count.) The dangerous subset is the CROSS-FILE ones — this PR’s was the
-  only one pointing into a file it moved. ⚠️ **A green citation gate proves nothing about that
-  form.**
+  ⚠️ **Re-measured 2026-08-23, and STATE THE COUNTING RULE — the numbers differ by a factor
+  of the rule alone.** Over all 909 tracked `.js` files at `943a047b`:
+  • **Rule A, single-line refs only** (`(:NNN)`): **24 matches on 22 lines across 17 files**.
+  • **Rule B, single-line refs OR bare RANGES** (`(:NNN)` or `(:NNN-MMM)`): **29 matches across
+  22 files** — the five extra are bare ranges in `seat-space.js`, `council-pointer-fence.test.js`,
+  `run-debate.test.js`, `electron-workspace-e2e.integration.test.js` and `pack-validate.test.js`.
+  **Rule B is the right one to file on**: a bare `(:105-107)` is exactly as invisible to the gate
+  as a bare `(:59)`. Under Rule B, 2 matches are the deliberately-quoted examples on
+  `run-stage1-rows.js:165`, leaving **27 live bare-paren refs across 21 files**.
+  ⚠️ **CORRECTED same day:** this entry first read *"the SI-27 brief said '22 refs'; 22 is the
+  FILE count, not the ref count"* — itself wrong. Under Rule A the brief's 22 was the matching-**LINE**
+  count; the file count is 17 and the ref count 24. A correction stated in the wrong units is worse
+  than the rot it replaced — which is the whole reason SI-DUP exists.
+  The dangerous subset is the CROSS-FILE ones — this PR’s was the only one pointing into a file
+  it moved. ⚠️ **A green citation gate proves nothing about that form.**
 
 - [ ] **SI-27 rider (3) — the doc tree is unscanned, and SI-27 measured what that costs.**
   `scripts/check-citations.js` scans only `src/`, `electron/` and `tests/`; `BACKLOG.md` and
