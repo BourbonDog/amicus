@@ -19,7 +19,7 @@ const runState = require('./run-state');
 const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
 const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
   = require('./run-retry-notes');
-// briefingFor + the retry roster pad/bind step live in ./run-retry-launch (v4.8 T-A2 split).
+// briefingFor + bindRetryWave live in ./run-retry-launch (v4.8 T-A2 split); the pad/bind core it wraps is stage1-bind.js :: bindPaddedWave (SI-27).
 const { briefingFor, bindRetryWave } = require('./run-retry-launch');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
 // groupStage1Losses is re-exported below — run-retry.test.js imports it

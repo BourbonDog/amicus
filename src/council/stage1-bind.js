@@ -86,9 +86,11 @@ function missingSeatDeadWave(m) {
 /**
  * Bind ONE wave whose roster may have HOLES: pad the holes, bind, then drop
  * every placeholder bind. Appended (never inserted) by v4.8 SI-27 / R14, which
- * consolidated the block that stood byte-identical at three call sites —
- * `run-retry-launch.js :: bindRetryWave`, `run-stage2.js :: runStage2` and
- * `run-debate-revote.js :: runRevoteWave`.
+ * consolidated the block that stood byte-identical at three call sites ONCE `waveId`
+ * and the alias lookup are parameterised — site 2's callback was literally
+ * `(r, i) => { if (r.seat) … }`, reading the seat off a review, not off a roster
+ * slot. The three sites: `run-retry-launch.js :: bindRetryWave`,
+ * `run-stage2.js :: runStage2` and `run-debate-revote.js :: runRevoteWave`.
  *
  * How this differs from `bindStage1Waves` above: that one takes MANY waves, each
  * with a REAL roster — no padding, no placeholders, and it owns its own missing/

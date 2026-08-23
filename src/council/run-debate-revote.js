@@ -35,7 +35,8 @@ const { isAbortExit } = require('./run-launch');
 // zero cycle risk to this leaf — the same call run-stage2.js:30 makes.
 const { sanitizeName } = require('./seats');
 // v4.8 SI-27: the shared roster-padding core. ./stage1-bind requires only
-// ./seats, so this leaf stays cycle-free (the header at :19-23 above).
+// ./seats, so this leaf stays cycle-free (see the module docblock's cycle-class
+// paragraph above — named, not line-numbered, so it cannot rot).
 const { bindPaddedWave } = require('./stage1-bind');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
