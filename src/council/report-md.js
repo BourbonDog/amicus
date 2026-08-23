@@ -72,10 +72,16 @@ function renderMd(m) {
   // packet's rendering sites. A twin bench emits one street-cred row PER SEAT
   // (street-cred.js :: computeStreetCred), each with its own numbers, so keying
   // on `s.model` printed two DIFFERENT numbers under one identical label with
-  // nothing to say which seat was which. `seat` is emit-when-DIFFERENT
-  // (street-cred.js :: credSeats: `seat: id === m ? null : id`), so a
-  // unique-alias bench has no `seat` at all and this line is byte-identical to
-  // what it wrote before — which is what keeps the report snapshots green.
+  // nothing to say which seat was which. `seat` is emit-when-DIFFERENT, so a
+  // unique-alias bench has no `seat` KEY AT ALL and this line is byte-identical
+  // to what it wrote before — which is what keeps the report snapshots green.
+  // ⚠️ The key's absence comes from `street-cred.js :: computeStreetCred`'s
+  // row literal (`...(seat ? { seat } : {})`), NOT from `credSeats`. This
+  // comment used to cite `credSeats: seat: id === m ? null : id`, which is a
+  // real expression but the wrong mechanism: credSeats emits `seat: null` —
+  // the property PRESENT and null — and computeStreetCred is what drops it.
+  // The pin asserts absence (`'seat' in r === false`), so cite the producer
+  // that actually makes it absent.
   // Named mutant: tests/council/preset-trim-mutants.js :: ROWSEATDROP.
   for (const s of m.streetCred) { out.push(`| ${s.seat || s.model} | ${fmtNum(s.peersOnly)} | ${fmtNum(s.withSelf)} |`); }
 

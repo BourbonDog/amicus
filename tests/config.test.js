@@ -253,6 +253,26 @@ describe('Sidecar Config Module', () => {
       expect(aliases.opus).toBe('anthropic/claude-opus-5');
     });
 
+    it('has a NULL prototype, so an inherited key is not a known alias', () => {
+      // v4.8 SI-22.4 fix round 2 (council B1). Five gates read this table with
+      // bare indexing — resolveModel `:111`/`:142`, classifyCouncilMembers,
+      // council/presets-cli.js:41, pack/pack-validate.js:71 and
+      // utils/route-launch.js:205 — so on a normal object a member named
+      // 'toString' resolved to a truthy Function and was accepted everywhere.
+      // Pinned HERE, at the producer, because one line closes all five.
+      // Named mutant: tests/council/preset-trim-mutants.js :: PROTOALIASES.
+      const config = loadModule();
+      const aliases = config.getEffectiveAliases();
+      expect(Object.getPrototypeOf(aliases)).toBeNull();
+      for (const k of ['toString', 'constructor', 'valueOf', 'hasOwnProperty']) {
+        expect(aliases[k]).toBeUndefined();
+      }
+      // Own-enumerable iteration is unchanged — the shape every other consumer
+      // uses (Object.entries/Object.keys) must keep working.
+      expect(Object.keys(aliases)).toContain('gemini');
+      expect(Object.entries(aliases).length).toBeGreaterThan(0);
+    });
+
     it('should merge user aliases with defaults (user wins)', () => {
       const data = {
         default: 'gemini',

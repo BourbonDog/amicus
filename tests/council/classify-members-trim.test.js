@@ -184,28 +184,108 @@ describe('SI-22.4: the rules that bound the trim', () => {
     // text. SI-22.4 deliberately did not make that decision, so this trips at
     // the commit that would have forced it instead of letting it slip through a
     // hygiene fix.
-    // ⚠️ `Function.prototype.toString()` returns the source INCLUDING comments
-    // — measured under jest, where the body comes back carrying 12 `//` lines —
-    // so a bare /reason:\s*'…'/ would be tripped by any future COMMENT that
-    // quotes a reason string. The match is therefore anchored on the EMITTING
-    // STATEMENT (`droppedMembers.push({ member: raw, reason: '…'`).
-    // ⚠️ AND IT MUST TOLERATE WHITESPACE, measured the same way: babel-jest
-    // REFORMATS the source it hands back, breaking that one-line statement across
-    // four lines, so an exact-spacing regex matches in plain node and finds
-    // NOTHING under jest. `toHaveLength(2)` below is what turns that failure mode
-    // into a red instead of a vacuous pass over an empty match set.
-    // Residual, stated rather than left to be discovered: a comment reproducing
-    // the whole statement shape would still trip this. It fails SAFE — a spurious
-    // red sends the reader straight to the tripwire note — which is why the guard
-    // is kept in this form rather than made cleverer.
+    // ⚠️ BEHAVIOURAL, NOT TEXTUAL — rewritten in fix round 2 (council A1).
+    // This used to regex `Function.prototype.toString()` output, which couples
+    // the guard to how the SOURCE is spelled rather than to what the function
+    // DOES, and that bit twice: the body comes back carrying its own comments
+    // (so any comment quoting a reason string tripped it), and babel-jest
+    // REFORMATS the source (so an exact-spacing pattern matched in plain node
+    // and found NOTHING under jest, passing vacuously over an empty match set).
+    // Driving the function and collecting the reasons it actually EMITS tests
+    // the thing the tripwire exists for — a third reason reaching a user — and
+    // is immune to reformatting, to comments, and to babel.
+    // ⚠️ RESIDUAL, stated rather than left to be discovered: this observes
+    // every reason reachable from the drivers below, which cover both drop
+    // branches that exist today. A third reason added to EITHER branch reds
+    // this. A third reason on a NEW branch is observed only if some driver
+    // reaches it — so adding a branch means adding a driver here, and the
+    // docblock's tripwire note is what tells the next author so.
     const { classifyCouncilMembers } = classifier();
-    const src = classifyCouncilMembers.toString();
-    const reasons = [...src.matchAll(/droppedMembers\.push\(\s*\{\s*member:\s*raw,\s*reason:\s*'([^']*)'/g)]
-      .map(m => m[1]);
-    expect(reasons).toHaveLength(2);   // both emitting statements were actually found
+    // One driver per way a member can be dropped, PLUS one that must survive,
+    // so a mutation that drops everything cannot masquerade as a pass.
+    const drivers = [
+      [['nosuchalias'], []],            // gate 1, empty catalog
+      [['nosuchalias'], CATALOG],       // gate 1, populated catalog
+      [['   '], []],                    // trims to '' -> gate 1 (R22.4-3)
+      [['toString'], []],               // Object.prototype key -> gate 1 (B1)
+      [['openai/ghost'], CATALOG],      // gate 3, delisted full id
+      [['gpt '], []],                   // ACCEPTED: emits no reason at all
+    ];
+    const reasons = [];
+    let accepted = 0;
+    for (const [members, catalog] of drivers) {
+      const r = classifyCouncilMembers(members, catalog);
+      accepted += r.models.length;
+      for (const d of r.droppedMembers) { reasons.push(d.reason); }
+    }
+    expect(reasons).toHaveLength(5);          // five drivers dropped; a vacuous
+    expect(accepted).toBe(1);                 // empty set cannot pass this pair
+    expect(new Set(reasons).size).toBe(2);    // the tripwire itself
     expect(new Set(reasons)).toEqual(new Set([
       'alias no longer resolves to a known model',
       'resolved id is not present in the cached model catalog',
     ]));
+  });
+
+  describe('fix round 2 (council B1): the alias table has no Object.prototype', () => {
+    // Before this fix `getEffectiveAliases()` returned a NORMAL object, so
+    // `aliases['toString']` resolved off Object.prototype to a truthy Function
+    // and every gate asking `!!aliases[m]` read it as a known alias.
+    // ⚠️ SI-22.4 WIDENED that hole, which is why the pin lives in THIS file:
+    // measured at BASE `ecf90f19`, `'toString'` was already accepted but
+    // `'toString '` was correctly DROPPED — trimming before the lookup landed
+    // the padded spelling on the inherited property too. Both halves close here.
+    // Named mutant: tests/council/preset-trim-mutants.js :: PROTOALIASES.
+    const INHERITED = ['toString', 'constructor', 'valueOf', 'hasOwnProperty',
+      'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__defineGetter__'];
+
+    test('getEffectiveAliases() is null-prototype and still carries the real aliases', () => {
+      const config = classifier();
+      const aliases = config.getEffectiveAliases();
+      expect(Object.getPrototypeOf(aliases)).toBeNull();
+      expect(aliases.gpt).toBe('openai/gpt-5.6-terra');   // the table still works
+      for (const k of INHERITED) { expect(aliases[k]).toBeUndefined(); }
+    });
+
+    test('an inherited key is DROPPED, padded and unpadded, on an EMPTY catalog', () => {
+      const { classifyCouncilMembers } = classifier();
+      for (const key of INHERITED) {
+        for (const member of [key, `${key} `, ` ${key}`, `  ${key}  `]) {
+          const r = classifyCouncilMembers([member], []);
+          expect(r.models).toEqual([]);
+          // R22.4-2 still holds on this branch: the drop echoes the RAW member.
+          expect(r.dropped).toEqual([member]);
+          expect(r.droppedMembers).toEqual([
+            { member, reason: 'alias no longer resolves to a known model' }]);
+        }
+      }
+    });
+
+    test('...and on a POPULATED catalog, where the gate that fires is still gate 1', () => {
+      const { classifyCouncilMembers } = classifier();
+      for (const member of ['toString', 'toString ', 'valueOf ', 'hasOwnProperty ']) {
+        const r = classifyCouncilMembers([member], CATALOG);
+        expect(r.models).toEqual([]);
+        expect(r.droppedMembers[0].reason).toBe('alias no longer resolves to a known model');
+      }
+    });
+
+    test('SI-22.4 itself is undisturbed: a padded REAL alias still runs', () => {
+      const { classifyCouncilMembers } = classifier();
+      expect(classifyCouncilMembers(['gpt '], []).models).toEqual(['gpt']);
+      expect(classifyCouncilMembers([' gpt'], []).models).toEqual(['gpt']);
+      expect(classifyCouncilMembers(['nope '], []).models).toEqual([]);
+    });
+
+    test('resolveModel stops returning a Function for an inherited key', () => {
+      // The sharpest consumer: `:111` gates on `!== undefined`, which a
+      // Function passes, so resolveModel RETURNED Function.prototype.toString
+      // (typeof 'function') where every caller expects a model-id STRING.
+      const config = classifier();
+      for (const key of ['toString', 'valueOf', 'constructor']) {
+        expect(() => config.resolveModel(key)).toThrow(/Unknown model alias/);
+      }
+      expect(config.resolveModel('gpt')).toBe('openai/gpt-5.6-terra');
+    });
   });
 });

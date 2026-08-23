@@ -25,6 +25,14 @@
 // ⚠️ BASE `276d5a18` is 546 suites / 7917 tests BY SUBTRACTION of those three
 // suites, DERIVED and not separately measured — stated that way on purpose.
 //
+// ⚠️ SECOND DENOMINATOR, fix round 2 (2026-08-23): **549 suites / 7935 passed /
+// 8 skipped / 4 snapshots / 0 failed (7943 collected)**. The suite count is
+// unchanged — round 2 added six tests to two EXISTING suites
+// (classify-members-trim.test.js 10→15, config.test.js +1) and no new file.
+// NOTRIM / TRIMDROPPED / KEEPEMPTY / ROWSEATDROP above were measured against
+// the FIRST denominator and are left as taken; PROTOALIASES below is measured
+// against this one. Annotated, not renumbered.
+//
 // COUNTING RULE for every "red set" below: the set is the list of test-suite
 // FILES jest reports as FAIL under `npx jest --no-coverage` at FULL scope with
 // the mutation applied and nothing else changed, taken against the denominator
@@ -144,6 +152,61 @@
 // construction — but it means the suite as it stood before this task could not
 // have caught the rider's absence, and a future reader must not read those green
 // snapshots as coverage of this line.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// MUTANT "PROTOALIASES" — src/utils/config.js :: getEffectiveAliases
+//
+//   -  return { __proto__: null, ...DEFAULT_ALIASES, ...userAliases };
+//   +  return { ...DEFAULT_ALIASES, ...userAliases };
+//
+// This is the pre-fix expression exactly, so the mutant IS the shipped v4.7
+// behaviour. It restores `Object.prototype` on the alias table, which five
+// gates read by bare indexing.
+//
+// WHAT IT GUARDS (council B1, fix round 2). Measured on the real function,
+// BASE `ecf90f19` vs the fixed tree:
+//
+//     member          BASE          fixed
+//     'toString'      ACCEPTED      dropped     <- PRE-EXISTING hole
+//     'toString '     dropped       dropped     <- SI-22.4 had WIDENED it
+//     'gpt '          dropped       ACCEPTED    <- SI-22.4's intended effect
+//     'nope '         dropped       dropped     <- unchanged control
+//
+// The middle row is why this fix belongs to SI-22.4: at BASE the padded
+// spelling MISSED the prototype and was correctly dropped, and trimming before
+// the lookup landed it on the inherited property. The unpadded spelling was
+// already broken, so a fix restoring only the padded case would have taken more
+// code AND deliberately preserved a known hole (owner ruling, fix round 2).
+//
+// RED SET (measured): 2 suites, 6 tests.
+//   tests/council/classify-members-trim.test.js — 5 of 15
+//       (all four 'fix round 2 (council B1)' cases, PLUS the rewritten
+//        'R22.4-4 … EXACTLY TWO distinct `reason` strings' tripwire, which
+//        catches it independently: its `['toString'], []` driver stops being
+//        dropped, so the reason count falls 5→4 and the accepted count rises
+//        1→2. That the behavioural rewrite kills this mutant — which the
+//        textual version could not have — is the clearest evidence for A1.)
+//   tests/config.test.js — 1 of 64
+//       ('getEffectiveAliases › has a NULL prototype, so an inherited key is
+//        not a known alias')
+//
+// ⚠️ WHAT IT DOES NOT PROVE, measured rather than assumed. The four OTHER gates
+// that read this table by bare indexing — `config.js :: resolveModel` `:111`
+// and `:142`, `council/presets-cli.js:41`, `pack/pack-validate.js:71`,
+// `utils/route-launch.js:205` — have NO test that reds under this mutant except
+// the resolveModel case pinned above. The one-line fix closes all five; only two
+// are pinned. That is the honest blast radius, recorded so a later reader does
+// not mistake the fix's reach for the pin's.
+//
+// ⚠️ A THIRD SUITE GOES RED AND IT IS NOT A KILL. `tests/scripts/check-citations.test.js`
+// ('the real tree › has no stale citations in live code') fails under the
+// mutation — and ALSO fails without it, at any tree where this record has not
+// been written yet, because the two pins cite `preset-trim-mutants.js ::
+// PROTOALIASES` by symbol. Separated by measurement, not by reasoning: a
+// LINE-NEUTRAL variant of the same mutation (same edit plus a trailing comment,
+// so no line numbers shift) reproduced the identical check-citations failure,
+// which rules out a line-shift artifact and identifies the real cause. It is
+// excluded from the red set above.
 
 'use strict';
 module.exports = {};

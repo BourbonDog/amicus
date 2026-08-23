@@ -7,6 +7,24 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **A council member literally named `toString`, `constructor`, `valueOf` or `hasOwnProperty` is
+  no longer accepted as a valid model alias.** The effective alias table
+  (`config.js :: getEffectiveAliases`) was a plain object, so it inherited `Object.prototype`, and
+  every gate that asks *"is this a known alias?"* by indexing the table read those inherited methods
+  as a **truthy** answer. Five gates were affected: `resolveModel`, `classifyCouncilMembers`
+  (`--council` presets), `amicus council save`, pack validation, and launch-time route resolution.
+  The sharpest consequence, measured: `resolveModel('toString')` returned **the function itself**
+  — `typeof 'function'` — where every caller expects a model-id string, instead of throwing
+  *"Unknown model alias"* the way any other unknown name does. The table is now created with
+  `__proto__: null`, which closes all five at once — the same protection this release already gave
+  its other lookup tables. A member with one of those names is now dropped exactly like any other
+  unresolvable alias, with the same message.
+  ⚠️ **Disclosed rather than buried: the preset-member trim in this same release briefly made
+  this worse, and that is why it is fixed here.** Before the trim, `"toString "` (with the trailing
+  space) missed the inherited property and was correctly dropped; trimming before the lookup landed
+  the padded spelling on it too. Fixing only the half this release introduced would have taken more
+  code *and* knowingly left the other half open.
+
 - **A finding whose `raiser` is empty or missing no longer counts its own vote as peer
   corroboration.** `""` is not a model id, but the council-tally input schema accepts it, and the
   tally used to treat an unknown raiser as "exclude nothing" — so a document with `raiser: ""` and
@@ -303,7 +321,10 @@ All notable changes to Amicus are documented here. Format follows
 
 - **A `--council` preset member with stray whitespace now runs instead of being silently dropped.**
   `classifyCouncilMembers` (`src/utils/config.js`) trims each preset member **before** it is looked
-  up, so `"openai/gpt-5 "` reaches the alias table and the model catalog clean. `--models` already
+  up. The two spellings hit **different** gates: a padded **alias** (`"gpt "`) now reaches the alias
+  table clean, and a padded **full id** (`"openai/gpt-5 "`) now reaches the **model-catalog** lookup
+  clean — a full id short-circuits on `member.includes('/')` and never touches the alias table at
+  all. `--models` already
   trimmed on both of its spellings (`sidecar/fanout-validate.js :: parseModelsList`,
   `cli-council-run-bench.js :: parseList`), so the same stray space was benign on one flag and fatal
   on the other: on `--council` it turned a typo into a dropped member and a **degraded exit (2)** —

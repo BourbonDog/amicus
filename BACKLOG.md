@@ -3526,6 +3526,48 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   (`seat.id !== r.model` vs `seat.id !== seat.alias`), which is the property they exist to pin.
   Reword opportunistically, when one of those four files is open for another reason.
 
+- [x] **SI-22.4 fix round 2 (council B1) — the alias table inherited `Object.prototype`, and the
+  preset trim WIDENED it into a regression.** Closed 2026-08-23 in the SI-22.4 branch.
+  `config.js :: getEffectiveAliases` returned `{ ...DEFAULT_ALIASES, ...userAliases }` — a normal
+  object — so `aliases['toString']` resolved off the prototype to a truthy `Function`. Measured on
+  the real function, BASE `ecf90f19` vs fixed:
+
+  | member | BASE | fixed |
+  |---|---|---|
+  | `'toString'` | **accepted** | dropped |
+  | `'toString '` | dropped | dropped |
+  | `'gpt '` | dropped | **accepted** (SI-22.4's intended effect, preserved) |
+  | `'nope '` | dropped | dropped |
+
+  Row 2 is the regression this PR introduced: at BASE the padded spelling missed the prototype and
+  was correctly dropped; trimming before the lookup landed it on the inherited property.
+  ⚠️ **Fixed at the producer, not the call site** — `__proto__: null`, one line, closing **five**
+  bare-indexing gates: `config.js :: resolveModel` (`:111`/`:142`), `classifyCouncilMembers`,
+  `council/presets-cli.js:41`, `pack/pack-validate.js:71`, `utils/route-launch.js:205`.
+  ⚠️ **The reviewer's call-site list needed one correction, measured:** `config.js:292 ::
+  buildProviderModels` is **not** affected — its only use of the table is `Object.entries(aliases)`
+  (`:318`), own-enumerable and therefore immune. The fifth affected gate is `resolveModel`, which
+  the list did not name and which is the **worst** of the five: it returns the inherited `Function`
+  itself where every caller expects a model-id string, instead of throwing "Unknown model alias".
+  ⚠️ **Same defect class this release already closed elsewhere**, enumerated rather than counted
+  (the counts drift): `tally.js :: VERDICTS`, `report.js :: SYMBOL`, `debate.js :: PAST_TENSE` use
+  `__proto__: null`; `street-cred.js :: perJudgeRank` and `report.js :: ROLE_SUFFIX` use
+  `Object.create(null)`, the same guarantee in the other spelling. **The alias table was not among
+  them** — stated as the observable fact rather than as a claim about what SI-24 did or did not
+  sweep for.
+  ⚠️ **Scope ruling (owner, fix round 2):** the unpadded half is pre-existing and not strictly
+  SI-22.4's, but this PR widened it and cannot ship doing so. Restoring only the padded case would
+  take more code and deliberately preserve a known hole. Both halves fixed.
+  Named mutant **`PROTOALIASES`** (drop `__proto__: null`), **RED 2 suites / 6 tests** —
+  `classify-members-trim.test.js` 5 of 15, `config.test.js` 1 of 64; denominator 549 suites / 7943
+  tests. ⚠️ A third suite (`check-citations`) reds under the mutation **and without it**, from an
+  unrelated cause; separated by a LINE-NEUTRAL variant of the same mutation and excluded from the
+  set. Only **two** of the five gates are pinned — recorded so the fix's reach is not mistaken for
+  the pin's. ⚠️ The reach itself is **measured, not inferred**: each of the other three gate
+  expressions was evaluated directly with `'toString'` against both table shapes —
+  `presets-cli.js:41` unresolved `false→true`, `pack-validate.js:71` `seatOk true→false`,
+  `route-launch.js:205` `isAlias true→false`.
+
 - [ ] **The repo has NO mutant-name registry, and names have now collided TWICE in one release.
   OWNER: Christian. GATE: a single enumerated list of named mutants — file, path and red set —
   that a new pin must be checked against.** Collision 1: `SEATALWAYS` → renamed `HDRSEATFWD`

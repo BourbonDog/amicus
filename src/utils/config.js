@@ -216,7 +216,44 @@ function checkConfigChanged(currentHash) {
 function getEffectiveAliases() {
   const config = loadConfig();
   const userAliases = (config && config.aliases) || {};
-  return { ...DEFAULT_ALIASES, ...userAliases };
+  // `__proto__: null` — v4.8 SI-22.4 fix round 2 (council B1). This table is
+  // read with BARE INDEXING by five gates, so on a normal object a member
+  // literally named 'toString' / 'constructor' / 'valueOf' / 'hasOwnProperty'
+  // resolved off Object.prototype to a truthy Function and was treated as a
+  // KNOWN ALIAS. Measured, not argued:
+  //   resolveModel('toString')                    -> the Function itself,
+  //       typeof 'function', where every caller expects a model-id STRING
+  //       (`:111` and `:142` gate on `!== undefined`, which a Function passes)
+  //   classifyCouncilMembers(['toString '], [])   -> ACCEPTED, i.e. runnable
+  // The SAME defect class this release already closed at other lookup tables —
+  // `tally.js :: VERDICTS`, `report.js :: SYMBOL`, `debate.js :: PAST_TENSE`
+  // (all `__proto__: null`), plus `street-cred.js :: perJudgeRank` and
+  // `report.js :: ROLE_SUFFIX` (both `Object.create(null)`, the same guarantee
+  // in the other spelling). The ALIAS table was not among them.
+  // ⚠️ SI-22.4 WIDENED it and that is why it is fixed here: at BASE the padded
+  // spelling ('toString ') missed the prototype and was correctly dropped;
+  // trimming before the lookup landed it on the inherited property. The
+  // unpadded spelling was already accepted, so restoring only the padded case
+  // would take more code AND deliberately preserve a known hole.
+  // ⚠️ Fixed HERE, not at the call sites — one line closes all five, each
+  // MEASURED at its own gate expression with `'toString'` (not inferred from
+  // this one): `resolveModel` `:111`/`:142` (`!== undefined` true→false) ·
+  // `classifyCouncilMembers` (accepted→dropped, end to end) ·
+  // `council/presets-cli.js:41` (`amicus council save`: unresolved false→true) ·
+  // `pack/pack-validate.js:71` (`seatOk` true→false) ·
+  // `utils/route-launch.js:205` (`isAlias` true→false).
+  // No consumer breaks: every reference either indexes (`aliases[key]`) or
+  // iterates own-enumerable keys (`Object.entries`/`Object.keys` —
+  // `buildProviderModels`, `formatAliasNames`, `mcp-tools.js :: getGuideText`,
+  // `sidecar/models.js :: aliasMarks`), and both behave identically on a
+  // null-prototype object. NOTHING calls a method ON the object — swept
+  // uncapped over `src/` and `electron/` for `aliases.<x>`, `in aliases`,
+  // `Object.values`, `JSON.stringify`, spread and `for…in`.
+  // A `__proto__` key inside the user's own config.json is copied as an ORDINARY
+  // own property by spread (never the setter), so the prototype stays null —
+  // measured on both a literal and a `JSON.parse`d source.
+  // Named mutant "PROTOALIASES": drop `__proto__: null` from the literal below.
+  return { __proto__: null, ...DEFAULT_ALIASES, ...userAliases };
 }
 
 /**
