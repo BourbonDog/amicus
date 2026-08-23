@@ -127,7 +127,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.1 | OPEN | raiser's own leg orphans | `tally.js :: tally` |
 | 22.2 | OPEN | peer twin's leg orphans | `tally.js :: tally` |
 | 22.3 | **DONE** (T2.2 `33e2ecf7` + T-A4 `1e385895`, 2026-08-17) | ~~two orphaned twins → ONE dead row~~ producer fixed, and the reconcile half too: a PARTIAL retry return now gives 2 notes / 2 stillDeadLegs (B1) and each note reads its OWN slot's `firstFailure` (B2), output-identical to the BOUND control. ⚠️ Row/note half closed in **four of four** retry shapes; the SLOT half is closed **and bounded** — `min(N, roster count)` since T-A3 `4413eb25`, never an unqualified N→N | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (done — slot COUNT, not first-wins) |
-| 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
+| 22.4 | **DONE** (v4.8 SI-22.4, 2026-08-23; trim + rider + pins `1c7a9087`, the four named mutant red sets `4c49becc`, fix round 1 `f771f59b`; branch `v48-si22.4-preset-trim`, BASE `ecf90f19`, plan `276d5a18`) | ~~whitespace-padded preset member~~ each preset member is trimmed **before gate 1**, so a padded alias reaches the alias table clean and a padded full id reaches the catalog lookup clean; `models` carries the trimmed value while `dropped`/`droppedMembers` keep the member RAW, so a user can still find it in their own config. ⚠️ **This row's own wording was INCOMPLETE** — it reads as input hygiene, but measured over six shapes **ALL SIX change behaviour and the dominant effect is RESURRECTION, not de-duplication**: a member dropped today starts RUNNING — a new paid leg on four of the six, and on two of those the bench goes from empty to non-empty. Only ONE of the six is the twin-merge this row implies. The six-row table has one home, `CHANGELOG.md`. ⚠️ The knock-on is proved from **ARTIFACTS**, not reasoned from `buildSeats`: `meta.seats` = `['gemini#1','gemini#2']`, `review-gemini-1.md`/`review-gemini-2.md` on disk, `review-gemini.md` **absent**, against a same-padding no-collision control that asserts `'seats' in meta === false`. **Rider R22.4-6** — both report renderers now label street-cred rows `s.seat \|\| s.model`, byte-identical on a unique-alias bench against BASE's own renderers loaded from `276d5a18` (`renderMd` 733/733, `renderHtml` 9667/9667). ⚠️ **Record that the rider was HOMELESS** — deferred twice as *"SI-25-adjacent"*, and an association is not a schedule. ⚠️ A **THIRD** street-cred renderer, `electron/workspace-ui/workspace-matrix.js:147-149`, is still alias-labelled, so on a twin bench the report and the Workspace now disagree — filed for **v4.9 with a named owner (Christian) and the `opts.labelOf` seat-id signature change as its stated GATE**, deliberately NOT as an adjacency. Named mutants, none empty: `NOTRIM` 2 suites/9 tests · `TRIMDROPPED` 1/2 · `KEEPEMPTY` 1/1 · `CREDALIAS` 2/3, all four independently reproduced. 549 suites / 7929 passed / 8 skipped / 0 failed (BASE 546 / 7909); all five gates clean | `utils/config.js :: classifyCouncilMembers` · `report-md.js :: renderMd` · `report-html.js :: renderHtml` |
 | 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
 | 23 | **DONE** (v4.8 Wave 2, `d5378684`, 2026-08-22, ruling R10) | ~~`location` stripped on MCP tally path~~ the closed `z.object` now declares `location`; `tally.js :: tally`'s `outFindings` map — independently dropping it regardless of validation, CLI path too — now forwards it emit-when-present. A same-PR fix round (council A1/B1) closed the identical gap for `claim` one line below. ⚠️ **Closes into `tally.json` only, not `verdict.json`** — `verdict.js :: buildVerdict`'s closed `out` literal forwards neither field; filed, not fixed (`BACKLOG.md`). Named mutants: `SCHEMASTRIP` RED 2 tests/1 suite (reproduced directly for this record — the commit itself states no count); `CLAIMDROP` RED 2 suites/2 tests (commit-stated) | `mcp-tools.js :: getTools` · `tally.js :: tally` |
 | 24 | **DONE** (v4.8 Phase 6 PR1, 2026-08-22, SI-24) | ~~`VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first)~~ four `Object.prototype`-collision carriers closed at the table (`__proto__: null` / `Object.create(null)`), not two sites: **A** `tally.js :: VERDICTS` (read, CLI-only — MCP's `adjudications[].verdict` is `z.enum`) `36297e18`+`41733c58`; **C** `street-cred.js :: perJudgeRank` (write/accumulator, CLI **and** MCP — closes the half T3.3 left unfiled) `46b89f75`+`3e1a09a7`; **D** `report.js :: SYMBOL` (read, 3 renderers, CLI **and** MCP — `amicus_verdict`'s unvalidated `record: z.record(z.any())` bypasses A/B's `tally()`-gated enum) and **E** `debate.js :: PAST_TENSE` (read, defense-in-depth ONLY — `parse-stage2.js`'s allowlist already makes a real defense response unreachable, so this closes a latent hole, not a live bug) both `7ebe91ca`+`faccd178`, plus two follow-up rounds `551f8366`+`7bacef50` and `308e90d1`+`8aab4059` that retracted a born-false reachability claim for E. Named mutants `PROTOVERDICT` · `PROTORANK` · `PROTOSYMBOL` · `PROTOACTION` · `ACTIONPASSTHRU` · `DOUBLEBREACH` — the last two are a compound pair: `PAST_TENSE`'s null prototype and the allowlist are each independently sufficient, so only breaching BOTH reds the pin | `tally.js :: VERDICTS` · `street-cred.js :: perJudgeRank` · `report.js :: SYMBOL` · `debate.js :: PAST_TENSE` |
@@ -581,8 +581,10 @@ in `debate.json` (so `revoteJudges` and `revoteApplied` visibly disagree on a re
 degrade note is what explains why).
 
 ### Phase 6 · Independents — ~6 PRs, each ships alone
-SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin bench, so artifact
-filenames change and `meta.seats` starts emitting) · SI-23 (own PR, R10) · ~~SI-24 both sites
+~~SI-22.4 trim (+ the knock-on: trimming turns a padded preset into a REAL twin bench, so artifact
+filenames change and `meta.seats` starts emitting)~~ **DONE (v4.8 SI-22.4, 2026-08-23) — see
+status-table row `| 22.4 |`; the knock-on is exactly right, and the row records the effect this
+line does NOT name: four of six measured shapes gain a paid leg** · SI-23 (own PR, R10) · ~~SI-24 both sites
 including the unfiled `computeStreetCred` **data-loss** site~~ **DONE (PR1, 2026-08-22) — see
 status-table row `| 24 |`** · ~~SI-14 twin pin~~ **DONE (v4.8 Wave 1, 2026-08-22)** · ~~T6.5 repair-row
 seat~~ **DROPPED** · ~~T6.6 `skills/` doc-fact gate~~ **DONE (v4.8 Wave 1, 2026-08-22)** · ~~SI-25 sites (1)+(2) (R15)~~ **DONE (v4.8 SI-25, 2026-08-23) — all THREE sites, ruling R25-1; see status-table row `\| 25 \|`**
@@ -594,6 +596,8 @@ seat~~ **DROPPED** · ~~T6.6 `skills/` doc-fact gate~~ **DONE (v4.8 Wave 1, 2026
 > alone" ordering above is superseded by the owner's wave grouping.
 > ⚠️ **Superseded again 2026-08-23: SI-23 shipped in Wave 2 and SI-25 shipped as its own PR, so
 > Phase 6 is down to ONE — `SI-22.4`**, which is Wave 3's last item.
+> ⚠️ **Superseded a third time, later on 2026-08-23: `SI-22.4` shipped. Phase 6 is CLOSED — ZERO
+> members remain, and v4.8.0 is FEATURE-COMPLETE.** Only the release run is left.
 
 > T6.6 is a live defect, not scaffolding: `tally.js :: assignTier` (`:28`) returns **Confirmed**
 > (`confidence: thin`) for `(a=1, d=0)` — measured by execution 2026-08-21 — while
@@ -691,8 +695,9 @@ inline (not this note) for what is actually done.
 - **Wave 2.5 — DONE.** R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from
   this document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation). ✅ Shipped
   2026-08-22 as `T-R16.1` (`0a6a8032`) — see §4's R16 annotation, above, for the full record.
-- **Wave 3 — IN PROGRESS.** **strictly serial**: SI-27 **first** (✅ **DONE 2026-08-23** — see
-  row 27), SI-22.4 **LAST** — SI-22.4’s trim knock-on
+- **Wave 3 — ✅ DONE 2026-08-23.** **strictly serial**: SI-27 **first** (✅ **DONE 2026-08-23** —
+  see row 27), SI-22.4 **LAST** (✅ **DONE 2026-08-23** — see row 22.4; the serial order held, and
+  the knock-on below is exactly what the artifacts show) — SI-22.4’s trim knock-on
   turns a whitespace-padded preset member into a REAL twin bench (changed artifact filenames,
   `meta.seats` starts emitting), which SI-27’s consolidation should absorb rather than the other
   way around — and, SI-27 having shipped first, now will. ⚠️ **CORRECTED 2026-08-23: this said
@@ -710,6 +715,9 @@ inline (not this note) for what is actually done.
   `v48-si25-chair-packet-seats` (`f7fe180d` + `0c06bca9` + `95ee5520`), and it shipped **all three**
   rendering sites, not the (1)+(2) R15 scheduled (ruling **R25-1**). ⚠️ **After this, `SI-22.4` is
   the only item left before the release** — Wave 3's last, for the twin-bench knock-on stated above.
+  ✅ **`SI-22.4` SHIPPED later on 2026-08-23** (`1c7a9087` + `4c49becc` + `f771f59b`, branch
+  `v48-si22.4-preset-trim`). **v4.8.0 is FEATURE-COMPLETE**: the release run — version pin across 6
+  files → CHANGELOG → tag → `publish.yml` — is the only remaining task.
 
 Full detail and citations: `BACKLOG.md`’s "NEXT TASK — Wave 3 remainder" entry (2026-08-23) in
 the Phase 6 resume point — it supersedes the "NEXT TASK — Wave 3" entry this line used to name,

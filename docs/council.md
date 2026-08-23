@@ -758,7 +758,7 @@ named here. That is why the v4.8 keys below each needed their own line.
 - `schemaVersion` — verdict-document schema version (currently `2`).
 - `type` — document-type discriminator; always `"council-verdict"` (council family v2 envelope).
 - `overallVerdict` — the chair's verdict-scale outcome: one of `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"`, or `null` when no chair verdict was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
-- `seats` — **v4.8**, optional. The tally record's `meta.seats` (same `{id, alias, role, lens, position}` shape), promoted to the top level next to `seatLoss`. Present only when the tally record carried one, i.e. only when the bench repeated an alias. It is what makes the `alias#N` ids on `findings[].raiserSeat`, `adjudications[].seat` and `runStats[].seat` resolvable from the verdict **alone** — before v4.8 the verdict named seats it could not resolve. `council report` reads it to give each seat its own adjudication-matrix column; when it is absent, or is not an array of objects each carrying a string `id`, the renderer falls back to alias space **whole** and renders exactly as it did before v4.8.
+- `seats` — **v4.8**, optional. The tally record's `meta.seats` (same `{id, alias, role, lens, position}` shape), promoted to the top level next to `seatLoss`. Present only when the tally record carried one, i.e. only when the bench repeated an alias. It is what makes the `alias#N` ids on `findings[].raiserSeat`, `adjudications[].seat` and `runStats[].seat` resolvable from the verdict **alone** — before v4.8 the verdict named seats it could not resolve. `council report` reads it to give each seat its own adjudication-matrix column; when it is absent, or is not an array of objects each carrying a string `id`, the **adjudication matrix** falls back to alias space whole and renders exactly as it did before v4.8. ⚠️ **That fallback is the matrix's alone — it is not a whole-document guarantee.** The street-cred table beside it labels each row from `streetCred[].seat` whenever the row carries one, a predicate independent of this key, so a verdict with seated `streetCred[]` rows and no usable `seats` renders seat ids in the street-cred table and aliases in the matrix (measured on an absent `seats`, a non-array `seats`, and an array-of-strings `seats`). In-process both fields come from the same twin bench and travel together; the split is reachable on a hand-assembled or externally-supplied record, which `buildVerdict`'s own docblock names. A verdict written before v4.8 carries no `streetCred[].seat` at all and is unaffected.
 - `findings[].raiserSeat` — **v4.8**, optional. The raising seat's id, carried through from the tally record; absent unless the bench repeated an alias. `findings[].raiser` stays the alias.
 - `findings[].sameModelCorroboration` — **v4.8**, optional, `true` only. Carried through from the tally record; see the tally-record notes above for the stamp's meaning **and for the two directions in which it is wrong** (it misses one model behind two aliases, and it fires falsely on one alias behind two executables).
 - All other keys (`runId`, `council`, `findings`, `streetCred`, `runStats`, `tierCounts`) are passed through unchanged from the tally record.
@@ -815,8 +815,12 @@ much as a rename: the old alias key was **last-wins**, so the second seat's vote
 first's and a finding whose `basis` was `a0/d1` could render as two agreements, both starred. Now
 the rendered row and the finding's `basis` agree. **Benches with no repeated alias are
 byte-identical to v4.7** — every seat id there *is* its alias, so nothing in the document differs
-and nothing in the render does either. A verdict with no `seats` table (anything written before
-v4.8, anything hand-assembled) renders in alias space exactly as it always has.
+and nothing in the render does either. A verdict with no `seats` table renders its **matrix** in
+alias space exactly as it always has — including anything written before v4.8, which carries no
+seat fields at all. ⚠️ **The street-cred table below the matrix is not covered by that sentence.** Its row labels
+come from `streetCred[].seat`, never from `seats`, so a hand-assembled verdict carrying seated
+street-cred rows without a usable `seats` table shows `deepseek#1`/`deepseek#2` there while the
+matrix stays in alias space. See the `seats` key note in the verdict-document schema above.
 
 ⚠️ **v4.8 — the `UNATTRIBUTED` column.** A vote the matrix cannot attribute to a column is no
 longer dropped from the render. The vote→column join **refuses** a key that identifies nothing — an
@@ -868,6 +872,18 @@ both now refer to the raiser's seat. The report's legend gains a **second** line
 matrix does not carry — `` `†` `` marks a finding corroborated only by another seat running the
 same model — so from v4.8.0 the two legends are no longer interchangeable. That line, and the `†`
 itself, appear only on a run that actually raised such a finding, which is a twin bench only.
+
+⚠️ **v4.8 — a SECOND report/Workspace divergence, in the street-cred table, filed not fixed.** The
+sentence above is scoped to the **matrix**, and stays true. The street-cred table is a different
+story: both renderers (`report-md.js`, `report-html.js`) label each row `seat || model`, so a twin
+bench reads `gemini#1` / `gemini#2`, while the Workspace's street-cred table still labels from the
+model alias
+and reads `gemini` twice with different numbers under one identical name. **On a bench that repeats
+an alias the two street-cred tables now disagree**; on any bench with no repeated alias they are
+identical, because every seat id there *is* its alias. The report side is the corrected one. The
+Workspace side is not a one-liner — its blind mode resolves the label through `opts.labelOf(...)`,
+which would have to accept a seat id first — and is filed in `BACKLOG.md` for v4.9 with that
+signature change as its gate.
 
 This is the same renderer the `second-opinion` skill calls in Stage 5 to produce `report.html`.
 **`report.md` and this renderer's output are two different files** — `report.md` is Claude-authored

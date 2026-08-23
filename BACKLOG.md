@@ -1789,7 +1789,12 @@ with the repo and nobody re-derives (or re-argues) the exclusion next rev.
   there is no doc to correct.
 
 - [ ] **F-5 · Document the `routing.tier` cost-tier config surface** — [M] `routing.tier` and
-  `routing.tier_onboarded` (`src/utils/config.js:543–599`) are read by the cost-aware default
+  `routing.tier_onboarded` (`src/utils/config.js :: hasTierOnboarded` · `:: markTierOnboarded` ·
+  `:: getCostTier` · `:: setCostTier` — re-anchored BY SYMBOL 2026-08-23, NOT renumbered: the old
+  `:543–599` was exact when taken and rotted when v4.8 SI-22.4 added net **+37** lines above it in
+  the same file, moving `hasTierOnboarded` 543→580 and `setCostTier` 592→629. Counting rule: file
+  length 629→666 lines, BASE `ecf90f19` → HEAD, and the `function` def lines re-read in both trees.
+  ⚠️ Nothing caught this — `check:citations` does not scan the doc tree at all) are read by the cost-aware default
   picker and appear in no user doc; `tests/where-things-live-docs.test.js:65–74` does not pin them.
   Shipped in **v3.2.0** (`git log -S setCostTier` → `8aa5d6f`), so this is a four-rev-old hole.
   **Excluded because:** closing it means documenting the whole cost-tier feature end to end — an
@@ -3201,9 +3206,14 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   Per the phasing doc's own task list
   (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`, Phase 6): **~6 PRs, each ships
   alone** —
-  - **SI-22.4 trim.** ⚠️ Carries a knock-on the item itself does not name: trimming turns a
+  - ~~**SI-22.4 trim.** ⚠️ Carries a knock-on the item itself does not name: trimming turns a
     whitespace-padded preset member into a **REAL twin bench**, so artifact filenames change and
-    `meta.seats` starts emitting. Budget for that, it is not a pure input-hygiene fix.
+    `meta.seats` starts emitting. Budget for that, it is not a pure input-hygiene fix.~~
+    **DONE — v4.8 SI-22.4 (2026-08-23, `1c7a9087` + `4c49becc` + `f771f59b`).** The knock-on
+    warning was RIGHT and is proved from the artifacts. ⚠️ **It was also incomplete**: the knock-on
+    is not the only thing the item failed to name — measured over six shapes, ALL SIX change
+    behaviour and four of the six gain a **paid leg** that was not launched before. Budget for the
+    spend as well as the filenames. Full record: the ticked SI-22 item 4 below.
   - ~~**SI-23** — `location` stripped on the MCP tally path. Own PR, ruling **R10**: fix the closed
     `z.object` properly, so `evidence`/`file`/`line` stop dropping too.~~ **DONE — v4.8 Wave 2
     (2026-08-22, `d5378684`, PR #183).** ⚠️ **R10's own list was wrong on three of four names** —
@@ -3243,7 +3253,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     **Phase 3**, the prerequisite — not site (3).
 
   ⚠️ **Phase 6 is now down to TWO independents: SI-22.4, SI-25 sites (1)+(2).** (⚠️ **ONE since
-  2026-08-23** — SI-25 shipped, all three sites; only `SI-22.4` remains.) SI-24
+  2026-08-23** — SI-25 shipped, all three sites; only `SI-22.4` remains.) (⚠️ **ZERO since later
+  the same day, 2026-08-23** — `SI-22.4` shipped too; **Phase 6 is CLOSED and v4.8.0 is
+  feature-complete.** Live resume point: *"NEXT TASK — Wave 3 remainder"* below.) SI-24
   shipped at PR1, T6.5 was dropped, T6.6 + SI-14 shipped together in v4.8 Wave 1
   (T-W1.1/T-W1.2, 2026-08-22) alongside #135 C0 (Phase 7), and SI-23 shipped in v4.8 Wave 2
   (2026-08-22, `d5378684`). ⚠️ **The resume point past this point is
@@ -3324,6 +3336,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     member into a **real twin bench**, which changes artifact filenames and starts `meta.seats`
     emission — sequencing it before `SI-27` would make `SI-27`'s consolidation absorb that shape
     change instead of the other way around.
+    ✅ **BOTH SHIPPED 2026-08-23, in this order** — `SI-27` first, then `SI-22.4`. Wave 3 is DONE
+    and the ordering rationale held. Nothing on this bullet is outstanding.
   Not in any wave, **deferred to v4.9** per **W1-4**: `#135 C5`, the `#135 C2` probe. **Dropped**
   per **W1-3**: the `mcp-server.js:684` one-liner, the `listCouncilRuns` "dedupe" claim (6 rows / 5
   ids) — ⚠️ **not** the same as the live *"Council runs are invisible to CLI `amicus list`"* entry
@@ -3351,7 +3365,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   `SI-25` sites (1)+(2)** (ruling R15 — small PR, sites in `briefings-chair.js`/`run-assemble.js`;
   not yet placed in a wave below — schedule it, do not assume it rides Wave 3). ⚠️ **`SI-25` was
   scheduled and SHIPPED on 2026-08-23** — its own PR, outside every wave, and **all three** sites
-  rather than the two named here (ruling R25-1). `#138`
+  rather than the two named here (ruling R25-1). ⚠️ **`SI-22.4` also SHIPPED 2026-08-23** — Wave 3's
+  last item, as ordered; **neither member named on this line is outstanding.** `#138`
   Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
   only — re-derive before scheduling it, on the same "measure before you plan" precedent this
   record applies throughout.
@@ -3421,7 +3436,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ⚠️ **Remaining Phase 6 members: `SI-22.4`** (Wave 3's last item) **and `SI-25` sites (1)+(2)**
   (ruling R15 — not yet placed in a wave; schedule it, do not assume it rides Wave 3).
   ⚠️ **`SI-25` SHIPPED 2026-08-23** — own PR, outside every wave, **all three** sites (R25-1). The
-  only remaining Phase 6 member is `SI-22.4`.
+  only remaining Phase 6 member is `SI-22.4`. ⚠️ **`SI-22.4` SHIPPED later the same day — Phase 6
+  has NO remaining members.**
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom**, unchanged by `R16`
   — see the dedicated warning immediately below. ⚠️ **CORRECTED 2026-08-23: this said `SI-27`
@@ -3450,7 +3466,8 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   entry).
 
   **Wave 1 — DONE. Wave 2 (3-wide slot) — DONE. Wave 2.5 (`R16`) — DONE. Wave 3: `SI-27` —
-  DONE. `SI-25` — DONE (2026-08-23).** Remaining, in order:
+  DONE. `SI-25` — DONE (2026-08-23). `SI-22.4` — DONE (2026-08-23).**
+  ⚠️ **v4.8.0 IS FEATURE-COMPLETE. Only the release run remains.** In order:
   1. ~~**`SI-25` sites (1)+(2)** — ruling **R15**, anchor `briefings-chair.js :: buildChairPacket`
      (three sites; site (3) already shipped in Phase 3). ⚠️ **Not yet placed in a wave — schedule
      it, do not assume it rides Wave 3.**~~ **DONE — 2026-08-23**, own PR on branch
@@ -3462,11 +3479,19 @@ lines. Whoever takes this on needs an extraction first, not an edit.
      this branch's BASE `c0745013`, the rankings line was still `` `${r.judge}:
      ${JSON.stringify(r.order)}` ``. Full record, mutants and sizes: the ticked *"chair packet is
      assembled entirely in alias space"* entry below.
-  2. **`SI-22.4`** — anchor `utils/config.js :: classifyCouncilMembers`. **LAST**, because its
+  2. ~~**`SI-22.4`** — anchor `utils/config.js :: classifyCouncilMembers`. **LAST**, because its
      trim turns a whitespace-padded preset member into a REAL twin bench: artifact filenames
      change and `meta.seats` starts emitting. That is exactly why it could not precede `SI-27`.
-     It is now the **only** remaining item before the release.
-  3. **Release** — version pin across 6 files → CHANGELOG → tag → `publish.yml`.
+     It is now the **only** remaining item before the release.~~ ✅ **DONE — 2026-08-23**, branch
+     `v48-si22.4-preset-trim`, BASE `ecf90f19` (`1c7a9087` + `4c49becc` + `f771f59b`; plan
+     `276d5a18`). **The ordering rationale held exactly**: the trim does turn a padded preset into a
+     REAL twin bench, proved from the artifacts rather than from `buildSeats`.
+     ⚠️ **And the filing UNDERSTATED it** — all six measured shapes change behaviour, and the
+     dominant effect is **RESURRECTION, not de-duplication**: a member dropped today starts running,
+     a new paid leg on four of the six. Full record: the ticked SI-22 item 4 below (mutants, gates,
+     suite counts); the six-row table has one home, in `CHANGELOG.md`.
+  3. **Release — THIS IS NOW THE NEXT TASK.** Version pin across 6 files → CHANGELOG → tag →
+     `publish.yml`.
 
   ⚠️ **Carry forward, unchanged: `src/council/run-retry.js` is at 300/300, ZERO headroom.**
   `SI-27` changed one comment line in it (ruling P5) and it remains at exactly 300/300.
@@ -3477,6 +3502,43 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   SI-25 added the seat forward to its reviews projection), and `src/council/briefings-chair.js` is
   **243/300** (was 182). Both are still clear, but neither has the headroom the Phase 1 size note
   further down this file records for them — read the sizes here, not there.
+
+- [ ] **SI-22.4 rider (1) — four `src/` comments name "a padded `--council` member" as a live
+  cause. STALE EXAMPLES, NOT MOVED FENCES — filed so a later sweep does not re-litigate this.**
+  `src/council/run-assemble.js:168`, `src/council/run-stats-entry.js:62`, `src/council/run.js:198`
+  and `src/sidecar/fanout-wave-io.js:103` each justify the emit-when-DIFFERENT seat predicate with
+  a **disjunction**: *a leg that reports no `modelInput`* (which falls back to the RESOLVED id)
+  **or** *a padded `--council` member*. SI-22.4 killed the producer of the second disjunct only.
+  The first is still live, so the predicate, the reasoning and **the reader's action are unchanged**
+  — these comments name an example that moved, not a fence that moved. All four re-read at their
+  stated lines against the final tree, 2026-08-23.
+  ⚠️ **Do not "fix" these by deleting the predicate or narrowing the comment to the twin case.**
+  The padded shape is still reachable through the MCP `models` **array** —
+  `src/mcp-council-bench.js :: resolveBenchInput` returns `input.models` untrimmed — which is
+  exactly why `tests/council/run-assemble.test.js` and `tests/council/run-raiserseat-call.test.js`
+  keep their padded-bench cases and say so in place (*"THE PRODUCER MOVED, the shape did not"*).
+  Reword opportunistically, when one of those four files is open for another reason.
+
+- [ ] **SI-22.4 rider (2) → v4.9 — the THIRD street-cred renderer is still alias-labelled.
+  OWNER: Christian. GATE: `opts.labelOf` must accept a seat id before this can be written.**
+  `electron/workspace-ui/workspace-matrix.js:147-149` builds each street-cred row as
+  `var label = opts.labelOf(s.model);` → `var name = opts.isBlind() && label ? label : s.model;`
+  — the same defect class the v4.8 R22.4-6 rider fixed in `report-md.js` and `report-html.js`,
+  which now label `s.seat || s.model`. **Measured consequence:** on a bench that repeats an alias
+  the report's street-cred table reads `gemini#1`/`gemini#2` while the Workspace's reads `gemini`
+  twice, with different numbers under one identical name. Recorded for users in `docs/council.md`,
+  beside the matrix's own report/Workspace difference note. ⚠️ `docs/council.md`'s *"behaves
+  identically, with one deliberate difference"* is **matrix-scoped and therefore NOT falsified** —
+  do not strike it; the street-cred divergence is a second, separately documented one.
+  ⚠️ **NOT a one-liner, and must not be scheduled as one.** Swapping in `s.seat || s.model` fixes
+  sighted mode and breaks blind mode: the blind label is resolved by `opts.labelOf(s.model)`, so a
+  seat-first fallback requires `labelOf` to accept a **seat id** and still return the anonymised
+  letter. **That signature change IS the work, and it is the gate** — which is why this is v4.9 and
+  not a follow-up commit. Blind mode must keep showing no seat id (a seat id contains its alias).
+  ⚠️ **Filed with a named owner and a stated gate ON PURPOSE.** Three items this session were
+  deferred as *"adjacent to X"* and every one had to be re-discovered from scratch — SI-25 site
+  (3), the `report-md` rider, and this. **An association is not a schedule.** This moves when
+  Christian schedules it against the `labelOf` gate, not because something near it ships.
 
 - [ ] **SI-27 rider (1) — `COLLIDEID` is single-pinned repo-wide.** Measured 2026-08-23: the
   mutant that gives a placeholder the alias as its own id — colliding on the id-keyed dedup —
@@ -3726,8 +3788,10 @@ alias-keyed at `briefings-chair.js:88` and `:93`)~~ **DONE — v4.8 SI-25 (2026-
 the rankings render, which was alias-keyed at `:90` and which this measurement never listed. The
 `:88`/`:93` numbers were exact when taken and have since moved with the fix; anchor by symbol,
 `briefings-chair.js :: buildChairPacket` · ~~`SI-14` (confirmed: **no** such pin exists —
-pure test addition)~~ **DONE — v4.8 Wave 1 (`424cb63d`)** · `SI-22.4` (real, with the twin-bench
-knock-on as filed) · ~~`#135 C0`
+pure test addition)~~ **DONE — v4.8 Wave 1 (`424cb63d`)** · ~~`SI-22.4` (real, with the twin-bench
+knock-on as filed)~~ **DONE — v4.8 SI-22.4 (2026-08-23, `1c7a9087` + `4c49becc` + `f771f59b`).**
+⚠️ **"as filed" undersold it**: the knock-on is real, and so is a second effect the filing never
+named — four of six measured shapes gain a paid leg. · ~~`#135 C0`
 (confirmed trivial: `utils/no-output-backstop.js:23` is `120000`, `.github/workflows/
 council-review.yml:242` overrides to `300000`; change the default, delete the override)~~ **DONE —
 v4.8 Wave 1 (`4391f0b4` + ripple fix `b0d8e232`).**
@@ -3739,6 +3803,9 @@ unchanged). See "NEXT TASK — Wave 2.5" in the Phase 6 resume point above — `
 ⚠️ **SUPERSEDED 2026-08-23 — `SI-25` shipped** (own PR, all three sites, ruling R25-1). **`SI-22.4`
 is the last remaining Phase 6 independent**, and it is Wave 3's final item. The live resume point is
 "NEXT TASK — Wave 3 remainder" in the Phase 6 resume point above, not this paragraph.
+⚠️ **SUPERSEDED AGAIN, later on 2026-08-23 — `SI-22.4` shipped** (`1c7a9087` + `4c49becc` +
+`f771f59b`). **NOTHING on this line is still to do**, Phase 6 is closed, and v4.8.0 is
+feature-complete: only the release run remains. Still read the resume point, not this paragraph.
 
 **W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to
 v4.9.** #135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and
@@ -4050,7 +4117,8 @@ table is *Size gate — re-measured*, below.
 
 Task mode + #146 · the Workspace dead-seat surface (SI-02, R4, PR5b-1) · SI-16 splits · seatKey
 cross-file consolidation · #133 Pieces 2–3 · #138 Piece 3 · #135 C4 · PR1F-2 *unification*, PR1F-3,
-the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES.
+the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES · **SI-22.4 rider (2) — the
+Workspace street-cred renderer (owner Christian; gated on `opts.labelOf` accepting a seat id)**.
 **Holds — not work, do not re-scope:** SI-21, PR5a-1, PR5c-DOMKEY, PR5c-STANDING.
 
 ### Tracker state
@@ -5063,7 +5131,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   no longer byte-identical. (3) the ledger join (`ledger-join.js :: credFor`, extracted out of
   `ledger.js` in the same PR) is seat-keyed with an alias-MEAN fallback (fix round 1: the mean, not
   a last-wins alias key, because a seated alias with no runStats seat must not resolve to `{}`),
-  replacing the old alias-keyed last-wins `Map`. `report-md.js:70` and `report-html.js:51-52`
+  replacing the old alias-keyed last-wins `Map`. ~~`report-md.js:70` and `report-html.js:51-52`
   needed zero changes — they still render `s.model`, so on a twin bench they now show two
   DIFFERENT numbers under the same alias rather than two identical ones (the rendered table is more
   truthful, but ambiguous about which seat is which). Flagged as an SI-25-adjacent follow-up, not
@@ -5071,7 +5139,22 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   ⚠️ **SI-25 has since shipped (2026-08-23) and did NOT take this** — its scope was the chair packet
   (`briefings-chair.js` / `run-assemble.js`) and `report-md.js`/`report-html.js` were out of scope
   there too. So this follow-up is now **homeless**, the same way SI-25's own site (3) was: it is
-  filed here and scheduled nowhere. Do not read "SI-25-adjacent" as "SI-25 will cover it".
+  filed here and scheduled nowhere. Do not read "SI-25-adjacent" as "SI-25 will cover it".~~
+  ✅ **CLOSED 2026-08-23 — v4.8 SI-22.4's rider R22.4-6 (`1c7a9087`).** The struck paragraph is now
+  measurably FALSE: both renderers label the street-cred row `s.seat || s.model`
+  (`report-md.js :: renderMd`, `report-html.js :: renderHtml` — re-anchored BY SYMBOL; the struck
+  `:70` and `:51-52` were exact when taken and are now `:80` and `:57`, deliberately not
+  renumbered). A twin bench's two rows read `gemini#1` / `gemini#2`, so they are no longer ambiguous
+  about which seat is which; a unique-alias bench is byte-identical, measured against BASE's own
+  renderers loaded from `276d5a18` (`renderMd` 733/733, `renderHtml` 9667/9667). Named mutant
+  `CREDALIAS`, RED 2 suites / 3 tests.
+  ⚠️ **THIS ENTRY IS THE THIRD RE-DISCOVERY OF THE SAME DEFERRAL SHAPE, and it is why the
+  successor is filed differently.** *"SI-25-adjacent"* named an association, never a schedule; the
+  work sat here unowned until an unrelated PR happened to touch the same renderers. The follow-up it
+  spawned — the THIRD street-cred renderer, `electron/workspace-ui/workspace-matrix.js:147-149`,
+  still alias-labelled — is filed under *"SI-22.4 rider (2)"* above with a **named owner
+  (Christian)** and a **stated gate** (`opts.labelOf` must accept a seat id), explicitly NOT as an
+  adjacency. Do not re-file it as "adjacent to" anything.
 - [ ] **SI-21 · `lens` and `position` are unrecoverable from the tally artifacts on any bench that
   does not repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias,
   which is a **different question** from "does anything else in the document carry the seat's lens".
@@ -5233,13 +5316,57 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      mint from and still collapses to one row — inventing an id there is the guess that keyspace
      exists to reject. Pinned by name: `run-stages.test.js` :: *"T12: two orphaned twins the
      producer cannot tell apart still collapse (R2 floor)"*.
-  4. **A `--council` preset with a whitespace-padded member is functionally a twin bench that
+  4. ✅ **DONE — v4.8 SI-22.4, 2026-08-23** (`1c7a9087` trim + rider + pins · `4c49becc` the four
+     named mutant red sets · `f771f59b` fix round 1; branch `v48-si22.4-preset-trim`, BASE
+     `ecf90f19`, plan `276d5a18`).
+     ~~**A `--council` preset with a whitespace-padded member is functionally a twin bench that
      `buildSeats` treats as two distinct aliases.** `classifyCouncilMembers`
      (`src/utils/config.js:438-460`) pushes `member` **raw** where `parseModelsList` would trim, and
      `buildSeats` (`src/council/seats.js:67`) mints `alias#N` only when `counts.get(alias) > 1` — so
      `['openai/gpt-5 ','openai/gpt-5']` is two aliases, not one. Measured with both seats agreeing on
      both findings: `basis {a:0,d:0,n:0} Singleton` — **the undercount survives in full, silently.**
-     The fix is upstream (trim at classification), not in the peer filter.
+     The fix is upstream (trim at classification), not in the peer filter.~~
+     **Fixed exactly there.** `src/utils/config.js :: classifyCouncilMembers` — anchored BY SYMBOL;
+     the struck `:438-460` was exact when taken, is now `:461-496`, and is deliberately NOT
+     renumbered (counting rule: brace-matched from the `function classifyCouncilMembers` line to its
+     balancing `}`, inclusive, in both trees) — now trims each member **before gate 1**, so a padded
+     alias reaches the alias table clean and a padded full id reaches the catalog lookup clean.
+     `buildSeats` (`src/council/seats.js:67`, re-derived against the final tree and unmoved) then
+     sees ONE alias twice and mints `alias#N` for both, which the seat-aware peer filter already
+     handles.
+     ⚠️ **The filed framing above was INCOMPLETE — this is the durable lesson.** It describes input
+     hygiene whose one knock-on is a twin bench. Measured over six shapes, **all six change
+     behaviour and the dominant change is RESURRECTION, not de-duplication**: a member dropped today
+     starts RUNNING — a new paid leg on four of the six, and on two of those the bench goes from
+     empty to non-empty. Only ONE of the six is the twin-merge this item describes. The six-row
+     table has **one home**, deliberately, so the two records cannot drift: `CHANGELOG.md`'s entry
+     *"A `--council` preset member with stray whitespace now runs"*.
+     ⚠️ **The justification this item never led with:** the padded member produced a **degraded exit
+     (2)** — `run.js :: runCouncil`'s `dropped-members` note says so verbatim (*"the bench is smaller
+     than the preset requested; the run will exit degraded (2)"*) — while `--models` already trimmed
+     on BOTH spellings: `sidecar/fanout-validate.js :: parseModelsList` and
+     `cli-council-run-bench.js :: parseList`. The second is on the **council** surface, the plan
+     missed it, and the implementer found it. Same whitespace, benign on one flag, fatal on the other.
+     **R22.4-2:** `models` carries the trimmed value; `dropped`/`droppedMembers` keep the member RAW
+     so a user can still find it in their own config. **R22.4-3:** an all-whitespace member trims to
+     `''` and is dropped by gate 1 — a preservation property, measured identical either side, pinned
+     with a named mutant rather than RED-before-GREEN. **R22.4-4:** exactly TWO `reason` strings
+     still exist, so the docblock's free-text-vs-enum tripwire is NOT tripped.
+     **Rider R22.4-6 — `report-md.js` and `report-html.js` now label street-cred rows
+     `s.seat || s.model`.** ⚠️ **Record that it was HOMELESS**: deferred twice as
+     *"SI-25-adjacent"*. **An association is not a schedule** — the same shape that left SI-25 site
+     (3) unowned for two days. Byte-identity on a unique-alias bench, measured against BASE's own
+     renderers loaded from `276d5a18`: `renderMd` 733/733 bytes, `renderHtml` 9667/9667, identical.
+     On a twin bench `| gemini |` twice at BASE becomes `gemini#1`/`gemini#2`.
+     **The knock-on, proved from artifacts rather than reasoned from `buildSeats`:** `meta.seats` is
+     `['gemini#1','gemini#2']`, with `review-gemini-1.md`/`review-gemini-2.md` and
+     `judge-gemini-1.md`/`judge-gemini-2.md` on disk and `review-gemini.md` **absent** — against a
+     control with the same padding and no collision, which asserts `'seats' in meta === false`.
+     **Named mutants, none empty** (`tests/council/preset-trim-mutants.js`): `NOTRIM` 2 suites/9
+     tests · `TRIMDROPPED` 1/2 · `KEEPEMPTY` 1/1 · `CREDALIAS` 2/3 — all four independently
+     reproduced by a reviewer that compiled `config.js` in memory at its real path rather than
+     touching the tree. Suite **549 suites / 7929 passed / 8 skipped / 0 failed** (BASE 546 / 7909
+     passed — +3 suites, +20 tests). All five gates clean.
   5. ✅ **CLOSED 2026-08-20 — v4.8 T2.4 / PR C, in BOTH consumers.** This is the shape **SI-22.5**
      names, and ruling **R3** governs it: the vote now renders in a conditional `UNATTRIBUTED`
      column and stays in `basis`. Measured through the real `report.js :: toModel` on a twin bench
