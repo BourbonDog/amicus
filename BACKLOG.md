@@ -3347,8 +3347,15 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ⚠️ **New since Wave 2.5: the file-size gate is at saturation more broadly, and
   `cli-handlers-doctor.js` is now 299/300.** Re-measured against the final tree — see the two
   dedicated entries below (*"The file-size gate is at saturation"* and *"`cli-handlers-doctor.js`
-  is at 299/300"*). Neither blocks Wave 3, but `SI-27`'s own target (`run-retry.js`) has zero
-  headroom and `cli-handlers-doctor.js` has one line — know this going in.
+  is at 299/300"*). Neither blocks Wave 3. ⚠️ **CORRECTED 2026-08-22: this sentence said
+  `SI-27`'s own target is `run-retry.js`. It is NOT.** SI-27's three roster-padding sites are
+  `run-retry-launch.js :: bindRetryWave` (67/300), `run-stage2.js` (213/300) and
+  `run-debate-revote.js` (274/300) — `run-retry.js` holds no padding site at all. **So SI-27
+  does not relieve its 300/300**; that file stays saturated after Wave 3 and remains a standing
+  hazard for whoever next touches it. See row 27's corrected anchor for why the wrong file was
+  carried: SI-27 once covered `seatKey` duplication in `run-retry.js`, PR5c/T-A1 moved that
+  definition out to `run-retry-keys.js`, the item narrowed to roster-padding, and the anchor
+  column never followed. A fossil, not a typo.
 
 ### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
 
@@ -3393,9 +3400,11 @@ non-grandfathered files:
   everything else.
 
 **Consequence:** any change touching a saturated file must EXTRACT before it can add even a
-comment line. ⚠️ This lands directly on **SI-27**, which extracts from `run-retry.js` — the file
-at exactly 300 — so its implementer has no room for an explanatory line before the extraction
-itself lands.
+comment line. ⚠️ **CORRECTED 2026-08-22 — this paragraph said SI-27 extracts from
+`run-retry.js`. It does not.** SI-27's sites are `run-retry-launch.js :: bindRetryWave`,
+`run-stage2.js` and `run-debate-revote.js`; `run-retry.js` has no padding site. **Nothing in
+the remaining v4.8.0 plan relieves `run-retry.js`'s 300/300** — it is the one saturated file
+with no scheduled extraction, and the next change to it must extract first.
 
 ### ⚠️ `src/cli-handlers-doctor.js` is at 299/300 — one line of headroom (2026-08-22, `R16`/`T-R16.1`)
 
