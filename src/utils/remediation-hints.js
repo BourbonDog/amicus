@@ -130,6 +130,19 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   sweepSessionMetadataTmp:
     'amicus doctor --fix  (sweeps orphaned .metadata.json.*.tmp files left by an interrupted write)',
+
+  /**
+   * Stale sessions-index.json entries (R16): session-index.js :: recordSession
+   * never removes a row, so a project that is deleted, renamed or moved
+   * leaves its taskId -> path entries behind forever, and every
+   * recordSession call pays for rewriting the WHOLE index — the per-start
+   * cost grows with total sessions ever, not live ones. `doctor --fix`
+   * removes only entries whose project path no longer exists on disk
+   * (liveness, never age — R16-2): a five-year-old entry for a project that
+   * still exists is left alone.
+   */
+  pruneSessionIndex:
+    'amicus doctor --fix  (removes sessions-index.json entries whose project no longer exists on disk — liveness-based, never by age)',
 });
 
 module.exports = REMEDIATION_HINTS;

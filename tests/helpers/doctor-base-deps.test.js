@@ -4,8 +4,8 @@
 const { makeBaseDeps } = require('./doctor-base-deps');
 
 describe('helpers/doctor-base-deps: makeBaseDeps() contract', () => {
-  test('a bare call has exactly 26 keys', () => {
-    expect(Object.keys(makeBaseDeps())).toHaveLength(26);
+  test('a bare call has exactly 27 keys', () => {
+    expect(Object.keys(makeBaseDeps())).toHaveLength(27);
   });
 
   test('omit produces true key ABSENCE, not key: undefined', () => {
