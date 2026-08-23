@@ -340,6 +340,35 @@ describe('Headless Mode Runner', () => {
       // this fixture (an exception AFTER createSession resolved) is the case
       // where it IS assigned, and must be threaded onto the result exactly
       // like the "should close server on error" fixture above.
+      // Named mutant "SESSIONDROP": delete all three `opencodeSessionId:` lines
+      // from runHeadless's returns (src/headless.js — the two substantive returns
+      // and the catch-all's `sessionId || null`).
+      //
+      // RED: 4 tests / 2 suites, measured at FULL `npx jest --no-coverage` scope
+      // (544 suites / 7854 tests as denominator):
+      //   tests/headless.test.js — "carries opencodeSessionId on the outer-exception
+      //     return when a session already existed" · "carries opencodeSessionId: null
+      //     (not undefined, not absent) on the outer-exception return when no session
+      //     ever existed" · the normal-completion pin
+      //   tests/headless-poll-failures.test.js — the no-usable-output pin
+      //
+      // ⚠️ It was 3/2 when #133 Piece 1 first shipped; the council's A2 finding
+      // (`a3/d0/n0`) was that the catch-all's sessionId-UNSET path — the exact case
+      // `|| null` exists for — had been measured but never pinned. Adding that pin
+      // GREW the set to 4, which is what proves the new test reaches the mutated
+      // line rather than sitting beside it.
+      //
+      // ⚠️ RECORDED LATE, and that is the lesson: this red set was measured THREE
+      // times (implementer, controller, fix round) and written into no committed
+      // file until the Wave 2 record pass caught it. A red set that lives only in a
+      // transcript is not recorded — transcripts are deleted. Its three siblings
+      // from the same wave (FINDINGALIAS, CLAIMDROP, SCHEMASTRIP) were all recorded
+      // beside their tests at the time.
+      //
+      // ⚠️ tests/sidecar/fanout.test.js's leg-patch pin stays GREEN under this
+      // mutant BY DESIGN — it mocks runHeadless, so it cannot catch a regression
+      // inside it. It pins fanout-leg.js's threading, a genuinely different unit
+      // with no other coverage. Do not "fix" it to red here.
       it('carries opencodeSessionId on the outer-exception return when a session already existed (#133 P1)', async () => {
         mockCheckHealth.mockResolvedValue(true);
         mockCreateSession.mockResolvedValue('session-123');

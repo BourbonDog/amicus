@@ -3122,8 +3122,19 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   - **SI-22.4 trim.** ⚠️ Carries a knock-on the item itself does not name: trimming turns a
     whitespace-padded preset member into a **REAL twin bench**, so artifact filenames change and
     `meta.seats` starts emitting. Budget for that, it is not a pure input-hygiene fix.
-  - **SI-23** — `location` stripped on the MCP tally path. Own PR, ruling **R10**: fix the closed
-    `z.object` properly, so `evidence`/`file`/`line` stop dropping too.
+  - ~~**SI-23** — `location` stripped on the MCP tally path. Own PR, ruling **R10**: fix the closed
+    `z.object` properly, so `evidence`/`file`/`line` stop dropping too.~~ **DONE — v4.8 Wave 2
+    (2026-08-22, `d5378684`, PR #183).** ⚠️ **R10's own list was wrong on three of four names** —
+    `evidence`/`file`/`line` have no producer and no consumer anywhere in this codebase's finding
+    shape; only `location` was real (see R10's annotation, phasing doc §4, and the dedicated entry
+    below). `mcp-tools.js`'s closed `z.object` now declares `location`, and `tally.js ::
+    tally`'s `outFindings` map — independently dropping it regardless of validation, CLI path too
+    — now forwards it emit-when-present. A same-PR fix round (council A1/B1) found and closed the
+    identical gap for `claim` one line below. Named mutants: `SCHEMASTRIP` (remove the schema
+    declaration) RED 2 tests / 1 suite — reproduced directly by this record via hand-mutation and
+    a full `npx jest --no-coverage` run, not merely read off the commit, since the commit itself
+    never states this count; `CLAIMDROP` (delete the `claim` forward) RED 2 suites / 2 tests, per
+    the commit. See the dedicated entry below for the `verdict.json` scope this does NOT close.
   - ~~**SI-24** — both sites, **including the unfiled `computeStreetCred` data-loss site**. Row 24 of
     the status table records that T3.3 closed only the `perJudgeRank` half.~~ **DONE — v4.8 Phase 6
     PR1 (2026-08-22).** Four carriers closed at the table, not two sites; see status-table row
@@ -3142,11 +3153,13 @@ lines. Whoever takes this on needs an extraction first, not an edit.
     See the dedicated warning block below, now annotated.
   - **SI-25 sites (1)+(2)**, ruling **R15**; site (3) rode Phase 3 and is unblocked.
 
-  ⚠️ **Phase 6 is now down to THREE independents: SI-22.4, SI-23, SI-25 sites (1)+(2).** SI-24
-  shipped at PR1, T6.5 was dropped, and T6.6 + SI-14 shipped together in v4.8 Wave 1
-  (T-W1.1/T-W1.2, 2026-08-22) alongside #135 C0 (Phase 7). ⚠️ **The resume point past this point is
-  no longer "Phase 6 then Phase 7" — see "NEXT TASK — Wave 2" below**, which supersedes the
-  Phase-6-then-Phase-7 sequencing with the owner's wave-structure ruling.
+  ⚠️ **Phase 6 is now down to TWO independents: SI-22.4, SI-25 sites (1)+(2).** SI-24
+  shipped at PR1, T6.5 was dropped, T6.6 + SI-14 shipped together in v4.8 Wave 1
+  (T-W1.1/T-W1.2, 2026-08-22) alongside #135 C0 (Phase 7), and SI-23 shipped in v4.8 Wave 2
+  (2026-08-22, `d5378684`). ⚠️ **The resume point past this point is
+  no longer "Phase 6 then Phase 7" — see "NEXT TASK — Wave 2.5" below**, which supersedes the
+  Phase-6-then-Phase-7 sequencing (and Wave 2's own 3-wide slot, now done) with the owner's
+  wave-structure ruling.
   ⚠️ **Ordering is PREFERENCE ONLY — re-derived at Phase 5's own BASE and carried forward here so
   the next controller need not derive it a third time.** Nothing in the phasing doc §6 "genuinely
   gating (mechanical)" list forces any particular order **among Phase 6's independents**, and
@@ -3179,11 +3192,11 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   case at all) and was corrected alongside its Singleton row, in the same commit. A repo-wide grep
   for the old definition and the "at most one endorsement" phrase, across live (non-dated-snapshot)
   `.md` files, found no further occurrence.
-  ⚠️ **Never tick SI-18** — an earlier phase closed only its street-cred half; see SI-18's own entry
-  **below**, titled *"Findings are attributed by ALIAS, not by seat"*
-  (⚠️ **still true, but no longer the whole story as of 2026-08-22: SI-18 is now SCHEDULED for
-  v4.8.0** — see *"v4.8 release inventory"* below. Do not tick it until that PR ships; do not read
-  this line as saying it is out of scope) (searched for by title, not
+  ⚠️ **"Never tick SI-18" is HISTORY, not current — SI-18 shipped 2026-08-22 (`78ed7a40`, v4.8
+  Wave 2) and its own entry below is now ticked `[x]`.** This warned not to tick it because an
+  earlier phase (T3.3) closed only its street-cred half; see SI-18's own entry
+  **below**, titled *"Findings are attributed by ALIAS, not by seat"*, for the fix and its
+  verification (searched for by title, not
   cited by line — a line number here would rot on the next insertion above it). ⚠️ **That
   back-reference read "above" until 2026-08-21 (T5.4); the entry is below this line, not above it.** ⚠️ **Do not tick SI-12 either** (ruling **R19**) — it is row `| 12 |`, *double-orphan
   conformance collapse*, and is not what T2.4 closed.
@@ -3192,6 +3205,14 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   superseding the Phase-6-then-Phase-7 sequencing above (that entry is now ✅ PARTIALLY COMPLETED —
   T6.6 + SI-14 + `#135 C0` closed by Wave 1; `SI-22.4`, `SI-23`, `SI-25` sites (1)+(2), `SI-18`,
   `#133 Piece 1` and `#138` remain, redistributed into the wave structure below).
+
+  ✅ **The 3-wide slot is DONE — 2026-08-22.** All three landed as separate PRs in isolated
+  worktrees, none touching this record (deliberate, so they could not conflict here): `SI-18`
+  (`78ed7a40`, PR #184), `SI-23` (`d5378684`, PR #183), `#133 Piece 1` (`86a069a6`, PR #185, also
+  `main`'s current HEAD). Merged `main`: 544 suites / 7861 passed / 8 skipped, all gates 0. ⚠️ **The
+  "then" half of this ruling — `SI-25` sites (1)+(2) and `#138` Pieces 1+2 — did NOT ship as part
+  of this** and stays open; do not read "Wave 2 done" as covering it. See **"NEXT TASK — Wave
+  2.5"** below for the live resume point — R16 next, then Wave 3.
 
   **Owner ruling (2026-08-22) — the wave structure for the remainder of v4.8.0:**
   - **Wave 1** — batched, one PR. **DONE** (this PR: `T6.6`, `SI-14`, `#135 C0`).
@@ -3215,6 +3236,40 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   per **W1-3**: the `mcp-server.js:684` one-liner, the `listCouncilRuns` "dedupe" claim (6 rows / 5
   ids) — ⚠️ **not** the same as the live *"Council runs are invisible to CLI `amicus list`"* entry
   (`mcp-council-awareness.js:205`, filed under v4.7 PR3 rider findings), which stays filed.
+
+- [ ] **NEXT TASK — Wave 2.5.** Filed 2026-08-22 (v4.8 Wave 2 record) as the correct resume point,
+  superseding "NEXT TASK — Wave 2" above (now ✅ its 3-wide slot DONE — `SI-18`/`SI-23`/`#133 Piece
+  1`, commits above; its "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did NOT ship and
+  is not scheduled into any wave below; see the note at the end of this entry).
+
+  **Wave 1 — DONE.** **Wave 2 (3-wide slot) — DONE.** Next:
+  - **Wave 2.5 — `R16` (`sessions-index.json` leak).** Scope it from the growth entry under
+    *"Carried from the dropped v4.7.2 scope"* below — **measured and real**: 18,874 entries, 0.69
+    MB, 5,933 (31.4%) pointing at dead project paths, and a full read → `JSON.parse` → mutate →
+    `JSON.stringify` → atomic write of the ENTIRE index on **every session start**. ⚠️ **Do NOT
+    scope from R16's own "pin all 13 unpinned rails" wording** (owner-rulings table, above, and
+    the phasing doc's §4 row) — a repo-wide grep for that phrase and for "13" near
+    `sessions-index`/`unpinned rails` finds only that one table row, nowhere else in the tree; the
+    number 13 is unsourced (already flagged **W1-4**, above).
+  - **Wave 3 — strictly serial: `SI-27` first, `SI-22.4` LAST.** `SI-27` consolidates the
+    padding/bind/placeholder core into `stage1-bind.js` (the useful slice of rulings R11/R14).
+    ⚠️ **`SI-22.4` is ordered last on purpose**: its trim knock-on turns a whitespace-padded preset
+    member into a **real twin bench**, which changes artifact filenames and starts `meta.seats`
+    emission — sequencing it before `SI-27` would make `SI-27`'s consolidation absorb that shape
+    change instead of the other way around.
+
+  ⚠️ **Remaining Phase 6 members after Wave 2: `SI-22.4`** (now Wave 3's last item, above) **and
+  `SI-25` sites (1)+(2)** (ruling R15 — small PR, sites in `briefings-chair.js`/`run-assemble.js`;
+  not yet placed in a wave below — schedule it, do not assume it rides Wave 2.5 or Wave 3). `#138`
+  Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
+  only — re-derive before scheduling it, on the same "measure before you plan" precedent this
+  record applies throughout.
+
+  ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom** (see the dedicated
+  warning immediately below — unchanged by today's three PRs, none of which touch that file).
+  **`SI-27` extracts from that very file** — its implementer must know going in that there is no
+  room to add even one explanatory line before the extraction itself lands; the next change there
+  must extract first, per Release Constraint 6.
 
 ### ⚠️ `src/council/run-retry.js` is at 300/300 — ZERO headroom (2026-08-22, Wave 1)
 
@@ -3246,20 +3301,25 @@ read as history, not current scope.** T6.6 and SI-14 shipped (Phase 6 remainder 
 SI-23, SI-25 sites (1)+(2)); `#135 C0` shipped (Phase 7); `#135 C5` and the `#135 C2` probe are
 deferred to v4.9 (**W1-4**); the `mcp-server.js:684` one-liner and the `listCouncilRuns` dedupe are
 dropped as never-specified (**W1-3**); R16 is retained but rescoped (**W1-4**). The remaining work
-is no longer phrased as "Phase 6 remainder then Phase 7" — see **"NEXT TASK — Wave 2"** in the
-Phase 6 resume point above for the owner's wave structure, which is now the live resume point.
+is no longer phrased as "Phase 6 remainder then Phase 7" — see the owner's wave-structure ruling in
+the Phase 6 resume point above. ⚠️ **This pointer itself is now history**: at Wave 1's writing
+"NEXT TASK — Wave 2" was the live resume point; `SI-23` shipped alongside `SI-18` and `#133 Piece
+1` in Wave 2 (2026-08-22) and the live resume point is now **"NEXT TASK — Wave 2.5"**, below.
 
 #### The four items that were OPEN in neither a phase list nor §7's deferred list
 
 They sat in limbo: not scheduled, not deferred. The owner ruled **fix SI-18 only**. What the
 measurements found, and why that ruling is the right shape:
 
-- **SI-18 — LIVE, real, and now IN SCOPE for v4.8.0.** `ledger.js :: buildLedgerRows` filters
-  `findings.filter(f => f.raiser === model)` (`:142`) while iterating a **de-duplicated** alias
-  list, so on any twin bench both seats' findings collapse into a single alias row. Reachable on
-  ordinary engine output — no hand-assembly needed. ⚠️ This is the half T3.3 did **not** close;
+- **SI-18 — ✅ DONE 2026-08-22 (`78ed7a40`, v4.8 Wave 2).** Was: LIVE, real, and now IN SCOPE for
+  v4.8.0. `ledger.js :: buildLedgerRows` filtered
+  `findings.filter(f => f.raiser === model)` (`:142` pre-fix, `:143` today — one comment line
+  shifted it) while iterating a **de-duplicated** alias
+  list, so on any twin bench both seats' findings collapsed into a single alias row. Reachable on
+  ordinary engine output — no hand-assembly needed. This was the half T3.3 did **not** close;
   T3.3 closed the street-cred join (row 20) at the same anchor. **The standing "never tick SI-18"
-  warning still applies until this ships** — it is now scheduled, not closed.
+  warning no longer applies — it shipped.** See SI-18's own entry below (*"Findings are attributed
+  by ALIAS, not by seat"*) for the fix and its verification.
 - **SI-12 — LATENT, unreachable in production. NOT fixed in v4.8, deliberately.** Verified by
   reading all three write paths: `sidecar/leg-ids.js :: deriveLegIds` stamps every leg
   `${waveId}-${i+1}`, and `sidecar/fanout-leg.js` writes `taskId: legId` on the routing-failure
@@ -3292,8 +3352,11 @@ measurements found, and why that ruling is the right shape:
 
 #### Measured-real, unchanged, and still to do
 
-`SI-23` (the tally `findings` z.object declares only `id`/`raiser`/`severity`/`claim`/`raiserSeat`,
-so zod strips `location`/`evidence`/`file`/`line` — confirmed) · ~~`T6.6` (confirmed live:
+~~`SI-23` (the tally `findings` z.object declares only `id`/`raiser`/`severity`/`claim`/`raiserSeat`,
+so zod strips `location`/`evidence`/`file`/`line` — confirmed)~~ **DONE — v4.8 Wave 2
+(2026-08-22, `d5378684`).** ⚠️ Only `location` was ever real to strip — `evidence`/`file`/`line`
+have no producer or consumer anywhere in this codebase's finding shape; see the dedicated entry
+below. · ~~`T6.6` (confirmed live:
 `skills/second-opinion/SKILL.md:299` defines Singleton as `d = 0` and `a < 2` while
 `tally.js :: assignTier` returns **Confirmed** for `(a=1, d=0)`)~~ **DONE — v4.8 Wave 1
 (`c0a7c728`)** · `SI-25` sites (1)+(2) (confirmed
@@ -3304,9 +3367,10 @@ knock-on as filed) · ~~`#135 C0`
 council-review.yml:242` overrides to `300000`; change the default, delete the override)~~ **DONE —
 v4.8 Wave 1 (`4391f0b4` + ripple fix `b0d8e232`).**
 
-⚠️ **Still to do after v4.8 Wave 1 (2026-08-22):** `SI-23` · `SI-25` sites (1)+(2) · `SI-22.4` — the
-three remaining Phase 6 independents; measurements above unchanged. Redistributed into **Wave 2**
-and **Wave 3** — see "NEXT TASK — Wave 2" in the Phase 6 resume point above.
+⚠️ **Still to do after v4.8 Wave 2 (2026-08-22):** `SI-25` sites (1)+(2) · `SI-22.4` — the
+two remaining Phase 6 independents (`SI-23` shipped in Wave 2; measurements above for the other two
+unchanged). See "NEXT TASK — Wave 2.5" in the Phase 6 resume point above — `SI-22.4` rides Wave 3
+(last); `SI-25` sites (1)+(2) is not yet placed in a wave.
 
 **W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to
 v4.9.** #135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and
@@ -4474,7 +4538,7 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   copy so it is not buried in a source comment. Options for the owner: (a) accept the loss as the
   cost of a truthful bench-seat identity, (b) give the chair-synthesis leg its own ledger row/key,
   (c) something narrower — e.g. a `chairConformance` side-field on the bench row. Not decided here.
-- [ ] **Findings are attributed by ALIAS, not by seat.** ⚠️ **This item was filed "→ PR4c" and PR4c
+- [x] **Findings are attributed by ALIAS, not by seat.** ⚠️ **This item was filed "→ PR4c" and PR4c
   did NOT take it (ruling R4c-3); the forecast expired unfulfilled and `ledger.js`'s in-source
   comment has been corrected to say so.** `buildLedgerRows` filters
   `findings.filter(f => f.raiser === model)`, which is alias-exact, so on a bench where one alias
@@ -4490,12 +4554,53 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   builds a fresh object literal. What remains is the actual attribution change: `findings[].raiser`
   is still the ALIAS, so the join has nothing to split on. Seat-attributing it means keying the
   filter on `raiserSeat` and deciding what a seat-less finding joins to.
-  ⚠️ **STILL OPEN 2026-08-21 (SI-18) — do not read this as closed.** v4.8 Phase 3 T3.3 (`fb3fa09d`)
+  ⚠️ **STATUS AS OF 2026-08-21 (SI-18) — history, kept for the record; see the ✅ DONE paragraph
+  immediately below for 2026-08-22, current.** v4.8 Phase 3 T3.3 (`fb3fa09d`)
   also touched `buildLedgerRows`, and its own commit message names SI-18 at the same anchor, but
   what it closed there is the STREET-CRED join (SI-20's third site, `findings.filter(f => f.raiser
-  === model)`'s NEIGHBOUR, not itself). **This item's own filter is byte-unchanged**: measured,
-  `findings.filter(f => f.raiser === model)` is identical before and after this entire PR. The
-  findings half stays exactly as described above — filed, not scheduled.
+  === model)`'s NEIGHBOUR, not itself). **Through T3.3, this item's own filter was byte-unchanged**:
+  measured, `findings.filter(f => f.raiser === model)` was identical before and after that PR. The
+  findings half stayed exactly as described above at that date — filed, not scheduled.
+  ✅ **DONE — 2026-08-22, v4.8 Wave 2 (`78ed7a40`, PR #184).** The filter line above is a claim
+  about T3.3 specifically and is **still true today** — `const raised = findings.filter(f =>
+  f.raiser === model)` remains byte-identical at `ledger.js:143` (shifted from `:142` pre-fix by
+  one added comment line; this fix never touches it). What changed is what CONSUMES `raised`:
+  `ledger-join.js :: splitFindingsBySeat` now credits each finding to the ONE pair group whose own
+  `runStats` rows carry a matching `raiserSeat`, replacing the unconditional `i === 0 ? raised :
+  []`. R4b-2's concentration is now the FALLBACK for whatever cannot resolve — `raiserSeat` absent
+  (every pre-seat document, every hand-assembled one), or present but matching no group's own seat
+  (the asymmetric quadrant `tally.js`'s own comment names) — not the rule for every finding. The
+  row SET does not move: PR4b's `(alias, resolvedModel)` pairing is unchanged, only which existing
+  row a finding's numbers land on. Reuses the existing seat-or-alias shape (`ledger-join.js ::
+  credFor`) rather than a third spelling, per ruling **R14**.
+  Verified by the `avInput` golden fixture (unique-alias bench: `raiserSeat` is never emitted on
+  one, so every finding stays unresolved and concentrates exactly as before — byte-identical) plus
+  7 new example-based tests and 3 direct unit tests of `splitFindingsBySeat`
+  (`tests/council/ledger.test.js`). Named mutant `FINDINGALIAS` (revert to `i === 0 ? raised :
+  []`): RED 2 tests / 1 suite, full `npx jest --no-coverage` scope. `LEDGERALIAS` re-run:
+  unchanged at 2/1 — this change never reads or writes the street-cred `sc` map. Gates: lint,
+  check:sizes, check:citations, validate-docs all exit 0; full suite at the commit's own baseline
+  544 suites / 7849 passed / 8 skipped (merged main, three PRs later, is 544/7861/8).
+  ⚠️ **Not verified by a fuzz or a spec-derived oracle.** Neither a 500-trial fuzz nor a
+  1000-trial spec-derived oracle exists anywhere in commit `78ed7a40` or the current tree —
+  checked by reading the full commit diff and grepping the repo for `fuzz`/`oracle`/`trial` near
+  this change. The mutant plus the example tests named above are the actual, and sufficient,
+  verification.
+- [ ] **SI-23 closed the gap into `tally.json`; `verdict.json` still drops `location`/`claim` —
+  filed, not fixed (found while writing the v4.8 Wave 2 record, 2026-08-22).** `verdict.js ::
+  buildVerdict`'s `findings.map` builds a deliberately CLOSED `out` object literal (names every
+  key, copies nothing else off `f`) with two emit-when-set tails — `raiserSeat` and
+  `sameModelCorroboration` — and its own comment explains why both are emit-when-set rather than
+  `|| null`: `JSON.stringify({raiserSeat: null})` still writes the key, which "changes the shape
+  of every unique-alias `verdict.json` and fails `seat-parity-ondisk`'s needles." `location` and
+  `claim` are not in the literal and have no tail, so neither reaches `verdict.json` even though
+  SI-23 now carries both into `tally.json`. **Measured cost today: none.** The only two readers of
+  `f.location` in the tree are `briefings-debate.js:65` (`const loc = f.location ? ...`) and
+  `debate.js :: debateTargets` (`src.location`, `debate.js:260`) — both read from `tallyInput`,
+  not `verdict.json`. No renderer under `src/council/report*.js` or `src/workspace/` reads
+  `.location` or `.claim` (grepped both trees, zero hits). Adding tails here is a `verdict.json`
+  shape change and deserves its own decision, the same reasoning row 09 in the phasing doc's
+  status table already applied when `raiserSeat` was added — do not add them as a drive-by.
 - [x] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
   cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
   flip the launched name from the short alias to the raw executable id, the exact failure

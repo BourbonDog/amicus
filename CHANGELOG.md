@@ -251,6 +251,31 @@ All notable changes to Amicus are documented here. Format follows
   `src/sidecar/models-probe.js`'s docblock, which stated the same thing and which the first
   pass at this finding missed — the twin was only caught because the council re-reviewed the
   fix. ⚠️ Pre-existing wording in both places; this release did not introduce it.
+- **Findings in the reliability ledger are now attributed to the seat that actually raised them,
+  instead of being concentrated onto one row per alias.** On a twin bench whose two seats resolve
+  to different executables, the ledger used to hand *every* finding raised by that alias to the
+  first of its two rows, leaving the second reading zero raised findings and a null confirm rate
+  regardless of what that seat actually did. Each finding is now credited to the pair group whose
+  own reliability data carries the seat that raised it; a finding that cannot be resolved to a
+  specific seat (no seat information at all, or a seat that matches no group's own data) still
+  concentrates on the first row, exactly as before. The row set itself is unchanged — a run that
+  never repeats a model alias is byte-identical.
+- **`findings[].location` and `findings[].claim` submitted through the `amicus_council_tally` MCP
+  tool now survive into `tally.json`.** The tool's findings schema silently stripped a
+  hand-assembled finding's `location` before tally ever ran it; separately, tally's own output
+  step was dropping both `location` and `claim` regardless of what validation let through, on the
+  command-line path too. Both are fixed together. ⚠️ This closes the gap as far as `tally.json` —
+  neither field is forwarded further, into `verdict.json`; that remains a separate, filed,
+  undecided change.
+- **A headless leg's run document now carries its real OpenCode session id instead of always
+  `null`.** The field was already promised by the run schema and already set on the interactive
+  path, but the headless path never assigned it, so every headless leg — the common case — carried
+  a null session id no matter how the leg actually went. It is now set on both normal outcomes and,
+  measured rather than assumed, on the exception path too, including the specific case where no
+  session was ever created. A leg's on-disk record now carries the id the same way it already
+  carries its status and usage figures, so a session-less leg's record is unaffected. Piece 1 of a
+  larger, multi-piece fix — reading and resolving session ids from provider logs is separate,
+  future work.
 
 ### Changed
 

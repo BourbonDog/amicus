@@ -83,6 +83,23 @@ shapes, so the true open work-item count is **20**, not 16.
 > row). Named mutants: `PROTOVERDICT`, `PROTORANK`, `PROTOSYMBOL`, `PROTOACTION`, `ACTIONPASSTHRU`,
 > `DOUBLEBREACH`. Re-counted directly off the 31-row table by bucketing every Verdict cell, not by
 > arithmetic on the line above: **16 DONE · 3 PARTIAL · 1 SUPERSEDED · 1 HOLD · 10 OPEN**.
+> ⚠️ **That line was ALREADY stale when written — off by one DONE/PARTIAL, not just the two rows
+> below.** Row 05 (`debate.js` second copy of the filter) reads **DONE** at its own cell, corrected
+> 2026-08-22 by the v4.8 release inventory, which found its old PARTIAL wording stale — but that
+> correction was never propagated into this running tally. Bucketing the table AS WRITTEN just
+> above, before either of the two changes below: **17 DONE · 2 PARTIAL · 1 SUPERSEDED · 1 HOLD · 10
+> OPEN** — 10 OPEN was already right; only DONE/PARTIAL were off by one each. Read a verdict off
+> the table's own cell, never off this sentence's arithmetic — which is exactly why this note
+> exists.
+> ⚠️ **TWO MORE changes since Phase 6 PR1 — v4.8 Wave 2 (2026-08-22): rows 18 and 23 both moved
+> OPEN → DONE.** `78ed7a40` (PR #184, ruling R14) closed **18**: `ledger-join.js ::
+> splitFindingsBySeat` now attributes each finding to the pair group whose own `runStats` rows
+> carry a matching `raiserSeat`, instead of dumping every raised finding onto the block's first
+> pair group; the row SET does not move. `d5378684` (PR #183, ruling R10) closed **23**:
+> `mcp-tools.js`'s closed schema now declares `location`, and `tally.js :: tally`'s `outFindings`
+> map — independently dropping it regardless of validation — now forwards it, plus `claim` in the
+> same PR's fix round. Re-counted directly off the 31-row table by bucketing every Verdict cell,
+> not by arithmetic on either line above: **19 DONE · 2 PARTIAL · 1 SUPERSEDED · 1 HOLD · 8 OPEN**.
 
 | # | Verdict | Item | Current anchor (by symbol) |
 |---|---|---|---|
@@ -103,7 +120,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 15 | **SUPERSEDED** | seatKey + padding duplication | by PR5c-SEATKEY + SI-27 |
 | 16 | OPEN → **v4.9** | function lengths. ⚠️ **All three counts re-measured 2026-08-21 (T5.4) by brace-matching the current tree, and ALL THREE were wrong** (this said "two" until fix round 1, contradicting its own list): `runStage2` was recorded as 161 and is **165** (`:47-211`) — stale before v4.8 Phase 5, which never touches that file; `runRevoteWave` was 91, was **157** (`:124-280`) after T5.1, and is **125** (`:148-272`) after T5.5 deleted the `boundLegs` arm and its comment block and then repaired five sentences that deletion falsified, across three review rounds (re-brace-matched 2026-08-22 against the final tree); `runDebate` was recorded here as 165 and is **166** (`:106-271`) — ⚠️ note the BACKLOG's twin entry recorded `runDebate` as 166 and was right, so the two documents disagreed, and only this one was wrong about it | `run-stage2.js :: runStage2` 165 · `run-debate.js :: runDebate` 166 · `run-debate-revote.js :: runRevoteWave` 125 |
 | 17 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21, ruling R4) | ~~chair-on-bench, no engine guard~~ normalised at the ledger join instead of guarded: a chair-synthesis row never decides a bench seat's `role`/`conformance` when the group also holds a bench leg; `wasChair` stays any-wins | `ledger-join.js :: benchLegs` |
-| 18 | OPEN | findings attributed by alias — **only this half of `buildLedgerRows` is still open**; T3.3 closed the OTHER half of the same anchor (the street-cred join, row 20) but `findings.filter(f => f.raiser === model)` is byte-unchanged | `ledger.js :: buildLedgerRows` |
+| 18 | **DONE** (v4.8 Wave 2, `78ed7a40`, 2026-08-22, ruling R14) | ~~findings attributed by alias — only this half of `buildLedgerRows` was still open; T3.3 closed the OTHER half of the same anchor (the street-cred join, row 20) but `findings.filter(f => f.raiser === model)` was byte-unchanged~~ that filter line is STILL byte-identical (`ledger.js:143`) — this fix does not touch it — but `ledger-join.js :: splitFindingsBySeat` now credits each finding to the ONE pair group whose own `runStats` rows carry a matching `raiserSeat`, replacing the unconditional first-group dump; R4b-2's concentration is now the fallback for what cannot resolve, not the rule. Row SET unchanged. Verified by the `avInput` golden fixture, 7 example tests + 3 direct unit tests of `splitFindingsBySeat`, and named mutant `FINDINGALIAS` (RED 2 tests/1 suite); `LEDGERALIAS` re-run unchanged at 2/1 | `ledger.js :: buildLedgerRows` · `ledger-join.js :: splitFindingsBySeat` |
 | 19 | **DONE** (T3.3 `fb3fa09d`, 2026-08-21) | ~~never-ran aggregate stays chair-promotable~~ closes as a side effect of seat-attributed street cred (row 20): a dead seat now gets its OWN seat-keyed row, which resolves to `null`/`null` rather than borrowing its live twin's number | `run-chair.js :: pickFallbackChair` |
 | 20 | **DONE** (T3.3 `fb3fa09d` + fix round 1 `8027391b`, 2026-08-21) | ~~street cred collapses twins ×3~~ all three sites seat-keyed: `rankPositions` keys by seat where `orderSeats` names one, `computeStreetCred`'s driver is one row per seat, and the ledger join is seat-keyed with an alias-mean fallback | `street-cred.js :: rankPositions` · `:: computeStreetCred` · `ledger-join.js :: credFor` |
 | 21 | **HOLD** | lens/position unrecoverable | owner-deferred; its own prose is false (§3) |
@@ -112,7 +129,7 @@ shapes, so the true open work-item count is **20**, not 16.
 | 22.3 | **DONE** (T2.2 `33e2ecf7` + T-A4 `1e385895`, 2026-08-17) | ~~two orphaned twins → ONE dead row~~ producer fixed, and the reconcile half too: a PARTIAL retry return now gives 2 notes / 2 stillDeadLegs (B1) and each note reads its OWN slot's `firstFailure` (B2), output-identical to the BOUND control. ⚠️ Row/note half closed in **four of four** retry shapes; the SLOT half is closed **and bounded** — `min(N, roster count)` since T-A3 `4413eb25`, never an unqualified N→N | `run-stage1-rows.js :: pushDeadSeatRows` (done) · `run-retry.js :: retryStage1Losses`'s `launched` (done — slot COUNT, not first-wins) |
 | 22.4 | OPEN | whitespace-padded preset member | `utils/config.js :: classifyCouncilMembers` |
 | 22.5 | **DONE** (T2.4 `774dcdc2`+`d82e2127` / `09212e97`+`fa0c5ae7`, 2026-08-20) | ~~orphaned Stage-2 judge rendered nowhere~~ the vote→column join now REFUSES a key that names no column and folds it into a conditional `UNATTRIBUTED` column (R3 render, R18 one column); the vote stays in `basis`. Broader than the row's original wording — it closes `''`, `undefined`, non-string and orphan-seat keys, of which the Stage-2 orphan is one case. ⚠️ `report-html.js` in the anchor column is **wrong and was wrong when written**: the column propagates from the model, so BOTH renderers needed **zero** edits (`git diff ed5c0c02..0cb2d4d9 -- src/council/report-html.js` = 0 bytes). ⚠️ NOT SI-12 — see row 12, still OPEN (ruling **R19**) | `report.js :: toModel` · `matrix-model.js :: buildMatrixModel` (renderers untouched) |
-| 23 | OPEN | `location` stripped on MCP tally path | `mcp-tools.js :: getTools` |
+| 23 | **DONE** (v4.8 Wave 2, `d5378684`, 2026-08-22, ruling R10) | ~~`location` stripped on MCP tally path~~ the closed `z.object` now declares `location`; `tally.js :: tally`'s `outFindings` map — independently dropping it regardless of validation, CLI path too — now forwards it emit-when-present. A same-PR fix round (council A1/B1) closed the identical gap for `claim` one line below. ⚠️ **Closes into `tally.json` only, not `verdict.json`** — `verdict.js :: buildVerdict`'s closed `out` literal forwards neither field; filed, not fixed (`BACKLOG.md`). Named mutants: `SCHEMASTRIP` RED 2 tests/1 suite (reproduced directly for this record — the commit itself states no count); `CLAIMDROP` RED 2 suites/2 tests (commit-stated) | `mcp-tools.js :: getTools` · `tally.js :: tally` |
 | 24 | **DONE** (v4.8 Phase 6 PR1, 2026-08-22, SI-24) | ~~`VERDICTS[v.verdict]` inherited keys — the `tally.js` site is still open; T3.3 closed the unfiled second site's `perJudgeRank` half (mutant `JUDGEALIAS`, keyed on seat first)~~ four `Object.prototype`-collision carriers closed at the table (`__proto__: null` / `Object.create(null)`), not two sites: **A** `tally.js :: VERDICTS` (read, CLI-only — MCP's `adjudications[].verdict` is `z.enum`) `36297e18`+`41733c58`; **C** `street-cred.js :: perJudgeRank` (write/accumulator, CLI **and** MCP — closes the half T3.3 left unfiled) `46b89f75`+`3e1a09a7`; **D** `report.js :: SYMBOL` (read, 3 renderers, CLI **and** MCP — `amicus_verdict`'s unvalidated `record: z.record(z.any())` bypasses A/B's `tally()`-gated enum) and **E** `debate.js :: PAST_TENSE` (read, defense-in-depth ONLY — `parse-stage2.js`'s allowlist already makes a real defense response unreachable, so this closes a latent hole, not a live bug) both `7ebe91ca`+`faccd178`, plus two follow-up rounds `551f8366`+`7bacef50` and `308e90d1`+`8aab4059` that retracted a born-false reachability claim for E. Named mutants `PROTOVERDICT` · `PROTORANK` · `PROTOSYMBOL` · `PROTOACTION` · `ACTIONPASSTHRU` · `DOUBLEBREACH` — the last two are a compound pair: `PAST_TENSE`'s null prototype and the allowlist are each independently sufficient, so only breaching BOTH reds the pin | `tally.js :: VERDICTS` · `street-cred.js :: perJudgeRank` · `report.js :: SYMBOL` · `debate.js :: PAST_TENSE` |
 | 25 | OPEN | chair packet in alias space | `briefings-chair.js :: buildChairPacket` — three sites, three sizes |
 | 26 | **DONE** (T3.1 `13ae8cf6`, 2026-08-20) | ~~`letterByModel` dead code~~ deleted — the JSDoc `@returns` clause, the `const`, the populate line and the return-literal key; `labelMap`/`entries` untouched | `anonymize.js :: assignLabels` |
@@ -280,6 +297,22 @@ count, no enumeration of what the 13 rails are, anywhere else in the tree. The u
 real and measured (`BACKLOG.md`'s `sessions-index.json` growth entry: a full
 read→parse→mutate→write of the whole index on every session start), and R16 stands — **scope it
 from that growth entry, not from this row's "13."**
+
+⚠️ **R10's own list is wrong on three of four names — corrected 2026-08-22 (v4.8 Wave 2), and the
+ruling itself is unchanged.** R10 reads *"`evidence`/`file`/`line` stop dropping too."* Measured
+across `src/`, `schemas/`, `tests/`, `findings.js :: REQUIRED`, `briefings.js ::
+FINDINGS_JSON_SHAPE` and `anonymize.js :: toGlobalFindings`: only `location` exists as a finding
+property anywhere in this codebase's shape. `evidence`/`file`/`line` have zero producers and zero
+consumers, and no finding object anywhere under `src/council/` is ever read as `.file`, `.line` or
+`.evidence` (grepped, zero hits) — the only place `file` and `line` co-occur as sibling keys on one
+record anywhere in the repo is `scripts/check-secrets.js`'s secret-scanner output
+(`{file, secrets: [{line, ...}]}`), an unrelated domain. `rationale` is real
+(Stage-1-required, `findings.js :: REQUIRED`) but `anonymize.js :: toGlobalFindings` never forwards
+it past Stage-1, so adding it to the MCP tally schema would invent a shape the engine's own path
+never produces. R10 stands as ruled — fix the closed `z.object` properly — and SI-23 (`d5378684`,
+row 23 above) did exactly that for the one real name, `location` (and, in the same PR's fix round,
+`claim`, which was already declared but separately dropped by `tally.js`'s own map). **Scope any
+future reading of R10 from this annotation's measurement, not from the ruling's own list of names.**
 
 ⚠️ **R17–R20 were ruled 2026-08-20, not 2026-08-16** — appended here rather than renumbered, so
 R1–R16 keep the numbers every other document cites them by. R17/R18 were taken before T2.4 / PR C
@@ -582,6 +615,21 @@ review pass found one instance the first sweep missed (`src/sidecar/models-probe
 sweep added (`tests/no-output-backstop-wiring.test.js:383` and `:424`); all three closed in the
 same follow-up commit. Full detail: `BACKLOG.md`'s `#135 C0` entries in the v4.8 release inventory.
 
+✅ **`#133` Piece 1 DONE — v4.8 Wave 2 (2026-08-22, `86a069a6`, PR #185, ruling R13).** Shipped as
+scoped: `opencodeSessionId` threaded onto `runHeadless`'s two substantive returns (guaranteed
+assigned) and, measured rather than assumed, onto the catch-all exception return too
+(`sessionId || null` — an exception before session creation reaches that same catch with the id
+still unset); `fanout-leg.js`'s `legPatch` carries it through to disk with `|| undefined`, matching
+the sibling status/reason/usage fields, so a session-less leg carries neither key rather than a
+`null` that could clobber a prior attempt's real id on a fallback retry. A same-PR council fix
+round reordered the field after the return objects' spreads (fragility fix, no observed clobber)
+and pinned the catch-all's sessionId-**unset** branch, which the first pass had reasoned about but
+never actually pinned. ⚠️ **No named mutant exists for this change** — verification is 6 pinning
+tests across 3 suites (`tests/headless.test.js` ×4, `tests/headless-poll-failures.test.js` ×1,
+`tests/sidecar/fanout.test.js` ×1), one of the four in `headless.test.js` added by the council fix
+round. Piece 1 only, per R13 — the log parser and the session-id resolver remain out of scope. Full
+detail: `BACKLOG.md`'s Wave 2 record.
+
 **W1-4 — v4.8 Wave 1 ruling (2026-08-22): `#135 C5` and the `#135 C2` probe are DEFERRED to v4.9.**
 #135 self-describes as *"a placeholder for a reminder for a brainstorming session"* and neither
 item has a measured target.
@@ -600,19 +648,28 @@ its own §4 row and annotation: its "13 unpinned rails" phrase is unsourced, sco
 
 Supersedes the Phase-6-then-Phase-7 sequencing above as the **resume point**; Phases 6 and 7 above
 remain the measured substrate for what each item IS, not for what order to take them in.
+⚠️ **The "resume point" role itself has since moved to "NEXT TASK — Wave 2.5" below** — this
+section's own wave list is accurate as a record of what was ruled, but read the status annotations
+inline (not this note) for what is actually done.
 
 - **Wave 1** — batched, one PR. **DONE**: T6.6, SI-14, `#135 C0` (this PR).
 - **Wave 2** — run **3-wide in isolated worktrees**: SI-23 · `#133 Piece 1` · SI-18 (newly promoted
   into v4.8.0 scope by `BACKLOG.md`'s release inventory, not part of Phase 6/7 as originally
   scoped) — **then** SI-25 sites (1)+(2) · `#138` Pieces 1+2.
-- **Wave 2.5** — R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from this
-  document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation).
+  ✅ **The 3-wide slot is DONE — 2026-08-22**: `SI-23` (`d5378684`, PR #183), `#133 Piece 1`
+  (`86a069a6`, PR #185), `SI-18` (`78ed7a40`, PR #184) — see status-table rows 18/23 and the Phase
+  7 `#133` annotation, above. ⚠️ **The "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did
+  NOT ship** and is not part of what "Wave 2 done" covers.
+- **Wave 2.5 — NEXT.** R16, scoped from `BACKLOG.md`'s `sessions-index.json` growth entry, not from
+  this document's own "13 unpinned rails" wording (unsourced — see §4's R16 annotation).
 - **Wave 3** — **strictly serial**: SI-27 **first**, SI-22.4 **LAST** — SI-22.4's trim knock-on
   turns a whitespace-padded preset member into a REAL twin bench (changed artifact filenames,
   `meta.seats` starts emitting), which SI-27's consolidation should absorb rather than the other
-  way around.
+  way around. ⚠️ `SI-27` extracts from `src/council/run-retry.js`, which is at 300/300 lines —
+  zero headroom for even one explanatory line before that extraction lands (`BACKLOG.md`).
+- Not in a wave: `SI-25` sites (1)+(2) (ruling R15 — remaining Phase 6 member, not yet scheduled).
 
-Full detail and citations: `BACKLOG.md`'s "NEXT TASK — Wave 2" entry in the Phase 6 resume point.
+Full detail and citations: `BACKLOG.md`'s "NEXT TASK — Wave 2.5" entry in the Phase 6 resume point.
 
 ### Post-Phase-2 · SI-27 — 1 PR
 Padding/bindSeats/placeholder-filter core → `stage1-bind.js`, parameterised on
