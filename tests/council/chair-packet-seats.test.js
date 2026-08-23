@@ -11,6 +11,10 @@
 // the seat forward in `run-assemble.js :: buildChairPacketFile` — and the
 // byte-identity invariant is only provable across both. A single-item file follows
 // the precedent of r8-surfaced.test.js / run-raiserseat-call.test.js.
+//
+// The five named mutants these tests are the red set for — ALIASBACK, SEATONLY,
+// NULLLEAK, FLATTIE, SEATALWAYS — are recorded with their measured numbers in
+// tests/council/chair-packet-seat-mutants.js :: ALIASBACK.
 'use strict';
 const fs = require('fs');
 const path = require('path');

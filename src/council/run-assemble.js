@@ -254,7 +254,9 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
     // RESOLVED id when a leg reports no modelInput — so an UNCONDITIONAL forward
     // rewrites the header from `google/gemini-3.5-pro` to `gemini` on a bench with
     // no twin at all, breaking spec §4.2's byte-identity promise. Measured, not
-    // argued: tests/council/chair-packet-seats.test.js pins that exact bench.
+    // argued: tests/council/chair-packet-seats.test.js pins that exact bench, and
+    // the named mutant guarding this predicate is
+    // tests/council/chair-packet-seat-mutants.js :: SEATALWAYS.
     // ⚠️ The Claude review keeps NO seat and renders `claude` via the fallback.
     reviews: reviews.map(r => ({ model: r.model, text: r.text,
       ...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {}) }))

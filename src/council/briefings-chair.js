@@ -92,6 +92,11 @@ function orNone(text, none) {
  * and it can also be shorter than `order`. No `null` may reach the rendered
  * JSON: this is the one artifact a paid chair reads as authoritative. An absent
  * `orderSeats` returns `order` untouched (spec §4.2's byte-identity promise).
+ *
+ * Two named mutants guard the two arms — NULLLEAK the scalar fallback, FLATTIE
+ * the tie arm — with their measured red sets in
+ * tests/council/chair-packet-seat-mutants.js :: NULLLEAK. Re-run them, never
+ * renumber, if this expression or its pins change.
  */
 function seatKeyedOrder(order, orderSeats) {
   if (!Array.isArray(order) || !Array.isArray(orderSeats)) { return order; }
@@ -127,9 +132,13 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, 
   // `orderSeats`, `tallyInput`, verdict.json, the report and every launcher
   // option stay alias-valued and untouched (run-debate.test.js's parity pin
   // guards that boundary). Nothing routes on this artifact.
-  // The fallbacks are load-bearing, not defensive: on a unique-alias bench the
-  // seat channel is ABSENT at every site (spec §4.2 emit-when-DIFFERENT), so the
-  // rendering is byte-identical there by construction.
+  // The fallbacks are load-bearing, not defensive — named mutants ALIASBACK and
+  // SEATONLY, with their measured red sets, in
+  // tests/council/chair-packet-seat-mutants.js :: ALIASBACK. On a unique-alias
+  // bench the seat channel is ABSENT at every site (spec §4.2's
+  // emit-when-DIFFERENT rule), so the rendering is byte-identical there by
+  // construction — and the review projection that feeds site (1) applies that
+  // same rule for a reason its own comment gives.
   const reviewBlocks = reviews
     .map(r => `--- Review by ${displayName(r.seat) || r.model} ---\n${r.text}`).join('\n\n');
   const rankingLines = (rankings || [])
