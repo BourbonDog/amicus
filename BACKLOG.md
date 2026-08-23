@@ -5351,10 +5351,17 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
      The fix is upstream (trim at classification), not in the peer filter.~~
      **Fixed exactly there.** `src/utils/config.js :: classifyCouncilMembers` — anchored BY SYMBOL.
      Counting rule: brace-matched from the `function classifyCouncilMembers` line to its balancing
-     `}`, inclusive. By that rule the function is `:461-496` at HEAD and was **`:438-462`** both at
-     BASE `ecf90f19` and at the commit that wrote the struck citation (`c2313416`) — so the struck
-     `:438-460` was **never exact**: it stopped at the loop's closing brace two lines early. Neither
-     half is renumbered; the symbol is the anchor. The function now trims each member **before gate
+     `}`, inclusive. By that rule it was **`:438-462`** both at BASE `ecf90f19` and at the commit
+     that wrote the struck citation (`c2313416`) — so the struck `:438-460` was **never exact**: it
+     stopped at the loop's closing brace two lines early. Neither half is renumbered; the symbol is
+     the anchor.
+     ⚠️ **This sentence also carried `:461-496` "at HEAD", and that was wrong — measured
+     2026-08-23.** `:461-496` is `11b3cd40`'s span; the very next commit (`7d33a3c4`, the fix round
+     that corrected the `:438-460` half) added **+8 lines of JSDoc immediately above the function**,
+     moving it to `:469-504`. The author brace-matched, then edited above the function, then never
+     re-measured — **inside one commit**. No "at HEAD" number is given now, deliberately: a
+     self-referential line citation is stale the moment anything above it moves, which is the entire
+     reason this entry is anchored by symbol in the first place. Re-derive it if you need it. The function now trims each member **before gate
      1**, so a padded
      alias reaches the alias table clean and a padded full id reaches the catalog lookup clean.
      `buildSeats` (`src/council/seats.js:67`, re-derived against the final tree and unmoved) then
