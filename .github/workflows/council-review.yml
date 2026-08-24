@@ -371,17 +371,23 @@ jobs:
           process.stdout.write(out.join('\n'));
           ENVCTX
           : > env-context.md
-          for wf in $(grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff \
-                        | sed 's|^+++ b/||' | sort -u); do
+          # `while read`, not `for x in $(...)`: word-splitting a command
+          # substitution is SC2013, and this step already reads diff-notes.txt
+          # with exactly this idiom. The `|| [ -n "$wf" ]` guard keeps a final
+          # line that has no trailing newline.
+          grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff \
+            | sed 's|^+++ b/||' | sort -u > wf-list.txt
+          while IFS= read -r wf || [ -n "$wf" ]; do
+            [ -n "$wf" ] || continue
             slug=$(printf '%s' "$wf" | tr '/' '_')
             # HEAD sha, not base: the bench must see the env block as this PR leaves
-            # it. A fork PR's head is absent from this repo, so the fetch 404s and the
+            # it. A fork PR head is absent from this repo, so the fetch 404s and the
             # annotation is simply skipped — never a hard failure.
             if gh api "repos/${GH_REPO}/contents/${wf}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null \
                  | base64 -d > "wf-${slug}" 2>/dev/null && [ -s "wf-${slug}" ]; then
               node env-context.js "$wf" "wf-${slug}" >> env-context.md
             fi
-          done
+          done < wf-list.txt
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract
           # (findings JSON block) and the anti-sycophancy clause itself — this
