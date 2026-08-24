@@ -465,9 +465,24 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     if (!isCustomDefault && selectedAlias) {
       // Selecting a quick pick = explicit touch: upgrade that ONE alias
       // to the resolved id via the chosen route (user-locked decision #2).
+      // This is the ONE place clobbering aliasEdits is permitted.
       writeAliasRoute(selectedAlias);
     }
-    Object.keys(modelChoiceIds).forEach(function(alias) { writeAliasRoute(alias); });
+    // issue 138 (fix round 2, ruling R6a): every OTHER drilled-down alias is
+    // written ONLY when Step 3 left it untouched. hasOwnProperty.call, not
+    // the in operator and not a truthiness/not-undefined check:
+    // aliasEdits[alias] === null is a MEANINGFUL value here (ipc-setup.js:
+    // string = set, null = delete), so a falsy/undefined check would
+    // silently resurrect an alias the user explicitly deleted in Step 3,
+    // and the in operator or a not-undefined check can be fooled by an
+    // inherited Object.prototype property name (this codebase has been
+    // bitten by that class of bug before -- see the proto:null guard in
+    // src/sidecar/setup.js resolveChoice).
+    Object.keys(modelChoiceIds).forEach(function(alias) {
+      if (alias === selectedAlias) { return; } // already handled above, unconditionally
+      if (Object.prototype.hasOwnProperty.call(aliasEdits, alias)) { return; }
+      writeAliasRoute(alias);
+    });
     return aliasWrites;
   }
 

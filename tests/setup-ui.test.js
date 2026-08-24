@@ -471,15 +471,63 @@ describe('setup-ui wizard', () => {
       expect(writes.deepseek).toBeUndefined();
     });
 
-    it('preserves aliasEdits precedence: a drilled-down touch overrides a same-alias Step-3 edit, matching the selected-alias precedent -- and leaves an untouched alias edit alone', () => {
+    // fix round 2, ruling R6a: the precedence differs by whether the alias
+    // is the SELECTED (checked) default or not. Only the selected alias
+    // clobbers aliasEdits (pre-existing, unchanged -- see the pin test
+    // below). Every OTHER alias in modelChoiceIds is written ONLY when
+    // aliasEdits has no entry for it at all -- a Step-3 edit (including an
+    // explicit deletion, aliasEdits[alias] === null) on a non-selected
+    // alias is the later, more deliberate action and wins.
+    it('R6a: a Step-3 edit on a NON-selected alias wins over a same-alias dropdown touch (round-1 had this backwards)', () => {
       const collectAliasWrites = extractCollectAliasWrites()({
         modelChoicesData: twoCardData,
         modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' },
-        aliasEdits: { deepseek: 'some-stale-step3-edit', untouched: 'kept-value' }
+        aliasEdits: { deepseek: 'some-explicit-step3-edit', untouched: 'kept-value' }
       });
-      const writes = collectAliasWrites('gemini', false);
-      expect(writes.deepseek).toBe('deepseek/deepseek-r1'); // explicit touch wins, same as the selected alias already does
-      expect(writes.untouched).toBe('kept-value');           // an edit for an alias nobody touched survives
+      const writes = collectAliasWrites('gemini', false); // gemini is selected, NOT deepseek
+      expect(writes.deepseek).toBe('some-explicit-step3-edit'); // Step-3 edit wins for a non-selected alias
+      expect(writes.untouched).toBe('kept-value');                // an edit for an alias nobody touched survives either way
+    });
+
+    it('R6a Finding 1 regression: a Step-3 DELETION of a non-selected alias survives a same-alias dropdown touch (the null must reach aliasWrites, not be resurrected)', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }, // drilled down AFTER deleting, in either order
+        aliasEdits: { deepseek: null } // explicit Step-3 deletion
+      });
+      const writes = collectAliasWrites('gemini', false); // gemini is the checked default, NOT deepseek
+      expect(writes.deepseek).toBeNull(); // deletion survives -- must NOT come back as a route id
+      expect(writes.gemini).toBe('google/gemini-x');
+    });
+
+    it('R6a: presence must be tested with hasOwnProperty, not `!== undefined` -- an inherited Object.prototype property name is not mistaken for a real aliasEdits entry', () => {
+      // aliasEdits has no OWN 'toString' key, but plain-object property
+      // access still resolves it via the prototype chain to a real
+      // function -- so `aliasEdits.toString !== undefined` is TRUE even
+      // though nothing was ever set. hasOwnProperty correctly says false,
+      // so the drilled-down write for a same-named alias must proceed.
+      const protoCardData = [
+        { alias: 'toString', routes: { openrouter: 'openrouter/acme/toString-model', acme: 'acme/toString-model' } }
+      ];
+      expect(({}).toString !== undefined).toBe(true); // sanity: the footgun is real
+      expect(Object.prototype.hasOwnProperty.call({}, 'toString')).toBe(false); // sanity: hasOwnProperty is not fooled
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: protoCardData,
+        modelChoiceIds: { toString: 'acme/toString-model' },
+        aliasEdits: {} // no OWN 'toString' key
+      });
+      const writes = collectAliasWrites(null, false); // 'toString' is not the selected alias
+      expect(writes.toString).toBe('acme/toString-model');
+    });
+
+    it('R6a pin: the selected alias still clobbers a same-alias Step-3 edit -- unchanged, this is the one place clobbering is permitted', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: {}, // no drill-down needed to prove the selected-alias branch alone
+        aliasEdits: { deepseek: 'some-stale-step3-edit' }
+      });
+      const writes = collectAliasWrites('deepseek', false); // deepseek IS the checked default this time
+      expect(writes.deepseek).toBe('deepseek/deepseek-v4-pro'); // selected-alias clobber, unchanged from before R6a
     });
 
     it('is not gated on the quick-pick radio: a custom (searched) default model still carries the drilled-down write', () => {
