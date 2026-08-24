@@ -14,7 +14,7 @@ on:
   workflow_call:
     inputs:
       models:
-        description: Comma-separated amicus model aliases (must be aliases this repo SHIPS in src/utils/curated-models.js — a CI runner has no user config)
+        description: Comma-separated amicus model aliases. Resolved from .github/amicus-ci-aliases.json on the base ref when present, else from the table amicus ships in src/utils/curated-models.js. The pre-flight step fails the run before any spend if a name resolves through neither.
         type: string
         default: 'glm,qwen,gpt,kimi'
       chair:
@@ -102,6 +102,16 @@ jobs:
       # path at 120000 and looked like a fix that changed nothing.
       DIFF_CAP: ${{ inputs.diff_cap_bytes || '240000' }}
       RUN_DIR: council-run
+      # A runner has no user config, so every alias would otherwise resolve from
+      # amicus's SHIPPED table (src/utils/curated-models.js :: toDefaultAliases).
+      # Pointing the config dir at the workspace lets the provisioning step below
+      # place a real alias map here, and puts the spend ledger somewhere uploadable
+      # — spend-ledger.js writes it into this same directory.
+      # github.workspace, NOT runner.temp: the `runner` context is unavailable in a
+      # job-level env block, where it silently expands to '' — making this the
+      # filesystem root. actionlint catches it; a local test that sets the variable
+      # by hand never can.
+      AMICUS_CONFIG_DIR: ${{ github.workspace }}/amicus-cfg
     steps:
       - name: Gate on secret availability (soft-skip fork PRs)
         id: gate
@@ -133,6 +143,117 @@ jobs:
         env:
           AMICUS_SKIP_POSTINSTALL: '1'
         run: npm install -g --omit=optional amicus@latest
+
+      - name: Provision the alias map (BASE ref only — never PR-controlled)
+        if: steps.gate.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The base sha, NOT the head: this map decides which models get paid to
+          # run, so a PR must never edit the map used to review that same PR.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          mkdir -p "$AMICUS_CONFIG_DIR"
+          # SHAPE, not just syntax (council A2): a map that parses but carries no
+          # usable `aliases` object leaves loadConfig() with nothing and degrades
+          # SILENTLY to the shipped table — the failure this step exists to remove.
+          cat > validate-map.js <<'VALIDATE'
+          const fs = require('fs');
+          let map;
+          try {
+            map = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          } catch (err) {
+            console.error('::error::alias map is not valid JSON: ' + err.message);
+            process.exit(1);
+          }
+          const aliases = map && map.aliases;
+          if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) {
+            console.error('::error::alias map has no aliases object');
+            process.exit(1);
+          }
+          const names = Object.keys(aliases);
+          if (names.length === 0) {
+            console.error('::error::alias map declares zero aliases');
+            process.exit(1);
+          }
+          for (const name of names) {
+            const id = aliases[name];
+            if (typeof id !== 'string' || id.indexOf('/') === -1) {
+              console.error("::error::alias '" + name + "' does not map to a fully-qualified model id");
+              process.exit(1);
+            }
+          }
+          console.log('alias map validated: ' + names.length + ' alias(es)');
+          VALIDATE
+          # Fetched over the API rather than read from disk because this workflow
+          # never checks out — the same reason the briefing step inlines its JS.
+          #
+          # 404 is the ONLY tolerated failure (council A1/C2): a workflow_call
+          # caller legitimately has no such file. Every other failure — rate limit,
+          # auth, 5xx, DNS — FAILS the run. Treating a transient blip as "no map"
+          # would swap the bench's models on a network hiccup, which is precisely
+          # the silent substitution this workflow exists to eliminate.
+          if gh api "repos/${GH_REPO}/contents/.github/amicus-ci-aliases.json?ref=${BASE_SHA}" \
+               --jq '.content' > alias-map.b64 2> alias-map.err; then
+            base64 -d < alias-map.b64 > "$AMICUS_CONFIG_DIR/config.json"
+            node validate-map.js "$AMICUS_CONFIG_DIR/config.json" || exit 1
+            echo "::notice::alias map provisioned from .github/amicus-ci-aliases.json@${BASE_SHA}"
+          elif grep -q 'HTTP 404' alias-map.err; then
+            rm -f "$AMICUS_CONFIG_DIR/config.json"
+            echo "::notice::no .github/amicus-ci-aliases.json on the base ref — using amicus's shipped alias table"
+          else
+            echo "::error::could not read the alias map and it was NOT a 404 — refusing to fall back to the shipped table silently"
+            cat alias-map.err
+            exit 1
+          fi
+
+      - name: Pre-flight the bench (prints every binding; fails before any spend)
+        if: steps.gate.outputs.available == 'true'
+        run: |
+          # Runs BEFORE the paid step on purpose. A seat that is not a known alias
+          # here is dropped by config.js :: classifyCouncilMembers with only a
+          # run.json note, so the council would quietly review with a smaller
+          # bench. Stop instead. The JS only prints; the shell writes the summary,
+          # so no newline escapes have to survive the YAML block scalar.
+          cat > preflight.js <<'PREFLIGHT'
+          const { execSync } = require('child_process');
+          const path = require('path');
+          const root = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          const cfg = require(path.join(root, 'amicus', 'src', 'utils', 'config.js'));
+          const seats = []
+            .concat(String(process.env.MODELS || '').split(','))
+            .concat([String(process.env.CHAIR || '')])
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const aliases = cfg.getEffectiveAliases();
+          let missing = 0;
+          for (const seat of Array.from(new Set(seats))) {
+            if (seat.indexOf('/') !== -1) {
+              console.log(seat + ' -> (full id, no alias lookup)');
+              continue;
+            }
+            const resolved = aliases[seat];
+            if (resolved === undefined) {
+              console.error("::error::seat '" + seat + "' is not a known alias here — it would be dropped from the bench");
+              missing++;
+            } else {
+              console.log(seat + ' -> ' + resolved);
+            }
+          }
+          process.exit(missing ? 1 : 0);
+          PREFLIGHT
+          set +e
+          node preflight.js > bindings.txt
+          PF=$?
+          set -e
+          {
+            echo "### Council bench bindings"
+            echo
+            echo '```'
+            cat bindings.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat bindings.txt
+          exit "$PF"
 
       - name: Build council briefing from the PR diff
         if: steps.gate.outputs.available == 'true'
@@ -271,6 +392,52 @@ jobs:
             exit 1
           fi
           cp council-cli.json "$RUN_DIR/cli-stdout.json"
+
+      - name: Collect the spend receipt (the only record of concrete model ids)
+        if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}
+        run: |
+          # run.json / events.jsonl / verdict.json record ALIAS NAMES only, so they
+          # are byte-identical whichever model an alias bound to. The spend ledger
+          # is the one artifact carrying fully-resolved ids, and it lands in
+          # AMICUS_CONFIG_DIR — which is why that is set to a workspace path above.
+          LEDGER="${AMICUS_CONFIG_DIR}/spend-ledger.jsonl"
+          mkdir -p "$RUN_DIR"
+          if [ -s "$LEDGER" ]; then
+            cp "$LEDGER" "$RUN_DIR/spend-ledger.jsonl"
+            cat > receipt.js <<'RECEIPT'
+          const fs = require('fs');
+          const seen = new Map();
+          for (const line of fs.readFileSync(process.argv[2], 'utf8').split(/\r?\n/)) {
+            if (!line.trim()) { continue; }
+            let row;
+            try { row = JSON.parse(line); } catch (_err) { continue; }
+            if (!row || typeof row.model !== 'string') { continue; }
+            const cost = (row.cost && Number(row.cost.amount)) || 0;
+            const prev = seen.get(row.model) || { calls: 0, cost: 0 };
+            seen.set(row.model, { calls: prev.calls + 1, cost: prev.cost + cost });
+          }
+          for (const entry of seen) {
+            console.log(entry[0] + '  (' + entry[1].calls + ' call(s), $' + entry[1].cost.toFixed(4) + ')');
+          }
+          RECEIPT
+            # Guarded, not piped straight into the summary group: a crash inside
+            # the group would be masked by the trailing echo's exit status and
+            # publish an EMPTY "billed" section — a silent degrade of the very
+            # check that exists to prove which models ran.
+            if node receipt.js "$LEDGER" > receipt.txt; then
+              {
+                echo "### Models actually billed"
+                echo
+                echo '```'
+                cat receipt.txt
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::could not summarize the spend ledger (it is still uploaded in the run artifact)"
+            fi
+          else
+            echo "::warning::no spend ledger was written — cannot confirm which models actually ran"
+          fi
 
       - name: Upload evidence artifact (full run directory)
         if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}
