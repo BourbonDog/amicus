@@ -1,0 +1,23 @@
+{
+  "$comment": [
+    "Alias map provisioned into CI runs of council-review.yml.",
+    "A runner has no user config, so without this file every alias falls back to",
+    "the pinned table in src/utils/curated-models.js (toDefaultAliases) — which",
+    "tracks what this package SHIPS, not what the bench should review with.",
+    "Read at run time via `gh api` from the BASE ref (never the PR head), because",
+    "council-review.yml deliberately never checks out PR code.",
+    "Pins are exact ids on purpose: OpenRouter's floating `~vendor/x-latest` ids",
+    "carry no canonical target, so a floating pin is invisible in both the",
+    "pre-flight table and the spend ledger — you could never tell what reviewed.",
+    "Exact pins go stale instead, so alias-pin-drift.yml watches them weekly.",
+    "`amicus models --check` does NOT cover these: glm/qwen/kimi are flat CARDLESS",
+    "entries with no idPattern, so its audit only asks whether the id still exists."
+  ],
+  "aliases": {
+    "glm": "openrouter/z-ai/glm-5.3",
+    "qwen": "openrouter/qwen/qwen3.8-max",
+    "gpt": "openrouter/openai/gpt-5.6-terra",
+    "kimi": "openrouter/moonshotai/kimi-k3",
+    "deepseek": "openrouter/deepseek/deepseek-v4-pro"
+  }
+}

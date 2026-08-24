@@ -113,10 +113,12 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(prFallback[1]).toBe(inputDefault[1]);
   });
 
-  // A CI runner installs amicus from npm and has NO user config, so an alias
-  // that only exists in someone's ~/.config/amicus/config.json resolves to
-  // nothing there — the seat dies mid-run, after the job has already spent.
-  // Every default seat must therefore be an alias this repo SHIPS.
+  // The workflow now provisions .github/amicus-ci-aliases.json into
+  // AMICUS_CONFIG_DIR, and the pre-flight step kills an unresolvable seat
+  // BEFORE any spend rather than letting it die mid-run. This assertion still
+  // holds the FALLBACK path honest: a workflow_call caller (or a fork with no
+  // map on its base ref) gets only the table this repo SHIPS, so the defaults
+  // must stay resolvable there too.
   test('every default bench seat and the chair are shipped curated aliases (no local-only aliases)', () => {
     const { toDefaultAliases } = require('../../src/utils/curated-models');
     const shipped = toDefaultAliases();
@@ -329,6 +331,87 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).not.toContain('diff truncated to ${DIFF_CAP} bytes');
       expect(step).toContain('Not shown');
       expect(step).toContain('|| [ -n "$line" ]');
+    });
+  });
+
+  // The bug this suite's `no local-only aliases` test could only work AROUND:
+  // a runner resolved every alias from the shipped table, so `glm` reviewed at
+  // whatever curated-models.js pinned rather than what the bench intended, and
+  // an alias absent from that table was dropped by classifyCouncilMembers with
+  // nothing but a run.json note. Provisioning supplies the map; the pre-flight
+  // makes an unresolvable seat loud and free instead of silent and paid.
+  describe('alias provisioning and its observability', () => {
+    const stepFor = (name, next) => {
+      const y = yml();
+      return y.slice(y.indexOf(name), y.indexOf(next));
+    };
+
+    test('the config dir is redirected into the workspace at job level', () => {
+      // Also where spend-ledger.jsonl lands — getConfigDir() owns both.
+      expect(yml()).toContain('AMICUS_CONFIG_DIR: ${{ runner.temp }}/amicus-cfg');
+    });
+
+    test('the alias map is read from the BASE ref, never the PR head', () => {
+      const step = stepFor('Provision the alias map', 'Pre-flight the bench');
+      expect(step).toContain('github.event.pull_request.base.sha');
+      expect(step).not.toContain('pull_request.head.sha');
+      expect(step).toContain('.github/amicus-ci-aliases.json');
+      // Still no checkout anywhere — the map comes over the API.
+      expect(yml()).not.toContain('actions/checkout');
+    });
+
+    test('an unparseable map fails loudly instead of degrading to the shipped table', () => {
+      // loadConfig() swallows a parse error and returns null, which would look
+      // exactly like "no map provisioned" — the failure this step removes.
+      const step = stepFor('Provision the alias map', 'Pre-flight the bench');
+      expect(step).toContain('JSON.parse');
+      expect(step).toContain('::error::');
+      expect(step).toContain('exit 1');
+    });
+
+    test('the pre-flight runs before the paid council step and can fail the job', () => {
+      const y = yml();
+      expect(y.indexOf('Pre-flight the bench')).toBeLessThan(
+        y.indexOf('Run the adjudicated council'));
+      const step = stepFor('Pre-flight the bench', 'Build council briefing');
+      expect(step).toContain('getEffectiveAliases');
+      expect(step).toContain('::error::');
+      expect(step).toContain('exit "$PF"');
+    });
+
+    test('the spend receipt is collected — the only artifact with concrete ids', () => {
+      const step = stepFor('Collect the spend receipt', 'Upload evidence artifact');
+      expect(step).toContain('spend-ledger.jsonl');
+      expect(step).toContain('$RUN_DIR/spend-ledger.jsonl');
+      // Guarded: an unguarded crash inside the summary group is masked by the
+      // trailing echo and publishes an empty "billed" section.
+      expect(step).toContain('if node receipt.js "$LEDGER" > receipt.txt; then');
+    });
+
+    test('every pin in the map is a fully-qualified, non-floating model id', () => {
+      const map = JSON.parse(fs.readFileSync(
+        path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
+      const aliases = map.aliases || {};
+      expect(Object.keys(aliases).length).toBeGreaterThan(0);
+      for (const [alias, id] of Object.entries(aliases)) {
+        expect(typeof id).toBe('string');
+        expect(alias).not.toContain('/');
+        expect(id).toContain('/');
+        // A `~vendor/x-latest` pointer names no concrete release, so it is
+        // invisible in both the pre-flight table and the spend ledger.
+        expect(id).not.toContain('~');
+      }
+    });
+
+    test('the default bench and chair are all covered by the map', () => {
+      const y = yml();
+      const map = JSON.parse(fs.readFileSync(
+        path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
+      const bench = y.match(/MODELS: \$\{\{ inputs\.models \|\| '([^']*)' \}\}/)[1].split(',');
+      const chair = y.match(/CHAIR: \$\{\{ inputs\.chair \|\| '([^']*)' \}\}/)[1];
+      for (const alias of [...bench, chair]) {
+        expect(Object.keys(map.aliases)).toContain(alias);
+      }
     });
   });
 });

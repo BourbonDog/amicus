@@ -112,11 +112,11 @@ const CARDLESS = [
   { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k2.6' } },
   { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-lite' } },
   // inkling added 2026-08-14: the council-review workflow's default bench
-  // names it, and a workflow can only use aliases this table ships — a CI
-  // runner has no user config, so a locally-defined alias resolves to
-  // nothing there. Pinned to the full model, not `inkling-small`: the bench
-  // seat wants the flagship's judgment. `:batch` is deliberately not pinned
-  // (deferred completion is wrong for an interactive council leg).
+  // names it, and this table is the FLOOR a runner falls back to when no
+  // alias map is provisioned (workflow_call callers, forks) — there, a
+  // locally defined alias still resolves to nothing. Pinned to the full
+  // model, not `inkling-small`: the bench seat wants the flagship's
+  // judgment. `:batch` is not pinned (wrong for an interactive council leg).
   { alias: 'inkling', routes: { openrouter: 'openrouter/thinkingmachines/inkling' } },
 ];
 

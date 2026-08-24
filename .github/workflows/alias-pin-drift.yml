@@ -1,0 +1,95 @@
+name: CI Alias Pin Drift
+
+# Sibling of model-drift.yml, deliberately SEPARATE from it.
+#
+# model-drift.yml audits what the PACKAGE ships (src/utils/curated-models.js);
+# remediation there is a source edit. This audits what THIS REPO'S council
+# review runs with (.github/amicus-ci-aliases.json); remediation is a one-line
+# JSON bump. They also ask different questions: `models --check` compares a
+# curated FAMILY against the flagship its idPattern resolves to, so it cannot
+# see a flat CARDLESS pin fall behind — glm sat pinned at 5.1 with 5.2 and 5.3
+# both live and every gate stayed green, because the id still existed.
+#
+# Scheduled, not a PR gate: a pin goes stale when a vendor ships, which has
+# nothing to do with any PR here. Drift opens (or refreshes) an issue rather
+# than only reddening a run, so the bump lands in someone's queue.
+
+on:
+  schedule:
+    - cron: '30 9 * * 1' # Mondays 09:30 UTC, after model-drift.yml's 09:00
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: check-ci-alias-pins (keyless OpenRouter catalog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+
+      # No provider secrets here, same as model-drift.yml: the keyless
+      # OpenRouter catalog covers every id the CI map pins.
+      - name: Refresh the model catalog
+        run: npm run refresh-models
+
+      - name: Audit the CI alias pins
+        id: audit
+        run: |
+          set +e
+          npm run --silent check:ci-alias-pins > pins.txt 2>&1
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat pins.txt
+          {
+            echo "### CI alias pin audit"
+            echo
+            echo '```'
+            cat pins.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or refresh the bump issue
+        if: steps.audit.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: 'CI alias pins are behind the catalog'
+        run: |
+          BODY="$(printf '%s\n' \
+            'The weekly audit found newer siblings for one or more pins in' \
+            '`.github/amicus-ci-aliases.json`.' \
+            '' \
+            'Bump the pins in that file — council-review.yml reads it from the base' \
+            'ref at run time, so a merge is all that is needed.' \
+            '' \
+            '```' \
+            "$(cat pins.txt)" \
+            '```' \
+            '' \
+            "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          EXISTING="$(gh issue list --state open --search "$TITLE in:title" \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+            echo "::notice::refreshed existing bump issue #${EXISTING}"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label dependencies \
+              || gh issue create --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Fail the run when pins are stale
+        if: steps.audit.outputs.code != '0'
+        # Through env, not interpolated into the script body: actionlint's
+        # shellcheck pass rewrites inline ${{ }} into a placeholder token, and
+        # the env form is the shape the rest of this repo's workflows use.
+        env:
+          AUDIT_CODE: ${{ steps.audit.outputs.code }}
+        run: |
+          echo "::error::CI alias pin audit exited ${AUDIT_CODE}"
+          exit 1
