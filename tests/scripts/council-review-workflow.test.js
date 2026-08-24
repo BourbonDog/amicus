@@ -435,6 +435,15 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // a silently EMPTY section that reads as "this workflow defines no env".
       expect(step).toContain('ENV_CTX=0');
       expect(step).toContain('env context skipped');
+      // #194 finding C1. grep exits 1 on zero matches — the ordinary case, since
+      // most PRs touch no workflow. Today's bare `run:` is `bash -e` (confirmed
+      // from a real run log: `shell: /usr/bin/bash -e {0}`), so a pipeline masks
+      // it; adding `shell: bash` anywhere turns pipefail on and `-e` then kills
+      // the step, losing the WHOLE briefing. Measured both ways before and after:
+      // `bash -eo pipefail` went exit 1 / no briefing -> exit 0 / briefing written.
+      expect(step).toContain('> wf-raw.txt || true');
+      // grep must not sit in a pipeline whose status can propagate.
+      expect(step).not.toContain("capped.diff \\");
       // Only workflows whose diff survived the cap — annotating an elided file
       // would describe code the bench was explicitly told it cannot see.
       expect(step).toContain('capped.diff');

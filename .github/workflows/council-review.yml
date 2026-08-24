@@ -341,6 +341,10 @@ jobs:
           # version lacked. BASE ref, not head: a PR must not swap the parser that
           # reads its own workflow. Unlike the alias map this is supplementary
           # context, so an absent parser is a notice, not a failed run.
+          # ONE-TIME BOOTSTRAP GAP (#194 finding A1/B1, and it is real): the PR that
+          # ADDS or MOVES this parser cannot use it, because the base ref predates the
+          # file. That PR takes the notice path and gets no env section; every PR after
+          # the merge gets the feature. Do not read that first notice as a defect.
           if gh api "repos/${GH_REPO}/contents/scripts/extract-workflow-env.js?ref=${BASE_SHA}" \
                --jq '.content' 2>/dev/null | base64 -d > env-context.js && [ -s env-context.js ]; then
             ENV_CTX=1
@@ -354,8 +358,15 @@ jobs:
           # with exactly this idiom. The `|| [ -n "$wf" ]` guard keeps a final
           # line that has no trailing newline.
           if [ "$ENV_CTX" = "1" ]; then
-            grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff \
-              | sed 's|^+++ b/||' | sort -u > wf-list.txt
+            # grep exits 1 on ZERO matches, which is the ordinary case: most PRs
+            # touch no workflow. This repo's bare `run:` is `bash -e` (no pipefail),
+            # so a pipeline masks that status today — but ONE `shell: bash` line
+            # anywhere turns pipefail on, and `-e` then kills the step, losing the
+            # ENTIRE briefing on every source-only PR. Measured both ways: `bash -e`
+            # exits 0, `bash -eo pipefail` exits 1 with no briefing written.
+            # Split so grep’s status is guarded rather than carried by a pipeline.
+            grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff > wf-raw.txt || true
+            sed 's|^+++ b/||' wf-raw.txt | sort -u > wf-list.txt
             while IFS= read -r wf || [ -n "$wf" ]; do
               [ -n "$wf" ] || continue
               slug=$(printf '%s' "$wf" | tr '/' '_')
