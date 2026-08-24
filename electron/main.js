@@ -512,6 +512,36 @@ registerSetupHandlers(() => mainWindow);
 function createSettingsChildWindow() {
   const { buildSetupHTML } = require('./setup-ui');
 
+  // issue 138: mirror createSetupWindow's catalog resolution so Step 2 shows
+  // live per-model options here too, instead of falling back to the pinned
+  // `[offline list]` badge. This window must stay synchronous (opening
+  // Settings must never trigger a network fetch), so read the on-disk cache
+  // directly with readCache() rather than the async fetch-and-refresh helper
+  // createSetupWindow awaits. A missing or corrupt cache reads back as null
+  // and degrades to the same pinned fallback buildSetupHTML already applies
+  // when no quickPicks are given.
+  const { resolveQuickPicks } = require('../src/utils/quick-picks');
+  const { readCache } = require('../src/utils/model-catalog');
+  let quickPicks;
+  const shortlists = {};
+  try {
+    const cacheDoc = readCache();
+    const catalog = cacheDoc ? cacheDoc.models : [];
+    quickPicks = resolveQuickPicks(catalog);
+
+    const { buildModelShortlist } = require('../src/utils/model-shortlist');
+    for (const p of quickPicks) {
+      try {
+        shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
+          catalog,
+          recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter),
+        });
+      } catch (_e) { /* a shortlist failure must never block the wizard */ }
+    }
+  } catch (_err) {
+    quickPicks = undefined;  // buildSetupHTML falls back to pinned
+  }
+
   const settingsWin = new BrowserWindow({
     width: 560, height: 680,
     parent: mainWindow, modal: false,
@@ -525,7 +555,7 @@ function createSettingsChildWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT });
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists });
   settingsWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   settingsWin.webContents.on('page-title-updated', (e) => e.preventDefault());
 }
