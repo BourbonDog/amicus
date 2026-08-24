@@ -107,8 +107,16 @@ form; do not silently renumber it.
 
 ## The burn-down list
 
-`CONFIG.grandfathered` in `scripts/check-citations.js` holds citations that were
-already stale when the gate landed, so the gate could block from day one instead
-of shipping advisory. Every entry rotted when v4.8 PR0 split its target. Fix the
-citation, then **delete the entry** — a test asserts every entry still names a
-real citation, so the list cannot quietly accumulate dead weight.
+`CONFIG.grandfathered` in `scripts/check-citations.js` is the escape hatch for
+citations already stale when a gate change lands, so the gate can block from day
+one instead of shipping advisory. **It is empty, and should stay that way.** Fix
+the citation, then **delete the entry** — a test asserts every entry still names
+a real citation, so the list cannot quietly accumulate dead weight.
+
+The original eight were burned down in one pass. **Four were born stale** — wrong
+in the commit that wrote them, not rotted by later drift: three reused a line
+number from a split that had already landed (one from a split made in that very
+commit), and one wrote a symbol name with `.js` appended as if it were a path.
+The other four were ordinary rot from the PR0/PR5c splits. A gate that catches
+only decay would never have caught the first four — which is the case for
+`file.js :: symbol` being the default form.

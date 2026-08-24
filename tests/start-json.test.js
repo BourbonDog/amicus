@@ -168,7 +168,7 @@ describe('spend ledger append on start finalize (B24)', () => {
   // D16: the convention pin at the other end — an untagged solo run's row
   // carries tag:null (present, not omitted), matching spend-ledger.js's
   // nullable-dim convention (contrast with metadata.json's own absent-not-null
-  // tag, D13 — createSessionMetadata.js:50).
+  // tag, D13 — start-metadata.js :: createSessionMetadata).
   it('an untagged headless run carries tag:null on its ledger row', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],

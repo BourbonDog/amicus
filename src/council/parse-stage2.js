@@ -38,7 +38,7 @@ function parseJudgeOutput(text, { labels, findingIds }) {
   // ⚠️ v4.4.1 FINAL-REVIEW C. `JSON.parse('null')` SUCCEEDS — it returns null and
   // throws nothing — so a body of literal `null` sailed past the catch above and
   // `parsed.ranking` threw `TypeError: Cannot read properties of null`. parseDebateDefense
-  // (:129) and parseRevote (:167) below already carried this `!parsed` guard; the judge
+  // (parse-stage2.js :: parseDebateDefense) and parseRevote (parse-stage2.js :: parseRevote) below already carried this `!parsed` guard; the judge
   // path and findings.js's validateFindings did not, which made it an asymmetry among
   // five consumers of one extractor rather than a new rule. Guarded on BOTH derefs so
   // a `null` body reports exactly what a keyless `{}` body already reported —

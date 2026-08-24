@@ -162,7 +162,7 @@ describe('T2 — disclosed residuals (known-wrong, pinned so they cannot rot)', 
 
 
   test('R4: the CRITIC path is not seat-keyed — a dead bench twin beside a live critic twin', () => {
-    // role is inferred from ALIAS equality (live-seats.js:209) and critics suppress through
+    // role is inferred from ALIAS equality (live-dead-seats.js:151) and critics suppress through
     // byRole, a different map. Filed to BACKLOG; not fixed here.
     expect(rows([deadLeg('d', 'd#2')], null,
       [{ model: 'd', seat: 'd#1', role: 'critic' }], { critic: 'd' })).toHaveLength(0);
