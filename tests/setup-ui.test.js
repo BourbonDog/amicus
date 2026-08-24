@@ -377,6 +377,120 @@ describe('setup-ui wizard', () => {
       // resolve through the one function this suite just fixed.
       expect(calls.length).toBeGreaterThanOrEqual(2);
     });
+
+    // fix round 1, Finding 2: a DIVERGENT_VENDOR's picked id (curated-models.js
+    // has no shared string form between anthropic's direct and OpenRouter
+    // ids) must come back byte-for-byte, never routed through toBareIfDirect.
+    it('a picked id for a DIVERGENT_VENDOR (anthropic) is returned verbatim, never canonicalized', () => {
+      const mcAnthropic = {
+        alias: 'opus',
+        routes: { openrouter: 'openrouter/anthropic/claude-opus-5', anthropic: 'anthropic/claude-opus-5' }
+      };
+      const pickRouteFor = extractPickRouteFor()({
+        // Real directProviders (extracted from the built HTML) includes
+        // 'anthropic' -- toBareIfDirect WOULD strip this prefix if it ran.
+        modelChoiceIds: { opus: 'openrouter/anthropic/claude-opus-5' }
+      });
+      expect(pickRouteFor(mcAnthropic)).toBe('openrouter/anthropic/claude-opus-5');
+    });
+
+    // fix round 1, Finding 3: a shortlist row with no OpenRouter twin writes
+    // data-or="" -> the change handler stores null, not ''. pickRouteFor's
+    // `modelOpenrouterIds[mc.alias] || picked` must degrade to the picked
+    // id, not to an empty-string write.
+    it('a picked model with no OpenRouter twin (data-or="") still returns the picked id under an active OpenRouter pill', () => {
+      const pickRouteFor = extractPickRouteFor()({
+        routingChoices: { deepseek: 'openrouter' },
+        explicitRouteChoices: { deepseek: true },
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-v3.2' },
+        modelOpenrouterIds: { deepseek: null } // what the change handler stores for data-or=""
+      });
+      expect(pickRouteFor(mc)).toBe('deepseek/deepseek-v3.2');
+    });
+
+    it('the change handler degrades a missing data-or to null (not empty string, per Finding 3)', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const idx = script.indexOf(".closest('.model-pick')");
+      const nearby = script.slice(idx, idx + 400);
+      expect(nearby).toContain("(opt && opt.getAttribute('data-or')) || null");
+    });
+  });
+
+  describe('issue 138 fix round 1, Finding 1: a drilled-down pick on a non-selected card must not vanish', () => {
+    // Extracts the REAL collectAliasWrites (+ its pickRouteFor/toBareIfDirect
+    // dependencies) via the same new Function harness as extractPickRouteFor
+    // above -- not a local reimplementation. Brittle to reindenting any of
+    // the three extracted functions.
+    function extractCollectAliasWrites() {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
+      const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
+      const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
+      expect(directProvidersMatch).toBeTruthy();
+      expect(toBareMatch).toBeTruthy();
+      expect(pickRouteForMatch).toBeTruthy();
+      expect(collectMatch).toBeTruthy();
+      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+      // eslint-disable-next-line no-new-func
+      const build = new Function(
+        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
+        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
+      );
+      return (opts = {}) => build(
+        directProviders,
+        opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
+        opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
+        opts.aliasEdits || {}, opts.modelChoicesData || []
+      );
+    }
+
+    const twoCardData = [
+      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
+      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+    ];
+
+    it('writes a drilled-down alias even when a DIFFERENT card is the checked default', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }
+      });
+      const writes = collectAliasWrites('gemini', false);
+      expect(writes.gemini).toBe('google/gemini-x');       // selected alias: unchanged behavior
+      expect(writes.deepseek).toBe('deepseek/deepseek-r1'); // Finding 1: must NOT vanish
+    });
+
+    it('a card the user never touched is not written at all', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: {} // nobody drilled down
+      });
+      const writes = collectAliasWrites('gemini', false);
+      expect(writes).toEqual({ gemini: 'google/gemini-x' });
+      expect(writes.deepseek).toBeUndefined();
+    });
+
+    it('preserves aliasEdits precedence: a drilled-down touch overrides a same-alias Step-3 edit, matching the selected-alias precedent -- and leaves an untouched alias edit alone', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' },
+        aliasEdits: { deepseek: 'some-stale-step3-edit', untouched: 'kept-value' }
+      });
+      const writes = collectAliasWrites('gemini', false);
+      expect(writes.deepseek).toBe('deepseek/deepseek-r1'); // explicit touch wins, same as the selected alias already does
+      expect(writes.untouched).toBe('kept-value');           // an edit for an alias nobody touched survives
+    });
+
+    it('is not gated on the quick-pick radio: a custom (searched) default model still carries the drilled-down write', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }
+      });
+      const writes = collectAliasWrites(null, true); // customDefaultModel path: isCustomDefault=true
+      expect(writes.deepseek).toBe('deepseek/deepseek-r1');
+      expect(writes.gemini).toBeUndefined(); // no quick-pick was selected, so no selected-alias write
+    });
   });
 
   describe('Step 3 - Alias Editor', () => {

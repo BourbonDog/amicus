@@ -235,6 +235,12 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // issue 138: an explicit per-model choice overrides the family flagship.
     var picked = modelChoiceIds[mc.alias];
     if (picked) {
+      // Deliberately NEVER toBareIfDirect(picked) here (unlike the auto-pick
+      // canonicalization below): picked/modelOpenrouterIds come straight
+      // from the shortlist's own id/data-or, and for a DIVERGENT_VENDOR
+      // (e.g. anthropic) that id can already BE its only-callable
+      // openrouter/<vendor>/... form -- stripping the prefix would
+      // fabricate a direct id nothing serves.
       if (routingChoices[mc.alias] === 'openrouter' && explicitRouteChoices[mc.alias]) {
         return modelOpenrouterIds[mc.alias] || picked;
       }
@@ -429,27 +435,48 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     updateWritePreviews();
   });
 
+  // issue 138 (fix round 1, Finding 1): assemble aliasWrites for Finish --
+  // the aliasEdits (Step 3) overlay first, then the selected quick-pick
+  // alias, then every OTHER alias whose drill-down <select> fired change.
+  // Before the Task-3 dropdown existed there was nothing to lose by writing
+  // only the selected alias; now a drilled-down pick on a card that is NOT
+  // the checked default would silently vanish without this. A dropdown
+  // change is an explicit touch exactly like selecting a quick pick (see
+  // pickRouteFor's own comment on that phrase), so it gets the same
+  // precedence: written after the aliasEdits overlay, same as the selected
+  // alias already was, so this doesn't change that existing precedence --
+  // it only extends it to more aliases. modelChoiceIds only ever gains an
+  // entry from the change handler above, never from server-rendered HTML,
+  // so a card the user never touched can't accidentally end up in here.
+  function collectAliasWrites(selectedAlias, isCustomDefault) {
+    var aliasWrites = {};
+    Object.keys(aliasEdits).forEach(function(k) {
+      aliasWrites[k] = aliasEdits[k];
+    });
+    function writeAliasRoute(alias) {
+      var mc = null;
+      for (var i = 0; i < modelChoicesData.length; i++) {
+        if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
+      }
+      if (!mc) { return; }
+      var routeId = pickRouteFor(mc);
+      if (routeId) { aliasWrites[mc.alias] = routeId; }
+    }
+    if (!isCustomDefault && selectedAlias) {
+      // Selecting a quick pick = explicit touch: upgrade that ONE alias
+      // to the resolved id via the chosen route (user-locked decision #2).
+      writeAliasRoute(selectedAlias);
+    }
+    Object.keys(modelChoiceIds).forEach(function(alias) { writeAliasRoute(alias); });
+    return aliasWrites;
+  }
+
   finishBtn.addEventListener('click', async function() {
     finishBtn.disabled = true; finishBtn.textContent = 'Saving...';
     try {
       var r = document.querySelector('input[name="default-model"]:checked');
       var dm = window.customDefaultModel || (r ? r.value : null);
-      var aliasWrites = {};
-      Object.keys(aliasEdits).forEach(function(k) {
-        aliasWrites[k] = aliasEdits[k];
-      });
-      if (!window.customDefaultModel && r) {
-        // Selecting a quick pick = explicit touch: upgrade that ONE alias
-        // to the resolved id via the chosen route (user-locked decision #2).
-        var mc = null;
-        for (var i = 0; i < modelChoicesData.length; i++) {
-          if (modelChoicesData[i].alias === r.value) { mc = modelChoicesData[i]; break; }
-        }
-        if (mc) {
-          var routeId = pickRouteFor(mc);
-          if (routeId) { aliasWrites[mc.alias] = routeId; }
-        }
-      }
+      var aliasWrites = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
       await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites, (window.collectCouncilPicks && window.collectCouncilPicks()) || []);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
       await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
