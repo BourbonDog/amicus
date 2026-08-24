@@ -418,6 +418,22 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('if node receipt.js "$LEDGER" > receipt.txt; then');
     });
 
+    // #193 was reviewed twice, and BOTH councils unanimously raised a blocker
+    // that $GH_REPO / $MODELS / $CHAIR were undefined. They were defined — in
+    // the job-level `env:` block, which the PR did not change and which
+    // therefore never appears in a diff. Four seats agreed off one shared
+    // blind spot, which is one observation, not four.
+    test('the briefing appends env definitions a diff structurally cannot show', () => {
+      const step = stepFor('Build council briefing', 'Run the adjudicated council');
+      expect(step).toContain('env-context.js');
+      expect(step).toContain('Workflow env definitions');
+      // Only workflows whose diff survived the cap — annotating an elided file
+      // would describe code the bench was explicitly told it cannot see.
+      expect(step).toContain('capped.diff');
+      // HEAD, not base: the bench must see the env block as this PR leaves it.
+      expect(step).toContain('ref=${HEAD_SHA}');
+    });
+
     test('every pin in the map is a fully-qualified, non-floating model id', () => {
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));

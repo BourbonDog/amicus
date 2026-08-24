@@ -325,6 +325,63 @@ jobs:
           process.stderr.write(notes.join('\n'));
           FILTER_EOF
           node filter-diff.js full.diff "$DIFF_CAP" > capped.diff 2> diff-notes.txt
+
+          # A `run:` block's env vars are DEFINED in the job's `env:` block, which
+          # this PR does not change — so it never appears in a diff. On #193 both
+          # council rounds unanimously raised a blocker that $GH_REPO / $MODELS /
+          # $CHAIR were undefined. They were defined; the definitions simply never
+          # reached the bench, and four seats agreed off one shared blind spot.
+          # Only workflows whose diff SURVIVED the byte cap are worth annotating.
+          cat > env-context.js <<'ENVCTX'
+          const fs = require('fs');
+          const label = process.argv[2];
+          const lines = fs.readFileSync(process.argv[3], 'utf8').split(/\r?\n/);
+          const indentOf = (l) => l.length - l.replace(/^ */, '').length;
+          const out = [];
+          let inJobs = false;
+          let job = null;
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.trim() || line.trim().startsWith('#')) { continue; }
+            const ind = indentOf(line);
+            if (ind === 0) {
+              inJobs = line.trim() === 'jobs:';
+              job = null;
+            } else if (inJobs && ind === 2 && /^[A-Za-z0-9_-]+:$/.test(line.trim())) {
+              job = line.trim().slice(0, -1);
+            }
+            // Workflow-level (0) and job-level (4) only. A step-level env: sits at
+            // 8 and travels with its own step, so it is already in the hunk.
+            if (line.trim() !== 'env:' || ind > 4) { continue; }
+            const body = [];
+            for (let j = i + 1; j < lines.length; j++) {
+              const next = lines[j];
+              if (!next.trim()) { body.push(next); continue; }
+              if (indentOf(next) <= ind) { break; }
+              body.push(next);
+            }
+            while (body.length && !body[body.length - 1].trim()) { body.pop(); }
+            if (!body.length) { continue; }
+            const where = job ? ('job ' + job) : 'workflow level';
+            out.push(label + ' (' + where + ', env: at line ' + (i + 1) + ')');
+            out.push('');
+            for (const b of body) { out.push(b); }
+            out.push('');
+          }
+          process.stdout.write(out.join('\n'));
+          ENVCTX
+          : > env-context.md
+          for wf in $(grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff \
+                        | sed 's|^+++ b/||' | sort -u); do
+            slug=$(printf '%s' "$wf" | tr '/' '_')
+            # HEAD sha, not base: the bench must see the env block as this PR leaves
+            # it. A fork PR's head is absent from this repo, so the fetch 404s and the
+            # annotation is simply skipped — never a hard failure.
+            if gh api "repos/${GH_REPO}/contents/${wf}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null \
+                 | base64 -d > "wf-${slug}" 2>/dev/null && [ -s "wf-${slug}" ]; then
+              node env-context.js "$wf" "wf-${slug}" >> env-context.md
+            fi
+          done
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract
           # (findings JSON block) and the anti-sycophancy clause itself — this
@@ -350,6 +407,15 @@ jobs:
             echo '```diff'
             cat capped.diff
             echo '```'
+            if [ -s env-context.md ]; then
+              echo
+              echo "## Workflow env definitions (context, NOT part of the diff)"
+              echo
+              echo "> Unchanged by this PR, so absent from the diff above. These blocks define"
+              echo "> the variables the changed run: steps reference — treat them as present."
+              echo
+              cat env-context.md
+            fi
           } > briefing.md
 
       - name: Run the adjudicated council (amicus council run, headless)
