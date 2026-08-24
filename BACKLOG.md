@@ -4025,7 +4025,7 @@ above were updated in place; these are the items it could not close, filed rathe
   the lever honestly**: both mechanisms below are arguably in the gate, not in the authors who wrote
   a wrapped or quoted anchor in good faith — if people keep writing the same shape, the consumer is
   what's wrong (failure mode #7). Filed here, **not fixed** — a gate change is its own concern.
-  - **Mechanism A — no cross-line joining.** `parseCitations` (`scripts/check-citations.js:110`)
+  - **Mechanism A — no cross-line joining.** `parseCitations` (`scripts/check-citations.js :: parseCitations`)
     splits file content on `\n` and runs its regex **per line**; a `file.js ::` / `symbol` token
     that wraps onto the next physical comment line never appears as one match on either line, so it
     parses to nothing. Candidate fix, **not implemented here**: join wrapped comment lines before
@@ -4048,7 +4048,7 @@ above were updated in place; these are the items it could not close, filed rathe
     gate-scope + 3 `BACKLOG.md` + 1 phasing doc = 7); treat **4, doc-tree only, current** as the
     re-measured fact, not "eight" carried forward.
   - **Mechanism B — the SYMBOL grammar has no quoted-string form, on ANY line.** The regex's symbol
-    capture (`scripts/check-citations.js:89`, `[A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)*`) admits only
+    capture (`scripts/check-citations.js :: CITATION`, `[A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)*`) admits only
     identifier characters. `file.js :: "quoted test title"` and `file.js :: *"quoted test title"*`
     are an established convention in this codebase for citing one specific test by its description
     rather than a symbol — and neither form can EVER match that grammar, wrapped or not. Confirmed

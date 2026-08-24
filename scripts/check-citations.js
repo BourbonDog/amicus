@@ -60,6 +60,11 @@ const CONFIG = {
     // @opencode-ai/sdk's own build output, cited for its 5000ms default.
     'dist/server.js',
   ],
+  // Escape hatch for citations already stale when a gate change lands, so the
+  // gate can block from day one instead of shipping advisory. EMPTY, and meant
+  // to stay that way: fix the citation (prefer `file.js :: symbol`), then delete
+  // its entry. A test asserts every entry still names a live citation, so this
+  // cannot quietly accumulate dead weight. See docs/CITATIONS.md.
   grandfathered: [],
 };
 
