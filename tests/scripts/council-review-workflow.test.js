@@ -427,6 +427,14 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       const step = stepFor('Build council briefing', 'Run the adjudicated council');
       expect(step).toContain('env-context.js');
       expect(step).toContain('Workflow env definitions');
+      // #194 B1: the parser is the repo's own tested module, fetched from the
+      // BASE ref, not a copy inlined in the heredoc. One source, one test suite.
+      // Base and not head so a PR cannot swap the parser reading its own workflow.
+      expect(step).toContain('scripts/extract-workflow-env.js?ref=${BASE_SHA}');
+      // Supplementary context, so an absent parser is a notice and a skip, never
+      // a silently EMPTY section that reads as "this workflow defines no env".
+      expect(step).toContain('ENV_CTX=0');
+      expect(step).toContain('env context skipped');
       // Only workflows whose diff survived the cap — annotating an elided file
       // would describe code the bench was explicitly told it cannot see.
       expect(step).toContain('capped.diff');
