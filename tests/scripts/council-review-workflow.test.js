@@ -348,7 +348,13 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     test('the config dir is redirected into the workspace at job level', () => {
       // Also where spend-ledger.jsonl lands — getConfigDir() owns both.
-      expect(yml()).toContain('AMICUS_CONFIG_DIR: ${{ runner.temp }}/amicus-cfg');
+      // github.workspace, not runner.temp: `runner` is not an available context
+      // in a job-level env block, where it expands to '' — rooting the config dir
+      // at the filesystem root. A local test that sets the var by hand cannot see it.
+      expect(yml()).toContain('AMICUS_CONFIG_DIR: ${{ github.workspace }}/amicus-cfg');
+      // The EXPRESSION, not the substring — the comment above it in the workflow
+      // names runner.temp deliberately.
+      expect(yml()).not.toContain('${{ runner.temp }}');
     });
 
     test('the alias map is read from the BASE ref, never the PR head', () => {

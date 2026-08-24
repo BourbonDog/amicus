@@ -61,26 +61,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TITLE: 'CI alias pins are behind the catalog'
         run: |
-          BODY="$(printf '%s\n' \
-            'The weekly audit found newer siblings for one or more pins in' \
-            '`.github/amicus-ci-aliases.json`.' \
-            '' \
-            'Bump the pins in that file — council-review.yml reads it from the base' \
-            'ref at run time, so a merge is all that is needed.' \
-            '' \
-            '```' \
-            "$(cat pins.txt)" \
-            '```' \
-            '' \
-            "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+          # No heredoc: its body would have to sit at column 0 to satisfy the
+          # shell, which terminates the YAML block scalar. No backtick or $ inside
+          # a single-quoted string either — that is SC2016, which fails the quality
+          # gate. Hence plain echo lines and ~~~ fences instead of ``` ones.
+          {
+            echo 'The weekly audit found newer siblings for one or more pins in'
+            echo '.github/amicus-ci-aliases.json — bump them there. council-review.yml'
+            echo 'reads that file from the base ref at run time, so merging is enough.'
+            echo
+            echo '~~~'
+            cat pins.txt
+            echo '~~~'
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > issue-body.md
           EXISTING="$(gh issue list --state open --search "$TITLE in:title" \
             --json number --jq '.[0].number // empty')"
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$BODY"
+            gh issue comment "$EXISTING" --body-file issue-body.md
             echo "::notice::refreshed existing bump issue #${EXISTING}"
           else
-            gh issue create --title "$TITLE" --body "$BODY" --label dependencies \
-              || gh issue create --title "$TITLE" --body "$BODY"
+            gh issue create --title "$TITLE" --body-file issue-body.md --label dependencies \
+              || gh issue create --title "$TITLE" --body-file issue-body.md
           fi
 
       - name: Fail the run when pins are stale

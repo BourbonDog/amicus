@@ -107,7 +107,11 @@ jobs:
       # Pointing the config dir at the workspace lets the provisioning step below
       # place a real alias map here, and puts the spend ledger somewhere uploadable
       # — spend-ledger.js writes it into this same directory.
-      AMICUS_CONFIG_DIR: ${{ runner.temp }}/amicus-cfg
+      # github.workspace, NOT runner.temp: the `runner` context is unavailable in a
+      # job-level env block, where it silently expands to '' — making this the
+      # filesystem root. actionlint catches it; a local test that sets the variable
+      # by hand never can.
+      AMICUS_CONFIG_DIR: ${{ github.workspace }}/amicus-cfg
     steps:
       - name: Gate on secret availability (soft-skip fork PRs)
         id: gate
