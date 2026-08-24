@@ -26,6 +26,29 @@ function settingsWindowBlock() {
   return MAIN.slice(start, end);
 }
 
+/**
+ * Text of the balanced `(...)` call starting at `openParenIdx` (the index of
+ * the call's own opening paren). Unlike a naive indexOf('}')/indexOf(')')
+ * scan, this tracks paren depth so it stops at the call's OWN closing paren
+ * regardless of what the argument contains (nested braces, nested calls,
+ * reformatting across lines) and never spills into unrelated code that
+ * happens to follow.
+ */
+function balancedParens(text, openParenIdx) {
+  if (text[openParenIdx] !== '(') {
+    throw new Error(`expected '(' at index ${openParenIdx}`);
+  }
+  let depth = 0;
+  for (let i = openParenIdx; i < text.length; i++) {
+    if (text[i] === '(') { depth++; }
+    else if (text[i] === ')') {
+      depth--;
+      if (depth === 0) { return text.slice(openParenIdx, i + 1); }
+    }
+  }
+  throw new Error('unbalanced parens: no matching close found');
+}
+
 describe('main.js Settings child window catalog wiring (issue 138)', () => {
   test('resolves quick picks from the on-disk catalog cache', () => {
     const block = settingsWindowBlock();
@@ -43,12 +66,14 @@ describe('main.js Settings child window catalog wiring (issue 138)', () => {
 
   test('passes both quickPicks and shortlists into buildSetupHTML', () => {
     const block = settingsWindowBlock();
-    const callIdx = block.indexOf('buildSetupHTML({');
-    expect(callIdx).toBeGreaterThan(-1);
-    // buildSetupHTML({ client: CLIENT, quickPicks, shortlists }) — the whole
-    // options object, not just the call site, so a revert to
+    const nameIdx = block.indexOf('buildSetupHTML(');
+    expect(nameIdx).toBeGreaterThan(-1);
+    // Bound the call to its OWN matching close-paren (not the next stray '}'
+    // in the surrounding code, e.g. the template-literal interpolation on the
+    // following line) so this stays correct across reformatting. A revert to
     // `buildSetupHTML({ client: CLIENT })` (no quick picks) fails this.
-    const call = block.slice(callIdx, block.indexOf('}', block.indexOf(')', callIdx)) + 1);
+    const openParenIdx = nameIdx + 'buildSetupHTML'.length;
+    const call = balancedParens(block, openParenIdx);
     expect(call).toMatch(/\bquickPicks\b/);
     expect(call).toMatch(/\bshortlists\b/);
   });
