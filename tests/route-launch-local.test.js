@@ -17,7 +17,7 @@ describe('resolveRouteForLaunch: local assembly', () => {
     jest.doMock('../src/utils/local-probe', () => ({ probeLocalProvider: probe }));
     // Keep the direct-vendor key/catalog reads inert.
     // M5: mocking config alone does NOT achieve that. resolveRouteForLaunch
-    // unconditionally calls buildLaunchKeys() (route-launch.js:269) → the real
+    // unconditionally calls buildLaunchKeys() (route-launch.js :: buildLaunchKeys) → the real
     // readApiKeys()/readAuthJsonKeys(), an fs.readFileSync of ~/.config/amicus/.env;
     // and when validateModel !== false (tests 1, 3, 4) it calls the real
     // getRouteCatalogInfo() → getCatalogInfo() → refreshCatalog() → fetchAllModels(),
@@ -111,7 +111,7 @@ describe('resolveRouteForLaunch: local assembly', () => {
   });
 
   // D10/M24: the router builds live-probe suggestions (gateway:'local'), but
-  // route-launch.js:292-294 then OVERWRITES result.suggestions unconditionally with
+  // route-suggestions.js :: applySuggestions then OVERWRITES result.suggestions unconditionally with
   // buildSuggestions(), which reads only the 24h catalog cache and hardcodes
   // gateway:'direct' (:110). Without the applySuggestions guard (written in Step 3-pre,
   // wired in Step 3c) the live roster is discarded —

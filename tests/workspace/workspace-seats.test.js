@@ -178,7 +178,7 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
 
     // 'chair' is not a REVIEWING role (isReviewing/isReviewingRole both exclude it), so it also
     // does not suppress deadSeats' own unrelated ghost row for the same alias (D6 role-aware
-    // suppression, live-seats.js:234-243) — both rows exist. The assertion below is specifically
+    // suppression, live-dead-seats.js :: isReviewing) — both rows exist. The assertion below is specifically
     // about the chair's OWN live row never picking up the PR1F-4 retry marker.
     expect(tbody.children.length).toBe(2);
     const liveRow = tbody.children.find((r) => !r.classList.contains('seat-dead'));
@@ -338,7 +338,7 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     // Council finding A1: on a UNIQUE bench `s.seat` is null, and a bare `retried[s.seat]`
     // coerces null to the string key 'null' — so any seat with no seat id would match a degrade
     // record whose alias is literally `null`. Same class as the `toString` alias that crashed
-    // the seats repaint (live-seats.js:170-174), which is why this family uses
+    // the seats repaint (live-dead-seats.js :: deadSeats), which is why this family uses
     // Object.create(null). The `s.seat &&` guard in the lookup is what closes it.
     const degrades = [{
       kind: 'degrade', channel: 'dead-leg', what: 'seat null did not review',
@@ -432,7 +432,7 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
 
 /**
  * Drift pin (v4.7 PR7 task-8 review finding, "Important"): retriedSeats() above is a
- * hand-mirrored copy of deadSeats' own kind/channel/data-shape filter (live-model.js:227-241)
+ * hand-mirrored copy of deadSeats' own kind/channel/data-shape filter (live-dead-seats.js :: deadSeats)
  * — the comment at this file's :47-56 says it "must keep mirroring it", but nothing enforced
  * that until now.
  *

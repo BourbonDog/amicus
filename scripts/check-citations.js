@@ -60,21 +60,7 @@ const CONFIG = {
     // @opencode-ai/sdk's own build output, cited for its 5000ms default.
     'dist/server.js',
   ],
-  // Known-stale citations, grandfathered so the gate can block from day one.
-  // Every one of these rotted when v4.8 PR0 split its target file. Fix the
-  // citation (prefer a `file.js :: symbol` anchor), then delete the entry.
-  grandfathered: [
-    { file: 'tests/route-launch-local.test.js', cite: 'route-launch.js:269' },
-    { file: 'tests/route-launch-local.test.js', cite: 'route-launch.js:292-294' },
-    { file: 'tests/workspace/dead-seat-twins.test.js', cite: 'live-seats.js:209' },
-    { file: 'tests/workspace/run-detail.test.js', cite: 'run.js:293' },
-    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-seats.js:170-174' },
-    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-seats.js:234-243' },
-    { file: 'tests/workspace/workspace-seats.test.js', cite: 'live-model.js:227-241' },
-    // Not a moved-target rot: `createSessionMetadata` is a symbol (it lives in
-    // src/sidecar/start-metadata.js), never a file. Malformed since it was written.
-    { file: 'tests/start-json.test.js', cite: 'createSessionMetadata.js:50' },
-  ],
+  grandfathered: [],
 };
 
 // A citation: a .js path, an optional @ref, then either :NNN[-MMM] or :: symbol.

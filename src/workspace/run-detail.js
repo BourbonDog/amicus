@@ -124,13 +124,13 @@ function costPanel(run, tally) {
 
 // ⚠️ PRE-FLIGHT (P3): F04's correction is implemented here rather than left as prose.
 // VERIFIED on shipped main (Task 0): `finalize(exitCode, error)` writes `error: error || null`
-// (src/council/run.js:98-100), and `return finalize(degraded.value ? 2 : 0)` (:293) is the ONLY
+// (run-finalize.js :: writeRunTerminal), and `return finalize(degraded.value ? 2 : 0)` (run.js:279) is the ONLY
 // exit-2 path — it passes NO error. Every error-bearing call is `finalize(1, …)`. So on a
 // `status:'partial'` run — precisely the run this panel exists to explain — `run.error` is
 // GUARANTEED null, and the old one-line formula rendered "undefined: undefined".
 // Name the stage instead. Stage status is a closed set (DE-ROT F19): running / complete /
-// skipped / error, and `run-chair.js:114` writes 'error' for a chair that failed after retry +
-// fallback promotion, 'skipped' (:89) for one the cost ceiling skipped.
+// skipped / error, and `run-chair.js :: chairStatus` writes 'error' for a chair that failed after retry +
+// fallback promotion, 'skipped' (run-chair.js :: skippedForCost) for one the cost ceiling skipped.
 function degradedReason(run) {
   // exit-1 path: the engine wrote a structured {code, message}.
   if (run.error && run.error.code) { return `${run.error.code}: ${run.error.message}`; }

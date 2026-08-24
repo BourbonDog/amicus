@@ -161,19 +161,19 @@ describe('runHeadless no-output backstop wiring', () => {
 });
 
 /**
- * Fix wave — review finding (Important): the `--timeout` block (:852) and the
- * backstop block (:870) are independent `if`s, both gated only on
- * `!completed && !aborted`. When noOutputBackstopMs and timeoutMs are
- * configured close together (a near-term reality once PR3's 30s live-probe
- * override lands), the post-break poll tail (the getMessages call + mirror
- * processing already inside the iteration that fires the backstop) can
- * consume the remaining margin, so BOTH blocks fire for one leg: a double
- * abortSession() call, and result.timedOut === true riding alongside
- * result.error = 'NO_OUTPUT_BACKSTOP: ...'. That matters downstream because
- * src/utils/result-schema.js statusFromResult() checks `timedOut` BEFORE
- * `error` (opposite precedence to resolveTerminalState), so a backstop-killed
- * leg would be counted/reported as an ordinary 'timeout' in wave legs and
- * --json — silently defeating the whole point of a distinctly-named reason.
+ * Fix wave — review finding (Important), CLOSED by the same commit that
+ * raised it (46d5251cc). The `--timeout` block and the backstop block WERE
+ * independent `if`s, both gated only on `!completed && !aborted`, so with
+ * noOutputBackstopMs and timeoutMs configured close together the post-break
+ * poll tail could consume the remaining margin and BOTH would fire for one
+ * leg: a double abortSession(), and result.timedOut === true riding
+ * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
+ * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
+ * so a backstop-killed leg read as an ordinary 'timeout'.
+ * NO LONGER REACHABLE: headless.js:993 now also requires `!backstopFired`
+ * and headless.js:1011 requires `backstopFired`, so the two guards are
+ * mutually exclusive by construction — see headless.js:985-992 for the
+ * race they close. The test below pins it: exactly one abort, never both.
  */
 describe('fix wave: the backstop and the ordinary --timeout must not both fire for one leg', () => {
   test('thresholds set close together: only the backstop fires, never both', async () => {

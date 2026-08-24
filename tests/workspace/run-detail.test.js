@@ -111,7 +111,7 @@ describe('getRunDetail', () => {
     const d = getRunDetail(project, 'bbbb2222');
     expect(d.derived.verdictPanel.overallVerdict).toBeNull();
     // ⚠️ PRE-FLIGHT (P3): was the raw fixture string. `run.error` is null on every partial run
-    // (verified: run.js:293 is the only exit-2 finalize and passes no error), so the reason is
+    // (verified: run.js:279 is the only exit-2 finalize and passes no error), so the reason is
     // derived from the chair stage's `status:'error'`. See degradedReason() in Step 4.
     expect(d.derived.verdictPanel.reason).toBe('Chair synthesis stage failed');
     expect(d.artifacts['chair-output.md'].present).toBe(false);
