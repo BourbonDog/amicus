@@ -418,6 +418,39 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('if node receipt.js "$LEDGER" > receipt.txt; then');
     });
 
+    // #193 was reviewed twice, and BOTH councils unanimously raised a blocker
+    // that $GH_REPO / $MODELS / $CHAIR were undefined. They were defined — in
+    // the job-level `env:` block, which the PR did not change and which
+    // therefore never appears in a diff. Four seats agreed off one shared
+    // blind spot, which is one observation, not four.
+    test('the briefing appends env definitions a diff structurally cannot show', () => {
+      const step = stepFor('Build council briefing', 'Run the adjudicated council');
+      expect(step).toContain('env-context.js');
+      expect(step).toContain('Workflow env definitions');
+      // #194 B1: the parser is the repo's own tested module, fetched from the
+      // BASE ref, not a copy inlined in the heredoc. One source, one test suite.
+      // Base and not head so a PR cannot swap the parser reading its own workflow.
+      expect(step).toContain('scripts/extract-workflow-env.js?ref=${BASE_SHA}');
+      // Supplementary context, so an absent parser is a notice and a skip, never
+      // a silently EMPTY section that reads as "this workflow defines no env".
+      expect(step).toContain('ENV_CTX=0');
+      expect(step).toContain('env context skipped');
+      // #194 finding C1. grep exits 1 on zero matches — the ordinary case, since
+      // most PRs touch no workflow. Today's bare `run:` is `bash -e` (confirmed
+      // from a real run log: `shell: /usr/bin/bash -e {0}`), so a pipeline masks
+      // it; adding `shell: bash` anywhere turns pipefail on and `-e` then kills
+      // the step, losing the WHOLE briefing. Measured both ways before and after:
+      // `bash -eo pipefail` went exit 1 / no briefing -> exit 0 / briefing written.
+      expect(step).toContain('> wf-raw.txt || true');
+      // grep must not sit in a pipeline whose status can propagate.
+      expect(step).not.toContain("capped.diff \\");
+      // Only workflows whose diff survived the cap — annotating an elided file
+      // would describe code the bench was explicitly told it cannot see.
+      expect(step).toContain('capped.diff');
+      // HEAD, not base: the bench must see the env block as this PR leaves it.
+      expect(step).toContain('ref=${HEAD_SHA}');
+    });
+
     test('every pin in the map is a fully-qualified, non-floating model id', () => {
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));

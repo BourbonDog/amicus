@@ -325,6 +325,60 @@ jobs:
           process.stderr.write(notes.join('\n'));
           FILTER_EOF
           node filter-diff.js full.diff "$DIFF_CAP" > capped.diff 2> diff-notes.txt
+
+          # A `run:` block's env vars are DEFINED in the job's `env:` block, which
+          # this PR does not change — so it never appears in a diff. On #193 both
+          # council rounds unanimously raised a blocker that $GH_REPO / $MODELS /
+          # $CHAIR were undefined. They were defined; the definitions simply never
+          # reached the bench, and four seats agreed off one shared blind spot.
+          # Only workflows whose diff SURVIVED the byte cap are worth annotating.
+          # The parser is FETCHED, not inlined (#194 finding B1). This workflow
+          # never checks out and amicus — the only package the runner installs —
+          # depends on no YAML parser, so there is nothing to require; that real
+          # constraint is what forced a hand-rolled scan. Fetching the repo’s own
+          # module means ONE source serves both the runner and the unit tests in
+          # tests/scripts/extract-workflow-env.test.js, which is what the first
+          # version lacked. BASE ref, not head: a PR must not swap the parser that
+          # reads its own workflow. Unlike the alias map this is supplementary
+          # context, so an absent parser is a notice, not a failed run.
+          # ONE-TIME BOOTSTRAP GAP (#194 finding A1/B1, and it is real): the PR that
+          # ADDS or MOVES this parser cannot use it, because the base ref predates the
+          # file. That PR takes the notice path and gets no env section; every PR after
+          # the merge gets the feature. Do not read that first notice as a defect.
+          if gh api "repos/${GH_REPO}/contents/scripts/extract-workflow-env.js?ref=${BASE_SHA}" \
+               --jq '.content' 2>/dev/null | base64 -d > env-context.js && [ -s env-context.js ]; then
+            ENV_CTX=1
+          else
+            ENV_CTX=0
+            echo "::notice::scripts/extract-workflow-env.js is not on the base ref — env context skipped"
+          fi
+          : > env-context.md
+          # `while read`, not `for x in $(...)`: word-splitting a command
+          # substitution is SC2013, and this step already reads diff-notes.txt
+          # with exactly this idiom. The `|| [ -n "$wf" ]` guard keeps a final
+          # line that has no trailing newline.
+          if [ "$ENV_CTX" = "1" ]; then
+            # grep exits 1 on ZERO matches, which is the ordinary case: most PRs
+            # touch no workflow. This repo's bare `run:` is `bash -e` (no pipefail),
+            # so a pipeline masks that status today — but ONE `shell: bash` line
+            # anywhere turns pipefail on, and `-e` then kills the step, losing the
+            # ENTIRE briefing on every source-only PR. Measured both ways: `bash -e`
+            # exits 0, `bash -eo pipefail` exits 1 with no briefing written.
+            # Split so grep’s status is guarded rather than carried by a pipeline.
+            grep -oE '^\+\+\+ b/\.github/workflows/[^ ]+\.ya?ml$' capped.diff > wf-raw.txt || true
+            sed 's|^+++ b/||' wf-raw.txt | sort -u > wf-list.txt
+            while IFS= read -r wf || [ -n "$wf" ]; do
+              [ -n "$wf" ] || continue
+              slug=$(printf '%s' "$wf" | tr '/' '_')
+              # HEAD sha, not base: the bench must see the env block as this PR leaves
+              # it. A fork PR head is absent from this repo, so the fetch 404s and the
+              # annotation is simply skipped — never a hard failure.
+              if gh api "repos/${GH_REPO}/contents/${wf}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null \
+                   | base64 -d > "wf-${slug}" 2>/dev/null && [ -s "wf-${slug}" ]; then
+                node env-context.js "$wf" "wf-${slug}" >> env-context.md
+              fi
+            done < wf-list.txt
+          fi
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract
           # (findings JSON block) and the anti-sycophancy clause itself — this
@@ -350,6 +404,15 @@ jobs:
             echo '```diff'
             cat capped.diff
             echo '```'
+            if [ -s env-context.md ]; then
+              echo
+              echo "## Workflow env definitions (context, NOT part of the diff)"
+              echo
+              echo "> Unchanged by this PR, so absent from the diff above. These blocks define"
+              echo "> the variables the changed run: steps reference — treat them as present."
+              echo
+              cat env-context.md
+            fi
           } > briefing.md
 
       - name: Run the adjudicated council (amicus council run, headless)
