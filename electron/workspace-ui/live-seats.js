@@ -1,8 +1,8 @@
 // electron/workspace-ui/live-seats.js
-// Seats surface: dash, seatCells, SEATS_PANEL_EXCLUDED_ROLES,
-// seatsFromRunStats, deadSeats. Moved verbatim from live-model.js@ac7e7e12:53-285
-// (v4.8 PR0 size-gate split, zero behavior). Loads BEFORE live-model.js,
-// which re-exports these on window.AmicusLive so no consumer changes.
+// Seats surface: dash, seatCells, SEATS_PANEL_EXCLUDED_ROLES, seatsFromRunStats. Moved
+// verbatim from live-model.js@ac7e7e12:53-285 (v4.8 PR0 size-gate split, zero behavior).
+// `deadSeats` moved too, then PR5c split it to live-dead-seats.js :: deadSeats; it is
+// only re-exported here. Loads BEFORE live-model.js, which re-exports on window.AmicusLive.
 // ES5 IIFE, dual export, strict-CSP <script> loading — same shape as
 // every renderer module. Comments write "PR 102", never the hash-number
 // form (electron-token-drift HEX_RE trips on it — this file is scanned).
