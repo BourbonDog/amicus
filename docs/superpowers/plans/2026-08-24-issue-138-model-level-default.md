@@ -622,7 +622,7 @@ describe('#138 per-card model drill-down', () => {
     expect(html).toContain('All 3 models');
   });
 
-  test('omitting the shortlists argument renders exactly today\'s card', () => {
+  test('omitting the shortlists argument behaves identically to passing {}', () => {
     const withArg = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, {});
     const without = buildModelStepHTML(choices, 'deepseek', { deepseek: true });
     expect(withArg).toBe(without);
@@ -630,6 +630,12 @@ describe('#138 per-card model drill-down', () => {
   });
 });
 ```
+
+Note (added post-implementation, controller ruling R5, 2026-08-24): the test name
+above was originally "...renders exactly today's card", which overclaimed —
+the omitted-arg path only proves equivalence to the explicit-`{}` path, not
+byte-for-byte equivalence to the pre-#138 HTML (that string gained one inert
+whitespace-only line; see buildModelPickHTML's docstring in the shipped code).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -645,8 +651,10 @@ Add this helper above `buildModelStepHTML`:
  * #138: the family -> model second level for one card. Renders EVERY model
  * in one <select> (scrollable and type-ahead searchable, so nothing is
  * hidden), grouped "Suggested" / "All N models". Returns '' when no
- * shortlist was supplied, so callers that pass nothing get today's card
- * byte-for-byte.
+ * shortlist was supplied, so callers that pass nothing get a behaviorally
+ * unchanged card (no <select> emitted) -- NOT a byte-for-byte identical HTML
+ * string, since the card template always splices this return value in as
+ * its own line, leaving one inert whitespace-only line when it is ''.
  * @param {string} alias
  * @param {{recommendedId:string, suggested:Array<object>, rest:Array<object>, total:number}} [shortlist]
  * @returns {string} HTML fragment
@@ -726,7 +734,8 @@ git add electron/setup-ui-model.js electron/main.js tests/setup-ui-model.test.js
 git commit -m "feat(#138): per-card model <select> in setup Step 2
 
 Each family card gains a model dropdown grouped Suggested / All N. Omitting
-the new shortlists argument renders the previous card byte-for-byte."
+the new shortlists argument leaves the previous card behaviorally unchanged
+(no <select> is emitted)."
 ```
 
 ---

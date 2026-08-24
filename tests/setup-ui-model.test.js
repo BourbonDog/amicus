@@ -346,11 +346,20 @@ describe('#138 per-card model drill-down', () => {
     expect(html).toContain('All 3 models');
   });
 
-  test('omitting the shortlists argument renders exactly today\'s card', () => {
+  // CONTROLLER RULING R5 (issue 138, 2026-08-24): this proves omitting the
+  // 4th arg is equivalent to passing {} explicitly (the default-parameter
+  // path) -- that equivalence holds trivially no matter what the template
+  // does, so it does NOT by itself prove the no-shortlist card matches the
+  // pre-issue-138 HTML byte-for-byte (it doesn't -- see buildModelPickHTML's
+  // docstring). The extra assertions below pin the no-shortlist card's
+  // actual shape: no <select> at all, and still a well-formed card.
+  test('omitting the shortlists argument behaves identically to passing {}', () => {
     const withArg = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, {});
     const without = buildModelStepHTML(choices, 'deepseek', { deepseek: true });
     expect(withArg).toBe(without);
     expect(without).not.toContain('model-pick');
+    expect(without).not.toContain('<select');
+    expect(without).toContain('class="write-preview"');
   });
 
   // CONTROLLER RULING R1 (2026-08-24): data-or belongs to Task 3, not Task 4

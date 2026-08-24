@@ -67,8 +67,14 @@ function buildModelSearchHTML() {
  * issue 138: the family -> model second level for one card. Renders EVERY model
  * in one <select> (scrollable and type-ahead searchable, so nothing is
  * hidden), grouped "Suggested" / "All N models". Returns '' when no
- * shortlist was supplied, so callers that pass nothing get today's card
- * byte-for-byte.
+ * shortlist was supplied (or its `total` is 0).
+ *
+ * That '' is NOT dropped by the caller — buildModelStepHTML always splices
+ * it into the card template as its own line, so a card with no shortlist
+ * gains one whitespace-only line versus the pre-issue-138 HTML string. It is NOT
+ * byte-for-byte identical to that old output. It IS behaviorally identical:
+ * no <select> is emitted, and whitespace-only text nodes are inert once
+ * parsed as HTML, so the rendered card is unchanged.
  *
  * CONTROLLER RULING R1 (issue 138, 2026-08-24): every <option> carries
  * data-or="<openrouterId>" (empty string when the row has no OpenRouter
@@ -101,7 +107,9 @@ function buildModelPickHTML(alias, shortlist) {
  * @param {Object<string,boolean>} [configuredKeys] - Provider IDs the user has keys for.
  * @param {Object<string,object>} [shortlists] - issue 138: per-alias vendor shortlist
  *   from buildModelShortlist(), used to render the model-level <select>.
- *   Defaults to {}, so omitting it renders today's card unchanged.
+ *   Defaults to {}; omitting it (or passing {}) is behaviorally identical to
+ *   today's card (no <select> for that alias) but not byte-for-byte identical
+ *   to the pre-issue-138 HTML string — see buildModelPickHTML's docstring.
  * @returns {string} HTML fragment
  */
 function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortlists = {}) {
