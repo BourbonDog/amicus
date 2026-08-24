@@ -371,4 +371,9 @@ describe('#138 per-card model drill-down', () => {
     expect(html).toContain('data-or="openrouter/deepseek/deepseek-v4-flash"');
     expect(html).toContain('data-or="openrouter/deepseek/deepseek-r1"');
   });
+
+  test('#138 the resolved-id span carries its alias so it can be refreshed', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('class="model-resolved" data-alias="deepseek"');
+  });
 });

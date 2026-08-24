@@ -171,7 +171,7 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
         <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
         <span class="model-alias">${c.alias}</span>
         <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
-        <span class="model-resolved">${previewId}</span>
+        <span class="model-resolved" data-alias="${c.alias}">${previewId}</span>
         ${routeHtml}
         ${modelPickHtml}
         <span class="write-preview" data-alias="${c.alias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${previewId}</code></span>

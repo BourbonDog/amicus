@@ -621,6 +621,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var idEl = el.querySelector('.write-preview-id');
       if (idEl && routeId) { idEl.textContent = routeId; }
     });
+    // issue 138: keep the resolved-id line in step with the route/model choice.
+    document.querySelectorAll('.model-resolved').forEach(function(el) {
+      var alias = el.getAttribute('data-alias');
+      var mc = null;
+      for (var i = 0; i < modelChoicesData.length; i++) {
+        if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
+      }
+      if (!mc) { return; }
+      var id = pickRouteFor(mc);
+      if (id) { el.textContent = id; }
+    });
   }
 
   document.addEventListener('input', function(e) {
