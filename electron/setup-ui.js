@@ -20,15 +20,19 @@ const { listDirectProviders } = require('../src/utils/provider-registry');
  * @param {string} [options.client='code-local'] - Client type for branding
  * @param {Array} [options.quickPicks] - Resolved quick-pick rows from resolveQuickPicks(catalog).
  *   Defaults to pinned fallbacks when not provided.
+ * @param {Object<string,object>} [options.shortlists] - issue 138: per-alias vendor
+ *   shortlist from buildModelShortlist(), passed through to buildModelStepHTML
+ *   for the model-level <select>. Defaults to {} (no drill-down rendered).
  */
 function buildSetupHTML(options = {}) {
   const {
     client = 'code-local',
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
+    shortlists = {},
   } = options;
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
-  const modelHtml = buildModelStepHTML(quickPicks);
+  const modelHtml = buildModelStepHTML(quickPicks, undefined, undefined, shortlists);
   const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);

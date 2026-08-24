@@ -329,9 +329,22 @@ async function createSetupWindow() {
   const { buildSetupHTML } = require('./setup-ui');
   const { resolveQuickPicks } = require('../src/utils/quick-picks');
   let quickPicks;
+  const shortlists = {};
   try {
     const catalog = await require('../src/utils/model-catalog').getCatalog();
     quickPicks = resolveQuickPicks(catalog);
+
+    // issue 138: one vendor shortlist per family card, resolved server-side from
+    // the same catalog the quick picks came from (no extra IPC round-trip).
+    const { buildModelShortlist } = require('../src/utils/model-shortlist');
+    for (const p of quickPicks) {
+      try {
+        shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
+          catalog,
+          recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter),
+        });
+      } catch (_e) { /* a shortlist failure must never block the wizard */ }
+    }
   } catch (_err) {
     quickPicks = undefined;  // buildSetupHTML falls back to pinned
   }
@@ -348,7 +361,7 @@ async function createSetupWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT, quickPicks });
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists });
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 

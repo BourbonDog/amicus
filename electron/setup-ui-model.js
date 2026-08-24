@@ -64,14 +64,47 @@ function buildModelSearchHTML() {
 }
 
 /**
+ * issue 138: the family -> model second level for one card. Renders EVERY model
+ * in one <select> (scrollable and type-ahead searchable, so nothing is
+ * hidden), grouped "Suggested" / "All N models". Returns '' when no
+ * shortlist was supplied, so callers that pass nothing get today's card
+ * byte-for-byte.
+ *
+ * CONTROLLER RULING R1 (issue 138, 2026-08-24): every <option> carries
+ * data-or="<openrouterId>" (empty string when the row has no OpenRouter
+ * form), so a later task can read the user's chosen route without
+ * re-deriving a gateway prefix from the value id.
+ * @param {string} alias
+ * @param {{recommendedId:string, suggested:Array<object>, rest:Array<object>, total:number}} [shortlist]
+ * @returns {string} HTML fragment
+ */
+function buildModelPickHTML(alias, shortlist) {
+  if (!shortlist || !shortlist.total) { return ''; }
+  const opt = (r) => {
+    const price = r.pricePerMInput === null ? '' : ` · $${r.pricePerMInput.toFixed(2)}/M`;
+    const sel = r.isRecommended ? ' selected' : '';
+    return `<option value="${r.id}" data-or="${r.openrouterId || ''}"${sel}>${r.id}${price}</option>`;
+  };
+  let html = `<select class="model-pick" data-alias="${alias}">`;
+  html += `<optgroup label="Suggested">${shortlist.suggested.map(opt).join('')}</optgroup>`;
+  if (shortlist.rest.length > 0) {
+    html += `<optgroup label="All ${shortlist.total} models">${shortlist.rest.map(opt).join('')}</optgroup>`;
+  }
+  return html + '</select>';
+}
+
+/**
  * Build the HTML fragment for Step 2 (Model Selection).
  * @param {Array<{alias:string, label:string, blurb:string, source:string, routes:Object<string,string>}>} choices
  *   Resolved rows from resolveQuickPicks(). Each row has separate label + blurb fields.
  * @param {string} [selectedAlias] - Pre-selected alias; defaults to first available choice.
  * @param {Object<string,boolean>} [configuredKeys] - Provider IDs the user has keys for.
+ * @param {Object<string,object>} [shortlists] - issue 138: per-alias vendor shortlist
+ *   from buildModelShortlist(), used to render the model-level <select>.
+ *   Defaults to {}, so omitting it renders today's card unchanged.
  * @returns {string} HTML fragment
  */
-function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
+function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortlists = {}) {
   // Determine availability for each model
   const availability = choices.map(c => {
     const providers = Object.keys(c.routes);
@@ -124,12 +157,15 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
       routeHtml = `<span class="route-static">via ${PROVIDER_NAMES[bestProvider]}</span>`;
     }
 
+    const modelPickHtml = buildModelPickHTML(c.alias, shortlists[c.alias]);
+
     return `<label class="${cardClass}">
         <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
         <span class="model-alias">${c.alias}</span>
         <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
         <span class="model-resolved">${previewId}</span>
         ${routeHtml}
+        ${modelPickHtml}
         <span class="write-preview" data-alias="${c.alias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${previewId}</code></span>
       </label>`;
   }).join('\n      ');
@@ -145,4 +181,4 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
   </div>`;
 }
 
-module.exports = { buildModelSearchHTML, buildModelStepHTML, PROVIDER_NAMES };
+module.exports = { buildModelSearchHTML, buildModelStepHTML, buildModelPickHTML, PROVIDER_NAMES };

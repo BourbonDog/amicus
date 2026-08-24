@@ -304,3 +304,62 @@ describe('setup-ui-model', () => {
     });
   });
 });
+
+describe('#138 per-card model drill-down', () => {
+  const choices = [{
+    alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro',
+              deepseek: 'deepseek/deepseek-v4-pro' },
+  }];
+  const mk = (id, price, rec) => ({
+    id, name: id.split('/').pop(), contextLength: 128000,
+    pricePerMInput: price, isRecommended: !!rec,
+    directId: id, openrouterId: 'openrouter/' + id,
+  });
+  const shortlists = {
+    deepseek: {
+      recommendedId: 'deepseek/deepseek-v4-pro',
+      suggested: [mk('deepseek/deepseek-v4-pro', 0.52, true),
+                  mk('deepseek/deepseek-v4-flash', 0.06)],
+      rest: [mk('deepseek/deepseek-r1', 0.70)],
+      total: 3,
+    },
+  };
+
+  test('renders a model <select> for the card', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('class="model-pick" data-alias="deepseek"');
+  });
+
+  test('the recommended model is the selected option', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    // R1: data-or is emitted on every <option>, so the recommended option's
+    // tag now carries it too — attribute order is value, data-or, selected.
+    expect(html).toMatch(/<option value="deepseek\/deepseek-v4-pro" data-or="openrouter\/deepseek\/deepseek-v4-pro" selected>/);
+  });
+
+  test('every model is reachable — including one only in `rest`', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('value="deepseek/deepseek-r1"');
+    expect(html).toContain('Suggested');
+    expect(html).toContain('All 3 models');
+  });
+
+  test('omitting the shortlists argument renders exactly today\'s card', () => {
+    const withArg = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, {});
+    const without = buildModelStepHTML(choices, 'deepseek', { deepseek: true });
+    expect(withArg).toBe(without);
+    expect(without).not.toContain('model-pick');
+  });
+
+  // CONTROLLER RULING R1 (2026-08-24): data-or belongs to Task 3, not Task 4
+  // -- emitted on every <option>, suggested and rest alike, so a later task
+  // can read the user's chosen route without re-deriving a gateway prefix.
+  test('every option carries data-or with the row\'s openrouterId (R1)', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-v4-pro"');
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-v4-flash"');
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-r1"');
+  });
+});
