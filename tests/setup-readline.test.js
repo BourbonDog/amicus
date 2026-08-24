@@ -47,7 +47,23 @@ jest.mock('../src/cli-handlers-doctor', () => ({
 function mockReadline(answer) {
   jest.doMock('readline', () => ({
     createInterface: () => ({
-      question: (_q, cb) => cb(answer),
+      question: (q, cb) => {
+        // #138: this file's assertions predate the family -> model
+        // drill-down (promptForVendorModel) and were written against a
+        // single alias write per pick; dedicated coverage for the
+        // drill-down itself lives in
+        // tests/setup-readline-model-drilldown.test.js. Without this
+        // branch, a numeric `answer` used by other tests here (e.g. '1')
+        // would ALSO answer the drill-down's own prompt and select a
+        // shortlist row -- since that shortlist always sorts the
+        // just-written flagship first, '1' happens to reselect the same
+        // value, so those assertions would keep passing but only by
+        // coincidence rather than by exercising the behaviour they name.
+        // Always keep the family default here so this file stays decoupled
+        // from the drill-down's own selection logic.
+        if (q.includes('or Enter to keep the default')) { cb(''); return; }
+        cb(answer);
+      },
       close: jest.fn(),
     }),
   }));
