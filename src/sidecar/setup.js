@@ -550,14 +550,18 @@ async function runReadlineSetup() {
       // the flagship route for this alias only. Guarded — a picker failure
       // must never abort a setup run that has already collected keys.
       //
-      // R4 (fix round 1): skip when the per-provider phase already showed
-      // THIS vendor's priced picker and wrote chosen.alias this run
-      // (vendorAliasesWritten) -- asking again would be the same question
-      // twice in one run. Still fire when chosen.noUpgrade is true (the
-      // user typed a known alias name rather than picking a number): that
-      // path never asked a model question, so the drill-down is not a
-      // repeat there even when the alias happens to be in the written set.
-      if (pick && (chosen.noUpgrade || !vendorAliasesWritten.has(chosen.alias))) {
+      // R4a (fix round 2, supersedes R4's noUpgrade disjunct): the governing
+      // rule is simply never ask about the same vendor twice in one run --
+      // `vendorAliasesWritten` IS the record of having already asked (via
+      // the per-provider phase's own priced picker). `chosen.noUpgrade`
+      // does NOT imply no question was asked for this vendor: a user can
+      // type a known alias name (noUpgrade=true) for a vendor the
+      // per-provider phase already walked through this run, and that must
+      // still be skipped. Whenever noUpgrade is true AND the alias is
+      // genuinely unasked-about, `!vendorAliasesWritten.has(...)` is
+      // already true on its own, so dropping the noUpgrade disjunct loses
+      // no legitimate firing case -- only the double-ask.
+      if (pick && !vendorAliasesWritten.has(chosen.alias)) {
         try {
           const { buildModelShortlist } = require('../utils/model-shortlist');
           const shortlist = buildModelShortlist(pick.vendorPath, {
