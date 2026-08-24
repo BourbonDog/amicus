@@ -494,6 +494,89 @@ describe('Setup Wizard', () => {
       // (deepseek-v4-pro) the standard step would otherwise upgrade it to.
       expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3');
     });
+
+    it('R4 (fix round 1): does NOT ask the vendor drill-down again when the per-provider phase already wrote this alias (numbered pick, no noUpgrade) -- would otherwise ask the same question twice in one run', async () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
+
+      const { getCatalog } = require('../../src/utils/model-catalog');
+      getCatalog.mockResolvedValueOnce([
+        { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
+        { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
+      ]);
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((prompt, callback) => {
+        if (prompt.includes('Pick a number')) { callback(''); return; } // per-provider phase: accept preselected (tier-chosen)
+        if (prompt.includes('Setup mode')) { callback('1'); return; } // standard mode
+        // Same collision setup as the 'Fix 2' test above -- '5' is the
+        // numbered quick-pick for the 'deepseek' family, which collides
+        // with the vendor alias the per-provider phase just wrote. If the
+        // drill-down leaked through here it would ALSO receive this '5',
+        // which is out of range for its 2-row shortlist -- surfacing as
+        // extra `question()` calls carrying the drill-down's own prompt
+        // text, asserted against below.
+        callback('5');
+      });
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      // R4: the per-provider phase already showed a priced deepseek picker
+      // and wrote the 'deepseek' alias this run -- the standard step's own
+      // drill-down must not ask the same question again.
+      const prompts = mockInterface.question.mock.calls.map(c => c[0]);
+      expect(prompts.some(p => p.includes('Which deepseek model'))).toBe(false);
+      expect(prompts.some(p => p.includes('or Enter to keep the default'))).toBe(false);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3'); // unchanged, per 'Fix 2' above
+    });
+
+    it('R4 (fix round 1): still asks the vendor drill-down for a noUpgrade pick (typed alias name) even when the alias is absent from vendorAliasesWritten', async () => {
+      // No keyed providers this run -- runProviderDefaultPickers is a no-op
+      // and vendorAliasesWritten stays empty, so this pins the OTHER half of
+      // R4: noUpgrade alone is sufficient to fire the drill-down, because
+      // that path never asked a model question for this vendor yet.
+      const { getCatalog } = require('../../src/utils/model-catalog');
+      getCatalog.mockResolvedValueOnce([
+        { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
+        { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
+      ]);
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((prompt, callback) => {
+        if (prompt.includes('Setup mode')) { callback('1'); return; } // standard mode
+        // 'deepseek' is a known DEFAULT_ALIASES name -> resolveChoice's
+        // noUpgrade branch (typed alias name), NOT the numbered quick-pick
+        // branch -- no model question has been asked for it yet this run.
+        if (prompt.includes('Pick a default')) { callback('deepseek'); return; }
+        // Drill-down: the shortlist sorts the just-seeded live flagship
+        // (deepseek-v4-pro) first as "recommended", so '2' selects the
+        // OTHER row (deepseek-v3) -- a value that only lands if the
+        // drill-down's answer is actually applied, not just asked.
+        if (prompt.includes('or Enter to keep the default')) { callback('2'); return; }
+        callback(''); // e.g. "Add a local / self-hosted server?"
+      });
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const prompts = mockInterface.question.mock.calls.map(c => c[0]);
+      expect(prompts.some(p => p.includes('or Enter to keep the default'))).toBe(true);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3');
+    });
   });
 
   describe('runReadlineSetup — local / self-hosted provider offer (Task 12, v4.2 §4.6)', () => {

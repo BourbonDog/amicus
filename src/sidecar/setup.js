@@ -549,7 +549,15 @@ async function runReadlineSetup() {
       // the vendor whose catalog rows we drill into; a chosen id REPLACES
       // the flagship route for this alias only. Guarded — a picker failure
       // must never abort a setup run that has already collected keys.
-      if (pick) {
+      //
+      // R4 (fix round 1): skip when the per-provider phase already showed
+      // THIS vendor's priced picker and wrote chosen.alias this run
+      // (vendorAliasesWritten) -- asking again would be the same question
+      // twice in one run. Still fire when chosen.noUpgrade is true (the
+      // user typed a known alias name rather than picking a number): that
+      // path never asked a model question, so the drill-down is not a
+      // repeat there even when the alias happens to be in the written set.
+      if (pick && (chosen.noUpgrade || !vendorAliasesWritten.has(chosen.alias))) {
         try {
           const { buildModelShortlist } = require('../utils/model-shortlist');
           const shortlist = buildModelShortlist(pick.vendorPath, {
