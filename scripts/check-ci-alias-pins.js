@@ -67,8 +67,11 @@ function newestSibling(pinned, catalogIds) {
   let best = null;
   let bestVersion = pin.version;
   for (const id of catalogIds) {
-    // `:free` / `:batch` are billing variants of the same release, not newer ones.
-    if (id.includes(':')) { continue; }
+    // No blanket `:` skip. `:free` / `:batch` land in `suffix`, so the
+    // suffix equality below ALREADY refuses to bump a plain pin to a billing
+    // variant — while a blanket skip additionally blinded the checker to a
+    // pin that is ITSELF a variant (a `:free` pin could never find a `:free`
+    // sibling, and went quietly unwatched forever). Council finding D3.
     const other = parsePin(id);
     if (!other) { continue; }
     if (other.vendor !== pin.vendor) { continue; }

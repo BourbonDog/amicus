@@ -375,6 +375,30 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('exit 1');
     });
 
+    // Council finding A2: JSON.parse proves syntax, not shape. A file that
+    // parses to {"foo":1} yields zero aliases and degrades silently.
+    test('the map is validated by SHAPE, not merely parsed', () => {
+      const step = stepFor('Provision the alias map', 'Pre-flight the bench');
+      expect(step).toContain('has no aliases object');
+      expect(step).toContain('declares zero aliases');
+      expect(step).toContain('does not map to a fully-qualified model id');
+      // The argv slot must be the path itself — `node x.js -- path` puts '--'
+      // in argv[2] and reads the wrong file (this bit the receipt step once).
+      expect(step).not.toContain('validate-map.js --');
+    });
+
+    // Council finding A1/C2: a blanket else-branch turned ANY gh failure into
+    // "no map", so a rate limit or DNS blip silently swapped the bench's models.
+    test('only a 404 falls back; every other gh failure fails the run', () => {
+      const step = stepFor('Provision the alias map', 'Pre-flight the bench');
+      expect(step).toContain("grep -q 'HTTP 404' alias-map.err");
+      expect(step).toContain('was NOT a 404');
+      // stderr must be captured, not discarded — 2>/dev/null makes the 404
+      // indistinguishable from every other failure.
+      expect(step).toContain('2> alias-map.err');
+      expect(step).not.toContain('2>/dev/null');
+    });
+
     test('the pre-flight runs before the paid council step and can fail the job', () => {
       const y = yml();
       expect(y.indexOf('Pre-flight the bench')).toBeLessThan(

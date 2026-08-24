@@ -153,23 +153,57 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: |
           mkdir -p "$AMICUS_CONFIG_DIR"
+          # SHAPE, not just syntax (council A2): a map that parses but carries no
+          # usable `aliases` object leaves loadConfig() with nothing and degrades
+          # SILENTLY to the shipped table — the failure this step exists to remove.
+          cat > validate-map.js <<'VALIDATE'
+          const fs = require('fs');
+          let map;
+          try {
+            map = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          } catch (err) {
+            console.error('::error::alias map is not valid JSON: ' + err.message);
+            process.exit(1);
+          }
+          const aliases = map && map.aliases;
+          if (!aliases || typeof aliases !== 'object' || Array.isArray(aliases)) {
+            console.error('::error::alias map has no aliases object');
+            process.exit(1);
+          }
+          const names = Object.keys(aliases);
+          if (names.length === 0) {
+            console.error('::error::alias map declares zero aliases');
+            process.exit(1);
+          }
+          for (const name of names) {
+            const id = aliases[name];
+            if (typeof id !== 'string' || id.indexOf('/') === -1) {
+              console.error("::error::alias '" + name + "' does not map to a fully-qualified model id");
+              process.exit(1);
+            }
+          }
+          console.log('alias map validated: ' + names.length + ' alias(es)');
+          VALIDATE
           # Fetched over the API rather than read from disk because this workflow
           # never checks out — the same reason the briefing step inlines its JS.
-          # A workflow_call caller legitimately has no such file: that is a notice
-          # and a fall back to the shipped table, not a failure.
+          #
+          # 404 is the ONLY tolerated failure (council A1/C2): a workflow_call
+          # caller legitimately has no such file. Every other failure — rate limit,
+          # auth, 5xx, DNS — FAILS the run. Treating a transient blip as "no map"
+          # would swap the bench's models on a network hiccup, which is precisely
+          # the silent substitution this workflow exists to eliminate.
           if gh api "repos/${GH_REPO}/contents/.github/amicus-ci-aliases.json?ref=${BASE_SHA}" \
-               --jq '.content' > alias-map.b64 2>/dev/null; then
+               --jq '.content' > alias-map.b64 2> alias-map.err; then
             base64 -d < alias-map.b64 > "$AMICUS_CONFIG_DIR/config.json"
-            # An unparseable map makes loadConfig() return null and degrade SILENTLY
-            # back to the shipped table — the exact failure this step exists to
-            # remove. Fail loudly instead.
-            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' \
-              "$AMICUS_CONFIG_DIR/config.json" \
-              || { echo "::error::.github/amicus-ci-aliases.json is not valid JSON"; exit 1; }
+            node validate-map.js "$AMICUS_CONFIG_DIR/config.json" || exit 1
             echo "::notice::alias map provisioned from .github/amicus-ci-aliases.json@${BASE_SHA}"
-          else
+          elif grep -q 'HTTP 404' alias-map.err; then
             rm -f "$AMICUS_CONFIG_DIR/config.json"
             echo "::notice::no .github/amicus-ci-aliases.json on the base ref — using amicus's shipped alias table"
+          else
+            echo "::error::could not read the alias map and it was NOT a 404 — refusing to fall back to the shipped table silently"
+            cat alias-map.err
+            exit 1
           fi
 
       - name: Pre-flight the bench (prints every binding; fails before any spend)

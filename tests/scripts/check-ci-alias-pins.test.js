@@ -71,6 +71,21 @@ describe('check-ci-alias-pins', () => {
       }
     });
 
+    // Council finding D3: a blanket `:` skip meant a pin that is ITSELF a
+    // billing variant could never find its own sibling and went unwatched.
+    // Suffix equality already keeps the variant lines apart, so the skip was
+    // redundant AND blinding.
+    test('a billing-variant pin still finds its own variant sibling', () => {
+      const variants = CATALOG.concat([
+        'openrouter/z-ai/glm-5.3:free', 'openrouter/z-ai/glm-5.1:batch',
+      ]);
+      expect(newestSibling('openrouter/z-ai/glm-5.2:free', variants))
+        .toBe('openrouter/z-ai/glm-5.3:free');
+      // ...and a plain pin is still never bumped onto a variant.
+      expect(newestSibling('openrouter/z-ai/glm-5.1', variants))
+        .toBe('openrouter/z-ai/glm-5.3');
+    });
+
     test('never crosses a tier or variant line', () => {
       // Each of these would be a WRONG bump: -turbo/-code/-thinking/-27b are
       // different products, `-pro-0813` is a dated snapshot, `sol` is another
