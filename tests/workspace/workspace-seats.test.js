@@ -458,7 +458,7 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
  * reflects the retried computation in isolation, uncoupled from suppression) against the
  * IDENTICAL degrade array, and asserts the two verdicts match.
  */
-describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-model.js): drift pin', () => {
+describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-seats.js): drift pin', () => {
   let AmicusSeats;
   let AmicusLive;
   let document;

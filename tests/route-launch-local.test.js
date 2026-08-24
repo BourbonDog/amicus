@@ -111,9 +111,9 @@ describe('resolveRouteForLaunch: local assembly', () => {
   });
 
   // D10/M24: the router builds live-probe suggestions (gateway:'local'), but
-  // route-suggestions.js :: applySuggestions then OVERWRITES result.suggestions unconditionally with
+  // route-launch.js :: applySuggestions then OVERWRITES result.suggestions unconditionally with
   // buildSuggestions(), which reads only the 24h catalog cache and hardcodes
-  // gateway:'direct' (:110). Without the applySuggestions guard (written in Step 3-pre,
+  // gateway:'direct' (route-suggestions.js:65). Without the applySuggestions guard (written in Step 3-pre,
   // wired in Step 3c) the live roster is discarded —
   // defeating the spec's stated reason for probing live ("local rosters churn far
   // faster than the 24h cache", §4.2 point 4). Tasks 4's tests call bare resolveRoute()
