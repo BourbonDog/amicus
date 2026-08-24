@@ -267,6 +267,7 @@ describe('setup-ui wizard', () => {
       // eslint-disable-next-line no-new-func
       const build = new Function(
         'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'modelChoiceIds', 'modelOpenrouterIds',
         `${toBareMatch[0]}\n${pickRouteForMatch[0]}\nreturn pickRouteFor;`
       );
 
@@ -275,20 +276,106 @@ describe('setup-ui wizard', () => {
       // Case 1: no explicit pill click, no configured keys (falls back to
       // provs[0] === 'openrouter') — openrouter/google/x must canonicalize.
       const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } };
-      let pickRouteFor = build(directProviders, {}, {}, {});
+      let pickRouteFor = build(directProviders, {}, {}, {}, {}, {});
       expect(pickRouteFor(mcDirect)).toBe('google/gemini-x');
 
       // Case 2: gateway-only vendor (qwen not in directProviders) stays unchanged.
       const mcGatewayOnly = { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen-x' } };
-      pickRouteFor = build(directProviders, {}, {}, {});
+      pickRouteFor = build(directProviders, {}, {}, {}, {}, {});
       expect(pickRouteFor(mcGatewayOnly)).toBe('openrouter/qwen/qwen-x');
 
       // Case 3: explicit pill choice for a direct-capable vendor's OpenRouter
       // route is honored unchanged (user deliberately chose "via OpenRouter").
       const routingChoices = { gemini: 'openrouter' };
       const explicitRouteChoices = { gemini: true };
-      pickRouteFor = build(directProviders, routingChoices, {}, explicitRouteChoices);
+      pickRouteFor = build(directProviders, routingChoices, {}, explicitRouteChoices, {}, {});
       expect(pickRouteFor(mcDirect)).toBe('openrouter/google/gemini-x');
+    });
+  });
+
+  describe('issue 138: Finish honours a drilled-down model', () => {
+    // CONTROLLER RULING R3: extracts the REAL in-page pickRouteFor (not a
+    // local reimplementation) via the same new Function harness the #61
+    // suite above uses. Brittle to reindenting pickRouteFor's source.
+    function extractPickRouteFor() {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
+      const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
+      expect(directProvidersMatch).toBeTruthy();
+      expect(toBareMatch).toBeTruthy();
+      expect(pickRouteForMatch).toBeTruthy();
+      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+      // eslint-disable-next-line no-new-func
+      const build = new Function(
+        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'modelChoiceIds', 'modelOpenrouterIds',
+        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\nreturn pickRouteFor;`
+      );
+      return (opts = {}) => build(
+        directProviders,
+        opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
+        opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {}
+      );
+    }
+
+    const mc = {
+      alias: 'deepseek',
+      routes: {
+        openrouter: 'openrouter/deepseek/deepseek-v4-pro',
+        deepseek: 'deepseek/deepseek-v4-pro'
+      }
+    };
+
+    it('a chosen model id wins over the family flagship route', () => {
+      const pickRouteFor = extractPickRouteFor()({
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }
+      });
+      expect(pickRouteFor(mc)).toBe('deepseek/deepseek-r1');
+    });
+
+    it('an explicit OpenRouter pill keeps the openrouter/ prefix on the chosen model', () => {
+      const pickRouteFor = extractPickRouteFor()({
+        routingChoices: { deepseek: 'openrouter' },
+        explicitRouteChoices: { deepseek: true },
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' },
+        modelOpenrouterIds: { deepseek: 'openrouter/deepseek/deepseek-r1' }
+      });
+      expect(pickRouteFor(mc)).toBe('openrouter/deepseek/deepseek-r1');
+    });
+
+    it('a picked model without an explicit OpenRouter pill stays in its bare/direct form', () => {
+      // Drilled down but no "via OpenRouter" pill click — must NOT force the
+      // openrouter/ form even though modelOpenrouterIds has one on file.
+      const pickRouteFor = extractPickRouteFor()({
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' },
+        modelOpenrouterIds: { deepseek: 'openrouter/deepseek/deepseek-r1' }
+      });
+      expect(pickRouteFor(mc)).toBe('deepseek/deepseek-r1');
+    });
+
+    it('the primary path (no drill-down pick) is unchanged', () => {
+      const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } };
+      const pickRouteFor = extractPickRouteFor()();
+      expect(pickRouteFor(mcDirect)).toBe('google/gemini-x');
+    });
+
+    it('wires a change handler on .model-pick that records the choice and its OpenRouter form', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const idx = script.indexOf(".closest('.model-pick')");
+      expect(idx).toBeGreaterThan(-1);
+      const nearby = script.slice(idx, idx + 400);
+      expect(nearby).toContain('modelChoiceIds[alias] = sel.value;');
+      expect(nearby).toContain("getAttribute('data-or')");
+      expect(nearby).toContain('updateWritePreviews();');
+    });
+
+    it('both the Finish handler and updateWritePreviews call the same pickRouteFor', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const calls = script.match(/= pickRouteFor\(mc\);/g) || [];
+      // Finish handler (~:425) and updateWritePreviews (~:554) — both must
+      // resolve through the one function this suite just fixed.
+      expect(calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 

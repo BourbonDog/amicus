@@ -86,6 +86,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var directProviders = ${directProvidersJson};
   var routingChoices = {};
   var explicitRouteChoices = {};
+  // issue 138: alias -> a SPECIFIC model id the user drilled down to. Empty
+  // means "use the family flagship", i.e. today's behavior.
+  var modelChoiceIds = {};
+  var modelOpenrouterIds = {};
   var aliasEdits = {};
   var aliasDisplay = {};
   window.availableModels = null;
@@ -228,6 +232,14 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // the row's first route. Returns the full model id or null.
   function pickRouteFor(mc) {
     if (!mc) { return null; }
+    // issue 138: an explicit per-model choice overrides the family flagship.
+    var picked = modelChoiceIds[mc.alias];
+    if (picked) {
+      if (routingChoices[mc.alias] === 'openrouter' && explicitRouteChoices[mc.alias]) {
+        return modelOpenrouterIds[mc.alias] || picked;
+      }
+      return picked;
+    }
     var provs = Object.keys(mc.routes);
     var prov = routingChoices[mc.alias];
     if (!prov || !mc.routes[prov]) {
@@ -402,6 +414,18 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     explicitRouteChoices[alias] = true;
     var toggle = pill.parentElement;
     toggle.querySelectorAll('.route-pill').forEach(function(p) { p.classList.toggle('active', p === pill); });
+    updateWritePreviews();
+  });
+
+  // issue 138: model-level drill-down <select> change handler.
+  document.addEventListener('change', function(e) {
+    var sel = e.target && e.target.closest ? e.target.closest('.model-pick') : null;
+    if (!sel) { return; }
+    var alias = sel.getAttribute('data-alias');
+    if (!alias) { return; }
+    modelChoiceIds[alias] = sel.value;
+    var opt = sel.options[sel.selectedIndex];
+    modelOpenrouterIds[alias] = (opt && opt.getAttribute('data-or')) || null;
     updateWritePreviews();
   });
 
