@@ -773,7 +773,7 @@ describe('setup-ui wizard', () => {
     // itself against a revert to "savedAliases = cfg.aliases;".
     it('assigns savedAliases via a copy, not the live cfg.aliases reference', () => {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      expect(script).toContain('savedAliases = Object.assign({}, cfg.aliases);');
+      expect(script).toContain('savedAliases = Object.assign(Object.create(null), cfg.aliases);');
       expect(script).not.toContain('savedAliases = cfg.aliases;');
     });
   });
@@ -997,7 +997,7 @@ describe('buildSetupHTML (resolved picks)', () => {
   });
   test('init-loaded config deviations go to aliasDisplay, not aliasEdits', () => {
     const html = buildSetupHTML({ quickPicks: PICKS });
-    expect(html).toContain('var aliasDisplay = {}');
+    expect(html).toContain('var aliasDisplay = Object.create(null)');
     expect(html).toContain('aliasDisplay[k] = cfg.aliases[k]');
     expect(html).not.toContain('aliasEdits[k] = cfg.aliases[k]');
   });
