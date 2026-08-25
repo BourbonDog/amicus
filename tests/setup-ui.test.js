@@ -646,7 +646,7 @@ describe('setup-ui wizard', () => {
       const build = new Function(
         'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
-        'document', 'window',
+        'savedAliases', 'document', 'window',
         `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\n${buildReviewMatch[0]}\nreturn buildReview;`
       );
       return (opts = {}) => build(
@@ -654,7 +654,7 @@ describe('setup-ui wizard', () => {
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
         opts.aliasEdits || {}, opts.modelChoicesData || [],
-        opts.document, opts.window
+        opts.savedAliases || {}, opts.document, opts.window
       );
     }
 
@@ -681,7 +681,14 @@ describe('setup-ui wizard', () => {
         document: fakeDocument, window: fakeWindow
       });
       buildReview();
-      expect(els['review-routing'].textContent).not.toBe('No alias changes'); // the literal F4 symptom
+      // Sanity guard, not the mutant kill: for THIS fixture the a5ddaad0
+      // mutant (buildReview derived from the checked radio alone) returns
+      // "gemini → google/gemini-x", not the literal "No alias changes" --
+      // that string only appears when no card is checked at all, which is
+      // the custom-default fixture in the next test. The actual kill is
+      // the next assertion: the mutant never includes a non-selected
+      // card's drilled pick.
+      expect(els['review-routing'].textContent).not.toBe('No alias changes');
       expect(els['review-routing'].textContent).toContain('deepseek → deepseek/deepseek-r1');
       expect(els['review-routing'].textContent).toContain('gemini → google/gemini-x');
       expect(els['review-aliases'].textContent).toBe('2 alias(es) modified'); // gemini + deepseek
@@ -705,6 +712,40 @@ describe('setup-ui wizard', () => {
       buildReview();
       expect(els['review-routing'].textContent).toBe('deepseek → deepseek/deepseek-r1');
       expect(els['review-aliases'].textContent).toBe('1 alias(es) modified');
+    });
+
+    // N1: after the F1 fix, a plain reopen with ZERO user interaction is
+    // the NORMAL case where F3's init restore seeds modelChoiceIds for
+    // every card, because the saved value already names that card's own
+    // shortlist row (recommendedId, by construction, matches what F1 makes
+    // the card write). collectAliasWrites therefore returns a full map on
+    // every reopen, whether or not anything actually changed -- buildReview
+    // must not report that as "N alias(es) modified" on the one screen
+    // with no confirmation step after it. modelChoiceIds here stands in
+    // for what F3's restore would have seeded (both cards' saved values
+    // already match their shortlist rows); savedAliases is what F3 also
+    // captures from cfg.aliases. The values are IDENTICAL on purpose.
+    it('N1: reopening setup with zero user interaction reports NO alias changes, even though collectAliasWrites still returns a full map', () => {
+      const els = {
+        'review-keys': fakeEl(), 'review-model': fakeEl(),
+        'review-routing': fakeEl(), 'review-aliases': fakeEl()
+      };
+      const fakeDocument = {
+        getElementById: (id) => els[id],
+        querySelector: () => ({ value: 'gemini' }) // gemini is the checked (saved) default -- untouched
+      };
+      const fakeWindow = { customDefaultModel: null };
+      const buildReview = extractBuildReview()({
+        modelChoicesData: twoCardData,
+        // F3's init restore would have seeded exactly this, because both
+        // cards' saved values already name their own shortlist rows.
+        modelChoiceIds: { gemini: 'google/gemini-x', deepseek: 'deepseek/deepseek-v4-pro' },
+        savedAliases: { gemini: 'google/gemini-x', deepseek: 'deepseek/deepseek-v4-pro' },
+        document: fakeDocument, window: fakeWindow
+      });
+      buildReview();
+      expect(els['review-routing'].textContent).toBe('No alias changes');
+      expect(els['review-aliases'].textContent).toBe('No changes');
     });
   });
 

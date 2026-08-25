@@ -92,6 +92,11 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var modelOpenrouterIds = {};
   var aliasEdits = {};
   var aliasDisplay = {};
+  // N1: the alias map as loaded from disk (init below), so buildReview can
+  // tell an actual change from a value-identical re-write. Stays {} until
+  // init resolves (a fresh/offline config has nothing saved yet, so every
+  // computed write IS new).
+  var savedAliases = {};
   window.availableModels = null;
   var keyValid = false, validatedKey = '';
   var $ = function(id) { return document.getElementById(id); };
@@ -149,6 +154,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         window.customDefaultModel = cfg.default;
       }
       if (cfg && cfg.aliases) {
+        savedAliases = cfg.aliases; // N1: buildReview diffs against this
         modelChoicesData.forEach(function(mc) {
           var currentModel = cfg.aliases[mc.alias];
           if (currentModel) {
@@ -415,13 +421,28 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // alias changes', even though Finish wrote it. sidecar:save-config has
     // no confirmation step, so this review IS the only gate.
     var aliasWritesPreview = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
-    var writes = Object.keys(aliasWritesPreview).map(function(alias) {
-      var val = aliasWritesPreview[alias];
+    // N1: aliasWritesPreview is EVERY alias Finish would write, including
+    // ones whose value is already what's on disk -- after the F1 fix that
+    // is the NORMAL case on a plain reopen (init below seeds modelChoiceIds
+    // from cfg.aliases, so the drilled-down alias, the recommendedId, and
+    // the saved value are now the same string by construction). Finish
+    // still writes the full map (a value-identical write is harmless), but
+    // this review must only SHOW entries that actually differ from
+    // savedAliases -- otherwise a no-op reopen reports "N alias(es)
+    // modified" on the one screen that has no confirmation step after it.
+    var changedWrites = {};
+    Object.keys(aliasWritesPreview).forEach(function(alias) {
+      if (aliasWritesPreview[alias] !== savedAliases[alias]) {
+        changedWrites[alias] = aliasWritesPreview[alias];
+      }
+    });
+    var writes = Object.keys(changedWrites).map(function(alias) {
+      var val = changedWrites[alias];
       return alias + ' \\u2192 ' + (val === null ? '(deleted)' : val);
     });
     document.getElementById('review-routing').textContent =
       writes.length > 0 ? writes.join(', ') : 'No alias changes';
-    var editCount = Object.keys(aliasWritesPreview).length;
+    var editCount = Object.keys(changedWrites).length;
     var reviewAliases = document.getElementById('review-aliases');
     if (reviewAliases) {
       reviewAliases.textContent = editCount > 0 ? editCount + ' alias(es) modified' : 'No changes';
@@ -458,22 +479,40 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   });
 
   // issue 138 (fix round 1, Finding 1; precedence description corrected in
-  // the F2/F6 fix wave): assemble aliasWrites for Finish -- the aliasEdits
-  // (Step 3) overlay first, then the selected alias's resolved route
-  // (custom default or checked quick-pick), then every OTHER alias whose
-  // drill-down <select> fired change. Before the Task-3 dropdown existed
-  // there was nothing to lose by writing only the selected alias; now a
-  // drilled-down pick on a card that is NOT the checked default would
-  // silently vanish without this. Precedence is NOT uniform across the two
-  // groups, unlike an earlier version of this comment claimed: only the
-  // selected alias clobbers its aliasEdits entry (the ONE place that's
-  // permitted -- user-locked decision #2); every OTHER drilled-down alias
-  // defers to aliasEdits and is written only when Step 3 left it untouched
-  // (see the hasOwnProperty guard below and ruling R6a, which already
-  // described the real behaviour correctly). modelChoiceIds only ever
-  // gains an entry from the change handler above, never from
-  // server-rendered HTML, so a card the user never touched can't
-  // accidentally end up in here.
+  // the F2/F6 fix wave; modelChoiceIds provenance corrected in the N2 fix
+  // wave): assemble aliasWrites for Finish -- the aliasEdits (Step 3)
+  // overlay first; THEN, only for a checked quick-pick default (not a
+  // custom/searched one -- isCustomDefault skips this stage entirely), the
+  // selected alias's resolved route; then every OTHER alias whose
+  // drill-down <select> fired change -- "every OTHER" means every alias
+  // but the selected one ONLY when that earlier stage ran, so under a
+  // custom default the selected alias (if it has a drilled pick) is
+  // handled by THIS stage instead, not skipped. Before the Task-3 dropdown
+  // existed there was nothing to lose by writing only the selected alias;
+  // now a drilled-down pick on a card that is NOT the checked default
+  // would silently vanish without this. Precedence is NOT uniform across
+  // the two groups, unlike an earlier version of this comment claimed:
+  // only the selected alias clobbers its aliasEdits entry (the ONE place
+  // that's permitted -- user-locked decision #2); every OTHER drilled-down
+  // alias defers to aliasEdits and is written only when Step 3 left it
+  // untouched (see the hasOwnProperty guard below and ruling R6a, which
+  // already described the real behaviour correctly).
+  //
+  // modelChoiceIds is populated from TWO places, not one, unlike an
+  // earlier version of this comment claimed: the change handler above
+  // (a live drill-down pick), AND the init restore block (F3) -- which
+  // seeds it from cfg.aliases for every card whose SAVED value already
+  // names one of its shortlist rows, reading the id back out of that
+  // card's own server-rendered <option> elements. After the F1 fix that is
+  // the NORMAL case, not an edge case: a card the user never touched in
+  // THIS session routinely lands in modelChoiceIds anyway, because its
+  // saved value already matches its recommendedId. That is still correct
+  // to iterate here -- collectAliasWrites' job is to compute what Finish
+  // SHOULD write, and a value-identical write is harmless -- but it does
+  // mean this function can no longer be read as "only ever fires for
+  // aliases the user actually changed this session". buildReview is the
+  // layer responsible for not SHOWING those value-identical entries as
+  // changes (see its own N1 comment).
   function collectAliasWrites(selectedAlias, isCustomDefault) {
     var aliasWrites = {};
     Object.keys(aliasEdits).forEach(function(k) {
