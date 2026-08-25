@@ -445,3 +445,77 @@ describe('F5: catalog ids are escaped at every buildModelPickHTML interpolation 
     expect(decodeEntities(valueMatch[2])).toBe(hostileId);
   });
 });
+
+// Council review, PR 196 (consistency pass, NOT closing a live
+// vulnerability -- see electron/setup-ui-model.js's inline comments): the
+// file already escaped catalog-derived r.id/r.openrouterId in
+// buildModelPickHTML but left previewId and data-alias unescaped elsewhere,
+// even though in real use neither can carry a payload (c.alias is one of
+// the five hardcoded FAMILIES names; previewId comes out of
+// resolveQuickPicks' anchored idPattern regexes or a hardcoded fallback).
+// These tests use synthetic hostile values the real catalog/FAMILIES would
+// never actually produce, purely to pin that the escaping code path fires
+// uniformly now.
+describe('council review PR 196: previewId and data-alias escaping consistency', () => {
+  function decodeEntities(s) {
+    return s
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  const hostileAlias = 'deepseek"><script>1</script>';
+  const hostilePreviewId = 'deepseek/a"><script>2</script>';
+  const hostileChoices = [{
+    alias: hostileAlias, label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { deepseek: hostilePreviewId }
+  }];
+
+  test('a hostile alias in data-alias is escaped on every span/select/button carrying it', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    expect(html).not.toContain(`data-alias="${hostileAlias}"`);
+    const escaped = escapeAttr(hostileAlias);
+    // model-resolved and write-preview spans (the two elements the finding
+    // named) must both carry the escaped form.
+    expect(html).toContain(`<span class="model-resolved" data-alias="${escaped}">`);
+    expect(html).toContain(`<span class="write-preview" data-alias="${escaped}">`);
+  });
+
+  test('a hostile previewId is escaped in both .model-resolved text and .write-preview-id text', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    expect(html).not.toContain(`>${hostilePreviewId}<`);
+    const escapedPreview = escapeAttr(hostilePreviewId);
+    const resolvedMatch = html.match(/<span class="model-resolved"[^>]*>([^]*?)<\/span>/);
+    const writeIdMatch = html.match(/<code class="write-preview-id">([^]*?)<\/code>/);
+    expect(resolvedMatch[1]).toBe(escapedPreview);
+    expect(writeIdMatch[1]).toBe(escapedPreview);
+    expect(decodeEntities(resolvedMatch[1])).toBe(hostilePreviewId); // round-trips to the exact original
+  });
+
+  test('the model-pick <select> data-alias (buildModelPickHTML) is also escaped', () => {
+    const shortlist = {
+      recommendedId: hostilePreviewId,
+      suggested: [{ id: hostilePreviewId, name: 'a', contextLength: 1000, pricePerMInput: null, isRecommended: true, openrouterId: '' }],
+      rest: [], total: 1
+    };
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, { [hostileAlias]: shortlist });
+    expect(html).not.toContain(`<select class="model-pick" data-alias="${hostileAlias}">`);
+    expect(html).toContain(`<select class="model-pick" data-alias="${escapeAttr(hostileAlias)}">`);
+  });
+
+  // The finding's own verification requirement: a querySelector built from
+  // the RAW (unescaped) alias string must still find the element, because
+  // browsers decode HTML entities in attribute values before a CSS
+  // attribute selector ever compares against them. Simulated here (no
+  // jsdom dependency, matching this suite's existing decodeEntities
+  // approach) by asserting the round-trip a real DOM would perform.
+  test('decoding the escaped data-alias recovers the exact raw alias a querySelector would be built from', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    const match = html.match(/<span class="model-resolved" data-alias="([^]*?)">/);
+    expect(match).toBeTruthy();
+    expect(decodeEntities(match[1])).toBe(hostileAlias); // what document.querySelector would match against
+  });
+});

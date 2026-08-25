@@ -111,7 +111,12 @@ function buildModelPickHTML(alias, shortlist) {
     const sel = r.isRecommended ? ' selected' : '';
     return `<option value="${escapeAttr(r.id)}" data-or="${escapeAttr(r.openrouterId || '')}"${sel}>${escapeAttr(r.id)}${price}</option>`;
   };
-  let html = `<select class="model-pick" data-alias="${alias}">`;
+  // Escaping-discipline consistency pass (council review, PR 196): alias
+  // is one of the five hardcoded FAMILIES names, not catalog data, so this
+  // is not closing a live vulnerability -- it matches the escapeAttr() use
+  // a few lines up for r.id/r.openrouterId, which ARE catalog-derived, so
+  // every attribute interpolation in this function follows the same rule.
+  let html = `<select class="model-pick" data-alias="${escapeAttr(alias)}">`;
   html += `<optgroup label="Suggested">${shortlist.suggested.map(opt).join('')}</optgroup>`;
   if (shortlist.rest.length > 0) {
     html += `<optgroup label="All ${shortlist.total} models">${shortlist.rest.map(opt).join('')}</optgroup>`;
@@ -163,6 +168,21 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
 
     // Resolved id for the write-preview (prefer bestProvider route)
     const previewId = c.routes[bestProvider] || Object.values(c.routes)[0] || '';
+    // Escaping-discipline consistency pass (council review, PR 196): NOT
+    // closing a live vulnerability -- c.alias is one of the five hardcoded
+    // FAMILIES names and previewId is filtered through resolveQuickPicks'
+    // anchored idPattern regexes (or a hardcoded fallback), neither of
+    // which can carry a payload. This applies the same escapeAttr() used a
+    // few lines up (buildModelPickHTML, for genuinely catalog-derived
+    // r.id/r.openrouterId) to the data-alias="..." attributes below and to
+    // previewId where it lands as .model-resolved / .write-preview-id text,
+    // matching what buildModelPickHTML already does for option text -- so
+    // this one class of interpolation isn't escaped in one place in this
+    // file and not another. Other c.alias interpolations in this card
+    // (the radio value, the plain-text alias label) were not part of the
+    // finding and are left as-is.
+    const escapedAlias = escapeAttr(c.alias);
+    const escapedPreviewId = escapeAttr(previewId);
 
     // Offline badge for fallback rows
     const badge = c.source === 'fallback'
@@ -175,12 +195,12 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
       const pills = providers.map(p => {
         const isActive = p === bestProvider;
         const cls = isActive ? 'route-pill active' : 'route-pill';
-        return `<button class="${cls}" data-alias="${c.alias}" data-provider="${p}">${PROVIDER_NAMES[p]}</button>`;
+        return `<button class="${cls}" data-alias="${escapedAlias}" data-provider="${p}">${PROVIDER_NAMES[p]}</button>`;
       }).join('');
       const toggleDisplay = showToggle ? '' : ' style="display:none"';
       const staticDisplay = showToggle ? ' style="display:none"' : '';
-      routeHtml = `<span class="route-toggle" data-alias="${c.alias}"${toggleDisplay}>${pills}</span>`;
-      routeHtml += `<span class="route-static" data-alias="${c.alias}"${staticDisplay}>via ${PROVIDER_NAMES[bestProvider]}</span>`;
+      routeHtml = `<span class="route-toggle" data-alias="${escapedAlias}"${toggleDisplay}>${pills}</span>`;
+      routeHtml += `<span class="route-static" data-alias="${escapedAlias}"${staticDisplay}>via ${PROVIDER_NAMES[bestProvider]}</span>`;
     } else {
       routeHtml = `<span class="route-static">via ${PROVIDER_NAMES[bestProvider]}</span>`;
     }
@@ -191,10 +211,10 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
         <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
         <span class="model-alias">${c.alias}</span>
         <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
-        <span class="model-resolved" data-alias="${c.alias}">${previewId}</span>
+        <span class="model-resolved" data-alias="${escapedAlias}">${escapedPreviewId}</span>
         ${routeHtml}
         ${modelPickHtml}
-        <span class="write-preview" data-alias="${c.alias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${previewId}</code></span>
+        <span class="write-preview" data-alias="${escapedAlias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${escapedPreviewId}</code></span>
       </label>`;
   }).join('\n      ');
 
