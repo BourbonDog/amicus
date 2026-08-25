@@ -166,7 +166,8 @@ function validateFindings(jsonText) {
 
   // ⚠️ LC-10 (owner ruling, 2026-07-26). A review that read the material and found
   // nothing is a VALID review — the anti-sycophancy clause shipped in every Stage-1
-  // briefing says so verbatim ("An empty severity category is a valid result"), and
+  // review briefing says so verbatim ("An empty severity category is a valid result";
+  // task briefings state the same rule in claims wording — v4.9 W6), and
   // rejecting it structurally pressured models into inventing findings to satisfy
   // the schema. costgate01's grok did exactly that, and the fabrication reached
   // tally.json, the street-cred rankings, the chair synthesis and a human decision.

@@ -99,6 +99,7 @@ src/
 │   ├── briefings-chair.js
 │   ├── briefings-debate.js
 │   ├── briefings-stage2.js
+│   ├── briefings-task.js
 │   ├── briefings.js
 │   ├── chair-fallback.js
 │   ├── debate.js
@@ -521,6 +522,7 @@ evals/
 | `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()`, `CHAIR_TASK()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
+| `council/briefings-task.js` |  | `TASK_ANTI_SYCOPHANCY_CLAUSE()`, `TASK_FINDINGS_JSON_SHAPE()`, `TASK_FINDINGS_CONTRACT()`, `buildTaskSeatBriefing()`, `buildTaskCriticBriefing()` |
 | `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
 | `council/chair-fallback.js` |  | `pickFallbackChair()`, `classifyChairAttempt()` |
 | `council/debate.js` |  | `applyDebate()`, `decorateRecord()`, `debateRunStatsRows()`, `PAST_TENSE()`, `DEBATE_ROLES()` |

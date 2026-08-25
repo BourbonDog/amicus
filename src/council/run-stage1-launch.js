@@ -47,7 +47,7 @@ async function launchStage1(ctx) {
       seated.push({ waveId, models: [m], roster: seats.slice(i, i + 1) });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1LensBriefing(o.intent, { lens: o.lenses[i], briefing: o.briefing, date: o.date }),
       }));
     });
   } else {
@@ -61,7 +61,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias !== o.critic) });
       launches.push(launchers.launchWave({
         ...common, models: seats1, waveId: `${o.runId}-s1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date }),
       }));
     }
     if (o.critic) {
@@ -70,7 +70,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias === o.critic).slice(0, 1) });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date }),
       }));
     }
   }

@@ -146,7 +146,7 @@ async function runCouncil(options, deps = {}) {
 
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
-      briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
+      briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date }), { mode: 0o600 });
 
     // ---- Stage 1: independent reviews ----
     // Lens mode launches one solo per seat instead of a `-s1` seat wave, so it
