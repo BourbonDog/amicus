@@ -72,6 +72,35 @@ describe('buildWizardCSS — kit component treatments', () => {
   });
 });
 
+describe('buildWizardCSS — model-level picker (Step 2 card, issue 138)', () => {
+  let rules;
+  beforeAll(() => { rules = require('../../electron/setup-ui-styles').__rawWizardCSS(); });
+
+  // This only proves the generated CSS text carries the right declarations --
+  // it cannot prove the dropdown actually renders legibly on Windows (no
+  // jsdom/visual test harness exists for this repo). The defect being fixed
+  // was invisible to any string-based test, which is exactly why it shipped.
+  test('.model-pick is token-driven, not left to OS-default chrome', () => {
+    expect(rules).toMatch(/\.model-pick\s*\{[^}]*background:\s*var\(--surface\)/);
+    expect(rules).toMatch(/\.model-pick\s*\{[^}]*border:\s*1px solid var\(--border\)/);
+    expect(rules).toMatch(/\.model-pick\s*\{[^}]*color:\s*var\(--text-muted\)/);
+    expect(rules).toMatch(/\.model-pick\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
+  });
+
+  // The load-bearing part: Windows does not inherit a <select>'s background
+  // /color into its <option>/<optgroup> children, which is the actual defect
+  // (black-on-white chrome in a dark wizard) reported against issue 138.
+  test('.model-pick option/optgroup set background + color explicitly (the load-bearing fix)', () => {
+    expect(rules).toMatch(/\.model-pick option\s*\{[^}]*background:\s*var\(--surface\)/);
+    expect(rules).toMatch(/\.model-pick option\s*\{[^}]*color:\s*var\(--text\)/);
+    expect(rules).toMatch(/\.model-pick optgroup\s*\{[^}]*color:\s*var\(--text-muted\)/);
+  });
+
+  test('.model-pick sits on its own line below the route pills, not stretched wide like .alias-model-select', () => {
+    expect(rules).toMatch(/\.model-pick\s*\{[^}]*flex-basis:\s*100%/);
+  });
+});
+
 describe('buildWizardCSS — free council picker (B35/#27 grouped rendering)', () => {
   let rules;
   beforeAll(() => { rules = require('../../electron/setup-ui-styles').__rawWizardCSS(); });

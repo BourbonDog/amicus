@@ -192,6 +192,28 @@ function __rawWizardCSS() {
     margin-left: auto; font-size: 11px; color: var(--text-faint); font-style: italic;
   }
 
+  /* Model-level picker (Step 2 card) — issue 138. Mirrors .alias-model-select's
+     token-driven approach (background/border/radius/color/font/outline/cursor),
+     but this control lives inside a wrapping .model-card row alongside the
+     radio and route pills, not the Step-3 alias table's own linear row —
+     so it takes flex-basis:100% (its own line, below the route pills) rather
+     than alias-model-select's flex:1, and a plain --border (not --accent,
+     which the alias editor reserves for its active-edit state) so it reads
+     as a subordinate refinement, not the card's primary affordance. The
+     option/optgroup rules are load-bearing: Windows does not inherit a
+     <select>'s background/color into its <option>/<optgroup> children. */
+  .model-pick {
+    flex-basis: 100%; margin-top: 4px; padding: 3px 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-3); color: var(--text-muted); font-size: 11px;
+    font-family: var(--font-mono);
+    outline: none; cursor: pointer; max-width: 280px;
+  }
+  .model-pick:hover { border-color: var(--border-strong); }
+  .model-pick:focus { border-color: var(--accent); }
+  .model-pick option { background: var(--surface); color: var(--text); }
+  .model-pick optgroup { color: var(--text-muted); font-style: normal; }
+
   /* Routing example */
   .routing-example {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-8);
