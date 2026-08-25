@@ -28,7 +28,14 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // V17 (council A4): per-provider snapshot of the catalog each save-key
   // offer was built from, so set-provider-default applies against the SAME
   // catalog the picker offered — a re-fetch there could return a different
-  // catalog and flip directFormIfProven's evidence (TOCTOU).
+  // catalog and flip directFormIfProven's evidence (TOCTOU). Lifetime =
+  // the OFFER SESSION (PR 199 B1/D2 as re-ruled after review F1): the
+  // wizard auto-applies on render and re-applies on every radio change, so
+  // EVERY apply while the offer is on screen must see the offer's own
+  // catalog — a one-shot delete-on-read handed every human pick a fresh
+  // fetch, which is the original A4 race. The session ends when a new
+  // offer overwrites the entry (Map.set below) or setup-done clears the
+  // map. Pairing state, never a catalog cache.
   const offerCatalogs = new Map();
 
   ipcMain.handle('sidecar:validate-key', async (_event, provider, key) => {
@@ -91,8 +98,15 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // applyProviderDefault uses directFormIfProven (model-canonicalization.js)
   // to decide whether to strip an OpenRouter prefix off chosenId, and needs
   // the catalog the offer was built from to do it. Fetching fresh only when
-  // no snapshot exists (apply without a prior offer).
+  // no snapshot exists (no prior offer, or the offer session already ended
+  // via setup-done).
   ipcMain.handle('sidecar:set-provider-default', async (_event, provider, chosenId) => {
+    // Reads WITHOUT consuming (PR 199 B1/D2 re-ruled after review F1): the
+    // user's pick is routinely the second-or-later apply for one offer
+    // (auto-apply on render, re-apply per radio change), and each must see
+    // the catalog the visible rows were built from. Staleness is bounded by
+    // the offer session instead: setup-done clears the map, a re-offer
+    // overwrites the entry.
     let catalog = offerCatalogs.get(provider);
     if (!catalog) {
       catalog = [];
@@ -147,6 +161,9 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   });
 
   ipcMain.handle('sidecar:setup-done', (_event, defaultModel, keyCount) => {
+    // The offer session ends with the wizard: any apply after this fetches
+    // fresh evidence rather than reusing a closed offer's catalog (B1/D2).
+    offerCatalogs.clear();
     const { BrowserWindow } = require('electron');
     const senderWindow = BrowserWindow.fromWebContents(_event.sender);
     const mainWin = getMainWindow();

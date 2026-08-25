@@ -216,13 +216,13 @@ async function runStage1(ctx) {
         return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
           degraded: false, extraRows };
       }
-      // Every -p<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒
-      // buildRunStatsEntry's never-invent defaults); 'unstructured' is flat — !res.ok holds at every push (v4.9 V18).
-      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: m.modelInput, role: 'repair',
-        wasChair: false, conformance: 'unstructured' }));
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
+      // Every -p<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒ never-invent
+      // defaults); pushed AFTER re-validation to stamp the repair LEG's own measured outcome (PR 199 D1, v4.9 V18 refined).
+      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: m.modelInput, role: 'repair',
+        wasChair: false, conformance: res.ok ? 'clean' : 'unstructured' }));
       if (res.ok) { conformance = 'repaired'; }
     }
     if (!res.ok) { conformance = 'unstructured'; }

@@ -1470,11 +1470,21 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 
 - [x] **Conformance drift between producers of the same non-primary role** — **DONE, v4.9 W1
   (2026-08-25, ruling V18):** both repair-loop pushes (`run-stages.js :: runStage1`,
-  `run-stage2.js :: runStage2`) now pass an explicit `conformance: 'unstructured'` — the flat
+  `run-stage2.js :: runStage2`) passed an explicit `conformance: 'unstructured'` — the flat
   literal this entry's design call named, chosen because `res.ok`/`parsed.ok` are provably false
   at each push. The `|| 'clean'` default was NOT flipped (the two primary error-row sites,
   `run-finish.js :: finishRun` and `run-stage1-rows.js :: pushDeadSeatRows`, depend on it), and
-  the rows are pinned by behavior tests including two every-row pins. Original filing:
+  the rows are pinned by behavior tests including two every-row pins.
+  — refined 2026-08-25 (council D1 on PR 199): the flat literal misdescribed SUCCESSFUL repair
+  legs — at the push, the false `res.ok`/`parsed.ok` was the PRE-repair validation, not the
+  repair's own outcome. Per this filing's other alternative, all three `buildRunStatsEntry`
+  repair pushes (the
+  two loops plus `run-chair.js`'s ch4 push, which had been taking the `'clean'` default —
+  debate's `mk('repair')` rows are a fourth, separate producer, already correct: debate emits
+  repair rows only for failed repairs, stamped `'unstructured'` at the call sites) now push
+  AFTER the re-validation/re-parse and stamp the measured value: `'clean'` when the repair leg's
+  own output parsed, `'unstructured'` when it did not. Failed-repair rows still read
+  `'unstructured'`; the primary rows' `'repaired'` state is unchanged. Original filing:
   [S, defer-with-record]
   `buildRunStatsEntry` (`src/council/run-assemble.js:60`) defaults `conformance` to `'clean'` when
   the caller doesn't pass one explicitly — every engine-born `chair-attempt` row (`run-chair.js`'s
@@ -6549,9 +6559,15 @@ Filed past-tense in the same commit as the fixes, per the falsified-record rule.
 - **Council A4 (`directFormIfProven` TOCTOU via the two setup IPC fetches) — ruling V17: closed
   structurally.** The wizard's apply handler now consumes the SAME catalog snapshot the offer
   was built from (per-provider snapshot minted at the save-key build site), so the
-  check-vs-use window is gone; `directFormIfProven` and its A4 pin
+  check-vs-use window is gone *within an offer session*; `directFormIfProven` and its A4 pin
   (`tests/model-canonicalization.test.js`) are byte-untouched, exactly as that pin's reasoning
-  requires.
+  requires. ⚠️ Snapshot LIFETIME was re-ruled twice on PR 199 and the final shape is
+  **offer-session** (2026-08-25): the council's B1/D2 (unbounded lifetime) was first answered
+  with delete-on-first-read, which the fix-wave review's F1 showed re-opens the A4 race for
+  every human pick (the wizard auto-applies on render, so the pick is always a later apply).
+  Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
+  clears the map. All four states pinned in
+  `tests/electron/ipc-setup-catalog-snapshot.test.js`.
 - **`MAX_CATALOG_AGE_MS` mirror (doctor-alias-check vs cli-handlers-doctor)** — retired to one
   source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
   it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is

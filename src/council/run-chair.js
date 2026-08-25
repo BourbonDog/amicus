@@ -256,14 +256,16 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // distinction: a launched ch4 (a leg document exists, whatever its
     // status) gets its own row so the repair's spend is attributed even when
     // it never supplies a VERDICT; a ch4 that never even launched gets no
-    // row at all, because there is nothing billed to attribute.
+    // row at all, because there is nothing billed to attribute. The push sits
+    // AFTER the verdict parse so it stamps the ch4 leg's own measured outcome (PR 199 D1).
+    overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
+    chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({
         leg: repair.leg, model: actualChair, role: 'repair', wasChair: false,
+        conformance: overallVerdict ? 'clean' : 'unstructured',
       }));
     }
-    overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
-    chairConformance = overallVerdict ? 'repaired' : 'unstructured';
   }
   // A completed chair whose verdict never parsed is 'unstructured' even when
   // the repair was skipped (e.g. the chair leg itself tripped --max-cost).

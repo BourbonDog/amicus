@@ -938,11 +938,11 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     });
     const { extraRows } = await runStage1(ctx);
     expect(extraRows).toHaveLength(1);
-    // v4.9 V18: EVERY repair row says 'unstructured' — even this one, whose own
-    // output parsed. The row records the failed parse that made the attempt
-    // exist, not the attempt's outcome (that lands on the seat's primary row).
+    // v4.9 V18 refined (PR 199 D1): the repair ROW carries the repair LEG's own
+    // measured re-validation outcome — this repair's output parsed, so its row
+    // reads 'clean'. The seat's primary row separately says 'repaired'.
     expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1',
-      conformance: 'unstructured' });
+      conformance: 'clean' });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
   });
@@ -1937,9 +1937,10 @@ describe('runStage2', () => {
     expect(extraRows).toHaveLength(1);
     expect(extraRows[0]).toMatchObject({
       model: 'gemini', role: 'repair', wasChair: false, waveId: 'abc123-q1', status: 'complete',
-      // v4.9 V18: the repair ROW is 'unstructured' even when the repair lands —
-      // 'repaired' is the JUDGE's primary conformance, asserted above.
-      conformance: 'unstructured',
+      // v4.9 V18 refined (PR 199 D1): the repair ROW carries the repair leg's own
+      // re-parse outcome — it landed, so 'clean'. 'repaired' stays the JUDGE's
+      // primary conformance, asserted above.
+      conformance: 'clean',
     });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
