@@ -574,8 +574,39 @@ describe('setup-ui wizard', () => {
       expect(blockMatch).toBeTruthy();
       // eslint-disable-next-line no-new-func
       return new Function(
-        'modelChoicesData', 'cfg', 'routingChoices', 'modelChoiceIds', 'modelOpenrouterIds', 'document',
+        'modelChoicesData', 'cfg', 'routingChoices', 'modelChoiceIds', 'modelOpenrouterIds',
+        'explicitRouteChoices', 'document',
         blockMatch[0]
+      );
+    }
+
+    // Duplicated from the 'issue 138 fix round 1, Finding 1' describe block
+    // above (same new Function harness, same extraction regexes) rather than
+    // shared, matching this file's existing convention of a describe-local
+    // copy of each extractor (see extractPickRouteFor, defined separately in
+    // both the '#61' and 'issue 138: Finish honours...' describes).
+    function extractCollectAliasWrites() {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
+      const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
+      const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
+      expect(directProvidersMatch).toBeTruthy();
+      expect(toBareMatch).toBeTruthy();
+      expect(pickRouteForMatch).toBeTruthy();
+      expect(collectMatch).toBeTruthy();
+      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+      // eslint-disable-next-line no-new-func
+      const build = new Function(
+        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
+        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
+      );
+      return (opts = {}) => build(
+        directProviders,
+        opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
+        opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
+        opts.aliasEdits || {}, opts.modelChoicesData || []
       );
     }
 
@@ -588,7 +619,7 @@ describe('setup-ui wizard', () => {
         { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
       ];
       const cfg = { aliases: { gemini: 'google/gemini-2.5-flash' } };
-      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {};
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
       const sel = {
         value: null,
         options: [
@@ -603,10 +634,14 @@ describe('setup-ui wizard', () => {
         }
       };
       const run = extractAliasRestoreBlock();
-      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, fakeDocument);
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument);
       expect(modelChoiceIds.gemini).toBe('google/gemini-2.5-flash'); // Finish must write the SAVED pick back, not the flagship
       expect(sel.value).toBe('google/gemini-2.5-flash');             // Step 2's dropdown must visually agree
       expect(modelOpenrouterIds.gemini).toBe('openrouter/google/gemini-2.5-flash');
+      // A bare/direct saved pick must NOT be mistaken for an explicit-OR
+      // choice -- the OR-restore branch below is the only place that sets
+      // these, and this alias matched by `value`, not by `data-or`.
+      expect(explicitRouteChoices.gemini).toBeUndefined();
     });
 
     it('leaves modelChoiceIds untouched when the saved alias value names no shortlist row (no card for it, or value predates the catalog)', () => {
@@ -614,13 +649,116 @@ describe('setup-ui wizard', () => {
         { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
       ];
       const cfg = { aliases: { gemini: 'google/some-retired-model' } };
-      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {};
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
       const sel = { value: null, options: [fakeOption('google/gemini-3.7-flash', '')] };
       const fakeDocument = { querySelector: () => sel };
       const run = extractAliasRestoreBlock();
-      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, fakeDocument);
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument);
       expect(modelChoiceIds.gemini).toBeUndefined();
       expect(sel.value).toBeNull();
+    });
+
+    // Council review finding, PR 196 (not to be confused with the
+    // pre-existing "F1" label used elsewhere in this file for issue 138's
+    // fix-round-1 Finding 1): a saved value that names no option's `value`
+    // was silently dropped even when it DID name an option's `data-or` --
+    // an explicit-OpenRouter drilled pick (pickRouteFor's explicit-OR
+    // branch saves "openrouter/<vendor>/<model>", never a bare id)
+    // round-tripped to nothing, so the dropdown fell back to the flagship
+    // and Finish silently rewrote the saved pick away.
+    it('F3-OR: seeds the whole explicit-OpenRouter state when the saved value matches an option data-or, not its value', () => {
+      const twoCardData = [
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+      ];
+      const cfg = { aliases: { deepseek: 'openrouter/deepseek/deepseek-r1' } }; // explicit-OR form, matches no option.value
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
+      const sel = {
+        value: null,
+        options: [
+          fakeOption('deepseek/deepseek-v4-pro', 'openrouter/deepseek/deepseek-v4-pro'),
+          fakeOption('deepseek/deepseek-r1', 'openrouter/deepseek/deepseek-r1')
+        ]
+      };
+      const fakeDocument = { querySelector: () => sel };
+      const run = extractAliasRestoreBlock();
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument);
+      expect(sel.value).toBe('deepseek/deepseek-r1');                       // dropdown shows the drilled model, bare
+      expect(modelChoiceIds.deepseek).toBe('deepseek/deepseek-r1');         // bare id, matching the change handler's own convention
+      expect(modelOpenrouterIds.deepseek).toBe('openrouter/deepseek/deepseek-r1');
+      expect(routingChoices.deepseek).toBe('openrouter');                   // so the rendered route pill agrees
+      expect(explicitRouteChoices.deepseek).toBe(true);                     // so pickRouteFor takes its explicit-OR branch
+    });
+
+    it('F3-OR: a saved value matching neither an option value nor a data-or is left untouched (no false-positive OR match)', () => {
+      const twoCardData = [
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+      ];
+      const cfg = { aliases: { deepseek: 'openrouter/deepseek/some-retired-model' } };
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
+      const sel = { value: null, options: [fakeOption('deepseek/deepseek-r1', 'openrouter/deepseek/deepseek-r1')] };
+      const fakeDocument = { querySelector: () => sel };
+      const run = extractAliasRestoreBlock();
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument);
+      expect(modelChoiceIds.deepseek).toBeUndefined();
+      expect(routingChoices.deepseek).toBeUndefined();
+      expect(explicitRouteChoices.deepseek).toBeUndefined();
+      expect(sel.value).toBeNull();
+    });
+
+    // Full round-trip, chaining the REAL restore block into the REAL
+    // collectAliasWrites (via the extractCollectAliasWrites copy defined
+    // just above in this describe block) -- proves save -> reopen-init ->
+    // Finish reproduces the exact saved string, not just that individual
+    // flags look right in isolation. Covers BOTH an explicit-OR pick and a
+    // bare/direct pick, per the council's verification requirement.
+    describe('round-trip: reopen-init followed by collectAliasWrites reproduces the saved value byte-for-byte', () => {
+      const deepseekCard = [
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+      ];
+
+      it('an explicit-OpenRouter drilled pick round-trips unchanged', () => {
+        const savedValue = 'openrouter/deepseek/deepseek-r1';
+        const cfg = { aliases: { deepseek: savedValue } };
+        const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
+        const sel = {
+          value: null,
+          options: [
+            fakeOption('deepseek/deepseek-v4-pro', 'openrouter/deepseek/deepseek-v4-pro'),
+            fakeOption('deepseek/deepseek-r1', 'openrouter/deepseek/deepseek-r1')
+          ]
+        };
+        const fakeDocument = { querySelector: () => sel };
+        extractAliasRestoreBlock()(
+          deepseekCard, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument
+        );
+        const collectAliasWrites = extractCollectAliasWrites()({
+          modelChoicesData: deepseekCard, routingChoices, explicitRouteChoices, modelChoiceIds, modelOpenrouterIds
+        });
+        const writes = collectAliasWrites(null, true); // reopen-and-Finish with no further edits
+        expect(writes.deepseek).toBe(savedValue); // byte-identical to what was loaded
+      });
+
+      it('a bare/direct drilled pick round-trips unchanged (regression guard)', () => {
+        const savedValue = 'deepseek/deepseek-r1';
+        const cfg = { aliases: { deepseek: savedValue } };
+        const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
+        const sel = {
+          value: null,
+          options: [
+            fakeOption('deepseek/deepseek-v4-pro', 'openrouter/deepseek/deepseek-v4-pro'),
+            fakeOption('deepseek/deepseek-r1', 'openrouter/deepseek/deepseek-r1')
+          ]
+        };
+        const fakeDocument = { querySelector: () => sel };
+        extractAliasRestoreBlock()(
+          deepseekCard, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, explicitRouteChoices, fakeDocument
+        );
+        const collectAliasWrites = extractCollectAliasWrites()({
+          modelChoicesData: deepseekCard, routingChoices, explicitRouteChoices, modelChoiceIds, modelOpenrouterIds
+        });
+        const writes = collectAliasWrites(null, true);
+        expect(writes.deepseek).toBe(savedValue); // byte-identical, and must NOT gain an openrouter/ prefix
+      });
     });
   });
 

@@ -174,12 +174,47 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
             // <select> so a no-op reopen-and-Finish round-trips cleanly.
             var sel = document.querySelector('.model-pick[data-alias="' + mc.alias + '"]');
             if (sel) {
+              var matchedByValue = false;
               for (var j = 0; j < sel.options.length; j++) {
                 if (sel.options[j].value === currentModel) {
                   sel.value = currentModel;
                   modelChoiceIds[mc.alias] = currentModel;
                   modelOpenrouterIds[mc.alias] = sel.options[j].getAttribute('data-or') || null;
+                  matchedByValue = true;
                   break;
+                }
+              }
+              // F3-OR (council review, issue 138): an explicit-OpenRouter
+              // drilled pick is saved as "openrouter/<vendor>/<model>"
+              // (pickRouteFor's explicit-OR branch below) -- that form
+              // matches no option's bare 'value', only its 'data-or'. Every
+              // option carries 'data-or' (CONTROLLER RULING R1, issue 138 --
+              // see buildModelPickHTML's docstring in setup-ui-model.js), so
+              // search for THAT match when the bare-value search above
+              // found nothing.
+              // Restoring modelChoiceIds alone here would round-trip the
+              // dropdown selection but make Finish write the BARE id back --
+              // silently converting the user's explicit "via OpenRouter"
+              // choice into direct-first policy routing on the very next
+              // save, which is worse than the visible flagship-revert this
+              // block exists to fix. So restore the WHOLE state pickRouteFor
+              // needs to reproduce the OR form: the option's bare value (for
+              // the <select> and modelChoiceIds), its data-or
+              // (modelOpenrouterIds), and the two flags pickRouteFor's
+              // explicit-OR branch checks -- routingChoices[alias] ===
+              // 'openrouter' and explicitRouteChoices[alias] -- which are
+              // exactly the flags the route-pill click handler sets, so the
+              // rendered pill agrees with the restored state too.
+              if (!matchedByValue) {
+                for (var k = 0; k < sel.options.length; k++) {
+                  if (sel.options[k].getAttribute('data-or') === currentModel) {
+                    sel.value = sel.options[k].value;
+                    modelChoiceIds[mc.alias] = sel.options[k].value;
+                    modelOpenrouterIds[mc.alias] = currentModel;
+                    routingChoices[mc.alias] = 'openrouter';
+                    explicitRouteChoices[mc.alias] = true;
+                    break;
+                  }
                 }
               }
             }
