@@ -42,7 +42,7 @@ const { logger } = require('../utils/logger');
  * alias, ch3 = a DIFFERENT ledger-promoted alias, ch4 = whichever succeeded)
  * means a chair leg's modelInput does not reliably equal run.json's `chair`
  * field while the chain is still in flight (that field is only checkpointed
- * once the WHOLE chain resolves, src/council/run-chair.js:122) — so alias
+ * once the WHOLE chain resolves, run-chair.js :: runChair at :148) — so alias
  * matching would miss ch3/ch4 mid-run. The stage that owns the leg is the
  * authoritative signal instead (plan's F34 correction: "derive role from the
  * stage that owns the leg"). Every other stage (stage1/stage2/debate-*)

@@ -114,6 +114,37 @@ describe("stage1-retry channel (SL-2)", () => {
   });
 });
 
+describe("kind 'info' + channel 'ledger-skipped' (v4.9 task mode, W5.1)", () => {
+  const info = {
+    kind: 'info', channel: 'ledger-skipped',
+    what: 'task runs write no reliability rows',
+    why: 'ledger-driven chair promotion draws only on review-run history',
+    effect: 'fallback candidates come from review runs only',
+  };
+
+  test('makeDegrade accepts an info record on ledger-skipped', () => {
+    const r = makeDegrade(info);
+    expect(r.kind).toBe('info');
+    expect(r.channel).toBe('ledger-skipped');
+  });
+
+  test('formatDegrade renders an info record with the Note: lead', () => {
+    expect(formatDegrade(makeDegrade({ ...info, what: 'a', why: 'b', effect: 'c' })))
+      .toBe('Note: a — b. c.\n');
+  });
+
+  test('DEGRADE_CHANNELS has ledger-skipped', () => {
+    expect(DEGRADE_CHANNELS.has('ledger-skipped')).toBe(true);
+  });
+
+  test('a degrade and a heal still lead Notice / Recovered — info changed neither', () => {
+    expect(formatDegrade(makeDegrade({ ...valid, what: 'a', why: 'b', effect: 'c' })))
+      .toBe('Notice: a — b. c.\n');
+    expect(formatDegrade(makeDegrade({ ...valid, kind: 'heal', what: 'a', why: 'b', effect: 'c' })))
+      .toBe('Recovered: a — b. c.\n');
+  });
+});
+
 describe('seat-unbound channel (v4.8)', () => {
   test('makeDegrade round-trips a seat-unbound degrade', () => {
     const r = makeDegrade({

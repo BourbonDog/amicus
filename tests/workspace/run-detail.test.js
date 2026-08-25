@@ -78,8 +78,10 @@ describe('getRunDetail', () => {
     // assertion is this exact array.
     // ⚠️ CITATION REPAIR 2026-08-21 (v4.8 Phase 5 T5.4 fix round 1) — four of the five anchors in
     // this block were re-opened and were WRONG: run.js:236 is the Stage-2 conformance merge (the
-    // runChair call is :271), run-chair.js:92 is classifyChairAttempt (the 'chair' stamps are
-    // :187/:190/:219), run-state.js:95-102 is initCouncilRun's seed (the append is inside
+    // runChair call is :271), run-chair.js:92 was classifyChairAttempt (the v4.9 W4 split moved
+    // its body to chair-fallback.js, still run-chair.js :: classifyChairAttempt via re-export;
+    // the 'chair' stamps sit at run-chair.js:109/:112/:141 inside runChair),
+    // run-state.js:95-102 is initCouncilRun's seed (the append is inside
     // updateStage), and run-debate.test.js:616 was a runStats-row assertion. That last one was
     // ALREADY stale at v4.8 Phase 5's BASE 9ef275e5 — verified by opening it there, so the +337
     // lines that phase added to that file did not cause it. Only
@@ -184,8 +186,8 @@ describe('getRunDetail', () => {
   /**
    * TST-8 — degradedReason()'s THIRD branch (a `skipped` stage) had no coverage. It was
    * deferred as YAGNI and is no longer: the v4.4 cost work added two fresh ways to skip a
-   * stage that did not exist when it was deferred — `overBudget()` (src/council/run-chair.js:84
-   * checkpoints the chair stage `skipped`; src/council/run.js:229 does the same for
+   * stage that did not exist when it was deferred — `overBudget()` (src/council/run-chair.js:97-110
+   * stamps the chair stage `skipped`; src/council/run.js:229 does the same for
    * debate-revote) and the pre-flight BUDGET_EXCEEDED refusal that stamps `budgetRefusals[]`.
    * A run that reaches the verdict panel with a cost-ceiling skip is now a normal outcome, and
    * this branch is the only thing that explains it to the user.
@@ -207,7 +209,7 @@ describe('getRunDetail', () => {
   };
 
   test('degradedReason skipped path: a cost-ceiling-skipped chair names the stage and the cause', () => {
-    // run-chair.js:84-90 — `if (overBudget()) { updateStage(…, {status:'skipped'}) }`, with no
+    // run-chair.js:97-110 — `if (overBudget()) { updateStage(…, {status:'skipped'}) }`, with no
     // startedAt and no run.error anywhere. Before this branch the panel had nothing to say.
     const d = withStages([
       { name: 'stage1', status: 'complete' },

@@ -105,8 +105,8 @@ const { benchLegs, credFor, splitFindingsBySeat } = require('./ledger-join');
  * most-recently-seen-first, and pickFallbackChair LAUNCHES `aliases[0]`, so
  * first-occurrence anchoring (what a naive `new Map(model+'\0'+resolved)`
  * gives for free) promotes the executable-id-shaped name over the short alias
- * on `--models gpt-5,openai/gpt-5,gpt-5` — the form run-chair.js:48-52 argues
- * against. On a bench where no alias repeats AND no alias has more than one
+ * on `--models gpt-5,openai/gpt-5,gpt-5` — the form run-chair.js :: pickFallbackChair
+ * (body in chair-fallback.js since the v4.9 W4 split) argues against. On a bench where no alias repeats AND no alias has more than one
  * joinable runStats row, lastIndexOf === indexOf and the row set and its order
  * are unchanged from pre-PR4b.
  *

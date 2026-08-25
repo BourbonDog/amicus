@@ -58,7 +58,7 @@ describe('council workspace fixtures', () => {
 
   // ⚠️ DE-ROT (F16): the engine writes ABSOLUTE paths into `stages[].project`
   // (run.js:127 `project: o.runDir`, run.js:166 `project: <runDir>/_scratch`,
-  // run-chair.js:92) and into `options.outDir` (run.js:78). A relative "." would
+  // run-chair.js:112) and into `options.outDir` (run.js:78). A relative "." would
   // make the live leg rollup resolve sessions against process.cwd(). Fixtures
   // therefore ship the `__RUNDIR__` sentinel; `copyRunFixture()` rewrites it.
   test('fixtures carry the __RUNDIR__ sentinel, never a relative path', () => {
