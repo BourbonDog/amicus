@@ -49,8 +49,11 @@ function vendorRowsIn(catalog, vendor) {
 }
 
 /**
- * Choose the verbatim catalog id a single catalog `row` should surface as in
- * the picker -- NEVER fabricates an id.
+ * Choose the id a single catalog `row` should surface as in the picker.
+ * Prefers a real, verbatim catalog id; only SYNTHESISES one (via
+ * `toCanonicalDefault`, below) for a non-divergent vendor with no direct
+ * twin at all -- see `buildRows`'s docstring for the measured extent of
+ * that case (all `deepseek` rows, as of 2026-08-24).
  *
  * A direct-namespace row always keeps its own (real, direct-callable) id,
  * regardless of what `pairAcrossGateways` could resolve for it -- this is
@@ -86,9 +89,30 @@ function chooseRowId(vendor, isDirect, row, paired) {
 /**
  * Dedupe `vendor`'s catalog rows across gateways into one row per logical
  * model, reusing `pairAcrossGateways` (never re-deriving the pairing logic).
- * Every row id is verbatim from the catalog (see `chooseRowId`) -- never
- * fabricated, and a direct row is never dropped even when its OpenRouter
- * twin is ambiguous.
+ * A direct row is never dropped even when its OpenRouter twin is ambiguous.
+ *
+ * Row ids are verbatim catalog ids whenever a real row carries them: a
+ * direct row keeps its own id, and an OpenRouter row collapses onto a
+ * direct twin only when `pairAcrossGateways` found exactly one. For a
+ * NON-divergent vendor with no direct twin at all, `chooseRowId` derives
+ * the bare form via `toCanonicalDefault` -- that id is SYNTHESISED, not
+ * verbatim. Measured 2026-08-24: all 14 `deepseek` rows are derived this
+ * way, because the catalog carries no `deepseek/*` rows. This is safe for
+ * routing, but not for the reason an earlier version of this comment
+ * claimed (F8 fix wave, tracked separately as issue #195 -- do not "fix"
+ * the routing behavior itself here, only this sentence was wrong): a bare
+ * id is NOT failure-routed direct-first-with-OpenRouter-fallback.
+ * gateway-router.js's auto-mode step 7 is
+ * `if (rq.keys[vendor] && hasForm(rq, 'direct'))`, and `hasForm` is
+ * `!req.gatewayIds || req.gatewayIds[gateway] !== undefined` -- a bare id
+ * carries no `gatewayIds` at all, so `hasForm(rq, 'direct')` is VACUOUSLY
+ * true on this path; the only real gate is `rq.keys[vendor]`. The fallback
+ * to OpenRouter is therefore KEY-ABSENCE-driven (no key for `vendor`), not
+ * a check that the direct form actually resolves -- that check only fires
+ * on the ALIAS path, where `gatewayIds` IS attached and `hasForm` can
+ * genuinely be false. It is not a catalog-confirmed direct id either way,
+ * and callers that need that distinction should consult
+ * `curated-models.js`'s `directFormProvenance()`.
  * @param {Array<{id:string,name:string,contextLength:(number|null)}>} catalog
  * @param {string} vendor
  * @returns {Array<{id:string,name:string,contextLength:(number|null),pricePerMInput:(number|null),isPreselected:boolean}>}
@@ -217,17 +241,22 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  * `config.default` on first use. Read-modify-write, NO-CLOBBER -- preserves
  * an already-set `config.default` and every other existing alias/key.
  *
- * `chosenId` is a verbatim catalog id straight from `buildProviderDefaultChoices`
- * (via `chooseRowId`/`computePreselectedId`): a real direct id, or -- for a
- * `DIVERGENT_VENDORS` vendor with no direct twin -- an `openrouter/`-prefixed
- * id. **Never** run `toCanonicalDefault` on a divergent vendor's id: that
- * would strip the `openrouter/` prefix and fabricate a non-direct-callable
- * dot-form id no row actually carries (the exact bug just fixed in Task 4's
+ * `chosenId` comes straight from `buildProviderDefaultChoices` (via
+ * `chooseRowId`/`computePreselectedId`): a real direct id; an
+ * `openrouter/`-prefixed id (for a `DIVERGENT_VENDORS` vendor with no direct
+ * twin); or -- for a non-divergent vendor with no direct twin at all -- a
+ * bare id `chooseRowId` already SYNTHESISED via `toCanonicalDefault` (not a
+ * catalog-verbatim id; see `buildRows`'s docstring). **Never** run
+ * `toCanonicalDefault` on a divergent vendor's id: that would strip the
+ * `openrouter/` prefix and fabricate a non-direct-callable dot-form id no
+ * row actually carries (the exact bug just fixed in Task 4's
  * `chooseRowId`/`canonicalizeResolved`). Non-divergent vendors' direct and
- * OpenRouter ids are identical once the prefix is stripped, so
- * `toCanonicalDefault` is safe there.
+ * OpenRouter ids are identical once the prefix is stripped, so re-running
+ * `toCanonicalDefault` here is safe (and a no-op when `chosenId` is already
+ * bare).
  * @param {string} vendor e.g. 'anthropic'
- * @param {string} chosenId verbatim catalog id from the picker
+ * @param {string} chosenId id from the picker (see above -- not always
+ *   catalog-verbatim)
  * @param {{seedDefaultIfAbsent?: boolean}} [options]
  * @returns {{alias: string, setAsDefault: boolean}}
  */

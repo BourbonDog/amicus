@@ -21,6 +21,26 @@ const PROVIDER_NAMES = {
 };
 
 /**
+ * F5: HTML-escape a value for safe interpolation into BOTH an attribute
+ * value (double-quoted) and element text content. Catalog ids are
+ * data-controlled (this repo's own convention documents them as such --
+ * see renderSearchResults in electron/setup-ui.js, which uses createElement
+ * + textContent instead of a template string for this exact row source),
+ * so every id/name reaching a template string here must be escaped rather
+ * than trusted.
+ * @param {*} value
+ * @returns {string}
+ */
+function escapeAttr(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Check if a model has at least one route with a configured key.
  * When no keys are configured at all (empty configuredKeys), all models are available
  * to allow the initial render before Step 1 completes.
@@ -64,14 +84,67 @@ function buildModelSearchHTML() {
 }
 
 /**
+ * issue 138: the family -> model second level for one card. Renders EVERY model
+ * in one <select> (scrollable and type-ahead searchable, so nothing is
+ * hidden), grouped "Suggested" / "All N models". Returns '' when no
+ * shortlist was supplied (or its `total` is 0).
+ *
+ * That '' is NOT dropped by the caller — buildModelStepHTML always splices
+ * it into the card template as its own line, so a card with no shortlist
+ * gains one whitespace-only line versus the pre-issue-138 HTML string. It is NOT
+ * byte-for-byte identical to that old output. It IS behaviorally identical:
+ * no <select> is emitted, and whitespace-only text nodes are inert once
+ * parsed as HTML, so the rendered card is unchanged.
+ *
+ * CONTROLLER RULING R1 (issue 138, 2026-08-24): every <option> carries
+ * data-or="<openrouterId>" (empty string when the row has no OpenRouter
+ * form), so a later task can read the user's chosen route without
+ * re-deriving a gateway prefix from the value id.
+ * @param {string} alias
+ * @param {{recommendedId:string, suggested:Array<object>, rest:Array<object>, total:number}} [shortlist]
+ * @returns {string} HTML fragment
+ */
+function buildModelPickHTML(alias, shortlist) {
+  if (!shortlist || !shortlist.total) { return ''; }
+  const opt = (r) => {
+    const price = r.pricePerMInput === null ? '' : ` · $${r.pricePerMInput.toFixed(2)}/M`;
+    const sel = r.isRecommended ? ' selected' : '';
+    return `<option value="${escapeAttr(r.id)}" data-or="${escapeAttr(r.openrouterId || '')}"${sel}>${escapeAttr(r.id)}${price}</option>`;
+  };
+  // Escaping-discipline consistency pass (council review, PR 196): alias
+  // is one of the five hardcoded FAMILIES names, not catalog data, so this
+  // is not closing a live vulnerability -- it matches the escapeAttr() use
+  // a few lines up for r.id/r.openrouterId, which ARE catalog-derived, so
+  // every attribute interpolation in this function follows the same rule.
+  let html = `<select class="model-pick" data-alias="${escapeAttr(alias)}">`;
+  html += `<optgroup label="Suggested">${shortlist.suggested.map(opt).join('')}</optgroup>`;
+  if (shortlist.rest.length > 0) {
+    // council review, PR 196 (F2): this optgroup holds ONLY `rest` -- label it
+    // by rest.length, not shortlist.total, or the label overstates what's in
+    // it (e.g. "All 14 models" over 6 rows when 8 are already under
+    // "Suggested" above). Singular/plural handled explicitly so a 9-row
+    // vendor with one leftover row doesn't read "1 models".
+    const restCount = shortlist.rest.length;
+    const restLabel = restCount === 1 ? '1 more model' : `${restCount} more models`;
+    html += `<optgroup label="${restLabel}">${shortlist.rest.map(opt).join('')}</optgroup>`;
+  }
+  return html + '</select>';
+}
+
+/**
  * Build the HTML fragment for Step 2 (Model Selection).
  * @param {Array<{alias:string, label:string, blurb:string, source:string, routes:Object<string,string>}>} choices
  *   Resolved rows from resolveQuickPicks(). Each row has separate label + blurb fields.
  * @param {string} [selectedAlias] - Pre-selected alias; defaults to first available choice.
  * @param {Object<string,boolean>} [configuredKeys] - Provider IDs the user has keys for.
+ * @param {Object<string,object>} [shortlists] - issue 138: per-alias vendor shortlist
+ *   from buildModelShortlist(), used to render the model-level <select>.
+ *   Defaults to {}; omitting it (or passing {}) is behaviorally identical to
+ *   today's card (no <select> for that alias) but not byte-for-byte identical
+ *   to the pre-issue-138 HTML string — see buildModelPickHTML's docstring.
  * @returns {string} HTML fragment
  */
-function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
+function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortlists = {}) {
   // Determine availability for each model
   const availability = choices.map(c => {
     const providers = Object.keys(c.routes);
@@ -102,6 +175,20 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
 
     // Resolved id for the write-preview (prefer bestProvider route)
     const previewId = c.routes[bestProvider] || Object.values(c.routes)[0] || '';
+    // Escaping-discipline consistency pass (council review, PR 196; extended
+    // by a second pass, N-c): NOT closing a live vulnerability -- c.alias is
+    // one of the five hardcoded FAMILIES names and previewId is filtered
+    // through resolveQuickPicks' anchored idPattern regexes (or a hardcoded
+    // fallback), neither of which can carry a payload. This applies the
+    // same escapeAttr() used a few lines up (buildModelPickHTML, for
+    // genuinely catalog-derived r.id/r.openrouterId) to every c.alias /
+    // previewId interpolation in this card template -- attributes
+    // (data-alias, the radio value) and text content alike (.model-alias,
+    // .model-resolved, .write-preview-id, the write-preview <code>s) --
+    // so a reader of this template does not have to work out which
+    // interpolations are "safe" and which are escaped; the rule is uniform.
+    const escapedAlias = escapeAttr(c.alias);
+    const escapedPreviewId = escapeAttr(previewId);
 
     // Offline badge for fallback rows
     const badge = c.source === 'fallback'
@@ -114,23 +201,26 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
       const pills = providers.map(p => {
         const isActive = p === bestProvider;
         const cls = isActive ? 'route-pill active' : 'route-pill';
-        return `<button class="${cls}" data-alias="${c.alias}" data-provider="${p}">${PROVIDER_NAMES[p]}</button>`;
+        return `<button class="${cls}" data-alias="${escapedAlias}" data-provider="${p}">${PROVIDER_NAMES[p]}</button>`;
       }).join('');
       const toggleDisplay = showToggle ? '' : ' style="display:none"';
       const staticDisplay = showToggle ? ' style="display:none"' : '';
-      routeHtml = `<span class="route-toggle" data-alias="${c.alias}"${toggleDisplay}>${pills}</span>`;
-      routeHtml += `<span class="route-static" data-alias="${c.alias}"${staticDisplay}>via ${PROVIDER_NAMES[bestProvider]}</span>`;
+      routeHtml = `<span class="route-toggle" data-alias="${escapedAlias}"${toggleDisplay}>${pills}</span>`;
+      routeHtml += `<span class="route-static" data-alias="${escapedAlias}"${staticDisplay}>via ${PROVIDER_NAMES[bestProvider]}</span>`;
     } else {
       routeHtml = `<span class="route-static">via ${PROVIDER_NAMES[bestProvider]}</span>`;
     }
 
+    const modelPickHtml = buildModelPickHTML(c.alias, shortlists[c.alias]);
+
     return `<label class="${cardClass}">
-        <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
-        <span class="model-alias">${c.alias}</span>
+        <input type="radio" name="default-model" value="${escapedAlias}" ${checked}${disabled}>
+        <span class="model-alias">${escapedAlias}</span>
         <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
-        <span class="model-resolved">${previewId}</span>
+        <span class="model-resolved" data-alias="${escapedAlias}">${escapedPreviewId}</span>
         ${routeHtml}
-        <span class="write-preview" data-alias="${c.alias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${previewId}</code></span>
+        ${modelPickHtml}
+        <span class="write-preview" data-alias="${escapedAlias}">will set <code>${escapedAlias}</code> → <code class="write-preview-id">${escapedPreviewId}</code></span>
       </label>`;
   }).join('\n      ');
 
@@ -145,4 +235,4 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
   </div>`;
 }
 
-module.exports = { buildModelSearchHTML, buildModelStepHTML, PROVIDER_NAMES };
+module.exports = { buildModelSearchHTML, buildModelStepHTML, buildModelPickHTML, PROVIDER_NAMES, escapeAttr };

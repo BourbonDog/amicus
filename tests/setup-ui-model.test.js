@@ -6,7 +6,7 @@
  * provider routing toggles, and PROVIDER_NAMES export.
  */
 
-const { buildModelStepHTML, buildModelSearchHTML, PROVIDER_NAMES } = require('../electron/setup-ui-model');
+const { buildModelStepHTML, buildModelSearchHTML, buildModelPickHTML, PROVIDER_NAMES, escapeAttr } = require('../electron/setup-ui-model');
 
 // Local fixture replacing the deleted MODEL_CHOICES export.
 // Matches the v2 resolved-row shape: { alias, label, blurb, source, routes }.
@@ -302,5 +302,280 @@ describe('setup-ui-model', () => {
       expect(html).not.toContain('display:none');
       expect(html).toContain('or pick any model');
     });
+  });
+});
+
+describe('#138 per-card model drill-down', () => {
+  const choices = [{
+    alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro',
+              deepseek: 'deepseek/deepseek-v4-pro' },
+  }];
+  const mk = (id, price, rec) => ({
+    id, name: id.split('/').pop(), contextLength: 128000,
+    pricePerMInput: price, isRecommended: !!rec,
+    directId: id, openrouterId: 'openrouter/' + id,
+  });
+  const shortlists = {
+    deepseek: {
+      recommendedId: 'deepseek/deepseek-v4-pro',
+      suggested: [mk('deepseek/deepseek-v4-pro', 0.52, true),
+                  mk('deepseek/deepseek-v4-flash', 0.06)],
+      rest: [mk('deepseek/deepseek-r1', 0.70)],
+      total: 3,
+    },
+  };
+
+  test('renders a model <select> for the card', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('class="model-pick" data-alias="deepseek"');
+  });
+
+  test('the recommended model is the selected option', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    // R1: data-or is emitted on every <option>, so the recommended option's
+    // tag now carries it too — attribute order is value, data-or, selected.
+    expect(html).toMatch(/<option value="deepseek\/deepseek-v4-pro" data-or="openrouter\/deepseek\/deepseek-v4-pro" selected>/);
+  });
+
+  test('every model is reachable — including one only in `rest`', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('value="deepseek/deepseek-r1"');
+    expect(html).toContain('Suggested');
+    // council review, PR 196 (F2): the optgroup holds ONLY `rest` (1 row
+    // here), so its label must describe that 1 row, not `shortlist.total`
+    // (3) -- "All 3 models" would overstate what's actually in the group.
+    expect(html).toContain('1 more model');
+    expect(html).not.toContain('All 3 models');
+  });
+
+  // council review, PR 196 (F2): measured on the live catalog, deepseek has
+  // total=14, suggested=8, rest=6 -- the old label read "All 14 models"
+  // over exactly 6 options. Reproduces that split and pins the label to the
+  // group's actual content (rest.length), plus a singular-count fixture so
+  // a 9-row vendor with one leftover row doesn't regress to "1 models".
+  describe('F2: "rest" optgroup label describes what it actually contains', () => {
+    const mkRow = (id, price) => ({
+      id, name: id.split('/').pop(), contextLength: 128000,
+      pricePerMInput: price, isRecommended: false,
+      directId: id, openrouterId: 'openrouter/' + id,
+    });
+
+    test('total=14, suggested=8, rest=6 -> labeled by the 6 actually present, not 14', () => {
+      const suggested = Array.from({ length: 8 }, (_, i) => mkRow(`deepseek/s${i}`, 0.1));
+      const rest = Array.from({ length: 6 }, (_, i) => mkRow(`deepseek/r${i}`, 0.2));
+      const html = buildModelPickHTML('deepseek', {
+        recommendedId: null, suggested, rest, total: 14,
+      });
+      expect(html).toContain('6 more models');
+      expect(html).not.toContain('All 14 models');
+      expect(html).not.toContain('14 more');
+    });
+
+    test('a single leftover row reads "1 more model", never "1 models"', () => {
+      const suggested = Array.from({ length: 8 }, (_, i) => mkRow(`vendor/s${i}`, 0.1));
+      const rest = [mkRow('vendor/r0', 0.2)];
+      const html = buildModelPickHTML('vendor', {
+        recommendedId: null, suggested, rest, total: 9,
+      });
+      expect(html).toContain('1 more model');
+      expect(html).not.toContain('1 more models');
+      expect(html).not.toContain('1 models');
+    });
+  });
+
+  // CONTROLLER RULING R5 (issue 138, 2026-08-24): this proves omitting the
+  // 4th arg is equivalent to passing {} explicitly (the default-parameter
+  // path) -- that equivalence holds trivially no matter what the template
+  // does, so it does NOT by itself prove the no-shortlist card matches the
+  // pre-issue-138 HTML byte-for-byte (it doesn't -- see buildModelPickHTML's
+  // docstring). The extra assertions below pin the no-shortlist card's
+  // actual shape: no <select> at all, and still a well-formed card.
+  test('omitting the shortlists argument behaves identically to passing {}', () => {
+    const withArg = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, {});
+    const without = buildModelStepHTML(choices, 'deepseek', { deepseek: true });
+    expect(withArg).toBe(without);
+    expect(without).not.toContain('model-pick');
+    expect(without).not.toContain('<select');
+    expect(without).toContain('class="write-preview"');
+  });
+
+  // CONTROLLER RULING R1 (2026-08-24): data-or belongs to Task 3, not Task 4
+  // -- emitted on every <option>, suggested and rest alike, so a later task
+  // can read the user's chosen route without re-deriving a gateway prefix.
+  test('every option carries data-or with the row\'s openrouterId (R1)', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-v4-pro"');
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-v4-flash"');
+    expect(html).toContain('data-or="openrouter/deepseek/deepseek-r1"');
+  });
+
+  test('#138 the resolved-id span carries its alias so it can be refreshed', () => {
+    const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
+    expect(html).toContain('class="model-resolved" data-alias="deepseek"');
+  });
+});
+
+describe('F5: catalog ids are escaped at every buildModelPickHTML interpolation point', () => {
+  // Minimal entity DECODER for the test's own round-trip check -- not
+  // production code, just the inverse of escapeAttr so the test can assert
+  // "what a real HTML parser would read back" without pulling in jsdom
+  // (not a project dependency; see F3's inline-fake-DOM approach for why).
+  function decodeEntities(s) {
+    return s
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  test('escapeAttr escapes all five HTML-significant characters', () => {
+    expect(escapeAttr(`&<>"'`)).toBe('&amp;&lt;&gt;&quot;&#39;');
+  });
+
+  test('escapeAttr round-trips through decodeEntities back to the original', () => {
+    const original = `deepseek/a"></option></select><img src=x onerror=1>`;
+    expect(decodeEntities(escapeAttr(original))).toBe(original);
+  });
+
+  // The exact id a reviewer used to close the <select> early and inject an
+  // <img> into the body (data:text/html page, no CSP, privileged preload).
+  const hostileId = 'deepseek/a"></option></select><img src=x onerror=1>';
+  const hostileChoices = [{
+    alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' },
+  }];
+  const hostileShortlists = {
+    deepseek: {
+      recommendedId: 'deepseek/deepseek-v4-pro',
+      suggested: [{
+        id: hostileId, name: 'a', contextLength: 128000,
+        pricePerMInput: 0.5, isRecommended: false,
+        directId: hostileId, openrouterId: hostileId,
+      }],
+      rest: [],
+      total: 1,
+    },
+  };
+
+  test('a hostile catalog id cannot close the <select> or inject a sibling tag', () => {
+    const html = buildModelStepHTML(hostileChoices, 'deepseek', { deepseek: true }, hostileShortlists);
+    // The literal breakout sequence must never appear unescaped in the output.
+    expect(html).not.toContain('"></option></select><img');
+    expect(html).not.toContain('<img src=x onerror=1>');
+    // The <select> for this alias must still be well-formed: exactly one
+    // opening and one closing tag, with the hostile id trapped inside as
+    // escaped attribute/text content.
+    const selectOpens = (html.match(/<select class="model-pick" data-alias="deepseek">/g) || []).length;
+    const selectCloses = (html.match(/<\/select>/g) || []).length;
+    expect(selectOpens).toBe(1);
+    expect(selectCloses).toBe(1);
+    expect(html).toContain('&lt;/option&gt;&lt;/select&gt;&lt;img src=x onerror=1&gt;');
+  });
+
+  test('the escaped value attribute still decodes back to the exact hostile id (data-or round-trip)', () => {
+    const html = buildModelStepHTML(hostileChoices, 'deepseek', { deepseek: true }, hostileShortlists);
+    const valueMatch = html.match(/<option value="([^]*?)" data-or="([^]*?)"[ >]/);
+    expect(valueMatch).toBeTruthy();
+    expect(decodeEntities(valueMatch[1])).toBe(hostileId);
+    expect(decodeEntities(valueMatch[2])).toBe(hostileId);
+  });
+});
+
+// Council review, PR 196 (consistency pass, NOT closing a live
+// vulnerability -- see electron/setup-ui-model.js's inline comments): the
+// file already escaped catalog-derived r.id/r.openrouterId in
+// buildModelPickHTML but left previewId and data-alias unescaped elsewhere,
+// even though in real use neither can carry a payload (c.alias is one of
+// the five hardcoded FAMILIES names; previewId comes out of
+// resolveQuickPicks' anchored idPattern regexes or a hardcoded fallback).
+// These tests use synthetic hostile values the real catalog/FAMILIES would
+// never actually produce, purely to pin that the escaping code path fires
+// uniformly now.
+describe('council review PR 196: previewId and data-alias escaping consistency', () => {
+  function decodeEntities(s) {
+    return s
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  const hostileAlias = 'deepseek"><script>1</script>';
+  const hostilePreviewId = 'deepseek/a"><script>2</script>';
+  const hostileChoices = [{
+    alias: hostileAlias, label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { deepseek: hostilePreviewId }
+  }];
+
+  test('a hostile alias in data-alias is escaped on every span/select/button carrying it', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    expect(html).not.toContain(`data-alias="${hostileAlias}"`);
+    const escaped = escapeAttr(hostileAlias);
+    // model-resolved and write-preview spans (the two elements the finding
+    // named) must both carry the escaped form.
+    expect(html).toContain(`<span class="model-resolved" data-alias="${escaped}">`);
+    expect(html).toContain(`<span class="write-preview" data-alias="${escaped}">`);
+  });
+
+  // N-c (second council review, PR 196): the first escaping pass covered
+  // data-alias and previewId but left three other c.alias interpolations
+  // in the SAME card template unescaped -- the radio value, the
+  // .model-alias span, and the write-preview <code>. c.alias is one of the
+  // five hardcoded FAMILIES names (not catalog data), so this is a
+  // uniformity fix, not a vulnerability closure: a reader of this template
+  // should not have to work out which interpolations are escaped and which
+  // aren't. Uses the file's real, hardcoded FAMILIES-shaped hostile fixture
+  // only to make the point mechanically checkable, not because a real
+  // alias could ever carry this payload.
+  test('N-c: the radio value, .model-alias span, and write-preview <code> are also escaped', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    const escaped = escapeAttr(hostileAlias);
+    expect(html).not.toContain(`value="${hostileAlias}"`);
+    expect(html).not.toContain(`<span class="model-alias">${hostileAlias}</span>`);
+    expect(html).not.toContain(`<code>${hostileAlias}</code>`);
+    expect(html).toContain(`value="${escaped}"`);
+    expect(html).toContain(`<span class="model-alias">${escaped}</span>`);
+    expect(html).toContain(`<code>${escaped}</code>`);
+  });
+
+  test('a hostile previewId is escaped in both .model-resolved text and .write-preview-id text', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    expect(html).not.toContain(`>${hostilePreviewId}<`);
+    const escapedPreview = escapeAttr(hostilePreviewId);
+    const resolvedMatch = html.match(/<span class="model-resolved"[^>]*>([^]*?)<\/span>/);
+    const writeIdMatch = html.match(/<code class="write-preview-id">([^]*?)<\/code>/);
+    expect(resolvedMatch[1]).toBe(escapedPreview);
+    expect(writeIdMatch[1]).toBe(escapedPreview);
+    expect(decodeEntities(resolvedMatch[1])).toBe(hostilePreviewId); // round-trips to the exact original
+  });
+
+  test('the model-pick <select> data-alias (buildModelPickHTML) is also escaped', () => {
+    const shortlist = {
+      recommendedId: hostilePreviewId,
+      suggested: [{ id: hostilePreviewId, name: 'a', contextLength: 1000, pricePerMInput: null, isRecommended: true, openrouterId: '' }],
+      rest: [], total: 1
+    };
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, { [hostileAlias]: shortlist });
+    expect(html).not.toContain(`<select class="model-pick" data-alias="${hostileAlias}">`);
+    expect(html).toContain(`<select class="model-pick" data-alias="${escapeAttr(hostileAlias)}">`);
+  });
+
+  // The finding's own verification requirement: a querySelector built from
+  // the RAW (unescaped) alias string must still find the element, because
+  // browsers decode HTML entities in attribute values before a CSS
+  // attribute selector ever compares against them. Simulated here (no
+  // jsdom dependency, matching this suite's existing decodeEntities
+  // approach) by asserting the round-trip a real DOM would perform.
+  test('decoding the escaped data-alias recovers the exact raw alias a querySelector would be built from', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    const match = html.match(/<span class="model-resolved" data-alias="([^]*?)">/);
+    expect(match).toBeTruthy();
+    expect(decodeEntities(match[1])).toBe(hostileAlias); // what document.querySelector would match against
   });
 });

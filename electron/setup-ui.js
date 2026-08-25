@@ -20,15 +20,19 @@ const { listDirectProviders } = require('../src/utils/provider-registry');
  * @param {string} [options.client='code-local'] - Client type for branding
  * @param {Array} [options.quickPicks] - Resolved quick-pick rows from resolveQuickPicks(catalog).
  *   Defaults to pinned fallbacks when not provided.
+ * @param {Object<string,object>} [options.shortlists] - issue 138: per-alias vendor
+ *   shortlist from buildModelShortlist(), passed through to buildModelStepHTML
+ *   for the model-level <select>. Defaults to {} (no drill-down rendered).
  */
 function buildSetupHTML(options = {}) {
   const {
     client = 'code-local',
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
+    shortlists = {},
   } = options;
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
-  const modelHtml = buildModelStepHTML(quickPicks);
+  const modelHtml = buildModelStepHTML(quickPicks, undefined, undefined, shortlists);
   const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
@@ -82,8 +86,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var directProviders = ${directProvidersJson};
   var routingChoices = {};
   var explicitRouteChoices = {};
+  // issue 138: alias -> a SPECIFIC model id the user drilled down to. Empty
+  // means "use the family flagship", i.e. today's behavior.
+  var modelChoiceIds = {};
+  var modelOpenrouterIds = {};
   var aliasEdits = {};
   var aliasDisplay = {};
+  // N1: the alias map as loaded from disk (init below), so buildReview can
+  // tell an actual change from a value-identical re-write. Stays {} until
+  // init resolves (a fresh/offline config has nothing saved yet, so every
+  // computed write IS new).
+  var savedAliases = {};
   window.availableModels = null;
   var keyValid = false, validatedKey = '';
   var $ = function(id) { return document.getElementById(id); };
@@ -141,12 +154,75 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         window.customDefaultModel = cfg.default;
       }
       if (cfg && cfg.aliases) {
+        // N-a (council review, PR 196): a defensive copy, not the live cfg.aliases
+        // reference. Nothing in this file currently mutates cfg.aliases after
+        // this point (checked: every '.aliases[' site below is a read), so
+        // buildReview's N1 diff is not measured to be wrong today -- but the
+        // copy is one line and removes a fragile "never mutate this" invariant
+        // future edits would otherwise have to remember.
+        savedAliases = Object.assign({}, cfg.aliases); // N1: buildReview diffs against this
         modelChoicesData.forEach(function(mc) {
           var currentModel = cfg.aliases[mc.alias];
           if (currentModel) {
             var provs = Object.keys(mc.routes);
             for (var i = 0; i < provs.length; i++) {
               if (mc.routes[provs[i]] === currentModel) { routingChoices[mc.alias] = provs[i]; break; }
+            }
+            // F3: the shortlist <select> is server-rendered with its OWN
+            // recommendedId-derived "selected" option and never consults
+            // modelChoiceIds at init -- so a saved drill-down pick silently
+            // reverted to the family flagship on every reopen (Step 3's
+            // alias table showed the saved value while Step 2 showed a
+            // different one). Mirror the customDefaultModel restore just
+            // above: when the saved alias value names one of THIS card's
+            // shortlist rows, seed modelChoiceIds (the .model-pick change
+            // handler's own state) and push the same value into the DOM
+            // <select> so a no-op reopen-and-Finish round-trips cleanly.
+            var sel = document.querySelector('.model-pick[data-alias="' + mc.alias + '"]');
+            if (sel) {
+              var matchedByValue = false;
+              for (var j = 0; j < sel.options.length; j++) {
+                if (sel.options[j].value === currentModel) {
+                  sel.value = currentModel;
+                  modelChoiceIds[mc.alias] = currentModel;
+                  modelOpenrouterIds[mc.alias] = sel.options[j].getAttribute('data-or') || null;
+                  matchedByValue = true;
+                  break;
+                }
+              }
+              // F3-OR (council review, issue 138): an explicit-OpenRouter
+              // drilled pick is saved as "openrouter/<vendor>/<model>"
+              // (pickRouteFor's explicit-OR branch below) -- that form
+              // matches no option's bare 'value', only its 'data-or'. Every
+              // option carries 'data-or' (CONTROLLER RULING R1, issue 138 --
+              // see buildModelPickHTML's docstring in setup-ui-model.js), so
+              // search for THAT match when the bare-value search above
+              // found nothing.
+              // Restoring modelChoiceIds alone here would round-trip the
+              // dropdown selection but make Finish write the BARE id back --
+              // silently converting the user's explicit "via OpenRouter"
+              // choice into direct-first policy routing on the very next
+              // save, which is worse than the visible flagship-revert this
+              // block exists to fix. So restore the WHOLE state pickRouteFor
+              // needs to reproduce the OR form: the option's bare value (for
+              // the <select> and modelChoiceIds), its data-or
+              // (modelOpenrouterIds), and the two flags pickRouteFor's
+              // explicit-OR branch checks -- routingChoices[alias] ===
+              // 'openrouter' and explicitRouteChoices[alias] -- which are
+              // exactly the flags the route-pill click handler sets, so the
+              // rendered pill agrees with the restored state too.
+              if (!matchedByValue) {
+                for (var k = 0; k < sel.options.length; k++) {
+                  if (sel.options[k].getAttribute('data-or') === currentModel) {
+                    sel.value = sel.options[k].value;
+                    modelChoiceIds[mc.alias] = sel.options[k].value;
+                    modelOpenrouterIds[mc.alias] = currentModel;
+                    routingChoices[mc.alias] = 'openrouter';
+                    explicitRouteChoices[mc.alias] = true;
+                    break;
+                  }
+                }
+              }
             }
           }
         });
@@ -224,6 +300,20 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // the row's first route. Returns the full model id or null.
   function pickRouteFor(mc) {
     if (!mc) { return null; }
+    // issue 138: an explicit per-model choice overrides the family flagship.
+    var picked = modelChoiceIds[mc.alias];
+    if (picked) {
+      // Deliberately NEVER toBareIfDirect(picked) here (unlike the auto-pick
+      // canonicalization below): picked/modelOpenrouterIds come straight
+      // from the shortlist's own id/data-or, and for a DIVERGENT_VENDOR
+      // (e.g. anthropic) that id can already BE its only-callable
+      // openrouter/<vendor>/... form -- stripping the prefix would
+      // fabricate a direct id nothing serves.
+      if (routingChoices[mc.alias] === 'openrouter' && explicitRouteChoices[mc.alias]) {
+        return modelOpenrouterIds[mc.alias] || picked;
+      }
+      return picked;
+    }
     var provs = Object.keys(mc.routes);
     var prov = routingChoices[mc.alias];
     if (!prov || !mc.routes[prov]) {
@@ -363,21 +453,52 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
     document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
-    var writes = [];
-    var r2 = document.querySelector('input[name="default-model"]:checked');
-    if (!window.customDefaultModel && r2) {
-      var mc2 = null;
-      for (var i2 = 0; i2 < modelChoicesData.length; i2++) {
-        if (modelChoicesData[i2].alias === r2.value) { mc2 = modelChoicesData[i2]; break; }
+    // F4: mirror the EXACT call Finish makes (collectAliasWrites), not just
+    // the checked radio, so Step 4 can never under-report what Finish is
+    // about to write. Before this fix, buildReview re-derived "writes" from
+    // the checked radio alone -- a drilled-down pick on a card that was NOT
+    // the checked default (or any drilled pick at all, under a custom
+    // default) was invisible here and fell through to the literal 'No
+    // alias changes', even though Finish wrote it. sidecar:save-config has
+    // no confirmation step, so this review IS the only gate.
+    var aliasWritesPreview = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
+    // N1: aliasWritesPreview is EVERY alias Finish would write, including
+    // ones whose value is already what's on disk -- after the F1 fix that
+    // is the NORMAL case on a plain reopen (init below seeds modelChoiceIds
+    // from cfg.aliases, so the drilled-down alias, the recommendedId, and
+    // the saved value are now the same string by construction). Finish
+    // still writes the full map (a value-identical write is harmless), but
+    // this review must only SHOW entries that actually differ from
+    // savedAliases -- otherwise a no-op reopen reports "N alias(es)
+    // modified" on the one screen that has no confirmation step after it.
+    // N-b (council review, PR 196): an alias that was NEVER in savedAliases
+    // reads as undefined there, while a delete-write (Step 3's delete
+    // button, for one of the five default aliases -- see aliasEdits[alias]
+    // = null in setup-ui-alias-script.js) is null. null !== undefined is
+    // true, so without this normalization a default alias that was never
+    // explicitly saved (a config written by an older/partial flow that
+    // skipped default-seeding -- addAlias() in src/sidecar/setup.js is one
+    // such path) would show "alias -> (deleted)" for deleting something
+    // that was never there. saveConfig() already drops falsy alias values
+    // (src/utils/config.js), so that write is a true no-op on disk; the
+    // review must agree. Reading savedAliases[alias] as null (not
+    // undefined) when the key is absent makes "delete of an absent alias"
+    // compare equal to "still absent" without changing any other case --
+    // every other savedAliases value here is a non-empty string.
+    var changedWrites = {};
+    Object.keys(aliasWritesPreview).forEach(function(alias) {
+      var oldVal = Object.prototype.hasOwnProperty.call(savedAliases, alias) ? savedAliases[alias] : null;
+      if (aliasWritesPreview[alias] !== oldVal) {
+        changedWrites[alias] = aliasWritesPreview[alias];
       }
-      if (mc2) {
-        var routeId2 = pickRouteFor(mc2);
-        if (routeId2) { writes.push(mc2.alias + ' \\u2192 ' + routeId2); }
-      }
-    }
+    });
+    var writes = Object.keys(changedWrites).map(function(alias) {
+      var val = changedWrites[alias];
+      return alias + ' \\u2192 ' + (val === null ? '(deleted)' : val);
+    });
     document.getElementById('review-routing').textContent =
       writes.length > 0 ? writes.join(', ') : 'No alias changes';
-    var editCount = Object.keys(aliasEdits).length;
+    var editCount = Object.keys(changedWrites).length;
     var reviewAliases = document.getElementById('review-aliases');
     if (reviewAliases) {
       reviewAliases.textContent = editCount > 0 ? editCount + ' alias(es) modified' : 'No changes';
@@ -401,27 +522,97 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     updateWritePreviews();
   });
 
+  // issue 138: model-level drill-down <select> change handler.
+  document.addEventListener('change', function(e) {
+    var sel = e.target && e.target.closest ? e.target.closest('.model-pick') : null;
+    if (!sel) { return; }
+    var alias = sel.getAttribute('data-alias');
+    if (!alias) { return; }
+    modelChoiceIds[alias] = sel.value;
+    var opt = sel.options[sel.selectedIndex];
+    modelOpenrouterIds[alias] = (opt && opt.getAttribute('data-or')) || null;
+    updateWritePreviews();
+  });
+
+  // issue 138 (fix round 1, Finding 1; precedence description corrected in
+  // the F2/F6 fix wave; modelChoiceIds provenance corrected in the N2 fix
+  // wave): assemble aliasWrites for Finish -- the aliasEdits (Step 3)
+  // overlay first; THEN, only for a checked quick-pick default (not a
+  // custom/searched one -- isCustomDefault skips this stage entirely), the
+  // selected alias's resolved route; then every OTHER alias whose
+  // drill-down <select> fired change -- "every OTHER" means every alias
+  // but the selected one ONLY when that earlier stage ran, so under a
+  // custom default the selected alias (if it has a drilled pick) is
+  // handled by THIS stage instead, not skipped. Before the Task-3 dropdown
+  // existed there was nothing to lose by writing only the selected alias;
+  // now a drilled-down pick on a card that is NOT the checked default
+  // would silently vanish without this. Precedence is NOT uniform across
+  // the two groups, unlike an earlier version of this comment claimed:
+  // only the selected alias clobbers its aliasEdits entry (the ONE place
+  // that's permitted -- user-locked decision #2); every OTHER drilled-down
+  // alias defers to aliasEdits and is written only when Step 3 left it
+  // untouched (see the hasOwnProperty guard below and ruling R6a, which
+  // already described the real behaviour correctly).
+  //
+  // modelChoiceIds is populated from TWO places, not one, unlike an
+  // earlier version of this comment claimed: the change handler above
+  // (a live drill-down pick), AND the init restore block (F3) -- which
+  // seeds it from cfg.aliases for every card whose SAVED value already
+  // names one of its shortlist rows, reading the id back out of that
+  // card's own server-rendered <option> elements. After the F1 fix that is
+  // the NORMAL case, not an edge case: a card the user never touched in
+  // THIS session routinely lands in modelChoiceIds anyway, because its
+  // saved value already matches its recommendedId. That is still correct
+  // to iterate here -- collectAliasWrites' job is to compute what Finish
+  // SHOULD write, and a value-identical write is harmless -- but it does
+  // mean this function can no longer be read as "only ever fires for
+  // aliases the user actually changed this session". buildReview is the
+  // layer responsible for not SHOWING those value-identical entries as
+  // changes (see its own N1 comment).
+  function collectAliasWrites(selectedAlias, isCustomDefault) {
+    var aliasWrites = {};
+    Object.keys(aliasEdits).forEach(function(k) {
+      aliasWrites[k] = aliasEdits[k];
+    });
+    function writeAliasRoute(alias) {
+      var mc = null;
+      for (var i = 0; i < modelChoicesData.length; i++) {
+        if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
+      }
+      if (!mc) { return; }
+      var routeId = pickRouteFor(mc);
+      if (routeId) { aliasWrites[mc.alias] = routeId; }
+    }
+    if (!isCustomDefault && selectedAlias) {
+      // Selecting a quick pick = explicit touch: upgrade that ONE alias
+      // to the resolved id via the chosen route (user-locked decision #2).
+      // This is the ONE place clobbering aliasEdits is permitted.
+      writeAliasRoute(selectedAlias);
+    }
+    // issue 138 (fix round 2, ruling R6a): every OTHER drilled-down alias is
+    // written ONLY when Step 3 left it untouched. hasOwnProperty.call, not
+    // the in operator and not a truthiness/not-undefined check:
+    // aliasEdits[alias] === null is a MEANINGFUL value here (ipc-setup.js:
+    // string = set, null = delete), so a falsy/undefined check would
+    // silently resurrect an alias the user explicitly deleted in Step 3,
+    // and the in operator or a not-undefined check can be fooled by an
+    // inherited Object.prototype property name (this codebase has been
+    // bitten by that class of bug before -- see the proto:null guard in
+    // src/sidecar/setup.js resolveChoice).
+    Object.keys(modelChoiceIds).forEach(function(alias) {
+      if (!isCustomDefault && alias === selectedAlias) { return; } // handled above, but only in that branch
+      if (Object.prototype.hasOwnProperty.call(aliasEdits, alias)) { return; }
+      writeAliasRoute(alias);
+    });
+    return aliasWrites;
+  }
+
   finishBtn.addEventListener('click', async function() {
     finishBtn.disabled = true; finishBtn.textContent = 'Saving...';
     try {
       var r = document.querySelector('input[name="default-model"]:checked');
       var dm = window.customDefaultModel || (r ? r.value : null);
-      var aliasWrites = {};
-      Object.keys(aliasEdits).forEach(function(k) {
-        aliasWrites[k] = aliasEdits[k];
-      });
-      if (!window.customDefaultModel && r) {
-        // Selecting a quick pick = explicit touch: upgrade that ONE alias
-        // to the resolved id via the chosen route (user-locked decision #2).
-        var mc = null;
-        for (var i = 0; i < modelChoicesData.length; i++) {
-          if (modelChoicesData[i].alias === r.value) { mc = modelChoicesData[i]; break; }
-        }
-        if (mc) {
-          var routeId = pickRouteFor(mc);
-          if (routeId) { aliasWrites[mc.alias] = routeId; }
-        }
-      }
+      var aliasWrites = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
       await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites, (window.collectCouncilPicks && window.collectCouncilPicks()) || []);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
       await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
@@ -550,6 +741,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var routeId = pickRouteFor(mc);
       var idEl = el.querySelector('.write-preview-id');
       if (idEl && routeId) { idEl.textContent = routeId; }
+    });
+    // issue 138: keep the resolved-id line in step with the route/model choice.
+    document.querySelectorAll('.model-resolved').forEach(function(el) {
+      var alias = el.getAttribute('data-alias');
+      var mc = null;
+      for (var i = 0; i < modelChoicesData.length; i++) {
+        if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
+      }
+      if (!mc) { return; }
+      var id = pickRouteFor(mc);
+      if (id) { el.textContent = id; }
     });
   }
 

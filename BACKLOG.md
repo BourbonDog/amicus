@@ -337,8 +337,12 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
   curated route. `opus`/`haiku` only. Fix: `59c8eb3`.
 
 - [x] **BL-412-1 · Medium · a fresh `amicus setup` seeded an alias its own `doctor` calls stale** — **DONE (4.1.2).**
-  `quick-picks.js:83` (`toLiveSeedAliases`) and `setup.js:389` (readline wizard) both ran
-  `toCanonicalDefault()` on a divergent vendor's OpenRouter route, storing
+  `quick-picks.js:83` (`toLiveSeedAliases`) and the readline wizard's default-model
+  canonicalization call (`setup.js:389` at the time of this fix -- that line no longer shows
+  this code; the call has since moved and become `toStorableRoute(pick)` at
+  `src/sidecar/setup.js:542`, a fixed, different form, not a bare `toCanonicalDefault()`, so
+  neither historical line number should be expected to still demonstrate the bug below) both
+  ran `toCanonicalDefault()` on a divergent vendor's OpenRouter route, storing
   `anthropic/claude-opus-4.8` under the direct `anthropic` vendor. `alias-audit.js:82` suppresses
   only `curated-route` sources, so the row is unsuppressable and `amicus doctor` reports
   `1 stale: opus` — the very warning 4.1.1 shipped to remove. Reproduced against a **direct-only**
@@ -3316,7 +3320,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   of this** and stays open; do not read "Wave 2 done" as covering it. See **"NEXT TASK — Wave
   2.5"** below for the live resume point — R16 next, then Wave 3.
   ⚠️ **Of that "then" half, `SI-25` has since shipped** — 2026-08-23, its own PR, **all three** sites
-  (ruling R25-1), never inside a wave. `#138` Pieces 1+2 remain open and unscheduled.
+  (ruling R25-1), never inside a wave. ⚠️ **`#138` Pieces 1+2 are now DONE** — branch
+  `fix/138-model-level-default` (2026-08-24), not yet merged to `main`; see the ✅ entry at
+  `:6023` for the full record.
 
   **Owner ruling (2026-08-22) — the wave structure for the remainder of v4.8.0:**
   - **Wave 1** — batched, one PR. **DONE** (this PR: `T6.6`, `SI-14`, `#135 C0`).
@@ -3366,10 +3372,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   not yet placed in a wave below — schedule it, do not assume it rides Wave 3). ⚠️ **`SI-25` was
   scheduled and SHIPPED on 2026-08-23** — its own PR, outside every wave, and **all three** sites
   rather than the two named here (ruling R25-1). ⚠️ **`SI-22.4` also SHIPPED 2026-08-23** — Wave 3's
-  last item, as ordered; **neither member named on this line is outstanding.** `#138`
-  Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
-  only — re-derive before scheduling it, on the same "measure before you plan" precedent this
-  record applies throughout.
+  last item, as ordered; **neither member named on this line is outstanding.** ⚠️ **`#138`
+  Pieces 1+2 are now DONE** — branch `fix/138-model-level-default` (2026-08-24), not yet merged
+  to `main`; see the ✅ entry at `:6023` for the full record.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom** (see the dedicated
   warning immediately below — unchanged by `R16`, which does not touch that file).
@@ -3966,8 +3971,10 @@ column's rendering), and **stays**. Both the dropped "dedupe" claim and the live
 entry cite the same function, `listCouncilRuns`, but they are different claims about it — only one
 of them was ever filed with a defect behind it.
 
-`#138` Pieces 1+2 remain **NOT individually measured, reported from the phasing doc only.**
-Re-derive before planning it — this section's whole point is that unmeasured rows go stale.
+⚠️ **`#138` Pieces 1+2 are now DONE** — branch `fix/138-model-level-default` (2026-08-24), not
+yet merged to `main`; see the ✅ entry at `:6023` for the full record. This line was correct
+when written; the section's "measure before you plan" point stands for every other still-open
+row here.
 
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
@@ -6001,13 +6008,43 @@ when no line exists.
 
 ### Setup polish — #138
 
-Smaller than it reads: a two-level-picker gap, not a missing feature. The main `setup` path
-(`setup.js:444`) offers quick-picks keyed by **family alias** (`deepseek → routes.openrouter`) with
-no model-level choice — but a per-provider picker with priced, context-annotated rows **already
-exists** (`provider-default-prompt.js` / `provider-default-picker.js`); it only runs after
-`amicus key <provider>` saves a key. And `resolveChoice` already accepts *"any full model id"*, so
-the capability is there but undiscoverable from the list. Add the family → model second level,
-reusing the existing priced picker.
+**Original problem statement, kept for the record -- resolved by the ✅ block below, not a
+claim about current code:** smaller than it reads: a two-level-picker gap, not a missing
+feature. The main `setup` path (the `'Choose your default model:'` readline prompt --
+`setup.js:444` was already the wrong pointer even when this was written; the prompt now lives
+at `src/sidecar/setup.js:513`) offered quick-picks keyed by **family alias**
+(`deepseek → routes.openrouter`) with no model-level choice -- but a per-provider picker with
+priced, context-annotated rows **already existed** (`provider-default-prompt.js` /
+`provider-default-picker.js`); it only ran after `amicus key <provider>` saved a key. And
+`resolveChoice` already accepted *"any full model id"*, so the capability was there but
+undiscoverable from the list. The ask: add the family → model second level, reusing the
+existing priced picker -- done, see below.
+
+✅ **Pieces 1+2 DONE — branch `fix/138-model-level-default` (2026-08-24; not yet merged).** Piece 1 (the priced picker unreachable except via
+`amicus key <provider>`): a new pure module, `src/utils/model-shortlist.js`, wraps
+`buildProviderDefaultChoices` (`provider-default-picker.js`) — the same priced core this entry
+names — and turns each vendor's rows into `{recommendedId, suggested, rest, total}`. Both setup
+surfaces now reach it directly, no separate `amicus key` pass required: the GUI
+(`electron/setup-ui-model.js`) adds a per-card `<select>` grouped `Suggested` / `All N models`,
+and readline (`src/sidecar/setup.js`) adds a sub-prompt after the family pick (8 rows, `a` for
+all, or paste any id). Piece 2 (the GUI Finish handler lacked readline's clobber guard):
+`electron/setup-ui.js`'s Finish handler now writes every alias that got an explicit drill-down
+pick, not only the checked default, and a Step-3 route edit on a non-selected alias still beats a
+stale dropdown touch. Shipped in the same branch, not separately tracked pieces: the stale
+`.model-resolved` label refreshes live on route/model change, `provider-default-picker.js`'s
+docstrings no longer claim row ids are never fabricated, and the Settings window's Step 2 now
+builds from the live on-disk catalog instead of a stale one. Verification: 554 suites / 8 skipped,
+full pass (exact passed-test count omitted here -- it rotted twice already under later commits on
+this same branch, same reasoning as `9278f7c0`'s drop of this paragraph's commit count; see
+`npm test` for the current number) (up from the 551/7978/8 baseline at `2c2d20a0`);
+`check-file-sizes.js --all`, `npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
+has no Jest coverage (no jsdom in this repo, and `pickRouteFor` is an in-page closure) — it is
+covered by CDP smoke only.
+**Piece 3 remains OPEN, deferred to v4.9.0**
+(`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:769`). Its content is not defined
+anywhere in the tracked tree beyond that deferral tag — searched this file and the phasing doc for
+"Piece 3" and found only the bare name, no description to re-derive against. This branch does not
+touch it.
 
 ### Carried from the dropped v4.7.2 scope
 
@@ -6317,7 +6354,7 @@ and top-level `docs/*.md`.
   - **Gate:** `docs/council.md` carries no such gloss (grep: zero hits), so the correct anchor has
     no twin. Fix both headings together and re-grep the phrase repo-wide before claiming closure.
 
-- [ ] **`electron/setup-ui.js:37` re-materialises `Object.prototype` on the alias table.**
+- [ ] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialises `Object.prototype` on the alias table.** Anchor on the variable name, not a line number -- it was `:37` at v4.8.0 and drifted to `:41` on branch `fix/138-model-level-default` (verified 2026-08-24); this file has already moved once.
   `JSON.stringify(getDefaultAliases())` is re-embedded as a page literal, and the parser always
   gives the result a normal prototype, so the null-prototype seed this release added does not reach
   the Electron wizard. Traced and inert (`JSON.stringify` drops function values before the write,

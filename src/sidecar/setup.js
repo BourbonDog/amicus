@@ -354,6 +354,73 @@ async function printDoctorFinale(deps = {}) {
 }
 
 /**
+ * #138 second level: after a family pick, let the user name a SPECIFIC model
+ * from that vendor. Returns the chosen catalog id, or null to keep the
+ * family default (bare Enter, an empty shortlist, or two invalid entries).
+ *
+ * The prompt deliberately avoids the substring "Pick a number":
+ * tests/sidecar/setup.test.js:392,475 branch on that literal and would
+ * answer '' here, leaving new coverage green but vacuous.
+ * @param {(q: string) => Promise<string>} ask
+ * @param {(line: string) => void} print
+ * @param {{suggested: Array<object>, rest: Array<object>, total: number}} shortlist
+ * @param {string} vendorPath
+ * @returns {Promise<string|null>}
+ */
+async function promptForVendorModel(ask, print, shortlist, vendorPath) {
+  if (!shortlist || shortlist.total === 0) { return null; }
+
+  let visible = shortlist.suggested;
+  const fmt = (r, i) => {
+    const price = r.pricePerMInput === null ? 'n/a' : `$${r.pricePerMInput.toFixed(2)}/M in`;
+    const ctx = r.contextLength === null || r.contextLength === undefined ? '' : ` · ctx ${r.contextLength}`;
+    return `  ${i + 1}) ${r.id}${ctx} · ${price}${r.isRecommended ? '  (recommended)' : ''}`;
+  };
+
+  const render = () => {
+    print('');
+    print(`Which ${vendorPath} model?`);
+    visible.forEach((r, i) => print(fmt(r, i)));
+    if (visible.length < shortlist.total) {
+      print(`  … ${shortlist.total - visible.length} more`);
+    }
+    print('');
+  };
+  render();
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const hint = visible.length < shortlist.total ? ", 'a' for all" : '';
+    const answer = (await ask(
+      `Choose 1-${visible.length}${hint}, a full model id, or Enter to keep the default: `
+    ) || '').trim();
+
+    if (answer === '') { return null; }
+    if (answer.toLowerCase() === 'a' && visible.length < shortlist.total) {
+      visible = shortlist.suggested.concat(shortlist.rest);
+      render();
+      attempt--; // expanding the list is not a failed attempt
+      continue;
+    }
+    if (/^\d+$/.test(answer)) {
+      const n = Number.parseInt(answer, 10);
+      if (n >= 1 && n <= visible.length) { return visible[n - 1].id; }
+    }
+    if (answer.includes('/')) { return answer; }
+    // F1 (council review, PR 196): the final attempt used to fall through
+    // silently -- the loop just exited and the caller kept the family
+    // default with no feedback at all, so the user's last keystroke
+    // visibly did nothing. Both attempts now print, but the last one also
+    // states the consequence instead of implying a further retry.
+    if (attempt === 0) {
+      print(`Invalid choice: "${answer}".`);
+    } else {
+      print(`Invalid choice: "${answer}". Keeping the family default.`);
+    }
+  }
+  return null;
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
@@ -486,6 +553,62 @@ async function runReadlineSetup() {
         const fallback = getDefaultAliases()[chosen.alias];
         if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }
       }
+
+      // #138: offer the family -> model second level. `pick.vendorPath` is
+      // the vendor whose catalog rows we drill into; a chosen id REPLACES
+      // the flagship route for this alias only. Guarded — a picker failure
+      // must never abort a setup run that has already collected keys.
+      //
+      // R4a (fix round 2, supersedes R4's noUpgrade disjunct; wording
+      // corrected in the F7 fix wave -- the previous wording claimed the
+      // governing rule was "never ask about the same vendor twice in one
+      // run", which this guard cannot implement and does not):
+      //
+      // `vendorAliasesWritten` holds PROVIDER names (runProviderDefaultPickers
+      // adds each entry of `foundKeys`, e.g. 'google'/'openai'/'anthropic'/
+      // 'deepseek'), while `chosen.alias` is a FAMILY ALIAS name ('gemini',
+      // 'gemini-pro', 'gpt', 'opus', 'deepseek'). The two prompts write
+      // DIFFERENT config keys -- the per-provider picker writes
+      // `config.aliases[provider]` (e.g. `aliases.google`), this drill-down
+      // writes `config.aliases[chosen.alias]` (e.g. `aliases.gemini`) -- so
+      // `!vendorAliasesWritten.has(chosen.alias)` only skips the drill-down
+      // when the alias STRING happens to collide with an already-written
+      // provider name. Today that's 'deepseek' alone (alias 'deepseek' ===
+      // provider 'deepseek'); every other family alias never collides, so
+      // this drill-down still fires for those even after the per-provider
+      // phase ran for that family's vendor -- correctly: the two prompts
+      // bind different keys, they are not "the same vendor twice".
+      //
+      // TRAP: re-keying this guard to `pick.vendorPath` (so it tests the
+      // actual vendor instead of the alias-name coincidence) looks like the
+      // obvious fix for the mismatch above and is NOT one -- it was
+      // measured to delete issue 138's feature entirely for every user
+      // holding a direct key, by skipping the drill-down for every family
+      // whose per-provider picker already ran this session. Leave this
+      // guard exactly as it is.
+      //
+      // `chosen.noUpgrade` does NOT imply no question was asked for this
+      // vendor: a user can type a known alias name (noUpgrade=true) for a
+      // vendor the per-provider phase already walked through this run, and
+      // that must still be skipped. Whenever noUpgrade is true AND the
+      // alias is genuinely unasked-about, `!vendorAliasesWritten.has(...)`
+      // is already true on its own, so dropping the noUpgrade disjunct
+      // loses no legitimate firing case -- only the double-ask.
+      if (pick && !vendorAliasesWritten.has(chosen.alias)) {
+        try {
+          const { buildModelShortlist } = require('../utils/model-shortlist');
+          const shortlist = buildModelShortlist(pick.vendorPath, {
+            catalog,
+            recommendedId: cfg.aliases[chosen.alias],
+          });
+          const specific = await promptForVendorModel(
+            askQuestion.bind(null, rl), console.log, shortlist, pick.vendorPath
+          );
+          if (specific) { cfg.aliases[chosen.alias] = specific; }
+        } catch (err) {
+          console.log(`Note: couldn't list ${pick.vendorPath} models (${err.message}).`);
+        }
+      }
     } else {
       cfg.default = chosen.modelId;
     }
@@ -613,6 +736,7 @@ module.exports = {
   createDefaultConfig,
   deriveFreeAlias,
   detectApiKeys,
+  promptForVendorModel,
   runFreeCouncilBranch,
   runInteractiveSetup,
   runReadlineSetup,

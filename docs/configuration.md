@@ -1,6 +1,6 @@
 # Configuration Reference
 
-`amicus setup` is the recommended way to configure Amicus. It opens a graphical wizard that validates your API keys live, lets you pick a default model from the live catalog, and saves everything to `~/.config/amicus/.env` (permissions `0600`). The environment variables below are for overrides and advanced tuning — most users only need the API keys section.
+`amicus setup` is the recommended way to configure Amicus. It opens a graphical wizard that validates your API keys live, lets you pick a default model from the live catalog — down to a specific model per provider, not just the family default — and saves everything to `~/.config/amicus/.env` (permissions `0600`). The environment variables below are for overrides and advanced tuning — most users only need the API keys section.
 
 ---
 
