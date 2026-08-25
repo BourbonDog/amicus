@@ -216,3 +216,123 @@ describe("defaults-row suppression via provenance (v4.6.3 PR1, spec D2)", () => 
     });
   });
 });
+
+// B3 (council review of PR 198, issue 195): doctor --fix's repair candidate
+// set. None of these tests doMock curated-models, so the lazy
+// require('./curated-models') inside findFabricatedAliasRepairs should
+// resolve the REAL module and its REAL DIVERGENT_VENDORS (currently just
+// 'anthropic') — same idiom findStaleAliases's top describe block documents.
+// BUT the 'defaults-row suppression' describe block above leaves a
+// jest.doMock'd curated-models stub (no DIVERGENT_VENDORS export) registered
+// after its own tests run — a doMock registration outlives jest.resetModules()
+// within one file; only jest.unmock() actually clears it. Unmock + reset in
+// beforeEach (not at describe-body/collection time — that block's doMock
+// calls run during EXECUTION, after collection finishes) so this block's
+// tests see the real module regardless of file ordering.
+describe('findFabricatedAliasRepairs (B3, council review of PR 198)', () => {
+  let findFabricatedAliasRepairs;
+  beforeEach(() => {
+    jest.unmock('../../src/utils/curated-models');
+    jest.resetModules();
+    ({ findFabricatedAliasRepairs } = require('../../src/utils/alias-audit'));
+  });
+
+  // google's direct namespace is populated + authoritative, but omits the
+  // exact fabricated bare id — classifyModel returns 'invalid' for it. The
+  // real openrouter row is the twin the pre-fix picker stripped the prefix
+  // from — this is the exact 'google/gemma-4-31b-it:free' example from the
+  // task brief.
+  const FABRICATED_CATALOG = [
+    { id: 'google/gemini-3.7-flash', authoritative: true },
+    { id: 'google/gemini-2.5-pro', authoritative: true },
+    { id: 'openrouter/google/gemma-4-31b-it:free' },
+  ];
+
+  it('repairs a bare id that classifies invalid AND has an unambiguous OpenRouter twin', () => {
+    const sources = [{ alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([
+      { alias: 'google', oldId: 'google/gemma-4-31b-it:free', newId: 'openrouter/google/gemma-4-31b-it:free' },
+    ]);
+  });
+
+  it('never touches an already OpenRouter-prefixed value (not bare)', () => {
+    const sources = [
+      { alias: 'google', model: 'openrouter/google/gemma-4-31b-it:free', source: 'user-config' },
+    ];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('leaves a typo (invalid, no matching catalog twin) untouched — stays a warning, not a guess', () => {
+    // "gemna" (typo) never normalizes to match the real "gemma" openrouter row.
+    const sources = [{ alias: 'google', model: 'google/gemna-4-31b-it:free', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('leaves a genuinely retired model (invalid, absent everywhere) untouched', () => {
+    const sources = [{ alias: 'google', model: 'google/gemini-1.0-ultra-retired', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('leaves an ambiguous OpenRouter twin untouched (two rows normalize to the same key)', () => {
+    // 'gemma.5-flash' and 'gemma-5-flash' both normalize to 'gemma-5-flash'
+    // (normalizeKey unifies '.'/'-') — pairAcrossGateways must omit, not guess.
+    const ambiguousCatalog = [
+      { id: 'google/gemini-3.7-flash', authoritative: true },
+      { id: 'openrouter/google/gemma-5-flash' },
+      { id: 'openrouter/google/gemma.5-flash' },
+    ];
+    const sources = [{ alias: 'google', model: 'google/gemma-5-flash', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, ambiguousCatalog)).toEqual([]);
+  });
+
+  it('excludes DIVERGENT_VENDORS (anthropic) — the picker never strips their prefix, so a bare form was never produced by this bug', () => {
+    const anthropicCatalog = [
+      { id: 'anthropic/claude-opus-4-8', authoritative: true },
+      { id: 'openrouter/anthropic/claude-opus-4.9' },
+    ];
+    const sources = [{ alias: 'anthropic', model: 'anthropic/claude-opus-4.9', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, anthropicCatalog)).toEqual([]);
+  });
+
+  it('ignores non-user-config sources — only what is actually persisted to config.aliases can be repaired', () => {
+    const sources = [
+      { alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'defaults' },
+      { alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'curated-route (google)' },
+    ];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('a valid bare id (real catalog row) is never "repaired" — nothing to fix', () => {
+    const sources = [{ alias: 'google', model: 'google/gemini-3.7-flash', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('an unverifiable (unknown, no namespace rows) alias is never repaired', () => {
+    const sources = [{ alias: 'mystery', model: 'mystery-vendor/some-model', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('a malformed (no "/") model value is skipped, not thrown on', () => {
+    const sources = [{ alias: 'broken', model: 'not-a-vendor-slash-model', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, FABRICATED_CATALOG)).toEqual([]);
+  });
+
+  it('returns [] on an empty catalog — no evidence, no repair', () => {
+    const sources = [{ alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, [])).toEqual([]);
+  });
+
+  // Rule 4's sharpest case: the catalog is NOT literally empty (another
+  // vendor has authoritative rows), but THIS vendor's direct namespace has
+  // zero rows at all -- classifyModel returns 'unknown', not 'invalid' --
+  // while an OpenRouter twin DOES exist for it. 'unknown' must never
+  // authorise a write, even with a real twin sitting right there.
+  it('never repairs an "unknown" (unresolved direct namespace) alias, even when an OpenRouter twin exists', () => {
+    const unknownNamespaceCatalog = [
+      { id: 'openrouter/google/gemma-4-31b-it:free' }, // the real twin
+      { id: 'anthropic/claude-opus-4-8', authoritative: true }, // catalog isn't empty; google's direct ns just was never fetched
+    ];
+    const sources = [{ alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'user-config' }];
+    expect(findFabricatedAliasRepairs(sources, unknownNamespaceCatalog)).toEqual([]);
+  });
+});

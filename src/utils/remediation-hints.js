@@ -143,6 +143,19 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   pruneSessionIndex:
     'amicus doctor --fix  (removes sessions-index.json entries whose project no longer exists on disk — liveness-based, never by age)',
+
+  /**
+   * Fabricated bare alias (B3, council review of PR 198 / issue 195): v4.8.0
+   * could persist a `<vendor>/<model>` id no catalog row carries. `doctor
+   * --fix` rewrites ONLY the narrow, mechanically-unambiguous class -- an
+   * alias that classifies `invalid` on the `direct` gateway AND has an
+   * unambiguous OpenRouter twin (`pairAcrossGateways`, alias-audit.js's
+   * `findFabricatedAliasRepairs`) -- to that twin. Every other stale/drifted
+   * alias (typo, retired model, user-invented id) is left for `amicus
+   * models --check` instead, never guessed at.
+   */
+  repairFabricatedAlias:
+    'amicus doctor --fix  (rewrites a fabricated bare alias to its catalog-confirmed OpenRouter id — safe only for the narrow class doctor can prove; use `amicus models --check` for anything else)',
 });
 
 module.exports = REMEDIATION_HINTS;
