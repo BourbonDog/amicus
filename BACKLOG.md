@@ -337,8 +337,12 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
   curated route. `opus`/`haiku` only. Fix: `59c8eb3`.
 
 - [x] **BL-412-1 · Medium · a fresh `amicus setup` seeded an alias its own `doctor` calls stale** — **DONE (4.1.2).**
-  `quick-picks.js:83` (`toLiveSeedAliases`) and `setup.js:389` (readline wizard) both ran
-  `toCanonicalDefault()` on a divergent vendor's OpenRouter route, storing
+  `quick-picks.js:83` (`toLiveSeedAliases`) and the readline wizard's default-model
+  canonicalization call (`setup.js:389` at the time of this fix -- that line no longer shows
+  this code; the call has since moved and become `toStorableRoute(pick)` at
+  `src/sidecar/setup.js:542`, a fixed, different form, not a bare `toCanonicalDefault()`, so
+  neither historical line number should be expected to still demonstrate the bug below) both
+  ran `toCanonicalDefault()` on a divergent vendor's OpenRouter route, storing
   `anthropic/claude-opus-4.8` under the direct `anthropic` vendor. `alias-audit.js:82` suppresses
   only `curated-route` sources, so the row is unsuppressable and `amicus doctor` reports
   `1 stale: opus` — the very warning 4.1.1 shipped to remove. Reproduced against a **direct-only**
@@ -6001,13 +6005,17 @@ when no line exists.
 
 ### Setup polish — #138
 
-Smaller than it reads: a two-level-picker gap, not a missing feature. The main `setup` path
-(`setup.js:444`) offers quick-picks keyed by **family alias** (`deepseek → routes.openrouter`) with
-no model-level choice — but a per-provider picker with priced, context-annotated rows **already
-exists** (`provider-default-prompt.js` / `provider-default-picker.js`); it only runs after
-`amicus key <provider>` saves a key. And `resolveChoice` already accepts *"any full model id"*, so
-the capability is there but undiscoverable from the list. Add the family → model second level,
-reusing the existing priced picker.
+**Original problem statement, kept for the record -- resolved by the ✅ block below, not a
+claim about current code:** smaller than it reads: a two-level-picker gap, not a missing
+feature. The main `setup` path (the `'Choose your default model:'` readline prompt --
+`setup.js:444` was already the wrong pointer even when this was written; the prompt now lives
+at `src/sidecar/setup.js:513`) offered quick-picks keyed by **family alias**
+(`deepseek → routes.openrouter`) with no model-level choice -- but a per-provider picker with
+priced, context-annotated rows **already existed** (`provider-default-prompt.js` /
+`provider-default-picker.js`); it only ran after `amicus key <provider>` saved a key. And
+`resolveChoice` already accepted *"any full model id"*, so the capability was there but
+undiscoverable from the list. The ask: add the family → model second level, reusing the
+existing priced picker -- done, see below.
 
 ✅ **Pieces 1+2 DONE — branch `fix/138-model-level-default` (2026-08-24, 13 commits over
 `2c2d20a0`; not yet merged).** Piece 1 (the priced picker unreachable except via
@@ -6342,7 +6350,7 @@ and top-level `docs/*.md`.
   - **Gate:** `docs/council.md` carries no such gloss (grep: zero hits), so the correct anchor has
     no twin. Fix both headings together and re-grep the phrase repo-wide before claiming closure.
 
-- [ ] **`electron/setup-ui.js:37` re-materialises `Object.prototype` on the alias table.**
+- [ ] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialises `Object.prototype` on the alias table.** Anchor on the variable name, not a line number -- it was `:37` at v4.8.0 and drifted to `:41` on branch `fix/138-model-level-default` (verified 2026-08-24); this file has already moved once.
   `JSON.stringify(getDefaultAliases())` is re-embedded as a page literal, and the parser always
   gives the result a normal prototype, so the null-prototype seed this release added does not reach
   the Electron wizard. Traced and inert (`JSON.stringify` drops function values before the write,

@@ -918,7 +918,7 @@ OpenRouter id after a direct-pill click."
 
 ### Task 6: Correct the picker's false header claim
 
-**Files:** Modify `src/utils/provider-default-picker.js:88-90`. No test — this is a documentation correction of a statement the code disproves.
+**Files:** Modify `src/utils/provider-default-picker.js`. The false "never fabricated" claim appears in three docstrings describing the same synthesis path -- `buildRows` (the primary target measured below), `chooseRowId`, and `applyProviderDefault` -- so no single line number can honestly cover it; anchor on the function names, not a line range (line numbers on this file have already drifted once during this branch -- see Task 8's citation audit). No test -- this is a documentation correction of a statement the code disproves.
 
 **Why:** the header says *"Every row id is verbatim from the catalog … never fabricated."* **Measured false:** all 14 rows `buildProviderDefaultChoices('deepseek')` returns carry bare `deepseek/…` ids synthesised by `chooseRowId` → `toCanonicalDefault` from `openrouter/deepseek/…` rows, because the catalog holds **zero** `deepseek/*` rows.
 

@@ -373,8 +373,12 @@ describe('setup-ui wizard', () => {
     it('both the Finish handler and updateWritePreviews call the same pickRouteFor', () => {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
       const calls = script.match(/= pickRouteFor\(mc\);/g) || [];
-      // Finish handler (~:425) and updateWritePreviews (~:554) — both must
-      // resolve through the one function this suite just fixed.
+      // The Finish path (writeAliasRoute) and updateWritePreviews (which
+      // itself calls it twice -- once refreshing .write-preview text, once
+      // refreshing .model-resolved, the Task 5 addition) -- all three call
+      // sites must resolve through the one function this suite just fixed.
+      // Anchored on function/element names, not line numbers: this file's
+      // line numbers have already drifted once during this branch.
       expect(calls.length).toBeGreaterThanOrEqual(2);
     });
 
