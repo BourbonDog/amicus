@@ -6009,6 +6009,31 @@ exists** (`provider-default-prompt.js` / `provider-default-picker.js`); it only 
 the capability is there but undiscoverable from the list. Add the family → model second level,
 reusing the existing priced picker.
 
+✅ **Pieces 1+2 DONE — branch `fix/138-model-level-default` (2026-08-24, 13 commits over
+`2c2d20a0`; not yet merged).** Piece 1 (the priced picker unreachable except via
+`amicus key <provider>`): a new pure module, `src/utils/model-shortlist.js`, wraps
+`buildProviderDefaultChoices` (`provider-default-picker.js`) — the same priced core this entry
+names — and turns each vendor's rows into `{recommendedId, suggested, rest, total}`. Both setup
+surfaces now reach it directly, no separate `amicus key` pass required: the GUI
+(`electron/setup-ui-model.js`) adds a per-card `<select>` grouped `Suggested` / `All N models`,
+and readline (`src/sidecar/setup.js`) adds a sub-prompt after the family pick (8 rows, `a` for
+all, or paste any id). Piece 2 (the GUI Finish handler lacked readline's clobber guard):
+`electron/setup-ui.js`'s Finish handler now writes every alias that got an explicit drill-down
+pick, not only the checked default, and a Step-3 route edit on a non-selected alias still beats a
+stale dropdown touch. Shipped in the same branch, not separately tracked pieces: the stale
+`.model-resolved` label refreshes live on route/model change, `provider-default-picker.js`'s
+docstrings no longer claim row ids are never fabricated, and the Settings window's Step 2 now
+builds from the live on-disk catalog instead of a stale one. Verification: 554 suites / 8022
+passed / 8 skipped (up from the 551/7978/8 baseline at `2c2d20a0`); `check-file-sizes.js --all`,
+`npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
+has no Jest coverage (no jsdom in this repo, and `pickRouteFor` is an in-page closure) — it is
+covered by CDP smoke only.
+**Piece 3 remains OPEN, deferred to v4.9.0**
+(`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:769`). Its content is not defined
+anywhere in the tracked tree beyond that deferral tag — searched this file and the phasing doc for
+"Piece 3" and found only the bare name, no description to re-derive against. This branch does not
+touch it.
+
 ### Carried from the dropped v4.7.2 scope
 
 - [ ] **`sessions-index.json` growth.** Design already recommended in this file (doctor check +

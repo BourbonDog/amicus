@@ -275,7 +275,7 @@ This opens a graphical wizard:
 | Step | What it does |
 |------|--------------|
 | **1. API Keys** | Enter keys for OpenRouter, Google, OpenAI, Anthropic, and/or DeepSeek. Each is validated live against the provider's API. Written to `~/.config/amicus/.env` with `0600` permissions. |
-| **2. Default Model** | Pick your go-to model from a searchable live picker (backed by the catalog). Used whenever you omit `--model`. |
+| **2. Default Model** | Pick your go-to model from a searchable live picker (backed by the catalog) — each provider card also lets you drill down to a specific model instead of just the family default. Used whenever you omit `--model`. |
 | **3. Model Routing** | Decide which provider serves each model — e.g. route Gemini through a direct Google key and everything else through OpenRouter. |
 | **4. Review** | Confirm the configuration before saving. |
 
