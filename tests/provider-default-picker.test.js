@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 
 const { buildProviderDefaultChoices, applyProviderDefault } = require('../src/utils/provider-default-picker');
+const { classifyModel } = require('../src/utils/model-classification');
 
 /**
  * Fixture: anthropic direct rows (haiku/sonnet/opus + one direct-only,
@@ -177,6 +178,115 @@ describe('buildProviderDefaultChoices — anthropic divergent-vendor id fabricat
   });
 });
 
+describe('buildProviderDefaultChoices — non-divergent vendor bare-id fabrication guard (issue 195)', () => {
+  // Mirrors the anthropic guard above, but for a NON-divergent vendor whose
+  // direct namespace IS populated with authoritative rows -- unlike
+  // anthropic (where every OR-only id is protected by DIVERGENT_VENDORS)
+  // and unlike deepseek (whose direct namespace is empty, below), google's
+  // bare-form-eligible ids used to be synthesized unconditionally even when
+  // the vendor's OWN direct namespace proved the bare id didn't exist.
+  const googlePopulatedNamespaceCatalog = [
+    // Populated, authoritative direct rows -- pairAcrossGateways resolves
+    // these as real direct twins for their own OpenRouter rows.
+    { id: 'google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000, pricing: null },
+    { id: 'openrouter/google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000,
+      pricing: { prompt: '0.0000003' } },
+    { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextLength: 1000000, pricing: null },
+    { id: 'openrouter/google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextLength: 1000000,
+      pricing: { prompt: '0.0000125' } },
+    // OR-only row, NO direct twin -- e.g. a free/batch variant Google's
+    // direct API doesn't serve. Issue 195's exact shape: naive stripping
+    // produces 'google/gemma-4-31b-it:free', an id no catalog row carries.
+    { id: 'openrouter/google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (free)', contextLength: 8192,
+      pricing: { prompt: '0' } },
+  ];
+
+  test('OR-only row with a populated direct namespace keeps the OpenRouter-prefixed id -- never fabricates an unlisted bare id', () => {
+    const { rows } = buildProviderDefaultChoices('google', { catalog: googlePopulatedNamespaceCatalog, tier: 'balanced' });
+    const ids = rows.map(r => r.id);
+    expect(ids).toContain('openrouter/google/gemma-4-31b-it:free');
+    expect(ids).not.toContain('google/gemma-4-31b-it:free'); // fabricated id must never appear
+  });
+
+  test('a row WITH a real direct twin still collapses onto its bare id (fix does not disable the happy path)', () => {
+    const { rows } = buildProviderDefaultChoices('google', { catalog: googlePopulatedNamespaceCatalog, tier: 'balanced' });
+    const ids = rows.map(r => r.id);
+    expect(ids).toContain('google/gemini-3.7-flash');
+    expect(ids).toContain('google/gemini-2.5-pro');
+  });
+
+  test('empty direct namespace (deepseek-shaped): bare form is still synthesized -- current behavior must be preserved', () => {
+    const emptyDirectNamespaceCatalog = [
+      { id: 'openrouter/deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', contextLength: 128000,
+        pricing: { prompt: '0.00000026' } },
+      { id: 'openrouter/deepseek/deepseek-r1', name: 'DeepSeek R1', contextLength: 128000,
+        pricing: { prompt: '0.0000007' } },
+    ];
+    const { rows } = buildProviderDefaultChoices('deepseek', { catalog: emptyDirectNamespaceCatalog, tier: 'balanced' });
+    const ids = rows.map(r => r.id);
+    expect(ids).toContain('deepseek/deepseek-v3.2');
+    expect(ids).toContain('deepseek/deepseek-r1');
+  });
+
+  test('issue 195: a tier-resolved OR-only id (populated direct namespace) preselects its OWN row, not a cheaper decoy (canonicalizeResolved regression)', () => {
+    // Only row matching google's 'economy' tier pattern (^gemini-[\d.]+-flash-lite)
+    // is the OR-only row, priced ABOVE the direct 'flash' row below -- so a
+    // broken canonicalizeResolved (unconditional strip -> id absent from
+    // `rows` -> defensive fallback) provably lands on the WRONG (cheaper) row
+    // instead of coincidentally matching by price.
+    const catalog = [
+      { id: 'google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000, pricing: null },
+      { id: 'openrouter/google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000,
+        pricing: { prompt: '0.0000003' } }, // cheapest -- the wrong-fallback trap
+      { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextLength: 1000000, pricing: null },
+      { id: 'openrouter/google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', contextLength: 1000000,
+        pricing: { prompt: '0.0000125' } },
+      { id: 'openrouter/google/gemini-2.5-flash-lite:batch', name: 'Gemini 2.5 Flash Lite (batch)',
+        contextLength: 1000000, pricing: { prompt: '0.000002' } },
+    ];
+    const { preselectedId, rows } = buildProviderDefaultChoices('google', { catalog, tier: 'economy' });
+    expect(preselectedId).toBe('openrouter/google/gemini-2.5-flash-lite:batch');
+    const preselectedRows = rows.filter(r => r.isPreselected);
+    expect(preselectedRows).toHaveLength(1);
+    expect(preselectedRows[0].id).toBe('openrouter/google/gemini-2.5-flash-lite:batch');
+  });
+
+  test('invariant: every row buildProviderDefaultChoices returns classifies non-invalid at its own implied gateway, across all four direct vendors', () => {
+    // The property issue 195 is actually about: a row id this module hands
+    // back must never be something catalogGate/classifyModel would reject
+    // outright once the user holds that vendor's key.
+    const fixtures = [
+      { vendor: 'google', catalog: googlePopulatedNamespaceCatalog },
+      { vendor: 'deepseek', catalog: [
+        { id: 'openrouter/deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', contextLength: 128000,
+          pricing: { prompt: '0.00000026' } },
+      ] },
+      { vendor: 'anthropic', catalog: anthropicCatalog },
+      { vendor: 'anthropic', catalog: [
+        // OR-only, no direct twin -- anthropic is DIVERGENT_VENDORS, so this
+        // must classify 'unknown' or 'valid' via the openrouter namespace,
+        // never 'invalid' via a fabricated direct one.
+        { id: 'openrouter/anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: 200000,
+          pricing: { prompt: '0.000002', completion: '0.00001' } },
+      ] },
+      { vendor: 'openai', catalog: [
+        { id: 'openai/gpt-5.6-terra', name: 'GPT 5.6 Terra', contextLength: 400000, pricing: null },
+        { id: 'openrouter/openai/gpt-5.6-terra', name: 'GPT 5.6 Terra', contextLength: 400000,
+          pricing: { prompt: '0.000001' } },
+        { id: 'openrouter/openai/gpt-3.5-turbo-0613', name: 'GPT-3.5 Turbo (0613)', contextLength: 4096,
+          pricing: { prompt: '0.0000015' } }, // OR-only, populated authoritative direct namespace above
+      ] },
+    ];
+    for (const { vendor, catalog } of fixtures) {
+      const { rows } = buildProviderDefaultChoices(vendor, { catalog, tier: 'balanced' });
+      for (const row of rows) {
+        const gateway = row.id.startsWith('openrouter/') ? 'openrouter' : 'direct';
+        expect(classifyModel(row.id, gateway, { models: catalog })).not.toBe('invalid');
+      }
+    }
+  });
+});
+
 describe('buildProviderDefaultChoices — degenerate input, must not crash', () => {
   test('absent catalog for the vendor -> empty rows, null preselectedId', () => {
     expect(buildProviderDefaultChoices('anthropic', {})).toEqual({ preselectedId: null, rows: [] });
@@ -284,5 +394,64 @@ describe('applyProviderDefault — read-modify-write (vendor alias + seed defaul
 
     const cfg = loadConfig();
     expect(cfg.default).toBe('anthropic');
+  });
+});
+
+describe('applyProviderDefault — does not re-strip a preserved OpenRouter prefix (issue 195 regression)', () => {
+  // buildProviderDefaultChoices only ever hands a non-divergent vendor an
+  // OpenRouter-prefixed chosenId when directFormIfSafe already proved the
+  // bare form invalid. applyProviderDefault must not undo that by
+  // re-deriving the bare form unconditionally when it persists the choice.
+  let tempDir;
+  let originalEnv;
+  let loadConfig;
+
+  const googlePopulatedNamespaceCatalog = [
+    { id: 'google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000, pricing: null },
+    { id: 'openrouter/google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000,
+      pricing: { prompt: '0.0000003' } },
+    { id: 'openrouter/google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (free)', contextLength: 8192,
+      pricing: { prompt: '0' } },
+  ];
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-config-test-'));
+    originalEnv = { ...process.env };
+    process.env.AMICUS_CONFIG_DIR = tempDir;
+    ({ loadConfig } = require('../src/utils/config'));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test('with catalog: a chosenId the picker kept OpenRouter-prefixed is stored VERBATIM, not re-stripped to the fabricated bare id', () => {
+    const result = applyProviderDefault('google', 'openrouter/google/gemma-4-31b-it:free', {
+      catalog: googlePopulatedNamespaceCatalog,
+    });
+    expect(result).toEqual({ alias: 'google', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.google).toBe('openrouter/google/gemma-4-31b-it:free');
+    expect(cfg.aliases.google).not.toBe('google/gemma-4-31b-it:free'); // the fabricated id must never be persisted
+  });
+
+  test('with catalog: a chosenId WITH a real direct twin still canonicalizes to the bare form (happy path unaffected)', () => {
+    const result = applyProviderDefault('google', 'openrouter/google/gemini-3.7-flash', {
+      catalog: googlePopulatedNamespaceCatalog,
+    });
+    expect(result).toEqual({ alias: 'google', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.google).toBe('google/gemini-3.7-flash');
+  });
+
+  test('without catalog: falls back to the pre-195 unconditional strip (never blocks on an unknown namespace)', () => {
+    const result = applyProviderDefault('google', 'openrouter/google/gemma-4-31b-it:free');
+    expect(result).toEqual({ alias: 'google', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.google).toBe('google/gemma-4-31b-it:free');
   });
 });

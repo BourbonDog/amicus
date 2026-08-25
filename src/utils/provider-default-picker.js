@@ -19,6 +19,7 @@ const { getCostTier, loadConfig, saveConfig } = require('./config');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
 const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
 const { isLocalProvider } = require('./local-providers');
+const { classifyModel } = require('./model-classification');
 
 /**
  * @param {{pricing?: {prompt?: string|number|null}|null}|null|undefined} orRow
@@ -49,11 +50,33 @@ function vendorRowsIn(catalog, vendor) {
 }
 
 /**
+ * Direct-first canonicalization for a non-divergent vendor's OpenRouter id,
+ * guarded by `classifyModel` (model-classification.js): only strips the
+ * `openrouter/<vendor>/` prefix when the bare result would NOT classify
+ * `invalid` against `catalogInfo` -- i.e. the vendor's direct namespace is
+ * either empty (`unknown`; e.g. `deepseek`, no key ever fetched) or the bare
+ * id is itself present (`valid`). When the namespace carries authoritative
+ * rows that omit the bare id (`invalid`; e.g. `google`/`openai`, issue 195),
+ * `orId` is returned unchanged rather than fabricating an id no row carries
+ * and no key can ever resolve. Reuses `classifyModel` rather than
+ * re-deriving its namespace/authoritative logic. Callers must gate
+ * `DIVERGENT_VENDORS` (anthropic -- different strings, dash vs. dot) first.
+ * @param {string} vendor
+ * @param {string} orId an `openrouter/<vendor>/<rest>` id (or already-bare)
+ * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
+ * @returns {string} the bare direct id when safe, else `orId` unchanged
+ */
+function directFormIfSafe(vendor, orId, catalogInfo) {
+  const bare = toCanonicalDefault(orId);
+  if (bare === orId) { return orId; } // gateway-only vendor -- no direct integration at all
+  return classifyModel(bare, 'direct', catalogInfo) === 'invalid' ? orId : bare;
+}
+
+/**
  * Choose the id a single catalog `row` should surface as in the picker.
- * Prefers a real, verbatim catalog id; only SYNTHESISES one (via
- * `toCanonicalDefault`, below) for a non-divergent vendor with no direct
- * twin at all -- see `buildRows`'s docstring for the measured extent of
- * that case (all `deepseek` rows, as of 2026-08-24).
+ * Prefers a real, verbatim catalog id; only SYNTHESISES one (delegating to
+ * `directFormIfSafe`, above -- see its docstring for the guard) for a
+ * non-divergent vendor with no direct twin at all.
  *
  * A direct-namespace row always keeps its own (real, direct-callable) id,
  * regardless of what `pairAcrossGateways` could resolve for it -- this is
@@ -63,27 +86,24 @@ function vendorRowsIn(catalog, vendor) {
  * and must not be dropped or silently merged.
  *
  * An OpenRouter-namespace row is collapsed onto a direct id only when
- * `pairAcrossGateways` found exactly one (unambiguous) direct twin -- that's
- * a real catalog id, safe to reuse for dedup. Otherwise: for
+ * `pairAcrossGateways` found exactly one (unambiguous) direct twin. For
  * `DIVERGENT_VENDORS` (direct ids don't share a string form with
- * OpenRouter's -- e.g. anthropic's dash-vs-dot versioning), the row keeps
- * its OpenRouter-prefixed id as-is; stripping the prefix would fabricate a
- * non-direct-callable dot-form id no row actually carries. Non-divergent
- * vendors keep the pre-existing strip via `toCanonicalDefault`, which is
- * safe because their direct and OpenRouter ids are identical once the
- * `openrouter/<vendor>/` prefix is removed (mirrors curated-models.js's
- * `directFormFor` policy).
+ * OpenRouter's, e.g. anthropic's dash-vs-dot versioning), the row keeps its
+ * OpenRouter-prefixed id as-is -- `directFormIfSafe` is never reached for
+ * them, since stripping is not even a string-safe operation on their ids.
  * @param {string} vendor
  * @param {boolean} isDirect whether `row.id` is itself a direct-namespace id
  * @param {{id:string}} row
  * @param {{direct?:string, openrouter?:string}} paired
+ * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
  * @returns {string|null}
  */
-function chooseRowId(vendor, isDirect, row, paired) {
+function chooseRowId(vendor, isDirect, row, paired, catalogInfo) {
   if (isDirect) { return row.id; }
   if (paired.direct) { return paired.direct; }
   if (!paired.openrouter) { return null; }
-  return DIVERGENT_VENDORS.has(vendor) ? paired.openrouter : toCanonicalDefault(paired.openrouter);
+  if (DIVERGENT_VENDORS.has(vendor)) { return paired.openrouter; }
+  return directFormIfSafe(vendor, paired.openrouter, catalogInfo);
 }
 
 /**
@@ -95,14 +115,16 @@ function chooseRowId(vendor, isDirect, row, paired) {
  * direct row keeps its own id, and an OpenRouter row collapses onto a
  * direct twin only when `pairAcrossGateways` found exactly one. For a
  * NON-divergent vendor with no direct twin at all, `chooseRowId` derives
- * the bare form via `toCanonicalDefault` -- that id is SYNTHESISED, not
- * verbatim. Measured 2026-08-24: all 14 `deepseek` rows are derived this
- * way, because the catalog carries no `deepseek/*` rows. This is safe for
- * routing, but not for the reason an earlier version of this comment
- * claimed (F8 fix wave, tracked separately as issue #195 -- do not "fix"
- * the routing behavior itself here, only this sentence was wrong): a bare
- * id is NOT failure-routed direct-first-with-OpenRouter-fallback.
- * gateway-router.js's auto-mode step 7 is
+ * the bare form via `directFormIfSafe` -- SYNTHESISED, not verbatim, only
+ * when the vendor's namespace can't prove it invalid (issue 195). Measured
+ * 2026-08-24 against a real 601-row catalog: all 14 `deepseek` rows derive
+ * this way (empty namespace); `google` (19/69) and `openai` (51/175) rows
+ * used to derive the same unconditional way despite a populated,
+ * authoritative namespace omitting that specific id, and now stay
+ * OpenRouter-prefixed instead. Once a bare id IS synthesized (the deepseek
+ * case), it is safe for routing, but not for the reason an earlier version
+ * of this comment claimed: a bare id is NOT failure-routed direct-first-
+ * with-OpenRouter-fallback. gateway-router.js's auto-mode step 7 is
  * `if (rq.keys[vendor] && hasForm(rq, 'direct'))`, and `hasForm` is
  * `!req.gatewayIds || req.gatewayIds[gateway] !== undefined` -- a bare id
  * carries no `gatewayIds` at all, so `hasForm(rq, 'direct')` is VACUOUSLY
@@ -133,7 +155,7 @@ function buildRows(catalog, vendor) {
     const isDirect = row.id.startsWith(directPrefix);
     const token = isDirect ? row.id.slice(directPrefix.length) : row.id.slice(orPrefix.length);
     const paired = pairAcrossGateways(vendor, token, catalogInfo);
-    const chosenId = chooseRowId(vendor, isDirect, row, paired);
+    const chosenId = chooseRowId(vendor, isDirect, row, paired, catalogInfo);
     if (!chosenId || seenIds.has(chosenId)) { continue; }
     seenIds.add(chosenId);
 
@@ -148,7 +170,7 @@ function buildRows(catalog, vendor) {
     // pricing (`sourceRow`, which for a local/direct row IS the catalog row
     // itself) instead. Gated on `isLocal`, NOT on "no OpenRouter twin", so a
     // direct (non-local) row with no twin still renders `pricePerMInput:
-    // null` (tests/provider-default-picker.test.js:59, pinned).
+    // null` (tests/provider-default-picker.test.js:60, pinned).
     const localPrice = isLocal ? pricePerMInputFrom(sourceRow) : null;
 
     rows.push({
@@ -164,22 +186,22 @@ function buildRows(catalog, vendor) {
 
 /**
  * Canonicalize `resolveTier`'s verbatim catalog-id output the same way row
- * ids are built (`chooseRowId`), so it can be matched against `rows`
- * exactly. `resolveTier` already prefers a real direct id when one matches
- * the tier pattern (`model-tiers.js`'s `pickForTier` tries the direct
- * namespace first), so this only has an effect when it fell back to an
- * OpenRouter id (no matching direct-namespace row at all). For
- * `DIVERGENT_VENDORS`, that OpenRouter id must stay OpenRouter-prefixed --
- * stripping it would fabricate a non-direct-callable dot-form id that no row
- * carries. Non-divergent vendors keep the pre-existing strip, safe because
- * their direct and OpenRouter ids are identical once the prefix is removed.
+ * ids are built (`chooseRowId`/`directFormIfSafe`), so it matches `rows`
+ * exactly. Only matters when `resolveTier` fell back to an OpenRouter id (no
+ * matching direct-namespace row for the tier). `DIVERGENT_VENDORS` keep that
+ * id OpenRouter-prefixed; non-divergent vendors go through the same
+ * `classifyModel`-guarded strip `chooseRowId` uses (issue 195) -- an
+ * unconditional strip here would produce a canonical id `rows` no longer
+ * carries whenever `directFormIfSafe` kept the row itself OpenRouter-
+ * prefixed, defeating the match below.
  * @param {string} vendor
  * @param {string|null} resolved verbatim catalog id from `resolveTier`, or null
+ * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
  * @returns {string|null}
  */
-function canonicalizeResolved(vendor, resolved) {
+function canonicalizeResolved(vendor, resolved, catalogInfo) {
   if (!resolved) { return null; }
-  return DIVERGENT_VENDORS.has(vendor) ? resolved : toCanonicalDefault(resolved);
+  return DIVERGENT_VENDORS.has(vendor) ? resolved : directFormIfSafe(vendor, resolved, catalogInfo);
 }
 
 /**
@@ -197,7 +219,7 @@ function canonicalizeResolved(vendor, resolved) {
 function computePreselectedId(vendor, tier, catalog, rows) {
   const effectiveTier = tier || getCostTier();
   const resolved = resolveTier(vendor, effectiveTier, catalog);
-  const canonical = canonicalizeResolved(vendor, resolved);
+  const canonical = canonicalizeResolved(vendor, resolved, { models: catalog });
   if (canonical && rows.some(r => r.id === canonical)) { return canonical; }
 
   const priced = rows.filter(r => r.pricePerMInput !== null);
@@ -241,27 +263,27 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  * `config.default` on first use. Read-modify-write, NO-CLOBBER -- preserves
  * an already-set `config.default` and every other existing alias/key.
  *
- * `chosenId` comes straight from `buildProviderDefaultChoices` (via
- * `chooseRowId`/`computePreselectedId`): a real direct id; an
- * `openrouter/`-prefixed id (for a `DIVERGENT_VENDORS` vendor with no direct
- * twin); or -- for a non-divergent vendor with no direct twin at all -- a
- * bare id `chooseRowId` already SYNTHESISED via `toCanonicalDefault` (not a
- * catalog-verbatim id; see `buildRows`'s docstring). **Never** run
- * `toCanonicalDefault` on a divergent vendor's id: that would strip the
- * `openrouter/` prefix and fabricate a non-direct-callable dot-form id no
- * row actually carries (the exact bug just fixed in Task 4's
- * `chooseRowId`/`canonicalizeResolved`). Non-divergent vendors' direct and
- * OpenRouter ids are identical once the prefix is stripped, so re-running
- * `toCanonicalDefault` here is safe (and a no-op when `chosenId` is already
- * bare).
+ * `chosenId` comes straight from `buildProviderDefaultChoices`: a real
+ * direct id; an `openrouter/`-prefixed id (`DIVERGENT_VENDORS`, or -- since
+ * issue 195 -- a non-divergent vendor whose bare form would classify
+ * `invalid`); or a bare id already SYNTHESISED via `directFormIfSafe`.
+ * **Never** unconditionally strip a divergent vendor's id -- fabricates a
+ * non-direct-callable dot-form id no row carries. Non-divergent vendors
+ * re-run the SAME `classifyModel`-guarded strip `chooseRowId` used to pick
+ * `chosenId` (`directFormIfSafe`, passed `catalog`): an unconditional strip
+ * would silently re-fabricate the id `chooseRowId` just refused, undoing
+ * the fix where the id is persisted and routed on. Without `catalog`, an
+ * empty namespace reads `unknown` and strips unconditionally (pre-195
+ * behavior) -- callers that built choices from a catalog should pass it.
  * @param {string} vendor e.g. 'anthropic'
  * @param {string} chosenId id from the picker (see above -- not always
  *   catalog-verbatim)
- * @param {{seedDefaultIfAbsent?: boolean}} [options]
+ * @param {{seedDefaultIfAbsent?: boolean, catalog?: Array<{id:string}>}} [options]
  * @returns {{alias: string, setAsDefault: boolean}}
  */
-function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true } = {}) {
-  const storedId = DIVERGENT_VENDORS.has(vendor) ? chosenId : toCanonicalDefault(chosenId);
+function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog } = {}) {
+  const catalogInfo = { models: Array.isArray(catalog) ? catalog : [] };
+  const storedId = DIVERGENT_VENDORS.has(vendor) ? chosenId : directFormIfSafe(vendor, chosenId, catalogInfo);
 
   const config = loadConfig() || {};
   if (!config.aliases || typeof config.aliases !== 'object') { config.aliases = {}; }

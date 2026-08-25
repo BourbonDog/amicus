@@ -43,6 +43,31 @@ describe('runProviderDefaultFlow', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  // Issue 195: a chosenId picked from choices.rows can now be OpenRouter-
+  // prefixed for a non-divergent vendor too (whenever the catalog proves the
+  // bare form invalid) -- runProviderDefaultFlow must pass the SAME catalog
+  // it built choices from into applyProviderDefault, or applyProviderDefault
+  // would re-strip the prefix the picker deliberately kept.
+  test('issue 195: an OpenRouter-only row (populated direct namespace) is chosen and persisted VERBATIM, never re-stripped', async () => {
+    const openrouterOnlyCatalog = [
+      { id: 'openai/model-a', name: 'Model A', contextLength: 1000, pricing: null },
+      { id: 'openrouter/openai/model-a', name: 'Model A', contextLength: 1000, pricing: { prompt: '0.000002' } },
+      // OR-only, no direct twin, despite openai's direct namespace above being
+      // populated -- priced free ($0/M), so it wins cheapest-row preselection
+      // (neither model id matches openai's gpt-* tier patterns, so
+      // resolveTier falls through to the priced-cheapest fallback).
+      { id: 'openrouter/openai/model-d:free', name: 'Model D (free)', contextLength: 1000, pricing: { prompt: '0' } },
+    ];
+
+    const result = await runProviderDefaultFlow('openai', { interactive: false, catalog: openrouterOnlyCatalog });
+
+    expect(result.chosenId).toBe('openrouter/openai/model-d:free');
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.openai).toBe('openrouter/openai/model-d:free');
+    expect(cfg.aliases.openai).not.toBe('openai/model-d:free'); // fabricated id must never be persisted
+  });
+
   test('non-interactive: applies preselectedId silently and writes the alias', async () => {
     const result = await runProviderDefaultFlow('openai', { interactive: false, catalog });
 

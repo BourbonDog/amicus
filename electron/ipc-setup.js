@@ -80,10 +80,25 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // Task 8: apply a per-provider default picker choice. Read-modify-write,
   // no-clobber -- applyProviderDefault only ever writes aliases[vendor] and
   // seeds config.default when absent (see provider-default-picker.js).
-  ipcMain.handle('sidecar:set-provider-default', (_event, provider, chosenId) => {
+  // Fetches the catalog before applying (issue 195): applyProviderDefault
+  // re-derives the same classifyModel-guarded strip buildProviderDefaultChoices
+  // used to choose chosenId in the first place, and needs the catalog to do
+  // it -- without one it can't tell an OpenRouter-only id from a fabricated
+  // bare one and would re-strip a prefix the picker deliberately kept.
+  ipcMain.handle('sidecar:set-provider-default', async (_event, provider, chosenId) => {
+    let catalog = [];
+    try {
+      const { getCatalog } = require('../src/utils/model-catalog');
+      catalog = await getCatalog();
+    } catch (err) {
+      // Best-effort only -- an empty catalog degrades applyProviderDefault
+      // to its pre-issue-195 unconditional strip (never blocks on `unknown`),
+      // it must never abort applying an already-made picker choice.
+      logger.error('set-provider-default catalog fetch error', { error: err.message });
+    }
     try {
       const { applyProviderDefault } = require('../src/utils/provider-default-picker');
-      return applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true });
+      return applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true, catalog });
     } catch (err) {
       logger.error('set-provider-default handler error', { error: err.message });
       return { success: false, error: err.message };
