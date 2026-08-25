@@ -175,19 +175,18 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
 
     // Resolved id for the write-preview (prefer bestProvider route)
     const previewId = c.routes[bestProvider] || Object.values(c.routes)[0] || '';
-    // Escaping-discipline consistency pass (council review, PR 196): NOT
-    // closing a live vulnerability -- c.alias is one of the five hardcoded
-    // FAMILIES names and previewId is filtered through resolveQuickPicks'
-    // anchored idPattern regexes (or a hardcoded fallback), neither of
-    // which can carry a payload. This applies the same escapeAttr() used a
-    // few lines up (buildModelPickHTML, for genuinely catalog-derived
-    // r.id/r.openrouterId) to the data-alias="..." attributes below and to
-    // previewId where it lands as .model-resolved / .write-preview-id text,
-    // matching what buildModelPickHTML already does for option text -- so
-    // this one class of interpolation isn't escaped in one place in this
-    // file and not another. Other c.alias interpolations in this card
-    // (the radio value, the plain-text alias label) were not part of the
-    // finding and are left as-is.
+    // Escaping-discipline consistency pass (council review, PR 196; extended
+    // by a second pass, N-c): NOT closing a live vulnerability -- c.alias is
+    // one of the five hardcoded FAMILIES names and previewId is filtered
+    // through resolveQuickPicks' anchored idPattern regexes (or a hardcoded
+    // fallback), neither of which can carry a payload. This applies the
+    // same escapeAttr() used a few lines up (buildModelPickHTML, for
+    // genuinely catalog-derived r.id/r.openrouterId) to every c.alias /
+    // previewId interpolation in this card template -- attributes
+    // (data-alias, the radio value) and text content alike (.model-alias,
+    // .model-resolved, .write-preview-id, the write-preview <code>s) --
+    // so a reader of this template does not have to work out which
+    // interpolations are "safe" and which are escaped; the rule is uniform.
     const escapedAlias = escapeAttr(c.alias);
     const escapedPreviewId = escapeAttr(previewId);
 
@@ -215,13 +214,13 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
     const modelPickHtml = buildModelPickHTML(c.alias, shortlists[c.alias]);
 
     return `<label class="${cardClass}">
-        <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
-        <span class="model-alias">${c.alias}</span>
+        <input type="radio" name="default-model" value="${escapedAlias}" ${checked}${disabled}>
+        <span class="model-alias">${escapedAlias}</span>
         <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
         <span class="model-resolved" data-alias="${escapedAlias}">${escapedPreviewId}</span>
         ${routeHtml}
         ${modelPickHtml}
-        <span class="write-preview" data-alias="${escapedAlias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${escapedPreviewId}</code></span>
+        <span class="write-preview" data-alias="${escapedAlias}">will set <code>${escapedAlias}</code> → <code class="write-preview-id">${escapedPreviewId}</code></span>
       </label>`;
   }).join('\n      ');
 

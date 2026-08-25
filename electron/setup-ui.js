@@ -154,7 +154,13 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         window.customDefaultModel = cfg.default;
       }
       if (cfg && cfg.aliases) {
-        savedAliases = cfg.aliases; // N1: buildReview diffs against this
+        // N-a (council review, PR 196): a defensive copy, not the live cfg.aliases
+        // reference. Nothing in this file currently mutates cfg.aliases after
+        // this point (checked: every '.aliases[' site below is a read), so
+        // buildReview's N1 diff is not measured to be wrong today -- but the
+        // copy is one line and removes a fragile "never mutate this" invariant
+        // future edits would otherwise have to remember.
+        savedAliases = Object.assign({}, cfg.aliases); // N1: buildReview diffs against this
         modelChoicesData.forEach(function(mc) {
           var currentModel = cfg.aliases[mc.alias];
           if (currentModel) {

@@ -523,6 +523,26 @@ describe('council review PR 196: previewId and data-alias escaping consistency',
     expect(html).toContain(`<span class="write-preview" data-alias="${escaped}">`);
   });
 
+  // N-c (second council review, PR 196): the first escaping pass covered
+  // data-alias and previewId but left three other c.alias interpolations
+  // in the SAME card template unescaped -- the radio value, the
+  // .model-alias span, and the write-preview <code>. c.alias is one of the
+  // five hardcoded FAMILIES names (not catalog data), so this is a
+  // uniformity fix, not a vulnerability closure: a reader of this template
+  // should not have to work out which interpolations are escaped and which
+  // aren't. Uses the file's real, hardcoded FAMILIES-shaped hostile fixture
+  // only to make the point mechanically checkable, not because a real
+  // alias could ever carry this payload.
+  test('N-c: the radio value, .model-alias span, and write-preview <code> are also escaped', () => {
+    const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
+    const escaped = escapeAttr(hostileAlias);
+    expect(html).not.toContain(`value="${hostileAlias}"`);
+    expect(html).not.toContain(`<span class="model-alias">${hostileAlias}</span>`);
+    expect(html).not.toContain(`<code>${hostileAlias}</code>`);
+    expect(html).toContain(`value="${escaped}"`);
+    expect(html).toContain(`<span class="model-alias">${escaped}</span>`);
+    expect(html).toContain(`<code>${escaped}</code>`);
+  });
 
   test('a hostile previewId is escaped in both .model-resolved text and .write-preview-id text', () => {
     const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});

@@ -762,6 +762,21 @@ describe('setup-ui wizard', () => {
     });
   });
 
+  describe('N-a: savedAliases is a defensive copy of cfg.aliases, not a live reference', () => {
+    // Static source pin, not a runtime mutant-behavior test: investigation
+    // (council review, PR 196) found every other '.aliases[' site in this
+    // file is a READ, so there is no code path today that mutates
+    // cfg.aliases after this assignment -- i.e. no reachable input makes
+    // the old bare-reference form and this copy diverge at runtime. The
+    // copy is still one line and removes that "nothing may ever mutate
+    // this" invariant for future edits, so this pins the source line
+    // itself against a revert to "savedAliases = cfg.aliases;".
+    it('assigns savedAliases via a copy, not the live cfg.aliases reference', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      expect(script).toContain('savedAliases = Object.assign({}, cfg.aliases);');
+      expect(script).not.toContain('savedAliases = cfg.aliases;');
+    });
+  });
 
   describe('F4: Step 4 review mirrors exactly what Finish will write', () => {
     // Extracts the REAL buildReview (+ its toBareIfDirect/pickRouteFor/
