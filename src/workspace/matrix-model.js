@@ -15,7 +15,7 @@
  * unconditionally (src/council/tally.js :: tally) — it is never a real source for
  * either the override badge or the post-override tier. Only `buildVerdict`
  * materializes `{from,to,reason}` and rewrites `tier` to `tierOverride.to`
- * (src/council/verdict.js:122-126). So both fields are joined in from
+ * (src/council/verdict.js:128-132). So both fields are joined in from
  * verdict.findings[] by `id`; when verdict is absent/unparseable (caller
  * passes null/undefined, or a finding has no verdict-side counterpart) the
  * row falls back to tally's own (pre-override) tier and renders no badge.

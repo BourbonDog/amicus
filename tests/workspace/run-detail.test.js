@@ -77,10 +77,10 @@ describe('getRunDetail', () => {
     // "WITHOUT --debate run.json carries no `debate` key at all (durable contract)", whose
     // assertion is this exact array.
     // ⚠️ CITATION REPAIR 2026-08-21 (v4.8 Phase 5 T5.4 fix round 1) — four of the five anchors in
-    // this block were re-opened and were WRONG: run.js:236 is the Stage-2 conformance merge (the
+    // this block were re-opened and were WRONG: run.js:246 is the Stage-2 conformance merge (the
     // runChair call is :271), run-chair.js:92 was classifyChairAttempt (the v4.9 W4 split moved
     // its body to chair-fallback.js, still run-chair.js :: classifyChairAttempt via re-export;
-    // the 'chair' stamps sit at run-chair.js:109/:112/:141 inside runChair),
+    // the 'chair' stamps sit at run-chair.js:109/:112/:152 inside runChair),
     // run-state.js:95-102 is initCouncilRun's seed (the append is inside
     // updateStage), and run-debate.test.js:616 was a runStats-row assertion. That last one was
     // ALREADY stale at v4.8 Phase 5's BASE 9ef275e5 — verified by opening it there, so the +337
@@ -113,7 +113,7 @@ describe('getRunDetail', () => {
     const d = getRunDetail(project, 'bbbb2222');
     expect(d.derived.verdictPanel.overallVerdict).toBeNull();
     // ⚠️ PRE-FLIGHT (P3): was the raw fixture string. `run.error` is null on every partial run
-    // (verified: run.js:279 is the only exit-2 finalize and passes no error), so the reason is
+    // (verified: run.js:294 is the only exit-2 finalize and passes no error), so the reason is
     // derived from the chair stage's `status:'error'`. See degradedReason() in Step 4.
     expect(d.derived.verdictPanel.reason).toBe('Chair synthesis stage failed');
     expect(d.artifacts['chair-output.md'].present).toBe(false);

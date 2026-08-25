@@ -119,6 +119,15 @@ async function runCouncil(options, deps = {}) {
   const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
+    // v4.9 W5.3: o.intent is 'task' or ABSENT — never 'review' (both transports strip it).
+    if (o.intent !== undefined && o.intent !== 'task') {
+      return finalize(1, { code: 'BAD_ARGS',
+        message: `Error: intent must be 'task' or omitted (review); got '${o.intent}'` });
+    }
+    if (o.intent === 'task' && o.claudeReviewFile) {   // V12: a file review is REVIEW machinery
+      return finalize(1, { code: 'BAD_ARGS', message:
+        '--claude-review enters a REVIEW as review N+1 and has no task-mode meaning; drop it for a task run' });
+    }
     // v4.1 §4.4: Claude-in-council is a FILE input — validated after initRun (so the
     // error doc lands in a run dir that exists) and before any launch (zero spend).
     const pre = asm.preflightClaudeReview(o);
@@ -132,7 +141,8 @@ async function runCouncil(options, deps = {}) {
     if (seatPre.error) { return finalize(1, seatPre.error); }
     o.seats = seatPre.seats;
     o.criticSeat = seatPre.criticSeat;
-    runState.checkpoint(o.runDir, { seats: o.seats, criticSeat: o.criticSeat });
+    runState.checkpoint(o.runDir, { seats: o.seats, criticSeat: o.criticSeat,
+      ...(o.intent === 'task' ? { intent: 'task' } : {}) });   // v4.9 W5.3: emit-when-'task', never 'review'
 
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
@@ -242,16 +252,21 @@ async function runCouncil(options, deps = {}) {
     // buildTallyInput appends after the primary review rows (run-assemble.js
     // docblock). Neither stage invents a second mechanism for the other's kind
     // of row.
-    const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
-      runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
-      reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
-      extraRows: [...s1.extraRows, ...s2.extraRows],
-      // v4.8 PR4c §3.2: the ONLY production caller of buildTallyInput, so this is
-      // the single seam meta.seats enters through. The final input is derived by
-      // SPREAD (run-finish.js:36), not rebuilt, so both the provisional and the
-      // debated input inherit it from here.
-      seats: o.seats,
-    });
+    const mkInput = (chairStats, chairModel) => {
+      const input = asm.buildTallyInput({
+        runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
+        reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
+        extraRows: [...s1.extraRows, ...s2.extraRows],
+        // v4.8 PR4c §3.2: the ONLY production caller of buildTallyInput, so this is
+        // the single seam meta.seats enters through. The final input is derived by
+        // SPREAD (run-finish.js:36), not rebuilt, so both the provisional and the
+        // debated input inherit it from here.
+        seats: o.seats,
+      });
+      // v4.9 W5.3: emit-when-'task' as a pure meta TAIL; review meta stays untouched.
+      if (o.intent === 'task') { input.meta = { ...input.meta, intent: 'task' }; }
+      return input;
+    };
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);
 

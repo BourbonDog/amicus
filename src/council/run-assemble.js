@@ -136,7 +136,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // ONLY when the bench repeats an alias — the one case where the `alias#N`
     // seat ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat
     // resolve to nothing else in the document (meta.models is the ALIAS list).
-    // ⚠️ `seats ?` alone would be VACUOUS: run.js:133 sets o.seats unconditionally
+    // ⚠️ `seats ?` alone would be VACUOUS: run.js:142 sets o.seats unconditionally
     // past the preflight and buildSeats always returns an ARRAY ([] is still
     // truthy), so that spelling writes a full table into tally-input.json,
     // tally.json AND verdict.json on every unique-alias bench.
@@ -152,7 +152,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // joined positionally to meta.models (`claude` is pushed onto that inside
     // run-assemble.js :: buildTallyInput) or to streetCred[].
     // .slice() is defence-in-depth only: the array is shared with
-    // runState.checkpoint (run.js:135) and with both tally inputs. Nothing
+    // runState.checkpoint (run.js:144) and with both tally inputs. Nothing
     // mutates meta.seats — unlike models, which meta.models.push mutates below —
     // so no test can distinguish the copy from the reference.
     ...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {}),

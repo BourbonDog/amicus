@@ -103,13 +103,13 @@
       }
     },
     "degrades": {
-      "description": "v4.6 Plan 1: every degrade/heal the sink announced — additive, written by run-degrade.js.",
+      "description": "v4.6 Plan 1: every degrade/heal the sink announced — additive, written by run-degrade.js. v4.9 widened kind with 'info': an announcement that is neither a loss nor a recovery (e.g. a task run's ledger-skipped note) — recorded here but never flipping the run degraded.",
       "type": "array",
       "items": {
         "type": "object",
         "required": ["kind", "channel", "what", "why", "effect"],
         "properties": {
-          "kind": { "enum": ["degrade", "heal"] },
+          "kind": { "enum": ["degrade", "heal", "info"] },
           "channel": { "type": "string" },
           "what": { "type": "string" },
           "why": { "type": "string" },

@@ -2921,9 +2921,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
        *"the same three … **as a malformed seats table**"*. Under A the two sets coincide, so both
        sentences were **correct as written**.
        **Measured** by enumerating every `buildReport` caller in live code: `runReport`
-       (`cli-handlers-council.js:95`), `runVerdict` on `--render` (`:210`, via `buildVerdict`, which
-       copies `adjudications` straight through at `verdict.js:128`), `run-verdict-files.js:44`
-       (engine-internal, not schema-free), and `mcp-server.js :: amicus_verdict` (`:1462`/`:1472`).
+       (`cli-handlers-council.js:97`), `runVerdict` on `--render` (`:212`, via `buildVerdict`, which
+       copies `adjudications` straight through at `verdict.js:134`), `run-verdict-files.js:44`
+       (engine-internal, not schema-free), and `mcp-server.js :: amicus_verdict` (`:1466`/`:1476`).
        `runTally` never calls `buildReport` at all. So a non-array `adjudications` reaches exactly
        **A** — the same three a malformed seats table reaches.
        ⚠️ **The error chain, recorded so it is not repeated:** a re-reviewer flagged the sentence
@@ -4702,8 +4702,8 @@ deliberately left alone:
   reference (`:121`), so PR3's per-vote `seat` survives; `raiserSeat` has no slot and is dropped.
   Measured on a twin bench: the tally finding carries `"raiserSeat":"deepseek#1"`, the verdict
   finding does not, while both carry `adjudications[0].seat === "deepseek#2"`. Every caller writes
-  through `buildVerdict` (`run-verdict-files.js:41`, `cli-handlers-council.js:198`,
-  `mcp-server.js:1452`), so there is no second path that could add it.
+  through `buildVerdict` (`run-verdict-files.js:41`, `cli-handlers-council.js:200`,
+  `mcp-server.js:1456`), so there is no second path that could add it.
   ⚠️ **CORRECTED at T-A8, 2026-08-17, by re-opening all three.** This entry cited
   `run-assemble.js:223` for the first caller; `run-assemble.js` **does not call `buildVerdict` at
   all** (`grep -n 'buildVerdict(' src/council/run-assemble.js` — no hits) and `:223` there is
@@ -4722,7 +4722,7 @@ deliberately left alone:
   Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
   document" gap.
   - **Verified by execution (2026-08-16):** `src/council/verdict.js :: buildVerdict` —
-    `findings[].raiserSeat` is emitted at `verdict.js:141`: `...(f.raiserSeat ? { raiserSeat:
+    `findings[].raiserSeat` is emitted at `verdict.js:147`: `...(f.raiserSeat ? { raiserSeat:
     f.raiserSeat } : {})`.
 - [x] **DONE (v4.8 Phase 5 T5.1 + T5.2, 2026-08-21) · PR4 · an `-rv` leg that binds to NO seat makes
   `applyDebate` invent an adjudication row —
@@ -5636,7 +5636,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   prototype chain and `basis["function toString() { [native code] }"] = NaN`, serialized as `null`
   in both `tally.json` and `verdict.json`. Reachable on the schema-free CLI path only — the MCP
   path's `adjudications[].verdict` is `z.enum(['agree','dispute','neutral'])`
-  (`src/mcp-tools.js:420`), which rejects every `Object.prototype` key before `tally()` ever runs.
+  (`src/mcp-tools.js:426`), which rejects every `Object.prototype` key before `tally()` ever runs.
   PR4c's `sameModelCorroboration` stamp (`tally.js :: sameModelCorroboration`) reads the same
   `VERDICTS[v.verdict]` expression — measured harmless: it resolves the same `undefined`, so
   nothing downstream corrupts.
@@ -6535,9 +6535,21 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
-## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
+## v4.9 records — dispositions and rulings made in-cycle (2026-08-25)
 
-Filed past-tense in the same commit as the fixes, per the falsified-record rule.
+Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- **W5 ruling — a spec self-contradiction resolved: `intent` is emit-when-`'task'`
+  EVERYWHERE.** The v4.8 design spec's §5.3 declares verdict-`intent` "mandatory" while its
+  §7.5 promises byte-identical review-run `verdict.json`; both cannot hold. v4.9 W5 shipped
+  the §7.5 side — `intent` appears on `run.json`, tally `meta`, and `verdict.json` only when
+  `'task'`; absence means review and `'review'` is never materialized (the engine rejects an
+  explicit `intent:'review'` option pre-spend, pinned). §5.3's rationale — renderers need a
+  fork key on the verdict — is fully served by emit-when-task. Byte identity for review runs
+  is pinned at the key level AND the byte level (`tests/council/run-intent.test.js`).
+- **W5 size note: `src/council/run.js` hit exactly 300/300** with the intent validation +
+  V12 block. Any W6+ edit to it needs an extraction or a same-line-count swap first — the W6
+  briefing-write fork is designed as a dispatch-helper swap for exactly this reason.
 
 - **The `tests/mcp-headless-e2e.integration.test.js` double failure — DECIDED: live-LLM flake,
   not a session leak; the standing "Jest did not exit" warning was a REAL, separate defect.**

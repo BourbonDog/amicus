@@ -426,6 +426,65 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
   });
 });
 
+// v4.9 W5.4 (V5): a task run that reaches the ledger-promotion step announces —
+// once, kind:'info', channel 'ledger-skipped' — that the ledger it is about to
+// draw on is fed by review runs only (task runs write no rows, gate 1). The
+// note is speech, not loss: on an otherwise-clean walk (fallback succeeds) the
+// run still exits 0 with degraded.value false — the T5.5-shaped end-to-end pin
+// (tests/council/run-finalize.test.js) driven through the real driver here.
+describe("task-mode promotion announcement (v4.9 W5.4 — 'ledger-skipped')", () => {
+  const promotionScript = () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'timeout')], 1, 'error');
+    script['abc123-ch3'] = () => okWave([mkLeg('grok', 'Fallback synthesis.\nVERDICT: Ship it', 'complete', 0.02)]);
+    return script;
+  };
+  const statsFn = () => [
+    { model: 'grok', avgStreetCredPeersOnly: 1.2 },
+    { model: 'gemini', avgStreetCredPeersOnly: 1.0 },
+  ];
+
+  test('task run reaching the promotion step emits EXACTLY ONE info note — and still exits 0 clean', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(promotionScript()), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    // degraded.value stayed false: a degraded run can never exit 0
+    // (resolveTerminalExit turns 0 into 2 off that flag).
+    expect(exitCode).toBe(0);
+    expect(run.status).toBe('complete');
+    const notes = (run.degrades || []).filter(d => d.channel === 'ledger-skipped');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toEqual({
+      kind: 'info', channel: 'ledger-skipped',
+      what: 'task runs write no reliability rows',
+      why: 'ledger-driven chair promotion draws only on review-run history — task rankings measure concurrence, never defect confirmation',
+      effect: 'fallback candidates come from review runs only; a task-only install has none',
+    });
+    // toEqual above already excludes a data key; make the absence explicit.
+    expect('data' in notes[0]).toBe(false);
+  });
+
+  test('review-run control: the same promotion walk WITHOUT intent emits no such note', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(promotionScript()), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toEqual([]);
+  });
+
+  test('a task run whose chair succeeds first try never reaches the step — no note', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(happyScript()), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toEqual([]);
+  });
+});
+
 describe('chair VERDICT-line repair (one re-prompt)', () => {
   // v4.3 Task 3 (spec §7.2): the ch4 VERDICT-repair launch is a SEPARATE call
   // site from the ch1/ch2/ch3 chain (attemptChair) — its own attribution wiring.

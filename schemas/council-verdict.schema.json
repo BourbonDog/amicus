@@ -56,6 +56,10 @@
     "claudeInCouncil": {
       "type": "boolean"
     },
+    "intent": {
+      "enum": ["review", "task"],
+      "description": "v4.9, optional. The run's intent, forwarded from the tally record's meta.intent. The engine emits it only when 'task' — a review verdict never materializes the key, keeping review-run verdict.json byte-identical — but an explicit 'review' from hand-assembled input is accepted."
+    },
     "overallVerdict": {
       "oneOf": [
         {
@@ -222,13 +226,13 @@
       ]
     },
     "degrades": {
-      "description": "v4.6 Plan 2: what this run lost — copied verbatim from the sink at verdict assembly. Additive; absent on a clean run.",
+      "description": "v4.6 Plan 2: what this run lost — copied verbatim from the sink at verdict assembly. Additive; absent when the sink recorded nothing. v4.9 widened kind with 'info': an announcement that is neither a loss nor a recovery (e.g. a task run's ledger-skipped note) — carried here without degrading the run.",
       "type": "array",
       "items": {
         "type": "object",
         "required": ["kind", "channel", "what", "why", "effect"],
         "properties": {
-          "kind": { "enum": ["degrade", "heal"] },
+          "kind": { "enum": ["degrade", "heal", "info"] },
           "channel": { "type": "string" },
           "what": { "type": "string" },
           "why": { "type": "string" },

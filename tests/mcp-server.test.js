@@ -2355,6 +2355,22 @@ describe('council MCP handlers', () => {
     expect(gpt.runs).toBe(1);
   });
 
+  // v4.9 W5.4 gate 3. MEASURED: tally() copies `meta` VERBATIM from the input
+  // onto the returned record (tally.js — the `meta` key of the return literal),
+  // so the handler gates on the RECORD's meta.intent. The auto-append test
+  // above is the absent-intent control. Named mutant LEDGERGATE3: drop the
+  // intent conjunct at the handler's append site — this test goes red.
+  test("amicus_council_tally with meta.intent 'task' returns the record but appends NO ledger row", async () => {
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
+    const input = { ...avInput, meta: { ...avInput.meta, intent: 'task' } };
+    const res = await handlers.amicus_council_tally(input, process.cwd());
+    expect(res.isError).toBeFalsy();
+    const doc = JSON.parse(unfence(res.content[0].text));
+    expect(doc.type).toBe('council-tally');           // record still produced
+    expect(doc.meta.intent).toBe('task');             // and meta rides it verbatim
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]); // but nothing recorded
+  });
+
   test('amicus_council_tally returns fenced JSON content (v4.0 §8 — H9)', async () => {
     const res = await handlers.amicus_council_tally(avInput, process.cwd());
     expect(res.isError).toBeFalsy();

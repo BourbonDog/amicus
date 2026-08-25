@@ -366,3 +366,54 @@ describe('valueless and dash-leading value flags (v4.7 PR6)', () => {
     expect(runCouncil).toHaveBeenCalled();
   });
 });
+
+// v4.9 W5.2 (spec §5.3, ruling V5/V9 neighborhood): `--intent` on the council
+// run CLI surface — emit-when-'task': the options object handed to runCouncil
+// carries intent:'task' or NO intent key at all. 'review' is the default
+// spelled out and is never materialized (review runs carry no intent anywhere).
+describe("--intent on council run (v4.9 W5.2, emit-when-'task')", () => {
+  test("--intent task threads intent:'task' into runCouncil options", async () => {
+    const code = await handleCouncilRun(argsBase({ intent: 'task' }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].intent).toBe('task');
+  });
+
+  test('--intent review is the default spelled out: NO intent key on options', async () => {
+    const code = await handleCouncilRun(argsBase({ intent: 'review' }));
+    expect(code).toBe(0);
+    expect('intent' in runCouncil.mock.calls[0][0]).toBe(false);
+  });
+
+  test('absent --intent: NO intent key on options', async () => {
+    const code = await handleCouncilRun(argsBase());
+    expect(code).toBe(0);
+    expect('intent' in runCouncil.mock.calls[0][0]).toBe(false);
+  });
+
+  test('--intent bogus fails BAD_ARGS pre-spend, hint naming the two values', async () => {
+    const code = await handleCouncilRun(argsBase({ intent: 'bogus' }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toMatch(/--intent/);
+    expect(doc.error.hint).toMatch(/review/);
+    expect(doc.error.hint).toMatch(/task/);
+  });
+
+  test('bare --intent (parseArgs boolean true) also fails BAD_ARGS pre-spend', async () => {
+    const code = await handleCouncilRun(argsBase({ intent: true }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.code).toBe('BAD_ARGS');
+  });
+
+  // The usage text IS the flag registry (utils/known-flags derives from it) —
+  // without the cli.js usage line, bin/amicus.js rejects `--intent` as an
+  // unknown flag before this handler ever runs. Same pin shape as --tag's in
+  // tests/utils/known-flags.test.js.
+  test("'intent' is a known flag (registered via the council run usage block)", () => {
+    const { getKnownFlags } = require('../src/utils/known-flags');
+    expect(getKnownFlags().has('intent')).toBe(true);
+  });
+});

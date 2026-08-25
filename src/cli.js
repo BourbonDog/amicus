@@ -590,7 +590,7 @@ Subcommands for 'council':
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
       [--fallback] [--no-fallback] [--on-complete <cmd>]
       [--template <name|path>] [--artifact <file>] [--var <k=v>]
-      [--pack <name|path>] [--tag <t>]
+      [--pack <name|path>] [--tag <t>] [--intent review|task]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -620,6 +620,8 @@ Subcommands for 'council':
                                 --pack <name|path> loads a saved pack (bench,
                                 chair, critic/lenses, options, template);
                                 explicit flags always override the pack's values.
+                                --intent task marks a task-mode run (v4.9);
+                                review is the default and is never stored.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

@@ -411,6 +411,12 @@ function getTools() {
         runId: z.string(), runType: z.string().optional(), date: z.string().optional(),
         models: z.array(z.string()).min(1), chair: z.string().optional(),
         claudeInCouncil: z.boolean().optional(), seats: z.array(z.any()).nullable().optional(),
+        // v4.9 W5.2: declared or zod strips it (the same #137-shaped silent
+        // fork as the seat keys above) — a task run's meta.intent would vanish
+        // from every hand-assembled MCP call and the ledger gates would see a
+        // review run. Permissive z.string(), matching runType: tally() stays
+        // the single arbiter of shape on both paths.
+        intent: z.string().optional(),
       }).describe('Run metadata; meta.models lists every reviewed model.'),
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),
@@ -586,6 +592,12 @@ function getTools() {
       ),
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       tag: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, '1-64 chars, letters/digits/_/- only').optional().describe('Label this session for list/search/spend grouping'),
+      // v4.9 W5.2: `.optional()` never `.default()` — absent IS 'review'.
+      intent: z.enum(['review', 'task']).optional().describe(
+        "Run intent (v4.9). 'task' marks a task-mode run, recorded as intent: 'task' on " +
+        "run.json/verdict.json and kept out of the reliability ledger; 'review' is the " +
+        'default and is never stored.'
+      ),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
         'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +

@@ -124,7 +124,7 @@ function costPanel(run, tally) {
 
 // ⚠️ PRE-FLIGHT (P3): F04's correction is implemented here rather than left as prose.
 // VERIFIED on shipped main (Task 0): `finalize(exitCode, error)` writes `error: error || null`
-// (run-finalize.js :: writeRunTerminal), and `return finalize(degraded.value ? 2 : 0)` (run.js:279) is the ONLY
+// (run-finalize.js :: writeRunTerminal), and `return finalize(degraded.value ? 2 : 0)` (run.js:294) is the ONLY
 // exit-2 path — it passes NO error. Every error-bearing call is `finalize(1, …)`. So on a
 // `status:'partial'` run — precisely the run this panel exists to explain — `run.error` is
 // GUARANTEED null, and the old one-line formula rendered "undefined: undefined".

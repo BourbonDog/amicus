@@ -42,6 +42,34 @@ test('tally auto-appends a ledger row that council stats then reflects', async (
   expect(gpt.runs).toBe(1);
 });
 
+// v4.9 W5.4 gate 2. MEASURED: tally() copies `meta` VERBATIM from the input
+// onto the returned record (tally.js — the `meta` key of the return literal),
+// so the gate reads the RECORD's meta.intent, not a re-parse of the input.
+// Named mutant LEDGERGATE2: drop the intent conjunct in runTally's append
+// gate — the task test goes red (a ledger row appears). The auto-append test
+// above is the absent-intent control; the explicit-'review' test pins that a
+// hand-assembled input saying 'review' still appends.
+test("tally with meta.intent 'task' computes the record but appends NO ledger row", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-task-'));
+  const file = path.join(dir, 'input.json');
+  fs.writeFileSync(file, JSON.stringify({ ...avInput, meta: { ...avInput.meta, intent: 'task' } }));
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'tally', file], json: true }));
+  expect(code).toBe(0);
+  expect(JSON.parse(out).tierCounts).toBeDefined();      // record still produced
+  expect(deriveReliability({ dir: ledgerDir })).toEqual([]); // but nothing recorded
+});
+
+test("tally with an explicit meta.intent 'review' still appends (hand-assembled inputs may materialize it)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-rev-'));
+  const file = path.join(dir, 'input.json');
+  fs.writeFileSync(file, JSON.stringify({ ...avInput, meta: { ...avInput.meta, intent: 'review' } }));
+  const { code } = await capture(() => handleCouncil({ _: ['council', 'tally', file], json: true }));
+  expect(code).toBe(0);
+  const gpt = deriveReliability({ dir: ledgerDir }).find(a => a.model === 'gpt');
+  expect(gpt).toBeDefined();
+  expect(gpt.runs).toBe(1);
+});
+
 test('stats --json emits the wrapped council-stats doc, not a bare array (v4.0 §7)', async () => {
   const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
   expect(code).toBe(0);

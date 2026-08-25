@@ -777,7 +777,7 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
       rankings: [{ judge: 'gpt', order: ['gemini'] }],
       runStats: [],
     };
-    // mcp-server.js:1540-1543 hands the SDK-PARSED input to the handler and
+    // mcp-server.js:1544-1547 hands the SDK-PARSED input to the handler and
     // :1424 does `const record = tally(input)` — so the parse output, not the
     // raw object, is what tally() sees on this path.
     const s = schema();
@@ -843,5 +843,56 @@ describe('amicus_council_tally retains findings[].location (SI-23, R10)', () => 
     });
     expect(record.findings[0].location).toBe('src/foo.js line 12');
     expect(record.findings[0].claim).toBe('c');
+  });
+});
+
+// v4.9 W5.2: `intent` on the two council MCP shapes.
+//
+// amicus_council_run gains a real enum param (`.optional()` never `.default()`
+// — the absent-key idiom is the engine-wide representation of 'review').
+//
+// amicus_council_tally's closed meta z.object is the same silent-strip trap as
+// the seat keys above (#137 shape): W5.3 puts `intent` on the engine-built
+// tally-input's meta, so WITHOUT a declaration here zod strips it from every
+// hand-assembled MCP call and the three W5.4 ledger gates see a review run —
+// a task run's rankings would land in the reliability ledger via exactly one
+// transport. Permissive z.string(), matching runType: tally() stays the
+// single arbiter of shape on both paths.
+describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
+  const byName = () => Object.fromEntries(getTools().map(t => [t.name, t]));
+
+  test('amicus_council_run declares intent as an optional review|task enum with no Zod default', () => {
+    const schema = byName().amicus_council_run.inputSchema.intent;
+    expect(schema).toBeDefined();
+    expect(schema._def.typeName).toBe('ZodOptional');
+    expect(schema.isOptional()).toBe(true);
+  });
+
+  test("amicus_council_run accepts intent 'task' and 'review', rejects anything else", () => {
+    const tool = byName().amicus_council_run;
+    const extra = { briefingFile: '/tmp/briefing.md' };
+    expect(z.object(tool.inputSchema).parse({ ...extra, intent: 'task' }).intent).toBe('task');
+    expect(z.object(tool.inputSchema).parse({ ...extra, intent: 'review' }).intent).toBe('review');
+    expect(() => z.object(tool.inputSchema).parse({ ...extra, intent: 'bogus' })).toThrow();
+  });
+
+  test('amicus_council_run leaves intent genuinely absent from the parsed result when omitted', () => {
+    const tool = byName().amicus_council_run;
+    const parsed = z.object(tool.inputSchema).parse({ briefingFile: '/tmp/briefing.md' });
+    expect('intent' in parsed).toBe(false);
+  });
+
+  // The strip pin (RED first against the raw shape): undeclared, zod ^3
+  // silently DROPS meta.intent rather than rejecting it.
+  test('amicus_council_tally meta.intent survives the MCP parse', () => {
+    const schema = byName().amicus_council_tally.inputSchema;
+    const out = schema.meta.parse({ runId: 'r', models: ['a', 'b'], intent: 'task' });
+    expect(out.intent).toBe('task');
+  });
+
+  test('amicus_council_tally meta.intent stays absent when omitted', () => {
+    const schema = byName().amicus_council_tally.inputSchema;
+    const out = schema.meta.parse({ runId: 'r', models: ['a', 'b'] });
+    expect('intent' in out).toBe(false);
   });
 });

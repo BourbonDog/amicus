@@ -125,6 +125,17 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     }
     if (attempt.leg) { actualChair = o.chair; }
     else if (!overBudget()) {
+      // v4.9 W5.4 (V5): the promotion below draws on the reliability ledger,
+      // which task runs never feed (run-finish.js gate 1) — announced once,
+      // kind 'info' (speech, not loss: the sink never flips `degraded` on it).
+      if (o.intent === 'task') {
+        degrade.note({
+          kind: 'info', channel: 'ledger-skipped',
+          what: 'task runs write no reliability rows',
+          why: 'ledger-driven chair promotion draws only on review-run history — task rankings measure concurrence, never defect confirmation',
+          effect: 'fallback candidates come from review runs only; a task-only install has none',
+        });
+      }
       let statsRows = [];
       try { statsRows = statsFn(); } catch { /* no ledger yet */ }
       const fallback = pickFallbackChair(statsRows, o.models, o.chair);

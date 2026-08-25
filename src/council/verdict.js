@@ -116,6 +116,12 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // matching the `seatLoss` sibling below; PR5 codes against that name.
     ...(record.meta.seats ? { seats: record.meta.seats } : {}),
     claudeInCouncil: record.meta.claudeInCouncil,
+    // v4.9 W5.3: task-mode marker, forwarded from the tally record's meta —
+    // emit-when-'task' (the W4/W5 plan's §7.5 byte-identity ruling): a review
+    // record never materializes the key, so a review verdict.json is unchanged
+    // byte for byte, and an explicit meta.intent 'review' (hand-assembled
+    // input) is deliberately NOT forwarded either.
+    ...(record.meta && record.meta.intent === 'task' ? { intent: 'task' } : {}),
     overallVerdict: opts.overallVerdict === undefined ? null : opts.overallVerdict,
     findings: record.findings.map(f => {
       const d = byId.get(f.id) || {};
@@ -150,7 +156,7 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // emitted (same semantics as `seat.id !== seat.alias` one layer up,
     // run-stats-entry.js:64). NOT a plain pass-through like `raiserSeat`
     // above (:141) — that field's upstream producer already holds a real
-    // {id, alias} seat OBJECT at its own decision point (run.js:202:
+    // {id, alias} seat OBJECT at its own decision point (run.js:212:
     // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
     // through here is safe. The street-cred producer never has such an object
     // at this point, only a flat row, so a pass-through here would leak `seat`

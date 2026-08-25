@@ -35,7 +35,9 @@ function runTally(inputPath, useJson, opts = {}) {
   // Auto-append the run to the reliability ledger (consumed by `amicus council
   // stats`). Tally is the council's finalize step, so this is where the row is
   // recorded. Best-effort: a ledger write failure must not fail the tally.
-  if (opts.append !== false) {
+  // v4.9 W5.4 gate 2: task-run records never feed it — gated on the RECORD's
+  // meta.intent (tally copies meta verbatim from the input, measured).
+  if (opts.append !== false && !(record.meta && record.meta.intent === 'task')) {
     try { appendRun(record); }
     catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
   }

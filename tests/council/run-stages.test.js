@@ -76,7 +76,7 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
   // additive — a test wanting a different sink still passes its own `degrade`
   // and reads that back instead.
   const notes = [];
-  // Production sets these at run.js:133-134 (asm.preflightSeats). Without them
+  // Production sets these at run.js:142-143 (asm.preflightSeats). Without them
   // every consumer under test falls through roleAt's unknown-id default and an
   // empty bindSeats roster — green for the wrong reason.
   const seats = buildSeats(models, critic, lenses);

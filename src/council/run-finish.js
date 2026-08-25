@@ -4,7 +4,7 @@
 // Moved verbatim from run.js@6b0c3b6b:242-288 (v4.8 PR0 size-gate split, zero
 // behavior). NOT run-finalize.js — that sibling owns exit codes and the
 // terminal write; this module builds the final tally, appends the run
-// record to the ledger (skipped for lens runs), and writes the
+// record to the ledger (skipped for lens runs and task runs), and writes the
 // tally/verdict artifact files + their stage events.
 const { tally } = require('./tally');
 const { decorateRecord } = require('./debate');
@@ -48,8 +48,10 @@ function finishRun({ o, chairRes, debatedInput, debateFindings, appendRunFn, deg
   ];
   const record = tally(finalInput);
   if (debateFindings) { decorateRecord(record, debateFindings); }
-  if (!o.lenses) {
-    // Lens runs never feed cross-run reliability stats (spec §4 / skill rule).
+  if (!o.lenses && o.intent !== 'task') {
+    // Lens runs never feed cross-run reliability stats (spec §4 / skill rule);
+    // task runs neither (v4.9 W5.4 gate 1 — task rankings measure concurrence,
+    // never defect confirmation, so a task row would poison chair promotion).
     try { appendRunFn(record); }
     catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
   }

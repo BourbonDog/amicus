@@ -189,6 +189,13 @@ async function handleCouncilRun(args, depsOverride = {}) {
       return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error });
     }
   }
+  // v4.9 W5.2 (spec §5.3): emit-when-'task' everywhere — 'review' is the
+  // default spelled out and is never materialized on the options object.
+  if (args.intent !== undefined && args.intent !== 'review' && args.intent !== 'task') {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --intent must be review or task',
+      hint: "review (the default) may be omitted; only '--intent task' changes the run" });
+  }
   let runId;
   if (args['run-id']) {
     const check = validateTaskId(String(args['run-id']));
@@ -238,6 +245,8 @@ async function handleCouncilRun(args, depsOverride = {}) {
     template: templateMeta, // F9 (v4.5): null when no --template; additive on the run.json seed (run-state.js).
     pack: packRecord, // v4.5 Task 12 (B7/F5): null when no --pack; additive on the run.json seed (run-state.js).
     tag: args.tag, // v4.7 F8: undefined when no --tag; Task 3 stores it on the run.json seed.
+    // v4.9 W5.2: o.intent is 'task' or ABSENT, never 'review' (validated above).
+    ...(args.intent === 'task' ? { intent: 'task' } : {}),
     droppedMembers: benchRes.droppedMembers, // v4.5 Wave 2: [] when nothing dropped; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and

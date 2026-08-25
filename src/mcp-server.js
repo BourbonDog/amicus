@@ -1424,7 +1424,11 @@ const handlers = {
       const record = tally(input);
       // Auto-append to the reliability ledger (parity with `amicus council
       // tally`). Best-effort: a ledger write failure must not fail the tally.
-      try { require('./council/ledger').appendRun(record); } catch { /* best-effort */ }
+      // v4.9 W5.4 gate 3: task-run records never feed it — gated on the
+      // RECORD's meta.intent (tally copies meta verbatim from the input).
+      if (!(record.meta && record.meta.intent === 'task')) {
+        try { require('./council/ledger').appendRun(record); } catch { /* best-effort */ }
+      }
       // v4.0 §8 (H9): fence the JSON — council output summarizes untrusted
       // model prose entering the orchestrating agent's context. JSON intact
       // inside the fence; CLI --json stays unfenced (the programmatic channel).

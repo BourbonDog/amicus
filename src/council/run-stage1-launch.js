@@ -14,7 +14,7 @@ const { buildSeats } = require('./seats');
 /** Launch all Stage-1 legs (wave + critic/lens solos), collect run docs. */
 async function launchStage1(ctx) {
   const { o, launchers } = ctx;
-  // Seat identity for THIS launch. run.js:133 sets o.seats from asm.preflightSeats;
+  // Seat identity for THIS launch. run.js:142 sets o.seats from asm.preflightSeats;
   // buildSeats is pure and total, so a direct require() caller or a legacy run dir
   // reconstructs the same table rather than binding nothing (spec §4.3).
   const seats = Array.isArray(o.seats) && o.seats.length > 0
