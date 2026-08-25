@@ -6017,8 +6017,7 @@ priced, context-annotated rows **already existed** (`provider-default-prompt.js`
 undiscoverable from the list. The ask: add the family → model second level, reusing the
 existing priced picker -- done, see below.
 
-✅ **Pieces 1+2 DONE — branch `fix/138-model-level-default` (2026-08-24, 13 commits over
-`2c2d20a0`; not yet merged).** Piece 1 (the priced picker unreachable except via
+✅ **Pieces 1+2 DONE — branch `fix/138-model-level-default` (2026-08-24; not yet merged).** Piece 1 (the priced picker unreachable except via
 `amicus key <provider>`): a new pure module, `src/utils/model-shortlist.js`, wraps
 `buildProviderDefaultChoices` (`provider-default-picker.js`) — the same priced core this entry
 names — and turns each vendor's rows into `{recommendedId, suggested, rest, total}`. Both setup
