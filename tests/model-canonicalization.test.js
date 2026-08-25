@@ -91,8 +91,20 @@ describe('directFormIfProven — persistence (conservative: strip only on positi
       .toBe('openrouter/deepseek/deepseek-v3.2');
   });
 
-  test('no evidence (absent catalog, {models: undefined} coerced by the caller): id is preserved verbatim', () => {
-    expect(directFormIfProven('deepseek', 'openrouter/deepseek/deepseek-v3.2', { models: [] }))
+  // A5 (council review of PR 198): the previous version of this test passed
+  // { models: [] } -- byte-identical to the "empty catalog" test above -- so
+  // it never actually exercised catalogInfo.models being undefined at all.
+  // Passes { models: undefined } directly here to pin classifyModel's OWN
+  // coercion (`Array.isArray(catalogInfo.models) ? catalogInfo.models : []`,
+  // model-classification.js) at this call boundary. The OTHER absent-catalog
+  // shape -- the `catalog` OPTION omitted entirely from applyProviderDefault,
+  // which is what actually produces `{models: undefined}` in production via
+  // `{ models: Array.isArray(catalog) ? catalog : [] }` -- is covered by
+  // tests/provider-default-picker.test.js's "without catalog: chosenId is
+  // preserved VERBATIM" test (applyProviderDefault called with no options at
+  // all), so both coercion sites are pinned.
+  test('no evidence ({models: undefined}): id is preserved verbatim', () => {
+    expect(directFormIfProven('deepseek', 'openrouter/deepseek/deepseek-v3.2', { models: undefined }))
       .toBe('openrouter/deepseek/deepseek-v3.2');
   });
 
@@ -104,6 +116,38 @@ describe('directFormIfProven — persistence (conservative: strip only on positi
   test('proven valid (bare id present in the catalog): strips -- happy path unaffected', () => {
     expect(directFormIfProven('google', 'openrouter/google/gemini-3.7-flash', { models: populatedGoogleCatalog }))
       .toBe('google/gemini-3.7-flash');
+  });
+
+  // A4 (council review of PR 198): a bare `chosenId` that is ALREADY bare
+  // (no `openrouter/` prefix -- toCanonicalDefault is a no-op on it) short-
+  // circuits BEFORE classifyModel ever runs, so a bare id the catalog proves
+  // `invalid` is persisted VERBATIM even when an unambiguous OpenRouter twin
+  // sits right there in the same catalog. This is a DELIBERATE, pinned
+  // decision, not an oversight: `directFormIfProven` only ever handles the
+  // strip direction (OR-prefixed -> bare, on positive evidence); it never
+  // performs the inverse repair (bare -> OR twin). That repair already
+  // exists as a SEPARATE, explicit, user-visible step --
+  // `findFabricatedAliasRepairs`/`doctor --fix` (alias-audit.js, B3) --
+  // which announces the rewrite as a `heal` degrade naming both ids, rather
+  // than this pure canonicalization primitive silently substituting a
+  // DIFFERENT id than the one the caller actually handed in. Reachability is
+  // narrow by measurement: both `runProviderDefaultFlow` (CLI/readline) and
+  // `runProviderDefaultPickers` (setup wizard) fetch the catalog exactly
+  // ONCE and reuse that same array for both `buildProviderDefaultChoices`
+  // (which never offers a bare id classifying invalid under that catalog)
+  // and `applyProviderDefault` -- so this path is unreachable there. It IS
+  // reachable via `electron/ipc-setup.js`'s two separate IPC calls
+  // (`save-key` builds choices from one `getCatalog()` fetch,
+  // `sidecar:set-provider-default` re-fetches independently before
+  // applying) -- a real, if narrow, TOCTOU window between the two. See
+  // .superpowers/sdd/issue-195-report.md for the fuller reasoning.
+  test('A4: an ALREADY-BARE chosenId proven invalid is persisted verbatim, not upgraded to its OR twin (deliberate -- doctor --fix is the remediation layer)', () => {
+    const catalogWithUnambiguousTwin = [
+      ...populatedGoogleCatalog,
+      { id: 'openrouter/google/gemma-4-31b-it:free' }, // the twin doctor --fix WOULD use
+    ];
+    expect(directFormIfProven('google', 'google/gemma-4-31b-it:free', { models: catalogWithUnambiguousTwin }))
+      .toBe('google/gemma-4-31b-it:free'); // unchanged -- NOT upgraded to the OR twin here
   });
 });
 

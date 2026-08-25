@@ -1,10 +1,21 @@
 /**
- * Alias Audit (F5) — report + suggest, never auto-repair.
+ * Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
  *
  * Finds aliases/routes pointing at models absent from the catalog and
  * suggests current same-vendor replacements. Pure functions over inputs;
  * collectAliasSources() does the gathering. Consumed by `amicus models
  * --check` and the npm wrapper scripts.
+ *
+ * `findFabricatedAliasRepairs()` (B3, council review of PR 198) is the one
+ * exception to "never auto-repair": it detects the single class `doctor
+ * --fix` can safely rewrite unattended -- a bare id `classifyModel` proves
+ * `invalid` on the `direct` gateway AND for which the catalog holds an
+ * unambiguous OpenRouter twin (`pairAcrossGateways`, never string
+ * concatenation) -- still pure detection here; the actual write lives in
+ * `doctor-alias-check.js`'s `repairAlias()`. Every OTHER class this module
+ * finds (typo, retired model, ambiguous twin, drifted-but-live) stays
+ * report-and-suggest only, same as before -- this module does not become a
+ * general auto-repair tool.
  */
 
 'use strict';
@@ -132,7 +143,10 @@ function suggestReplacements(staleModel, catalog, n = 3) {
  * fresh `amicus setup` would seed today — the v4.6.1 release-gate class
  * (stored `gemini` -> 3.1-flash-lite-preview: still catalog-listed so
  * findStaleAliases passes it, no longer what the family resolves to).
- * Report + suggest, never auto-repair (this module's charter).
+ * Report + suggest only -- unlike `findFabricatedAliasRepairs` below (B3's
+ * narrow, mechanically-unambiguous exception), THIS function never
+ * auto-repairs: a drifted-but-live target has no single unambiguous
+ * "correct" answer to converge on the way a fabricated id does.
  *
  * Only user-config rows are checked (defaults/curated follow the catalog by
  * construction), only for aliases that are quick-pick families (a custom

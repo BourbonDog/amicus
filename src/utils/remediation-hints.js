@@ -156,6 +156,17 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   repairFabricatedAlias:
     'amicus doctor --fix  (rewrites a fabricated bare alias to its catalog-confirmed OpenRouter id — safe only for the narrow class doctor can prove; use `amicus models --check` for anything else)',
+
+  /**
+   * A3 (council review of PR 198): same repairable class as
+   * `repairFabricatedAlias` above, but the cached catalog `evaluateAliasesCheck`
+   * would repair FROM is itself stale (older than doctor's own `catalog`
+   * check's freshness window) -- a stale catalog can be missing rows that
+   * would make a "fabricated" id look repairable when it is merely unfetched,
+   * so the repair declines rather than write on unverified evidence.
+   */
+  repairFabricatedAliasStaleCatalog:
+    'amicus models --refresh, then amicus doctor --fix  (the alias looks fabricated but the cached catalog is stale — refresh it first so the repair rests on current data, not a possibly-incomplete snapshot)',
 });
 
 module.exports = REMEDIATION_HINTS;

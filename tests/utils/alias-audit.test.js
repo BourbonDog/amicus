@@ -335,4 +335,63 @@ describe('findFabricatedAliasRepairs (B3, council review of PR 198)', () => {
     const sources = [{ alias: 'google', model: 'google/gemma-4-31b-it:free', source: 'user-config' }];
     expect(findFabricatedAliasRepairs(sources, unknownNamespaceCatalog)).toEqual([]);
   });
+
+  // A6 (council review of PR 198): doctor-alias-check.js's evaluateAliasesCheck
+  // ok-branch (`stale.length === 0 && drifted.length === 0` -> 'ok') relies on
+  // an UNPINNED invariant -- every alias findFabricatedAliasRepairs deems
+  // repairable is also one findStaleAliases deems stale -- so a repairable
+  // defect can never sit silently behind an 'ok' status. This holds BY
+  // CONSTRUCTION for a 'user-config' source today: both functions read the
+  // SAME provider-scoped namespace bucket (`idsByProvider` here vs.
+  // classifyModel's own per-vendor scoping -- functionally identical for
+  // well-formed ids) and require "id absent from that bucket" -- repairable
+  // ADDS the stricter "at least one authoritative row + an unambiguous OR
+  // twin" on top, never relaxes the absence check -- and findStaleAliases's
+  // two suppression clauses only ever fire for 'curated-route'/'defaults'
+  // sources, never 'user-config' (the only source findFabricatedAliasRepairs
+  // considers), so nothing suppresses a user-config row out of `stale` that
+  // `repairable` still flags. Pinned here directly (not just asserted in
+  // prose) across a spread of namespace shapes, using the REAL functions
+  // together -- a future change to either one that breaks the subset
+  // relationship (e.g. extending a suppression clause to user-config rows,
+  // or loosening findFabricatedAliasRepairs's absence check) fails this test
+  // even though neither function's own existing tests would necessarily
+  // catch it in isolation.
+  describe('invariant: findFabricatedAliasRepairs is always a subset of findStaleAliases', () => {
+    const { findStaleAliases } = require('../../src/utils/alias-audit');
+
+    const scenarios = [
+      ['populated authoritative, miss, unambiguous OR twin (repairable + stale)',
+        [{ id: 'google/gemini-3.7-flash', authoritative: true }, { id: 'openrouter/google/gemma-4-31b-it:free' }],
+        'google/gemma-4-31b-it:free'],
+      ['populated authoritative, miss, no OR twin (typo -- stale only)',
+        [{ id: 'google/gemini-3.7-flash', authoritative: true }],
+        'google/gemna-4-31b-it:free'],
+      ['populated, ALL rows non-authoritative, miss (unknown -- neither)',
+        [{ id: 'google/gemini-3.7-flash', authoritative: false }, { id: 'openrouter/google/gemma-4-31b-it:free' }],
+        'google/gemma-4-31b-it:free'],
+      ['empty direct namespace (unknown, unresolved -- neither)',
+        [{ id: 'anthropic/claude-opus-4-8', authoritative: true }, { id: 'openrouter/google/gemma-4-31b-it:free' }],
+        'google/gemma-4-31b-it:free'],
+      ['ambiguous OR twin (ambiguous -- stale only)',
+        [{ id: 'google/gemini-3.7-flash', authoritative: true }, { id: 'openrouter/google/gemma-5-flash' },
+          { id: 'openrouter/google/gemma.5-flash' }],
+        'google/gemma-5-flash'],
+      ['bare id present (valid -- neither)',
+        [{ id: 'google/gemini-3.7-flash', authoritative: true }],
+        'google/gemini-3.7-flash'],
+      ['divergent vendor, populated authoritative, miss, OR twin exists (gated -- neither)',
+        [{ id: 'anthropic/claude-opus-4-8', authoritative: true }, { id: 'openrouter/anthropic/claude-opus-4.9' }],
+        'anthropic/claude-opus-4.9'],
+    ];
+
+    it.each(scenarios)('%s', (_label, catalog, model) => {
+      const sources = [{ alias: model.split('/')[0], model, source: 'user-config' }];
+      const staleAliases = findStaleAliases(sources, catalog).map((s) => s.alias);
+      const repairableAliases = findFabricatedAliasRepairs(sources, catalog).map((r) => r.alias);
+      for (const alias of repairableAliases) {
+        expect(staleAliases).toContain(alias);
+      }
+    });
+  });
 });

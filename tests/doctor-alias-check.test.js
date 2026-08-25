@@ -101,6 +101,51 @@ describe('evaluateAliasesCheck — deps-injected (no real I/O)', () => {
     expect(row.hint).toBe('amicus models --check');
   });
 
+  // A3 (council review of PR 198): the repair ACTION requires a FRESH cached
+  // catalog -- doctor's 'catalog' check reads the exact same cache and would
+  // independently call this one 'stale (25h old)'; --fix must not rewrite
+  // config.aliases from data the same run just called untrustworthy.
+  describe('--fix declines to repair from a stale catalog (A3)', () => {
+    const staleReadCache = () => (
+      { fetchedAt: Date.now() - 25 * 60 * 60 * 1000, models: FABRICATED_CATALOG });
+
+    test('repairAlias is never called; the row stays unfixed and names the reason', () => {
+      const d = baseDeps({ fix: true, readCache: staleReadCache });
+      const row = evaluateAliasesCheck(d);
+      expect(d.repairAlias).not.toHaveBeenCalled();
+      expect(row.fixed).toBeUndefined();
+      expect(row.status).toBe('warn');
+      expect(row.message).toMatch(/1 fixable via doctor --fix once the catalog is refreshed \(catalog is stale\)/);
+      expect(row.hint).toMatch(/amicus models --refresh/);
+    });
+
+    test('a cache with no fetchedAt at all is treated as not fresh (same as doctor\'s catalog check)', () => {
+      const d = baseDeps({ fix: true, readCache: () => ({ models: FABRICATED_CATALOG }) });
+      const row = evaluateAliasesCheck(d);
+      expect(d.repairAlias).not.toHaveBeenCalled();
+      expect(row.fixed).toBeUndefined();
+    });
+
+    test('exactly at the freshness boundary (24h old, inclusive) still repairs', () => {
+      const d = baseDeps({
+        fix: true,
+        readCache: () => ({ fetchedAt: Date.now() - 24 * 60 * 60 * 1000, models: FABRICATED_CATALOG }),
+      });
+      const row = evaluateAliasesCheck(d);
+      expect(d.repairAlias).toHaveBeenCalledTimes(1);
+    });
+
+    test('one second past the freshness boundary declines', () => {
+      const d = baseDeps({
+        fix: true,
+        readCache: () => ({ fetchedAt: Date.now() - (24 * 60 * 60 * 1000 + 1000), models: FABRICATED_CATALOG }),
+      });
+      const row = evaluateAliasesCheck(d);
+      expect(d.repairAlias).not.toHaveBeenCalled();
+      expect(row.fixed).toBeUndefined();
+    });
+  });
+
   test('an already-healthy alias set stays ok and untouched even with --fix', () => {
     const d = baseDeps({
       fix: true,
@@ -223,6 +268,27 @@ describe('doctor --fix alias repair — realistic end-to-end (isolated AMICUS_CO
     expect(row.message).toMatch(/catalog empty/);
     const after = fs.readFileSync(path.join(dir, 'config.json'), 'utf-8');
     expect(after).toBe(before);
+  });
+
+  // A3 (council review of PR 198), realistic end-to-end: the SAME class B3
+  // repairs when the catalog is fresh must be LEFT UNTOUCHED ON DISK when
+  // the cached catalog is stale (25h old) -- proves the freshness gate holds
+  // through the real config read/write path, not just the deps-injected unit.
+  test('stale catalog: --fix never writes even though the alias would otherwise be repairable', () => {
+    const dir = seedConfig({ aliases: { google: OLD_ID } });
+    const { evaluateAliasesCheck: evaluate } = require('../src/utils/doctor-alias-check');
+    const before = fs.readFileSync(path.join(dir, 'config.json'), 'utf-8');
+    const deps = {
+      ...realDeps(true),
+      readCache: () => ({ fetchedAt: Date.now() - 25 * 60 * 60 * 1000, models: FABRICATED_CATALOG }),
+    };
+    const row = evaluate(deps);
+    expect(row.fixed).toBeUndefined();
+    expect(row.status).toBe('warn');
+    expect(row.message).toMatch(/1 fixable via doctor --fix once the catalog is refreshed \(catalog is stale\)/);
+    expect(row.hint).toMatch(/amicus models --refresh/);
+    const after = fs.readFileSync(path.join(dir, 'config.json'), 'utf-8');
+    expect(after).toBe(before); // untouched -- no write on stale evidence
   });
 
   test('a genuinely stale (typo) alias is reported but never rewritten', () => {

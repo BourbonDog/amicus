@@ -19,9 +19,37 @@
  * `applyProviderDefault`, provider-default-picker.js). Every OTHER
  * stale/drifted alias is left untouched and stays a warning, hinting at
  * `amicus models --check` same as before this PR.
+ *
+ * A3 (council review of PR 198): the repair ACTION additionally requires the
+ * cached catalog to be FRESH (same `MAX_CATALOG_AGE_MS` window as doctor's
+ * own `catalog` check, cli-handlers-doctor.js). `readCache()` here reads the
+ * exact same cache doctor's `catalog` check may independently report as
+ * `stale (Nh old)` -- without this gate, `--fix` would rewrite a user's
+ * config from data the SAME run just called untrustworthy. A stale catalog
+ * can be missing rows that would make a "fabricated" id look repairable when
+ * it is merely unfetched, so a stale catalog declines the repair (explaining
+ * why via `repairFabricatedAliasStaleCatalog`) rather than writing on
+ * unverified evidence; detection/reporting is unaffected either way.
  */
 
 const HINTS = require('./remediation-hints');
+
+// Mirrors cli-handlers-doctor.js's own MAX_CATALOG_AGE_MS (which itself
+// mirrors model-catalog.js's DEFAULT_MAX_AGE_MS) -- duplicated rather than
+// imported to avoid a require cycle (cli-handlers-doctor.js requires this
+// module at load time, before its own module.exports exists).
+const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+
+/**
+ * @param {{fetchedAt?: number}|null} cache
+ * @returns {boolean} true when `cache` exists, has a numeric `fetchedAt`, and
+ *   is no older than `MAX_CATALOG_AGE_MS` -- the same test doctor's `catalog`
+ *   check applies to decide `ok` vs `stale (Nh old)`.
+ */
+function isCatalogFresh(cache) {
+  if (!cache || typeof cache.fetchedAt !== 'number') { return false; }
+  return (Date.now() - cache.fetchedAt) <= MAX_CATALOG_AGE_MS;
+}
 
 /**
  * Rewrite one alias's stored value in place. Read-modify-write / no-clobber
@@ -62,15 +90,16 @@ function evaluateAliasesCheck(d) {
   const name = 'Model aliases';
   const cache = d.readCache();
   const catalog = (cache && cache.models) || [];
+  const catalogFresh = isCatalogFresh(cache);
 
   let state = computeState(d, catalog);
   let fixFields = {};
 
-  // Only under --fix, and only when there is something in the narrow,
-  // mechanically-unambiguous class to repair (rule 1). A failed individual
-  // rewrite is best-effort -- it simply stays a warning, same as one
-  // findStaleAliases could never resolve.
-  if (d.fix && state.repairable.length > 0) {
+  // Only under --fix, only when there is something in the narrow,
+  // mechanically-unambiguous class to repair (rule 1), and only on a FRESH
+  // catalog (A3) -- a failed individual rewrite is best-effort -- it simply
+  // stays a warning, same as one findStaleAliases could never resolve.
+  if (d.fix && state.repairable.length > 0 && catalogFresh) {
     const repaired = [];
     for (const r of state.repairable) {
       try { d.repairAlias(r.alias, r.newId); repaired.push(r); }
@@ -103,11 +132,19 @@ function evaluateAliasesCheck(d) {
   const parts = [];
   if (stale.length) { parts.push(`${stale.length} stale: ${stale.map((s) => s.alias).join(', ')}`); }
   if (drifted.length) { parts.push(`${drifted.length} drifted: ${drifted.map((s) => s.alias).join(', ')}`); }
-  // Rule 1: without --fix, report the repairable count and the hint, change nothing.
-  if (repairable.length) { parts.push(`${repairable.length} fixable via doctor --fix`); }
+  // Rule 1: without --fix, report the repairable count and the hint, change
+  // nothing. A3: when the catalog is stale, say so explicitly rather than
+  // offering a fix that will silently decline to write.
+  if (repairable.length) {
+    parts.push(catalogFresh
+      ? `${repairable.length} fixable via doctor --fix`
+      : `${repairable.length} fixable via doctor --fix once the catalog is refreshed (catalog is stale)`);
+  }
   return {
     id, name, status: 'warn', message: parts.join('; '),
-    hint: repairable.length > 0 ? HINTS.repairFabricatedAlias : 'amicus models --check',
+    hint: repairable.length === 0
+      ? 'amicus models --check'
+      : (catalogFresh ? HINTS.repairFabricatedAlias : HINTS.repairFabricatedAliasStaleCatalog),
     ...fixFields,
   };
 }
