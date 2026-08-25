@@ -1588,7 +1588,11 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 ## v4.7 PR3 rider follow-ups (2026-08-07)
 
 - [x] **`sessions-index.json` has no maintenance step — it only ever grows** — **DONE — v4.8 Wave
-  2.5 (2026-08-22, ruling R16/T-R16.1, `0a6a8032`).** [M, needs a design
+  2.5 (2026-08-22, ruling R16/T-R16.1, `0a6a8032`).** ⚠️ **That hash is a dangling pre-squash
+  branch commit (v4.9 kickoff refute pass, 2026-08-25: `merge-base --is-ancestor` exits 1; no
+  branch or tag contains it). The commit on `main` is `dda1b8cf`, the squash of PR #187.** This
+  repo mixes true merges and squashes — verify ancestry per hash, never inherit one from a DONE
+  record. [M, needs a design
   decision] `recordSession` (`src/utils/session-index.js:64`) appends a `taskId -> project` entry on
   every session start and **nothing ever removes one**. Entries outlive their subject: a project that
   is deleted, renamed, or moved leaves its rows behind forever, and the index has no TTL, cap, or
@@ -3354,7 +3358,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   1`, commits above; its "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did NOT ship and
   is not scheduled into any wave below; see the note at the end of this entry).
 
-  ✅ **DONE — 2026-08-22.** `R16` shipped as `T-R16.1` (`0a6a8032`) — see the ticked
+  ✅ **DONE — 2026-08-22.** `R16` shipped as `T-R16.1` (`0a6a8032` — ⚠️ a dangling pre-squash
+  hash; the on-`main` commit is `dda1b8cf`, PR #187's squash — corrected at the v4.9 kickoff,
+  2026-08-25) — see the ticked
   `sessions-index.json` growth entry above for the full record. Suite after merge: 545 suites /
   7882 passed / 8 skipped, all six gates exit 0. See **"NEXT TASK — Wave 3"** below for the live
   resume point.
@@ -4263,6 +4269,19 @@ cross-file consolidation · #133 Pieces 2–3 · #138 Piece 3 · #135 C4 · PR1F
 the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES · **SI-22.4 rider (2) — the
 Workspace street-cred renderer (owner Christian; gated on `opts.labelOf` accepting a seat id)**.
 **Holds — not work, do not re-scope:** SI-21, PR5a-1, PR5c-DOMKEY, PR5c-STANDING.
+
+> ⚠️ **Triaged at the v4.9 kickoff (2026-08-25) — the list above is the dated 2026-08-16
+> record; three of its tokens do not survive re-measurement.** (1) **`#135 C4` DROPPED as
+> never-specified** (T6.5/W1-3 precedent): born in the phasing doc's own deferral line
+> (`4ee46696`), defined nowhere in any tree, and issue #135's body carries no C-taxonomy. The
+> real #135 remainder is **C5 + the C2 probe**, per ruling W1-4. (C0 shipped on `main` via
+> squash `919cb202`, PR #182 — its previously-recorded hashes `4391f0b4`/`b0d8e232` are
+> dangling pre-squash commits.) (2) **`#138 Piece 3` DROPPED as never-specified** — see the
+> struck entry at *Setup polish — #138*. (3) **"the prune check" ALREADY SHIPPED** in v4.8
+> Wave 2.5 (`dda1b8cf`, PR #187) — see the ticked `sessions-index.json` growth entries. The
+> live v4.9 scope, rulings V1–V18, and the wave train are in
+> `docs/superpowers/plans/2026-08-25-v49-phasing-and-rulings.md` (a plan doc — pruned at the
+> release cut; git history is the audit trail).
 
 ### Tracker state
 
@@ -6040,15 +6059,27 @@ this same branch, same reasoning as `9278f7c0`'s drop of this paragraph's commit
 `check-file-sizes.js --all`, `npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
 has no Jest coverage (no jsdom in this repo, and `pickRouteFor` is an in-page closure) — it is
 covered by CDP smoke only.
-**Piece 3 remains OPEN, deferred to v4.9.0**
+~~**Piece 3 remains OPEN, deferred to v4.9.0**
 (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:769`). Its content is not defined
 anywhere in the tracked tree beyond that deferral tag — searched this file and the phasing doc for
 "Piece 3" and found only the bare name, no description to re-derive against. This branch does not
-touch it.
+touch it.~~ **DROPPED as never-specified at the v4.9 kickoff (2026-08-25), on the T6.5/W1-3
+precedent.** Exhaustive history check: `git log --all -S '#138 Piece'` returns exactly three
+commits — `4ee46696` (the phasing doc, which defines Pieces 1+2 and names Piece 3 only in its
+deferral line), `2ca728c1` (the #138 plan, which mentions Piece 3 only to ask whether it is
+open), and `102302d4` (the v4.8.1 cut, which DELETED both docs — the `:769` citation above now
+dangles; recover via `git show v4.8.0:docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`).
+No commit in any branch or tag ever gave it content. If #138 has a real third ask it must be
+re-filed fresh — there is nothing to inherit. (Pieces 1+2 shipped via PR #196, merge `3e3e29a0`;
+issue #138 is closed.)
 
 ### Carried from the dropped v4.7.2 scope
 
-- [ ] **`sessions-index.json` growth.** Design already recommended in this file (doctor check +
+- [x] **`sessions-index.json` growth.** — **SHIPPED v4.8 Wave 2.5 as `dda1b8cf` (PR #187,
+  T-R16.1): doctor check `sessions-index-prune` + `--fix`, liveness-based per R16-2.** This
+  carried checkbox was left unticked while the entry's own DONE records ticked — caught at the
+  v4.9 kickoff (2026-08-25). Struck from the v4.9 carried list. Original filing: design already
+  recommended in this file (doctor check +
   `--fix`, **liveness-based not age-based**). Impact measured, not theorized: 5.7 ms parse plus a
   0.69 MB write on **every session start** (`O(total sessions ever)` per launch), and
   `amicus list --all` at 8,275 ms → 53 ms after a prune.
@@ -6137,6 +6168,23 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     | `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ no `firstFailure` → `data.seat`, an ALIAS |
     | `waveStillDeadNote` (`:28`) dead-wave arm | `dead-wave` | ❌ `data.models[]`, ALIASES |
     | `waveStillDeadNote` (`:28`) partial arm | `seat-unbound` | ❌ alias only |
+
+    ⚠️ **THIS TABLE ROTTED AND ITS HEADLINE IS NOW FALSE — re-measured 2026-08-25 (v4.9
+    kickoff), table rows left standing as the dated 2026-08-15 record.** PR5c shipped producer
+    identity on two of the three ❌ rows: `srcLegStillDeadNote` (now
+    `run-retry-notes.js :: srcLegStillDeadNote`) gained a `seatId` parameter emitted on
+    `data.seatId`, and the dead-wave arm of `waveStillDeadNote` now emits `data.seats[]`
+    index-parallel with `models` (`so ? so.id : null` — an unidentified slot emits null, never
+    the alias). A seat id is therefore available on **four of five arms**; the only id-less arm
+    left is the **seat-unbound partial arm**, whose omission is deliberate and commented
+    (*"seat-unbound has no consumer"*) — and the seat OBJECT is already on the record it is
+    built from (`stage1-bind.js :: missingSeatDeadWave` carries `seats: [m.seat]`), so the
+    producer half of the v4.9 work is ~one line. The line numbers in the rows above have also
+    all moved — anchor by symbol. ⚠️ Two caveats that SURVIVE for any consumer change:
+    `firstFailure.seatId` can be ALIAS-valued on the inexact twin branch
+    (`run-retry-group.js :: recordFailure`), and `seat-unbound` is a SHARED channel (orphan-leg
+    notes carrying `data.legId`, and `reVoteUnboundNote`, ride it too) — never admit the
+    channel raw; gate on the retry-family fields (`retryWaveId || firstFailure`).
 
     Both consumers filter to `dead-leg`/`dead-wave` (`live-dead-seats.js :: deadSeats`,
     `workspace-seats.js :: retriedSeats` — re-anchored BY SYMBOL at T-A8, 2026-08-17, having read
