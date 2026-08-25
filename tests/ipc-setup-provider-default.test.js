@@ -129,4 +129,49 @@ describe('sidecar:set-provider-default (Task 8)', () => {
     expect(cfg.aliases.gpt).toBe('openai/gpt-5.5');
     expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
   });
+
+  // Issue 195: a non-divergent vendor's chosenId can now arrive OpenRouter-
+  // prefixed too (buildProviderDefaultChoices only synthesizes a bare id
+  // when the catalog can't prove it invalid). The handler must fetch the
+  // catalog and hand it to applyProviderDefault so the SAME guard is applied
+  // here -- otherwise it would silently re-strip the prefix the picker
+  // deliberately kept and persist the fabricated id anyway.
+  test('non-divergent vendor: fetches the catalog and does not re-strip an OpenRouter-only chosenId', async () => {
+    const { loadConfig } = require('../src/utils/config');
+    const { getCatalog } = require('../src/utils/model-catalog');
+    getCatalog.mockResolvedValueOnce([
+      { id: 'google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000, pricing: null },
+      { id: 'openrouter/google/gemini-3.7-flash', name: 'Gemini 3.7 Flash', contextLength: 1000000,
+        pricing: { prompt: '0.0000003' } },
+      { id: 'openrouter/google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (free)', contextLength: 8192,
+        pricing: { prompt: '0' } },
+    ]);
+
+    const result = await setProviderDefault('google', 'openrouter/google/gemma-4-31b-it:free');
+    expect(result).toEqual({ alias: 'google', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.google).toBe('openrouter/google/gemma-4-31b-it:free');
+    expect(cfg.aliases.google).not.toBe('google/gemma-4-31b-it:free'); // fabricated id must never be persisted
+  });
+
+  // F1 (major, council review of PR 198): a catalog fetch failure used to
+  // degrade applyProviderDefault to an unconditional strip, which silently
+  // reintroduced the exact bug issue 195 fixed on every network hiccup
+  // (fabricated 'openai/gpt-5.5' would classify 'invalid' against the real
+  // catalog once it did come back). The handler must still apply the choice
+  // (never abort an already-made picker choice) but must preserve chosenId
+  // exactly as given rather than guessing on no evidence.
+  test('catalog fetch failure degrades gracefully: still applies the choice, preserved VERBATIM (F1), never aborts', async () => {
+    const { loadConfig } = require('../src/utils/config');
+    const { getCatalog } = require('../src/utils/model-catalog');
+    getCatalog.mockRejectedValueOnce(new Error('network unreachable'));
+
+    const result = await setProviderDefault('openai', 'openrouter/openai/gpt-5.5');
+    expect(result).toEqual({ alias: 'openai', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.openai).toBe('openrouter/openai/gpt-5.5');
+    expect(cfg.aliases.openai).not.toBe('openai/gpt-5.5'); // the fabricated id must never be persisted
+  });
 });

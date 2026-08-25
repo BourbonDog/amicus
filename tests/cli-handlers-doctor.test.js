@@ -5,7 +5,7 @@ const HINTS = require('../src/utils/remediation-hints');
 const { makeBaseDeps } = require('./helpers/doctor-base-deps');
 
 // Canonical fixture — see tests/helpers/doctor-base-deps.js for the full
-// 26-key shape and the institutional comments (M14/B14/B15/D8/#76/v4.6.2 PR1
+// 29-key shape and the institutional comments (M14/B14/B15/D8/#76/v4.6.2 PR1
 // env forward-pin) that used to live inline here.
 const allGood = makeBaseDeps();
 

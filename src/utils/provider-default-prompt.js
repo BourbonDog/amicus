@@ -111,7 +111,7 @@ async function runProviderDefaultFlow(provider, options = {}) {
     chosenId = await promptForChoice(ask, print, choices);
   }
 
-  const { setAsDefault } = applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true });
+  const { setAsDefault } = applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true, catalog });
   const summaryLine = `\`amicus start --model ${provider}\` → ${chosenId}` +
     (setAsDefault ? ', set as your default model' : '');
 

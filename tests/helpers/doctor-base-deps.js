@@ -4,7 +4,7 @@
 /**
  * makeBaseDeps({ omit = [], ...overrides } = {})
  *
- * Factory for the canonical 26-key `runDoctorChecks` deps fixture, formerly
+ * Factory for the canonical 29-key `runDoctorChecks` deps fixture, formerly
  * duplicated byte-identically across 11 doctor-family suites (~360 lines).
  * Builds a FRESH object on every call and returns it — no shared/module-level
  * state — so each consumer file owns its own instance.
@@ -62,6 +62,15 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
     collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
     findStaleAliases: () => [],
+    // B3 (council review of PR 198): deterministic no-repair fixture — the
+    // 'defaults'-sourced row above would fall through to [] via the real
+    // alias-audit module anyway (not 'user-config'), but pinning it explicitly
+    // matches this file's "never real I/O in a pure doctor suite" convention
+    // (mirrors findStaleAliases above). repairAlias is a no-op since
+    // findFabricatedAliasRepairs always returns [] here — never touches the
+    // real config.
+    findFabricatedAliasRepairs: () => [],
+    repairAlias: () => {},
     hasOpencodeBinary: () => true,
     getElectronPath: () => '/path/to/electron',
     // B14: hasAmicusRegistration (raw, unstripped read) is the PRIMARY 'mcp'

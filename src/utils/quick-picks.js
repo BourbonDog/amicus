@@ -79,8 +79,8 @@ function resolveQuickPicks(catalog) {
  * Stripping the prefix there fabricates an id the direct API rejects, which
  * `amicus doctor` then reports as a stale alias. The row's own direct route is
  * used verbatim, falling back to the intact `openrouter/` form when the
- * catalog offered no direct pick. Mirrors the guard already used at
- * `provider-default-picker.js:82,143,220`.
+ * catalog offered no direct pick. Mirrors the DIVERGENT_VENDORS-first guard
+ * `model-canonicalization.js :: directFormIfSafe` uses internally.
  * @param {{vendorPath?:string, routes?:Object<string,string>}} pick
  * @returns {string|undefined}
  */

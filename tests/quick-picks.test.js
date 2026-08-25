@@ -139,7 +139,7 @@ describe('toLiveSeedAliases', () => {
 // `openrouter/` fabricates an id the direct API rejects. A seeded config
 // carrying it makes `amicus doctor` report a stale alias — the very warning
 // the v4.1.1 alias work removed. Mirrors the guard at
-// provider-default-picker.js:82,143,220.
+// model-canonicalization.js :: directFormIfSafe.
 describe('divergent-vendor routes are never derived by prefix-stripping', () => {
   const { toDefaultAliases, DIVERGENT_VENDORS } = require('../src/utils/curated-models');
 

@@ -14,6 +14,9 @@ const electronMcpCheck = require('./utils/doctor-electron-mcp-check');
 const localProvidersCheck = require('./utils/doctor-local-providers-check');
 // v4.6.2 PR1 (spec §4) — the 'anthropic-base-url' check body.
 const baseUrlCheck = require('./utils/doctor-base-url-check');
+// B3 (council review of PR 198, issue 195) — the 'aliases' check body,
+// including its --fix repair of fabricated bare ids. Same split rationale.
+const aliasCheck = require('./utils/doctor-alias-check');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
@@ -41,6 +44,10 @@ function realDeps() {
     collectAliasSources: () => require('./utils/alias-audit').collectAliasSources(),
     findStaleAliases: (s, c) => require('./utils/alias-audit').findStaleAliases(s, c),
     findDriftedStoredAliases: (s, c) => require('./utils/alias-audit').findDriftedStoredAliases(s, c),
+    // B3: the narrow fabricated-bare-id repair class (pure detection) + the
+    // impure rewrite primitive `doctor --fix` calls when repairing one.
+    findFabricatedAliasRepairs: (s, c) => require('./utils/alias-audit').findFabricatedAliasRepairs(s, c),
+    repairAlias: (alias, newId) => aliasCheck.repairAlias(alias, newId),
     hasOpencodeBinary: () => {
       // Single source of truth shared with the runtime server-start guard.
       const { ensureNodeModulesBinInPath, hasOpencodeBinary } = require('./utils/path-setup');
@@ -156,20 +163,10 @@ async function runDoctorChecks(depsOverride = {}) {
       : { id: 'catalog', name: 'Model catalog', status: 'warn', message: `stale (${hrs}h old)`, hint: 'amicus models --refresh' };
   }));
 
-  checks.push(guard('aliases', 'Model aliases', () => {
-    const cache = d.readCache();
-    const catalog = (cache && cache.models) || [];
-    const sources = d.collectAliasSources();
-    const stale = d.findStaleAliases(sources, catalog);
-    const drifted = d.findDriftedStoredAliases(sources, catalog);
-    if (stale.length === 0 && drifted.length === 0) {
-      return { id: 'aliases', name: 'Model aliases', status: 'ok', message: catalog.length ? 'all resolve' : 'catalog empty — not checked', hint: null };
-    }
-    const parts = [];
-    if (stale.length) { parts.push(`${stale.length} stale: ${stale.map(s => s.alias).join(', ')}`); }
-    if (drifted.length) { parts.push(`${drifted.length} drifted: ${drifted.map(s => s.alias).join(', ')}`); }
-    return { id: 'aliases', name: 'Model aliases', status: 'warn', message: parts.join('; '), hint: 'amicus models --check' };
-  }));
+  // B3: self-heals in place under --fix (fabricated bare ids only) — see
+  // utils/doctor-alias-check.js for the check body and utils/alias-audit.js's
+  // findFabricatedAliasRepairs for the detection rule.
+  checks.push(guard('aliases', 'Model aliases', () => aliasCheck.evaluateAliasesCheck(d)));
 
   checks.push(guard('anthropic-base-url', 'ANTHROPIC_BASE_URL',
     () => baseUrlCheck.evaluateAnthropicBaseUrl(d)));

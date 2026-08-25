@@ -80,10 +80,26 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // Task 8: apply a per-provider default picker choice. Read-modify-write,
   // no-clobber -- applyProviderDefault only ever writes aliases[vendor] and
   // seeds config.default when absent (see provider-default-picker.js).
-  ipcMain.handle('sidecar:set-provider-default', (_event, provider, chosenId) => {
+  // Fetches the catalog before applying (issue 195): applyProviderDefault
+  // uses directFormIfProven (model-canonicalization.js) to decide whether to
+  // strip an OpenRouter prefix off chosenId, and needs the catalog to do it.
+  ipcMain.handle('sidecar:set-provider-default', async (_event, provider, chosenId) => {
+    let catalog = [];
+    try {
+      const { getCatalog } = require('../src/utils/model-catalog');
+      catalog = await getCatalog();
+    } catch (err) {
+      // Best-effort only -- a fetch failure leaves `catalog` empty, which
+      // directFormIfProven (F1, council review of PR 198) reads as NO
+      // evidence, never as license to strip: chosenId is persisted exactly
+      // as given, not re-derived. Applying an already-made picker choice
+      // must never abort on a catalog hiccup, and must never fabricate an
+      // id on one either -- that was the exact bug issue 195 fixed.
+      logger.error('set-provider-default catalog fetch error', { error: err.message });
+    }
     try {
       const { applyProviderDefault } = require('../src/utils/provider-default-picker');
-      return applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true });
+      return applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true, catalog });
     } catch (err) {
       logger.error('set-provider-default handler error', { error: err.message });
       return { success: false, error: err.message };

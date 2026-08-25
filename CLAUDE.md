@@ -227,7 +227,7 @@ src/
 │   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
 │   ├── activity-poller.js
 │   ├── agent-mapping.js  # Agent Mapping Module
-│   ├── alias-audit.js  # Alias Audit (F5) — report + suggest, never auto-repair.
+│   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
@@ -241,6 +241,7 @@ src/
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── degrade.js
+│   ├── doctor-alias-check.js
 │   ├── doctor-base-url-check.js  # v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row.
 │   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
@@ -274,6 +275,7 @@ src/
 │   ├── mcp-discovery.js  # MCP Discovery - Discovers MCP servers from parent LLM configuration
 │   ├── mcp-self-identity.js
 │   ├── mcp-validators.js  # MCP Validators
+│   ├── model-canonicalization.js  # Direct-first id canonicalization, guarded by `classifyModel`
 │   ├── model-catalog.js  # OpenRouter model catalog cache (F3 #18 / F5 foundation).
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
@@ -627,7 +629,7 @@ evals/
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
-| `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()` |
+| `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
@@ -641,6 +643,7 @@ evals/
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
+| `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
@@ -674,6 +677,7 @@ evals/
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
 | `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
+| `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
@@ -691,7 +695,7 @@ evals/
 | `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
 | `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
-| `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()` |
+| `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()`, `toStorableRoute()` |
