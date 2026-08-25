@@ -6,7 +6,7 @@
  * provider routing toggles, and PROVIDER_NAMES export.
  */
 
-const { buildModelStepHTML, buildModelSearchHTML, PROVIDER_NAMES } = require('../electron/setup-ui-model');
+const { buildModelStepHTML, buildModelSearchHTML, PROVIDER_NAMES, escapeAttr } = require('../electron/setup-ui-model');
 
 // Local fixture replacing the deleted MODEL_CHOICES export.
 // Matches the v2 resolved-row shape: { alias, label, blurb, source, routes }.
@@ -375,5 +375,73 @@ describe('#138 per-card model drill-down', () => {
   test('#138 the resolved-id span carries its alias so it can be refreshed', () => {
     const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
     expect(html).toContain('class="model-resolved" data-alias="deepseek"');
+  });
+});
+
+describe('F5: catalog ids are escaped at every buildModelPickHTML interpolation point', () => {
+  // Minimal entity DECODER for the test's own round-trip check -- not
+  // production code, just the inverse of escapeAttr so the test can assert
+  // "what a real HTML parser would read back" without pulling in jsdom
+  // (not a project dependency; see F3's inline-fake-DOM approach for why).
+  function decodeEntities(s) {
+    return s
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  test('escapeAttr escapes all five HTML-significant characters', () => {
+    expect(escapeAttr(`&<>"'`)).toBe('&amp;&lt;&gt;&quot;&#39;');
+  });
+
+  test('escapeAttr round-trips through decodeEntities back to the original', () => {
+    const original = `deepseek/a"></option></select><img src=x onerror=1>`;
+    expect(decodeEntities(escapeAttr(original))).toBe(original);
+  });
+
+  // The exact id a reviewer used to close the <select> early and inject an
+  // <img> into the body (data:text/html page, no CSP, privileged preload).
+  const hostileId = 'deepseek/a"></option></select><img src=x onerror=1>';
+  const hostileChoices = [{
+    alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' },
+  }];
+  const hostileShortlists = {
+    deepseek: {
+      recommendedId: 'deepseek/deepseek-v4-pro',
+      suggested: [{
+        id: hostileId, name: 'a', contextLength: 128000,
+        pricePerMInput: 0.5, isRecommended: false,
+        directId: hostileId, openrouterId: hostileId,
+      }],
+      rest: [],
+      total: 1,
+    },
+  };
+
+  test('a hostile catalog id cannot close the <select> or inject a sibling tag', () => {
+    const html = buildModelStepHTML(hostileChoices, 'deepseek', { deepseek: true }, hostileShortlists);
+    // The literal breakout sequence must never appear unescaped in the output.
+    expect(html).not.toContain('"></option></select><img');
+    expect(html).not.toContain('<img src=x onerror=1>');
+    // The <select> for this alias must still be well-formed: exactly one
+    // opening and one closing tag, with the hostile id trapped inside as
+    // escaped attribute/text content.
+    const selectOpens = (html.match(/<select class="model-pick" data-alias="deepseek">/g) || []).length;
+    const selectCloses = (html.match(/<\/select>/g) || []).length;
+    expect(selectOpens).toBe(1);
+    expect(selectCloses).toBe(1);
+    expect(html).toContain('&lt;/option&gt;&lt;/select&gt;&lt;img src=x onerror=1&gt;');
+  });
+
+  test('the escaped value attribute still decodes back to the exact hostile id (data-or round-trip)', () => {
+    const html = buildModelStepHTML(hostileChoices, 'deepseek', { deepseek: true }, hostileShortlists);
+    const valueMatch = html.match(/<option value="([^]*?)" data-or="([^]*?)"[ >]/);
+    expect(valueMatch).toBeTruthy();
+    expect(decodeEntities(valueMatch[1])).toBe(hostileId);
+    expect(decodeEntities(valueMatch[2])).toBe(hostileId);
   });
 });

@@ -49,11 +49,60 @@ function balancedParens(text, openParenIdx) {
   throw new Error('unbalanced parens: no matching close found');
 }
 
+/** The createSetupWindow function body, isolated from the rest of main.js. */
+function setupWindowBlock() {
+  const start = MAIN.indexOf('async function createSetupWindow');
+  expect(start).toBeGreaterThan(-1);
+  const end = MAIN.indexOf('// ============================================================================', start + 10);
+  expect(end).toBeGreaterThan(start);
+  return MAIN.slice(start, end);
+}
+
+// F1: both createSetupWindow and createSettingsChildWindow used to compute
+// `recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter)`
+// -- toStorableRoute's DIVERGENT-vendor branch applied to every vendor. For a
+// non-divergent vendor with only an openrouter route resolved (the common
+// first-run shape), that produces the full `openrouter/<vendor>/<model>`
+// string, which model-shortlist.js's rows never carry (they're bare
+// `<vendor>/<model>`), so the dropdown silently fell back to the cost-tier
+// preselect instead of the family flagship the card itself displays. See
+// tests/model-shortlist.test.js's "F13" describe block for the underlying
+// mechanism, reproduced end-to-end against a first-run-shaped catalog.
+describe('F1: recommendedId must be toStorableRoute(p), not the divergent-vendor expression applied to every vendor', () => {
+  test('createSetupWindow passes recommendedId: toStorableRoute(p)', () => {
+    const block = setupWindowBlock();
+    expect(block).toContain("require('../src/utils/quick-picks')");
+    expect(block).toMatch(/\btoStorableRoute\b/);
+    const idx = block.indexOf('recommendedId:');
+    expect(idx).toBeGreaterThan(-1);
+    const line = block.slice(idx, block.indexOf('\n', idx));
+    expect(line).toContain('toStorableRoute(p)');
+    expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
+  });
+
+  test('createSettingsChildWindow passes recommendedId: toStorableRoute(p)', () => {
+    const block = settingsWindowBlock();
+    expect(block).toContain("require('../src/utils/quick-picks')");
+    expect(block).toMatch(/\btoStorableRoute\b/);
+    const idx = block.indexOf('recommendedId:');
+    expect(idx).toBeGreaterThan(-1);
+    const line = block.slice(idx, block.indexOf('\n', idx));
+    expect(line).toContain('toStorableRoute(p)');
+    expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
+  });
+});
+
 describe('main.js Settings child window catalog wiring (issue 138)', () => {
   test('resolves quick picks from the on-disk catalog cache', () => {
     const block = settingsWindowBlock();
     expect(block).toContain("require('../src/utils/model-catalog')");
-    expect(block).toMatch(/\breadCache\(\)/);
+    // F12: anchored to the ASSIGNMENT, not a bare `readCache()` match -- the
+    // surrounding comment ("read the on-disk cache directly with
+    // readCache() rather than...") also contains the literal text
+    // `readCache()`, so `/\breadCache\(\)/` alone is satisfied by the
+    // comment and stays green even if the real call site is reverted to
+    // `const cacheDoc = null;` (a perfect functional revert of `7379a401`).
+    expect(block).toMatch(/const\s+\w+\s*=\s*readCache\(\)/);
     expect(block).toContain("require('../src/utils/quick-picks')");
     expect(block).toMatch(/resolveQuickPicks\(/);
   });

@@ -543,6 +543,169 @@ describe('setup-ui wizard', () => {
       expect(writes.deepseek).toBe('deepseek/deepseek-r1');
       expect(writes.gemini).toBeUndefined(); // no quick-pick was selected, so no selected-alias write
     });
+
+    // F2 regression: round-1's `if (alias === selectedAlias) { return; }` was
+    // unconditional, so a drilled-down pick on the CHECKED alias vanished
+    // whenever a custom default was ALSO set (neither branch wrote it --
+    // the "selected alias" branch above is gated on !isCustomDefault, and
+    // this loop skipped it thinking it was "already handled"). modelChoiceIds
+    // must be keyed to the SELECTED alias here, not to a decoy like deepseek
+    // -- keying it to deepseek is what let this ship: the loop would still
+    // write deepseek (a non-selected alias) and the test would pass even on
+    // the buggy code.
+    it('F2: a drilled-down pick on the alias that is ALSO the checked radio must not vanish when a custom default is set', () => {
+      const collectAliasWrites = extractCollectAliasWrites()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { gemini: 'google/gemini-drilled' } // keyed to the SELECTED alias, not deepseek
+      });
+      const writes = collectAliasWrites('gemini', true); // gemini is both the checked radio AND drilled; isCustomDefault=true
+      expect(writes.gemini).toBe('google/gemini-drilled'); // must be written by the loop, not silently dropped
+    });
+  });
+
+  describe('F3: init restores modelChoiceIds (and the DOM <select>) from a saved drill-down pick', () => {
+    // Extracts the REAL alias-restore loop out of the init IIFE via the same
+    // new Function harness used above -- not a local reimplementation.
+    // Brittle to reindenting the forEach block (closing `});` must stay at
+    // 8-space indent, matching the extraction regex).
+    function extractAliasRestoreBlock() {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const blockMatch = script.match(/modelChoicesData\.forEach\(function\(mc\) \{[\s\S]*?\n {8}\}\);/);
+      expect(blockMatch).toBeTruthy();
+      // eslint-disable-next-line no-new-func
+      return new Function(
+        'modelChoicesData', 'cfg', 'routingChoices', 'modelChoiceIds', 'modelOpenrouterIds', 'document',
+        blockMatch[0]
+      );
+    }
+
+    function fakeOption(value, dataOr) {
+      return { value, getAttribute: (name) => (name === 'data-or' ? (dataOr || '') : null) };
+    }
+
+    it('seeds modelChoiceIds and the <select>.value when the saved alias names a shortlist row', () => {
+      const twoCardData = [
+        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
+      ];
+      const cfg = { aliases: { gemini: 'google/gemini-2.5-flash' } };
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {};
+      const sel = {
+        value: null,
+        options: [
+          fakeOption('google/gemini-3.7-flash', 'openrouter/google/gemini-3.7-flash'),
+          fakeOption('google/gemini-2.5-flash', 'openrouter/google/gemini-2.5-flash')
+        ]
+      };
+      const fakeDocument = {
+        querySelector: (selector) => {
+          expect(selector).toBe('.model-pick[data-alias="gemini"]');
+          return sel;
+        }
+      };
+      const run = extractAliasRestoreBlock();
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, fakeDocument);
+      expect(modelChoiceIds.gemini).toBe('google/gemini-2.5-flash'); // Finish must write the SAVED pick back, not the flagship
+      expect(sel.value).toBe('google/gemini-2.5-flash');             // Step 2's dropdown must visually agree
+      expect(modelOpenrouterIds.gemini).toBe('openrouter/google/gemini-2.5-flash');
+    });
+
+    it('leaves modelChoiceIds untouched when the saved alias value names no shortlist row (no card for it, or value predates the catalog)', () => {
+      const twoCardData = [
+        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
+      ];
+      const cfg = { aliases: { gemini: 'google/some-retired-model' } };
+      const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {};
+      const sel = { value: null, options: [fakeOption('google/gemini-3.7-flash', '')] };
+      const fakeDocument = { querySelector: () => sel };
+      const run = extractAliasRestoreBlock();
+      run(twoCardData, cfg, routingChoices, modelChoiceIds, modelOpenrouterIds, fakeDocument);
+      expect(modelChoiceIds.gemini).toBeUndefined();
+      expect(sel.value).toBeNull();
+    });
+  });
+
+  describe('F4: Step 4 review mirrors exactly what Finish will write', () => {
+    // Extracts the REAL buildReview (+ its toBareIfDirect/pickRouteFor/
+    // collectAliasWrites dependencies, same as the F2 harness above) via
+    // the same new Function pattern. Brittle to reindenting any of the
+    // four extracted functions.
+    function extractBuildReview() {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
+      const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
+      const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
+      const buildReviewMatch = script.match(/function buildReview\(\) \{[\s\S]*?\n {2}\}/);
+      expect(directProvidersMatch).toBeTruthy();
+      expect(toBareMatch).toBeTruthy();
+      expect(pickRouteForMatch).toBeTruthy();
+      expect(collectMatch).toBeTruthy();
+      expect(buildReviewMatch).toBeTruthy();
+      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+      // eslint-disable-next-line no-new-func
+      const build = new Function(
+        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
+        'document', 'window',
+        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\n${buildReviewMatch[0]}\nreturn buildReview;`
+      );
+      return (opts = {}) => build(
+        directProviders,
+        opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
+        opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
+        opts.aliasEdits || {}, opts.modelChoicesData || [],
+        opts.document, opts.window
+      );
+    }
+
+    function fakeEl() { return { textContent: '' }; }
+
+    const twoCardData = [
+      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
+      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+    ];
+
+    it('lists a drilled-down pick on a NON-selected card, not just the checked radio (the F4 trigger)', () => {
+      const els = {
+        'review-keys': fakeEl(), 'review-model': fakeEl(),
+        'review-routing': fakeEl(), 'review-aliases': fakeEl()
+      };
+      const fakeDocument = {
+        getElementById: (id) => els[id],
+        querySelector: () => ({ value: 'gemini' }) // gemini is the checked radio
+      };
+      const fakeWindow = { customDefaultModel: null };
+      const buildReview = extractBuildReview()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }, // drilled on the NON-selected card
+        document: fakeDocument, window: fakeWindow
+      });
+      buildReview();
+      expect(els['review-routing'].textContent).not.toBe('No alias changes'); // the literal F4 symptom
+      expect(els['review-routing'].textContent).toContain('deepseek → deepseek/deepseek-r1');
+      expect(els['review-routing'].textContent).toContain('gemini → google/gemini-x');
+      expect(els['review-aliases'].textContent).toBe('2 alias(es) modified'); // gemini + deepseek
+    });
+
+    it('reports the drilled write even when a custom (searched) default is set and no radio backs it', () => {
+      const els = {
+        'review-keys': fakeEl(), 'review-model': fakeEl(),
+        'review-routing': fakeEl(), 'review-aliases': fakeEl()
+      };
+      const fakeDocument = {
+        getElementById: (id) => els[id],
+        querySelector: () => null // no radio matches a searched custom default
+      };
+      const fakeWindow = { customDefaultModel: 'openrouter/some/searched-model' };
+      const buildReview = extractBuildReview()({
+        modelChoicesData: twoCardData,
+        modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' },
+        document: fakeDocument, window: fakeWindow
+      });
+      buildReview();
+      expect(els['review-routing'].textContent).toBe('deepseek → deepseek/deepseek-r1');
+      expect(els['review-aliases'].textContent).toBe('1 alias(es) modified');
+    });
   });
 
   describe('Step 3 - Alias Editor', () => {
@@ -617,5 +780,166 @@ describe('buildSetupHTML (resolved picks)', () => {
     const selectionIdx = script.indexOf('aliasWrites[mc.alias] = routeId');
     expect(overlayIdx).toBeGreaterThan(-1);
     expect(selectionIdx).toBeGreaterThan(overlayIdx);
+  });
+
+  // F10: every buildSetupHTML( call anywhere in tests/ before this fix was
+  // (), { client: ... }, or { quickPicks: PICKS } -- none passed the 4th
+  // buildModelStepHTML argument (`shortlists`) all the way through. Dropping
+  // it entirely (e.g. reverting the call below back to
+  // `buildModelStepHTML(quickPicks)`) emits zero `.model-pick` selects and
+  // produces byte-identical HTML for every input any OTHER test in this
+  // file supplies -- lint-clean, and the mirror seam in main.js is pinned
+  // by source text only, so the gap read as covered when it wasn't.
+  const SHORTLISTS = {
+    gemini: {
+      recommendedId: 'google/gemini-9.9-flash',
+      suggested: [{
+        id: 'google/gemini-9.9-flash', name: 'gemini-9.9-flash', contextLength: 128000,
+        pricePerMInput: 0.1, isRecommended: true,
+        directId: 'google/gemini-9.9-flash', openrouterId: 'openrouter/google/gemini-9.9-flash',
+      }],
+      rest: [],
+      total: 1,
+    },
+  };
+
+  test('F10: passing shortlists renders the per-card drill-down <select>', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS, shortlists: SHORTLISTS });
+    expect(html).toContain('class="model-pick"');
+  });
+
+  test('F10: omitting shortlists (as every OTHER buildSetupHTML test in this file does) renders NO drill-down <select> -- the seam this fix pins', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS });
+    expect(html).not.toContain('class="model-pick"');
+  });
+});
+
+// F10 (part 2): `grep -rn "model-resolved" tests/` returned only a comment
+// and one static-markup assertion (setup-ui-model.test.js's "the
+// resolved-id span carries its alias") before this fix -- nothing actually
+// RAN updateWritePreviews's `.model-resolved` refresh loop, the entire
+// production change of commit `dd429502`. Extracted via the same
+// new Function harness as the F2/F4 describe blocks above.
+describe('F10: updateWritePreviews keeps .model-resolved in step with the route/model choice (commit dd429502)', () => {
+  // This describe block is a sibling of 'setup-ui wizard' (which owns the
+  // outer `html`/`beforeAll`), not nested inside it -- same as
+  // 'buildSetupHTML (resolved picks)' above -- so it builds its own.
+  const localHtml = buildSetupHTML();
+
+  function extractUpdateWritePreviews() {
+    const script = localHtml.match(/<script>([\s\S]*)<\/script>/)[1];
+    const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+    const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
+    const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
+    const updateMatch = script.match(/function updateWritePreviews\(\) \{[\s\S]*?\n {2}\}/);
+    expect(directProvidersMatch).toBeTruthy();
+    expect(toBareMatch).toBeTruthy();
+    expect(pickRouteForMatch).toBeTruthy();
+    expect(updateMatch).toBeTruthy();
+    const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+    // eslint-disable-next-line no-new-func
+    const build = new Function(
+      'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+      'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window',
+      `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${updateMatch[0]}\nreturn updateWritePreviews;`
+    );
+    return (opts = {}) => build(
+      directProviders,
+      opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
+      opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
+      opts.modelChoicesData || [], opts.document, opts.window
+    );
+  }
+
+  const twoCardData = [
+    { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
+    { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+  ];
+
+  function fakeModelResolvedEl(alias) {
+    return { getAttribute: (n) => (n === 'data-alias' ? alias : null), textContent: '' };
+  }
+  function fakeWritePreviewEl(alias) {
+    return {
+      getAttribute: (n) => (n === 'data-alias' ? alias : null),
+      classList: { toggle: () => {} },
+      querySelector: () => ({ textContent: '' }),
+    };
+  }
+
+  test('a NON-selected card\'s .model-resolved line still refreshes to a drilled-down pick', () => {
+    const modelResolvedEls = [fakeModelResolvedEl('gemini'), fakeModelResolvedEl('deepseek')];
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }), // gemini is the checked radio, NOT deepseek
+      querySelectorAll: (selector) => {
+        if (selector === '.model-resolved') { return modelResolvedEls; }
+        if (selector === '.write-preview') { return [fakeWritePreviewEl('gemini'), fakeWritePreviewEl('deepseek')]; }
+        return [];
+      },
+    };
+    const updateWritePreviews = extractUpdateWritePreviews()({
+      modelChoicesData: twoCardData,
+      modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }, // drilled on the NON-selected card
+      document: fakeDocument, window: { customDefaultModel: null },
+    });
+    updateWritePreviews();
+    const deepseekEl = modelResolvedEls.find(el => el.getAttribute('data-alias') === 'deepseek');
+    expect(deepseekEl.textContent).toBe('deepseek/deepseek-r1'); // the refresh this commit added
+  });
+
+  test('a card with no drilled pick resolves to its default route (auto-pick, canonicalised)', () => {
+    const modelResolvedEls = [fakeModelResolvedEl('gemini'), fakeModelResolvedEl('deepseek')];
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }),
+      querySelectorAll: (selector) => {
+        if (selector === '.model-resolved') { return modelResolvedEls; }
+        if (selector === '.write-preview') { return []; }
+        return [];
+      },
+    };
+    const updateWritePreviews = extractUpdateWritePreviews()({
+      modelChoicesData: twoCardData,
+      document: fakeDocument, window: { customDefaultModel: null },
+    });
+    updateWritePreviews();
+    const deepseekEl = modelResolvedEls.find(el => el.getAttribute('data-alias') === 'deepseek');
+    expect(deepseekEl.textContent).toBe('deepseek/deepseek-v4-pro'); // canonicalised bare form
+  });
+});
+
+// F11: `grep -rn finishBtn tests/` returned 0 repo-wide before this fix --
+// nothing bound the Finish handler to collectAliasWrites, so
+// `var aliasWrites = {};` would pass the entire suite. Bounds the call the
+// same way tests/electron/main-settings-catalog-wiring.test.js already
+// bounds `buildSetupHTML(` -- balancedParens, not a naive indexOf('}')/
+// indexOf(')') scan, so this stays correct across reformatting.
+describe('F11: the Finish handler is bound to collectAliasWrites (not a stand-in constant)', () => {
+  /** Mirrors tests/electron/main-settings-catalog-wiring.test.js's helper. */
+  function balancedParens(text, openParenIdx) {
+    if (text[openParenIdx] !== '(') {
+      throw new Error(`expected '(' at index ${openParenIdx}`);
+    }
+    let depth = 0;
+    for (let i = openParenIdx; i < text.length; i++) {
+      if (text[i] === '(') { depth++; }
+      else if (text[i] === ')') {
+        depth--;
+        if (depth === 0) { return text.slice(openParenIdx, i + 1); }
+      }
+    }
+    throw new Error('unbalanced parens: no matching close found');
+  }
+
+  test('finishBtn.addEventListener\'s body calls collectAliasWrites( and threads the result into sidecar:save-config', () => {
+    const html = buildSetupHTML();
+    const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+    const nameIdx = script.indexOf('finishBtn.addEventListener(');
+    expect(nameIdx).toBeGreaterThan(-1);
+    const openParenIdx = nameIdx + 'finishBtn.addEventListener'.length;
+    const call = balancedParens(script, openParenIdx);
+    expect(call).toMatch(/\bcollectAliasWrites\(/);
+    // A mutant that computes aliasWrites but never sends it (or sends a
+    // stand-in constant) must also fail -- bound the IPC call too.
+    expect(call).toMatch(/sidecar:save-config['"],\s*dm,\s*aliasWrites/);
   });
 });
