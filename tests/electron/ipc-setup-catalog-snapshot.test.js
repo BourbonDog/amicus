@@ -117,6 +117,26 @@ describe('catalog snapshot across save-key → set-provider-default (V17 / A4)',
     expect(getCatalog).toHaveBeenCalledTimes(2); // both fetches were offer builds
   });
 
+  test('A1 (round-2 council): two windows are independent offer sessions — neither the other window\'s offer nor its setup-done touches this window\'s apply', async () => {
+    const winA = { sender: { id: 3 } };
+    const winB = { sender: { id: 5 } };
+    getCatalog.mockResolvedValueOnce(CATALOG_1).mockResolvedValue(CATALOG_2);
+
+    await handlers['sidecar:save-key'](winA, 'anthropic', 'sk-ant-a');   // A offers on CATALOG_1
+    await handlers['sidecar:save-key'](winB, 'anthropic', 'sk-ant-b');   // B offers on CATALOG_2
+
+    // B finishes its wizard; A's live offer must survive.
+    await handlers['sidecar:setup-done'](winB, 'anthropic', 1);
+
+    await handlers['sidecar:set-provider-default'](winA, 'anthropic', 'anthropic/claude-sonnet-5');
+    expect(applyProviderDefault.mock.calls[0][2].catalog).toBe(CATALOG_1);
+
+    // B's session ended: its apply now fetches fresh instead of reusing.
+    await handlers['sidecar:set-provider-default'](winB, 'anthropic', 'anthropic/claude-sonnet-6');
+    expect(applyProviderDefault.mock.calls[1][2].catalog).toBe(CATALOG_2);
+    expect(getCatalog).toHaveBeenCalledTimes(3); // two offer builds + B's post-session fetch
+  });
+
   test('no snapshot (apply without a prior offer): falls back to a fresh fetch (issue 195 path)', async () => {
     getCatalog.mockResolvedValue(CATALOG_2);
 
