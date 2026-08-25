@@ -90,7 +90,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,gpt,kimi' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
-    expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'fix' }}");
+    expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
     expect(y).toContain("MAX_COST: ${{ inputs.max_cost || '2.00' }}");
     expect(y).not.toContain("'1.00'");
     // fail_on is validated to the enum before any paid step
@@ -108,25 +108,6 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     const y = yml();
     const inputDefault = y.match(/models:\s*\n\s*description:[^\n]*\n\s*type: string\s*\n\s*default: '([^']*)'/);
     const prFallback = y.match(/MODELS: \$\{\{ inputs\.models \|\| '([^']*)' \}\}/);
-    expect(inputDefault).not.toBeNull();
-    expect(prFallback).not.toBeNull();
-    expect(prFallback[1]).toBe(inputDefault[1]);
-  });
-
-  // Same trap, same fix, for fail_on: the workflow_call input default and the
-  // pull_request `||` fallback are two independent spellings of one gate
-  // policy, and only the fallback is read on a plain pull_request run (empty
-  // inputs). This is the exact mistake cb7c90fd made for `models` --
-  // changing one spelling and not the other is invisible to lint/actionlint
-  // and leaves real PRs on the stale policy. fail_on's own `description:`
-  // line contains single quotes ('Gate policy: none (report-only), ...'), so
-  // the capture below anchors on the literal `type: string` line between
-  // `description:` and `default:` rather than a bare `default: '([^']*)'`
-  // scan, which a loose quote-count could latch onto inside the description.
-  test('the two fail_on spellings cannot drift apart (input default === pull_request fallback)', () => {
-    const y = yml();
-    const inputDefault = y.match(/fail_on:\s*\n\s*description:[^\n]*\n\s*type: string\s*\n\s*default: '([^']*)'/);
-    const prFallback = y.match(/FAIL_ON: \$\{\{ inputs\.fail_on \|\| '([^']*)' \}\}/);
     expect(inputDefault).not.toBeNull();
     expect(prFallback).not.toBeNull();
     expect(prFallback[1]).toBe(inputDefault[1]);

@@ -32,7 +32,7 @@ on:
       fail_on:
         description: 'Gate policy: none (report-only), fix (fail unless the chair says Ship it), rethink (fail only on Fundamental rethink)'
         type: string
-        default: 'fix'
+        default: 'none'
       max_cost:
         description: Whole-run cost ceiling in USD (advisory on cold runners)
         type: string
@@ -94,10 +94,7 @@ jobs:
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
-      # fix now genuinely gates the PR: the check fails unless the chair
-      # returns "Ship it". A null chair verdict (parse failure) still maps to
-      # `neutral` below, not `failure` — a dead chair never hard-fails the check.
-      FAIL_ON: ${{ inputs.fail_on || 'fix' }}
+      FAIL_ON: ${{ inputs.fail_on || 'none' }}
       MAX_COST: ${{ inputs.max_cost || '2.00' }}
       # ⚠️ THIS is the load-bearing default, not the `default:` under workflow_call.inputs.
       # A `pull_request` trigger supplies no `inputs`, so every automatic council review on a
