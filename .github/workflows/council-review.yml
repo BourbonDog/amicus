@@ -6,8 +6,7 @@ name: Council Review
 # non-Claude chair verdict — and this workflow publishes the result three
 # ways: a Council Review check run (Confirmed findings as annotations), a
 # sticky PR comment, and the full run directory as an evidence artifact.
-# Gating now defaults ON via the fail_on input: the check fails unless the
-# chair says "Ship it". Pass fail_on: none to opt back out to report-only.
+# Gating is opt-in via the fail_on input (default: report-only).
 
 on:
   pull_request:
