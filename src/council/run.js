@@ -229,7 +229,7 @@ async function runCouncil(options, deps = {}) {
     // falls back to r.model on a miss rather than assuming the two arrays stay
     // symmetric — a naive seatKey on both sides would make that orphan's
     // conformance unreachable instead of merged, a silent total loss.
-    const seatKey = (s, alias) => (s ? s.id : alias);
+    const { seatKey } = require('./run-retry-keys');   // v4.9 W3 (SI-DUP b): the one rule, one home
     const byJudge = new Map(s2.judgeResults.map(j => [seatKey(j.seat, j.judge), j]));
     for (const r of s1.reviews) {
       const j = byJudge.get(r.seat ? r.seat.id : r.model) || byJudge.get(r.model);

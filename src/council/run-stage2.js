@@ -31,6 +31,63 @@ const { artifactName } = require('./seats');
 const { orphanLegNote, bindPaddedWave } = require('./stage1-bind');
 
 /**
+ * Bind the -s2 wave's legs to the seats `reviews[]` holds and note the two
+ * unbindable shapes (orphan legs, unbound seats) on ctx.degrade. Lifted
+ * verbatim out of `runStage2` below (v4.9 W2, the SI-16 function-length
+ * split); the caller reads back only `judgeSeatOf` — `s2WaveId` rides along
+ * in the return for the seam's shape, nothing downstream consumes it.
+ * @param {object} ctx
+ * @param {{reviews: Array, judges: Array<string>, s2Legs: Array<object>,
+ *   runId: string}} args — `s2Legs` arrives pre-guarded
+ *   (`(wave && wave.legs) || []`): the wave-null guard stays at the call
+ *   site, beside the leg loop that shares it.
+ * @returns {{s2WaveId: string, judgeSeatOf: Map<object, object>}}
+ */
+function bindStage2Seats(ctx, { reviews, judges, s2Legs, runId }) {
+  // v4.8 PR3 Task 4: bind the -s2 wave's legs to the SAME seats reviews[] holds,
+  // in `reviews` order — judges is built from that same array by the same
+  // `.map`, and real fanout stamps `${waveId}-${i+1}` off that same index
+  // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
+  // are appended, run-stages.js:153, so `reviews` order is no longer seat order
+  // — both arrays still derive from the same `reviews`).
+  // §3.4's padding pattern now lives in `stage1-bind.js :: bindPaddedWave`
+  // (v4.8 SI-27) — why the roster is padded rather than filtered, and why
+  // placeholders are tracked by IDENTITY rather than an id-name prefix test,
+  // are in that function's docblock. Only this site's TAIL stays here.
+  const s2WaveId = `${runId}-s2`;
+  const { seatOf: judgeSeatOf, bindRes, placeholders } =
+    bindPaddedWave(s2WaveId, reviews.map(r => r.seat), i => judges[i], s2Legs);
+  // An orphan leg (a judge DID land, but no roster slot claims it) gets the
+  // same shape as Stage 1's orphanLegNote — `data.legId` present.
+  for (const leg of bindRes.orphanLegs) { ctx.degrade.note(orphanLegNote(s2WaveId, leg)); }
+  // review F(important): mirrors stage1-bind.js:40's suppression rule
+  // verbatim. A wave that returned ZERO legs is already announced on a louder
+  // channel (thin-cross-review, or this refusal itself) — there is no
+  // "missing seat" fact this adds. An orphan leg means a judge DID land for
+  // SOME seat we could not name — reporting the roster's other unbound seats
+  // as "missing" would double-count that one failure as two, on a channel
+  // whose whole contract is "nothing was guessed": the stray leg might BE the
+  // seat this loop would otherwise call missing.
+  if (s2Legs.length > 0 && bindRes.orphanLegs.length === 0) {
+    for (const seat of bindRes.unbound) {
+      if (placeholders.has(seat)) { continue; }
+      ctx.degrade.note({
+        channel: 'seat-unbound',
+        what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
+        // R27-5: `reviews.length` IS the padded roster's length — bindPaddedWave
+        // maps 1:1 over the source array, and `Array.prototype.map` preserves
+        // length. Pinned (`ROSTERLEN`) in run-stages.test.js, because a
+        // substitution into unpinned prose is how a true sentence goes quietly false.
+        why: `the wave returned fewer judge legs than its roster of ${reviews.length}`,
+        effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
+        data: { waveId: s2WaveId, seat: seat.alias },
+      });
+    }
+  }
+  return { s2WaveId, judgeSeatOf };
+}
+
+/**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
  * @param {object} ctx
  * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array,
@@ -76,52 +133,14 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   ctx.addWave(wave);
   if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [], extraRows: [] }; }
 
-  // v4.8 PR3 Task 4: bind the -s2 wave's legs to the SAME seats reviews[] holds,
-  // in `reviews` order — judges is built from that same array by the same
-  // `.map`, and real fanout stamps `${waveId}-${i+1}` off that same index
-  // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
-  // are appended, run-stages.js:153, so `reviews` order is no longer seat order
-  // — both arrays still derive from the same `reviews`).
-  // §3.4's padding pattern now lives in `stage1-bind.js :: bindPaddedWave`
-  // (v4.8 SI-27) — why the roster is padded rather than filtered, and why
-  // placeholders are tracked by IDENTITY rather than an id-name prefix test,
-  // are in that function's docblock. Only this site's TAIL stays here.
-  const s2WaveId = `${o.runId}-s2`;
+  // Seat binding (v4.8 PR3 Task 4) lives in bindStage2Seats above (v4.9 W2).
   // review F(critical): `wave` is legitimately null — a budget/args refusal
   // (run-budget.js failPre) returns `{wave: null, exitCode: 1}`, which
   // isAbortExit does NOT catch (only 130/143), so execution reaches here.
   // Guarded exactly like the leg loop below (`(wave && wave.legs) || []`) —
   // this is the only OTHER dereference of wave.legs in the file.
   const s2Legs = (wave && wave.legs) || [];
-  const { seatOf: judgeSeatOf, bindRes, placeholders } =
-    bindPaddedWave(s2WaveId, reviews.map(r => r.seat), i => judges[i], s2Legs);
-  // An orphan leg (a judge DID land, but no roster slot claims it) gets the
-  // same shape as Stage 1's orphanLegNote — `data.legId` present.
-  for (const leg of bindRes.orphanLegs) { ctx.degrade.note(orphanLegNote(s2WaveId, leg)); }
-  // review F(important): mirrors stage1-bind.js:40's suppression rule
-  // verbatim. A wave that returned ZERO legs is already announced on a louder
-  // channel (thin-cross-review, or this refusal itself) — there is no
-  // "missing seat" fact this adds. An orphan leg means a judge DID land for
-  // SOME seat we could not name — reporting the roster's other unbound seats
-  // as "missing" would double-count that one failure as two, on a channel
-  // whose whole contract is "nothing was guessed": the stray leg might BE the
-  // seat this loop would otherwise call missing.
-  if (s2Legs.length > 0 && bindRes.orphanLegs.length === 0) {
-    for (const seat of bindRes.unbound) {
-      if (placeholders.has(seat)) { continue; }
-      ctx.degrade.note({
-        channel: 'seat-unbound',
-        what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
-        // R27-5: `reviews.length` IS the padded roster's length — bindPaddedWave
-        // maps 1:1 over the source array, and `Array.prototype.map` preserves
-        // length. Pinned (`ROSTERLEN`) in run-stages.test.js, because a
-        // substitution into unpinned prose is how a true sentence goes quietly false.
-        why: `the wave returned fewer judge legs than its roster of ${reviews.length}`,
-        effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
-        data: { waveId: s2WaveId, seat: seat.alias },
-      });
-    }
-  }
+  const { judgeSeatOf } = bindStage2Seats(ctx, { reviews, judges, s2Legs, runId: o.runId });
 
   const judgeResults = [];
   // v4.7 D2: every judge-repair launch is a billed leg of its own, distinct from

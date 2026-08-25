@@ -15,7 +15,10 @@
  * call before it), the seat-keyed `byJudge`, the `sanitizeName`'d per-seat
  * repair id, and the `seat` field on the pushed legs (see the function's own
  * docblock below). Do not treat `runRevoteWave` as a behaviour-neutral mirror
- * of the old run-debate.js code — only `legOpts`/`legRow` still are.
+ * of the old run-debate.js code — only `legOpts`/`legRow` still are. Since
+ * v4.9 W2 (SI-16) the one-bounded-repair block lives in the in-file
+ * `repairRevoteLeg`, called from runRevoteWave's leg loop — a structural
+ * split only, no behaviour change.
  *
  * `isAbortExit` comes from ./run-launch, NEVER from ./run-stages: run-stage2.js:12
  * records that taking it from run-launch.js "is what dissolved the old cycle
@@ -38,6 +41,11 @@ const { sanitizeName } = require('./seats');
 // ./seats, so this leaf stays cycle-free (see the module docblock's cycle-class
 // paragraph above — named, not line-numbered, so it cannot rot).
 const { bindPaddedWave } = require('./stage1-bind');
+// v4.9 W3 (SI-DUP disposition b): the wave's join key for one leg — the bound
+// seat's id, else the bare alias. Was a local `function seatKey` here; now the
+// run-retry-keys.js export (same rule, one home). ./run-retry-keys is
+// REQUIRE-FREE by design (its own docblock), so this leaf stays cycle-free.
+const { seatKey } = require('./run-retry-keys');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
@@ -64,9 +72,6 @@ function legRow(model, leg, conformance) {
         ...(leg.model ? { resolvedModel: leg.model } : {}) }
     : { model, status: 'error', durationMs: null, usage: null, conformance, summary: '' };
 }
-
-/** The wave's join key for one leg: the bound seat's id, else the bare alias. */
-function seatKey(seat, alias) { return seat ? seat.id : alias; }
 
 /**
  * T5.1 (owner ruling R8), narrowed by T5.5: announce a re-vote leg whose key
@@ -133,6 +138,46 @@ function reVoteUnboundNote(waveId, judge, key, leg) {
 }
 
 /**
+ * v4.9 W2 (SI-16): the one bounded repair for an ALIVE-but-unparseable re-vote
+ * leg (spec §5.7 — only ONE repair is spent), split out of runRevoteWave's leg
+ * loop. The CALLER owns the `alive && !parsed.ok` gate; this function always
+ * launches exactly one repair solo. It returns the post-repair view the caller
+ * records from there on — `parsed`, `conformance`, `outLeg` (the repaired leg
+ * when the repair completed, else the original) — plus exactly one non-null
+ * row: `supersededRow` (completed repair — the pre-repair leg's row) or
+ * `repairRow` (dead repair — the failed attempt's own row), for the caller to
+ * push. A user abort mid-repair returns `{ aborted: <exitCode> }` alone, which
+ * the caller propagates as its own return.
+ */
+async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds }) {
+  // One repair, solo, to that judge. The id is built from the SEAT key so
+  // two twins never share one repair id (and one never overwrites the
+  // other's run-state entry). ⚠️ The trailing `r` is load-bearing: it is what
+  // stops bindSeats' `/^(.*)-(\d+)$/` matching a repair id whose judge alias
+  // is a bare number (`r1-rv-2r` does not match; `r1-rv-2` would). Dropping
+  // it re-arms a collision. sanitizeName also fixes the pre-existing slash
+  // bug (D4) — `r1-rv-openrouter/deepseek/deepseek-chatr` stops nesting
+  // three directory levels — and is a no-op for every plain alias.
+  const repairId = `${waveId}-${sanitizeName(key)}r`;
+  runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
+  const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
+    // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors.
+    prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: leg.summary }) });
+  ctx.addWave(r2.wave);
+  if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
+  const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
+  parsed = leg2 ? parseRevote(leg2.summary, expectedIds) : parsed;
+  const conformance = parsed.ok ? 'repaired' : 'unstructured';
+  // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
+  // revote-<model>.md and the runStats row keep the PRE-repair output.
+  return leg2
+    ? { aborted: null, parsed, conformance, outLeg: leg2,
+        supersededRow: legRow(judge, leg, 'unstructured'), repairRow: null }
+    : { aborted: null, parsed, conformance, outLeg: leg,
+        supersededRow: null, repairRow: legRow(judge, r2.leg, 'unstructured') };
+}
+
+/**
  * The re-vote mini-wave (spec §5.1).
  *
  * v4.8 PR3 Task 6 — the parallel-array discipline this function now runs on:
@@ -194,28 +239,11 @@ async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf
       : { ok: false, byId: {}, errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
     let conformance = alive ? 'clean' : 'unstructured';
     if (alive && !parsed.ok) {
-      // One repair, solo, to that judge. The id is built from the SEAT key so
-      // two twins never share one repair id (and one never overwrites the
-      // other's run-state entry). ⚠️ The trailing `r` is load-bearing: it is what
-      // stops bindSeats' `/^(.*)-(\d+)$/` matching a repair id whose judge alias
-      // is a bare number (`r1-rv-2r` does not match; `r1-rv-2` would). Dropping
-      // it re-arms a collision. sanitizeName also fixes the pre-existing slash
-      // bug (D4) — `r1-rv-openrouter/deepseek/deepseek-chatr` stops nesting
-      // three directory levels — and is a no-op for every plain alias.
-      const repairId = `${waveId}-${sanitizeName(key)}r`;
-      runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
-      const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
-        // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors.
-        prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: leg.summary }) });
-      ctx.addWave(r2.wave);
-      if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
-      const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
-      parsed = leg2 ? parseRevote(leg2.summary, expectedIds) : parsed;
-      conformance = parsed.ok ? 'repaired' : 'unstructured';
-      // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
-      // revote-<model>.md and the runStats row keep the PRE-repair output.
-      if (leg2) { supersededLegs.push(legRow(judge, leg, 'unstructured')); outLeg = leg2; }
-      else { repairLegs.push(legRow(judge, r2.leg, 'unstructured')); }
+      const rep = await repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedIds });
+      if (rep.aborted) { return { aborted: rep.aborted }; }
+      ({ parsed, conformance, outLeg } = rep);
+      if (rep.supersededRow) { supersededLegs.push(rep.supersededRow); }
+      if (rep.repairRow) { repairLegs.push(rep.repairRow); }
     }
     // ⚠️ Two DIFFERENT values on the same iteration: `byJudge`'s key is the SEAT
     // (applyDebate joins it against `(a.seat || a.judge)`), while the leg's

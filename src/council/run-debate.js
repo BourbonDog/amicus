@@ -35,7 +35,7 @@ const { legOpts, legRow, runRevoteWave } = require('./run-debate-revote');
  * `raiserKey` survives in exactly two places here: the returned `{raiser}` (which
  * becomes defenseByRaiser's key — §3.3: that MUST stay seat-keyed, because
  * re-keying it to the alias is last-wins and silently drops one twin's entire
- * debate row plus its amended claim) and the `seat` runDebate derives from it.
+ * debate row plus its amended claim) and the `seat` runDefenseWave derives from it.
  * Everything else — both launch sites, both legRow calls, the stub and the
  * returned leg's `model` — is `raiserAlias`.
  *
@@ -98,6 +98,51 @@ async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
 }
 
 /**
+ * Defense mini-wave: ONE CONCURRENT solo per raiser (spec §5.1).
+ *
+ * Concurrent, not sequential: every raiser gets its OWN briefing, so this is N independent
+ * solos rather than one fanout wave. No per-leg budget check interleaves between them — the
+ * cost ceiling is a WHOLE-ROUND gate run.js applies BEFORE calling runDebate
+ * ('skipped-cost-ceiling' is a round-level outcome in spec §5.1's enum, not a per-leg one).
+ * `appendStageWave` is sync fs and each solo registers its waveId before its first await,
+ * so concurrency cannot interleave a read-modify-write of run.json.
+ * v4.1 §4.4: the reserved seat 'claude' is a FILE-sourced review with no leg to
+ * launch, so it is never asked to defend — its contested findings simply stand
+ * (the same "originals stand" outcome as a no-response).
+ *
+ * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
+ * @param {{byRaiser: object, aliasOf: function(string): string, seatById: Map<string, object>}} args
+ * @returns {Promise<{aborted: (number|null), defenseResults: Array<object>, defenseByRaiser: (object|null)}>}
+ *   `aborted` is an abort exit code (defenseByRaiser is null then) or null on a full wave.
+ */
+async function runDefenseWave(ctx, { byRaiser, aliasOf, seatById }) {
+  const raisers = Object.keys(byRaiser).filter(m => m !== 'claude');
+  const defenseResults = await Promise.all(
+    raisers.map((raiserKey, i) => runDefenseSolo(ctx, raiserKey, byRaiser[raiserKey], i, aliasOf)));
+  // A signal during the defense wave aborts the whole finalization (spec §5.7): return the
+  // abort code — runDebate maps it onto its own abort return — so run.js finalizes
+  // 'aborted' with NO tally-final / NO ledger.
+  const abortedDefense = defenseResults.find(d => d.aborted);
+  if (abortedDefense) { return { aborted: abortedDefense.aborted, defenseResults, defenseByRaiser: null }; }
+  // ⚠️ This literal lives in runDefenseWave, where `raiserAlias` does not exist — the
+  // projection is `aliasOf(d.raiser)`. `model` must stay ALIAS-valued (R3-1);
+  // `seat` is what gives two twins two files instead of one clobbered one (R3-3).
+  materializeDebate(ctx.o.runDir, defenseResults.map(d => ({ model: aliasOf(d.raiser),
+    summary: d.leg.summary, seat: seatById.get(d.raiser) || null })), 'rebuttal');
+
+  const defenseByRaiser = {};
+  for (const dr of defenseResults) { defenseByRaiser[dr.raiser] = { ...dr.byId }; }
+  // v4.1 §4.4: claude never gets a defense leg (raisers filter above), but its
+  // contested/disputed findings still need an audit trail — the SAME spec §5.7
+  // "originals stand" fallback a dead/unrepaired defense leg gets. Seeded into
+  // defenseByRaiser ONLY (never defenseResults, which feeds runDebate's `bad(l)`
+  // degraded check — a claude entry there would wrongly flip a clean run to
+  // degraded/exit 2).
+  if (byRaiser.claude) { defenseByRaiser.claude = allNoResponse(byRaiser.claude.map(f => f.id)); }
+  return { aborted: null, defenseResults, defenseByRaiser };
+}
+
+/**
  * Full Stage-2.5 sequence (spec §5.1). Returns everything run.js needs. Cost gate: run.js
  * checks overBudget before invoking; this checks again before the re-vote wave (spec §5.7).
  * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
@@ -128,38 +173,10 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   const seatById = new Map(seatTable.map(s => [s.id, s]));
   const aliasOf = (key) => { const s = seatById.get(key); return s ? s.alias : key; };
 
-  // ---- Defense mini-wave: ONE CONCURRENT solo per raiser (spec §5.1) ----
-  // Concurrent, not sequential: every raiser gets its OWN briefing, so this is N independent
-  // solos rather than one fanout wave. No per-leg budget check interleaves between them — the
-  // cost ceiling is a WHOLE-ROUND gate run.js applies BEFORE calling runDebate
-  // ('skipped-cost-ceiling' is a round-level outcome in spec §5.1's enum, not a per-leg one).
-  // `appendStageWave` is sync fs and each solo registers its waveId before its first await,
-  // so concurrency cannot interleave a read-modify-write of run.json.
-  // v4.1 §4.4: the reserved seat 'claude' is a FILE-sourced review with no leg to
-  // launch, so it is never asked to defend — its contested findings simply stand
-  // (the same "originals stand" outcome as a no-response).
-  const raisers = Object.keys(byRaiser).filter(m => m !== 'claude');
-  const defenseResults = await Promise.all(
-    raisers.map((raiserKey, i) => runDefenseSolo(ctx, raiserKey, byRaiser[raiserKey], i, aliasOf)));
-  // A signal during the defense wave aborts the whole finalization (spec §5.7):
-  // return the abort code so run.js finalizes 'aborted' with NO tally-final / NO ledger.
-  const abortedDefense = defenseResults.find(d => d.aborted);
-  if (abortedDefense) { return { aborted: abortedDefense.aborted, contested, disputed }; }
-  // ⚠️ This literal lives in runDebate, where `raiserAlias` does not exist — the
-  // projection is `aliasOf(d.raiser)`. `model` must stay ALIAS-valued (R3-1);
-  // `seat` is what gives two twins two files instead of one clobbered one (R3-3).
-  materializeDebate(ctx.o.runDir, defenseResults.map(d => ({ model: aliasOf(d.raiser),
-    summary: d.leg.summary, seat: seatById.get(d.raiser) || null })), 'rebuttal');
-
-  const defenseByRaiser = {};
-  for (const dr of defenseResults) { defenseByRaiser[dr.raiser] = { ...dr.byId }; }
-  // v4.1 §4.4: claude never gets a defense leg (raisers filter above), but its
-  // contested/disputed findings still need an audit trail — the SAME spec §5.7
-  // "originals stand" fallback a dead/unrepaired defense leg gets. Seeded into
-  // defenseByRaiser ONLY (never defenseResults, which feeds the `bad(l)`
-  // degraded check below — a claude entry there would wrongly flip a clean run
-  // to degraded/exit 2).
-  if (byRaiser.claude) { defenseByRaiser.claude = allNoResponse(byRaiser.claude.map(f => f.id)); }
+  // ---- Defense mini-wave (runDefenseWave): abort short-circuits the round (spec §5.7) ----
+  const dw = await runDefenseWave(ctx, { byRaiser, aliasOf, seatById });
+  if (dw.aborted) { return { aborted: dw.aborted, contested, disputed }; }
+  const { defenseResults, defenseByRaiser } = dw;
   // Stamp previousTier onto the tally input: applyDebate reads it off tallyInput.findings[]
   // (it ignores the provisional record), so without this every row's previousTier is null.
   const stampedInput = { ...tallyInput, findings: tallyInput.findings.map(f => ({ ...f, previousTier: previousTier[f.id] })) };

@@ -7,10 +7,10 @@
 // run-retry-group.js re-exports all four, so no import path in the tree moved.
 
 /**
- * The one seat-key rule: a seat's id when it was identified, its alias otherwise.
- * Exported so `run-retry-group.js :: recordFailure` and run-retry.js both consume it
- * rather than re-spelling it — two readers of one rule that drift apart is how the
- * alias/seat-id keyspace splits in the first place.
+ * The one seat-key rule: a seat's id when it was identified, its alias otherwise. Exported
+ * so `run-retry-group.js :: recordFailure`, run-retry.js and — since v4.9 W3 (SI-DUP
+ * disposition b) — run.js, run-debate-revote.js and run-stage1-rows.js all consume it
+ * rather than re-spelling it: readers of one rule that drift apart is how it splits.
  */
 const seatKey = (s, alias) => (s ? s.id : alias);
 

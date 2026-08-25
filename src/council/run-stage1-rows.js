@@ -10,8 +10,8 @@ const { buildRunStatsEntry } = require('./run-assemble');
 // The one keyspace. It lives in ./run-retry-keys (v4.8 Phase 2 T-A1), which IS require-free;
 // run-retry-group.js re-exports it and requires nothing else, so this import's closure
 // terminates at a leaf and cannot re-create the parent-child cycle the header above
-// documents eliminating.
-const { twinAliases, legLossKey } = require('./run-retry-group');
+// documents eliminating. (v4.9 W3, SI-DUP b: `seatKey` joined this destructure — see keyOf.)
+const { seatKey, twinAliases, legLossKey } = require('./run-retry-group');
 // v4.8 T-A6 size-gate split: the SUPERSEDED half of these rows moved to
 // ./run-stage1-superseded, taking `../utils/degrade` and the default stderr sink with it.
 // `degrade` is still a parameter HERE, forwarded unchanged, so a caller that omits it still
@@ -63,8 +63,11 @@ const { supersededRows } = require('./run-stage1-superseded');
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
   roleFor, seatOf, degrade, twins = twinAliases(o.seats) }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
-  // `run-retry-keys.js :: seatKey` (imported by run-retry.js since v4.8 T-A1) uses
-  // for a roster slot it could not identify, so both sides of every lookup agree.
+  // `run-retry-keys.js :: seatKey` (imported by run-retry.js since v4.8 T-A1, and by
+  // this file since v4.9 W3 for the dead-wave slot join below) uses for a roster slot
+  // it could not identify, so both sides of every lookup agree. keyOf itself stays
+  // hand-written on purpose: its else branch is `l.modelInput || l.model`, a LEG read
+  // with no bare alias in scope — a sibling form, not a re-spelling of that rule.
   const keyOf = (leg) => { const s = seatOf.get(leg); return s ? s.id : (leg.modelInput || leg.model); };
   // v4.8 T2.2 ruling R2, the LEG arms' MINT branch: on an alias the roster repeats, an
   // unbound leg's `keyOf` names BOTH twins, so N dead legs collapsed into ONE row.
@@ -139,7 +142,7 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
     // reconcile, so index-zipping them is safe here and nowhere else.
     (w.models || []).forEach((alias, i) => {
       const s = (w.seats || [])[i] || null;
-      const join = s ? s.id : alias;
+      const join = seatKey(s, alias);
       // R2's MARK branch. This arm has no leg to mint from, and `(waveId, i)` is
       // measurably NOT unique — missingSeatDeadWave emits several records under one
       // waveId each with i === 0, and run-retry.js re-indexes when it narrows a

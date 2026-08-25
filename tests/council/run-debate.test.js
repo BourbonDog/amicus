@@ -154,7 +154,7 @@ function ctxFor(tmp, launchers, models = ['gemini', 'gpt', 'qwen']) {
   };
 }
 
-// T5.1: seat id -> bench alias, built the same way run-debate.js:129 does.
+// T5.1: seat id -> bench alias, built the same way run-debate.js:174 does.
 function aliasOfFor(seats) {
   const byId = new Map(seats.map(s => [s.id, s]));
   return (key) => { const s = byId.get(key); return s ? s.alias : key; };
@@ -332,7 +332,7 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
 
 // v4.8 Phase 6 PR1 Task 3, fix rounds 1-2 (SI-24) — WHAT ACTUALLY PROTECTS
 // addendumOutcomes' `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
-// (run-debate.js:262) is NOT PAST_TENSE's null prototype. It is
+// (run-debate.js:279) is NOT PAST_TENSE's null prototype. It is
 // parseDebateDefense's ALLOWLIST, one file upstream.
 //
 // Fix round 1 set out to pin PAST_TENSE's SECOND consumer here (the FIRST is
@@ -1403,9 +1403,10 @@ describe('runDebate — T5.2 (SI-10/R8): the re-vote refusal stops the adjudicat
 //       `stage1-bind.js :: bindPaddedWave`, which is where it is applied now
 //   M2  the same filter, formerly its own copy in run-stage2.js — since SI-27 it is
 //       literally the SAME line as M1                  (pinned in run-stages.test.js)
-//   M3  neuter `if (placeholders.has(seat)) { continue; }` in run-stage2.js's
-//       seat-unbound loop — still a CALL-SITE mutation there, because the tail did
-//       not move; renamed `PLACEHOLDERLEAK`            (pinned in run-stages.test.js)
+//   M3  neuter `if (placeholders.has(seat)) { continue; }` in the seat-unbound
+//       loop — still a run-stage2.js CALL-SITE mutation (the tail never joined the
+//       shared helper; since v4.9 W2 it sits in `run-stage2.js :: bindStage2Seats`);
+//       renamed `PLACEHOLDERLEAK`                     (pinned in run-stages.test.js)
 // ⚠️ So M1, M2, this file's pin and run-retry-launch.test.js's "NOPLACEHOLDERFILTER"
 // are ONE mutation now. MEASURED 2026-08-23, full `npx jest --no-coverage`: it reds
 // 19 tests in FOUR suites — run-debate 4: THREE OF THE FOUR tests in the F1 describe

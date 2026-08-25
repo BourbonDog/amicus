@@ -254,7 +254,7 @@ describe('decorateRecord — additive past-tense debate field', () => {
  * alike, is ALREADY the literal 'no-response' before `debateFindings` (and
  * therefore `d.action`) exists. Traced and verified: `debateFindings` has
  * exactly ONE producer (`debate.js :: applyDebate`), which has ONE caller in
- * src/ (`run-debate.js:203`); `decorateRecord` has ONE caller
+ * src/ (`run-debate.js:220`); `decorateRecord` has ONE caller
  * (`run-finish.js:50`, fed by `run.js`'s own `runDebate` result). No MCP or
  * CLI entry hands either function a hand-assembled document. So this table's
  * null prototype is DEFENSE-IN-DEPTH here, not a fix for a reachable defect —
@@ -341,7 +341,7 @@ describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited a
 // NO PIN THAT PRE-DATES THIS TASK REDS.
 //
 // ⚠️ RE-RUN at fix round 1 (SI-24 review): PAST_TENSE has a SECOND consumer,
-// run-debate.js:262's `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
+// run-debate.js:279's `PAST_TENSE[df.action] || PAST_TENSE['no-response']`
 // inside runDebate's addendumOutcomes, which the three tests above never
 // reach (they call decorateRecord directly). Added
 // tests/council/run-debate.test.js coverage driving a REAL defense response
@@ -360,7 +360,7 @@ describe('decorateRecord — PAST_TENSE is prototype-safe against an inherited a
 // `{action: 'no-response'}`. Every other action string a model could emit,
 // inherited-key or ordinary junk alike, is ALREADY the literal 'no-response'
 // before `debateFindings` (and therefore `df.action`) exists — regardless of
-// PROTOACTION. `PAST_TENSE[df.action]` at run-debate.js:262 is an own-key hit
+// PROTOACTION. `PAST_TENSE[df.action]` at run-debate.js:279 is an own-key hit
 // on every input the real pipeline can deliver, mutated or not. Denominator
 // at this re-run: 544 suites (543/1), 7847 tests (7836 passed / 3 failed / 8
 // skipped — +3 over the prior 7844, exactly the three new tests, all

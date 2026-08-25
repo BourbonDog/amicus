@@ -93,7 +93,8 @@ describe('the orphan intersection — where four designs died', () => {
   // handed a bound seat the debate files an unrecorded alias-named debate leg may have
   // written — the RN-1 defect, re-armed. The one available proof is a -s2 note: that leg
   // BOUND in Stage 1, so its review landed under a seat name. `data.waveId` identifies it
-  // EXACTLY (run-stage2.js:67/69/90 build it as `${runId}-s2`), not by prefix guess.
+  // EXACTLY (run-stage2.js :: bindStage2Seats and the launch site in
+  // run-stage2.js :: runStage2 both build it as `${runId}-s2`), not by prefix guess.
   //
   // ⚠️ Council-1 B2's rationale ("the orphan may have only written a review") is measured
   // FALSE for a STAGE-1 orphan and is disputed on the PR: run-stages.test.js's F1 pin "M2: the

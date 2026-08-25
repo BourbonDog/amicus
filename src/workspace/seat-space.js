@@ -76,17 +76,19 @@ function isSeatTable(seats) {
  * namespace (MEASURED; the one regression this fix wave introduced). The question is:
  * does the note POSITIVELY PROVE the orphan did NOT write this kind? Exactly one such
  * proof exists. `orphanLegNote` has three call sites — run-stages.js:71 and :140 (Stage-1
- * and its retry) and run-stage2.js:110 (the -s2 judge wave) — and `data.waveId` separates
- * them EXACTLY, not heuristically: run-stage2.js:67/69/90 build it as `${runId}-s2` from
+ * and its retry) and run-stage2.js :: bindStage2Seats (the -s2 judge wave) — and
+ * `data.waveId` separates them EXACTLY, not heuristically: run-stage2.js :: bindStage2Seats
+ * and the launch site in run-stage2.js :: runStage2 both build it as `${runId}-s2` from
  * the runId this run.json carries. A -s2 note says the leg BOUND in Stage 1, so its review
  * landed under a SEAT name: `review-<alias>.md` is provably not its. Nothing else is
  * provable, and the near misses are why:
  *   - a Stage-1 note exonerates NOTHING, not even judge-: that orphan is re-admitted to
- *     Stage 2 under a PLACEHOLDER seat (run-stage2.js:92-97) that `judgeSeatOf` filters out
- *     (:105-107), so its judge leg takes the alias branch too — and emits no -s2 note,
+ *     Stage 2 under a PLACEHOLDER seat that stage1-bind.js :: bindPaddedWave pads in and
+ *     drops from `judgeSeatOf` (called from run-stage2.js :: bindStage2Seats since the
+ *     v4.9 W2 split), so its judge leg takes the alias branch too — and emits no -s2 note,
  *     because it BOUND. Measured: run-stages.test.js :: "M2: the placeholder never becomes…".
  *   - rebuttal-/revote- are never exonerated: a debate leg whose raiser/judge key names no
- *     seat takes materializeDebate's alias branch (run-debate.js :: runDebate;
+ *     seat takes materializeDebate's alias branch (run-debate.js :: runDefenseWave;
  *     run-debate-revote.js :: runRevoteWave, `seat = seatOf.get(leg) || null`). A rebuttal
  *     leg's unbound raiser still has no note recording it. A revote leg's unbound judge
  *     SOMETIMES gets one, since v4.8 T5.1 (channel `seat-unbound`, run-debate-revote.js's

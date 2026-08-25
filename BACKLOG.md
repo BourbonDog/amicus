@@ -4429,7 +4429,10 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   on channel membership alone.
 
 - [ ] **PR4 · `run-stage2.js:57` builds its judge roster from `reviews[].modelInput`, so a twin
-  bench pays for two judge legs and clobbers one `judge-<alias>.md`.** Pre-existing, not
+  bench pays for two judge legs and clobbers one `judge-<alias>.md`.**
+  (⚠️ **2026-08-25, v4.9 W2: the roster line moved — `run-stage2.js :: runStage2`'s
+  `const judges = reviews.map(r => r.modelInput)` is `:119` today; `:57` now sits inside the
+  extracted `bindStage2Seats`.**) Pre-existing, not
   introduced by PR2b, and PR2b did not change how many reviews reach Stage 2: `materializeReviews`
   already returned one in-memory entry per complete leg, so a twin bench already handed Stage 2
   two reviews — only the FILE on disk was clobbered. What PR2b changed is that those two reviews
@@ -4725,7 +4728,10 @@ deliberately left alone:
   the file 274→268: the signature is `:153`, the `writeFileSync` `:158`, `seatKey` `:69`,
   its call site `:190`. The
   2026-08-22 reading is left standing as the dated measurement it is; the ANCHOR was already a
-  symbol, which is why this entry needed an annotation and not a re-derivation.**)
+  symbol, which is why this entry needed an annotation and not a re-derivation.**
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): `seatKey` has since LEFT this file entirely — the one
+  definition is `run-retry-keys.js :: seatKey` and `run-debate-revote.js` now imports it; the
+  symbol anchor above names where it lived when measured.**)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
   keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
   seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:99`, **was `:81`,
@@ -4983,7 +4989,10 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   (v4.8 Phase 5 T5.4), when all three were re-opened and found stale** — that file grew above them
   after they were written. Today the spelling is `:232` (now anchored by symbol), the `Map` build
   `:233` and the two-key lookup `:235`. The mechanism this paragraph describes is unchanged; only
-  the numbers were wrong. **Latent, not reachable from
+  the numbers were wrong.
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): the `run.js` spelling itself is GONE — `:232` now holds
+  `const { seatKey } = require('./run-retry-keys')` and the definition lives at
+  `run-retry-keys.js:15`; the `Map` build (`:233`) and two-key lookup (`:235`) still stand.** **Latent, not reachable from
   production**: `src/sidecar/leg-ids.js:16` stamps every fanout leg's `taskId` as `${waveId}-${i+1}`,
   and `fanout-leg.js` writes that `taskId` into `buildRunResult` on both the normal completion path
   (`:191`) and the routing-failure path (`:61`) — so a real `-s2` wave cannot produce even one
@@ -5064,7 +5073,9 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `run-retry.js` imports it. The old citations (`:56`/`:149`/`:224`) were all stale, in a clause
   that said "re-derived directly, not assumed" — the same self-certifying phrasing corrected in the
   SI-DUP entry below. Entry left SUPERSEDED, but no longer carrying three wrong numbers and a count
-  that is off by one. Separately, §3.4's
+  that is off by one.
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): now ZERO files redefine it — `run.js` and
+  `run-debate-revote.js` both import `run-retry-keys.js :: seatKey`, the sole definition.** Separately, §3.4's
   roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
   WAS duplicated near-verbatim in a **different** set of three files:
   `run-retry-launch.js@2517a947:50-60`
@@ -5093,7 +5104,9 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   true when written and are historical from here on. The pad/bind/drop core lives ONCE, in
   `stage1-bind.js :: bindPaddedWave`; each site keeps only its own orphan/missing tail. The
   `seatKey` half of this clause is **not** closed by SI-27 — that is SI-DUP disposition (b),
-  still v4.9. See the ticked SI-27 record under "NEXT TASK — Wave 3" for sizes, red sets and
+  still v4.9. (⚠️ **2026-08-25: and v4.9 W3 Task D has now DELIVERED disposition (b), closing the
+  `seatKey` half too — see SI-DUP's shipped note.**) See the ticked SI-27 record under "NEXT TASK —
+  Wave 3" for sizes, red sets and
   commits.
   - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
     note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
@@ -5832,6 +5845,16 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
     measurement — see the correction note above.)
+    ✅ **FIVE since 2026-08-25 (v4.9 W3 Task D — disposition (b) shipped, see its note below):**
+    the `run.js :: seatKey` definition, the `run-debate-revote.js :: seatKey` definition and
+    `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias` all became CALL SITES
+    of the exported `run-retry-keys.js:15` copy — excluded by this bullet's own counting rule.
+    The five that remain, each re-opened 2026-08-25: `run-retry-keys.js:15` (the exported
+    definition), `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` and `run-stages.js:96 :: keyOf`
+    (both left on purpose — their else branch is a LEG read, `l.modelInput || l.model`, a sibling
+    form, not this rule over a bare alias), `run-stages.js:106` (the healed-filter's inline form —
+    outside the W3 replace list; `run-stages.js` was not touched), and `run.js:235` (hand-inlined,
+    stays: its `|| byJudge.get(r.model)` fallback is load-bearing, per disposition (b)).
     Sites, **re-derived by opening each line, 2026-08-17** (T-A2 fix round 3; the list previously
     read "all re-derived by execution against the final tree" as of 2026-08-16 and **three of the
     eight were stale by then or became so** — `run-retry-group.js:29`, `run-stage1-rows.js:55` and
@@ -5854,16 +5877,21 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `:188`; v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the
     rest) and T5.5 took it to 274, and `:64` itself was unmoved through all of THAT, re-opened
     2026-08-22; ⚠️ **v4.8 SI-27 then took the file 274→268 and moved both — the definition is
-    `:69` and its one caller `:190` as of 2026-08-23, re-read at both lines**),
+    `:69` and its one caller `:190` as of 2026-08-23, re-read at both lines**;
+    ✅ **consolidated 2026-08-25, v4.9 W3: the definition is GONE — a header require at `:48`,
+    the caller at `:235` — no longer a Count-1 member**),
     `run-retry-keys.js:15`
     (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` (**was `:42`/`:45`/`:55`/`:57`**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias;`
-    (**was `:85`/`:129`/`:138`/`:153`/`:155`**),
+    (**was `:85`/`:129`/`:138`/`:153`/`:155`**; ✅ **consolidated 2026-08-25, v4.9 W3: now
+    `const join = seatKey(s, alias)` at `:145` — a call site, not a spelling**),
     `run-stages.js:96 :: keyOf`, `run-stages.js:106`, `run.js :: seatKey` (**was `:228`; `:232`
-    today**, one caller `:233`, **was `:229`**),
+    today**, one caller `:233`, **was `:229`**; ✅ **consolidated 2026-08-25, v4.9 W3: `:232`
+    holds an in-place `require('./run-retry-keys')` now, caller still `:233`**),
     `run.js:235` (hand-inlined; **was `:231`**).
-    **The count is still EIGHT** — T2.2 added no spelling, only call sites.
+    **The count is still EIGHT** — T2.2 added no spelling, only call sites. ✅ **FIVE since
+    2026-08-25 (v4.9 W3) — see the count line above.**
     **Excluded, and why:** `run-retry-group.js:87` (`legs.push({ leg: l, seatId: bound ? bound.id :
     null })`, **was `:109`, then `:151`; −64 from T-A1, the same shift as `:128`→`:64` below**) and
     `run-retry-notes.js:58` fall back to
@@ -5887,7 +5915,44 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
-    5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
+    5 sites (6 occurrences), `electron/` 4 sites.**
+    ✅ **Re-censused 2026-08-25 (v4.9 W3 Task D), by grepping `\.seat \|\|` and
+    `\|\| X.(model|judge)` over `src/` + `electron/` and opening every hit: 14 sites /
+    15 occurrences — `src/` 10 sites (11 occurrences), `electron/` 4 sites** (same rule as above,
+    restated: a bare two-term `||` resolving an already-emitted row to one identity string, the
+    row's emitted `seat` field else its alias field, live code only). **Five members are NEW since
+    the 2026-08-21 pass**, with inclusion rulings: `briefings-chair.js:180` (`r.seat || r.judge`,
+    ranking lines) and `:183` (`a.seat || a.judge`, adjudication lines), both inside
+    `buildChairPacket` — SI-25-born, unambiguous members (post-emit rankings/adjudications rows,
+    `seat` emitted-when-different); `street-cred.js:242 :: computeStreetCred`
+    (`perJudgeRank[j.seat || j.judge]`) — **INCLUDED**: `j` is the `judgePos` projection a dozen
+    lines up, which copies the emitted ranking row's `judge`/`seat` fields verbatim, so this read
+    resolves the emitted row's own field pair (excluding it on the projection technicality would
+    let a one-line refactor move a member out of the census); `report-md.js:86 :: renderMd` and
+    `report-html.js:57 :: renderHtml` (`s.seat || s.model` over `m.streetCred`) — both
+    **INCLUDED**: streetCred rows carry `seat` emit-when-set (`computeStreetCred`'s tail spread)
+    and each renderer resolves the emitted row to one label. **Adjacent, NOT members:**
+    `briefings-chair.js:178`'s `displayName(r.seat) || r.model` — its first term is a function of
+    the seat OBJECT, the pre-emit population (the conflation trap below, in reverse); and the
+    `|| null` family (`street-cred.js:227`, `run-retry.js:241`, `run-stages.js:264`,
+    `observe/council-legs.js:135`, `workspace/live-normalize.js:56`, `live-seats.js:99`) —
+    "seat or nothing" is a different value space, per the standing exclusions. **The nine
+    2026-08-21 members were each re-opened and re-anchored:** `debate.js :: applyDebate` `:107`
+    (was `:99`), `debate.js :: disputingJudges` `:207` (was `:199`), `report.js :: costRows` ×2
+    `:258` (was `:239`; the `const costRows` line is `:257`), `run-debate.js:276`/`:282` (were
+    `:259`/`:265`; both inside `runDebate`, moved by v4.9 W2 Task B); `electron/`:
+    `live-dead-seats.js:221` (was `:219`), `live-seats.js:96` (was `:95`),
+    `workspace-panels.js:122` (unmoved), `workspace-seats.js:247 :: renderDeadSeatRows` (was
+    `:245`). Excluded forms re-opened the same day: `debate.js :: raiserKey`
+    (`f.raiserSeat || f.raiser`) is `:258` now (was `:250`); `workspace-seats.js`' dual lookup is
+    `:189-190` now (was `:188`) and reads `(s.seat && retried[s.seat]) || retried[s.model]` — a
+    seat-GATED form today, further outside the bare-two-term rule than when it was excluded;
+    `workspace-seats.js:88`'s seatId chain and `workspace-render.js:195`/`:225` re-confirmed at
+    their stated lines. The four `electron/` members remain STRUCTURAL, per the standing paragraph
+    below — renderer modules cannot `require()` from `src/`, so none were consolidation
+    candidates and none become one via disposition (b).
+    ⚠️ The 2026-08-21 enumeration below is retained as the dated record its correction notes
+    already make it. Site and occurrence counts differ because
     `src/council/report.js :: costRows` spells the rule **twice on one line**, once per ternary
     branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js :: applyDebate`'s
@@ -5967,7 +6032,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `stage1-bind.js :: bindPaddedWave` on the stated `(waveId, rosterSource, aliasAt, legs)`
     signature, returning `{seatOf, bindRes, placeholders}`, and every site kept its own tail.
     ⚠️ **Disposition (b) below is NOT closed by this** — the `seatKey` half is still v4.9.
-  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
+    (✅ And v4.9 W3 delivered it, 2026-08-25 — see (b)'s shipped note.)
+  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14. ✅ SHIPPED
+    2026-08-25 (v4.9 W3 Task D) — the shipped note at the foot of this bullet says what moved;
+    everything between here and there is the pre-consolidation record (line numbers are where
+    things STOOD).** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**:
     `run.js :: seatKey` (**was `:228`; `:232` today**)
@@ -6012,6 +6081,23 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     failure mode **"THE WRONG LEVER"** — the defect is in a *consumer*. PR5c deliberately did not
     unify them; that is a refactor with its own blast radius, and mixing it into a defect PR is what
     made PR5a's review expensive. Still **not** urgent; it is a tidy-up, not a defect.
+    ✅ **SHIPPED 2026-08-25 (v4.9 W3 Task D), own commit, zero behavior change.** What moved:
+    `run.js`'s local spelling became an **in-place** `const { seatKey } = require('./run-retry-keys');`
+    on the very line the spelling held (`:232`, caller still `:233`) — in-place ON PURPOSE, so the
+    many live `run.js:NNN` citations across src/tests/electron did not move; `run-debate-revote.js`'s
+    `function seatKey` is deleted, replaced by a header require (`:48`; its one caller is `:235`
+    now); and `run-stage1-rows.js`'s `const join = s ? s.id : alias` is `const join =
+    seatKey(s, alias)` (`:145`), routed through that file's EXISTING `./run-retry-group`
+    destructure (`:14`) — evaluated per the plan's cycle check: `run-retry-group` requires only the
+    require-free `run-retry-keys` (its `:5` header + the P2 pin in
+    `tests/council/run-retry-keys.test.js`), so no exclusion was needed. The exported copy now has
+    **ten** callers (the seven above + these three). `run.js:235`'s hand-inlined third copy stays,
+    exactly as ruled above. Preservation: named mutant **SEATKEYSKEW** (flip the export's rule to
+    `s.alias`) reds **7 suites / 34 tests** of the 12-suite focused set — including
+    `run-degrade.test.js` (the run.js twin-merge pins) and `run-debate.test.js` (the revote-join
+    pins), two suites NO export flip could red before this consolidation, because their sites had
+    local copies: the export now measurably guards all three new sites. Count 1 above is **5** as
+    of this ship; Count 2 was re-censused the same day (see its ✅ block).
 
 ### Bench adaptation — closes #135, finishes #129
 

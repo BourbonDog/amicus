@@ -2155,7 +2155,8 @@ describe('runStage2', () => {
     //       and retry sites, so M2 == M1 == "NOPLACEHOLDERFILTER"
     //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
     //       seat-unbound loop — still a run-stage2.js CALL-SITE mutation (the tail
-    //       did not move); renamed `PLACEHOLDERLEAK`
+    //       never joined the shared helper; since v4.9 W2 it sits in
+    //       `run-stage2.js :: bindStage2Seats`); renamed `PLACEHOLDERLEAK`
     // MEASURED 2026-08-23, full `npx jest --no-coverage`: M2 at its new shared home
     // reds 19 tests in FOUR suites (run-stages 2, run-retry 9, run-retry-launch 4,
     // run-debate 4); PLACEHOLDERLEAK reds exactly one — M3's test below.
