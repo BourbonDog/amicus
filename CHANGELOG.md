@@ -3,6 +3,112 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.8.1] - 2026-08-25
+
+### Fixed
+
+- **Setup Step 2 offered one card per curated model *family*, with no way to choose which model
+  within it — issue #138.** `pickCurrent` kept exactly one winner per namespace, so a family with
+  several live models collapsed to a single card, and the route pill it wrote stored a **provider**
+  id, never a **model** id, so nothing downstream could tell them apart either. The family regex
+  made this worse for one vendor outright: `/^deepseek-v[\d.]+(-pro)?$/` only matches a
+  version-numbered `-v` name with an optional `-pro` suffix, so `deepseek-r1`, `deepseek-chat`, and
+  `deepseek-flash` never had a route to *any* card — structurally excluded, not just hidden behind
+  the flagship. Both wizard surfaces — the Electron Settings window and the readline setup flow —
+  now offer a vendor-scoped drill-down after the family pick, built on the existing priced picker
+  via a new pure module, `model-shortlist.js`, which splits a vendor's rows into suggested/rest so
+  the UI can show a handful of recommended models plus an "all" escape hatch. Persistence is
+  unchanged: `config.aliases[<family>]` still holds a route-encoded id and `config.default` still
+  holds the alias *name* — only the picker got smarter, not the storage shape. Two review rounds on
+  this branch closed five further blockers before it shipped: a silent setup-fallback path, a
+  misleading model-count label, a false alias-deletion report, a same-run double-ask of the same
+  vendor's drill-down, and an unescaped catalog id.
+
+- **`chooseRowId` fabricated bare `<vendor>/<model>` ids for catalog rows that exist only on
+  OpenRouter — issue #195.** Once the user held that vendor's own API key, the fabricated id routed
+  `direct`-first and `catalogGate` rejected it as `model_not_found`. Measured against the live
+  catalog: 19 of 69 `google` rows and 51 of 175 `openai` rows. The picker unconditionally stripped
+  the `openrouter/` prefix off any non-`DIVERGENT_VENDORS` OR-only row, regardless of whether the
+  direct namespace actually carried that model. It now reuses `classifyModel` — never a
+  reimplementation of its rule — and synthesizes the bare form only when that id would *not*
+  classify `invalid` on `direct`; `deepseek`'s empty-namespace rows (14/14) still synthesize bare,
+  unchanged. The identical unconditional strip existed in two more places that would otherwise have
+  silently undone the fix at write time — `canonicalizeResolved` (preselection matching) and
+  `applyProviderDefault` (the actual persist-to-config path, reached from both the Electron IPC
+  handler and the readline flow) — both now carry the same guard. Persistence was hardened further
+  in review: a failed or empty catalog fetch at persist time used to degrade straight back to the
+  old unconditional strip (confirmed against the real 601-row catalog), so `applyProviderDefault`
+  now requires *positive* catalog evidence (`classifyModel` returning `valid`, not merely
+  non-`invalid`) before it will strip a prefix — an empty catalog is inert, never a silent fallback.
+  ⚠️ **`doctor --fix` can now rewrite your config, not just diagnose it.** A new narrow repair,
+  `findFabricatedAliasRepairs`, finds aliases already persisted by v4.8.0 as a fabricated bare id —
+  one that classifies `invalid` on `direct` and has an unambiguous OpenRouter twin via
+  `pairAcrossGateways` — and rewrites them to the id the fixed picker would offer today. It is
+  gated on a **fresh** catalog fetch (declines with an explanatory hint if the same doctor run's own
+  `catalog` check reports the cache as stale, rather than repairing from data it has already told
+  you not to trust), idempotent, converts only to the one id `pairAcrossGateways` names, and every
+  repair is announced through the existing doctor-fix `heal` degrade channel, naming the alias and
+  both the old and new id. Outside that one class — a typo, a retired model, a user-invented id, or
+  a `DIVERGENT_VENDORS` alias — `doctor --fix` leaves the config alone exactly as before.
+
+### CI
+
+- **Council review on this repo ran with whatever alias each seat's name happened to resolve to on
+  a bare runner, not the intended bench — #193.** A CI runner has no user config, so
+  `getEffectiveAliases()` returned exactly `DEFAULT_ALIASES` and every seat bound to the shipped
+  `curated-models.js` pin: `glm` reviewed at 5.1 while 5.2 and 5.3 had already shipped, and an alias
+  missing from that table was silently dropped by `classifyCouncilMembers` with only a `run.json`
+  note to show for it. It was invisible by construction — `run.json`, `events.jsonl`, and
+  `verdict.json` all record alias *names*, so they read identically whichever model actually
+  answered; `spend-ledger.jsonl`, written to `getConfigDir()`, is the only artifact that carries a
+  resolved id. `council-review.yml` now provisions `.github/amicus-ci-aliases.json` from the
+  **base** ref (a PR can never edit the map used to review it), validates it by shape, pre-flights
+  every seat before any spend, and uploads the ledger as the receipt; every fetch failure but a 404
+  now fails closed instead of silently swapping the bench. A companion job, `alias-pin-drift.yml`,
+  compares each curated pin against its newest same-vendor sibling on the same tier/variant and
+  opens a weekly bump issue — `models --check` alone is structurally blind to this, since it
+  validates a curated *family* against its own `idPattern`, not a flat cardless pin like
+  `glm`/`qwen`/`kimi`.
+- **The council briefing now includes the `env:` blocks a diff can't show — #194.** PR #193 was
+  reviewed twice, and both benches unanimously raised the same blocker: `$GH_REPO`, `$MODELS`, and
+  `$CHAIR` looked undefined in the `run:` step under review. They were defined — in a workflow- or
+  job-level `env:` block the PR never touched, so it never appeared in the diff. Four seats agreeing
+  was one shared blind spot, not four independent findings. The briefing now appends the workflow-
+  and job-level `env:` blocks of every changed workflow (fetched from the base ref, exactly like the
+  alias map above), labelled explicitly as context and not part of the diff; step-level `env:` is
+  excluded because it already travels with its own hunk. A literal value under a
+  `TOKEN`/`SECRET`/`PASSWORD`/`KEY`-shaped name is withheld from the briefing — a pure `${{ }}`
+  reference is kept, since it names a secret rather than exposing one.
+- **The council-review check is no longer hardcoded green — #197.** Its `none`-policy branch set
+  `CONCLUSION="success"` before the chair's verdict was even read, so three distinct outcomes — a
+  clean review, a review with real findings, and a review that never ran at all — rendered as the
+  identical green check. `fail_on` now defaults to `rethink`: the check fails only when the chair
+  returns "Fundamental rethink," and passes on both "Fix these first" and "Ship it" (a null or
+  absent chair verdict still maps to neutral, never failure). A stricter `fail_on: fix` default was
+  tried first and reverted within hours: three live runs against PR #196 each came back "Fix these
+  first," but of the confirmed findings only one was a real, reachable defect — several were
+  accurate statements about states the system cannot produce, and two rested on premises that were
+  factually wrong. Gating on that verdict would have blocked more good work than bad. `fail_on` is
+  spelled twice in `council-review.yml` — the `workflow_call` input default, and the `pull_request`
+  path's `||` fallback, which is the load-bearing one for every label-triggered review on this repo
+  — and both spellings moved together, with a drift test re-verified against the historical
+  one-site-only mutant at the new value. `none` (report-only) and `fix` (the stricter gate) both
+  remain available for a caller that wants them.
+
+### Internal
+
+- **Burned down the citation allowlist and re-anchored the citations the gate cannot see —
+  citation-burndown, #192.** Twelve stale citations corrected, `CONFIG.grandfathered` emptied to
+  zero. Five of the eight previously-allowlisted entries were born stale — wrong in the commit that
+  introduced them, not rotted afterward; the no-output-backstop comment among them was a truth
+  failure rather than a numbering one, since the guard it warned was missing had been added by the
+  very commit that wrote the warning, so it is now reframed as closed history instead of
+  renumbered. Separately, several source comments cited a bare `(:129)`/`(:293)` line number with no
+  `.js` immediately before the colon — a shape `check-citations.js` cannot parse and so silently
+  never checks — and those are now `file.js :: symbol` anchors instead, both correct today and
+  visible to the gate from now on; one of them (`run.js:293`) had already rotted to the wrong line
+  and is corrected to `run.js:279` in the same pass.
+
 ## [4.8.0] - 2026-08-23
 
 ### Fixed
