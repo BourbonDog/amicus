@@ -90,7 +90,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,gpt,kimi' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
-    expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'fix' }}");
+    expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'rethink' }}");
     expect(y).toContain("MAX_COST: ${{ inputs.max_cost || '2.00' }}");
     expect(y).not.toContain("'1.00'");
     // fail_on is validated to the enum before any paid step
