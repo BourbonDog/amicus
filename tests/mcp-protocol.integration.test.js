@@ -44,7 +44,9 @@ function createMcpClient(extraEnv = {}) {
       try {
         const msg = JSON.parse(line);
         if (msg.id !== undefined && pending.has(msg.id)) {
-          pending.get(msg.id).resolve(msg);
+          const entry = pending.get(msg.id);
+          clearTimeout(entry.timer);
+          entry.resolve(msg);
           pending.delete(msg.id);
         }
       } catch {
@@ -61,11 +63,12 @@ function createMcpClient(extraEnv = {}) {
       return new Promise((resolve, reject) => {
         const id = nextId++;
         const msg = JSON.stringify({ jsonrpc: '2.0', id, method, params });
-        pending.set(id, { resolve, reject });
+        const entry = { resolve, reject };
+        pending.set(id, entry);
         child.stdin.write(msg + '\n');
 
         // Timeout after 10s
-        setTimeout(() => {
+        entry.timer = setTimeout(() => {
           if (pending.has(id)) {
             pending.delete(id);
             reject(new Error(`Timeout waiting for response to ${method} (id=${id})`));
@@ -85,16 +88,20 @@ function createMcpClient(extraEnv = {}) {
       child.stdin.end();
       child.stdout.removeAllListeners();
       // Reject any pending requests
-      for (const [, { reject }] of pending) {
+      for (const [, { reject, timer }] of pending) {
+        clearTimeout(timer);
         reject(new Error('Client closed'));
       }
       pending.clear();
       return new Promise((resolve) => {
-        child.on('close', resolve);
-        setTimeout(() => {
+        const killTimer = setTimeout(() => {
           child.kill('SIGKILL');
           resolve();
         }, 2000);
+        child.on('close', () => {
+          clearTimeout(killTimer);
+          resolve();
+        });
       });
     },
   };

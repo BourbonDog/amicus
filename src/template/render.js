@@ -14,10 +14,23 @@
  */
 
 const VAR_RE = /\{\{\s*([A-Za-z_][\w.]*)\s*\}\}/g;
+// Single source: validation and rendering both derive from this set — adding an
+// entry here is sufficient for both. A simple variable {{foo_bar}} reads
+// data.fooBar (snake_case slot, camelCase data key).
 const KNOWN_VARIABLES = ['prompt', 'artifact', 'artifact_path', 'date', 'project', 'var.<key>'];
 
 function knownList() {
   return KNOWN_VARIABLES.map((v) => `{{${v}}}`).join(', ');
+}
+
+function isSimpleVariable(name) {
+  // Reads KNOWN_VARIABLES live, not a load-time copy, so extending the
+  // exported set is sufficient (VAR_RE can never match the 'var.<key>' entry).
+  return name !== 'var.<key>' && KNOWN_VARIABLES.includes(name);
+}
+
+function dataKeyFor(name) {
+  return name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
 /**
@@ -46,7 +59,7 @@ function renderTemplate(text, data) {
       }
       continue;
     }
-    if (!['prompt', 'artifact', 'artifact_path', 'date', 'project'].includes(name)) {
+    if (!isSimpleVariable(name)) {
       return { error: `Error: Unknown template variable {{${name}}}. Known: ${knownList()}` };
     }
   }
@@ -76,12 +89,8 @@ function renderTemplate(text, data) {
   }
 
   const rendered = String(text).replace(VAR_RE, (_, name) => {
-    if (name === 'prompt') { return data.prompt; }
-    if (name === 'artifact') { return data.artifact; }
-    if (name === 'artifact_path') { return data.artifactPath; }
-    if (name === 'date') { return data.date; }
-    if (name === 'project') { return data.project; }
-    return vars[name.slice(4)];
+    if (name.startsWith('var.')) { return vars[name.slice(4)]; }
+    return data[dataKeyFor(name)];
   });
 
   return { text: rendered, notices };

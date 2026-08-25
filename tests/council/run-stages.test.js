@@ -938,7 +938,11 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     });
     const { extraRows } = await runStage1(ctx);
     expect(extraRows).toHaveLength(1);
-    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1' });
+    // v4.9 V18: EVERY repair row says 'unstructured' — even this one, whose own
+    // output parsed. The row records the failed parse that made the attempt
+    // exist, not the attempt's outcome (that lands on the seat's primary row).
+    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1',
+      conformance: 'unstructured' });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
   });
@@ -955,6 +959,7 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     expect(repairRows).toHaveLength(2);                          // cap = 2 re-prompts; BOTH get a row
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
   });
 
   test('a dead seat with no retry attempted gets a primary error row from its own (only) dead leg', async () => {
@@ -1932,6 +1937,9 @@ describe('runStage2', () => {
     expect(extraRows).toHaveLength(1);
     expect(extraRows[0]).toMatchObject({
       model: 'gemini', role: 'repair', wasChair: false, waveId: 'abc123-q1', status: 'complete',
+      // v4.9 V18: the repair ROW is 'unstructured' even when the repair lands —
+      // 'repaired' is the JUDGE's primary conformance, asserted above.
+      conformance: 'unstructured',
     });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
@@ -1955,6 +1963,7 @@ describe('runStage2', () => {
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
     expect(repairRows.every(r => r.model === 'gemini')).toBe(true);
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
   });
 
   test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {

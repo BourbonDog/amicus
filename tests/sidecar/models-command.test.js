@@ -494,7 +494,7 @@ describe('amicus models', () => {
       expect(out).toContain('Live probe (3 stored aliases):');
       expect(out).toContain('  SERVED: gemini -> openrouter/google/gemini-3.6-flash ($0.0004)');
       expect(out).toContain('  SILENT: probetest -> anthropic/claude-opus-4-8 — NO_OUTPUT_BACKSTOP:');
-      expect(out).toContain('(accepted but not serving)');
+      expect(out).toContain('(no output within the probe window)');
       expect(out).toContain('  ERROR:  gpt -> openai/gpt-5.6-terra — 402 Payment Required');
       expect(out.indexOf('Live probe')).toBeGreaterThan(out.indexOf('All aliases resolve'));
       expect(out.indexOf('Live probe')).toBeLessThan(out.indexOf('Per-gateway route audit'));

@@ -110,7 +110,7 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 - Chair selection & fallback: §5.3.
 
 ### Stage 4 — Tiered decisions (peer-validated)
-- **Consensus tier** = **Confirmed** findings (≥ 2 peer agreements, agrees dominate) → offer one **bulk accept/deny** (user may name exceptions).
+- **Consensus tier** = **Confirmed** findings (≥ 2 peer agreements with agrees dominating — or a lone corroborating peer with zero disputes) → offer one **bulk accept/deny** (user may name exceptions).
 - **Judgment tier** = **Disputed** (strong peer pushback), **Contested** (live dispute), or **Singleton** (only the raiser) → present **each individually**, showing the adjudication data and which model raised/disputed it.
 - Record every decision (accepted / denied / modified / deferred).
 

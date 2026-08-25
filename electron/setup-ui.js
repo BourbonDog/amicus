@@ -81,7 +81,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var selectedProvider = null;
   var modelChoicesData = ${modelChoicesJson};
   var providerNamesData = ${providerNamesJson};
-  var defaultAliases = ${defaultAliasesJson};
+  var defaultAliases = Object.assign(Object.create(null), ${defaultAliasesJson});
   var PROVIDER_FAMILY_NAMES = ${familyNamesJson};
   var directProviders = ${directProvidersJson};
   var routingChoices = {};

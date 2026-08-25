@@ -256,7 +256,9 @@ list. Two findings drove it:
 > *Next-rev hard gates*: the tight-file extraction pass (`cli-handlers-council-run.js` is at
 > **299/300 exactly**, `run-debate.js` at 299, two files **at 300**), and KNOWN_VARIABLES
 > single-sourcing **only if** `{{input}}` is ever scoped — it is not in this rev, so that gate
-> travels with composition rather than blocking here.
+> travels with composition rather than blocking here. *(Update 2026-08-25: the KNOWN_VARIABLES
+> gate is now satisfied — landed in v4.9 W1 ahead of any composition work. The tight-file
+> numbers in this note are a dated snapshot; re-measure with `npm run check:sizes`.)*
 
 ### Deferred out of v4.4.1 into v4.5 (2026-07-27)
 
@@ -388,9 +390,10 @@ consumer today (the Council Review GitHub Action) runs a single review per PR, n
 agent driving it, or the `critique`/`refine` built-ins are wanted on their own — those are a much
 smaller slice than the chaining machinery and could ship independently of F6.
 
-⚠️ **Carries its own hard gate:** KNOWN_VARIABLES single-sourcing (`src/template/render.js:45` keeps
-two hand-maintained copies of the known-variable set) must land **before** `{{input}}` does. See
-`BACKLOG.md` *Next-rev hard gates* — that gate travels with this item, not with v4.7.
+⚠️ **Its hard gate is already satisfied:** KNOWN_VARIABLES single-sourcing landed in v4.9 W1
+(2026-08-25) — `src/template/render.js` now derives both validation and rendering from
+`KNOWN_VARIABLES`, drift-tested, so `{{input}}` no longer waits on it. See `BACKLOG.md`
+*Next-rev hard gates* (ticked).
 
 ### GUI power ergonomics (F10) *(unscheduled — dropped from v4.7, 2026-08-05)*
 Focus-follows-fold hotkey, distinguishable window titles, tiling presets *(S each)*.

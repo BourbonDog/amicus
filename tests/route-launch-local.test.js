@@ -140,7 +140,7 @@ describe('resolveRouteForLaunch: local assembly', () => {
 // gateway-router.js's resolveRoute, which defeats that module's own
 // hasOwnProperty guards (Task 4, commit 19aade4) with corrupt input assembled
 // upstream. Fixed to match the same Object.prototype.hasOwnProperty.call idiom
-// used at gateway-router.js:134/138/151 and local-providers.js:103
+// used at gateway-router.js:142/146/159 and local-providers.js:103
 // (isLocalProvider). No mocking needed: `providers` is passed explicitly, so
 // getLocalProviders()/config.js is never consulted, and on the FIXED path the
 // function returns before touching api-key-store or local-probe.

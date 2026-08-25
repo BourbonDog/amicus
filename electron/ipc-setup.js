@@ -25,6 +25,12 @@ const { registerLocalProviderHandlers } = require('./ipc-setup-local');
  *   resolves through this local binding instead.
  */
 function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ipcMain } = {}) {
+  // V17 (council A4): per-provider snapshot of the catalog each save-key
+  // offer was built from, so set-provider-default applies against the SAME
+  // catalog the picker offered — a re-fetch there could return a different
+  // catalog and flip directFormIfProven's evidence (TOCTOU).
+  const offerCatalogs = new Map();
+
   ipcMain.handle('sidecar:validate-key', async (_event, provider, key) => {
     try {
       const { validateApiKey } = require('../src/utils/api-key-store');
@@ -62,6 +68,7 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
             const { buildProviderDefaultChoices } = require('../src/utils/provider-default-picker');
             const catalog = await getCatalog();
             result.providerDefault = buildProviderDefaultChoices(provider, { catalog });
+            offerCatalogs.set(provider, catalog);
           } catch (err) {
             logger.error('save-key providerDefault error', { error: err.message });
             result.providerDefault = null;
@@ -80,22 +87,27 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // Task 8: apply a per-provider default picker choice. Read-modify-write,
   // no-clobber -- applyProviderDefault only ever writes aliases[vendor] and
   // seeds config.default when absent (see provider-default-picker.js).
-  // Fetches the catalog before applying (issue 195): applyProviderDefault
-  // uses directFormIfProven (model-canonicalization.js) to decide whether to
-  // strip an OpenRouter prefix off chosenId, and needs the catalog to do it.
+  // Applies against the save-key offer's catalog snapshot (V17 / issue 195):
+  // applyProviderDefault uses directFormIfProven (model-canonicalization.js)
+  // to decide whether to strip an OpenRouter prefix off chosenId, and needs
+  // the catalog the offer was built from to do it. Fetching fresh only when
+  // no snapshot exists (apply without a prior offer).
   ipcMain.handle('sidecar:set-provider-default', async (_event, provider, chosenId) => {
-    let catalog = [];
-    try {
-      const { getCatalog } = require('../src/utils/model-catalog');
-      catalog = await getCatalog();
-    } catch (err) {
-      // Best-effort only -- a fetch failure leaves `catalog` empty, which
-      // directFormIfProven (F1, council review of PR 198) reads as NO
-      // evidence, never as license to strip: chosenId is persisted exactly
-      // as given, not re-derived. Applying an already-made picker choice
-      // must never abort on a catalog hiccup, and must never fabricate an
-      // id on one either -- that was the exact bug issue 195 fixed.
-      logger.error('set-provider-default catalog fetch error', { error: err.message });
+    let catalog = offerCatalogs.get(provider);
+    if (!catalog) {
+      catalog = [];
+      try {
+        const { getCatalog } = require('../src/utils/model-catalog');
+        catalog = await getCatalog();
+      } catch (err) {
+        // Best-effort only -- a fetch failure leaves `catalog` empty, which
+        // directFormIfProven (F1, council review of PR 198) reads as NO
+        // evidence, never as license to strip: chosenId is persisted exactly
+        // as given, not re-derived. Applying an already-made picker choice
+        // must never abort on a catalog hiccup, and must never fabricate an
+        // id on one either -- that was the exact bug issue 195 fixed.
+        logger.error('set-provider-default catalog fetch error', { error: err.message });
+      }
     }
     try {
       const { applyProviderDefault } = require('../src/utils/provider-default-picker');

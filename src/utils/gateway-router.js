@@ -10,6 +10,7 @@
 const { resolved, routeError, selectionRequired, parseDescriptor } = require('./model-descriptor');
 const { classifyModel } = require('./model-classification');
 const { isDirectProvider } = require('./provider-registry');
+const HINTS = require('./remediation-hints');
 
 /** Build the executable id for a gateway. */
 function executableFor(gateway, vendor, model) {
@@ -86,8 +87,15 @@ function catalogGate({ id, gateway, req }) {
   if (req.allowSelection) {
     return { ok: false, result: selectionRequired({ requested: req.descriptor.raw, suggestions: [] }) };
   }
-  return { ok: false, result: routeError({ requested: req.descriptor.raw, reason: 'model_not_found',
-    preferredGateway: gateway, suggestions: [] }) };
+  const e = routeError({ requested: req.descriptor.raw, reason: 'model_not_found',
+    preferredGateway: gateway, suggestions: [] });
+  // B2 (V16): a bare id invalid on direct whose openrouter/ twin IS catalog-
+  // confirmed is exactly doctor's repairable fabricated-alias class — point at
+  // the repair. Hint only; reason and shape unchanged.
+  if (gateway === 'direct' && classifyModel(`openrouter/${id}`, 'openrouter', req.catalogInfo) === 'valid') {
+    e.hint = HINTS.repairFabricatedAlias;
+  }
+  return { ok: false, result: e };
 }
 
 /**

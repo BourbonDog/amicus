@@ -216,10 +216,10 @@ async function runStage1(ctx) {
         return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
           degraded: false, extraRows };
       }
-      // Every -p<N> launch gets a row — INCLUDING a repair that failed: the
-      // error status rides naturally off solo.leg (null/'error'-status leg ⇒
-      // buildRunStatsEntry's own never-invent defaults), no special-casing needed.
-      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: m.modelInput, role: 'repair', wasChair: false }));
+      // Every -p<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒
+      // buildRunStatsEntry's never-invent defaults); 'unstructured' is flat — !res.ok holds at every push (v4.9 V18).
+      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: m.modelInput, role: 'repair',
+        wasChair: false, conformance: 'unstructured' }));
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);

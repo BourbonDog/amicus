@@ -885,12 +885,15 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   `src/pack/pack-forward.js` (96 lines) remains the natural receiving module for pack-domain
   spillover. **Any next-rev task, or any hotfix, touching a file in the table above must extract
   from it FIRST**, before adding anything.
-- [ ] **KNOWN_VARIABLES single-source (T3-m2).** `src/template/render.js:45` hand-maintains two
+- [x] **KNOWN_VARIABLES single-source (T3-m2).** — **DONE, v4.9 W1 (2026-08-25).** The gate is
+  satisfied ahead of `{{input}}`: `render.js` now derives BOTH the inline validation array and
+  the replacement chain from `KNOWN_VARIABLES` (the replacement chain was a THIRD hand-kept
+  enumeration this filing never counted), pinned by a drift test that extends the live exported
+  array and asserts a new entry validates AND renders. The `:45` citation had rotted to `:49`
+  before the fix; anchors are now by symbol. Original filing: `src/template/render.js:45`
+  hand-maintained two
   copies of the known-template-variable set — `KNOWN_VARIABLES` and a separate inline validation
-  array. Consistent today; the composition rev's `{{input}}` chaining variable (F6, now slotted
-  v4.7) adds a third
-  variable to both, and an edit that updates one copy but not the other fails silently. Single-source
-  them **before** `{{input}}` lands — hard gate, not a nice-to-have.
+  array — and an edit updating one copy but not the other failed silently.
 
 ### Fix-sized carries
 
@@ -1465,7 +1468,14 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   shape needs `buildRunStatsEntry` extracted to a **pure** module (`debate.js` is declared DI-free
   with zero requires). Stays deferred to its own TDD pass, as originally filed.
 
-- [ ] **Conformance drift between producers of the same non-primary role** — [S, defer-with-record]
+- [x] **Conformance drift between producers of the same non-primary role** — **DONE, v4.9 W1
+  (2026-08-25, ruling V18):** both repair-loop pushes (`run-stages.js :: runStage1`,
+  `run-stage2.js :: runStage2`) now pass an explicit `conformance: 'unstructured'` — the flat
+  literal this entry's design call named, chosen because `res.ok`/`parsed.ok` are provably false
+  at each push. The `|| 'clean'` default was NOT flipped (the two primary error-row sites,
+  `run-finish.js :: finishRun` and `run-stage1-rows.js :: pushDeadSeatRows`, depend on it), and
+  the rows are pinned by behavior tests including two every-row pins. Original filing:
+  [S, defer-with-record]
   `buildRunStatsEntry` (`src/council/run-assemble.js:60`) defaults `conformance` to `'clean'` when
   the caller doesn't pass one explicitly — every engine-born `chair-attempt` row (`run-chair.js`'s
   `recordAttempt`) takes that default. `legRow` (`src/council/run-debate.js:39`, see above) has no
@@ -4074,7 +4084,9 @@ above were updated in place; these are the items it could not close, filed rathe
     Current sites: `src/council/run-retry-keys.js:28`, `src/workspace/seat-space.js:85`,
     `tests/council/run-retry-lockstep.test.js:35`,
     `tests/council/run-retry-twins-threading.test.js:124`, `tests/council/run-retry.test.js:1084`,
-    `tests/council/run-stages.test.js:1199`, `:1207`, `:1496`. Candidate fix, **not implemented
+    `tests/council/run-stages.test.js:1204`, `:1212`, `:1501` (⚠️ re-derived 2026-08-25 — v4.9
+    W1's pin insertions in that file shifted all three; the bare-line forms are invisible to
+    `check-citations`, so they rot silently — re-open on read). Candidate fix, **not implemented
     here**: either give SYMBOL a quoted-string alternative, or define quoted-title as its own
     citation form with its own check (does the quoted text occur as a test title in the resolved
     target — a STRONGER claim than a symbol anchor makes today, which is checked by substring, not
@@ -5318,8 +5330,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   still alias-labelled — is filed under *"SI-22.4 rider (2)"* above with a **named owner
   (Christian)** and a **stated gate** (`opts.labelOf` must accept a seat id), explicitly NOT as an
   adjacency. Do not re-file it as "adjacent to" anything.
-- [ ] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
-  re-materialises the prototype.** Found by the SI-22.4 round-3 re-review, 2026-08-23, while
+- [x] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
+  re-materialised the prototype.** — **FIXED, v4.9 W1 (2026-08-25)** by seeding on the far side
+  of the parse at the single embed site (`electron/setup-ui.js :: buildWizardScript`,
+  `Object.assign(Object.create(null), …)`), pinned by a vm-eval test that was RED at HEAD —
+  see the ticked release-cut pointer entry for the record. The generalizable rule this entry
+  states below stands. Found by the SI-22.4 round-3 re-review, 2026-08-23, while
   sweeping uncapped for every spelling of the alias-table hazard. `getDefaultAliases()` is
   null-prototype at HEAD, but `electron/setup-ui.js` and `electron/setup-ui-alias-script.js`
   `JSON.stringify` it and re-embed it as a `<script>` literal (`var defaultAliases = {…}`), which
@@ -6096,7 +6112,8 @@ issue #138 is closed.)
   hazard is **key order** changing `run.json` bytes, which the order-insensitive pins would not
   catch. PR1F-3's proposed expression was found to be a **constant** (`res.ok` is always false at
   `run-stages.js:181`), so it needs a design call.
-- [ ] **KNOWN_VARIABLES single-source (T3-m2)** — hard gate, but only bites when `{{input}}` lands.
+- [x] **KNOWN_VARIABLES single-source (T3-m2)** — ~~hard gate, but only bites when `{{input}}`
+  lands~~ **DONE, v4.9 W1 (2026-08-25)** — see the ticked T3-m2 entry under *Next-rev hard gates*.
 
 ### Explicitly NOT in v4.8.0
 
@@ -6358,7 +6375,13 @@ Four items surfaced while cutting `[Unreleased]` → `[4.8.0]`. None was in the 
 Each is a live statement in a **shipped** file — `package.json`'s `files` ships `src/`, `skills/`
 and top-level `docs/*.md`.
 
-- [ ] **`src/sidecar/models.js :: fmtProbeLine` still prints `(accepted but not serving)`.**
+- [x] **`src/sidecar/models.js :: fmtProbeLine` printed `(accepted but not serving)`.** —
+  **FIXED, v4.9 W1 (2026-08-25):** the SILENT parenthetical now reads
+  `(no output within the probe window)` — a classification statement, not an acceptance
+  assertion — with the standalone pin updated and `docs/usage.md:406`'s verbatim example line
+  co-edited in the same commit (it quotes the runtime string). Class-name uses of
+  "accepted-but-silent" (`docs/configuration.md`, `no-output-backstop.js`'s comment) stand —
+  they name the classification, which is unchanged. Original filing:
   Owner-ruled 2026-08-23 as a product nit, **not** a release blocker: `docs/usage.md:406` quotes the
   runtime string and adds the honest caveat beside it, and nothing in the changelog claims the CLI
   line was corrected. What is left is that the terminal line asserts endpoint acceptance while the
@@ -6392,8 +6415,15 @@ and top-level `docs/*.md`.
   - **Gate:** none today. The sweep that produced this finding was
     `git grep -nE "240s|120s|240000|120000"`, uncapped, over the whole tree.
 
-- [ ] **The second-opinion skill's Stage-4 consensus headings still gloss Confirmed as "(≥ 2 peer
-  agreements, agrees dominate)"**, omitting the `a = 1, d = 0` case — `skills/second-opinion/SKILL.md:285`
+- [x] **The second-opinion skill's Stage-4 consensus headings glossed Confirmed as "(≥ 2 peer
+  agreements, agrees dominate)"**, omitting the `a = 1, d = 0` case — **FIXED, v4.9 W1
+  (2026-08-25):** both headings now read *"(≥ 2 peer agreements with agrees dominating — or a
+  lone corroborating peer with zero disputes)"*; the entry's own gate was run — both phrasings
+  re-grepped repo-wide, survivors are only the historical/frozen classes (this filing, the
+  released CHANGELOG entry, the 2026-06-23 frozen spec, MODEL-NOTES incident narrations).
+  ⚠️ The non-git runtime copy at `~/.claude/skills/second-opinion` carries the same two lines
+  and still needs the same edit (machine-local; handled outside this repo). Original filing —
+  anchors `skills/second-opinion/SKILL.md:285`
   and `skills/second-opinion/COUNCIL-DESIGN.md:113`. The formal cascade rows in both files were
   corrected in v4.8.0 (`c0a7c728`); that commit touched only the cascade table and two other
   bullets, so the *presentation* headings — the ones a Claude running the skill actually follows —
@@ -6402,9 +6432,41 @@ and top-level `docs/*.md`.
   - **Gate:** `docs/council.md` carries no such gloss (grep: zero hits), so the correct anchor has
     no twin. Fix both headings together and re-grep the phrase repo-wide before claiming closure.
 
-- [ ] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialises `Object.prototype` on the alias table.** Anchor on the variable name, not a line number -- it was `:37` at v4.8.0 and drifted to `:41` on branch `fix/138-model-level-default` (verified 2026-08-24); this file has already moved once.
+- [x] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialised `Object.prototype` on the alias table.** — **FIXED, v4.9 W1 (2026-08-25):** the single embed site now seeds on the far side of the parse — `Object.assign(Object.create(null), ${defaultAliasesJson})` — so inherited names (`toString`, `constructor`) are unreachable through every bare-index reader of the page-level `var defaultAliases`. Pinned RED-before-GREEN by a vm-eval test (`tests/electron/setup-ui-proto.test.js`) named after the rule: *a null-prototype table cannot cross a serialization boundary and stay null-prototype*. Original filing — anchor on the variable name, not a line number (it was `:37` at v4.8.0 and drifted twice before the fix):
   `JSON.stringify(getDefaultAliases())` is re-embedded as a page literal, and the parser always
   gives the result a normal prototype, so the null-prototype seed this release added does not reach
   the Electron wizard. Traced and inert (`JSON.stringify` drops function values before the write,
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
+
+## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
+
+Filed past-tense in the same commit as the fixes, per the falsified-record rule.
+
+- **The `tests/mcp-headless-e2e.integration.test.js` double failure — DECIDED: live-LLM flake,
+  not a session leak; the standing "Jest did not exit" warning was a REAL, separate defect.**
+  Measured (keyless rail + `--detectOpenHandles`): the failures cannot be a leak — fresh
+  `mkdtempSync` dir and fresh server per run, `afterAll` closes on all paths — but the copied
+  `createMcpClient` helper leaked timers deterministically in THREE suites (`request()`'s 10 s
+  timeout never cleared on resolve; `close()`'s 3 s SIGKILL fallback never cleared), six open
+  handles measured. Fixed in all three (`mcp-headless-e2e`, `mcp-protocol`,
+  `shared-server-e2e`), re-measured at zero; `afterAll` now also aborts a still-running task on
+  failure paths (bounded real-money leak), and the stale `--forceExit` comment was corrected —
+  the live rail never had it. The gate is trustworthy; a live-tier failure is re-run variance
+  on a real LLM unless a NEW mechanism is measured.
+- **Council B2 (bare id offered under an empty vendor namespace goes gate-invalid when the key
+  arrives later) — ruling V16: self-diagnose at the failure site.** `catalogGate`'s
+  `model_not_found` on a `direct`-gateway bare id whose `openrouter/` twin classifies valid now
+  carries the `repairFabricatedAlias` hint (`doctor --fix` is the remediation layer), mirroring
+  the `localHint` precedent. Offer-under-`unknown` stays deliberate; revalidate-on-key-add is
+  the filed follow-up, not built.
+- **Council A4 (`directFormIfProven` TOCTOU via the two setup IPC fetches) — ruling V17: closed
+  structurally.** The wizard's apply handler now consumes the SAME catalog snapshot the offer
+  was built from (per-provider snapshot minted at the save-key build site), so the
+  check-vs-use window is gone; `directFormIfProven` and its A4 pin
+  (`tests/model-canonicalization.test.js`) are byte-untouched, exactly as that pin's reasoning
+  requires.
+- **`MAX_CATALOG_AGE_MS` mirror (doctor-alias-check vs cli-handlers-doctor)** — retired to one
+  source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
+  it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is
+  acyclic, measured). Three copies → one; no drift test needed.

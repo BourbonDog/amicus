@@ -18,7 +18,7 @@ const baseUrlCheck = require('./utils/doctor-base-url-check');
 // including its --fix repair of fabricated bare ids. Same split rationale.
 const aliasCheck = require('./utils/doctor-alias-check');
 
-const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
+const { DEFAULT_MAX_AGE_MS: MAX_CATALOG_AGE_MS } = require('./utils/model-catalog'); // 24h — single source
 
 /** #56: keep `doctor --fix`'s electron self-heal from ever hanging on a slow disk/network. */
 const FIX_TIMEOUT_MS = 90 * 1000;

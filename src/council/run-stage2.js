@@ -172,10 +172,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         // is returned only for shape consistency, never read past this point.
         return { aborted: solo.exitCode, judgeResults, extraRows };
       }
-      // Every -q<N> launch gets a row — INCLUDING a repair that failed: the
-      // error status rides naturally off solo.leg (null/'error'-status leg ⇒
-      // buildRunStatsEntry's own never-invent defaults), no special-casing needed.
-      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: judge, role: 'repair', wasChair: false }));
+      // Every -q<N> launch gets a row — INCLUDING a failed repair (null/'error' leg ⇒
+      // buildRunStatsEntry's never-invent defaults); 'unstructured' is flat — !parsed.ok holds at every push (v4.9 V18).
+      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: judge, role: 'repair',
+        wasChair: false, conformance: 'unstructured' }));
       const out = (solo.leg && solo.leg.summary) || '';
       if (out.trim()) { judging = out; }
       parsed = parseJudgeOutput(out, parseCtx);

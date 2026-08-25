@@ -157,7 +157,7 @@ function fmtProbeCost(cost) {
 function fmtProbeLine(r) {
   const head = `  ${(PROBE_LABELS[r.outcome] + ':').padEnd(8)}${r.alias} -> ${r.target}`;
   if (r.outcome === 'served') { return `${head} (${fmtProbeCost(r.cost)})`; }
-  if (r.outcome === 'accepted-but-silent') { return `${head} — ${r.detail} (accepted but not serving)`; }
+  if (r.outcome === 'accepted-but-silent') { return `${head} — ${r.detail} (no output within the probe window)`; }
   return `${head} — ${r.detail}`;
 }
 
