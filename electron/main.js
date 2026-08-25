@@ -327,7 +327,7 @@ function createAmicusWindow() {
 async function createSetupWindow() {
   // Lazy-load setup UI to avoid loading it for sidecar mode
   const { buildSetupHTML } = require('./setup-ui');
-  const { resolveQuickPicks } = require('../src/utils/quick-picks');
+  const { resolveQuickPicks, toStorableRoute } = require('../src/utils/quick-picks');
   let quickPicks;
   const shortlists = {};
   try {
@@ -341,7 +341,7 @@ async function createSetupWindow() {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
-          recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter),
+          recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
     }
@@ -520,7 +520,7 @@ function createSettingsChildWindow() {
   // createSetupWindow awaits. A missing or corrupt cache reads back as null
   // and degrades to the same pinned fallback buildSetupHTML already applies
   // when no quickPicks are given.
-  const { resolveQuickPicks } = require('../src/utils/quick-picks');
+  const { resolveQuickPicks, toStorableRoute } = require('../src/utils/quick-picks');
   const { readCache } = require('../src/utils/model-catalog');
   let quickPicks;
   const shortlists = {};
@@ -534,7 +534,7 @@ function createSettingsChildWindow() {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
-          recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter),
+          recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
     }

@@ -156,6 +156,27 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
             for (var i = 0; i < provs.length; i++) {
               if (mc.routes[provs[i]] === currentModel) { routingChoices[mc.alias] = provs[i]; break; }
             }
+            // F3: the shortlist <select> is server-rendered with its OWN
+            // recommendedId-derived "selected" option and never consults
+            // modelChoiceIds at init -- so a saved drill-down pick silently
+            // reverted to the family flagship on every reopen (Step 3's
+            // alias table showed the saved value while Step 2 showed a
+            // different one). Mirror the customDefaultModel restore just
+            // above: when the saved alias value names one of THIS card's
+            // shortlist rows, seed modelChoiceIds (the .model-pick change
+            // handler's own state) and push the same value into the DOM
+            // <select> so a no-op reopen-and-Finish round-trips cleanly.
+            var sel = document.querySelector('.model-pick[data-alias="' + mc.alias + '"]');
+            if (sel) {
+              for (var j = 0; j < sel.options.length; j++) {
+                if (sel.options[j].value === currentModel) {
+                  sel.value = currentModel;
+                  modelChoiceIds[mc.alias] = currentModel;
+                  modelOpenrouterIds[mc.alias] = sel.options[j].getAttribute('data-or') || null;
+                  break;
+                }
+              }
+            }
           }
         });
         Object.keys(cfg.aliases).forEach(function(k) {
@@ -385,21 +406,22 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
     document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
-    var writes = [];
-    var r2 = document.querySelector('input[name="default-model"]:checked');
-    if (!window.customDefaultModel && r2) {
-      var mc2 = null;
-      for (var i2 = 0; i2 < modelChoicesData.length; i2++) {
-        if (modelChoicesData[i2].alias === r2.value) { mc2 = modelChoicesData[i2]; break; }
-      }
-      if (mc2) {
-        var routeId2 = pickRouteFor(mc2);
-        if (routeId2) { writes.push(mc2.alias + ' \\u2192 ' + routeId2); }
-      }
-    }
+    // F4: mirror the EXACT call Finish makes (collectAliasWrites), not just
+    // the checked radio, so Step 4 can never under-report what Finish is
+    // about to write. Before this fix, buildReview re-derived "writes" from
+    // the checked radio alone -- a drilled-down pick on a card that was NOT
+    // the checked default (or any drilled pick at all, under a custom
+    // default) was invisible here and fell through to the literal 'No
+    // alias changes', even though Finish wrote it. sidecar:save-config has
+    // no confirmation step, so this review IS the only gate.
+    var aliasWritesPreview = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
+    var writes = Object.keys(aliasWritesPreview).map(function(alias) {
+      var val = aliasWritesPreview[alias];
+      return alias + ' \\u2192 ' + (val === null ? '(deleted)' : val);
+    });
     document.getElementById('review-routing').textContent =
       writes.length > 0 ? writes.join(', ') : 'No alias changes';
-    var editCount = Object.keys(aliasEdits).length;
+    var editCount = Object.keys(aliasWritesPreview).length;
     var reviewAliases = document.getElementById('review-aliases');
     if (reviewAliases) {
       reviewAliases.textContent = editCount > 0 ? editCount + ' alias(es) modified' : 'No changes';
@@ -435,19 +457,23 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     updateWritePreviews();
   });
 
-  // issue 138 (fix round 1, Finding 1): assemble aliasWrites for Finish --
-  // the aliasEdits (Step 3) overlay first, then the selected quick-pick
-  // alias, then every OTHER alias whose drill-down <select> fired change.
-  // Before the Task-3 dropdown existed there was nothing to lose by writing
-  // only the selected alias; now a drilled-down pick on a card that is NOT
-  // the checked default would silently vanish without this. A dropdown
-  // change is an explicit touch exactly like selecting a quick pick (see
-  // pickRouteFor's own comment on that phrase), so it gets the same
-  // precedence: written after the aliasEdits overlay, same as the selected
-  // alias already was, so this doesn't change that existing precedence --
-  // it only extends it to more aliases. modelChoiceIds only ever gains an
-  // entry from the change handler above, never from server-rendered HTML,
-  // so a card the user never touched can't accidentally end up in here.
+  // issue 138 (fix round 1, Finding 1; precedence description corrected in
+  // the F2/F6 fix wave): assemble aliasWrites for Finish -- the aliasEdits
+  // (Step 3) overlay first, then the selected alias's resolved route
+  // (custom default or checked quick-pick), then every OTHER alias whose
+  // drill-down <select> fired change. Before the Task-3 dropdown existed
+  // there was nothing to lose by writing only the selected alias; now a
+  // drilled-down pick on a card that is NOT the checked default would
+  // silently vanish without this. Precedence is NOT uniform across the two
+  // groups, unlike an earlier version of this comment claimed: only the
+  // selected alias clobbers its aliasEdits entry (the ONE place that's
+  // permitted -- user-locked decision #2); every OTHER drilled-down alias
+  // defers to aliasEdits and is written only when Step 3 left it untouched
+  // (see the hasOwnProperty guard below and ruling R6a, which already
+  // described the real behaviour correctly). modelChoiceIds only ever
+  // gains an entry from the change handler above, never from
+  // server-rendered HTML, so a card the user never touched can't
+  // accidentally end up in here.
   function collectAliasWrites(selectedAlias, isCustomDefault) {
     var aliasWrites = {};
     Object.keys(aliasEdits).forEach(function(k) {
@@ -479,7 +505,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // bitten by that class of bug before -- see the proto:null guard in
     // src/sidecar/setup.js resolveChoice).
     Object.keys(modelChoiceIds).forEach(function(alias) {
-      if (alias === selectedAlias) { return; } // already handled above, unconditionally
+      if (!isCustomDefault && alias === selectedAlias) { return; } // handled above, but only in that branch
       if (Object.prototype.hasOwnProperty.call(aliasEdits, alias)) { return; }
       writeAliasRoute(alias);
     });

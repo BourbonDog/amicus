@@ -21,6 +21,26 @@ const PROVIDER_NAMES = {
 };
 
 /**
+ * F5: HTML-escape a value for safe interpolation into BOTH an attribute
+ * value (double-quoted) and element text content. Catalog ids are
+ * data-controlled (this repo's own convention documents them as such --
+ * see renderSearchResults in electron/setup-ui.js, which uses createElement
+ * + textContent instead of a template string for this exact row source),
+ * so every id/name reaching a template string here must be escaped rather
+ * than trusted.
+ * @param {*} value
+ * @returns {string}
+ */
+function escapeAttr(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Check if a model has at least one route with a configured key.
  * When no keys are configured at all (empty configuredKeys), all models are available
  * to allow the initial render before Step 1 completes.
@@ -89,7 +109,7 @@ function buildModelPickHTML(alias, shortlist) {
   const opt = (r) => {
     const price = r.pricePerMInput === null ? '' : ` · $${r.pricePerMInput.toFixed(2)}/M`;
     const sel = r.isRecommended ? ' selected' : '';
-    return `<option value="${r.id}" data-or="${r.openrouterId || ''}"${sel}>${r.id}${price}</option>`;
+    return `<option value="${escapeAttr(r.id)}" data-or="${escapeAttr(r.openrouterId || '')}"${sel}>${escapeAttr(r.id)}${price}</option>`;
   };
   let html = `<select class="model-pick" data-alias="${alias}">`;
   html += `<optgroup label="Suggested">${shortlist.suggested.map(opt).join('')}</optgroup>`;
@@ -189,4 +209,4 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
   </div>`;
 }
 
-module.exports = { buildModelSearchHTML, buildModelStepHTML, buildModelPickHTML, PROVIDER_NAMES };
+module.exports = { buildModelSearchHTML, buildModelStepHTML, buildModelPickHTML, PROVIDER_NAMES, escapeAttr };
