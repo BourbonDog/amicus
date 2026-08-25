@@ -550,17 +550,41 @@ async function runReadlineSetup() {
       // the flagship route for this alias only. Guarded — a picker failure
       // must never abort a setup run that has already collected keys.
       //
-      // R4a (fix round 2, supersedes R4's noUpgrade disjunct): the governing
-      // rule is simply never ask about the same vendor twice in one run --
-      // `vendorAliasesWritten` IS the record of having already asked (via
-      // the per-provider phase's own priced picker). `chosen.noUpgrade`
-      // does NOT imply no question was asked for this vendor: a user can
-      // type a known alias name (noUpgrade=true) for a vendor the
-      // per-provider phase already walked through this run, and that must
-      // still be skipped. Whenever noUpgrade is true AND the alias is
-      // genuinely unasked-about, `!vendorAliasesWritten.has(...)` is
-      // already true on its own, so dropping the noUpgrade disjunct loses
-      // no legitimate firing case -- only the double-ask.
+      // R4a (fix round 2, supersedes R4's noUpgrade disjunct; wording
+      // corrected in the F7 fix wave -- the previous wording claimed the
+      // governing rule was "never ask about the same vendor twice in one
+      // run", which this guard cannot implement and does not):
+      //
+      // `vendorAliasesWritten` holds PROVIDER names (runProviderDefaultPickers
+      // adds each entry of `foundKeys`, e.g. 'google'/'openai'/'anthropic'/
+      // 'deepseek'), while `chosen.alias` is a FAMILY ALIAS name ('gemini',
+      // 'gemini-pro', 'gpt', 'opus', 'deepseek'). The two prompts write
+      // DIFFERENT config keys -- the per-provider picker writes
+      // `config.aliases[provider]` (e.g. `aliases.google`), this drill-down
+      // writes `config.aliases[chosen.alias]` (e.g. `aliases.gemini`) -- so
+      // `!vendorAliasesWritten.has(chosen.alias)` only skips the drill-down
+      // when the alias STRING happens to collide with an already-written
+      // provider name. Today that's 'deepseek' alone (alias 'deepseek' ===
+      // provider 'deepseek'); every other family alias never collides, so
+      // this drill-down still fires for those even after the per-provider
+      // phase ran for that family's vendor -- correctly: the two prompts
+      // bind different keys, they are not "the same vendor twice".
+      //
+      // TRAP: re-keying this guard to `pick.vendorPath` (so it tests the
+      // actual vendor instead of the alias-name coincidence) looks like the
+      // obvious fix for the mismatch above and is NOT one -- it was
+      // measured to delete issue 138's feature entirely for every user
+      // holding a direct key, by skipping the drill-down for every family
+      // whose per-provider picker already ran this session. Leave this
+      // guard exactly as it is.
+      //
+      // `chosen.noUpgrade` does NOT imply no question was asked for this
+      // vendor: a user can type a known alias name (noUpgrade=true) for a
+      // vendor the per-provider phase already walked through this run, and
+      // that must still be skipped. Whenever noUpgrade is true AND the
+      // alias is genuinely unasked-about, `!vendorAliasesWritten.has(...)`
+      // is already true on its own, so dropping the noUpgrade disjunct
+      // loses no legitimate firing case -- only the double-ask.
       if (pick && !vendorAliasesWritten.has(chosen.alias)) {
         try {
           const { buildModelShortlist } = require('../utils/model-shortlist');

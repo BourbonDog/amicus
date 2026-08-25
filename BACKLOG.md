@@ -3320,7 +3320,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   of this** and stays open; do not read "Wave 2 done" as covering it. See **"NEXT TASK — Wave
   2.5"** below for the live resume point — R16 next, then Wave 3.
   ⚠️ **Of that "then" half, `SI-25` has since shipped** — 2026-08-23, its own PR, **all three** sites
-  (ruling R25-1), never inside a wave. `#138` Pieces 1+2 remain open and unscheduled.
+  (ruling R25-1), never inside a wave. ⚠️ **`#138` Pieces 1+2 are now DONE** — branch
+  `fix/138-model-level-default` (2026-08-24), not yet merged to `main`; see the ✅ entry at
+  `:6023` for the full record.
 
   **Owner ruling (2026-08-22) — the wave structure for the remainder of v4.8.0:**
   - **Wave 1** — batched, one PR. **DONE** (this PR: `T6.6`, `SI-14`, `#135 C0`).
@@ -3370,10 +3372,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   not yet placed in a wave below — schedule it, do not assume it rides Wave 3). ⚠️ **`SI-25` was
   scheduled and SHIPPED on 2026-08-23** — its own PR, outside every wave, and **all three** sites
   rather than the two named here (ruling R25-1). ⚠️ **`SI-22.4` also SHIPPED 2026-08-23** — Wave 3's
-  last item, as ordered; **neither member named on this line is outstanding.** `#138`
-  Pieces 1+2 remain **not individually re-measured**, reported from the phasing doc's Phase 7 list
-  only — re-derive before scheduling it, on the same "measure before you plan" precedent this
-  record applies throughout.
+  last item, as ordered; **neither member named on this line is outstanding.** ⚠️ **`#138`
+  Pieces 1+2 are now DONE** — branch `fix/138-model-level-default` (2026-08-24), not yet merged
+  to `main`; see the ✅ entry at `:6023` for the full record.
 
   ⚠️ **Carry forward: `src/council/run-retry.js` is at 300/300, ZERO headroom** (see the dedicated
   warning immediately below — unchanged by `R16`, which does not touch that file).
@@ -3970,8 +3971,10 @@ column's rendering), and **stays**. Both the dropped "dedupe" claim and the live
 entry cite the same function, `listCouncilRuns`, but they are different claims about it — only one
 of them was ever filed with a defect behind it.
 
-`#138` Pieces 1+2 remain **NOT individually measured, reported from the phasing doc only.**
-Re-derive before planning it — this section's whole point is that unmeasured rows go stale.
+⚠️ **`#138` Pieces 1+2 are now DONE** — branch `fix/138-model-level-default` (2026-08-24), not
+yet merged to `main`; see the ✅ entry at `:6023` for the full record. This line was correct
+when written; the section's "measure before you plan" point stands for every other still-open
+row here.
 
 
 ### v4.8 Phase 2 T-A8 — truth pass, and what it filed (2026-08-17)
@@ -6030,9 +6033,11 @@ pick, not only the checked default, and a Step-3 route edit on a non-selected al
 stale dropdown touch. Shipped in the same branch, not separately tracked pieces: the stale
 `.model-resolved` label refreshes live on route/model change, `provider-default-picker.js`'s
 docstrings no longer claim row ids are never fabricated, and the Settings window's Step 2 now
-builds from the live on-disk catalog instead of a stale one. Verification: 554 suites / 8022
-passed / 8 skipped (up from the 551/7978/8 baseline at `2c2d20a0`); `check-file-sizes.js --all`,
-`npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
+builds from the live on-disk catalog instead of a stale one. Verification: 554 suites / 8 skipped,
+full pass (exact passed-test count omitted here -- it rotted twice already under later commits on
+this same branch, same reasoning as `9278f7c0`'s drop of this paragraph's commit count; see
+`npm test` for the current number) (up from the 551/7978/8 baseline at `2c2d20a0`);
+`check-file-sizes.js --all`, `npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
 has no Jest coverage (no jsdom in this repo, and `pickRouteFor` is an in-page closure) — it is
 covered by CDP smoke only.
 **Piece 3 remains OPEN, deferred to v4.9.0**

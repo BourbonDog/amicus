@@ -714,7 +714,7 @@ At the site where `quickPicks` is resolved (`~:327-337`), after `resolveQuickPic
     try {
       shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
         catalog: catalogModels,
-        recommendedId: p.routes && (p.routes[p.vendorPath] || p.routes.openrouter),
+        recommendedId: toStorableRoute(p),
       });
     } catch (_e) { /* a shortlist failure must never block the wizard */ }
   }

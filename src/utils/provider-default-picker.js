@@ -98,9 +98,20 @@ function chooseRowId(vendor, isDirect, row, paired) {
  * the bare form via `toCanonicalDefault` -- that id is SYNTHESISED, not
  * verbatim. Measured 2026-08-24: all 14 `deepseek` rows are derived this
  * way, because the catalog carries no `deepseek/*` rows. This is safe for
- * routing (a bare id is policy-routed direct-first and falls back to
- * OpenRouter) but it is not a catalog-confirmed direct id, and callers
- * that need that distinction should consult
+ * routing, but not for the reason an earlier version of this comment
+ * claimed (F8 fix wave, tracked separately as issue #195 -- do not "fix"
+ * the routing behavior itself here, only this sentence was wrong): a bare
+ * id is NOT failure-routed direct-first-with-OpenRouter-fallback.
+ * gateway-router.js's auto-mode step 7 is
+ * `if (rq.keys[vendor] && hasForm(rq, 'direct'))`, and `hasForm` is
+ * `!req.gatewayIds || req.gatewayIds[gateway] !== undefined` -- a bare id
+ * carries no `gatewayIds` at all, so `hasForm(rq, 'direct')` is VACUOUSLY
+ * true on this path; the only real gate is `rq.keys[vendor]`. The fallback
+ * to OpenRouter is therefore KEY-ABSENCE-driven (no key for `vendor`), not
+ * a check that the direct form actually resolves -- that check only fires
+ * on the ALIAS path, where `gatewayIds` IS attached and `hasForm` can
+ * genuinely be false. It is not a catalog-confirmed direct id either way,
+ * and callers that need that distinction should consult
  * `curated-models.js`'s `directFormProvenance()`.
  * @param {Array<{id:string,name:string,contextLength:(number|null)}>} catalog
  * @param {string} vendor
