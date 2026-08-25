@@ -6,7 +6,10 @@ name: Council Review
 # non-Claude chair verdict — and this workflow publishes the result three
 # ways: a Council Review check run (Confirmed findings as annotations), a
 # sticky PR comment, and the full run directory as an evidence artifact.
-# Gating is opt-in via the fail_on input (default: report-only).
+# Gating now defaults ON via the fail_on input, at its most permissive
+# setting: the check fails ONLY when the chair returns "Fundamental
+# rethink". "Fix these first" still passes. Pass fail_on: fix to fail on
+# anything short of "Ship it", or fail_on: none for report-only.
 
 on:
   pull_request:
@@ -32,7 +35,7 @@ on:
       fail_on:
         description: 'Gate policy: none (report-only), fix (fail unless the chair says Ship it), rethink (fail only on Fundamental rethink)'
         type: string
-        default: 'none'
+        default: 'rethink'
       max_cost:
         description: Whole-run cost ceiling in USD (advisory on cold runners)
         type: string
@@ -94,7 +97,11 @@ jobs:
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
-      FAIL_ON: ${{ inputs.fail_on || 'none' }}
+      # rethink gates the PR on the chair's strongest verdict only: the check
+      # fails when the chair returns "Fundamental rethink", and PASSES on both
+      # "Fix these first" and "Ship it". A null chair verdict (parse failure)
+      # maps to `neutral` below, not `failure` — a dead chair never hard-fails.
+      FAIL_ON: ${{ inputs.fail_on || 'rethink' }}
       MAX_COST: ${{ inputs.max_cost || '2.00' }}
       # ⚠️ THIS is the load-bearing default, not the `default:` under workflow_call.inputs.
       # A `pull_request` trigger supplies no `inputs`, so every automatic council review on a
