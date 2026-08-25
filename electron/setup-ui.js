@@ -465,9 +465,24 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // this review must only SHOW entries that actually differ from
     // savedAliases -- otherwise a no-op reopen reports "N alias(es)
     // modified" on the one screen that has no confirmation step after it.
+    // N-b (council review, PR 196): an alias that was NEVER in savedAliases
+    // reads as undefined there, while a delete-write (Step 3's delete
+    // button, for one of the five default aliases -- see aliasEdits[alias]
+    // = null in setup-ui-alias-script.js) is null. null !== undefined is
+    // true, so without this normalization a default alias that was never
+    // explicitly saved (a config written by an older/partial flow that
+    // skipped default-seeding -- addAlias() in src/sidecar/setup.js is one
+    // such path) would show "alias -> (deleted)" for deleting something
+    // that was never there. saveConfig() already drops falsy alias values
+    // (src/utils/config.js), so that write is a true no-op on disk; the
+    // review must agree. Reading savedAliases[alias] as null (not
+    // undefined) when the key is absent makes "delete of an absent alias"
+    // compare equal to "still absent" without changing any other case --
+    // every other savedAliases value here is a non-empty string.
     var changedWrites = {};
     Object.keys(aliasWritesPreview).forEach(function(alias) {
-      if (aliasWritesPreview[alias] !== savedAliases[alias]) {
+      var oldVal = Object.prototype.hasOwnProperty.call(savedAliases, alias) ? savedAliases[alias] : null;
+      if (aliasWritesPreview[alias] !== oldVal) {
         changedWrites[alias] = aliasWritesPreview[alias];
       }
     });

@@ -63,6 +63,25 @@ describe('promptForVendorModel', () => {
     expect(asked).toHaveLength(2);
   });
 
+  // F1 (council review, PR 196): the loop used to print feedback only on
+  // the FIRST invalid entry -- a second invalid entry on the final attempt
+  // fell through in total silence: the function still returned null (family
+  // default kept) but the user's last keystroke visibly did nothing. Both
+  // invalid entries must now be acknowledged, and the final one must also
+  // state the consequence so the silent fallback isn't mistaken for a hang.
+  test('a second invalid entry on the final attempt is not silent -- it states the fallback', async () => {
+    const lines = [];
+    const { ask } = fifoAsk(['zzz', 'yyy']);
+    const chosen = await promptForVendorModel(ask, l => lines.push(l), shortlist(), 'deepseek');
+    expect(chosen).toBeNull();
+    expect(lines).toContain('Invalid choice: "zzz".');
+    // Not just "printed something" -- printed on the EXHAUSTED attempt AND
+    // named the fallback (the family default), not a generic re-ask.
+    const finalLine = lines[lines.length - 1];
+    expect(finalLine).toContain('Invalid choice: "yyy"');
+    expect(finalLine.toLowerCase()).toContain('default');
+  });
+
   test('the prompt does NOT contain "Pick a number"', async () => {
     // Guard rail: tests/sidecar/setup.test.js:392,475 branch on that literal
     // and would answer '' here, making any new coverage fake-green.

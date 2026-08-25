@@ -762,6 +762,7 @@ describe('setup-ui wizard', () => {
     });
   });
 
+
   describe('F4: Step 4 review mirrors exactly what Finish will write', () => {
     // Extracts the REAL buildReview (+ its toBareIfDirect/pickRouteFor/
     // collectAliasWrites dependencies, same as the F2 harness above) via
@@ -879,6 +880,39 @@ describe('setup-ui wizard', () => {
         // cards' saved values already name their own shortlist rows.
         modelChoiceIds: { gemini: 'google/gemini-x', deepseek: 'deepseek/deepseek-v4-pro' },
         savedAliases: { gemini: 'google/gemini-x', deepseek: 'deepseek/deepseek-v4-pro' },
+        document: fakeDocument, window: fakeWindow
+      });
+      buildReview();
+      expect(els['review-routing'].textContent).toBe('No alias changes');
+      expect(els['review-aliases'].textContent).toBe('No changes');
+    });
+
+    // N-b (council review, PR 196): saveConfig() drops falsy alias values
+    // (src/utils/config.js), so deleting an alias that was never in
+    // savedAliases is a true no-op on disk -- the key was absent before the
+    // write and is still absent after it. Before the fix, buildReview
+    // compared `aliasWritesPreview[alias] !== savedAliases[alias]` directly:
+    // `null !== undefined` is true, so this no-op rendered as "gemini ->
+    // (deleted)" -- reproducing exactly the over-reporting bug N1 exists to
+    // prevent. Reachable for real: a config written by an older/partial
+    // flow (e.g. addAlias() in src/sidecar/setup.js, which does not seed
+    // getDefaultAliases()) can omit a default alias entirely, and Step 3
+    // still renders a deletable row for it (buildAliasEditorHTML is always
+    // built from getDefaultAliases(), not from cfg.aliases).
+    it('N-b: deleting a default alias that was never in savedAliases reports NO change (true on-disk no-op)', () => {
+      const els = {
+        'review-keys': fakeEl(), 'review-model': fakeEl(),
+        'review-routing': fakeEl(), 'review-aliases': fakeEl()
+      };
+      const fakeDocument = {
+        getElementById: (id) => els[id],
+        querySelector: () => null // no radio checked -- deletion isn't tied to the default pick
+      };
+      const fakeWindow = { customDefaultModel: null };
+      const buildReview = extractBuildReview()({
+        modelChoicesData: twoCardData,
+        aliasEdits: { gemini: null }, // Step 3 delete button's write for a default alias
+        savedAliases: { deepseek: 'deepseek/deepseek-v4-pro' }, // 'gemini' key absent -- never saved
         document: fakeDocument, window: fakeWindow
       });
       buildReview();

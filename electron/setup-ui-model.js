@@ -119,7 +119,14 @@ function buildModelPickHTML(alias, shortlist) {
   let html = `<select class="model-pick" data-alias="${escapeAttr(alias)}">`;
   html += `<optgroup label="Suggested">${shortlist.suggested.map(opt).join('')}</optgroup>`;
   if (shortlist.rest.length > 0) {
-    html += `<optgroup label="All ${shortlist.total} models">${shortlist.rest.map(opt).join('')}</optgroup>`;
+    // council review, PR 196 (F2): this optgroup holds ONLY `rest` -- label it
+    // by rest.length, not shortlist.total, or the label overstates what's in
+    // it (e.g. "All 14 models" over 6 rows when 8 are already under
+    // "Suggested" above). Singular/plural handled explicitly so a 9-row
+    // vendor with one leftover row doesn't read "1 models".
+    const restCount = shortlist.rest.length;
+    const restLabel = restCount === 1 ? '1 more model' : `${restCount} more models`;
+    html += `<optgroup label="${restLabel}">${shortlist.rest.map(opt).join('')}</optgroup>`;
   }
   return html + '</select>';
 }

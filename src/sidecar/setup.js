@@ -406,7 +406,16 @@ async function promptForVendorModel(ask, print, shortlist, vendorPath) {
       if (n >= 1 && n <= visible.length) { return visible[n - 1].id; }
     }
     if (answer.includes('/')) { return answer; }
-    if (attempt === 0) { print(`Invalid choice: "${answer}".`); }
+    // F1 (council review, PR 196): the final attempt used to fall through
+    // silently -- the loop just exited and the caller kept the family
+    // default with no feedback at all, so the user's last keystroke
+    // visibly did nothing. Both attempts now print, but the last one also
+    // states the consequence instead of implying a further retry.
+    if (attempt === 0) {
+      print(`Invalid choice: "${answer}".`);
+    } else {
+      print(`Invalid choice: "${answer}". Keeping the family default.`);
+    }
   }
   return null;
 }

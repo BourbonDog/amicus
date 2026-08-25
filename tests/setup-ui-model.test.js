@@ -6,7 +6,7 @@
  * provider routing toggles, and PROVIDER_NAMES export.
  */
 
-const { buildModelStepHTML, buildModelSearchHTML, PROVIDER_NAMES, escapeAttr } = require('../electron/setup-ui-model');
+const { buildModelStepHTML, buildModelSearchHTML, buildModelPickHTML, PROVIDER_NAMES, escapeAttr } = require('../electron/setup-ui-model');
 
 // Local fixture replacing the deleted MODEL_CHOICES export.
 // Matches the v2 resolved-row shape: { alias, label, blurb, source, routes }.
@@ -343,7 +343,46 @@ describe('#138 per-card model drill-down', () => {
     const html = buildModelStepHTML(choices, 'deepseek', { deepseek: true }, shortlists);
     expect(html).toContain('value="deepseek/deepseek-r1"');
     expect(html).toContain('Suggested');
-    expect(html).toContain('All 3 models');
+    // council review, PR 196 (F2): the optgroup holds ONLY `rest` (1 row
+    // here), so its label must describe that 1 row, not `shortlist.total`
+    // (3) -- "All 3 models" would overstate what's actually in the group.
+    expect(html).toContain('1 more model');
+    expect(html).not.toContain('All 3 models');
+  });
+
+  // council review, PR 196 (F2): measured on the live catalog, deepseek has
+  // total=14, suggested=8, rest=6 -- the old label read "All 14 models"
+  // over exactly 6 options. Reproduces that split and pins the label to the
+  // group's actual content (rest.length), plus a singular-count fixture so
+  // a 9-row vendor with one leftover row doesn't regress to "1 models".
+  describe('F2: "rest" optgroup label describes what it actually contains', () => {
+    const mkRow = (id, price) => ({
+      id, name: id.split('/').pop(), contextLength: 128000,
+      pricePerMInput: price, isRecommended: false,
+      directId: id, openrouterId: 'openrouter/' + id,
+    });
+
+    test('total=14, suggested=8, rest=6 -> labeled by the 6 actually present, not 14', () => {
+      const suggested = Array.from({ length: 8 }, (_, i) => mkRow(`deepseek/s${i}`, 0.1));
+      const rest = Array.from({ length: 6 }, (_, i) => mkRow(`deepseek/r${i}`, 0.2));
+      const html = buildModelPickHTML('deepseek', {
+        recommendedId: null, suggested, rest, total: 14,
+      });
+      expect(html).toContain('6 more models');
+      expect(html).not.toContain('All 14 models');
+      expect(html).not.toContain('14 more');
+    });
+
+    test('a single leftover row reads "1 more model", never "1 models"', () => {
+      const suggested = Array.from({ length: 8 }, (_, i) => mkRow(`vendor/s${i}`, 0.1));
+      const rest = [mkRow('vendor/r0', 0.2)];
+      const html = buildModelPickHTML('vendor', {
+        recommendedId: null, suggested, rest, total: 9,
+      });
+      expect(html).toContain('1 more model');
+      expect(html).not.toContain('1 more models');
+      expect(html).not.toContain('1 models');
+    });
   });
 
   // CONTROLLER RULING R5 (issue 138, 2026-08-24): this proves omitting the
@@ -483,6 +522,7 @@ describe('council review PR 196: previewId and data-alias escaping consistency',
     expect(html).toContain(`<span class="model-resolved" data-alias="${escaped}">`);
     expect(html).toContain(`<span class="write-preview" data-alias="${escaped}">`);
   });
+
 
   test('a hostile previewId is escaped in both .model-resolved text and .write-preview-id text', () => {
     const html = buildModelStepHTML(hostileChoices, hostileAlias, { deepseek: true }, {});
