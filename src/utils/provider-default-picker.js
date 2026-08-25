@@ -17,9 +17,11 @@
 const { resolveTier } = require('./model-tiers');
 const { getCostTier, loadConfig, saveConfig } = require('./config');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
-const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
 const { isLocalProvider } = require('./local-providers');
-const { classifyModel } = require('./model-classification');
+// directFormIfSafe (list-building) / directFormIfProven (persistence): see
+// model-canonicalization.js's module docstring for why these are two
+// separately-named functions rather than one with an optional mode.
+const { directFormIfSafe, directFormIfProven } = require('./model-canonicalization');
 
 /**
  * @param {{pricing?: {prompt?: string|number|null}|null}|null|undefined} orRow
@@ -50,33 +52,10 @@ function vendorRowsIn(catalog, vendor) {
 }
 
 /**
- * Direct-first canonicalization for a non-divergent vendor's OpenRouter id,
- * guarded by `classifyModel` (model-classification.js): only strips the
- * `openrouter/<vendor>/` prefix when the bare result would NOT classify
- * `invalid` against `catalogInfo` -- i.e. the vendor's direct namespace is
- * either empty (`unknown`; e.g. `deepseek`, no key ever fetched) or the bare
- * id is itself present (`valid`). When the namespace carries authoritative
- * rows that omit the bare id (`invalid`; e.g. `google`/`openai`, issue 195),
- * `orId` is returned unchanged rather than fabricating an id no row carries
- * and no key can ever resolve. Reuses `classifyModel` rather than
- * re-deriving its namespace/authoritative logic. Callers must gate
- * `DIVERGENT_VENDORS` (anthropic -- different strings, dash vs. dot) first.
- * @param {string} vendor
- * @param {string} orId an `openrouter/<vendor>/<rest>` id (or already-bare)
- * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
- * @returns {string} the bare direct id when safe, else `orId` unchanged
- */
-function directFormIfSafe(vendor, orId, catalogInfo) {
-  const bare = toCanonicalDefault(orId);
-  if (bare === orId) { return orId; } // gateway-only vendor -- no direct integration at all
-  return classifyModel(bare, 'direct', catalogInfo) === 'invalid' ? orId : bare;
-}
-
-/**
  * Choose the id a single catalog `row` should surface as in the picker.
  * Prefers a real, verbatim catalog id; only SYNTHESISES one (delegating to
- * `directFormIfSafe`, above -- see its docstring for the guard) for a
- * non-divergent vendor with no direct twin at all.
+ * `directFormIfSafe`, model-canonicalization.js -- see its module docstring
+ * for the guard) for a non-divergent vendor with no direct twin at all.
  *
  * A direct-namespace row always keeps its own (real, direct-callable) id,
  * regardless of what `pairAcrossGateways` could resolve for it -- this is
@@ -89,8 +68,9 @@ function directFormIfSafe(vendor, orId, catalogInfo) {
  * `pairAcrossGateways` found exactly one (unambiguous) direct twin. For
  * `DIVERGENT_VENDORS` (direct ids don't share a string form with
  * OpenRouter's, e.g. anthropic's dash-vs-dot versioning), the row keeps its
- * OpenRouter-prefixed id as-is -- `directFormIfSafe` is never reached for
- * them, since stripping is not even a string-safe operation on their ids.
+ * OpenRouter-prefixed id as-is -- `directFormIfSafe` gates that set FIRST
+ * and internally (model-canonicalization.js), so stripping is never even
+ * attempted on their ids, which is not a string-safe operation.
  * @param {string} vendor
  * @param {boolean} isDirect whether `row.id` is itself a direct-namespace id
  * @param {{id:string}} row
@@ -102,7 +82,6 @@ function chooseRowId(vendor, isDirect, row, paired, catalogInfo) {
   if (isDirect) { return row.id; }
   if (paired.direct) { return paired.direct; }
   if (!paired.openrouter) { return null; }
-  if (DIVERGENT_VENDORS.has(vendor)) { return paired.openrouter; }
   return directFormIfSafe(vendor, paired.openrouter, catalogInfo);
 }
 
@@ -188,12 +167,12 @@ function buildRows(catalog, vendor) {
  * Canonicalize `resolveTier`'s verbatim catalog-id output the same way row
  * ids are built (`chooseRowId`/`directFormIfSafe`), so it matches `rows`
  * exactly. Only matters when `resolveTier` fell back to an OpenRouter id (no
- * matching direct-namespace row for the tier). `DIVERGENT_VENDORS` keep that
- * id OpenRouter-prefixed; non-divergent vendors go through the same
- * `classifyModel`-guarded strip `chooseRowId` uses (issue 195) -- an
- * unconditional strip here would produce a canonical id `rows` no longer
- * carries whenever `directFormIfSafe` kept the row itself OpenRouter-
- * prefixed, defeating the match below.
+ * matching direct-namespace row for the tier). `directFormIfSafe` gates
+ * `DIVERGENT_VENDORS` itself and keeps that id OpenRouter-prefixed;
+ * non-divergent vendors go through the same `classifyModel`-guarded strip
+ * `chooseRowId` uses (issue 195) -- an unconditional strip here would
+ * produce a canonical id `rows` no longer carries whenever `directFormIfSafe`
+ * kept the row itself OpenRouter-prefixed, defeating the match below.
  * @param {string} vendor
  * @param {string|null} resolved verbatim catalog id from `resolveTier`, or null
  * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
@@ -201,7 +180,7 @@ function buildRows(catalog, vendor) {
  */
 function canonicalizeResolved(vendor, resolved, catalogInfo) {
   if (!resolved) { return null; }
-  return DIVERGENT_VENDORS.has(vendor) ? resolved : directFormIfSafe(vendor, resolved, catalogInfo);
+  return directFormIfSafe(vendor, resolved, catalogInfo);
 }
 
 /**
@@ -219,7 +198,9 @@ function canonicalizeResolved(vendor, resolved, catalogInfo) {
 function computePreselectedId(vendor, tier, catalog, rows) {
   const effectiveTier = tier || getCostTier();
   const resolved = resolveTier(vendor, effectiveTier, catalog);
-  const canonical = canonicalizeResolved(vendor, resolved, { models: catalog });
+  // F2 (B5): guard the same way applyProviderDefault does, so classifyModel
+  // never sees a non-array `models` regardless of what a caller passes.
+  const canonical = canonicalizeResolved(vendor, resolved, { models: Array.isArray(catalog) ? catalog : [] });
   if (canonical && rows.some(r => r.id === canonical)) { return canonical; }
 
   const priced = rows.filter(r => r.pricePerMInput !== null);
@@ -266,15 +247,23 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  * `chosenId` comes straight from `buildProviderDefaultChoices`: a real
  * direct id; an `openrouter/`-prefixed id (`DIVERGENT_VENDORS`, or -- since
  * issue 195 -- a non-divergent vendor whose bare form would classify
- * `invalid`); or a bare id already SYNTHESISED via `directFormIfSafe`.
- * **Never** unconditionally strip a divergent vendor's id -- fabricates a
- * non-direct-callable dot-form id no row carries. Non-divergent vendors
- * re-run the SAME `classifyModel`-guarded strip `chooseRowId` used to pick
- * `chosenId` (`directFormIfSafe`, passed `catalog`): an unconditional strip
- * would silently re-fabricate the id `chooseRowId` just refused, undoing
- * the fix where the id is persisted and routed on. Without `catalog`, an
- * empty namespace reads `unknown` and strips unconditionally (pre-195
- * behavior) -- callers that built choices from a catalog should pass it.
+ * `invalid`); or a bare id already SYNTHESISED via `directFormIfSafe`. By
+ * the time this function runs, `chosenId`'s prefix (or lack of one) IS the
+ * decision -- PERSISTENCE therefore uses `directFormIfProven`, not
+ * `directFormIfSafe`: it strips the `openrouter/` prefix only on POSITIVE
+ * evidence (`classifyModel` returns `valid` -- the bare id is an actual
+ * catalog row), never merely because the catalog couldn't disprove it.
+ *
+ * This matters because `directFormIfSafe`'s optimistic default is correct
+ * for LIST-BUILDING (an empty/absent catalog can't assert absence, so a
+ * bare guess is reasonable to offer) but wrong here: a catalog fetch that
+ * failed or came back empty (`catalog` omitted, or `[]`) must never be read
+ * as license to fabricate a direct id `chooseRowId` never actually offered
+ * -- that reintroduces the exact bug issue 195 fixed, silently, on every
+ * degraded fetch. `directFormIfProven` preserves `chosenId` verbatim
+ * whenever the catalog can't prove the bare form valid, so an empty/absent
+ * `catalog` option is inert (no canonicalization at all), not a fallback to
+ * the old unconditional strip.
  * @param {string} vendor e.g. 'anthropic'
  * @param {string} chosenId id from the picker (see above -- not always
  *   catalog-verbatim)
@@ -283,7 +272,7 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  */
 function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog } = {}) {
   const catalogInfo = { models: Array.isArray(catalog) ? catalog : [] };
-  const storedId = DIVERGENT_VENDORS.has(vendor) ? chosenId : directFormIfSafe(vendor, chosenId, catalogInfo);
+  const storedId = directFormIfProven(vendor, chosenId, catalogInfo);
 
   const config = loadConfig() || {};
   if (!config.aliases || typeof config.aliases !== 'object') { config.aliases = {}; }
@@ -297,4 +286,12 @@ function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, ca
   return { alias: vendor, setAsDefault };
 }
 
-module.exports = { buildProviderDefaultChoices, applyProviderDefault, pricePerMInputFrom };
+// directFormIfSafe/directFormIfProven are re-exported (not just used
+// internally) so a caller that wants the canonicalization primitives
+// directly doesn't need to know they now live in model-canonicalization.js
+// -- see tests/model-canonicalization.test.js for the identity pin proving
+// this is a re-export, not a second, divergeable copy.
+module.exports = {
+  buildProviderDefaultChoices, applyProviderDefault, pricePerMInputFrom,
+  directFormIfSafe, directFormIfProven,
+};

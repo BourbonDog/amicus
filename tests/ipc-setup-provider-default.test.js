@@ -155,7 +155,14 @@ describe('sidecar:set-provider-default (Task 8)', () => {
     expect(cfg.aliases.google).not.toBe('google/gemma-4-31b-it:free'); // fabricated id must never be persisted
   });
 
-  test('catalog fetch failure degrades gracefully: still applies the choice (pre-195 unconditional-strip fallback), never aborts', async () => {
+  // F1 (major, council review of PR 198): a catalog fetch failure used to
+  // degrade applyProviderDefault to an unconditional strip, which silently
+  // reintroduced the exact bug issue 195 fixed on every network hiccup
+  // (fabricated 'openai/gpt-5.5' would classify 'invalid' against the real
+  // catalog once it did come back). The handler must still apply the choice
+  // (never abort an already-made picker choice) but must preserve chosenId
+  // exactly as given rather than guessing on no evidence.
+  test('catalog fetch failure degrades gracefully: still applies the choice, preserved VERBATIM (F1), never aborts', async () => {
     const { loadConfig } = require('../src/utils/config');
     const { getCatalog } = require('../src/utils/model-catalog');
     getCatalog.mockRejectedValueOnce(new Error('network unreachable'));
@@ -164,6 +171,7 @@ describe('sidecar:set-provider-default (Task 8)', () => {
     expect(result).toEqual({ alias: 'openai', setAsDefault: true });
 
     const cfg = loadConfig();
-    expect(cfg.aliases.openai).toBe('openai/gpt-5.5');
+    expect(cfg.aliases.openai).toBe('openrouter/openai/gpt-5.5');
+    expect(cfg.aliases.openai).not.toBe('openai/gpt-5.5'); // the fabricated id must never be persisted
   });
 });

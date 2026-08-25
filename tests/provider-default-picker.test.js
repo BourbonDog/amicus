@@ -369,8 +369,17 @@ describe('applyProviderDefault — read-modify-write (vendor alias + seed defaul
     expect(cfg.aliases.anthropic).not.toBe('anthropic/claude-fable-5');
   });
 
-  test('non-divergent vendor (openai): chosenId is canonicalized to the bare direct-first form', () => {
-    const result = applyProviderDefault('openai', 'openrouter/openai/gpt-5.5');
+  test('non-divergent vendor (openai): chosenId is canonicalized to the bare direct-first form, given a catalog that PROVES it (F1)', () => {
+    // F1 (council review of PR 198): applyProviderDefault now requires positive
+    // evidence (classifyModel === 'valid') to strip, not merely "not disproven" --
+    // so this happy-path test must supply a catalog whose direct namespace
+    // actually carries the bare id, matching what buildProviderDefaultChoices
+    // would really have offered alongside this chosenId.
+    const catalog = [
+      { id: 'openai/gpt-5.5', name: 'GPT 5.5', contextLength: 400000, pricing: null },
+      { id: 'openrouter/openai/gpt-5.5', name: 'GPT 5.5', contextLength: 400000, pricing: { prompt: '0.000001' } },
+    ];
+    const result = applyProviderDefault('openai', 'openrouter/openai/gpt-5.5', { catalog });
     expect(result).toEqual({ alias: 'openai', setAsDefault: true });
 
     const cfg = loadConfig();
@@ -399,9 +408,12 @@ describe('applyProviderDefault — read-modify-write (vendor alias + seed defaul
 
 describe('applyProviderDefault — does not re-strip a preserved OpenRouter prefix (issue 195 regression)', () => {
   // buildProviderDefaultChoices only ever hands a non-divergent vendor an
-  // OpenRouter-prefixed chosenId when directFormIfSafe already proved the
-  // bare form invalid. applyProviderDefault must not undo that by
-  // re-deriving the bare form unconditionally when it persists the choice.
+  // OpenRouter-prefixed chosenId when directFormIfSafe (list-building)
+  // already proved the bare form invalid, OR when the catalog it built from
+  // is empty/absent and never even got a chance to try -- applyProviderDefault
+  // (persistence) must not undo either case by deriving the bare form on
+  // anything less than positive evidence (`directFormIfProven`, F1: council
+  // review of PR 198) when it persists the choice.
   let tempDir;
   let originalEnv;
   let loadConfig;
@@ -447,11 +459,28 @@ describe('applyProviderDefault — does not re-strip a preserved OpenRouter pref
     expect(cfg.aliases.google).toBe('google/gemini-3.7-flash');
   });
 
-  test('without catalog: falls back to the pre-195 unconditional strip (never blocks on an unknown namespace)', () => {
+  // F1 (major, council review of PR 198): this used to fall back to the
+  // pre-195 unconditional strip, which SILENTLY REINTRODUCED the exact bug
+  // issue 195 fixed on every catalog fetch failure (measured: a live catalog
+  // correctly keeps this chosenId OpenRouter-prefixed; an empty one used to
+  // fabricate 'google/gemma-4-31b-it:free', which classifies 'invalid'
+  // against the real catalog). No catalog is NO evidence, not proof of
+  // absence -- chosenId must be preserved exactly as given, the same as the
+  // "with catalog, proven invalid" case above.
+  test('without catalog: chosenId is preserved VERBATIM, not fabricated (F1 -- empty catalog is no evidence)', () => {
     const result = applyProviderDefault('google', 'openrouter/google/gemma-4-31b-it:free');
     expect(result).toEqual({ alias: 'google', setAsDefault: true });
 
     const cfg = loadConfig();
-    expect(cfg.aliases.google).toBe('google/gemma-4-31b-it:free');
+    expect(cfg.aliases.google).toBe('openrouter/google/gemma-4-31b-it:free');
+    expect(cfg.aliases.google).not.toBe('google/gemma-4-31b-it:free'); // the fabricated id must never be persisted
+  });
+
+  test('empty catalog array (explicit): same as omitted -- chosenId is preserved verbatim', () => {
+    const result = applyProviderDefault('google', 'openrouter/google/gemma-4-31b-it:free', { catalog: [] });
+    expect(result).toEqual({ alias: 'google', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.google).toBe('openrouter/google/gemma-4-31b-it:free');
   });
 });
