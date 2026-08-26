@@ -1721,9 +1721,12 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   filing anticipated (CLI re-truncates the 80-char preview to its own 30; MODEL renders
   `council(<stage>)`, width-capped, bare `council` for terminal runs). **Parity is
   current-project only, `--all` included** (stated in `mergeCouncilRows`'s docblock, and in
-  docs/usage.md since PR #206 round-1 B1): under `--all` the session rows enumerate every
-  project the sessions-index knows, while the council rows come from this project's pointer
-  files alone — there is no cross-project council index. Original filing kept
+  docs/usage.md since PR #206 round-1 B1, and — since round-2 A1 — printed by the CLI itself
+  under the table on every human-readable `--all` listing,
+  `src/sidecar/list-council.js :: councilScopeNotice`, because a caveat only the source states
+  is the correct-but-silent degrade the product principle rejects): under `--all` the session
+  rows enumerate every project the sessions-index knows, while the council rows come from this
+  project's pointer files alone — there is no cross-project council index. Original filing kept
   below for the reasoning. — [S] The MCP
   `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
   `.concat(councilRows)` with `type: 'council-run'`); the CLI `listSidecars`
@@ -6763,3 +6766,35 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   exists: run the same entity-escape over the inbound body before fencing (one helper, one
   tag list — extend `OUTBOUND_FENCE_TAGS` or a sibling constant; keep the author-spelling
   and byte-identity-on-clean-text properties the outbound pins established).
+- [ ] **CI council glm/qwen stage-1 deaths: provider-side silent stall, MEASURED across all six
+  2026-08-26 council runs (evidence-first recon; extends issue #202 from hypothesis to data).**
+  Every dead leg is `NO_OUTPUT_BACKSTOP` at the deadline to the decisecond with ZERO tokens —
+  not even input usage — on `openrouter/z-ai/glm-5.3` (first-attempt dead 6/6) and
+  `openrouter/qwen/qwen3.8-max` (6/6; kimi-k3 3/6), while gpt/deepseek on the SAME key/gateway
+  never missed. Pins identical across all six runs (`.github/amicus-ci-aliases.json@eb135ae82`,
+  its only commit) — the W13 curated bump is CI-invisible and confirmed unrelated. The
+  one "full bench" run (W11) was LUCK: glm+qwen+kimi all died at 300s and all three single
+  retries landed. **480s backstop bought nothing** (PR 207: dead at 481.5s, 0 tokens) — the
+  stall is indefinite, not slow; do not raise it further. qwen has a SECOND disease: runaway
+  generation into the 600s leg cap (224,787 and 781,287 tokens, $0.33/$0.67 burned for
+  nothing). Remedies ranked by evidence: (1) second stage-1 retry CI-only — retries landed
+  6/10 today, compounding is the direct fix; (2) OpenRouter provider pinning/exclusion for
+  glm/qwen (one upstream in the rotation is black-holing; ledger doesn't record upstream —
+  needs the OpenRouter dashboard); (3) stop DOUBLING the backstop on retry (600s retry window
+  = 15+ min per doubly-dead seat; 300s fits a second retry in the same wall clock);
+  (4) stagger stage-1 launches (hypothesis-grade); (5) qwen: re-pin or cap output for the
+  runaway mode — retries/backstops don't treat it. NOT candidates (verified working): CI auth
+  provisioning, the alias map. Evidence: spend-ledger.jsonl + run.json per run, scratchpad
+  council-recon/<runId>; verbatim signature quoted in issue #202's thread context.
+
+- [ ] **Dead stage-2 JUDGE legs produce no degrade entry and no notice — a run can present a
+  full-bench street-cred table actually adjudicated by half the judges (found in the same
+  recon, W11 run 32956900910).** Ledger wave `9d8029c8-s2`: glm and qwen judge legs died the
+  identical silent death at +300s of stage 2 (0 tokens), yet run.json records NO degrade for
+  them and the verdict shipped a 4-model street-cred table adjudicated by gpt+kimi only. This
+  is the product principle's exact target (a correct-but-silent degrade) one stage later than
+  the W9 dead-seat work: stage-1 deaths are now loudly surfaced, stage-2 judge deaths are not.
+  Fix shape: a stage-2 twin of the seat-loss note (which judges actually returned rankings /
+  adjudications, recorded as a degrade + disclosed in the verdict footer beside the existing
+  `stage1:partial` marker — the footer already knows stages were partial; the WHO is what's
+  missing).

@@ -475,7 +475,12 @@ whichever stage is currently running; the CLI table renders `council(<stage>)` i
 column and re-truncates that 80-char preview to its usual 30-char slice. That merge is scoped
 to the CURRENT project on both surfaces — `--all` included, so under `--all` the session rows
 span every known project while the council rows do not: council runs are found through
-per-project pointer files and there is no cross-project council index to walk. The MCP tool
+per-project pointer files and there is no cross-project council index to walk. The CLI says
+so at runtime rather than only here — every human-readable `--all` listing ends with
+`council runs: current project only (no cross-project index).`, under the table or right after
+`No amicus sessions found.` when there is no table. That line is human-surface only: `--json`
+keeps its shape, on stdout and stderr alike, because no flag can widen the scope it reports.
+The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,
 `latestPreview`) — enrichments the CLI table doesn't apply, since it prints the raw 30-char slice

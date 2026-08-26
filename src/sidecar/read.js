@@ -18,7 +18,7 @@ const { normalizeLimit, truncationNotice } = require('./list-limit');
 // v4.9 W12: council runs are first-class rows on this surface too — the merge
 // amicus_list has done since v4.0 §8, split out for the same line-budget reason
 // as the two modules above. Owns the MODEL cell's rendering and width.
-const { padModel, modelCell, mergeCouncilRows } = require('./list-council');
+const { padModel, modelCell, mergeCouncilRows, councilScopeNotice } = require('./list-council');
 
 /**
  * Format a timestamp as relative age
@@ -149,6 +149,10 @@ async function listSidecars(options) {
   if (search) { sessions = searchSessions(sessions, search, { project }); }
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
+    // The same A1 disclosure as under the table below — an empty `--all` is
+    // where the omission is loudest. `!json` because this early return is the
+    // one line both modes share, and --json's shape may not move.
+    if (all && !json) { console.log(councilScopeNotice()); }
     return;
   }
 
@@ -183,6 +187,13 @@ async function listSidecars(options) {
         (all ? `  ${s.project || ''}` : '')
       );
     });
+    // Round 2 (A1): under `--all` the session rows span every indexed project
+    // and the council rows only ever span this one — say so. THIS is the seam:
+    // `all`, the `mergeCouncilRows` call above and the human table are all
+    // visible from here, and the merge itself cannot print. Inside the human
+    // branch on purpose — `--json` is a shape contract, and unlike the
+    // truncation notice there is no cap here for a script to raise.
+    if (all) { console.log(councilScopeNotice()); }
   }
 
   // No silent caps: say what was elided, and how to see it all. In --json mode

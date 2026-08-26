@@ -48,8 +48,11 @@ function padModel(text) {
  * `council(debate-defense)` is 23
  * characters — exactly the column, which would leave the STATUS cell butted
  * against it. Anything that long loses the tail of the stage name to an
- * ellipsis instead, keeping the ) and one space: `council(` + `…)` is 10
- * characters of chrome, so the stage keeps `MODEL_COL - 11`. Session and wave
+ * ellipsis instead. The chrome is 10 characters (`council(` is 8, `…)` is 2),
+ * so `MODEL_COL - 10` would rebuild a cell of exactly MODEL_COL and `padModel`
+ * would pad it by nothing — the same butted cell. The stage keeps
+ * `MODEL_COL - 11` instead: one character less than fits, which is what buys
+ * the space before STATUS. Session and wave
  * rows are deliberately NOT capped — a long model id overflows the column today
  * and this merge is not the place to change what a review row prints.
  */
@@ -104,4 +107,24 @@ function mergeCouncilRows(rows, project, opts = {}) {
   return rows.concat(council).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-module.exports = { padModel, modelCell, mergeCouncilRows };
+/**
+ * The `--all` scope disclosure, for the human-readable listing.
+ *
+ * Round 2 (A1): the SCOPE note above documents the limit for a reader of this
+ * file, and `--all` stamps every merged row with the project it came from — but
+ * neither tells the person at the terminal that the rows they did NOT get were
+ * never looked for. A correct-but-silent degrade fails the product principle as
+ * hard as a crash (README / BACKLOG.md: self-heal or self-diagnose, ALWAYS
+ * transparently), so the runtime says it out loud.
+ *
+ * The text lives here, beside the scope rule it restates, and read.js prints it
+ * — the same split as `list-limit.js :: truncationNotice`, whose notice this
+ * one is deliberately shaped like. Unlike that one it names no remedy: there is
+ * no flag that widens this, which is the whole disclosure.
+ * @returns {string}
+ */
+function councilScopeNotice() {
+  return 'council runs: current project only (no cross-project index).';
+}
+
+module.exports = { padModel, modelCell, mergeCouncilRows, councilScopeNotice };

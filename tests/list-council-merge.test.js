@@ -27,29 +27,52 @@
  * exact `createdAt` tie the session row (concatenated first) stays first.
  *
  * ── NAMED MUTANTS with MEASURED red sets ───────────────────────────────────
- * Scope for all three: `npx jest tests/list-council-merge.test.js
+ * Scope for all six: `npx jest tests/list-council-merge.test.js
  * tests/list-limit.test.js tests/list-search.test.js
  * tests/mcp-council-list.test.js tests/read-json.test.js --maxWorkers=2` →
- * 5 suites / 57 tests. Measured 2026-08-26, each applied ALONE to
- * src/sidecar/list-council.js and reverted; source restored by byte copy and
- * checksum-verified, never by `git checkout`.
+ * 5 suites / 68 tests. Measured 2026-08-26, each applied ALONE to
+ * src/sidecar/list-council.js (`NOTEALWAYS`/`NOTEINJSON`: src/sidecar/read.js)
+ * and reverted; source restored by byte copy and checksum-verified, never by
+ * `git checkout`. Every count below was RE-RUN against the round-2 suite, not
+ * renumbered from the round-1 record.
  *
  * `NOCOUNCILROWS` — `mergeCouncilRows` returns `rows` untouched, i.e. the
- *   pre-W12 CLI: **1 suite / 13 tests red**, all here. The two that stay GREEN
- *   are the point, not a gap — "session rows are BYTE-IDENTICAL" and "a wave row
- *   is untouched" are the absence-of-change controls, and a merge that never
- *   happens satisfies both by construction. The other four suites stay green
- *   too, which is what says the MCP surface was not disturbed.
+ *   pre-W12 CLI: **1 suite / 19 tests red**, all here. The seven that stay GREEN
+ *   are the point, not a gap — "session rows are BYTE-IDENTICAL", "a wave row is
+ *   untouched", the three note controls that seed no council run, "the premise
+ *   is true" and "a status matching neither row kind" all assert an ABSENCE, and
+ *   a merge that never happens satisfies every one of them by construction. The
+ *   other four suites stay green too, which is what says the MCP surface was not
+ *   disturbed.
  * `UNCAPPEDSTAGE` — the council MODEL cell stops owning its width (returns the
  *   raw `council(<stage>)`): **1 suite / 1 test red**, here — "the widest
  *   RUNNING stage name still leaves the column a space". Precisely scoped: the
  *   cap is pinned independently of the cell's content.
  * `NORESORT` — council rows are appended instead of merged into the newest-first
- *   order: **1 suite / 3 tests red**, all here — the ordering test, `--limit`
- *   (which slices the top N of that order) and `--json` (whose row order is the
- *   document's order). The TIE test stays green by design: appending and a
- *   stable re-sort agree on a tie, which is exactly why the tie needed its own
- *   test rather than being read off the ordering one.
+ *   order: **1 suite / 5 tests red**, all here — the ordering test, `--limit`
+ *   (which slices the top N of that order), `--json` (whose row order is the
+ *   document's order), and round 2's two whole-document pins (the
+ *   byte-identical listing and B3's exact-spelling row order). The TIE test
+ *   stays green by design: appending and a stable re-sort agree on a tie, which
+ *   is exactly why the tie needed its own test rather than being read off the
+ *   ordering one — and B2's "keeps its concatenation slot" stays green for the
+ *   same reason, which is itself the measurement B2 rests on.
+ * `NOSCOPENOTE` — `councilScopeNotice` returns `''`, i.e. the round-1 CLI that
+ *   documented the `--all` scope limit without ever saying it: **1 suite / 3
+ *   tests red** — A1's three positive assertions (under the table, without a
+ *   council row, and on the empty listing). A1's two controls stay green by
+ *   construction — they assert the note's ABSENCE without `--all` and in
+ *   `--json`, which an empty note satisfies.
+ * `NOTEALWAYS` — the print loses its `if (all)` gate in read.js's human branch:
+ *   **1 suite / 7 tests red**. The intended killer is "WITHOUT --all the human
+ *   output is byte-identical"; the other six are row-order assertions that read
+ *   the printed `lines()` and now find one more of them. Named because that
+ *   byte-identical control is a PRESERVATION pin — green at HEAD by
+ *   construction — and a preservation pin without a mutant proves nothing.
+ * `NOTEINJSON` — the EMPTY-listing note loses its `!json` half (read.js's early
+ *   return, the one line both modes share): **1 suite / 1 test red**, the
+ *   `--json` empty control. The other preservation pin, precisely scoped: it
+ *   fails for the guard alone, not for anything about the note's text.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -236,5 +259,164 @@ describe('amicus list — the flags apply to council rows too', () => {
     await listSidecars({ project, all: true, json: true });
     const row = JSON.parse(stdout()).find(r => r.id === 'cnlall01');
     expect(row.project).toBe(project);
+  });
+});
+
+/**
+ * ROUND 2, A1 — the `--all` scope limit is SPOKEN, not merely documented.
+ *
+ * Round 1 wrote the caveat into docs/usage.md and `mergeCouncilRows`'s docblock:
+ * under `--all` the session rows span every indexed project while the council
+ * rows do not, because council runs are found through per-project pointer files
+ * (`src/council/run-state.js :: listPointers`) and there is no cross-project
+ * council index to walk. A caveat only a reader of the source can see is
+ * exactly the correct-but-silent degrade the product principle rejects (README /
+ * BACKLOG.md: self-heal or self-diagnose, ALWAYS transparently). So the runtime
+ * says it, once, under the table.
+ *
+ * The disclosure is HUMAN-SURFACE ONLY, and the two controls below are why:
+ * `--json` is a machine contract whose shape may not change (not even on
+ * stderr, where the truncation notice legitimately goes — that one names a cap
+ * a script can raise; this one names a limit nothing can lift), and a listing
+ * without `--all` must stay byte-identical to its pre-note self.
+ */
+describe('amicus list --all — the scope limit speaks (round 2, A1)', () => {
+  const NOTE = 'council runs: current project only (no cross-project index).';
+
+  it('--all prints the disclosure exactly once, as the last line under the table', async () => {
+    seedSession('sesall03', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlall03', 'running', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, all: true });
+    expect(lines().filter(l => l === NOTE)).toHaveLength(1);
+    expect(lines()[lines().length - 1]).toBe(NOTE);
+    // …and the rows it qualifies are still printed above it.
+    expect(rowFor('cnlall03')).toBeDefined();
+  });
+
+  it('the note does not wait for a council row — the OMISSION is what it discloses', async () => {
+    seedSession('sesall04', { createdAt: '2026-07-19T01:00:00.000Z' });
+    await listSidecars({ project, all: true });
+    expect(stdout()).toContain(NOTE);
+  });
+
+  it('WITHOUT --all the human output is byte-identical to the pre-note listing', async () => {
+    seedSession('sesall05', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlall05', 'running', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project });
+    expect(stdout()).toBe([
+      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11)
+        + 'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING',
+      '─'.repeat(80),
+      'cnlall05'.padEnd(10) + 'council(stage1)'.padEnd(23) + 'running'.padEnd(11)
+        + ''.padEnd(12) + formatAge('2026-07-19T02:00:00.000Z').padEnd(12)
+        + 'council briefing text',
+      'sesall05'.padEnd(10) + 'vendorx/model-a'.padEnd(23) + 'complete'.padEnd(11)
+        + ''.padEnd(12) + formatAge('2026-07-19T01:00:00.000Z').padEnd(12)
+        + 'ordinary session briefing',
+    ].join('\n'));
+  });
+
+  it('an EMPTY --all listing carries it too — that is where the silence was loudest', async () => {
+    // The residual case the table-side note cannot reach: a project with
+    // nothing of its own, `--all`, and a council run sitting in some OTHER
+    // project. Pre-fix that printed a bare "No amicus sessions found." — the
+    // most complete version of the omission A1 is about.
+    await listSidecars({ project, all: true });
+    expect(stdout()).toContain('No amicus sessions found.');
+    expect(stdout()).toContain(NOTE);
+  });
+
+  it('…but the empty listing under --json is untouched (that path prints in both modes)', async () => {
+    await listSidecars({ project, all: true, json: true });
+    expect(stdout()).toBe('No amicus sessions found.');
+  });
+
+  it('--json --all keeps its shape — the note is on neither stdout nor stderr', async () => {
+    seedCouncil('cnlall06', 'running', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, all: true, json: true });
+    // Parses at all only if the note stayed out of the document.
+    expect(JSON.parse(stdout()).map(r => r.id)).toContain('cnlall06');
+    expect(stdout()).not.toContain('council runs:');
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).not.toContain('council runs:');
+  });
+});
+
+/**
+ * ROUND 2, B2 — the createdAt-less row, MEASURED rather than argued.
+ *
+ * The claim: such a row makes the merge comparator return NaN, so it "silently
+ * keeps relative order instead of being placed deterministically". Both halves
+ * are answered here.
+ *
+ *  - NaN is not a third outcome. ECMA-262's SortCompare maps a NaN comparator
+ *    result to +0 — "equal" — and V8's sort is stable, so the row keeps its slot
+ *    in the concatenation (session rows first, then `listCouncilRuns` order).
+ *    KEEPING THAT ORDER *IS* BEING PLACED DETERMINISTICALLY: same input, same
+ *    output, every run — which is what the second test pins, by listing twice.
+ *  - And nothing silent about it: with no `createdAt` the AGE cell renders
+ *    `NaNd ago`, in the row, in front of the reader.
+ *
+ * PRODUCIBILITY, measured: no first-party writer can emit such a row. Every
+ * session metadata.json is stamped at creation
+ * (`src/session-manager.js :: createSession`,
+ * `src/sidecar/fanout.js :: runFanout`,
+ * `src/sidecar/continue.js :: createContinueSessionMetadata`,
+ * `src/sidecar/start-metadata.js :: createSessionMetadata`) and so is every
+ * council run.json (`src/council/run-state.js :: initCouncilRun` for a CLI run,
+ * `src/mcp-council-run.js :: handleCouncilRunTool` for the MCP pre-seed, with
+ * `initRun` preserving whichever landed first). The row below is manufactured
+ * by seeding run.json with the key absent — reachable only from a hand-edited,
+ * legacy, or foreign file, which is exactly why it is worth a control.
+ */
+describe('amicus list — a row with no createdAt is placed, not lost (round 2, B2)', () => {
+  it('the premise is true: the comparator really does go NaN', () => {
+    expect(Number.isNaN(new Date(undefined) - new Date('2026-07-19T02:00:00.000Z'))).toBe(true);
+  });
+
+  it('it keeps its concatenation slot, and the same input prints the same list every time', async () => {
+    seedSession('sesnan01', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlnan01', 'complete', undefined);
+    await listSidecars({ project });
+    const first = stdout();
+    expect(lines().slice(2).map(l => l.slice(0, 8))).toEqual(['sesnan01', 'cnlnan01']);
+    logSpy.mockClear();
+    await listSidecars({ project });
+    expect(stdout()).toBe(first);
+  });
+
+  it('and the AGE cell says so out loud (a control on today\'s behavior, not an endorsement)', async () => {
+    seedCouncil('cnlnan02', 'complete', undefined);
+    await listSidecars({ project });
+    expect(rowFor('cnlnan02').slice(56, 68)).toBe('NaNd ago'.padEnd(12));
+  });
+});
+
+/**
+ * ROUND 2, B3 — `--status` is EXACT EQUALITY on BOTH sides of the merge.
+ *
+ * The claim was that the council filter's exact `===` might disagree with a
+ * broader session-side match (an `error` that also caught `crashed`/
+ * `timed-out`), leaving the merged list internally inconsistent. Measured: all
+ * three status filters in the repo are the same `s.status === <wanted>` —
+ * `src/sidecar/read.js :: enumerateSessions`,
+ * `src/sidecar/read.js :: enumerateAllProjects`, and
+ * `src/mcp-server.js :: amicus_list`, which applies one filter to the already
+ * merged array — against `src/sidecar/list-council.js :: mergeCouncilRows`.
+ * Refuted; this is the drift pin that keeps it refuted, driving BOTH filters
+ * with a status that matches neither row kind.
+ */
+describe('amicus list — --status is exact on both sides of the merge (round 2, B3)', () => {
+  it('a status matching neither row kind returns neither (no broader match on either side)', async () => {
+    seedSession('sesst001', { status: 'error', createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlst001', 'error', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, status: 'crashed' });
+    expect(stdout()).toContain('No amicus sessions found.');
+  });
+
+  it('the exact spelling returns both kinds', async () => {
+    seedSession('sesst002', { status: 'error', createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlst002', 'error', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, status: 'error' });
+    expect(lines().slice(2).map(l => l.slice(0, 8))).toEqual(['cnlst002', 'sesst002']);
   });
 });
