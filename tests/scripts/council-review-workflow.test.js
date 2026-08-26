@@ -34,8 +34,13 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
-    expect(y).toContain('glm,qwen,gpt,kimi');
-    expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
+    // 2026-08-26 owner ruling: kimi off the bench (cost vs contribution — the
+    // #202 stall record), deepseek promoted from chair to bench, gemini-pro
+    // chairs. kimi's alias-map pin stays so an explicit `models: kimi` input
+    // still resolves to the pinned id instead of silently falling back to the
+    // shipped curated table (the known CI config-skew class).
+    expect(y).toContain('glm,qwen,gpt,deepseek');
+    expect(y).toContain("CHAIR: ${{ inputs.chair || 'gemini-pro' }}");
     expect(y).not.toMatch(/\bo3\b|o3-pro|opus/);
   });
 
@@ -87,8 +92,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('workflow_call surface: callers and this repo\'s pull_request fallback bench the same four seats', () => {
     const y = yml();
-    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,gpt,kimi' }}");
-    expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
+    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,gpt,deepseek' }}");
+    expect(y).toContain("CHAIR: ${{ inputs.chair || 'gemini-pro' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
     expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'rethink' }}");
     expect(y).toContain("MAX_COST: ${{ inputs.max_cost || '2.00' }}");

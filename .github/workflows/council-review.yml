@@ -19,11 +19,11 @@ on:
       models:
         description: Comma-separated amicus model aliases. Resolved from .github/amicus-ci-aliases.json on the base ref when present, else from the table amicus ships in src/utils/curated-models.js. The pre-flight step fails the run before any spend if a name resolves through neither.
         type: string
-        default: 'glm,qwen,gpt,kimi'
+        default: 'glm,qwen,gpt,deepseek'
       chair:
         description: Chair model that synthesizes the verdict. Must not sit on the bench — if it appears in models, it is excluded from the bench for the run.
         type: string
-        default: 'deepseek'
+        default: 'gemini-pro'
       critic:
         description: Optional critic seat (must be one of the bench models); empty disables it
         type: string
@@ -93,8 +93,8 @@ jobs:
       # KEEP THE TWO IN SYNC: changing only the input default above silently
       # leaves every PR on this repo running the old bench, because no
       # pull_request run ever reads it.
-      MODELS: ${{ inputs.models || 'glm,qwen,gpt,kimi' }}
-      CHAIR: ${{ inputs.chair || 'deepseek' }}
+      MODELS: ${{ inputs.models || 'glm,qwen,gpt,deepseek' }}
+      CHAIR: ${{ inputs.chair || 'gemini-pro' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
       # rethink gates the PR on the chair's strongest verdict only: the check
