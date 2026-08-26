@@ -492,6 +492,9 @@ describe('runFanout orchestrator', () => {
    * Named mutant NULLGUARD: delete the leading `result &&`. RED measured
    * 2026-08-26 at the 7-suite/273-test focused scope — 1 test / 1 suite, this
    * one. It is the whole red set, which is the honest cost of a shape pin.
+   * RE-MEASURED at PR #207 round 3 (8 suites / 323 tests): still 1 test / 1
+   * suite, this one. The mutant survived the predicate swap below unchanged,
+   * which is exactly the point — the two properties are independent.
    *
    * ⚠️ PR #207 council round 2 (B2): this used to be
    * `expect(src).toContain('<the exact source line>')`, which pinned the
@@ -505,13 +508,45 @@ describe('runFanout orchestrator', () => {
     const src = fsReal.readFileSync(
       pathReal.join(__dirname, '..', '..', 'src', 'sidecar', 'fanout-leg.js'), 'utf-8');
     const norm = src.replace(/\s+/g, ' ');
-    // Tokens in order: the `result &&` null guard, THEN the `typeof` number
-    // check, THEN the pass-through/undefined arms. Quote style is free.
+    // Tokens in order: the `result &&` null guard, THEN the shared honesty
+    // predicate, THEN the pass-through/undefined arms. Quote style is free.
+    // ⚠️ PR #207 round 3 (B3) replaced the middle token: the bare `typeof`
+    // number test admitted NaN/Infinity/negative/fractional, so all four gates
+    // now share `isMeasuredTtft` (see tests/council/run-stats-entry.test.js).
+    // The `result &&` half — the property THIS pin exists for — is unchanged.
     expect(norm).toMatch(
-      /ttftMs:\s*result\s*&&\s*typeof\s+result\.ttftMs\s*===\s*['"]number['"]\s*\?\s*result\.ttftMs\s*:\s*undefined/);
-    // …and the `typeof` half survives alongside it: `result && result.ttftMs`
-    // alone would resurrect the 0-eating bug the guard shape exists to avoid.
+      /ttftMs:\s*result\s*&&\s*isMeasuredTtft\(result\.ttftMs\)\s*\?\s*result\.ttftMs\s*:\s*undefined/);
+    // …and the guard half survives alongside it: `result && result.ttftMs`
+    // alone would resurrect the 0-eating bug the shape exists to avoid.
     expect(norm).not.toMatch(/ttftMs:\s*result\s*&&\s*result\.ttftMs\s*\|\|/);
+  });
+
+  /**
+   * PR #207 council round 3, B3 — the drift pin for BOTH hops this file owns.
+   *
+   * `run.schema.json` declares ttftMs `integer, minimum 0`. A `typeof` gate let
+   * four families through: NaN and ±Infinity (which `JSON.stringify` writes as
+   * `null` — MEASURED — so the on-disk document violates its own schema while
+   * looking like an honest absence), negatives (a backward wall-clock jump
+   * during the probe's `Date.now()` delta) and fractions (a hand-edited leg).
+   * Dropping rather than clamping is the ruling: emit-when-VALID is the same
+   * discipline as emit-when-set, and a clamped `0` would read as "instant first
+   * token", which is a measurement this leg never made.
+   */
+  it('a DISHONEST ttftMs (NaN / Infinity / negative / fractional) is dropped on BOTH hops (round 3, B3)', async () => {
+    const bad = [NaN, Infinity, -Infinity, -5, 1.5];
+    for (let i = 0; i < bad.length; i++) {
+      const waveId = `ttftbad${i}`;
+      mockRunHeadless
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: bad[i] }))
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+      const { wave } = await runFanout({ ...baseOpts(), waveId });
+
+      const legMeta = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', `${waveId}-1`, 'metadata.json'), 'utf-8'));
+      expect(`${bad[i]} on disk: ${'ttftMs' in legMeta}`).toBe(`${bad[i]} on disk: false`);
+      expect(`${bad[i]} in wave: ${'ttftMs' in wave.legs[0]}`).toBe(`${bad[i]} in wave: false`);
+    }
   });
 
   // A first substantive tick observed inside the first poll is a real 0, and 0

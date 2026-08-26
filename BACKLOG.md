@@ -6252,6 +6252,46 @@ minutes to get started"*).
   Named mutant `MCPMUTE` (3 tests / 1 suite); three absence controls stay green both ways.
   ⚠️ The underlying `debug.log` limitation still applies to every OTHER stderr notice the
   council child writes — only the alias-shadow line has a real MCP channel.
+- ✅ **DONE, PR #207 council round 3 (A1, B1, B2, B3): the notice survives an ASYNCHRONOUS
+  stderr, and one predicate gates every `ttftMs`.**
+  **A1 —** round 2's `safeWrite` covered only a SYNCHRONOUS throw. MEASURED against a real
+  closed pipe (node v24.18.0, child spawned `stdio: ['ignore','ignore','pipe']`, read end
+  destroyed): `process.stderr.write` returns `false` and throws NOTHING; the EPIPE lands a turn
+  later as an unhandled `'error'` event, which is process-fatal (exit 7). Two shapes were tried
+  and **disproved**: a write CALLBACK receives the error and the `'error'` event still fires
+  unhandled (exit 7 again), and a scoped attach/detach always loses the race because delivery is
+  always on a later turn. Only a persistent listener absorbs it, and a second write raises a
+  second event — so `on`, never `once`. Fix: `alias-shadow.js :: armStream`, an attach-once no-op
+  `'error'` handler on the specific stream the default writer uses. Checked, not assumed, before
+  taking a process-wide behaviour: nothing in `src/`, `bin/` or `scripts/` attaches to or depends
+  on `process.stderr`'s `'error'` event, `logger.js` already ignores its own EPIPE, and
+  `electron/main.js` installs the same handler for the same reason. An INJECTED writer is never
+  armed. Mutant `STREAMFATAL` (3 tests / 1 suite), disjoint from `WRITERFATAL` (re-measured
+  unchanged) — the two halves of one contract, separately pinned.
+  **B1 —** the failure branch interpolated `err.message` before `safeWrite` could guard anything,
+  so a thrown `null`/`undefined` raised a TypeError inside the catch and escaped, and a thrown
+  bare string printed `(undefined)`. Now extracted first, through a guarded `describeThrown`.
+  ⚠️ The obvious repair is not sufficient: `String(Object.create(null))` THROWS (measured), so a
+  bare `String((err && err.message) || err)` moves the escape rather than closing it — that case
+  has its own fixture, and it is the ONLY test in the 323-test scope that dies to the naive form.
+  Mutant `MESSAGERAW` (3 tests / 1 suite).
+  **B2 —** `findAliasShadows`' docstring claimed that omitting `names` inspects "every alias the
+  user has configured". It iterates the CURATED keys, which is CORRECT — a shadow needs a curated
+  twin — so the docstring was fixed, not the code, and the honest behaviour got a control pin. Two
+  further carriers of the same claim (this module's site-3 note, and a test's own NAME, whose
+  fixture had already disproved it) were found by a second sweep and corrected.
+  **B3 —** all four `ttftMs` emit gates spelled their own `typeof x === 'number'`, which admits
+  NaN and ±Infinity (both serialize to `null`, breaking the schemas' own `integer, minimum 0`;
+  `JSON.parse('1e999')` is `Infinity`, so it is reachable from a real artifact), negatives, and
+  fractions. One predicate now: `src/utils/ttft.js :: isMeasuredTtft`. Three gates import it;
+  `council/run-stats-entry.js` cannot (it is pinned REQUIRE-FREE) and spells it by hand under
+  structural pins. **Probe-side ruling: DROP, do not clamp** — the probe is a `Date.now()` delta,
+  so a backward wall-clock jump measures negative, and clamping to `0` would publish "first token
+  inside the first poll" for a leg that measured nothing of the kind; the stamp stays one-shot,
+  because re-arming would only stamp a later poll against the same displaced origin. Mutant
+  `GATESPLIT`, measured PER GATE — and the `result-schema` gate needed its own direct fixture,
+  because `fanout-leg`'s gate drops the bad value one hop earlier, so a gate whose only exposure
+  runs through another gate had no cover at all.
 
 ### Quote the real engine error — #133 root fix
 

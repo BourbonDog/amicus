@@ -43,24 +43,31 @@
  *     returns an expanded `bench` on BOTH branches, so the handler seam covers
  *     every council_run call instead of the preset branch only.
  *
- * SIX named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
- * PR #207 round-2 tree (post-merge with origin/main @ PR #204) at ONE shared
- * focused scope — 7 suites / 284 tests: this file plus
- * tests/no-output-backstop-wiring.test.js, tests/sidecar/fanout.test.js,
- * tests/council/run-stats-entry.test.js,
+ * EIGHT named mutants. All red sets below were RE-MEASURED 2026-08-26 against
+ * the PR #207 round-3 tree at ONE shared focused scope — 8 suites / 323 tests:
+ * this file plus tests/no-output-backstop-wiring.test.js,
+ * tests/sidecar/fanout.test.js, tests/council/run-stats-entry.test.js,
+ * tests/council/runstats-byte-order.test.js,
  * tests/scripts/council-review-workflow.test.js,
  * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
+ * (Round 2 measured 7 suites / 284 tests; runstats-byte-order.test.js joined the
+ * scope and round 3 added the fixtures below, so the totals are not comparable
+ * — the per-mutant sets are, and each is marked grown or unchanged.)
  *
  * "SHADOWSILENT" — `src/utils/alias-shadow.js :: noteAliasShadows`, make the
  * emitter a no-op (an early `return;` after the writer and scope are bound, i.e.
- * the warning is computed and never spoken). RED: 17 tests / 2 suites.
- *   tests/alias-shadow.test.js            — 15 failed
+ * the warning is computed and never spoken). RED: 26 tests / 2 suites — GROWN
+ * from round 2's 17 by the nine round-3 fixtures (four A1, five B1), every one
+ * of which asserts that a line was actually produced.
+ *   tests/alias-shadow.test.js            — 24 failed
  *     · emits the plan's exact line, one per shadowed alias
  *     · once per scope: a second resolution of the same alias stays quiet
  *     · no module-global latch: two scope-less calls each speak (B3)
  *     · the B1 absence control (a healthy writer still gets every line)
  *     · the default writer is stderr
  *     · a check that CANNOT run says so rather than degrading silently
+ *     · all four round-3 A1 async-failure fixtures
+ *     · all five round-3 B1 failure-branch fixtures
  *     · a bare --models bench notices the shadow
  *     · two councils in ONE process each get their own audit (A5)
  *     · all four A6 chair/critic pins
@@ -72,15 +79,44 @@
  * predicate, and the mutant kills only the speech act. That split is the point —
  * a silent degrade of a self-diagnosis feature is exactly the failure the
  * product principle forbids, so the speech act gets its own pins, and the
- * ABSENCE CONTROLS are the ones that stay green in BOTH directions.
+ * ABSENCE CONTROLS are the ones that stay green in BOTH directions. ⚠️ Two
+ * fixtures LABELLED "ABSENCE CONTROL" do die here — round 3's injected-writer
+ * control and its real-Error control. They are controls for OVER-REACH (of the
+ * stream arming and of the message hardening), not controls for silence, and
+ * each carries a positive "…and the line was still produced" assertion.
  *
  * "WRITERFATAL" (PR #207 round 2, B1) — drop the try/catch inside
- * `alias-shadow.js :: safeWrite`, i.e. let a throwing writer escape again. RED:
- * 3 tests / 1 suite, all in this file — the loop-path throw, the failure-branch
- * throw, and the same through `auditAliasShadows`. Disjoint from SHADOWSILENT:
- * that mutant removes the speech, this one makes the speech lethal, and the B1
- * absence control is the fixture that stays green under WRITERFATAL and dies
- * under SHADOWSILENT, which is what keeps "swallow" from meaning "mute".
+ * `alias-shadow.js :: safeWrite`, i.e. let a SYNCHRONOUSLY throwing writer
+ * escape again. RED: 3 tests / 1 suite, all in this file — the loop-path throw,
+ * the failure-branch throw, and the same through `auditAliasShadows`.
+ * RE-MEASURED at round 3: UNCHANGED. Disjoint from SHADOWSILENT (that mutant
+ * removes the speech, this one makes the speech lethal), and disjoint from
+ * STREAMFATAL below, which is the ASYNCHRONOUS half of the same contract — no
+ * fixture dies under both, which is what proves the two failure modes are
+ * separately defended. The B1 absence control is the fixture that stays green
+ * under WRITERFATAL and dies under SHADOWSILENT, which is what keeps "swallow"
+ * from meaning "mute".
+ *
+ * "STREAMFATAL" (PR #207 round 3, A1) — drop the `armStream(stream)` call from
+ * the default stderr writer, i.e. stop attaching the no-op 'error' handler. RED:
+ * 3 tests / 1 suite, all in this file — the later-turn failure, the second
+ * later-turn failure (which is what forbids `once`), and the attach-once pin.
+ * The measured Node contract this defends, and why a write callback is NOT a
+ * substitute for it, is recorded on `armStream` itself and in the describe
+ * block below. The injected-writer control stays green in BOTH directions, so
+ * the arming is pinned as an addition rather than as a process-wide side effect.
+ *
+ * "MESSAGERAW" (PR #207 round 3, B1) — interpolate `err.message` straight into
+ * the failure line again, evaluating it before `safeWrite` can guard anything.
+ * RED: 3 tests / 1 suite — the thrown null, the thrown undefined and the thrown
+ * bare string.
+ * ⚠️ The fourth B1 fixture ("a thrown value with NO printable form") stays GREEN
+ * under MESSAGERAW, and that is deliberate: it is the pin for the OTHER wrong
+ * fix. MEASURED against a `describeThrown` written as a bare
+ * `String((err && err.message) || err)` with no try/catch — the obvious repair,
+ * and the one the finding itself suggested — that fixture is the ONLY failure in
+ * the whole 323-test scope. `String(Object.create(null))` throws, so the naive
+ * repair moves the escape rather than closing it. Do not thin that fixture.
  *
  * "MCPMUTE" (PR #207 round 2, A1) — make
  * `mcp-council-bench.js :: auditBenchAliases` a no-op. RED: 3 tests / 1 suite —
@@ -91,7 +127,8 @@
  * the property the finding asked for.
  *
  * "GATEWAYFORM" — `findAliasShadows`, replace the canonical comparison with a
- * raw `local === shipped`. RED: 2 tests / 1 suite, both in this file:
+ * raw `local === shipped`. RED: 2 tests / 1 suite, both in this file
+ * (RE-MEASURED at round 3: unchanged):
  *   · the same model in the other gateway form is NOT a shadow
  *   · this repo's own CI alias map raises only genuine model differences
  * Disjoint from SHADOWSILENT's set by construction: one mutant kills the speech,
@@ -102,16 +139,19 @@
  * `spoken.clear()` from `auditAliasShadows`", and there is no `spoken.clear()`
  * to drop any more — the module-global Set is gone and the scope is a fresh
  * `new Set()` created per audit. The equivalent mutation is to hoist that Set to
- * module scope and share it across audits. RED: 1 test / 1 suite:
+ * module scope and share it across audits. RED: 2 tests / 1 suite — GROWN from
+ * 1 at round 3, because the attach-once fixture audits twice and counts the
+ * lines:
  *   · two councils in ONE process each get their own audit (PR #203 A5)
+ *   · ATTACH-ONCE: repeated audits do not stack handlers on the stream (A1)
  * Every other speech pin stays green — the latch only ever silences the SECOND
  * run, which is exactly why one dedicated fixture had to exist.
  *
  * "SEATSBLIND" (PR #203 A6) — audit `res.bench` alone again, dropping the chair
- * and critic from the name list. RED: 3 tests / 1 suite — the explicit --chair
- * pin, the DEFAULT-chair pin and the --critic pin. The two A6 controls stay
- * green in both directions, so the widening is pinned as an ADDITION rather
- * than as noise.
+ * and critic from the name list. RED: 3 tests / 1 suite (RE-MEASURED at round 3:
+ * unchanged) — the explicit --chair pin, the DEFAULT-chair pin and the --critic
+ * pin. The two A6 controls stay green in both directions, so the widening is
+ * pinned as an ADDITION rather than as noise.
  */
 
 const fs = require('fs');
@@ -222,7 +262,11 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       ]);
     });
 
-    test('omitting the names inspects every configured alias (the models --check surface)', () => {
+    // ⚠️ PR #207 round 3, B2 renamed this. It used to read "…inspects every
+    // configured alias", which is what the docstring claimed and what the
+    // fixture had ALREADY disproved: `my-local` is configured, is inspected by
+    // nobody, and never could be — it has no curated twin to stand in front of.
+    test('omitting the names inspects every CURATED alias, reporting the configured ones', () => {
       writeConfig({ kimi: STALE_KIMI, glm: CURATED.glm, 'my-local': 'x/y' });
       expect(load().findAliasShadows()).toEqual([
         { alias: 'kimi', local: STALE_KIMI, curated: CURATED.kimi },
@@ -341,6 +385,24 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       expect(writes).toEqual([]);
     });
 
+    /**
+     * PR #207 council round 3, B2 — the CONTROL for the docstring's true scope.
+     *
+     * `findAliasShadows` with no names iterates the CURATED keys and reports the
+     * ones the user has also configured — it does NOT iterate "every alias the
+     * user has configured", which is what the docstring used to claim. The
+     * narrower scope is the CORRECT one: a shadow requires a curated twin by
+     * definition, and a purely local alias has nothing to shadow. The predicate
+     * side of that is pinned above; this is the SPEECH side, so the honest
+     * behaviour is pinned rather than implied by the prose.
+     */
+    test('ABSENCE CONTROL: a purely-local alias is silent in the omit-names scope too (B2)', () => {
+      writeConfig({ 'my-local': 'openrouter/vendor/whatever', 'also-mine': 'x/y/z' });
+      const writes = [];
+      load().auditAliasShadows(undefined, (s) => writes.push(s));
+      expect(writes).toEqual([]);
+    });
+
     // The check failing must never be indistinguishable from the check passing.
     // This is not hypothetical: during development a leaked module mock made
     // `loadConfig` undefined and the whole feature went quiet with a green suite.
@@ -359,6 +421,183 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       }
       expect(writes).toHaveLength(1);
       expect(writes[0]).toContain('could not check whether local aliases shadow the curated table');
+    });
+  });
+
+  /**
+   * PR #207 council round 3, A1 — the ASYNCHRONOUS half of "never fatal".
+   *
+   * Round 2's `safeWrite` try/catch covers only a writer that throws
+   * SYNCHRONOUSLY. MEASURED against a real closed pipe (node v24.18.0, Windows;
+   * parent spawns a child with `stdio: ['ignore','ignore','pipe']` and destroys
+   * the read end, child writes to `process.stderr`):
+   *
+   *   | shape                              | outcome                              |
+   *   |------------------------------------|--------------------------------------|
+   *   | `write(line)`                      | returns FALSE, throws nothing; EPIPE  |
+   *   |                                    | lands a turn later as an unhandled    |
+   *   |                                    | 'error' -> uncaughtException, exit 7  |
+   *   | `write(line, cb)`                  | cb receives EPIPE **and** 'error'     |
+   *   |                                    | still emits unhandled -> exit 7       |
+   *   | attach 'error', write, detach      | detach wins the race; the error lands |
+   *   |                                    | with 0 listeners -> exit 7            |
+   *   | persistent `on('error', noop)`     | absorbed, process survives; a SECOND  |
+   *   |                                    | write emits a SECOND 'error'          |
+   *
+   * Three consequences, each pinned below. (1) A write callback is NOT the fix —
+   * it observes the error without disarming the unhandled-'error' throw. (2) A
+   * scoped attach/detach is not merely racy, it is always wrong: delivery is
+   * always on a later turn. (3) The handler must be `on`, not `once` — a second
+   * notice raises a second event.
+   *
+   * The stub below reproduces exactly that shape: `write()` succeeds
+   * synchronously, then emits 'error' on a later turn. `emit('error')` with no
+   * listener THROWS (EventEmitter's documented behaviour) — the stub catches that
+   * throw into `fatal`, standing in for the process-fatal uncaughtException the
+   * real pipe produced, so the pin can assert on it instead of killing the worker.
+   *
+   * Named mutant "STREAMFATAL" — drop the attach-once 'error' arming from
+   * `alias-shadow.js`'s default stderr writer. Disjoint from WRITERFATAL: that
+   * one restores the SYNCHRONOUS throw path, this one the asynchronous one, and
+   * no fixture dies under both.
+   */
+  describe('the notice survives an ASYNCHRONOUS stderr failure (round 3, A1)', () => {
+    const { EventEmitter } = require('events');
+
+    let realStderrDesc;
+    let stub;
+
+    /** A stderr whose write() succeeds now and fails on a later turn. */
+    function asyncFailingStderr() {
+      const s = new EventEmitter();
+      s.written = [];
+      s.fatal = [];
+      s.pending = [];
+      s.write = (line) => {
+        s.written.push(String(line));
+        s.pending.push(new Promise((resolve) => setImmediate(() => {
+          const epipe = Object.assign(new Error('EPIPE: broken pipe, write'), { code: 'EPIPE' });
+          try { s.emit('error', epipe); } catch (e) { s.fatal.push(e); }
+          resolve();
+        })));
+        return false; // measured: a failing pipe returns false, it does not throw
+      };
+      return s;
+    }
+
+    beforeEach(() => {
+      realStderrDesc = Object.getOwnPropertyDescriptor(process, 'stderr');
+      stub = asyncFailingStderr();
+      Object.defineProperty(process, 'stderr', { value: stub, configurable: true });
+    });
+
+    afterEach(() => { Object.defineProperty(process, 'stderr', realStderrDesc); });
+
+    test('a stream that fails on a LATER turn cannot kill the run it diagnoses (A1)', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      // The synchronous half survives on its own — that is round 2's guard, and
+      // it is exactly why this defect was invisible.
+      expect(() => load().noteAliasShadows(['kimi'])).not.toThrow();
+      await Promise.all(stub.pending); // ...and the async turn the EPIPE lands on
+      expect(stub.written.join('')).toContain("alias 'kimi' resolves to");
+      expect(stub.fatal).toEqual([]);
+    });
+
+    test('a SECOND async failure is absorbed too — the handler is not a one-shot (A1)', async () => {
+      writeConfig({ kimi: STALE_KIMI, glm: 'openrouter/z-ai/glm-not-the-shipped-one' });
+      load().auditAliasShadows(['kimi', 'glm']);
+      await Promise.all(stub.pending);
+      expect(stub.written).toHaveLength(2);
+      expect(stub.fatal).toEqual([]);
+    });
+
+    test('ATTACH-ONCE: repeated audits do not stack handlers on the stream (A1)', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const shadow = load();
+      shadow.auditAliasShadows(['kimi']);
+      shadow.auditAliasShadows(['kimi']);
+      await Promise.all(stub.pending);
+      expect(stub.written).toHaveLength(2); // two audits, two notices — still spoken
+      expect(stub.listenerCount('error')).toBe(1);
+      expect(stub.fatal).toEqual([]);
+    });
+
+    // ABSENCE CONTROL: the arming is scoped to the module's OWN default writer.
+    // An injected writer (every test collector, and the MCP notices array) must
+    // leave the process's stderr completely untouched — no write, no listener.
+    test('ABSENCE CONTROL: an INJECTED writer leaves the stream alone entirely (A1)', () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const writes = [];
+      load().auditAliasShadows(['kimi'], (s) => writes.push(s));
+      expect(writes).toHaveLength(1);
+      expect(stub.written).toEqual([]);
+      expect(stub.listenerCount('error')).toBe(0);
+    });
+  });
+
+  /**
+   * PR #207 council round 3, B1 — the failure branch must survive what it caught.
+   *
+   * The catch block built its line with a template literal, so `${err.message}`
+   * was evaluated BEFORE `safeWrite` ever ran: a thrown `null`/`undefined` raised
+   * a fresh TypeError inside the catch and escaped `noteAliasShadows` entirely —
+   * the very failure round 2's guard exists to prevent, re-entering through the
+   * guard's own announcement. A thrown bare string was the quieter half: strings
+   * carry no `.message`, so a real reason printed as `(undefined)`.
+   *
+   * ⚠️ `String(x)` is itself not total (MEASURED: `String(Object.create(null))`
+   * throws `TypeError: Cannot convert object to primitive value`), so the
+   * extraction is guarded rather than merely defensive. Nothing in this catch may
+   * throw, including the code that describes the throw.
+   *
+   * Named mutant "MESSAGERAW" — put the bare `${err.message}` template back.
+   */
+  describe('the failure branch describes what was thrown (round 3, B1)', () => {
+    /** Drive the catch branch with an arbitrary thrown value. */
+    function noteWithThrow(thrown) {
+      const writes = [];
+      jest.doMock('../src/utils/config', () => ({ loadConfig: () => { throw thrown; } }));
+      try {
+        const shadow = require('../src/utils/alias-shadow');
+        expect(() => shadow.noteAliasShadows(['kimi'], (s) => writes.push(s))).not.toThrow();
+      } finally { jest.dontMock('../src/utils/config'); }
+      return writes;
+    }
+
+    const PREFIX = 'could not check whether local aliases shadow the curated table';
+
+    test('a thrown NULL is announced, not turned into a TypeError inside the catch', () => {
+      const writes = noteWithThrow(null);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain(PREFIX);
+      expect(writes[0]).toContain('(null)');
+    });
+
+    test('a thrown UNDEFINED is announced too', () => {
+      const writes = noteWithThrow(undefined);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain('(undefined)');
+    });
+
+    test('a thrown bare STRING renders the string itself, never "(undefined)"', () => {
+      const writes = noteWithThrow('config.json is a directory');
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain('(config.json is a directory)');
+      expect(writes[0]).not.toContain('(undefined)');
+    });
+
+    test('a thrown value with NO printable form still cannot escape (String() itself throws)', () => {
+      const writes = noteWithThrow(Object.create(null));
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain(PREFIX);
+    });
+
+    // ABSENCE CONTROL: the ordinary case is unchanged — a real Error still
+    // reports its own message, so the hardening did not cost the diagnosis.
+    test('ABSENCE CONTROL: a real Error still reports its own message verbatim', () => {
+      const writes = noteWithThrow(new Error('EACCES: permission denied'));
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain('(EACCES: permission denied)');
     });
   });
 

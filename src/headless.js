@@ -25,6 +25,9 @@ const { envNumber } = require('./utils/env-num');
 const { engineErrorForSession } = require('./utils/engine-log');
 // v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
 const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
+// v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
+// emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
+const { isMeasuredTtft } = require('./utils/ttft');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -961,11 +964,28 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         //   4. The pre-send backstop path, which skips the poll loop entirely —
         //      a model that began streaming while `sendPromptAsync` hung is
         //      never polled at all.
+        //   5. A backward wall-clock jump before the first substantive poll
+        //      (PR #207 round 3, B3). The reading is taken but is not a
+        //      measurement, so the emit gates drop it — see the ruling below.
         // And the value itself is QUANTIZED UPWARD: it is stamped at poll time,
         // not at token time, so every measurement is an upper bound carrying up
         // to one `pollIntervalMs` (plus the getMessages round-trip) of slack.
         // Nothing extra is recorded for the censored cases on purpose — there is
         // no honest number to record, and a sentinel would be read as data.
+        //
+        // ⚠️ CLOCK-SKEW RULING (PR #207 round 3, B3). This is a wall-clock
+        // delta, not a monotonic one, so a backward jump between
+        // `outputClockStartedAt` and this poll — NTP correction, a VM resuming
+        // from suspend, a manual clock set — measures NEGATIVE. Such a reading
+        // is DROPPED at the emit gates (`isMeasuredTtft`), never clamped:
+        // clamping to `0` would publish "first token inside the first poll",
+        // the most consequential value in the distribution the C2 derivation
+        // will read, for a leg that measured nothing of the kind.
+        //
+        // The stamp stays one-shot and unguarded ON PURPOSE. Re-arming after a
+        // skewed reading would let a LATER poll stamp a delta against the same
+        // displaced origin: a bigger number, equally wrong, and no longer even
+        // the first token. One decision point (the gate) beats two.
         if (ttftMs === null && substantiveActivity) { ttftMs = Date.now() - outputClockStartedAt; }
 
         // Check for the completion marker as the FINAL non-empty line, carrying
@@ -1466,8 +1486,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // v4.9 W13 Task A: emit-when-set. This return is reached by legs that
         // failed with no USABLE output, which is not the same as no output at
         // all — a leg that streamed reasoning and then errored has a real ttft
-        // and must keep it.
-        ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
+        // and must keep it. (PR #207 round 3, B3: emit-when-VALID too — see the
+        // clock-skew ruling at the stamp site above.)
+        ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
         error: sessionError
       };
     }
@@ -1486,7 +1507,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // #133 P1: see the comment on the sibling return above — guaranteed set.
       opencodeSessionId: sessionId,
       // v4.9 W13 Task A: emit-when-set — see the sibling return above.
-      ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
+      ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
       exitCode: 0
     };
 
@@ -1578,7 +1599,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // that path), and throwing away a measurement it already made would be a
       // second, silent loss on top of the first. Nothing is invented: a leg
       // that exploded before any poll observed activity still carries no key.
-      ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
+      ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
       error: error.message
     };
   }

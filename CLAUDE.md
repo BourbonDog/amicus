@@ -329,6 +329,7 @@ src/
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── text-sanitize.js  # One third-party string, safe to render: no escapes, no bidi, one short line.
 │   ├── thinking-validators.js  # Thinking Level Validators
+│   ├── ttft.js  # The one honesty predicate for the time-to-first-token probe (v4.9 W13).
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
 │   ├── update-notice.js  # The MCP server is the one entry point that skips bin/amicus.js's update
 │   ├── update-notifier-loader.js  # update-notifier Loader
@@ -744,6 +745,7 @@ evals/
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |

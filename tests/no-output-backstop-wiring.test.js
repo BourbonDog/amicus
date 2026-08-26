@@ -864,12 +864,15 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  * poll time, not token time — so it is an upper bound carrying up to one
  * `pollIntervalMs` of slack.
  *
- * FOUR named mutants. All red sets below were measured 2026-08-26 against the
- * PR #203 round-1 tree at ONE shared focused scope — 7 suites / 273 tests:
- * this file plus tests/alias-shadow.test.js, tests/sidecar/fanout.test.js,
+ * FIVE named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
+ * PR #207 round-3 tree at ONE shared focused scope — 8 suites / 323 tests: this
+ * file plus tests/alias-shadow.test.js, tests/sidecar/fanout.test.js,
  * tests/council/run-stats-entry.test.js,
+ * tests/council/runstats-byte-order.test.js,
  * tests/scripts/council-review-workflow.test.js,
  * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
+ * (The earlier scope was 7 suites / 273 tests, so the TOTALS are not comparable;
+ * every per-mutant set below is, and each is marked.)
  *
  * TTFTDROP — comment out the measure line in src/headless.js's poll loop
  *   (`if (ttftMs === null && substantiveActivity) { ... }`) so the probe never
@@ -877,10 +880,12 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  *   time to the FIRST substantive tick, not the leg's duration" · "reasoning
  *   alone is a first token…" · "a leg that measured a first token and THEN
  *   exploded keeps the measurement" · both "…survives a terminal first poll"
- *   pins. (It was 2 before round 1 added the A1/A2 pins.)
+ *   pins. (It was 2 before round 1 added the A1/A2 pins; RE-MEASURED at round 3:
+ *   unchanged.)
  *   The four absence tests stay GREEN under it BY DESIGN: absence is what the
- *   mutant produces everywhere, so they are controls, not pins. The carry pins
- *   in tests/sidecar/fanout.test.js and tests/council/run-stats-entry.test.js
+ *   mutant produces everywhere, so they are controls, not pins. Round 3's CLOCK
+ *   SKEW pin joins them for the same reason — it too asserts absence. The carry
+ *   pins in tests/sidecar/fanout.test.js and tests/council/run-stats-entry.test.js
  *   stay green too — they take a leg document as input and never run headless.
  *   Do not "fix" any of them to red.
  *
@@ -899,13 +904,23 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  *   "a fold marker in the very poll that first sees output still stamps
  *   ttftMs". The absence control in that same describe stays green in BOTH
  *   directions, which is what proves the hoist did not start inventing values.
+ *   RE-MEASURED at round 3: unchanged — the CLOCK SKEW pin does not join it,
+ *   because the mutant also produces absence for that fixture.
  *
  * TTFTSCOPE (PR #203 A2) — delete the emit-when-set spread from runHeadless's
  *   catch-all return, the observable half of declaring `ttftMs` inside the try.
- *   RED: 1 test / 1 suite — "a leg that measured a first token and THEN
- *   exploded keeps the measurement". Its sibling "the outer-exception return
- *   carries no ttftMs key either" stays green: that is the control saying the
- *   fix did not turn absence into a fabricated 0.
+ *   RED: 1 test / 1 suite (RE-MEASURED at round 3: unchanged) — "a leg that
+ *   measured a first token and THEN exploded keeps the measurement". Its sibling
+ *   "the outer-exception return carries no ttftMs key either" stays green: that
+ *   is the control saying the fix did not turn absence into a fabricated 0.
+ *
+ * GATESPLIT:headless (PR #207 round 3, B3) — revert all three of runHeadless's
+ *   emit gates from the shared `isMeasuredTtft` to a bare type test. RED: 2
+ *   tests / 2 suites — "CLOCK SKEW: a backward jump measures a negative delta,
+ *   which is DROPPED, not clamped" (this file) and "the three importable gates
+ *   import it" (tests/council/run-stats-entry.test.js, which owns the
+ *   cross-surface roster). The other three GATESPLIT variants, one per remaining
+ *   gate, are recorded in that same file.
  */
 describe('v4.9 W13 Task A: the TTFT probe', () => {
   test('records the elapsed time to the FIRST substantive tick, not the leg\'s duration', async () => {
@@ -1085,6 +1100,53 @@ describe('v4.9 W13 Task A: the TTFT probe survives a terminal first poll (PR #20
     expect(typeof result.ttftMs).toBe('number');
     expect(result.ttftMs).toBeGreaterThanOrEqual(0);
     expect(result.ttftMs).toBeLessThan(5000);
+  }, 20000);
+
+  /**
+   * PR #207 council round 3, B3 — THE PROBE SIDE OF THE HONESTY PREDICATE.
+   *
+   * The measurement is `Date.now() - outputClockStartedAt`, so it is only as
+   * monotonic as the wall clock. A backward jump between the clock origin and
+   * the first substantive poll — NTP correction, a VM resuming from suspend,
+   * a manual clock set — measures a NEGATIVE time to first token.
+   *
+   * RULING (recorded at the probe in src/headless.js): DROP, do not clamp. The
+   * schema says `minimum 0`, and clamping a −5 s artifact to `0` would publish
+   * "first token inside the first poll" — the single most consequential value in
+   * the distribution the C2 derivation will read — for a leg that measured
+   * nothing of the kind. Emit-when-VALID is the same discipline as
+   * emit-when-set: absence already means "no honest measurement", and a skewed
+   * delta is exactly that.
+   *
+   * The stamp itself is deliberately left one-shot and unguarded: re-arming
+   * after a skewed reading would let a LATER poll stamp a delta against the same
+   * displaced origin — a bigger number, equally wrong, and no longer even the
+   * first token. One decision point (the gate) beats two.
+   *
+   * CONTROL: the fixture is the fold-marker fixture from the pin directly above,
+   * which stamps a real number under an undisturbed clock. The only difference
+   * here is the skew.
+   */
+  test('CLOCK SKEW: a backward jump measures a negative delta, which is DROPPED, not clamped', async () => {
+    const NONCE = 'ttftskew9';
+    const realNow = Date.now;
+    let skewMs = 0;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => realNow.call(Date) + skewMs);
+    try {
+      mockGetMessages.mockImplementation(async () => {
+        skewMs = -5000; // the wall clock jumps back BEFORE this poll's activity is read
+        return [{
+          info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+          parts: [{ id: 't1', type: 'text', text: `done\n[SIDECAR_FOLD:${NONCE}]` }],
+        }];
+      });
+
+      const result = await runHeadless(MODEL, 'sys', 'user', 'ttftskew1', '/proj', 60000, 'build',
+        { ...OPTS, nonce: NONCE, noOutputBackstopMs: 60000 });
+
+      expect(result.completed).toBe(true); // the leg itself is unharmed
+      expect('ttftMs' in result).toBe(false);
+    } finally { nowSpy.mockRestore(); }
   }, 20000);
 
   // The absence contract is UNCHANGED by the hoist: a gate that breaks with no

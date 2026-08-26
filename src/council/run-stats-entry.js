@@ -53,10 +53,13 @@
  * tests/council/runstats-byte-order.test.js).
  *
  * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
- * the leg document and emitted only when it is a number. PROBE ONLY — nothing
+ * the leg document and emitted only when it is a NON-NEGATIVE INTEGER — the
+ * shape council-tally.schema.json declares, and (PR #207 round 3, B3) a stricter
+ * test than the bare type check this used to spell. PROBE ONLY — nothing
  * derives a backstop, threshold, or routing decision from it yet (ruling R12:
- * probe first, derive later). Absent means no substantive tick was observed,
- * which is neither `0` (a real measurement) nor `null`.
+ * probe first, derive later). Absent means no substantive tick was observed —
+ * or that the only reading taken was not an honest measurement — which is
+ * neither `0` (a real measurement) nor `null`.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
   repairRefused, seat, summary }) {
@@ -93,7 +96,19 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     // Emit-when-set, NOT `durationMs`'s null-coercion one line above: this row
     // is the C2 derivation's future input, and a null there would be read as a
     // measurement. Absent means "never observed" and must stay absent.
-    ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
+    //
+    // PR #207 round 3 (B3): emit-when-VALID too. The shared predicate is
+    // `src/utils/ttft.js :: isMeasuredTtft`, and it is spelled out by HAND here
+    // for one reason only — the module invariant at the top of this file forbids
+    // importing anything, and the pin that enforces it fires on the character
+    // sequence anywhere in the file, comments included. The structural pins that
+    // keep this copy in step with the shared one are in this module's own test
+    // file. Do not "simplify" it back to a bare type test: that admits NaN and
+    // ±Infinity (both of which serialize to `null`), negatives from a backward
+    // wall-clock jump at the probe, and fractions from a hand-edited artifact —
+    // every one of them forbidden by council-tally.schema.json's
+    // `integer, minimum 0`.
+    ...(Number.isInteger(ttftMs) && ttftMs >= 0 ? { ttftMs } : {}),
     usage: (leg && leg.usage) || null,
   };
 }

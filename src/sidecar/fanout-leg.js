@@ -14,6 +14,8 @@ const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
 const { writeFileAtomic } = require('../utils/atomic-write');
+// v4.9 W13 Task A (PR #207 round 3, B3): the shared ttftMs honesty predicate.
+const { isMeasuredTtft } = require('../utils/ttft');
 
 /** Map a runHeadless result to a leg metadata status. */
 function legStatusFromResult(result) {
@@ -191,12 +193,17 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     toolSettleAborted: result ? result.toolSettleAborted : undefined,
     // v4.9 W13 Task A: the TTFT probe's on-disk hop. Same omit-if-absent
     // convention as status/reason/usage/opencodeSessionId above (writeLegPatch
-    // drops only `undefined`), but guarded on `typeof === 'number'` rather than
-    // `||` ON PURPOSE: `0` is a real measurement — the first substantive tick
-    // landed inside the first poll — and `|| undefined` would silently eat it,
-    // turning "instant first token" into "never produced anything". A leg that
-    // genuinely produced nothing carries no key at all, so absence keeps its one
-    // meaning.
+    // drops only `undefined`), but guarded on a value TEST rather than on `||`
+    // ON PURPOSE: `0` is a real measurement — the first substantive tick landed
+    // inside the first poll — and `|| undefined` would silently eat it, turning
+    // "instant first token" into "never produced anything". A leg that genuinely
+    // produced nothing carries no key at all, so absence keeps its one meaning.
+    //
+    // PR #207 round 3 (B3): that value test is now the SHARED `isMeasuredTtft`
+    // rather than a local `typeof` check, which also admitted NaN/±Infinity (both
+    // of which `JSON.stringify` writes to this very file as `null`, breaking
+    // run.schema.json's `integer, minimum 0` while looking like an honest
+    // absence), negatives and fractions. See src/utils/ttft.js.
     //
     // The leading `result &&` matches its `toolSettleTimedOut`/`toolSettleAborted`
     // siblings directly above (PR #203 council round 1, A3/C1 — the earlier note
@@ -207,7 +214,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // cannot, the `result &&` reads assume it might — and this line costs
     // nothing whichever one holds: it is one `&&` against a value already in a
     // register, and it is dead code if `result` is truly always assigned.
-    ttftMs: result && typeof result.ttftMs === 'number' ? result.ttftMs : undefined,
+    ttftMs: result && isMeasuredTtft(result.ttftMs) ? result.ttftMs : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {
