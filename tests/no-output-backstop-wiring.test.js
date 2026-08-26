@@ -170,17 +170,18 @@ describe('runHeadless no-output backstop wiring', () => {
  * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
  * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
  * so a backstop-killed leg read as an ordinary 'timeout'.
- * NO LONGER REACHABLE: headless.js:1094 now also requires `!backstopFired`
- * and headless.js:1112 requires `backstopFired`, so the two guards are
- * mutually exclusive by construction — see headless.js:1086-1093 for the
+ * NO LONGER REACHABLE: headless.js:1147 now also requires `!backstopFired`
+ * and headless.js:1165 requires `backstopFired`, so the two guards are
+ * mutually exclusive by construction — see headless.js:1139-1146 for the
  * race they close. The test below pins it: exactly one abort, never both.
  *
- * ⚠️ These three citations were RE-DERIVED against the final v4.9 W13 tree
- * (2026-08-26). They were already rotted at HEAD — 993/1011/985-992 pointed
- * into the stable-idle gate, not the two backstop guards — and W13 Task A's
- * inserts in headless.js shifted them further. The gate cannot catch this
- * class: check-citations.js only proves NNN is IN RANGE, and every one of the
- * stale values was.
+ * ⚠️ These three citations were RE-DERIVED a second time, against the final
+ * PR #203 round-1 tree (2026-08-26). They had already rotted twice: once
+ * before W13 (993/1011/985-992 pointed into the stable-idle gate), and again
+ * when W13 shipped values that landed inside the explanatory comment rather
+ * than on the two `if`s. A1's hoist then shifted them further. The gate cannot
+ * catch this class: check-citations.js only proves NNN is IN RANGE, and every
+ * stale value was. The two numbers above are now the `if` lines themselves.
  */
 describe('fix wave: the backstop and the ordinary --timeout must not both fire for one leg', () => {
   test('thresholds set close together: only the backstop fires, never both', async () => {
@@ -844,42 +845,67 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  * threshold, no per-model window. That is R12, and it is stated in the module
  * comment beside the measure.
  *
- * ⚠️ MEASURED LIMITATION, recorded so the eventual C2 derivation does not read
- * the data wrong: four completion gates (`fold-marker`, boundary-provider-error,
- * error-with-no-output, `sdk-idle`) `break` EARLIER in the poll body than the
- * activity block. A leg whose first substantive output and whose completion
- * land inside the SAME poll therefore carries no ttft at all. So an absent
- * ttftMs means "no substantive tick was ever OBSERVED", which is not identical
- * to "the model produced nothing" — do not treat absence as a silent-seat
- * signal. Closing that would mean hoisting the activity block above four
- * completion gates in the poll loop, which is a behavior-risking refactor this
- * probe-only task deliberately declines.
+ * ⚠️ RESIDUAL CENSORING, recorded so the eventual C2 derivation does not read
+ * the data wrong. The four completion gates (`fold-marker`,
+ * boundary-provider-error, error-with-no-output, `sdk-idle`) used to `break`
+ * EARLIER in the poll body than the activity block, so a leg whose first output
+ * and whose completion landed in the same poll carried no ttft — the fast legs,
+ * i.e. a LEFT-truncated sample, not a random one. PR #203 round 1 (A1+B1) closed
+ * that by hoisting the whole activity block above the gates; the two pins live
+ * in "the TTFT probe survives a terminal first poll" below.
  *
- * TWO named mutants, both measured 2026-08-26 on this branch:
+ * What remains unmeasurable, and therefore what an absent `ttftMs` can still
+ * mean besides "this leg served nothing": an externally ABORTED leg (the
+ * metadata check breaks above `getMessages`), a POLL-FAILURE bail, `--timeout`
+ * expiry during the final sleep, and the pre-send backstop path that skips the
+ * poll loop entirely. Every one of those ends the leg without a poll observing
+ * what may already have been served. Absence is therefore still not a
+ * silent-seat signal. And every recorded value is QUANTIZED UPWARD — stamped at
+ * poll time, not token time — so it is an upper bound carrying up to one
+ * `pollIntervalMs` of slack.
+ *
+ * FOUR named mutants. All red sets below were measured 2026-08-26 against the
+ * PR #203 round-1 tree at ONE shared focused scope — 7 suites / 273 tests:
+ * this file plus tests/alias-shadow.test.js, tests/sidecar/fanout.test.js,
+ * tests/council/run-stats-entry.test.js,
+ * tests/scripts/council-review-workflow.test.js,
+ * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
  *
  * TTFTDROP — comment out the measure line in src/headless.js's poll loop
  *   (`if (ttftMs === null && substantiveActivity) { ... }`) so the probe never
- *   records. RED: 2 tests / 1 suite, measured at FULL `npx jest --no-coverage`
- *   scope (562 suites / 8218 tests as denominator):
- *     tests/no-output-backstop-wiring.test.js — "records the elapsed time to
- *       the FIRST substantive tick, not the leg's duration" · "reasoning alone
- *       is a first token — the probe tracks the whole substantive predicate,
- *       not just text growth"
- *   The three absence tests below stay GREEN under it BY DESIGN: absence is
- *   what the mutant produces everywhere, so they are controls, not pins. The
- *   carry pins in tests/sidecar/fanout.test.js and
- *   tests/council/run-stats-entry.test.js stay green too — they take a leg
- *   document as input and never run headless. Do not "fix" any of them to red.
+ *   records. RED: 5 tests / 1 suite, all in this file — "records the elapsed
+ *   time to the FIRST substantive tick, not the leg's duration" · "reasoning
+ *   alone is a first token…" · "a leg that measured a first token and THEN
+ *   exploded keeps the measurement" · both "…survives a terminal first poll"
+ *   pins. (It was 2 before round 1 added the A1/A2 pins.)
+ *   The four absence tests stay GREEN under it BY DESIGN: absence is what the
+ *   mutant produces everywhere, so they are controls, not pins. The carry pins
+ *   in tests/sidecar/fanout.test.js and tests/council/run-stats-entry.test.js
+ *   stay green too — they take a leg document as input and never run headless.
+ *   Do not "fix" any of them to red.
  *
  * PROGRESSEDTWIN — swap the measure's predicate from `substantiveActivity` to
  *   `progressed`, i.e. the twin this design exists to avoid. RED: 1 test /
- *   1 suite at focused scope (4 suites / 194 tests — this file plus
- *   tests/sidecar/fanout.test.js, tests/council/run-stats-entry.test.js,
- *   tests/headless.test.js):
+ *   1 suite:
  *     tests/no-output-backstop-wiring.test.js — "DISCRIMINATOR: the empty
  *       assistant placeholder moves `progressed` but stamps no ttft"
  *   ONE test carries that whole property. It is the only fixture in the repo
  *   where the two predicates disagree, so do not thin it.
+ *
+ * GATECENSOR (PR #203 A1/B1) — move the measure line back BELOW the four
+ *   completion gates, to its pre-round-1 home just above the backstop tick.
+ *   RED: 2 tests / 1 suite, both in "…survives a terminal first poll" —
+ *   "sdk-idle in the very poll that first sees output still stamps ttftMs" ·
+ *   "a fold marker in the very poll that first sees output still stamps
+ *   ttftMs". The absence control in that same describe stays green in BOTH
+ *   directions, which is what proves the hoist did not start inventing values.
+ *
+ * TTFTSCOPE (PR #203 A2) — delete the emit-when-set spread from runHeadless's
+ *   catch-all return, the observable half of declaring `ttftMs` inside the try.
+ *   RED: 1 test / 1 suite — "a leg that measured a first token and THEN
+ *   exploded keeps the measurement". Its sibling "the outer-exception return
+ *   carries no ttftMs key either" stays green: that is the control saying the
+ *   fix did not turn absence into a fabricated 0.
  */
 describe('v4.9 W13 Task A: the TTFT probe', () => {
   test('records the elapsed time to the FIRST substantive tick, not the leg\'s duration', async () => {
@@ -951,10 +977,9 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
   }, 20000);
 
   test('ABSENCE: the outer-exception return carries no ttftMs key either', async () => {
-    // `ttftMs` is declared inside runHeadless's try block, so it is not even in
-    // scope at the catch-all return — an exploded leg reports no measurement,
-    // which is the honest answer and matches the emit-when-set rule everywhere
-    // else. (Contrast `opencodeSessionId`, which run.schema.json REQUIRES to be
+    // An exception BEFORE any poll ran leaves the probe unset, so the catch-all
+    // return omits the key — emit-when-set, exactly like every other hop.
+    // (Contrast `opencodeSessionId`, which run.schema.json REQUIRES to be
     // present as string|null and is therefore coerced there — see #133 P1.)
     mockSendPromptAsync.mockRejectedValue(new Error('Network error'));
 
@@ -962,6 +987,119 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
       { ...OPTS, noOutputBackstopMs: 60000 });
 
     expect(String(result.error)).toContain('Network error');
+    expect('ttftMs' in result).toBe(false);
+  }, 20000);
+
+  /**
+   * PR #203 council round 1, finding A2 — the measurement must SURVIVE an
+   * exception taken after it was made.
+   *
+   * `ttftMs` used to be declared inside runHeadless's inner try, so it was not
+   * even in scope at the catch-all return: a leg that streamed real output and
+   * then exploded threw its own measurement away. The declaration now sits
+   * beside `sessionId`/`watchdog`, outside that try, and the catch-all return
+   * carries it emit-when-set like the two sibling returns.
+   *
+   * The throw seam is `server.close()` on the success path (src/headless.js:1343
+   * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
+   * guarded one in the handler): the leg polls, streams 'hello', completes, and
+   * only then does the close reject into the outer catch.
+   */
+  test('a leg that measured a first token and THEN exploded keeps the measurement', async () => {
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+      parts: [{ id: 't1', type: 'text', text: 'hello' }],
+    }]);
+    mockStartServer.mockResolvedValue({
+      client: {},
+      server: {
+        url: 'http://127.0.0.1:1',
+        close: jest.fn(async () => { throw new Error('close exploded'); }),
+      },
+    });
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'ttftboom2', '/proj', 2000, 'build',
+      { ...OPTS, noOutputBackstopMs: 60000 });
+
+    expect(String(result.error)).toContain('close exploded'); // the catch-all return, not a sibling
+    expect(typeof result.ttftMs).toBe('number');
+    expect(result.ttftMs).toBeGreaterThanOrEqual(0);
+    expect(result.ttftMs).toBeLessThan(2000);
+  }, 20000);
+});
+
+/**
+ * PR #203 council round 1, findings A1 + B1 — THE LEFT-CENSORING PAIR.
+ *
+ * The probe used to live in the middle of the poll body, BELOW four completion
+ * gates that `break`. A leg whose first substantive output and whose completion
+ * landed in the SAME poll therefore carried no measurement at all — and those
+ * are exactly the fast legs a time-to-first-token distribution is most sensitive
+ * to, so the censoring was not random: it truncated the LEFT tail, biasing any
+ * future C2 derivation upward.
+ *
+ * The fix is structural rather than a second probe site: the whole per-poll
+ * activity block (the five deltas, `progressed`, `substantiveActivity` and the
+ * one-shot stamp) is hoisted ABOVE the gates. Every gate that can end a poll now
+ * runs after the poll's activity has been read, so there is still exactly ONE
+ * definition of the predicate and exactly ONE stamp site — a second probe
+ * beside each gate is precisely the twin the design forbids.
+ *
+ * Both fixtures below are the terminal-poll shape: the FIRST poll that returns
+ * any output is also the poll that completes the leg.
+ */
+describe('v4.9 W13 Task A: the TTFT probe survives a terminal first poll (PR #203 A1/B1)', () => {
+  test('sdk-idle in the very poll that first sees output still stamps ttftMs', async () => {
+    // The SDK idle gate (headless.js, "Authoritative idle signal") is reached
+    // only once `mirror.output.length > 0` — i.e. the first poll carrying
+    // output can be the poll that ends the leg, and it breaks before the
+    // activity block used to run.
+    mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+      parts: [{ id: 't1', type: 'text', text: 'the whole answer, first poll' }],
+    }]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'ttftidle1', '/proj', 5000, 'build',
+      { ...OPTS, noOutputBackstopMs: 60000 });
+
+    expect(result.completed).toBe(true);
+    expect(typeof result.ttftMs).toBe('number');
+    expect(result.ttftMs).toBeGreaterThanOrEqual(0);
+    expect(result.ttftMs).toBeLessThan(5000);
+  }, 20000);
+
+  test('a fold marker in the very poll that first sees output still stamps ttftMs', async () => {
+    // The fold-marker gate is the FIRST gate in the poll body — the earliest
+    // possible break, and the one a well-behaved fast model actually takes.
+    const NONCE = 'ttftfold9';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+      parts: [{ id: 't1', type: 'text', text: `done\n[SIDECAR_FOLD:${NONCE}]` }],
+    }]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'ttftfold1', '/proj', 5000, 'build',
+      { ...OPTS, nonce: NONCE, noOutputBackstopMs: 60000 });
+
+    expect(result.completed).toBe(true);
+    expect(typeof result.ttftMs).toBe('number');
+    expect(result.ttftMs).toBeGreaterThanOrEqual(0);
+    expect(result.ttftMs).toBeLessThan(5000);
+  }, 20000);
+
+  // The absence contract is UNCHANGED by the hoist: a gate that breaks with no
+  // substantive activity must still leave the key off. Without this control the
+  // hoist could have been "fixed" by stamping unconditionally at each gate.
+  test('ABSENCE CONTROL: a gate that breaks with nothing served still stamps nothing', async () => {
+    // The boundary-provider-error gate: it fires with `!mirror.output`, so no
+    // substantive tick ever happened and no measurement may be invented.
+    mockSendPromptAsync.mockResolvedValue({ providerError: 'HTTP 402 no credits' });
+    mockGetMessages.mockResolvedValue([]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'ttftboundary1', '/proj', 5000, 'build',
+      { ...OPTS, noOutputBackstopMs: 60000 });
+
+    expect(String(result.error)).toContain('402');
     expect('ttftMs' in result).toBe(false);
   }, 20000);
 });

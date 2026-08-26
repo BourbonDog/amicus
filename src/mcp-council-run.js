@@ -58,7 +58,7 @@ async function handleCouncilRunTool(input, project, helpers) {
   // for any caller that bypasses schema validation).
   const oc = validateOnComplete(input.onComplete);
   if (!oc.ok) { return textResult(oc.error, true); }
-  const CHAIR_DEFAULT = 'deepseek';
+  const { CHAIR_DEFAULT } = require('./cli-council-run-bench'); // v4.9 W13 (PR #203 A6): one owner, not a second copy
   if (typeof input.briefingFile !== 'string' || !input.briefingFile.trim()) {
     return textResult("amicus_council_run requires 'briefingFile' (a path to the briefing).", true);
   }

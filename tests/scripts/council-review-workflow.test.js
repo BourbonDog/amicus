@@ -511,6 +511,37 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       return y.slice(y.indexOf('Run the adjudicated council'), y.indexOf('Collect the spend receipt'));
     };
 
+    /**
+     * The council step with its COMMENT lines removed — i.e. what the runner
+     * actually executes, plus the step's `env:` assignments.
+     *
+     * PR #203 council round 1, finding A7. The ordering test below used to read
+     * `--timeout` off the whole document, and the first `--timeout` in this file
+     * is not a flag at all: it is the phrase "the per-leg `--timeout 10`
+     * (600000 ms) set below" inside this very step's evidence comment, roughly
+     * thirty lines above the `run:` block that spells the real one. The two
+     * numbers agree today, which is exactly why the anchor was worth fixing
+     * before they stop agreeing — edit the real flag and the assertion would
+     * have gone on comparing against the prose.
+     *
+     * Named mutant PROSEANCHOR: drop the comment filter from the helper below.
+     * RED measured 2026-08-26 at the 7-suite/273-test focused scope — 1 test /
+     * 1 suite: "the ordering test reads the RUN command, not the prose that
+     * quotes the flag". The ordering assertion itself stays green under it,
+     * because today's two numbers agree — which is the point of the extra pin.
+     */
+    const councilRunCommand = () => councilStep()
+      .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+
+    test('the ordering test reads the RUN command, not the prose that quotes the flag', () => {
+      // The decoy is real and deliberate — the comment must keep explaining the
+      // relationship — so the extractor, not the comment, is what has to change.
+      expect(councilStep()).toMatch(/#.*--timeout \d+/);
+      expect(councilRunCommand()).not.toMatch(/#/);
+      // Exactly one executable spelling, so the match below cannot be ambiguous.
+      expect(councilRunCommand().match(/--timeout \d+/g)).toHaveLength(1);
+    });
+
     test('the paid council step raises the no-output backstop, with its evidence', () => {
       const step = councilStep();
       expect(step).toContain("AMICUS_NO_OUTPUT_BACKSTOP_MS: '480000'");
@@ -544,10 +575,12 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // Ordering is the whole point of the knob: the backstop is the leg-level
     // dead-man's switch and must still fire BEFORE the whole-leg timeout, or a
     // silent seat burns the full wall clock instead of being reported and retried.
-    test('the headroom stays under the per-leg --timeout, so the backstop still fires first', () => {
-      const y = yml();
-      const ms = Number(y.match(/AMICUS_NO_OUTPUT_BACKSTOP_MS: '(\d+)'/)[1]);
-      const timeoutMinutes = Number(y.match(/--timeout (\d+)/)[1]);
+    test('the headroom stays under the council step\'s OWN per-leg --timeout, so the backstop still fires first', () => {
+      // Both numbers come from the same step's executable lines (A7): the env
+      // assignment and the flag the runner will actually pass.
+      const cmd = councilRunCommand();
+      const ms = Number(cmd.match(/AMICUS_NO_OUTPUT_BACKSTOP_MS: '(\d+)'/)[1]);
+      const timeoutMinutes = Number(cmd.match(/--timeout (\d+)/)[1]);
       expect(ms).toBeGreaterThan(300000); // strictly more headroom than the default
       expect(ms).toBeLessThan(timeoutMinutes * 60000);
     });

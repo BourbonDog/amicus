@@ -265,7 +265,7 @@ describe('buildLegRows', () => {
     // indexes BOTH (`o.lenses[o.models.indexOf(alias)]`). Neither surviving shape THROWS, because
     // slug() coerces with String(), so instead of a crash they produced a confident lie in the
     // Role column. The lens/bench length pairing is an enforced invariant, not an assumption:
-    // src/cli-handlers-council-run.js:170 refuses `--lenses` unless it has exactly one lens per
+    // src/cli-handlers-council-run.js:164 refuses `--lenses` unless it has exactly one lens per
     // seat. A run.json that breaks it is malformed, and the honest answer is LC-4's same null.
     test.each([
       ['lenses a bare string (indexes the STRING: used to read "lens:s")', 'security', ['gpt']],

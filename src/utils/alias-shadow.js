@@ -22,11 +22,27 @@
  * Wired at two sites, both measured (see tests/alias-shadow.test.js's header for
  * the measurement):
  *   1. `cli-council-run-bench.js :: resolveBench` — the one bench-resolution
- *      helper BOTH council transports pass through, because
- *      `mcp-council-run.js:177` always spawns the CLI child with an expanded
- *      `--models` list.
+ *      helper BOTH council transports EXECUTE, because `mcp-council-run.js`
+ *      always spawns the CLI child with an expanded `--models` list. The bench,
+ *      the chair (explicit or default) and the critic are all inspected there:
+ *      they resolve through this same table, so a shadow on any of them is
+ *      equally invisible (PR #203 round 1, A6).
  *   2. `sidecar/models.js :: runCheck` — `amicus models --check`, where the
  *      whole configured alias set is the subject.
+ *
+ * ⚠️ SURFACE LIMITATION, measured (PR #203 council round 1, finding A4). The
+ * earlier claim that this line reaches "both transports" was true about which
+ * CODE runs and false about who ever SEES it. On the CLI surface the notice
+ * lands on the user's terminal. On the MCP surface it does not reach the client
+ * at all: `mcp-server.js :: spawnSidecarProcess` spawns the child with
+ * `stdio: ['ignore', 'ignore', <fd>]`, where the fd is an open handle on
+ * `<runDir>/debug.log` — so the child's stderr is redirected to that file (or
+ * dropped entirely when the dir cannot be created), the parent keeps no pipe,
+ * and the child is `unref`'d. An MCP caller therefore has to open
+ * `<runDir>/debug.log` to read this. Inventing a new channel for it (an MCP
+ * notification, a field on the tool result, a line in the run document) is a
+ * transport change, not a diagnosis, and is deliberately NOT part of this
+ * round — filed in BACKLOG.md beside C5.
  *
  * Named mutants, both with their red sets recorded in tests/alias-shadow.test.js:
  * "SHADOWSILENT" (make `noteAliasShadows` a no-op) and "GATEWAYFORM" (compare
@@ -87,9 +103,23 @@ function formatAliasShadow(s) {
 }
 
 /**
- * Per-PROCESS dedup. A council run is one CLI process (the MCP transport spawns
- * that same child), so "once per alias here" is "once per run" — and a preset
- * bench that names the same alias twice still gets one line.
+ * Per-SCOPE dedup: one line per shadowed alias, per scope.
+ *
+ * ⚠️ This used to be per-PROCESS with no way back (PR #203 council round 1,
+ * finding A5). The reasoning was "a council run is one CLI process", which is
+ * true of the spawned child and false of every other host — the engine, a
+ * programmatic caller, the test suite — where the SECOND council and every one
+ * after it got silence. For a self-diagnosis feature, silence is
+ * indistinguishable from all-clear, which is the correct-but-silent degrade the
+ * product principle forbids; so a scope is now explicit and re-openable.
+ *
+ * MEASURED, on what identifies a run at the wiring seam: nothing does. `runId`
+ * is assigned in cli-handlers-council-run.js AFTER `resolveBench` returns and is
+ * not on `args`, so there is no run identity to key the set on. The smallest
+ * honest seam is therefore for each wired site to OPEN a scope when it runs —
+ * see `auditAliasShadows` below, which is the only thing either site calls.
+ * Both sites are reached exactly once per command invocation, so one scope is
+ * one run, and the set still collapses a bench that names the same alias twice.
  */
 const spoken = new Set();
 
@@ -118,4 +148,23 @@ function noteAliasShadows(names, write) {
   }
 }
 
-module.exports = { findAliasShadows, formatAliasShadow, noteAliasShadows };
+/**
+ * THE WIRING ENTRY POINT: open a fresh notice scope, then speak.
+ *
+ * Both sites call this and nothing else, in ONE statement, so the scope can
+ * never be opened by one caller and forgotten by the next — a two-step
+ * "reset, then note" would have made the A5 defect re-introducible by omission,
+ * which for a self-diagnosis feature means going quiet with a green suite.
+ * `noteAliasShadows` stays exported as the scope-respecting primitive (two calls
+ * inside one scope still produce one line per alias).
+ * @param {string[]} [names] see findAliasShadows
+ * @param {(line: string) => void} [write] see noteAliasShadows
+ */
+function auditAliasShadows(names, write) {
+  spoken.clear();
+  noteAliasShadows(names, write);
+}
+
+module.exports = {
+  findAliasShadows, formatAliasShadow, noteAliasShadows, auditAliasShadows,
+};

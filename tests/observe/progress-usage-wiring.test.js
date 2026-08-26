@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Guards the real src/headless.js:451 wiring (Task 8, BINDING DECISION 1).
+ * Guards the real src/headless.js:474 wiring (Task 8, BINDING DECISION 1).
  *
  * The other progress-usage tests exercise writeProgress/readProgress in
  * isolation and would still pass even if the headless poll loop never wired

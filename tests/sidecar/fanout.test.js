@@ -478,6 +478,31 @@ describe('runFanout orchestrator', () => {
     expect('ttftMs' in wave.legs[1]).toBe(false);
   });
 
+  /**
+   * PR #203 council round 1, findings A3 + C1 — the null guard, pinned by SHAPE.
+   *
+   * MEASURED: the null path is NOT drivable from the outside. `result` is read
+   * bare three statements earlier (`legStatusFromResult(result)` →
+   * `statusFromResult`, which dereferences `result.aborted`), so a nullish
+   * `result` throws before this expression is ever evaluated — there is no
+   * fixture that reaches it. A behavioural pin here would therefore be a pin on
+   * the wrong line. What IS worth defending is the guard's presence: it makes
+   * `ttftMs` agree with its `toolSettleTimedOut`/`toolSettleAborted` siblings
+   * instead of relying on an invariant this file does not consistently assume.
+   * Named mutant NULLGUARD: delete the leading `result &&`. RED measured
+   * 2026-08-26 at the 7-suite/273-test focused scope — 1 test / 1 suite, this
+   * one. It is the whole red set, which is the honest cost of a shape pin.
+   */
+  it('the on-disk ttftMs hop keeps the `result &&` guard its siblings use (PR #203 A3/C1)', () => {
+    const src = fsReal.readFileSync(
+      pathReal.join(__dirname, '..', '..', 'src', 'sidecar', 'fanout-leg.js'), 'utf-8');
+    expect(src).toContain(
+      'ttftMs: result && typeof result.ttftMs === \'number\' ? result.ttftMs : undefined,');
+    // …and the `typeof` half survives alongside it: `result && result.ttftMs`
+    // alone would resurrect the 0-eating bug the guard shape exists to avoid.
+    expect(src).not.toMatch(/ttftMs:\s*result\s*&&\s*result\.ttftMs\s*\|\|/);
+  });
+
   // A first substantive tick observed inside the first poll is a real 0, and 0
   // is exactly the value a `|| undefined` omit-if-absent idiom would silently
   // eat — which is why both hops guard on `typeof === 'number'` instead.

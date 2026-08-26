@@ -72,7 +72,7 @@ function legRole({ bench, critic, lenses, stageName, modelInput }) {
   // remaining shape throws, because slug() coerces with String(), so both produced a confident
   // LIE instead of a crash: `lenses: 'security'` with `bench: ['gpt']` indexes the STRING and
   // yields `lens:s`, and a `lenses` array shorter than `bench` yields `lens:undefined`. The
-  // length pairing is a real, enforced invariant, not an assumption — cli-handlers-council-run.js:170
+  // length pairing is a real, enforced invariant, not an assumption — cli-handlers-council-run.js:164
   // refuses `--lenses` unless it has exactly one lens per seat — so a run.json that violates it is
   // malformed, and the honest answer for a malformed pairing is the same `null` (an em-dash in the
   // Role column) that LC-4 established, never a guess.

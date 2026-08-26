@@ -11,11 +11,17 @@
  * MEASURED SITE (delegated question, v4.9 W13 Task B). The plan asked for "the
  * shared resolution helper, not a handler", so that BOTH council transports get
  * it. Measurement:
- *   - `mcp-council-run.js:177` spawns the CLI child with `--models <expanded>`
+ *   - `mcp-council-run.js` spawns the CLI child with `--models <expanded>`
  *     — ALWAYS, never `--council`. So the MCP council path re-enters the CLI
  *     and lands in `cli-council-run-bench.js :: resolveBench` exactly like a
  *     hand-typed `amicus council run`. That function is therefore the ONE
- *     bench-resolution helper both transports pass through.
+ *     bench-resolution helper both transports EXECUTE.
+ *   - ⚠️ EXECUTE, not "surface" (PR #203 round 1, finding A4). The child's
+ *     stderr is redirected to `<runDir>/debug.log` by
+ *     `mcp-server.js :: spawnSidecarProcess` (`stdio: ['ignore','ignore',<fd>]`,
+ *     then `unref`), so an MCP caller never sees this line — it has to be read
+ *     out of the run dir. Recorded in alias-shadow.js's docblock and BACKLOG.md;
+ *     giving it an MCP channel is a transport change, out of scope here.
  *   - `config.js :: getEffectiveAliases` merges `{...DEFAULT_ALIASES,
  *     ...userAliases}`, so by the time anything downstream (`resolveModel`,
  *     `route-launch.js :: resolveRouteForLaunch`) sees an id, the two sources
@@ -28,17 +34,24 @@
  *     would double-print for a preset run (the child re-resolves the expanded
  *     bench). One site, in the child, is what "once per run" means here.
  *
- * NAMED MUTANT "SHADOWSILENT" — `src/utils/alias-shadow.js :: noteAliasShadows`,
- * make the emitter a no-op (an early `return;` after the writer is bound, i.e.
- * the warning is computed and never spoken). RED SET measured on the mutated
- * tree (`npx jest tests/alias-shadow.test.js
- * tests/sidecar/models-command.test.js --maxWorkers=2` -> 7 failed, 69 passed):
- *   tests/alias-shadow.test.js            — 5 failed
+ * FOUR named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
+ * PR #203 round-1 tree at ONE shared focused scope — 7 suites / 273 tests: this
+ * file plus tests/no-output-backstop-wiring.test.js, tests/sidecar/fanout.test.js,
+ * tests/council/run-stats-entry.test.js,
+ * tests/scripts/council-review-workflow.test.js,
+ * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
+ *
+ * "SHADOWSILENT" — `src/utils/alias-shadow.js :: noteAliasShadows`, make the
+ * emitter a no-op (an early `return;` after the writer is bound, i.e. the
+ * warning is computed and never spoken). RED: 12 tests / 2 suites.
+ *   tests/alias-shadow.test.js            — 10 failed
  *     · emits the plan's exact line, one per shadowed alias
  *     · once per run: a second resolution of the same alias stays quiet
  *     · the default writer is stderr
  *     · a check that CANNOT run says so rather than degrading silently
  *     · a bare --models bench notices the shadow
+ *     · two councils in ONE process each get their own audit (A5)
+ *     · all four A6 chair/critic pins
  *   tests/sidecar/models-command.test.js  — 2 failed
  *     · --check names a local alias that shadows a curated pin, on stderr
  *     · --check --json: the notice never enters the audit document on stdout
@@ -48,13 +61,25 @@
  * product principle forbids, so the speech act gets its own pins, and the
  * ABSENCE CONTROLS are the ones that stay green in BOTH directions.
  *
- * SECOND NAMED MUTANT "GATEWAYFORM" — `findAliasShadows`, replace the canonical
- * comparison with a raw `local === shipped`. RED SET (2 failed, 76 passed over
- * the same two suites), both in this file:
+ * "GATEWAYFORM" — `findAliasShadows`, replace the canonical comparison with a
+ * raw `local === shipped`. RED: 2 tests / 1 suite, both in this file:
  *   · the same model in the other gateway form is NOT a shadow
  *   · this repo's own CI alias map raises only genuine model differences
  * Disjoint from SHADOWSILENT's set by construction: one mutant kills the speech,
  * the other kills the discrimination, and no test dies under both.
+ *
+ * "SCOPESTUCK" (PR #203 A5) — drop the `spoken.clear()` from
+ * `auditAliasShadows`, i.e. put the un-resettable per-process latch back. RED:
+ * 1 test / 1 suite:
+ *   · two councils in ONE process each get their own audit (PR #203 A5)
+ * Every other speech pin stays green — the latch only ever silences the SECOND
+ * run, which is exactly why one dedicated fixture had to exist.
+ *
+ * "SEATSBLIND" (PR #203 A6) — audit `res.bench` alone again, dropping the chair
+ * and critic from the name list. RED: 3 tests / 1 suite — the explicit --chair
+ * pin, the DEFAULT-chair pin and the --critic pin. The two A6 controls stay
+ * green in both directions, so the widening is pinned as an ADDITION rather
+ * than as noise.
  */
 
 const fs = require('fs');
@@ -270,6 +295,97 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       }
       expect(res.bench).toEqual(['kimi', 'glm']);
       expect(writes).toEqual([]);
+    });
+
+    /**
+     * PR #203 council round 1, finding A5 — the dedup must RESET between runs.
+     *
+     * The `spoken` set is module scope. A host process that resolves two
+     * councils in a row (the CLI child is one run per process, but the engine,
+     * the test suite and any programmatic host are not) used to get the audit
+     * for the first and SILENCE for every one after — the worst failure shape
+     * for a self-diagnosis feature, because it is indistinguishable from "all
+     * clear". `resolveBench` now opens a fresh notice scope, so the set dedups
+     * WITHIN a run and never across runs.
+     *
+     * MEASURED, on the delegated question of what identifies a run at this
+     * seam: nothing does. `runId` is assigned in
+     * cli-handlers-council-run.js AFTER this call (it is not in `args`, and on
+     * the MCP path the child receives `--run-id` but the handler has not read it
+     * yet), so there is no id to key on. Opening the scope at the audit's own
+     * entry site is the smallest honest seam: each wired site is reached exactly
+     * once per command invocation, so one scope IS one run.
+     */
+    test('two councils in ONE process each get their own audit (PR #203 A5)', () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const bench = require('../src/cli-council-run-bench');
+      const runOnce = () => {
+        const writes = [];
+        const origErr = process.stderr.write;
+        process.stderr.write = (s) => { writes.push(String(s)); return true; };
+        try { bench.resolveBench({ models: 'kimi,glm' }, false); } finally { process.stderr.write = origErr; }
+        return writes;
+      };
+      const first = runOnce();
+      const second = runOnce();
+      const line = `Notice: alias 'kimi' resolves to ${STALE_KIMI} (curated ships ${CURATED.kimi})\n`;
+      expect(first).toEqual([line]);
+      expect(second).toEqual([line]); // …not silence, and not two copies either
+    });
+
+    /**
+     * PR #203 council round 1, finding A6 — the CHAIR and the CRITIC resolve
+     * through the very same alias table as a bench seat, so a shadow there is
+     * exactly as invisible and exactly as worth naming.
+     */
+    describe('the chair and the critic are audited too (PR #203 A6)', () => {
+      const runBench = (args) => {
+        const writes = [];
+        const origErr = process.stderr.write;
+        process.stderr.write = (s) => { writes.push(String(s)); return true; };
+        try { require('../src/cli-council-run-bench').resolveBench(args, false); }
+        finally { process.stderr.write = origErr; }
+        return writes.join('');
+      };
+
+      test('an explicit --chair naming a shadowed alias notices, though it is not a bench seat', () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const out = runBench({ models: 'glm,gpt', chair: 'kimi' });
+        expect(out).toContain(`Notice: alias 'kimi' resolves to ${STALE_KIMI}`);
+      });
+
+      // The chair a run gets when nobody passes --chair is still an alias, and
+      // a shadow on it repoints the seat that writes the verdict.
+      test('the DEFAULT chair is audited when --chair is absent', () => {
+        const LOCAL_DEEPSEEK = 'openrouter/deepseek/deepseek-v3-legacy';
+        writeConfig({ deepseek: LOCAL_DEEPSEEK });
+        const out = runBench({ models: 'glm,gpt' });
+        expect(out).toContain(`Notice: alias 'deepseek' resolves to ${LOCAL_DEEPSEEK}`);
+      });
+
+      // ⚠️ MEASURED: for a run that survives validation the critic is ALWAYS a
+      // bench seat (cli-handlers-council-run.js rejects `--critic` outside
+      // `--models`, and mcp-council-run.js enforces the same), so on a valid run
+      // this name is a duplicate the audit's own de-dup removes. It is included
+      // so the notice does not silently depend on a rule enforced in a different
+      // file — hence the only fixture that can discriminate it is a critic
+      // outside the bench, i.e. a run about to be rejected downstream.
+      test('a --critic naming a shadowed alias notices', () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const out = runBench({ models: 'glm,gpt', critic: 'kimi' });
+        expect(out).toContain(`Notice: alias 'kimi' resolves to ${STALE_KIMI}`);
+      });
+
+      test('CONTROL: a shadowed bench seat still reports exactly one row, chair and critic clean', () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const out = runBench({ models: 'kimi,glm', critic: 'kimi' });
+        expect(out).toBe(`Notice: alias 'kimi' resolves to ${STALE_KIMI} (curated ships ${CURATED.kimi})\n`);
+      });
+
+      test('ABSENCE CONTROL: a clean chair and critic add nothing to a clean bench', () => {
+        writeConfig({ kimi: CURATED.kimi, deepseek: CURATED.deepseek });
+        expect(runBench({ models: 'kimi,glm', chair: 'deepseek', critic: 'kimi' })).toBe('');
+      });
     });
 
     test('ABSENCE CONTROL: a REJECTED bench (both --models and --council) carries no bench, so nothing is noticed', () => {

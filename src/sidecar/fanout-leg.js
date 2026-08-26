@@ -196,10 +196,18 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // landed inside the first poll — and `|| undefined` would silently eat it,
     // turning "instant first token" into "never produced anything". A leg that
     // genuinely produced nothing carries no key at all, so absence keeps its one
-    // meaning. `result` is always assigned by the try/catch above, so no null
-    // guard is needed here (unlike toolSettleAborted, which needs one only
-    // because it deliberately preserves a meaningful `false`).
-    ttftMs: typeof result.ttftMs === 'number' ? result.ttftMs : undefined,
+    // meaning.
+    //
+    // The leading `result &&` matches its `toolSettleTimedOut`/`toolSettleAborted`
+    // siblings directly above (PR #203 council round 1, A3/C1 — the earlier note
+    // here argued the guard away by reasoning about `false`-preservation, which
+    // is what the `typeof` test is for and has nothing to do with nullishness).
+    // The two invariants in this file disagree about whether `result` can be
+    // nullish — the bare `result.summary`/`result.error` reads above assume it
+    // cannot, the `result &&` reads assume it might — and this line costs
+    // nothing whichever one holds: it is one `&&` against a value already in a
+    // register, and it is dead code if `result` is truly always assigned.
+    ttftMs: result && typeof result.ttftMs === 'number' ? result.ttftMs : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

@@ -5166,7 +5166,7 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
 
 - [x] **Chair-on-bench has no engine-side guard, and PR4b made its consequence observable.** The
   guard exists in three places and `src/council/` is not one of them:
-  `src/cli-handlers-council-run.js:137`, `src/mcp-council-run.js:114`, and
+  `src/cli-handlers-council-run.js:140`, `src/mcp-council-run.js:114`, and
   `src/pack/pack-validate.js:93` (packs only, `pack.kind === 'council'`). `preflightSeats` — the
   engine's own pre-spend seat validator — refuses **five** ways (`src/council/seats.js:186-209`)
   and chair-on-bench is not among them. Worse, the guard *cannot* cover the two hand-assembled
@@ -6134,13 +6134,25 @@ minutes to get started"*).
   ✅ **DONE, v4.9 W13 (2026-08-26): the C5 alias-shadow warning + the pin refresh.**
   `src/utils/alias-shadow.js` warns once per run when a user alias shadows a curated alias
   with a DIFFERENT id (canonical-form compare, so a gateway-spelling of the same id stays
-  silent — mutant `GATEWAYFORM`), at the shared `resolveBench` seam both transports flow
-  through, plus `models --check`. AND the anchors above are re-derived: the curated pins
-  themselves were a generation behind and moved — kimi → `kimi-k3`, qwen → `qwen3.8-max`,
+  silent — mutant `GATEWAYFORM`), at the shared `resolveBench` seam both transports EXECUTE,
+  plus `models --check`. PR #203 round 1 widened it to the chair (explicit or default) and the
+  critic, and made the once-per-run dedup re-openable so a host process running two councils
+  audits both. AND the anchors above are re-derived: the curated pins themselves were a
+  generation behind and moved — kimi → `kimi-k3`, qwen → `qwen3.8-max`,
   glm → `glm-5.3` (the review reproduced a standing glm-5.1-vs-5.3 shadow line CI would have
   printed every run) — so the kimi id and the `:112` line cited above are the dated 2026-08
   reading, not the tree. TTFT capture (the other half of this section) shipped the same wave
   as the probe (`ttftMs`, emit-when-set, R12: no derivation).
+- ⚠️ **The alias-shadow notice does not reach an MCP caller.** MEASURED (PR #203 round 1,
+  finding A4): `mcp-server.js :: spawnSidecarProcess` spawns the council child with
+  `stdio: ['ignore', 'ignore', <fd>]`, the fd being an open handle on `<runDir>/debug.log`
+  (or `'ignore'` when that dir cannot be created), and then `unref`s it — so the child's
+  stderr is a FILE, never a pipe the server reads and never anything the client sees. Both
+  transports run the check; only the CLI surfaces it. An MCP user has to open
+  `<runDir>/debug.log`. Giving it a real MCP channel (a notification, a field on the tool
+  result, or a line in the run document) is a transport change, not a diagnosis, and was
+  deliberately left out of W13's round-1 fix wave. Same limitation applies to every other
+  stderr notice the council child writes.
 
 ### Quote the real engine error — #133 root fix
 
