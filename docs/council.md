@@ -806,8 +806,10 @@ wrapper over `buildReport()` (`src/council/report.js`, which builds the neutral 
 dispatches to `report-md.js` / `report-html.js` — the two renderers that own the string formats).
 
 **What it renders**, in this order: a header (run type, id, date, chair, council members), a
-verdict-summary tier-count table (on a task run, followed by the one-line concurrence
-qualifier — *tiers report peer concurrence, never verification*), a **What was lost** section
+tier-count summary table — headed **Verdict summary** on a review run and **Answer summary** on a
+task run, since a task run produces an answer, not a verdict, and on a task run followed by the
+one-line concurrence qualifier (*tiers report peer concurrence, never verification*) — a
+**What was lost** section
 when the run degraded (plus a **Notes** list for informational records, e.g. a task run's
 ledger-skipped announcement), the **adjudication matrix** (finding × judge, `✓`/`✗`/`–` with
 `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by

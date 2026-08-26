@@ -27,7 +27,16 @@ function renderMd(m) {
     h.claudeInCouncil ? 'Claude in council' : null].filter(Boolean).join(' · ');
   out.push(`\n_${meta}_\n`);
 
-  out.push('## Verdict summary\n');
+  // v4.9 PR #200 round-4 B1: the section carrying the run's PRIMARY summary is
+  // named for what the run PRODUCED. A task run has no verdict — its chair closes
+  // with `ANSWER:` (`parse-stage2.js :: parseChairTerminal` picks that parser off
+  // the same intent, `verdict.js :: CHAIR_ANSWERS` is its scale) — so 'Verdict
+  // summary' named the wrong artifact on the one heading a skimmer reads. Forked
+  // in BOTH renderers, pinned SEPARATELY per renderer (the R8/street-cred rule:
+  // a shared pin would let either regress silently). Review runs keep the exact
+  // old string, which is what holds both .snap documents byte-identical.
+  // Named mutant: SUMMARYLABEL (tests/council/report-intent.test.js).
+  out.push(m.intent === 'task' ? '## Answer summary\n' : '## Verdict summary\n');
   out.push('| Tier | Count |\n|---|---|');
   for (const t of TIER_ORDER) { out.push(`| ${t} | ${m.tierCounts[t]} |`); }
   // v4.9 W8 T-A (spec §5.4): the concurrence qualifier, on a TASK run only, and

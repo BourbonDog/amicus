@@ -414,9 +414,20 @@ function getTools() {
         // v4.9 W5.2: declared or zod strips it (the same #137-shaped silent
         // fork as the seat keys above) — a task run's meta.intent would vanish
         // from every hand-assembled MCP call and the ledger gates would see a
-        // review run. Permissive z.string(), matching runType: tally() stays
-        // the single arbiter of shape on both paths.
-        intent: z.string().optional(),
+        // review run.
+        // ⚠️ PR #200 round-4 C1: an ENUM here, NOT the permissive z.string()
+        // the neighbouring envelope keys use — because this key's failure
+        // direction is not inert. `intent` is read by exact match (`=== 'task'`)
+        // at every consumer, so a near-miss spelling ('Task') passed a
+        // z.string(), rode meta VERBATIM into tally.json, and matched NOTHING:
+        // the ledger gates in cli-handlers-council.js and mcp-server.js then
+        // APPEND the task run's rankings to the reliability ledger — the
+        // polluting direction. The `.nullable()`/permissive idiom above is for
+        // keys where tally() can still be the single arbiter of shape; it
+        // cannot arbitrate a value whose whole meaning is its exact spelling.
+        // Both spellings accepted, matching amicus_council_run's enum below, so
+        // one input does not mean two things at two doors.
+        intent: z.enum(['review', 'task']).optional(),
       }).describe('Run metadata; meta.models lists every reviewed model.'),
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),

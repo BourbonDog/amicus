@@ -856,8 +856,11 @@ describe('amicus_council_tally retains findings[].location (SI-23, R10)', () => 
 // tally-input's meta, so WITHOUT a declaration here zod strips it from every
 // hand-assembled MCP call and the three W5.4 ledger gates see a review run —
 // a task run's rankings would land in the reliability ledger via exactly one
-// transport. Permissive z.string(), matching runType: tally() stays the
-// single arbiter of shape on both paths.
+// transport. ⚠️ Declared as an ENUM, not the permissive z.string() the
+// neighbouring envelope keys use: PR #200 round-4 C1 measured that a merely
+// STRIPPED key and a merely MIS-SPELLED one fail in the SAME direction (no
+// `=== 'task'` consumer matches ⇒ the ledger gates append), so this key has to
+// be refused at the boundary rather than left for tally() to arbitrate.
 describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   const byName = () => Object.fromEntries(getTools().map(t => [t.name, t]));
 
@@ -894,5 +897,32 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
     const schema = byName().amicus_council_tally.inputSchema;
     const out = schema.meta.parse({ runId: 'r', models: ['a', 'b'] });
     expect('intent' in out).toBe(false);
+  });
+
+  // PR #200 round-4 finding C1 — a FAIL-SAFETY INVERSION, not a style nit.
+  // `z.string()` accepted any string, so a near-miss spelling ('Task', 'TASK')
+  // passed validation, rode `meta` VERBATIM into tally.json, and then matched
+  // NONE of the `=== 'task'` consumers downstream. For the ledger gates
+  // (`cli-handlers-council.js`, `mcp-server.js`, both `record.meta.intent ===
+  // 'task'`) the silent degrade lands on the POLLUTING side: the task run's
+  // rankings ARE appended to the reliability ledger. A permissive envelope is
+  // only safe when the failure direction is inert; here it is not. The enum
+  // matches amicus_council_run's own `z.enum(['review','task'])`, so one input
+  // does not mean two things at two doors.
+  test("amicus_council_tally meta.intent REJECTS a near-miss spelling at the boundary", () => {
+    const schema = byName().amicus_council_tally.inputSchema;
+    const meta = extra => ({ runId: 'r', models: ['a', 'b'], ...extra });
+    expect(() => schema.meta.parse(meta({ intent: 'Task' }))).toThrow();
+    expect(() => schema.meta.parse(meta({ intent: 'TASK' }))).toThrow();
+    expect(() => schema.meta.parse(meta({ intent: 'bogus' }))).toThrow();
+  });
+
+  test('amicus_council_tally meta.intent accepts BOTH valid spellings', () => {
+    const schema = byName().amicus_council_tally.inputSchema;
+    const meta = extra => ({ runId: 'r', models: ['a', 'b'], ...extra });
+    expect(schema.meta.parse(meta({ intent: 'task' })).intent).toBe('task');
+    // 'review' is the default spelled out loud — accepted here exactly as
+    // runCouncil accepts it (`run.js`'s normalization, PR #200 A3), never refused.
+    expect(schema.meta.parse(meta({ intent: 'review' })).intent).toBe('review');
   });
 });

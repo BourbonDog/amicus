@@ -85,6 +85,48 @@ describe('toModel — intent rides the model (W8 T-A)', () => {
   });
 });
 
+/**
+ * PR #200 round-4 finding B1 (major). The header WORD forked in W8, but the
+ * section that carries the run's PRIMARY summary kept its review-mode name: a
+ * task report opened `# Council Report — task` and then, two lines later,
+ * `## Verdict summary`. A task run has no verdict — it has an ANSWER (the chair
+ * closes with `ANSWER:`, `parse-stage2.js :: parseChairTerminal` selects that
+ * parser off the same intent, and `verdict.js :: CHAIR_ANSWERS` is the scale) —
+ * so the one heading a skimmer reads was naming the wrong artifact.
+ *
+ * Classification of every 'Verdict'/'verdict' the two renderers actually EMIT:
+ *   - `report-md.js :: renderMd`'s `## Verdict summary` — labels this run's own
+ *     primary content ⇒ FORKED here.
+ *   - `report-html.js :: renderHtml`'s `<h2>Verdict summary</h2>` — same ⇒ FORKED.
+ * That is the whole rendered set. Every other 'verdict' in either file is a
+ * source comment, and no document-name reference (`verdict.json`) is rendered by
+ * either renderer at all — so nothing had to be LEFT alone on that ground.
+ */
+describe('the primary summary heading forks (B1) — named mutant SUMMARYLABEL', () => {
+  test('md: a task run labels the tier table "Answer summary"', () => {
+    const md = buildReport({ verdict: taskVerdict() }, { format: 'md' });
+    expect(md).toContain('## Answer summary\n');
+    expect(md).not.toContain('Verdict summary');
+  });
+
+  test('html: same fork, same document', () => {
+    const html = buildReport({ verdict: taskVerdict() }, { format: 'html' });
+    expect(html).toContain('<h2>Answer summary</h2>');
+    expect(html).not.toContain('Verdict summary');
+  });
+
+  test('a REVIEW run still says "Verdict summary" (byte-identity half of the fork)', () => {
+    // The standing wave constraint: a review run's report is byte-identical to
+    // HEAD's. Both .snap documents (report-debate, report-claude-column) are
+    // review runs and stay green — this is the pin that says why.
+    for (const format of ['md', 'html']) {
+      const out = buildReport({ verdict: reviewVerdict() }, { format });
+      expect(out).toContain('Verdict summary');
+      expect(out).not.toContain('Answer summary');
+    }
+  });
+});
+
 describe('the concurrence qualifier (spec §5.4) — named mutant QUALIFIERDROP', () => {
   // MUTANT QUALIFIERDROP: the qualifier never renders (both emits forced off —
   // `report-md.js :: renderMd`'s `if (m.intent === 'task')` and the `qualifier`
@@ -117,7 +159,10 @@ describe('the concurrence qualifier (spec §5.4) — named mutant QUALIFIERDROP'
   test('placement: a reader of the tiers sees it BEFORE the adjudication matrix', () => {
     for (const format of ['md', 'html']) {
       const out = buildReport({ verdict: taskVerdict() }, { format });
-      const tiers = out.indexOf('Verdict summary');
+      // B1: on a TASK run the tier table is headed 'Answer summary'. This
+      // anchor moved with the fork — it was 'Verdict summary', which no longer
+      // appears anywhere in a task document.
+      const tiers = out.indexOf('Answer summary');
       const qual = out.indexOf(QUALIFIER);
       const matrix = out.indexOf('Adjudication matrix');
       expect(tiers).toBeGreaterThan(-1);

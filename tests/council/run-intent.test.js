@@ -66,6 +66,19 @@ describe('v4.9 W5.3: runCouncil intent validation — BAD_ARGS pre-spend', () =>
    * right, so one spelling meant two different things at two doors: accepted
    * and ignored at the CLI, a hard refusal one layer in.
    *
+   * ⚠️ THIS PIN ALSO REFUTES PR #200 round-4 finding C2, which held that the
+   * normalization runs after `runState.initCouncilRun` writes run.json's seed and
+   * so materializes `intent:'review'` on the artifact. The ORDERING is real
+   * (`run.js` seeds ~50 lines before it normalizes) but there is no copy path:
+   * `run-state.js :: initCouncilRun`'s seed literal carries no `intent` key at
+   * all, and both run.json writers of it (`run.js`'s post-seat checkpoint and
+   * `cli-handlers-council-run.js`'s) are `=== 'task'` spreads that 'review'
+   * cannot pass. MEASURED with mutant SEEDCOPY — `...(o.intent ? { intent:
+   * o.intent } : {})` added to that seed literal — whose red set across this
+   * suite is EXACTLY this test, failing on the `'intent' in run.json` assertion
+   * below (1 failed, 5 passed). So the run.json line here is load-bearing: it is
+   * what would catch the defect C2 described if anything ever introduced it.
+   *
    * The ENGINE NORMALIZES instead: 'review' is the default spelled out loud, so
    * it becomes ABSENT — which is exactly what "never materialized" already
    * means everywhere downstream — and the run proceeds as the review run it
