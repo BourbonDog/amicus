@@ -61,7 +61,14 @@ function renderRecord(r) {
     `  Cost: ${formatCost(cost)}\n`;
 }
 function renderStats(agg) {
-  if (!agg.length) { return 'No council runs recorded yet.\n'; }
+  // v4.9 W8 (ruling V5 / R10): an empty table is ambiguous — a fresh install and a
+  // task-only install look the same, because task runs never append a row (the
+  // intent gate in runTally above). Say so here rather than let silence imply that
+  // no council ever ran. Human render only; --json's doc shape is untouched.
+  if (!agg.length) {
+    return 'No council runs recorded yet.\n'
+      + 'Task runs never write reliability rows; a task-only install has no history here.\n';
+  }
   // v4.7 GOA-7 D10: group keys may be executable ids (>16 chars) — size the
   // model column to the longest key; legacy (alias-keyed) groups get a notes
   // marker beside low-N.

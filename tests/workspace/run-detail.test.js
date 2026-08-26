@@ -168,6 +168,54 @@ describe('getRunDetail', () => {
     expect(d.artifacts['report.html'].present).toBe(false);
   });
 
+  /**
+   * v4.9 W8 T-B — the verdict panel carries the run's INTENT.
+   *
+   * The electron renderer (`electron/workspace-ui/workspace-matrix.js ::
+   * renderVerdict`) is a plain browser script and cannot `require()` src/, so the
+   * only way it can label a task run's chip `ANSWER:` is for the panel payload to
+   * carry the fork key. `verdict.json` itself is emit-when-'task' (the W5 ruling),
+   * but this payload is an in-memory IPC model with no byte-identity contract and
+   * a CLOSED literal whose other keys are always present with null defaults — so
+   * `intent` is materialized both ways and defaults to 'review', matching the
+   * literal's own style. The renderer still treats an ABSENT key as review, since
+   * older payloads (and every hand-built fixture in the workspace suites) have none.
+   *
+   * Named mutant PANELINTENTSTUCK: collapse the ternary to a bare
+   * `intent: 'review'`. RED SET: "a task run's verdict panel carries intent:'task'".
+   * The two review pins are the absence controls and stay green by construction.
+   */
+  test("a task run's verdict panel carries intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
+    const verdict = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'verdict.json'), 'utf-8'));
+    verdict.intent = 'task';
+    verdict.overallVerdict = 'Converged';
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), JSON.stringify(verdict));
+    registerPointer(project, 'aaaa1111', runDir);
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.derived.verdictPanel.intent).toBe('task');
+    expect(d.derived.verdictPanel.overallVerdict).toBe('Converged');
+  });
+
+  test("a review run's verdict panel carries intent:'review' — the fixture has no intent key at all", () => {
+    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const raw = JSON.parse(fs.readFileSync(path.join(project, 'runs', 'council-aaaa1111', 'verdict.json'), 'utf-8'));
+    expect('intent' in raw).toBe(false);          // absence pin on the artifact itself
+    expect(getRunDetail(project, 'aaaa1111').derived.verdictPanel.intent).toBe('review');
+  });
+
+  test("an absent verdict yields a present:false panel that still defaults intent to 'review'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('review');
+  });
+
   test('degradedReason exit-1 path: run.error.code/message drives the reason string', () => {
     // The other half of F04: `run.error` is only ever non-null on the exit-1 path, where the
     // engine writes a structured {code, message}. No fixture carries this shape, so it is

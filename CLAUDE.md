@@ -112,6 +112,7 @@ src/
 │   ├── parse-stage2.js
 │   ├── peer-split.js
 │   ├── presets-cli.js
+│   ├── report-cost.js
 │   ├── report-html.js
 │   ├── report-md.js
 │   ├── report.js
@@ -537,6 +538,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
+| `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-md.js` |  | `renderMd()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |

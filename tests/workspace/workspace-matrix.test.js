@@ -355,6 +355,47 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(onOpenReport).toHaveBeenCalledTimes(1);
     });
 
+    /**
+     * v4.9 W8 T-B — the chip names the scale its phrase belongs to.
+     *
+     * Payload-driven ONLY: this file is a plain browser script loaded by the
+     * Electron renderer, so it cannot require() src/ to learn the run's intent.
+     * `vp.intent` is minted by src/workspace/run-detail.js :: verdictPanel, which
+     * always materializes it; the ternary below is `=== 'task'` rather than
+     * `!== 'review'` so a payload that predates v4.9 (no key at all — the shape
+     * every other workspace suite hand-builds) reads as review rather than
+     * flipping every legacy run's chip to ANSWER.
+     *
+     * Named mutant CHIPLABELSTUCK: drop the ternary back to the bare
+     * `'VERDICT: ' + vp.overallVerdict`. RED SET: the task test below.
+     */
+    test("a task payload's chip reads ANSWER:, never VERDICT:", () => {
+      const container = document.createElement('div');
+      const vp = {
+        present: true, intent: 'task', overallVerdict: 'Converged',
+        tierCounts: null, streetCred: [], decisions: [], reason: null,
+      };
+      AmicusMatrix.renderVerdict(container, vp, {
+        labelOf: () => null, isBlind: () => false, reportPresent: true, onFold: () => {}, onOpenReport: () => {},
+      });
+      expect(container.textContent).toContain('ANSWER: Converged');
+      expect(container.textContent).not.toContain('VERDICT');
+    });
+
+    test('a review payload keeps VERDICT: — and so does a legacy payload with no intent key (absence pin)', () => {
+      const render = (vp) => {
+        const container = document.createElement('div');
+        AmicusMatrix.renderVerdict(container, vp, {
+          labelOf: () => null, isBlind: () => false, reportPresent: true, onFold: () => {}, onOpenReport: () => {},
+        });
+        return container.textContent;
+      };
+      const base = { present: true, overallVerdict: 'Fix these first', tierCounts: null, streetCred: [], decisions: [], reason: null };
+      expect(render({ ...base, intent: 'review' })).toContain('VERDICT: Fix these first');
+      expect(render(base)).toContain('VERDICT: Fix these first');   // no intent key at all
+      expect(render(base)).not.toContain('ANSWER');
+    });
+
     test('returns the chair-prose host element for the caller to render markdown into', () => {
       const container = document.createElement('div');
       const vp = { present: true, overallVerdict: 'ok', tierCounts: null, streetCred: [], decisions: [], reason: null };

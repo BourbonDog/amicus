@@ -164,6 +164,60 @@ describe('buildFoldText', () => {
   });
 
   /**
+   * v4.9 W8 T-B — the terminal line names the scale its phrase belongs to.
+   *
+   * A task chair closes on an `ANSWER:` line drawn from CHAIR_ANSWERS and never
+   * emits a `VERDICT:` one; the two scales are DISJOINT by pinned construction
+   * (src/council/parse-stage2.js, tests/council/chair-scale-drift.test.js). So a
+   * task fold headed `VERDICT: Converged` labels the phrase with a scale it does
+   * not belong to — the dishonesty this task exists to remove.
+   *
+   * `intent` is emit-when-`'task'` (src/council/verdict.js :: buildVerdict — the
+   * W5 ruling), so the review fold is unchanged byte for byte and BOTH absence
+   * cases (no key at all, and an explicit `'review'`) keep `VERDICT:`.
+   *
+   * Named mutant FOLDLABELSTUCK — hard-code the head line back to
+   * `` `VERDICT: ${overall || 'none'}` `` (the label ignores intent).
+   * RED SET: "a task fold's terminal line reads ANSWER:, never VERDICT:" and
+   * "a task fold with no chair phrase still degrades in the task scale". The two
+   * review pins stay GREEN by construction — they are the absence controls, and
+   * a mutant that turns them red would be a different defect.
+   */
+  describe('the terminal line names the scale the phrase belongs to (v4.9 W8)', () => {
+    const foldWith = (mutate) => {
+      const run = load('council-run-complete', 'run.json');
+      const tally = load('council-run-complete', 'tally.json');
+      const verdict = load('council-run-complete', 'verdict.json');
+      mutate(verdict);
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally, verdict, chairText: null }).split('\n');
+    };
+
+    test("a task fold's terminal line reads ANSWER:, never VERDICT:", () => {
+      const lines = foldWith((v) => { v.intent = 'task'; v.overallVerdict = 'Converged'; });
+      expect(lines[7]).toBe('ANSWER: Converged');
+      expect(lines[7]).not.toContain('VERDICT');
+      // Non-vacuous: the rest of the head is untouched by the fork.
+      expect(lines[6]).toBe('---');
+      expect(lines[8]).toBe('Tiers: Confirmed 1 · Disputed 1 · Contested 1 · Singleton 1');
+    });
+
+    test('a task fold with no chair phrase still degrades in the task scale: ANSWER: none', () => {
+      const lines = foldWith((v) => { v.intent = 'task'; v.overallVerdict = null; });
+      expect(lines[7]).toBe('ANSWER: none');
+    });
+
+    test('a review fold carries no intent key at all and is byte-identical — VERDICT: (absence pin)', () => {
+      const lines = foldWith((v) => { expect('intent' in v).toBe(false); });
+      expect(lines[7]).toBe('VERDICT: Fix these first');
+    });
+
+    test("an explicit intent:'review' is not task — emit-when-task means everything else reads review", () => {
+      const lines = foldWith((v) => { v.intent = 'review'; });
+      expect(lines[7]).toBe('VERDICT: Fix these first');
+    });
+  });
+
+  /**
    * v4.4.1 DOC-5 — the Cost line said the same thing twice. `formatCost`
    * (src/utils/pricing.js) already encodes inexactness as a leading `~` for both
    * 'estimated' and 'mixed', and returns a bare `?` for 'unknown'; appending the

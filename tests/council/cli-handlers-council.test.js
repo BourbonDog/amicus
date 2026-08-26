@@ -538,6 +538,46 @@ function appendLedgerRows(rows) {
   for (const r of rows) { fs.appendFileSync(file, JSON.stringify(r) + '\n'); }
 }
 
+/**
+ * v4.9 W8 T-B — the zero-rows surface self-diagnoses (ruling V5 / spec §10.4's R10
+ * gap: "`amicus council stats` under-reports with no in-band way to say so").
+ *
+ * An empty reliability table is AMBIGUOUS in exactly one direction that matters
+ * now: a fresh install and a task-only install render identically, because task
+ * runs never append a ledger row (the intent gate in `runTally`, pinned above by
+ * "tally with meta.intent 'task' computes the record but appends NO ledger row").
+ * One line closes that, at the only site that can know the table is empty.
+ *
+ * Named mutant STATSSILENT: drop the second line from the `!agg.length` branch.
+ * RED SET: the zero-rows test below. The non-empty control stays green — it is
+ * the absence pin, and the five renderStats tests below it are the byte-level
+ * proof that a populated table is untouched.
+ */
+describe('renderStats zero-rows self-diagnosis (v4.9 W8)', () => {
+  test('an empty ledger says WHY it can be empty — task runs write no reliability rows', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    expect(out).toBe('No council runs recorded yet.\n'
+      + 'Task runs never write reliability rows; a task-only install has no history here.\n');
+  });
+
+  test('a populated ledger renders no self-diagnosis line (control)', async () => {
+    appendLedgerRows([ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' })]);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    expect(out).not.toContain('Task runs never write reliability rows');
+    expect(out).not.toContain('No council runs recorded yet');
+    expect(out).toContain('openai/gpt-5.2');       // non-vacuous: the table really rendered
+  });
+
+  test('--json is unchanged — the line is human-render only', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
+    expect(code).toBe(0);
+    expect(out).not.toContain('Task runs never write reliability rows');
+    expect(JSON.parse(out).models).toEqual([]);
+  });
+});
+
 describe('renderStats (v4.7 GOA-7 D10 surfaces)', () => {
   test('legacy groups carry a legacy marker in the notes column', async () => {
     // No resolvedModel on any row → deriveReliability marks the group legacy.

@@ -207,8 +207,10 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
   // whose wave leg died still gets an honest error row.
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
-  // `joinsLedger` has no 'judge' member, so nothing consumed it; report.js's cost
-  // table does now, and without it a twin bench's two judge rows are identical.
+  // `joinsLedger` has no 'judge' member, so nothing consumed it;
+  // `report-cost.js :: buildCostModel` (the report's cost table, extracted from
+  // report.js in v4.9 W8) does now, and without it a twin bench's two judge rows
+  // are identical.
   // `buildRunStatsEntry` (run-stats-entry.js :: buildRunStatsEntry) applies the
   // shared emit-when-DIFFERENT predicate, so a unique bench stays byte-identical
   // and no new predicate enters the tree.

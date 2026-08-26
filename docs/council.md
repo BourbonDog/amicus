@@ -258,7 +258,10 @@ cross-process lock.
 `verdict.json` here is the **undecided** verdict — same schema as [`amicus council
 verdict`](#amicus-council-verdict)'s output (council family v2) plus **`overallVerdict`**
 (`"Ship it" | "Fix these first" | "Fundamental rethink" | null`), parsed from the chair's final
-`VERDICT:` line. Example excerpt:
+`VERDICT:` line — or, on a task run (`--intent task`, v4.9), `"Converged" | "Split" |
+"Insufficient" | null` parsed from its final `ANSWER:` line instead (both scales, and why they
+are disjoint, are in the `overallVerdict` key note under [`amicus council
+verdict`](#amicus-council-verdict)). Example excerpt:
 
 ```json
 {
@@ -757,7 +760,8 @@ named here. That is why the v4.8 keys below each needed their own line.
 **Key notes:**
 - `schemaVersion` — verdict-document schema version (currently `2`).
 - `type` — document-type discriminator; always `"council-verdict"` (council family v2 envelope).
-- `overallVerdict` — the chair's verdict-scale outcome: one of `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"`, or `null` when no chair verdict was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
+- `overallVerdict` — the chair's terminal-line outcome, on **one of two disjoint scales, chosen by the run's intent**. A review run (no `intent` key) carries a verdict-scale value — `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"` — parsed from the chair's `VERDICT:` line. A **task run** (`intent: "task"`, v4.9) carries an answer-scale value — `"Converged"`, `"Split"`, `"Insufficient"` — parsed from the chair's `ANSWER:` line. The two scales share no value and no keyword, which is what lets each parser be blind to the other's line; a task run therefore never reports `"Ship it"`, and a review run never reports `"Converged"`. `null` on either scale when no chair terminal line was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
+- `intent` — **v4.9**, optional, `"task"` only. Present exactly when the run was launched with `--intent task`; absent means review — the engine never writes `"review"` (emit-when-task, the same idiom as `tag`). It is the key every renderer forks on: the report's concurrence qualifier and header word, the fold's and the Workspace chip's `ANSWER:`/`VERDICT:` label, and the chair's own packet/parser upstream of this document.
 - `seats` — **v4.8**, optional. The tally record's `meta.seats` (same `{id, alias, role, lens, position}` shape), promoted to the top level next to `seatLoss`. Present only when the tally record carried one, i.e. only when the bench repeated an alias. It is what makes the `alias#N` ids on `findings[].raiserSeat`, `adjudications[].seat` and `runStats[].seat` resolvable from the verdict **alone** — before v4.8 the verdict named seats it could not resolve. `council report` reads it to give each seat its own adjudication-matrix column; when it is absent, or is not an array of objects each carrying a string `id`, the **adjudication matrix** falls back to alias space whole and renders exactly as it did before v4.8. ⚠️ **That fallback is the matrix's alone — it is not a whole-document guarantee.** The street-cred table beside it labels each row from `streetCred[].seat` whenever the row carries one, a predicate independent of this key, so a verdict with seated `streetCred[]` rows and no usable `seats` renders seat ids in the street-cred table and aliases in the matrix (measured on an absent `seats`, a non-array `seats`, and an array-of-strings `seats`). In-process both fields come from the same twin bench and travel together; the split is reachable on a hand-assembled or externally-supplied record, which `buildVerdict`'s own docblock names. A verdict written before v4.8 carries no `streetCred[].seat` at all and is unaffected.
 - `findings[].raiserSeat` — **v4.8**, optional. The raising seat's id, carried through from the tally record; absent unless the bench repeated an alias. `findings[].raiser` stays the alias.
 - `findings[].sameModelCorroboration` — **v4.8**, optional, `true` only. Carried through from the tally record; see the tally-record notes above for the stamp's meaning **and for the two directions in which it is wrong** (it misses one model behind two aliases, and it fires falsely on one alias behind two executables).
@@ -802,7 +806,10 @@ wrapper over `buildReport()` (`src/council/report.js`, which builds the neutral 
 dispatches to `report-md.js` / `report-html.js` — the two renderers that own the string formats).
 
 **What it renders**, in this order: a header (run type, id, date, chair, council members), a
-verdict-summary tier-count table, the **adjudication matrix** (finding × judge, `✓`/`✗`/`–` with
+verdict-summary tier-count table (on a task run, followed by the one-line concurrence
+qualifier — *tiers report peer concurrence, never verification*), a **What was lost** section
+when the run degraded (plus a **Notes** list for informational records, e.g. a task run's
+ledger-skipped announcement), the **adjudication matrix** (finding × judge, `✓`/`✗`/`–` with
 `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
 tier** (Disputed first), and a **cost table** (per-model status/duration/cost + wave total,
 sourced from `runStats[].usage`).

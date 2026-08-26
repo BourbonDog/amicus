@@ -6583,6 +6583,14 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
   clears the map. All four states pinned in
   `tests/electron/ipc-setup-catalog-snapshot.test.js`.
+- [ ] **A task run with a missing/corrupt `verdict.json` labels its fold and Workspace panels
+  review-scale** (W8 wave review finding 3, filed 2026-08-25). `fold-format.js` and
+  `run-detail.js`'s verdict panel read only `verdict.intent`; on the narrow leg where a task
+  run exits 1 BEFORE the verdict write (the normal degraded ladder writes verdict.json WITH
+  intent and is honest), the fold prints `VERDICT: none` and the panel defaults review.
+  `run.json` checkpoints `intent: 'task'` (`run.js :: runCouncil`'s start checkpoint) and
+  `detail.run` is in scope at both call sites — the fix is a `verdict.intent || run.intent`
+  source. Follow-up, not a blocker.
 - [ ] **Offer-session snapshots leak for a window destroyed without `setup-done`** (PR 199
   round-3 council B3, nit, filed as latent 2026-08-25). `electron/offer-session.js`'s map is
   reclaimed only by `endSession` (setup-done) or a same-key re-offer; a Settings window closed
@@ -6593,3 +6601,19 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
   it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is
   acyclic, measured). Three copies → one; no drift test needed.
+- **Spec §10.6 REFUTED BY MEASUREMENT — `council tally` / `council verdict` on a task run work
+  end to end; no `COUNCIL_INTENT_MISMATCH` guard was built (v4.9 W8 T-B).** The v4.8 design
+  spec's §10.6 claimed both commands "have no valid input path and must fail with a named
+  `COUNCIL_INTENT_MISMATCH`, not an ENOENT". Measured against the real CLI (`node
+  bin/amicus.js`, `AMICUS_CONFIG_DIR` redirected to a scratch dir) on a task tally-input built
+  from `tests/council/fixtures/av-receiver-input.js` with `meta.intent:'task'`: `council tally
+  <input> --json` exited **0**, returned the full record with `meta.intent:"task"` and
+  `tierCounts {Confirmed:29, Contested:2, Singleton:1, Disputed:3}`, and wrote **no**
+  `council-ledger.jsonl` at all (the W5.4 gate-2 intent gate in `cli-handlers-council.js ::
+  runTally`); `council verdict <tally.json> -o verdict.json --json` then exited **0** and
+  emitted `intent:"task"` with `overallVerdict:"Converged"` — a CHAIR_ANSWERS phrase recovered
+  from `chair-output.md` by `verdict.js :: readOverallVerdict`'s both-scale fallback (the W7
+  fix-round F2 change). The spec predates W5–W7 giving these paths an intent axis: the shipped
+  design **carries** intent rather than refusing it, and a mismatch error would now break the
+  exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
+  clause is unaffected — it stays mode-free by design, as written.

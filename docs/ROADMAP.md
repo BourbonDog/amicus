@@ -206,7 +206,8 @@ list. Two findings drove it:
    An earlier draft of this note said *"all three had already rotted"*; that universal is false and
    is corrected here. The other two HAD already rotted before T2.4 began (`report.js:79` and
    `ledger.js:24` are comments at `ed5c0c02`), so their drift is pre-existing, not this release's.
-   The report fallback is now at `src/council/report.js :: toModel`'s `total`; all three claims
+   The report fallback is now at `src/council/report-cost.js :: buildCostModel`'s `total` (it was
+   `report.js :: toModel`'s until v4.9 W8 extracted the cost table); all three claims
    themselves still hold. So CA-4's omissions are not a schema nicety — they under-report spend on the
    surface the owner relies on, which collides with the cost-truth principle (*reported > estimated
    > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never

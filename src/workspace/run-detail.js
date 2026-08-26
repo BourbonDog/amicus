@@ -142,13 +142,22 @@ function degradedReason(run) {
   return null;
 }
 
+// v4.9 W8 T-B: `intent` rides this payload so the renderer can label a task run's
+// chip `ANSWER:` (electron/workspace-ui/workspace-matrix.js :: renderVerdict is a
+// plain browser script and cannot require() src/, so a fork key it cannot read is
+// a fork it cannot make). Unlike verdict.json — emit-when-'task' per the W5 ruling,
+// because that artifact has a byte-identity contract — this is an in-memory IPC
+// model whose literal is CLOSED and always materializes every key with a default,
+// so `intent` is materialized both ways and defaults to 'review'. The renderer
+// still treats an ABSENT key as review: pre-v4.9 payloads carry none.
 function verdictPanel(run, verdict) {
   const reason = degradedReason(run);
   if (!verdict || verdict.parseError) {
-    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason };
+    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason, intent: 'review' };
   }
   return {
     present: true,
+    intent: verdict.intent === 'task' ? 'task' : 'review',
     overallVerdict: verdict.overallVerdict === undefined ? null : verdict.overallVerdict,
     tierCounts: verdict.tierCounts || null,
     streetCred: Array.isArray(verdict.streetCred) ? verdict.streetCred : [],

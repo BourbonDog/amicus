@@ -65,6 +65,10 @@ function renderHtml(m) {
   // formatDegrade) rendered into the row, not a second HTML dialect.
   const lostRows = (m.degrades || []).map(d =>
     `<tr><td>${esc(d.channel)}</td><td>${esc(formatDegrade(d).trimEnd())}</td></tr>`).join('');
+  // v4.9 W8 T-A: kind:'info' records are announcements, not losses (`report.js ::
+  // toModel` splits them). A <ul>, not a second table: the debate lists below use
+  // exactly this idiom, and a note carries no channel column's worth of weight.
+  const noteItems = (m.notes || []).map(d => `<li>${esc(formatDegrade(d).trimEnd())}</li>`).join('');
   const meta = [h.date, h.chair ? `chair: ${h.chair}` : null, `council: ${h.council.join(', ')}`,
     h.claudeInCouncil ? 'Claude in council' : null].filter(Boolean).map(esc).join(' · ');
 
@@ -76,6 +80,15 @@ function renderHtml(m) {
   const lostSection = lostRows
     ? `<h2>What was lost</h2><table><tr><th>Channel</th><th>Notice</th></tr>${lostRows}</table>`
     : '';
+  // Same heading-over-nothing guard, one level quieter: no info records ⇒ nothing
+  // at all, so every report that has none is byte-identical to before this existed.
+  const notesSection = noteItems ? `\n<p><strong>Notes:</strong></p><ul>${noteItems}</ul>` : '';
+  // v4.9 W8 T-A (spec §5.4): the concurrence qualifier rides the tier table on a
+  // TASK run only, placed where a reader of the tiers cannot miss it — the mirror
+  // of report-md.js :: renderMd's placement, pinned SEPARATELY per renderer so
+  // neither can regress silently. Named mutant: QUALIFIERDROP.
+  const qualifier = m.intent === 'task'
+    ? '\n<p class="legend">Tiers report peer concurrence, never verification.</p>' : '';
 
   // m.debate is absent on hand-built models (tests/council/report.test.js calls
   // renderHtml directly with no debate key) — the guard must tolerate that, and
@@ -135,7 +148,7 @@ td.c { text-align: center; }
 <h1>Council Report — ${esc(h.runType)} (${esc(h.runId)})</h1>
 <p class="meta">${meta}</p>
 <h2>Verdict summary</h2>
-<table><tr><th>Tier</th><th>Count</th></tr>${tierRows}</table>${lostSection}
+<table><tr><th>Tier</th><th>Count</th></tr>${tierRows}</table>${qualifier}${lostSection}${notesSection}
 <h2>Adjudication matrix</h2>
 <table><tr><th>Finding</th><th>Sev</th><th>Raiser</th>${judgeHead}<th>Tier</th><th>Decision</th></tr>${matrixRows}</table>
 <p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>${m.findings.some(f => f.sameModelCorroboration) ? '\n<p class="legend"><sup>†</sup> corroborated only by another seat running the SAME model — concurrence, not independent support.</p>' : ''}

@@ -5,10 +5,11 @@
  * (src/headless.js `formatFoldOutput`, exported from src/headless.js and
  * re-exported from src/index.js) — byte-for-byte the same **7-line** head:
  * marker, Model, Session, Client, CWD, Mode, `---`. ⚠️ v4.4.1 DOC-5: this said
- * "8-line" for two releases. Line 8 (`VERDICT:`) is council's OWN addition and
+ * "8-line" for two releases. Line 8 (the terminal line — `VERDICT:` on a review
+ * run, `ANSWER:` on a task one since v4.9 W8) is council's OWN addition and
  * has no counterpart in formatFoldOutput, whose 8th element is the summary
  * body. Only the first 7 lines are the shared contract; anyone changing the
- * shared format must sync those and leave `VERDICT:` alone.
+ * shared format must sync those and leave the terminal line alone.
  * src/headless.js is the SOURCE OF TRUTH; keep the head in sync with it.
  * (Line numbers deliberately omitted — the previous `:775-789`/`:797` citation
  * had drifted by ~500 lines.) The duplication is deliberate:
@@ -24,7 +25,7 @@
  * The chair body is UNTRUSTED model text: it passes through stripFoldMarkers
  * before embedding, so chair prose containing a marker can never truncate or
  * spoof the fold (the exact hazard the nonce closure exists for).
- * Degradation mirrors the engine's ladder: no chair → VERDICT: none + tally
+ * Degradation mirrors the engine's ladder: no chair → `<terminal>: none` + tally
  * summary; pre-tally → stage/status summary. Never blocked, always labeled.
  */
 'use strict';
@@ -63,14 +64,25 @@ function buildFoldText(o) {
   // amicus_verdict MCP path types overallVerdict as a bare z.string().nullable()
   // — mcp-tools.js :: amicus_verdict), so a multi-line or marker-bearing value
   // must never reach the head verbatim: an embedded '\n' would shift every line below
-  // VERDICT: (a raw string containing '\n' becomes several elements once the
+  // the terminal line (a raw string containing '\n' becomes several elements once the
   // head array is '\n'-joined), and an embedded marker could spoof the fold.
-  // Safe on the shipped engine path (parseChairVerdict returns a canonical
-  // CHAIR_VERDICTS phrase) — this is defense-in-depth, not a fix for a real
+  // Safe on the shipped engine path (`run-chair.js :: runChair` parses the chair's
+  // terminal line with `parse-stage2.js :: parseChairTerminal`, which returns a
+  // canonical phrase of the run's OWN scale — CHAIR_VERDICTS on a review run,
+  // CHAIR_ANSWERS on a task one) — this is defense-in-depth, not a fix for a real
   // producer.
+  // ⚠️ DE-ROT (v4.9 W8): this said "parseChairVerdict returns a canonical
+  // CHAIR_VERDICTS phrase", true only until W7 added the second scale — after
+  // which it named the wrong parser for every task run.
   const overall = verdict && verdict.overallVerdict
     ? stripFoldMarkers(String(verdict.overallVerdict)).replace(/[\r\n]+/g, ' ').trim()
     : null;
+  // v4.9 W8: the terminal line names the SCALE its phrase belongs to. The two
+  // scales are disjoint by pinned construction (tests/council/chair-scale-drift.test.js),
+  // so labelling a CHAIR_ANSWERS phrase `VERDICT:` asserts a scale it is not on.
+  // `intent` is emit-when-'task' (verdict.js :: buildVerdict, the W5 ruling), so
+  // absence — and an explicit 'review' — keep the review fold byte-identical.
+  const terminalLabel = verdict && verdict.intent === 'task' ? 'ANSWER' : 'VERDICT';
   const tierCounts = (verdict && verdict.tierCounts) || (tally && tally.tierCounts) || null;
   const cost = run.usage && run.usage.cost ? run.usage.cost : null;
 
@@ -82,7 +94,7 @@ function buildFoldText(o) {
     `CWD: ${o.project}`,
     'Mode: council',
     '---',
-    `VERDICT: ${overall || 'none'}`,
+    `${terminalLabel}: ${overall || 'none'}`,
   ];
   if (tierCounts) {
     head.push(tierLine(tierCounts));
