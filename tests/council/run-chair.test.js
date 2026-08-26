@@ -614,6 +614,51 @@ describe('v4.9 W7 (#146): the TASK chair answers instead of verdicting', () => {
       .toBe('the chair ran but its output carried no parseable VERDICT: line');
   });
 
+  // ── PR #200 tail C4 — the EFFECT line forks its noun too ───────────────────
+  //
+  // The `why` immediately above has forked on intent since W7; the `effect`
+  // beside it did not, so a task run whose chair failed was told "the verdict is
+  // written with overallVerdict null" — the one scale W7 exists to keep off a
+  // task run, in the very note explaining the loss. MEASURED 2026-08-26: `what`
+  // ("the council has no chair synthesis") needs no fork — "chair synthesis" is
+  // the same noun on both scales — and the `overallVerdict` KEY is genuinely
+  // scale-independent (src/council/verdict.js :: buildVerdict emits it whatever
+  // the intent), so only the leading noun moves.
+  //
+  // ── NAMED MUTANT "EFFECTNOUNFLAT" ─────────────────────────────────────────
+  // MUTATION: in src/council/run-chair.js, collapse the effect ternary back to
+  // the flat literal `'the verdict is written with overallVerdict null; will
+  // exit degraded (2)'`.
+  // MEASURED 2026-08-26, RED SET 1 of 45, applied and reverted BY HAND (restore
+  // verified: 45 passed, the pre-mutant baseline). Scope — `npx jest
+  // tests/council/run-chair.test.js --maxWorkers=2` = 1 suite / 45 tests:
+  //   run-chair 1 — "task run: the chair-failed EFFECT names the answer".
+  // ⚠️ The review control below survives it honestly: the review branch of the
+  // ternary IS that literal, byte for byte, which is the pin's whole claim.
+  // ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+  test('task run: the chair-failed EFFECT names the answer, not the verdict', async () => {
+    const script = taskScript('Prose only, forever.');
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'still no terminal line')]);
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }),
+      deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(2);
+    const d = (run.degrades || []).find(x => x.channel === 'chair-failed');
+    expect(d.effect).toBe('the answer is written with overallVerdict null; will exit degraded (2)');
+    // `what` is intent-neutral and stays one text on both scales.
+    expect(d.what).toBe('the council has no chair synthesis');
+  });
+
+  test('review control: the EFFECT is byte-identical to its pre-fork self', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose only, forever.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'still no terminal line')]);
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(2);
+    const d = (run.degrades || []).find(x => x.channel === 'chair-failed');
+    expect(d.effect).toBe('the verdict is written with overallVerdict null; will exit degraded (2)');
+    expect(d.what).toBe('the council has no chair synthesis');
+  });
+
   // The scales are disjoint END TO END, not just in the parser: a REVIEW run
   // whose chair emits an ANSWER line has produced NO verdict, and the run must
   // spend its one repair rather than silently scoring the wrong scale.

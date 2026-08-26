@@ -241,7 +241,11 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     const spawnIdx = handler.indexOf('spawnSidecarProcess');
     const preSpawnSection = handler.slice(spawnIdx);
     const metaWrite = preSpawnSection.slice(preSpawnSection.indexOf("'metadata.json'"));
-    expect(metaWrite.slice(0, 600)).toContain('packRecord');
+    // The window is a PROXIMITY bound — "in this write, not some later one" —
+    // not a budget for the write's prose. Widened from 600 in v4.9 W12, which
+    // added W1-M4's note to the same object literal and left `packRecord` at
+    // 725 characters; the object itself did not grow.
+    expect(metaWrite.slice(0, 900)).toContain('packRecord');
   });
 
   test('the MCP bridge is imported from pack/pack-resolve, never re-deriving the knob tables', () => {
@@ -335,8 +339,16 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     // above, before sharedIdx).
     expect(preSpend).toContain('checkBudget');
     expect(preSpend).toMatch(/fwd\.maxCost/);
-    expect(preSpend).toMatch(/fwd\.renderedPrompt/);
     expect(preSpend).not.toContain("require('./template/apply')");
+    // `fwd.renderedPrompt` used to be re-derived INSIDE this window. v4.9 W12
+    // (W1-M4) hoisted that one expression above the branch so the spawn
+    // fallback shares it — the reuse property this test exists for, in a
+    // stronger form: there is now exactly ONE "rendered, else raw" in the
+    // handler, it is derived before either path, and this path CONSUMES it.
+    const derivation = /const renderedPrompt = fwd\.renderedPrompt !== undefined/;
+    expect(handler.slice(0, sharedIdx)).toMatch(derivation);
+    expect(preSpend).not.toMatch(derivation);
+    expect(preSpend).toMatch(/\brenderedPrompt\b/);
   });
 });
 
@@ -527,7 +539,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
   // ---- W1-M6/M7: the solo knob/param-map invariant behind the forward-notice loop ----
   //
   // There is no live defect on the interactive `amicus_start` path today: it can never
-  // reach the shared-server branch (mcp-server.js:432 gates that branch on
+  // reach the shared-server branch (mcp-server.js:458 gates that branch on
   // `sharedServer.enabled && input.noUi`, and an interactive call has no `noUi`), so it
   // always takes spawn-fallback, which resolves the pack in-process before spawning
   // (single-resolution rule) — see the `packNotices` push loop in mcp-server.js. That

@@ -36,18 +36,21 @@
  *    render, so template provenance (`promptMeta.template`) is still
  *    recorded exactly as Wave 1 built it.
  *
- * `renderedPrompt` has two different consumers now (W1-M4, v4.7 PR7):
- * amicus_start's in-process path (which never spawns a child, so nothing
- * else would render it) reuses it as the actual prompt instead of rendering
- * a second time; amicus_fanout's spawn path writes it to the wave's
- * on-disk `briefing.md` — the `--search` corpus (src/sidecar/list-search.js)
- * — instead of the raw prompt, so a wave whose spawned child aborts before
- * its own render (src/sidecar/fanout.js) stays findable by the text the
- * user actually sees. The spawned child itself still gets the RAW prompt
- * (via a sibling `briefing-input.md`), so its own later render remains the
- * provenance source for `promptMeta.template`. amicus_start's
- * spawn-fallback path is the one remaining caller that still only needs the
- * pre-spend validation and ignores `renderedPrompt`.
+ * `renderedPrompt` now has a consumer on EVERY path (W1-M4, closed for
+ * amicus_fanout in v4.7 PR7 and for amicus_start in v4.9 W12 — no caller is
+ * left that only wants the pre-spend validation):
+ *  - amicus_start's in-process path never spawns a child, so nothing else
+ *    would render it: it reuses the text as the actual prompt.
+ *  - both SPAWN paths (amicus_fanout's wave, amicus_start's spawn fallback)
+ *    write it to the session's on-disk `briefing.md` instead of the raw
+ *    prompt, so work whose spawned child aborts before its own render
+ *    (src/sidecar/fanout.js) stays findable by the text the user actually
+ *    sees. amicus_start additionally seeds `metadata.briefing` from it —
+ *    that field, not briefing.md, is a start row's `--search` corpus
+ *    (src/sidecar/list-search.js :: rowMatchesSearch).
+ * On both spawn paths the child itself still gets the RAW prompt (via a
+ * sibling `briefing-input.md`), so its own later render remains the
+ * provenance source for `promptMeta.template`.
  */
 
 const { ERROR_CODES } = require('../utils/error-doc');

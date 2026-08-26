@@ -6,10 +6,11 @@
  * message begin.
  *
  * EXTRACTED from src/utils/engine-log.js (v4.9 W10 round 2). That module is the
- * I/O half — candidate dirs, mtime order, bounded tail reads; everything here is
- * a pure function of ONE line, which is where every correlation and truncation
- * finding has landed since. `engine-log.js` re-exports all of it, so a consumer
- * still has one import site.
+ * I/O half — candidate dirs, mtime order, the scan budget and its memo, with the
+ * bounded tail reads themselves in `./engine-log-tail.js` since PR #206;
+ * everything here is a pure function of ONE line, which is where every
+ * correlation and truncation finding has landed since. `engine-log.js`
+ * re-exports all of it, so a consumer still has one import site.
  *
  * TWO LINE FORMATS are in the wild and both are matched:
  *   logfmt   (1.17.x): `… level=ERROR … session.id=ses_<id> error=<msg>`
@@ -31,11 +32,6 @@
 // became its second caller — see that module's docblock. Re-exported below, as
 // the same function object, so every existing import site stays valid.
 const { collapseExcerpt, MAX_EXCERPT_CHARS } = require('./text-sanitize');
-
-/** ERROR level in either format: logfmt `level=ERROR`, columnar leading `ERROR`. */
-function isErrorLine(line) {
-  return /(^|\s)level=ERROR(\s|$)/.test(line) || /^\s*ERROR\b/.test(line);
-}
 
 /** A `key=value` token — the structural shape in both formats. */
 const PAIR_TOKEN = /^[\w.[\]-]+=/;
@@ -217,6 +213,39 @@ function mentionsSession(line, needle) {
  *  else entirely; treating them as identity hands us a foreign line. */
 const SESSION_FIELDS = new Set(['id', 'session', 'sessions', 'sessionid', 'session.id']);
 const FIELD_TOKEN = /^([\w.[\]-]+)=(.*)$/;
+
+/**
+ * ERROR level in either format: columnar's leading `ERROR` word, or logfmt's
+ * `level=ERROR` read as a TOP-LEVEL FIELD of the structural run.
+ *
+ * A FIELD, not a substring (#201 final-round tail C1). The old logfmt half was
+ * `/(^|\s)level=ERROR(\s|$)/` over the raw line — the last substring sweep left
+ * in this module, the shape rounds 2 and 3 replaced in the format test (A2),
+ * the `error=` extractor (C5) and the ownership scan (B2). A quoted value that
+ * merely CONTAINS the delimited text promoted the whole line, and an INFO line
+ * is ordinary prose about a retry: MEASURED before the fix, `… level=INFO …
+ * msg="upstream logged level=ERROR moments ago" fixture fell back to the cache`
+ * was reported as the leg's cause of death as `fixture fell back to the cache`.
+ * The same run bound applies as everywhere else: past the fields, `level=ERROR`
+ * is text a human wrote, `=` and all.
+ *
+ * The substring is still the FIRST test, just no longer the LAST word: it is a
+ * necessary condition, so a line without it rejects on one `indexOf` and never
+ * tokenizes — which is what keeps this the cheap half of the pair in
+ * `engine-log-tail.js :: newestExcerptInFile`.
+ */
+function isErrorLine(line) {
+  const text = String(line);
+  if (/^\s*ERROR\b/.test(text)) { return true; }
+  if (text.indexOf('level=ERROR') === -1) { return false; }
+  const tokens = tokenize(text);
+  const runEnd = structuralRunEnd(tokens);
+  for (let i = 0; i <= runEnd; i++) {
+    const field = FIELD_TOKEN.exec(tokens[i].text);
+    if (field && field[1].toLowerCase() === 'level' && field[2] === 'ERROR') { return true; }
+  }
+  return false;
+}
 
 /**
  * Is this line ABOUT session `needle` — not merely one that mentions it?

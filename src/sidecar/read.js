@@ -15,6 +15,10 @@ const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 // this module's own searchSessions re-export below.
 const { searchSessions } = require('./list-search');
 const { normalizeLimit, truncationNotice } = require('./list-limit');
+// v4.9 W12: council runs are first-class rows on this surface too — the merge
+// amicus_list has done since v4.0 §8, split out for the same line-budget reason
+// as the two modules above. Owns the MODEL cell's rendering and width.
+const { padModel, modelCell, mergeCouncilRows, councilScopeNotice } = require('./list-council');
 
 /**
  * Format a timestamp as relative age
@@ -142,9 +146,20 @@ async function listSidecars(options) {
   let sessions = all
     ? enumerateAllProjects({ status, project })
     : enumerateSessions(project, { status });
+  // Round 3 (B1): the merge's catch degrades to the session rows and used to do
+  // it in SILENCE. It now hands the failure out through this sink and the human
+  // branch says it — seam rationale at list-council.js :: mergeCouncilRows.
+  let unavailable = null;
+  sessions = mergeCouncilRows(sessions, project,
+    { status, all, onUnavailable: (note) => { unavailable = note; } });
   if (search) { sessions = searchSessions(sessions, search, { project }); }
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
+    // A1's disclosure as under the table below — an empty `--all` is where the
+    // omission is loudest — and B1's note on the same gate for the same reason:
+    // this early return is the one line both modes share, and --json cannot move.
+    if (!json && unavailable) { console.log(unavailable); }
+    if (all && !json) { console.log(councilScopeNotice()); }
     return;
   }
 
@@ -158,9 +173,11 @@ async function listSidecars(options) {
 
   if (json) {
     console.log(JSON.stringify(sessions, null, 2));
+    // No silent caps — but on stderr, so stdout stays one parseable document.
+    if (truncated) { console.error(truncationNotice(cap, total)); }
   } else {
     console.log(
-      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11) +
+      'ID'.padEnd(10) + padModel('MODEL') + 'STATUS'.padEnd(11) +
       'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING' +
       (all ? '  PROJECT' : '')
     );
@@ -171,7 +188,7 @@ async function listSidecars(options) {
         ((s.briefing?.length > 30) ? '...' : '');
       console.log(
         `${(s.id || '').padEnd(10)}` +
-        `${(s.type === 'wave' ? `wave(${s.legCount ?? 0} legs)` : (s.model || '')).padEnd(23)}` +
+        `${padModel(modelCell(s))}` +
         `${(s.status || 'unknown').padEnd(11)}` +
         `${(s.tag || '').padEnd(12)}` +
         `${age.padEnd(12)}` +
@@ -179,13 +196,19 @@ async function listSidecars(options) {
         (all ? `  ${s.project || ''}` : '')
       );
     });
-  }
-
-  // No silent caps: say what was elided, and how to see it all. In --json mode
-  // this goes to stderr so stdout stays a single parseable document.
-  if (truncated) {
-    const notice = truncationNotice(cap, total);
-    if (json) { console.error(notice); } else { console.log(notice); }
+    // THE TRAILING ORDER IS LOAD-BEARING (round 3, B4): docs/usage.md says every
+    // human `--all` listing ENDS with the scope note, and truncation used to
+    // print after the fork — after it — so `--all --limit N` made that false.
+    // Narrowest qualifier first; the standing limit closes.
+    if (truncated) { console.log(truncationNotice(cap, total)); }
+    if (unavailable) { console.log(unavailable); }
+    // Round 2 (A1): under `--all` the session rows span every indexed project
+    // and the council rows only ever span this one — say so. THIS is the seam:
+    // `all`, the `mergeCouncilRows` call above and the human table are all
+    // visible from here, and the merge itself cannot print. Inside the human
+    // branch on purpose — `--json` is a shape contract, and unlike the
+    // truncation notice there is no cap here for a script to raise.
+    if (all) { console.log(councilScopeNotice()); }
   }
 }
 

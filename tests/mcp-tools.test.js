@@ -777,8 +777,8 @@ describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', ()
       rankings: [{ judge: 'gpt', order: ['gemini'] }],
       runStats: [],
     };
-    // mcp-server.js:1544-1547 hands the SDK-PARSED input to the handler and
-    // :1424 does `const record = tally(input)` — so the parse output, not the
+    // mcp-server.js:1580-1583 hands the SDK-PARSED input to the handler and
+    // :1460 does `const record = tally(input)` — so the parse output, not the
     // raw object, is what tally() sees on this path.
     const s = schema();
     const record = tally({

@@ -1715,7 +1715,19 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
     `session-manager.js:127`'s `metadata.project || projectDir` — the actual write path into
     `sessions-index.json` — was not traced to its own origin. Open, not exhaustively verified.
 
-- [ ] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — [S] The MCP
+- [x] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — ✅ CLOSED
+  v4.9 W12 (2026-08-26): `src/sidecar/list-council.js :: mergeCouncilRows` merges council rows
+  into `listSidecars` on both surfaces; both real decisions below were ruled exactly as this
+  filing anticipated (CLI re-truncates the 80-char preview to its own 30; MODEL renders
+  `council(<stage>)`, width-capped, bare `council` for terminal runs). **Parity is
+  current-project only, `--all` included** (stated in `mergeCouncilRows`'s docblock, and in
+  docs/usage.md since PR #206 round-1 B1, and — since round-2 A1 — printed by the CLI itself
+  under the table on every human-readable `--all` listing,
+  `src/sidecar/list-council.js :: councilScopeNotice`, because a caveat only the source states
+  is the correct-but-silent degrade the product principle rejects): under `--all` the session
+  rows enumerate every project the sessions-index knows, while the council rows come from this
+  project's pointer files alone — there is no cross-project council index. Original filing kept
+  below for the reasoning. — [S] The MCP
   `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
   `.concat(councilRows)` with `type: 'council-run'`); the CLI `listSidecars`
   (`src/sidecar/read.js:133`) never calls `listCouncilRuns` at all. So `amicus council run …`
@@ -6834,6 +6846,17 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   it — ordering only helps a module with more than five exports, where the cap does the
   concealing. That row is a known-defect instance, not a fresh bug; it goes away with the
   generator ruling above, and inventing exports to pad past the cap is not a fix.
+  **Second instance below the floor, MEASURED 2026-08-26 (PR #206 round-1 A2/B3):**
+  `utils/untrusted-fence.js` exports three names, so `OUTBOUND_FENCE_TAGS()` renders the same
+  way. The measured PR 201 workaround was re-run against all four of its modules to be sure
+  what it actually is — `engine-log.js` (7 exports), `engine-log-parse.js` (6),
+  `engine-skew.js` (10) and `engine-skew-records.js` (8) each keep five FUNCTIONS in the
+  window and the cap hides the rest — and it does not reach a 3-export module. Dropping the
+  export is not available either: `tests/utils/outbound-fence-defang.test.js` reads
+  `OUTBOUND_FENCE_TAGS` as the LIVE fence vocabulary (close tags only when this was written;
+  both ends since PR #206 round 3 B3b), which is the whole point of there
+  being one list. Recorded at the export site and in `sidecar/list-council.js`'s header, which
+  cited the no-constant rule as if the generator enforced it.
 
 - **W5 ruling — a spec self-contradiction resolved: `intent` is emit-when-`'task'`
   EVERYWHERE.** The v4.8 design spec's §5.3 declares verdict-`intent` "mandatory" while its
@@ -6924,3 +6947,65 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   design **carries** intent rather than refusing it, and a mismatch error would now break the
   exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
   clause is unaffected — it stays mode-free by design, as written.
+
+- [ ] **Eight pre-existing rotted `mcp-server.js` citations — a hygiene sweep, MEASURED
+  2026-08-26 (filed at the W12 wave review; none caused by W12 — all verified already wrong
+  at the W12 base, and the citation gate passes because it only range-checks).** Seven point
+  at the shared-server error chain instead of the wave status-doc composer they describe:
+  `src/observe/council-legs.js:15` (cites `:592-608`), `src/observe/live-doc.js:28` and
+  `tests/observe/watch-render.test.js:317` (both cite `:687`),
+  `src/workspace/live-normalize.js:24` (cites `:592-662`),
+  `tests/workspace/live-model.test.js:59` (cites `:603`),
+  `tests/workspace/live-normalize.test.js:86` (cites `:590-665`),
+  `src/mcp-council-awareness.js:116` (cites `:586`). The eighth:
+  `tests/pack/mcp-pack-params.test.js:155` cites `mcp-server.js:289-291` for the pack-error
+  branch keeping the hint via `buildErrorDoc` — that call sits at `:309-310`; `:289-291` is
+  the pack-resolution comment. All eight likely share one root (a block of insertions above
+  `:600` that predates v4.9); re-derive each against the tree at fix time, not from the
+  numbers here.
+
+- [ ] **The INBOUND fence does not defang its own tags (observed at the W12 wave
+  review, 2026-08-26).** W12's `defangOutboundFenceTags` (`src/utils/untrusted-fence.js`;
+  named `defangOutboundFenceCloses` until PR #206 round 3 widened it to open tags too)
+  neutralizes house OUTBOUND tags inside embedded bodies at both outbound surfaces —
+  but `fenceSidecarOutput` in the same file leaves its own close tag live, so sidecar output
+  containing `</untrusted_sidecar_output>` still terminates the inbound fence early and the
+  remainder reads as trusted text. The 200-series scoping (B2/C2 = outbound family only) was
+  deliberate, so this is a fresh candidate, not a W12 violation. The fix shape already
+  exists: run the same entity-escape over the inbound body before fencing (one helper, one
+  tag list — extend `OUTBOUND_FENCE_TAGS` or a sibling constant; keep the author-spelling
+  and byte-identity-on-clean-text properties the outbound pins established). Round 3's
+  B3(a) applies here too: the escape is a SOFT boundary — defense in depth on top of the
+  preamble, not a parser guarantee — so say so wherever it lands.
+- [ ] **CI council glm/qwen stage-1 deaths: provider-side silent stall, MEASURED across all six
+  2026-08-26 council runs (evidence-first recon; extends issue #202 from hypothesis to data).**
+  Every dead leg is `NO_OUTPUT_BACKSTOP` at the deadline to the decisecond with ZERO tokens —
+  not even input usage — on `openrouter/z-ai/glm-5.3` (first-attempt dead 6/6) and
+  `openrouter/qwen/qwen3.8-max` (6/6; kimi-k3 3/6), while gpt/deepseek on the SAME key/gateway
+  never missed. Pins identical across all six runs (`.github/amicus-ci-aliases.json@eb135ae82`,
+  its only commit) — the W13 curated bump is CI-invisible and confirmed unrelated. The
+  one "full bench" run (W11) was LUCK: glm+qwen+kimi all died at 300s and all three single
+  retries landed. **480s backstop bought nothing** (PR 207: dead at 481.5s, 0 tokens) — the
+  stall is indefinite, not slow; do not raise it further. qwen has a SECOND disease: runaway
+  generation into the 600s leg cap (224,787 and 781,287 tokens, $0.33/$0.67 burned for
+  nothing). Remedies ranked by evidence: (1) second stage-1 retry CI-only — retries landed
+  6/10 today, compounding is the direct fix; (2) OpenRouter provider pinning/exclusion for
+  glm/qwen (one upstream in the rotation is black-holing; ledger doesn't record upstream —
+  needs the OpenRouter dashboard); (3) stop DOUBLING the backstop on retry (600s retry window
+  = 15+ min per doubly-dead seat; 300s fits a second retry in the same wall clock);
+  (4) stagger stage-1 launches (hypothesis-grade); (5) qwen: re-pin or cap output for the
+  runaway mode — retries/backstops don't treat it. NOT candidates (verified working): CI auth
+  provisioning, the alias map. Evidence: spend-ledger.jsonl + run.json per run, scratchpad
+  council-recon/<runId>; verbatim signature quoted in issue #202's thread context.
+
+- [ ] **Dead stage-2 JUDGE legs produce no degrade entry and no notice — a run can present a
+  full-bench street-cred table actually adjudicated by half the judges (found in the same
+  recon, W11 run 32956900910).** Ledger wave `9d8029c8-s2`: glm and qwen judge legs died the
+  identical silent death at +300s of stage 2 (0 tokens), yet run.json records NO degrade for
+  them and the verdict shipped a 4-model street-cred table adjudicated by gpt+kimi only. This
+  is the product principle's exact target (a correct-but-silent degrade) one stage later than
+  the W9 dead-seat work: stage-1 deaths are now loudly surfaced, stage-2 judge deaths are not.
+  Fix shape: a stage-2 twin of the seat-loss note (which judges actually returned rankings /
+  adjudications, recorded as a degrade + disclosed in the verdict footer beside the existing
+  `stage1:partial` marker — the footer already knows stages were partial; the WHO is what's
+  missing).
