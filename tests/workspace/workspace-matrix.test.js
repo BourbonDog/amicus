@@ -308,6 +308,31 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('chair stage failed');
     });
 
+    /**
+     * v4.9 fix round 2 (council B2), the renderer half — ALREADY GREEN by
+     * construction, and pinned here because it is the half that was never the
+     * defect. `renderVerdict` has forked this chip on `vp.intent` since W8; what
+     * was broken was upstream, in `src/workspace/run-detail.js :: verdictPanel`,
+     * which minted a hard-coded `intent: 'review'` on every present:false panel
+     * and so could never hand this branch a task payload. The fix sources the
+     * panel's intent as `verdict.intent || run.intent`; this pin states the
+     * contract that fix now satisfies, so a future edit cannot quietly retire
+     * the branch it feeds.
+     */
+    test("a task payload with no chair answer renders 'no chair answer', not 'no chair verdict'", () => {
+      const container = document.createElement('div');
+      const vp = {
+        present: false, intent: 'task', overallVerdict: null, tierCounts: null,
+        streetCred: [], decisions: [], reason: 'chair stage failed',
+      };
+      AmicusMatrix.renderVerdict(container, vp, {
+        labelOf: () => null, isBlind: () => false, reportPresent: false, onFold: () => {}, onOpenReport: () => {},
+      });
+      expect(container.textContent).toContain('no chair answer');
+      expect(container.textContent).not.toContain('no chair verdict');
+      expect(container.textContent).toContain('chair stage failed');
+    });
+
     test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js:48)', () => {
       const container = document.createElement('div');
       const vp = {

@@ -214,9 +214,19 @@ function runVerdict(args, useJson) {
     // `run.json`'s checkpoint (run.js :: runCouncil) covers exactly that leg.
     // Both are emit-when-'task', so absent/unreadable on both = review — the
     // fail-closed direction, and what every pre-v4.9 run is.
+    // ⚠️ PR #200 C2: the run.json read carries the SAME runId guard as both of
+    // its siblings — readOverallVerdict (verdict.js:255) and
+    // readPriorVerdictSurfaces (verdict.js:279) — `!runId || doc.runId === runId`, waived
+    // only when the RECORD names no run, never when the DOCUMENT does not.
+    // Without it a stale or foreign run.json in the folder hands this rebuild
+    // another run's intent, and intent SELECTS THE CHAIR PARSER in the
+    // readOverallVerdict call just below — so the leak can also change
+    // overallVerdict to a phrase off the wrong scale, exactly the failure the
+    // foreign-verdict.json guard exists to prevent one file over.
     const runDoc = readRun(runDir);
+    const ownRunDoc = runDoc && (!record.meta.runId || runDoc.runId === record.meta.runId);
     const intent = (record.meta && record.meta.intent === 'task')
-      || (runDoc && runDoc.intent === 'task') ? 'task' : 'review';
+      || (ownRunDoc && runDoc.intent === 'task') ? 'task' : 'review';
     const overallVerdict = readOverallVerdict(runDir, record.meta.runId, intent);
     // #87: tally.json carries neither seatLoss nor degrades — recover both from
     // the run folder's verdict the same way the chair line is recovered.

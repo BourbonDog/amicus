@@ -2392,6 +2392,38 @@ describe('council MCP handlers', () => {
     expect(v.findings.find(f => f.id === 'A1').decision).toBe('accepted');
   });
 
+  // PR #200 round-2 finding C1 — measured refutation, plus the pin it was
+  // missing. The finding read this rebuild leg as lacking the intent carrier
+  // the CLI threads through `opts.intent` (cli-handlers-council.js ::
+  // runVerdict). MEASURED 2026-08-25: this handler has NO runDir in scope —
+  // `record` arrives inline and `outDir` is a WRITE target for report.html
+  // (mcp-tools.js's amicus_verdict inputSchema), so meta.intent is the only
+  // carrier available here — and buildVerdict already reads that carrier
+  // FIRST (verdict.js:136, `(record.meta && record.meta.intent === 'task') ||
+  // opts.intent === 'task'`). Threading opts.intent off the same field would
+  // be a strict no-op. What was genuinely absent is a pin at THIS boundary:
+  // verdict.test.js pins buildVerdict directly, and nothing pinned the MCP
+  // tool's own document.
+  //
+  // Named mutant INTENTRECORDCARRIER: drop the `(record.meta && ...)` disjunct
+  // from verdict.js:136, leaving `opts.intent === 'task'`. MEASURED: this test
+  // RED; tests/cli-council-verdict-chair-carry.test.js stays fully green (the
+  // CLI passes opts.intent explicitly), which is exactly why the MCP leg needed
+  // a pin of its own. Reverted byte-exact.
+  test("amicus_verdict carries a task record's intent; a review record emits no intent key", async () => {
+    const taskIn = { ...avInput, meta: { ...avInput.meta, intent: 'task' } };
+    const taskRec = JSON.parse(unfence((await handlers.amicus_council_tally(taskIn, process.cwd())).content[0].text));
+    const taskV = JSON.parse(unfence(
+      (await handlers.amicus_verdict({ record: taskRec, decisions: [] }, process.cwd())).content[0].text));
+    expect(taskV.intent).toBe('task');
+    // Review control. emit-when-'task' means the key is ABSENT, never 'review'.
+    const revRec = JSON.parse(unfence((await handlers.amicus_council_tally(avInput, process.cwd())).content[0].text));
+    expect('intent' in revRec.meta).toBe(false);        // the premise, pinned
+    const revV = JSON.parse(unfence(
+      (await handlers.amicus_verdict({ record: revRec, decisions: [] }, process.cwd())).content[0].text));
+    expect('intent' in revV).toBe(false);
+  });
+
   test('amicus_council_stats returns the fenced wrapped doc (v4.0 §7+§8)', async () => {
     jest.resetModules();
     jest.doMock('../src/council/ledger', () => {

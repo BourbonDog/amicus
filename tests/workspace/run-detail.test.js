@@ -216,6 +216,45 @@ describe('getRunDetail', () => {
     expect(vp.intent).toBe('review');
   });
 
+  /**
+   * v4.9 fix round 2 (council B2) — `run.json` is the SECOND carrier of intent.
+   *
+   * The panel read `verdict.intent` alone, so on the narrow leg where a task run
+   * exits before the verdict write — or writes a corrupt one — the panel
+   * defaulted to review and the Workspace chip read "no chair verdict" on a run
+   * that was never on that scale. `run.json` checkpoints `intent: 'task'` at
+   * start (`run.js :: runCouncil`) and `run` is already this function's first
+   * parameter, so the honest source is `verdict.intent || run.intent`.
+   *
+   * Named mutant PANELINTENTVERDICTONLY: drop the `run.intent` half of both
+   * sources. RED SET: the two pins below. Every pin above is an absence control
+   * on a review fixture and stays green.
+   */
+  test("a task run with NO verdict.json labels its present:false panel intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.intent = 'task';
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('task');
+  });
+
+  test("a task run with a CORRUPT verdict.json still labels the panel intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.intent = 'task';
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), '{ truncated mid-write');
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('task');
+  });
+
   test('degradedReason exit-1 path: run.error.code/message drives the reason string', () => {
     // The other half of F04: `run.error` is only ever non-null on the exit-1 path, where the
     // engine writes a structured {code, message}. No fixture carries this shape, so it is

@@ -142,9 +142,16 @@ describe("council verdict preserves the chair's verdict across the Stage-5 repla
    * this fix.
    *
    * Named mutant SCALEFREEFALLBACK: restore the unconditional
-   * `parseChairVerdict(text) || parseChairAnswer(text)`. RED SET: the C2 pin and
-   * the symmetric task pin below. The C1 pin has its own mutant, INTENTDROPPED
-   * (drop `opts.intent` from buildVerdict's emit-when-task guard).
+   * `parseChairVerdict(text) || parseChairAnswer(text)` in verdict.js ::
+   * readOverallVerdict. RED SET, RE-MEASURED 2026-08-25 against the FINAL tree
+   * (PR #200 C2) — FIVE tests in this describe, not the two the first cut of
+   * this note named: 'C2: a REVIEW run whose chair prose carries an incidental
+   * ANSWER line stays null', 'C2 control: a review run with no run.json at all
+   * is still review (fail-closed)' (which the old count omitted and which was
+   * already red before C2 landed), 'symmetric: a TASK run ignores an incidental
+   * VERDICT line…', and the two C2 runId-guard pins added below. The C1 pin has
+   * its own mutant, INTENTDROPPED (drop `opts.intent` from buildVerdict's
+   * emit-when-task guard).
    */
   describe("the run's intent selects ONE parser, and rides onto the rebuild", () => {
     test('C2: a REVIEW run whose chair prose carries an incidental ANSWER line stays null', async () => {
@@ -225,6 +232,60 @@ describe("council verdict preserves the chair's verdict across the Stage-5 repla
       const keys = Object.keys(await stage5(dir));
       expect(keys.indexOf('intent')).toBe(keys.indexOf('claudeInCouncil') + 1);
       expect(keys.indexOf('overallVerdict')).toBe(keys.indexOf('intent') + 1);
+    });
+
+    /**
+     * PR #200 round-2 finding C2. The run.json intent read shipped WITHOUT the
+     * runId guard its two siblings both carry — readOverallVerdict
+     * (verdict.js:255) and readPriorVerdictSurfaces (verdict.js:279), both
+     * `!runId || prior.runId === runId` — so a stale or foreign run.json left
+     * in the folder could hand this rebuild another run's intent. That is not
+     * cosmetic: intent SELECTS THE CHAIR PARSER, so the leak both mints the
+     * `intent` key and can change `overallVerdict` to a phrase off the wrong
+     * scale — both asserted below, which is why the fixture prose carries a
+     * line of each scale.
+     *
+     * Named mutant FOREIGNRUNINTENT: drop the runId guard from the runDoc read
+     * in cli-handlers-council.js :: runVerdict (`const ownRunDoc = runDoc;`).
+     * MEASURED 2026-08-25 over this suite + council/cli-handlers-council +
+     * mcp-server (214 tests): 2 RED, both of them BELOW — this test and the
+     * no-runId one. Every other fixture in this file seeds `run-1` on both
+     * sides, so all of them are structurally blind to the guard; that is why
+     * these two exist. Reverted byte-exact.
+     */
+    test('C2: a FOREIGN run.json (different runId) leaks neither its intent nor its scale', async () => {
+      const dir = runFolder({
+        'tally.json': tallyDoc('run-1'),
+        'run.json': { runId: 'some-other-run', intent: 'task' },
+        'chair-output.md': 'quoting the other run:\n\nANSWER: Converged\n\nMy own close:\n\nVERDICT: Ship it\n',
+      });
+      const v = await stage5(dir);
+      expect('intent' in v).toBe(false);
+      expect(v.overallVerdict).toBe('Ship it');            // the REVIEW scale, not 'Converged'
+    });
+
+    test("C2 control: the same run.json under THIS run's id still carries the task intent", async () => {
+      const dir = runFolder({
+        'tally.json': tallyDoc('run-1'),
+        'run.json': { runId: 'run-1', intent: 'task' },
+        'chair-output.md': 'quoting the other run:\n\nANSWER: Converged\n\nMy own close:\n\nVERDICT: Ship it\n',
+      });
+      const v = await stage5(dir);
+      expect(v.intent).toBe('task');
+      expect(v.overallVerdict).toBe('Converged');          // the TASK scale
+    });
+
+    test('C2: a run.json with NO runId is not trusted — fail-closed to review', async () => {
+      // Mirrors the siblings' guard shape exactly: the RECORD's runId being
+      // absent is what waives the check, never the DOCUMENT's.
+      const dir = runFolder({
+        'tally.json': tallyDoc('run-1'),
+        'run.json': { intent: 'task' },
+        'chair-output.md': 'chair synthesis…\n\nANSWER: Converged\n',
+      });
+      const v = await stage5(dir);
+      expect('intent' in v).toBe(false);
+      expect(v.overallVerdict).toBeNull();
     });
 
     test('a task tally whose meta DOES carry intent needs no run.json — either carrier is enough', async () => {
