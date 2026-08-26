@@ -3,6 +3,255 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.0] - 2026-08-26
+
+*The council does new work.*
+
+### Added
+
+- **Task mode — the council stops being able only to critique (#134, #130, #146).**
+  `amicus council run --intent task`, or `intent: 'task'` on the `amicus_council_run` MCP tool,
+  points the whole pipeline at open-ended work instead of at a review. Every seat **produces the
+  deliverable** the briefing asks for — `briefings-task.js :: TASK_SEAT_ROLE` says it in as many
+  words, *"you are not reviewing the briefing, you are executing it"* — the Stage-2 judges rank
+  **which response best does the work** and adjudicate whether each declared claim holds, and the
+  chair synthesizes an **ANSWER**, never a verdict.
+  The two terminal scales are disjoint by construction: a review chair closes on
+  `Ship it | Fix these first | Fundamental rethink`
+  (`briefings-chair.js :: CHAIR_VERDICT_VALUES`, `parse-stage2.js :: CHAIR_VERDICTS`), a task chair
+  on `Converged | Split | Insufficient` (`briefings-chair-task.js :: CHAIR_ANSWER_VALUES`,
+  `parse-stage2.js :: CHAIR_ANSWERS`). They **share no value and no keyword** — `VERDICT:` and
+  `ANSWER:` — which is what lets each parser stay blind to the other's line, and it is
+  `parseChairTerminal(text, intent)` that picks between them. Each scale is spelled **five** times —
+  those two constants, the scale addendum, the chair repair prompt, and
+  `schemas/council-verdict.schema.json`'s `overallVerdict` enum, which now carries the review scale
+  followed by the task scale — and all five are drift-pinned together
+  (`tests/council/chair-scale-drift.test.js`, named mutant `ANSWERSCALEDRIFT`).
+  - **`intent` is emit-when-`task`, everywhere.** `review` is the default spelled out loud: both
+    transports strip it, and `run.js :: runCouncil` — a public door too — **normalizes** it to
+    absent (`delete`, never `= undefined`) rather than refusing it, so one input cannot mean two
+    things at two doors. Only a genuinely unknown value is `BAD_ARGS`. Nothing ever writes
+    `intent: "review"` onto `run.json`, `tally.json` or `verdict.json`, so every pre-v4.9 document
+    is already spelled correctly and no migration exists to need.
+  - **The Stage-1 contract does not fork.** The JSON skeleton, the
+    `blocker | major | minor | nit` enum and the required-non-empty `location` rule are review
+    mode's, verbatim; `findings.js` — one validator, one repair loop — changes by **zero executable
+    lines** (the only edits it took in this release are comments: a refreshed line citation, and the
+    empty-`findings[]` ruling now naming the task briefings' claims wording beside the review one).
+    Only the frame and the field glosses differ: in task mode `location` is the grounding
+    discipline, naming *what the claim rests on — a source, a computation, or the literal word
+    "assumption"*.
+  - **Intent selects the parser on the Stage-5 rebuild too**, where the run is long over and only
+    documents remain. Three carriers, because no one of them covers every leg — the record's own
+    `meta.intent`, `run.json`'s checkpoint, and the run folder's prior `verdict.json` — combined as
+    a **disjunction** (absence is no vote, not a vote for review). The two *document* reads carry the
+    same `!runId || doc.runId === runId` guard their siblings do — waived only when the *record* names
+    no run and never when the *document* does not. Without that guard a stale or foreign document in
+    the folder hands the rebuild another run's intent, which selects the chair parser. An
+    `overallVerdict` carried off the **wrong** scale is not trusted: it fails
+    `scale.includes(...)` and falls through to re-parse `chair-output.md`.
+  - **The renderers say what the run actually produced.** The primary heading is `## Answer summary`
+    on a task run and the exact old `## Verdict summary` on a review run; the tier table carries
+    *"Tiers report peer concurrence, never verification."* directly under the counts a skimmer
+    reads — task runs only, forked in **both** renderers and pinned separately per renderer so
+    neither can regress silently (mutants `SUMMARYLABEL`, `QUALIFIERDROP`). The fold
+    (`workspace/fold-format.js`) and the Workspace chip
+    (`electron/workspace-ui/workspace-matrix.js`) label the terminal line `ANSWER:` or `VERDICT:`
+    off the same key, matching on `=== 'task'` so a pre-v4.9 payload with no `intent` reads as
+    review instead of relabelling every legacy run. The chair's own briefing carries the caveat the
+    tier table cannot: *"Peer agreement on a claim is CONCURRENCE, not verification — models
+    correlate on priors."*
+  - **Task runs write zero reliability rows**, at two gates — `run-finish.js` (the engine's own
+    append) and `cli-handlers-council.js :: runTally` (the hand-assembled path) — and `council tally`
+    now **refuses** a `meta.intent` that is neither spelling rather than letting a near-miss
+    (`'Task'`) slide into the ledger, whatever `--no-ledger` says. The skip is **announced and
+    non-degrading**: a `Note:` on the new `ledger-skipped` channel, `kind: 'info'` — a third kind
+    beside `degrade`/`heal` that the degrade sink is structurally unable to flip `degraded.value`
+    on. ⚠️ It is emitted where it is *load-bearing*, not on every task run: the chair-fallback
+    promotion arm, which draws on ledger history a task run never fed. That arm is reached at most
+    once per `runChair`, and `runChair` runs once per run, so "announced once" is structural rather
+    than a flag's promise. `kind: 'info'` records get their own **Notes:** list in the report and
+    are kept out of the `## What was lost` heading — an announcement is not a loss.
+  - **`amicus council stats` on an empty ledger explains itself.** A fresh install and a task-only
+    install used to render the same blank table; the surface now names where rows come from
+    (*"reliability history comes from review runs; task runs never write rows here"*) rather than
+    asserting which of the two states the reader is in — an earlier wording claimed the latter and
+    was false on every fresh install.
+  - **`--claude-review` is refused with `--intent task`** — a file review is review machinery and
+    has no task-mode meaning.
+  - **Review runs are byte-identical *under the intent fork*.** Not "unchanged as far as we know":
+    the review path composes through the same dispatcher and is pinned at key *and* byte level, and
+    both report `.snap` documents are untouched by this release. Scoped deliberately — task mode
+    changes nothing a review run emits; two *other* items in this release do, and say so where they
+    land (the repair-attempt `runStats` conformance value, and the `tally-input.json` debate-row key
+    order the builder unification moves into agreement with `tally.json`).
+  - Limitations, ruled and recorded rather than discovered later: **one intent per run** (no mixed
+    bench), intent is **not pack-settable** (nothing in `src/pack/` reads it), and a task run builds
+    no reliability history by design. #130's *detector* half — the `location` heuristic that would
+    emit a divergence **observation** into `degrades[]` — is deliberately not in this release; what
+    ships is the declaration that removes its root cause, since the hard-coded review frame every
+    seat used to receive was #130's mechanical cause and #134's blocker at once.
+
+- **The engine speaks for itself (#133, pieces 2 and 3).** A `NO_OUTPUT_BACKSTOP` death report no
+  longer stops at what the deadline observed — it quotes **the engine's own newest ERROR line for
+  that session**, appended as ` — engine log: <excerpt>`. Bounded read, both log schemes,
+  boundary-anchored session matching (a line whose structural session field names someone else is
+  skipped even when our id appears elsewhere on it), and a **union across every candidate log
+  directory that exists**, not the first one — the dirs are alternative homes for the same engine's
+  logs, so a stale `$XDG_DATA_HOME` or an empty dir left by a previous install would otherwise
+  shadow the dir holding the answer. A matching line whose message part is empty keeps the walk
+  going instead of ending the file's scan, because the real failure and a terse message-less
+  teardown line are typically neighbours.
+  One lookup's scan is memoized per `fs` implementation for 10 s so a whole wave of seats shares it.
+  ⚠️ **That reuse serves hits only.** A **miss** re-lists and re-reads before it is believed, and
+  drops the live slot behind it, because the engine writes a leg's error *when that leg dies* —
+  possibly after the cached scan, possibly into a file it has only just rolled over to, so an
+  absence in a previous call's listing is not an absence on disk. The accepted residual runs the
+  other way and is stated rather than buried: a warm hit serves the newest line *as of when the slot
+  was built*, so the TTL bounds the missed window (≤10 s of new lines) and bounds nothing about the
+  **age** of what is served — a minutes-old genuine error for this leg can be quoted while a fatal
+  line written two seconds ago sits unread. Quoting a true older diagnostic is the trade; silence
+  while the cause sits on disk is the failure this module exists to end.
+  Where the answering server's version differs from the running install's engine, the report appends
+  ` (engine skew: server <a> ≠ installed <b>)` — tracked per server, refreshed on every session
+  create, with a remedy line that names the honest action and says why `doctor` cannot see this
+  class. Everything here is best-effort: every path returns `null` rather than throwing, because a
+  log read must never break a leg's death report. **#133 closes.**
+
+- **TTFT probe — probe, never derive (R12).** `ttftMs` is the elapsed time to the first
+  **substantive** tick, measured off the no-output backstop's *own* predicate. The distinction is
+  load-bearing and the plan's prose named the wrong one: `progressed` includes the empty assistant
+  placeholder OpenCode mints on prompt **acceptance**, so keying on it would stamp a
+  time-to-first-token on a leg that never produced a token. The probe and the backstop tick read one
+  shared `substantiveActivity` constant, and mutant `PROGRESSEDTWIN` pins the single fixture where
+  the two predicates disagree. It rides result docs, leg patches and `runStats` rows emit-when-set,
+  behind one validity rule — `utils/ttft.js :: isMeasuredTtft`, imported by three of the four gates
+  and hand-spelled by the fourth, `council/run-stats-entry.js`, which is pinned require-free (the
+  two spellings are held in step structurally, and a fifth site cannot appear unnoticed) — so an
+  unmeasured value is **dropped at the emit gate, never clamped**, and a leg with no measurement is
+  byte-identical to a pre-v4.9 one. The per-model backstop *derivation* deliberately waits for observations to derive
+  from (#135/#129 record).
+
+- **Alias-shadow warning (#135 C5 / #129's own side observation).** One notice per run when a
+  user-config alias **shadows** a curated alias with a different id — because everything keyed on
+  the alias *name* (per-model operating notes, a bench a workflow spells, a council preset) then
+  quietly describes a model the alias no longer resolves to, and by the time `resolveModel` sees an
+  id the two sources have already collapsed into one string. Compared in **canonical form**, so a
+  gateway spelling of the same id stays silent (mutant `GATEWAYFORM`). Diagnosis only: it resolves
+  nothing, changes no id, no exit code and no artifact — a local override winning is the documented
+  contract; this just says so out loud.
+  Wired at three measured sites, and the third exists because of a measured surface gap:
+  `cli-council-run-bench.js :: resolveBench` is the one bench-resolution helper **both** council
+  transports execute (bench, chair and critic all inspected there), but the council child's stderr
+  is not a pipe the MCP server reads — it is an fd on `<runDir>/debug.log` — so from that site alone
+  an MCP caller would have to open a log file to find the notice. `mcp-council-bench.js ::
+  auditBenchAliases` therefore writes it into the **tool result's notices array**, a different
+  surface rather than a second copy: the child still writes its line to `debug.log`, the parent
+  writes its own to the tool result, and no single surface shows it twice. The third site is
+  `amicus models --check`, the one call that passes no name list. Every third-party fragment the
+  notice quotes rides the house sanitizer (mutants `NOTICERAW`, `MESSAGERAW`, `THROWNRAW`), and the
+  stderr writer is armed against a closed pipe (`STREAMFATAL`, `STREAMDEAF`).
+
+- **`amicus list` finally shows council runs.** `amicus_list` has merged them since v4.0 §8; the
+  CLI never did, so a council launched from the terminal was invisible **to the terminal** —
+  `amicus list` reported *"No amicus sessions found."* in a project whose only work was a council.
+  The same enumerator now feeds both surfaces through `src/sidecar/list-council.js`: the MODEL cell
+  carries the live stage as `council(<stage>)`, mirroring the wave row's `wave(N legs)`, width-capped
+  so it can never butt against the STATUS column; `--search` reaches council material on both
+  surfaces. **Scope is stated rather than silent:** only the current project's council runs are
+  merged, `--all` included — council runs are found through per-project pointer files and there is
+  no cross-project council index to walk — so the human listing prints that disclosure, naming no
+  remedy because there is no flag that widens it. A merge that fails now **says so, with the cause**
+  (sanitized), instead of dropping every council row into output indistinguishable from a project
+  that has none.
+
+- **The Workspace dead-seat surface — an unbound seat stops being invisible (SI-02, R4).**
+  `deriveSeatLoss` and both Workspace consumers now admit the `seat-unbound` family behind **one
+  retry-family gate**, because `seat-unbound` is a shared channel — orphan-leg notes, re-vote
+  refusals and Stage-2 judge notes ride it too, and each is pinned *excluded* in every consumer.
+  The two LOSS reads spell that gate identically (`(retryWaveId || firstFailure) && (seatId ||
+  seat)`); the RETRIED read in `workspace-seats.js` is deliberately **narrower** — `retryWaveId`
+  alone, since a never-attempted seat carries a `firstFailure` and badging it *retried* would be
+  false. One loss rule, one narrowing, both pinned (mutants `SKIPRETRIED-A`/`-B`, one per direction
+  the widening could come back) rather than left to drift. The producer half was one line: the partial arm emits a seat id
+  beside the alias-valued seat, `null` for a slot it could not identify and never the alias.
+  The critic path keys on seat identity where the record and the run can both spell it, so a dead
+  bench twin beside a live critic twin renders one correctly-labelled row — it used to render
+  **nothing at all**, the silent 0-row erasure this project's product principle rates as severely as
+  a crash — and a both-dead pair renders two rows with one critic label. The known-wrong pins were
+  **flipped, not renamed**. The third street-cred renderer joins its seat-keyed siblings, and its
+  stated precondition was **measured false and struck rather than satisfied**: `labelOf` never
+  needed a seat id, and mutant `BLINDSEATLEAK` pins that the literally-planned spelling would have
+  leaked one into a blind render. The `seatTableRejected` banner now discloses the seats-vs-artifacts
+  document split in wording that was measured before it was written — the first draft's sentence
+  named the cost panel as a seat surface, which it is not, and would have shipped false.
+
+### Fixed
+
+- **W1's nine small repairs**, one wave, disjoint files, each TDD'd or pinned: the second-opinion
+  Stage-4 Confirmed gloss gains the lone-corroborating-peer case in both presentation headings;
+  `fmtProbeLine`'s silent parenthetical stops asserting endpoint acceptance and says only
+  *"(no output within the probe window)"*; the setup wizard's embedded alias tables are seeded
+  null-prototype **on the far side of the parse**, sibling tables and the `__proto__` alias-name
+  chain included; `MAX_CATALOG_AGE_MS` retires three copies to one exported source; repair-attempt
+  `runStats` rows stamp the **measured** outcome (refined twice by councils — the flat literal
+  mislabeled successful repairs, and the ch4 chair push had silently defaulted `clean`);
+  `KNOWN_VARIABLES` is single-sourced so validation and rendering derive from one exported set,
+  drift-tested — which satisfies the T3-m2 hard gate that composition's `{{input}}` was waiting on;
+  the MCP test-client timer leaks behind the standing *"Jest did not exit"* warning class are closed
+  in three suites (six open handles → zero, measured); a bare-id `model_not_found` carries the
+  doctor-repair hint when the OpenRouter twin classifies valid; and the setup TOCTOU is closed
+  **structurally** by consuming the same catalog snapshot the offer was built from — re-ruled twice
+  into per-window, session-scoped, read-without-consume offer sessions.
+- **The outbound fences neutralize both tag ends.** `utils/untrusted-fence.js ::
+  defangOutboundFenceTags` escapes open *and* close tags for the whole house fence vocabulary over
+  both outbound surfaces — the council briefing tail and the parent-conversation section — so a body
+  carrying the **sibling** surface's tags cannot smuggle them through the surface that does not
+  happen to emit them (mutants `CTXFENCEBREAKOUT`, `BRIEFFENCEBREAKOUT`). ⚠️ Stated as a disclosure,
+  not a caveat: an entity escape is a convention about how a reading model interprets bytes, not a
+  parser guarantee. This is defense in depth — it removes the literal tag so the escape stops being
+  free — and the load-bearing protection is still the preamble both fences carry.
+- **Curated pins move to the generation the bench actually runs** — `kimi` → `kimi-k3`, `qwen` →
+  `qwen3.8-max`, `glm` → `glm-5.3`. Not cosmetic: the review reproduced the standing alias-shadow
+  line the stale `glm` pin would have printed on every CI council run. Every old-id hit in the suite
+  was classified; no live pin of the old generation remains.
+
+### Internal
+
+- **The `runStats` builders unify (PR1F-2 closes).** Debate's `mk`, the re-vote `legRow` and the
+  Claude row fold into `buildRunStatsEntry`, so every non-primary row shares one key order, one
+  set of defaults, and one emit-when-set rule. (What the fold does **not** buy: propagation —
+  `mk` passes a synthetic five-field leg, so entry-param fields and future leg-sourced fields
+  still require widening `mk` itself; the widening is a filed candidate.) Done by measurement,
+  because every pre-existing pin proved
+  order-insensitive: 21 byte-order goldens were written **before** any fold (23 in the suite
+  now, after two post-fold additions), and mutant
+  `UNIFYDRIFT-mk` reddens exactly one test in the whole repo — the golden. A 137-invocation status
+  census showed the divergent `'unknown'` default **never fires and structurally cannot**, so it was
+  deleted as measured-dead rather than chosen between. ⚠️ The filing's own blast-radius claim was
+  **corrected** rather than inherited: `run.json` carries no `runStats`, and `tally.json`/
+  `verdict.json` were *already* in the entry's key order via tally's allowlist re-projection — the
+  fold moves `tally-input.json` **into** agreement with them.
+- **SI-16's three over-length council functions split at measured seams**, in-file and byte-faithful
+  (`runStage2` → `bindStage2Seats`, `runDebate` → `runDefenseWave`, `runRevoteWave` →
+  `repairRevoteLeg`), each mutant's red set recorded and each revert SHA-verified.
+- **`seatKey` consolidated to one exported definition** (SI-DUP disposition (b)): the two remaining
+  standalone copies of the seat-or-alias rule now import it, with the load-bearing hand-inlined
+  fallback and the two `keyOf` sibling forms deliberately untouched.
+- **MCP tool parameters re-measured and pinned** (F-1): 58 documented plus 2 allowlisted of 60 keys,
+  with the per-key rulings recorded in the test rather than in a comment that can rot. Separately
+  (F-5), `routing.tier` / `tier_onboarded` are documented from measurement, including the silent
+  `balanced` coercion.
+
+### CI
+
+- **Council backstop headroom.** `council-review.yml` sets `AMICUS_NO_OUTPUT_BACKSTOP_MS` to
+  `480000` on the council step, single-spelled and pinned by four workflow tests, with the measured
+  4.8.1-cycle stall evidence recorded in the comment beside it. The broader retry-policy question is
+  filed as issue 202 rather than guessed at here.
+- The CI bench moves with the pins above: `kimi` off the bench, `deepseek` seated, `gemini-pro`
+  chairs.
+
 ## [4.8.1] - 2026-08-25
 
 ### Fixed

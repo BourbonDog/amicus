@@ -163,6 +163,24 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
   const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/result-schema.js'];
   const INLINE = 'src/council/run-stats-entry.js';
 
+  /**
+   * Files that NAME `ttftMs` without being a site — comment mentions only, each
+   * with a decision already made. The roster pin below fires on any file
+   * containing the token, which is what gives it teeth; this list is where a
+   * mention earns its exemption by carrying the DECISION, not by being quiet.
+   *
+   * `council/debate.js` (v4.9 W14): `mk` deliberately does NOT forward `ttftMs`
+   * to debate rows, and the comment beside the fold says so and names the field.
+   * The decision the pin exists to force was made and filed — widening `mk` is a
+   * behaviour change with its own pins, recorded in BACKLOG. The absence itself
+   * is pinned as G1e in tests/council/runstats-byte-order.test.js, so this is a
+   * documented non-gate, not an unexamined sixth site. ⚠️ Do NOT move an entry
+   * from here into IMPORTERS to silence a failure: that list also drives "the
+   * three importable gates import it", which requires a real `isMeasuredTtft`
+   * call. A file that gates belongs there; a file that talks belongs here.
+   */
+  const MENTIONS_ONLY = ['src/council/debate.js'];
+
   /** Every .js file under src/, repo-relative, forward-slashed. */
   function srcFiles(dir = 'src') {
     const out = [];
@@ -225,11 +243,27 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
    * The drift guard with real teeth: a SIXTH site cannot appear unnoticed. A new
    * producer that touches `ttftMs` fails here until someone decides whether it is
    * a gate, and if so gates it. This is the one pin that can see a file nobody
-   * thought to add to the lists above.
+   * thought to add to the lists above. A comment-only mention lands here too, by
+   * design — it is still a decision someone has to make; `MENTIONS_ONLY` is where
+   * that decision is recorded, and every entry there carries its reason.
    */
   test('no ttftMs site in src/ escapes the roster', () => {
     const touching = srcFiles().filter(
       (f) => fs.readFileSync(path.join(ROOT, f), 'utf8').includes('ttftMs'));
-    expect(new Set(touching)).toEqual(new Set([...IMPORTERS, INLINE, 'src/utils/ttft.js']));
+    expect(new Set(touching))
+      .toEqual(new Set([...IMPORTERS, INLINE, 'src/utils/ttft.js', ...MENTIONS_ONLY]));
+  });
+
+  /**
+   * The exemption cannot rot into a blanket one: an entry that stops mentioning
+   * `ttftMs`, or that quietly grows a real gate, must be re-decided rather than
+   * left standing. Same anti-rot shape as the F-1 doc pin's allowlist checks.
+   */
+  test('every MENTIONS_ONLY entry still mentions ttftMs and still gates nothing', () => {
+    for (const f of MENTIONS_ONLY) {
+      const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+      expect({ f, mentions: src.includes('ttftMs') }).toEqual({ f, mentions: true });
+      expect({ f, gates: /isMeasuredTtft\(/.test(src) }).toEqual({ f, gates: false });
+    }
   });
 });

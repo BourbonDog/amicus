@@ -21,6 +21,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 
 - [The pipeline, end to end](#the-pipeline-end-to-end)
 - [`amicus council run`](#amicus-council-run)
+  - [Task mode (`--intent task`)](#task-mode---intent-task)
   - [Debate mode](#debate-mode)
 - [Council Workspace (GUI)](#council-workspace-gui)
   - [Auto-open on `amicus_council_run` (v4.5)](#auto-open-on-amicus_council_run-v45)
@@ -112,6 +113,7 @@ amicus council run --prompt-file <briefing.md>
     [--gateway auto|direct|openrouter] [--no-validate-model]
     [--template <name|path>] [--artifact <file>] [--var k=v]  # v4.5, see docs/usage.md#briefing-templates
     [--pack <name|path>]                                       # v4.5, see docs/usage.md#policy-packs
+    [--intent review|task]                                     # v4.9, see Task mode below
 ```
 
 **The headless engine (v4.0).** Everything the `second-opinion` skill orchestrates by hand in
@@ -284,6 +286,82 @@ $ amicus council run --models gemini,glm --chair deepseek \
 Consumers gate on **tiers + the chair verdict line** (`overallVerdict`), per the engine's
 report-only Stage-4 policy. Headless runs pin `meta.claudeInCouncil: false`,
 `meta.runType: "headless"`, and the chair is excluded from the street-cred universe.
+
+### Task mode (`--intent task`)
+
+By default a council **reviews** the material it is given. `--intent task` (over MCP: the `intent`
+parameter on `amicus_council_run`, spelled `'task'`) points the same pipeline at **open-ended work**
+instead: the bench *produces* what the briefing asks for, and the chair synthesizes an **answer**
+rather than a verdict about a review that never happened.
+
+`review` is the default, and it is never stored: `--intent review` is accepted and normalized away
+at every door, so nothing writes `intent: "review"` onto `run.json`, `tally.json` or `verdict.json`.
+Only `"task"` is ever recorded — the same emit-when-set idiom as `--tag`. Any other value is a
+pre-flight `BAD_ARGS` failure before any spend.
+
+**What changes, stage by stage:**
+
+| Stage | Review intent (default) | Task intent |
+|---|---|---|
+| Stage 1 | *"You are one reviewer… Review the material"* — each seat critiques the briefing | *"you are not reviewing the briefing, you are executing it"* — each seat produces the deliverable, then declares the load-bearing claims it rests on |
+| Stage 2 rank | Order the reviews by how **accurate** each critique was | Order the responses from the one that **best does the work the briefing asked for** to the one that does it least well |
+| Stage 2 adjudicate | For every finding id, `agree`/`dispute`/`neutral` on the **critique** | For every claim id, `agree`/`dispute`/`neutral` on whether **the claim holds** |
+| Chair | `VERDICT: Ship it \| Fix these first \| Fundamental rethink` | `ANSWER: Converged \| Split \| Insufficient` |
+| Reliability ledger | One row per (run × model) appended | **Nothing appended** |
+
+**The two scales are disjoint on purpose.** They share no value and no keyword, which is what lets
+each parser stay blind to the other's line: a task run can never report `"Ship it"`, and a review run
+can never report `"Converged"`. The run's intent is what selects the parser — including on a Stage-5
+`amicus council verdict` rebuild long after the run is over, where a carried `overallVerdict` from
+the *wrong* scale is refused and the chair's prose is re-parsed instead. Full field semantics are in
+the `overallVerdict` and `intent` key notes under
+[`amicus council verdict`](#amicus-council-verdict).
+
+**What does *not* change.** The Stage-1 output contract is identical — the same trailing fenced JSON
+skeleton, the same `blocker | major | minor | nit` severity enum, the same required-non-empty
+`location`, validated by the same validator and repaired by the same bounded repair loop. Only the
+frame and the field *glosses* fork. In task mode `location` is the grounding discipline: it names
+what the claim rests on — a source, a computation, or the literal word `assumption`. An empty
+`findings[]` under a real `overall` is a valid task response, exactly as it is a valid review, and
+the bench is told so rather than left to invent claims to fill the array.
+
+Two things a task bundle carries that a review bundle never does: the Stage-2 judge packet ends with
+a `--- THE BRIEFING (what every response was asked to do) ---` section — judges cannot rank *how well
+the work was done* without the ask — and that section is fenced as reference material, because it is
+the first time briefing text reaches a judge in band.
+
+**Task runs write no reliability rows, and say so.** Two gates enforce it (the engine's own append
+and `amicus council tally`'s), and `council tally` refuses a `meta.intent` that is neither spelling
+rather than letting a near-miss slide into the ledger. Where the skip is **load-bearing** it is
+**announced, and the announcement does not degrade the run** — a `Note:` record on the
+`ledger-skipped` channel with `kind: "info"`, which the degrade sink cannot use to flip a run's
+`degraded` state. ⚠️ It is emitted at one site, not on every task run: the chair-fallback promotion
+arm, reached only after the chair's own attempts have all failed and the run still has budget,
+because that arm is the one step that draws on ledger history a task run never fed. A task run whose
+chair answers has no `ledger-skipped` note, and needs none. `info` records are announcements, not losses: the report gives
+them their own **Notes:** list and keeps them out of `## What was lost`. Relatedly,
+[`amicus council stats`](#amicus-council-stats) on an empty ledger now names where rows come from
+instead of implying that no council ever ran.
+
+**Read the tiers correctly.** A task run's report carries the line *"Tiers report peer concurrence,
+never verification."* directly under the tier counts, and the chair's own packet carries the same
+caveat beside the adjudications it is weighing. Peer agreement on a generative bench is correlation
+between models trained on overlapping priors — a tier says *how many peers concurred*, never *that
+the claim was checked*.
+
+**Review runs are byte-identical.** Not "unchanged as far as we know": the review path composes
+through the same dispatcher, and the shared packet — section headers, `Review by <model>` labels,
+empty-section wordings — is used verbatim in both intents. One vocabulary, two instructions.
+
+**Limitations, as of v4.9:**
+
+- **One intent per run.** There is no mixed bench; the whole run is a task run or a review run.
+- **Intent is not pack-settable.** A [policy pack](./usage.md#policy-packs) cannot carry it — pass
+  the flag (or the MCP parameter) explicitly.
+- **`--claude-review` is refused with `--intent task`.** Entering a file as review N+1 is review
+  machinery and has no task-mode meaning.
+- **Task runs build no reliability history**, so they never contribute to — and never benefit from —
+  `amicus council stats`, including the ledger-driven chair-fallback promotion.
 
 ### Debate mode
 

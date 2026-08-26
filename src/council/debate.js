@@ -147,41 +147,41 @@ function decorateRecord(record, debateFindings) {
 }
 
 /**
- * runStats rows for the debate legs (spec §5.5), plus v4.7 D2/E4's row-per-launch
- * extras: role is 'rebuttal' | 'revote' for the primary defense/re-vote legs,
- * 'superseded' for an original leg a successful repair replaced, and 'repair' for
- * a repair attempt that itself never became usable (error status rides naturally
- * off the raw leg). The rebuttal/revote legs never enter meta.models, so the
- * ledger stays one row per (run × model × resolvedModel) pair — a debate round
- * can never ADD a row (v4.8 PR4b: meta.models is still the row driver, and the
- * pair fan-out only splits an alias whose own joinable rows resolved
- * differently). DEBATE_ROLES remains the debate-role
- * vocabulary (rebuttal/revote); the ledger's overwrite protection for ALL FOUR
- * of these row-per-launch roles — rebuttal, revote, superseded AND repair —
- * lives in ledger.js's own LEDGER_JOIN_ROLES allowlist (v4.7 D4, Task 7):
- * a role not named there never joins, full stop, regardless of which module
+ * runStats rows for the debate legs (spec §5.5), plus v4.7 D2/E4's row-per-launch extras: role is
+ * 'rebuttal' | 'revote' for the primary defense/re-vote legs, 'superseded' for an original leg a
+ * successful repair replaced, and 'repair' for a repair attempt that itself never became usable
+ * (error status rides naturally off the raw leg). The rebuttal/revote legs never enter meta.models,
+ * so the ledger stays one row per (run × model × resolvedModel) pair — a debate round can never ADD
+ * a row (v4.8 PR4b: meta.models is still the row driver, and the pair fan-out only splits an alias
+ * whose own joinable rows resolved differently). DEBATE_ROLES remains the debate-role vocabulary
+ * (rebuttal/revote); the ledger's overwrite protection for ALL FOUR of these row-per-launch roles —
+ * rebuttal, revote, superseded AND repair — lives in ledger.js's own LEDGER_JOIN_ROLES allowlist
+ * (v4.7 D4, Task 7): a role not named there never joins, full stop, regardless of which module
  * produced the row or whether it is even in DEBATE_ROLES.
  * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
  *   repairLegs?: Array}} args leg metadata
  * @returns {Array<object>}
  */
 function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLegs }) {
-  // v4.9 W11 (PR1F-2): one builder, so seat/findingsUnverified/repairRefused and
-  // every future entry field reach debate rows without a fourth hand-rolled copy.
-  //
-  // ⚠️ The four lists hold NORMALIZED rows, not leg docs, and their two model fields
-  // are the MIRROR IMAGE of the entry's `leg` contract: `l.model` is the council
-  // ALIAS and `l.resolvedModel` the executable id, where the entry reads `leg.model`
-  // AS the resolved id and takes the alias as its own `model`. Passing `l` as the leg
-  // unchanged would stamp the alias into `resolvedModel` on 118 of the 137 measured
-  // rows — hence the re-key back into leg-space; nothing is invented. `summary`/`seat`
-  // are deliberately NOT passed: no runStats row has ever carried review prose, and
-  // `seat` here is a materializeDebate filename input, not a seat OBJECT (pin G1b).
-  //
-  // ⚠️ `l.status || 'unknown'` is GONE, not moved: it never fired, and cannot, because
-  // a leg doc's status comes from result-schema.js :: buildRunResult, which applies
-  // its own `metadata.status || 'unknown'` a layer down. The MEASURED census and the
-  // pin both live in tests/council/runstats-byte-order.test.js (G1c).
+  // v4.9 W11 (PR1F-2): ONE builder — debate rows take the entry's key order, its defaults and its
+  // emit-when-set rules instead of a fourth hand-rolled body. ⚠️ Nothing propagates on its OWN (claim
+  // corrected in W14): `mk` hands the entry a SYNTHETIC leg of five fields plus three explicit params,
+  // so seat/findingsUnverified/repairRefused/summary — and any future leg-sourced field — reach these
+  // rows ONLY by widening THIS list. MEASURED, already shipped: W13's `ttftMs` rides the leg into the
+  // entry and debate rows do not carry it. Widening is a behaviour change needing its own pins; filed.
+  // ⚠️ The four lists hold NORMALIZED rows, not leg docs, and their model fields MIRROR the entry's
+  // `leg` contract: `l.model` is the ALIAS and `l.resolvedModel` the executable id, where the entry
+  // reads `leg.model` AS the resolved id and takes the alias as its own `model` — passing `l`
+  // unchanged would stamp the alias into `resolvedModel` on 118 of the 137 measured rows. Holding
+  // `summary`/`seat` back is deliberate too: no runStats row has ever carried review prose, and
+  // `seat` here is a materializeDebate filename input, not a seat OBJECT (pin G1b). ⚠️ The re-key's
+  // ONE divergence from the hand-rolled body is MEASURED-DEAD — a normalized row with `model`
+  // undefined but `resolvedModel` set now emits the resolved id AS `model`, where the old body left
+  // the key out of the JSON; `l.model` was an alias STRING on 137/137 census invocations, so no
+  // producer emits that shape today (pin G1d — dead, not impossible). ⚠️ `l.status || 'unknown'` is
+  // GONE, not moved: it never fired and cannot — result-schema.js :: buildRunResult applies its own
+  // `metadata.status || 'unknown'` a layer below. The MEASURED census and every pin named here live
+  // in tests/council/runstats-byte-order.test.js.
   const mk = (role) => (l) => buildRunStatsEntry({
     leg: { status: l.status, durationMs: l.durationMs, usage: l.usage,
       waveId: l.waveId, model: l.resolvedModel },

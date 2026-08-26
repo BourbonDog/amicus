@@ -1182,9 +1182,15 @@ unchecked items ride to the next rev.)*
   which renamed the pack's own flag to `--pack-version` and added a preflight guard. Filed and closed
   the same day; PR5's `pack:` help block carries the new spelling via the merge of `origin/main`.
 - [x] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
-  `cli-handlers-council-run.js:178-179` does `path.resolve(project, String(args['out-dir']))`
+  The resolve this was filed against did `path.resolve(project, String(args['out-dir']))`
   with no dash-leading/non-string guard — the same R1/R5 class fixed for `-o/--out`, one flag over.
   Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+  ⚠️ **Citation re-derived at the v4.9 W14 truth pass (2026-08-26): the filed
+  `cli-handlers-council-run.js:178-179` is rot — that resolve now sits at `:214-215`, and `:178-179`
+  is an unrelated `--max-cost`/arg-validation stretch.** The valueless-flag guard the fix added is
+  the `for (const flag of ['out-dir', 'claude-review', 'run-id'])` loop at `:57`, and the
+  containment check that followed it is at `:219-222`. Anchor by symbol next time — this citation
+  has now rotted through two file-growth waves.
   — done v4.7 PR6, but SPLIT: `--cwd` is guarded once at `bin/amicus.js` (16 consumer sites);
   council run's own valueless flags (`--out-dir`, `--claude-review`, `--run-id`, `--timeout`)
   guarded in-handler. The filed shape (B) was rejected — it would have turned
@@ -1931,12 +1937,19 @@ Every item is a fix or test hardening. No new flags, no new checks, no new outpu
   ⚠️ **Those two numbers are a `v4.7.0` reading — measured at T-A8 against the tag, they are exactly
   `v4.7.0`'s 215 and 283, so they were TRUE when this item was planned and were simply undated.**
   Today (2026-08-17): `run-launch.js` **244**, `run-retry.js` **295/300 — five free lines**.
-- [x] **Reword the backstop message** (#129 + #133, both flag the same string). `headless.js:485`
-  asserts "— likely a listed-but-not-serving model or a dead endpoint": a canned guess with no
+- [x] **Reword the backstop message** (#129 + #133, both flag the same string). ⚠️ **HISTORICAL —
+  the quoted string and its citation describe the PRE-FIX tree and were both re-derived away by
+  this very item; do not chase either (corrected at the v4.9 W14 truth pass, 2026-08-26).** As
+  filed, `headless.js:485`
+  asserted "— likely a listed-but-not-serving model or a dead endpoint": a canned guess with no
   evidence gate, fired identically from both firing sites. All the mechanism knows is "zero
   substantive activity by the deadline". Report that neutrally and **name
   `AMICUS_NO_OUTPUT_BACKSTOP_MS` in the message itself**. Highest value-per-line in the release —
-  this string is what sent 30 minutes of #133's debugging at model ids and API keys.
+  this string is what sent 30 minutes of #133's debugging at model ids and API keys. Shipped: the
+  guess is gone from the tree entirely (grep-verified — the only surviving copies are in CHANGELOG
+  prose and the v4.7.1 task reports). Today's neutral builder is
+  `src/headless.js :: formatNoOutputBackstopReason` (`:231`), whose observed-only sentence is
+  composed at `:232-236` and names the env var on both branches.
 - [x] **`continue`/`resume` inherit the parent's tag** (ruling 2). Parent tag is already on disk
   (D13, absent-not-null on `metadata.json`) and both handlers already resolve a validated parent
   `taskId` (`:24` resume, `:54` continue). ⚠️ **Gate risk:** `src/sidecar/continue.js` is at
@@ -7082,6 +7095,23 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   the pack-resolution comment. All eight likely share one root (a block of insertions above
   `:600` that predates v4.9); re-derive each against the tree at fix time, not from the
   numbers here.
+  **⚠️ Two more of the same class, in `src/headless.js`, flagged at the #203 fix round and
+  re-derived here 2026-08-26 (W14).** The title's count stays a count of `mcp-server.js`
+  citations; these are SELF-citations — a comment naming line numbers in its own file, which is
+  the shape with the shortest half-life in the tree, because any insertion above the comment
+  moves the target without moving the comment. (1) `headless.js:1500` says "sessionId was
+  assigned at `:413`/`:417`" — the two assignments are `sessionId = options.sessionId` at
+  **`:489`** and `sessionId = await createSession(...)` at **`:493`**; today `:413` is the
+  `Failed to start server` error field of an early return and `:417` is a blank line.
+  (2) `headless.js:1603` says "`sessionId` (`:365`)" for the declaration — `let sessionId;` is at
+  **`:418`**, while `:365` is now `let client, server;`, a DIFFERENT declaration in the same
+  function. That second one is the more dangerous rot of the two: it resolves to a plausible-looking
+  line, so a reader checking it sees a declaration and moves on.
+  Both comments' CLAIMS are still true (assigned-before-return,
+  and not-guaranteed-assigned-in-the-catch, verified by reading the current tree); only the
+  anchors rotted. Fix shape for all ten: cite the SYMBOL, not the line — `createSession`'s call
+  site and the `let sessionId` declaration are both greppable, and the citation gate is
+  structurally blind to a self-citation that range-checks inside its own file.
 
 - [ ] **The INBOUND fence does not defang its own tags (observed at the W12 wave
   review, 2026-08-26).** W12's `defangOutboundFenceTags` (`src/utils/untrusted-fence.js`;
@@ -7128,3 +7158,188 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   adjudications, recorded as a degrade + disclosed in the verdict footer beside the existing
   `stage1:partial` marker — the footer already knows stages were partial; the WHO is what's
   missing).
+
+### Filed at the W14 truth pass (2026-08-26) — PR #205 tails
+
+- [ ] **Widen `debate.js :: mk` so entry-param and future leg fields actually reach debate rows —
+  a BEHAVIOUR change, not a cleanup.** W11 folded the debate row builder onto
+  `buildRunStatsEntry` and its own comment claimed every future entry field would then reach
+  debate rows automatically. That was FALSE and is corrected in the tree (W14): `mk` hands the
+  entry a SYNTHETIC leg of five fields (`status`, `durationMs`, `usage`, `waveId`, and
+  `model` re-keyed from `l.resolvedModel`) plus three explicit params (`model`, `role`,
+  `conformance`), so nothing else crosses. MEASURED proof already shipped: W13's `ttftMs` is
+  sourced off the leg INSIDE the entry — the shape chosen precisely so "no caller change and none
+  can be forgotten" — and debate rows carry no `ttftMs`, because `mk`'s leg has no `ttftMs` to
+  source. Pinned as `G1e` in `tests/council/runstats-byte-order.test.js`. Widening is not free:
+  forwarding the full normalized row would also carry `summary` (raw review prose, which no
+  runStats row has ever held) and `seat` (a materializeDebate FILENAME input, not a seat object —
+  pin `G1b`), so the widening has to be field-by-field with its own byte-order goldens, and every
+  widened field lands in `tally-input.json` for every debate run. Decide `ttftMs` first — it is
+  the one field with a live consumer waiting (the C2 derivation) and no shape hazard.
+
+- [ ] **The deleted `mk` `|| 'unknown'` status default rests on a PRODUCER CENSUS, and a census is
+  a fact about today's producers, not an invariant.** W11 removed the default as measured-dead:
+  137 instrumented invocations, statuses complete×130 / error×5 / timeout×2, zero falsy, with the
+  structural argument that a leg document's `status` is already defaulted a layer below by
+  `result-schema.js :: buildRunResult` and that the two synthetic producers hard-code `'error'`.
+  Both halves are true at this tree and pinned (`G1c`). The RISK being filed is that neither half
+  is enforced: a NEW producer of a normalized debate row — a future debate stage, a replay/import
+  path, a hand-assembled fixture reaching `debateRunStatsRows` — may hand it a falsy `status`, and
+  the row will now carry that falsy value into `tally-input.json` instead of `'unknown'`. Display
+  still degrades gracefully (`tally.js`'s re-projection and `workspace/run-detail.js :: costPanel`
+  each keep their own `|| 'unknown'`), so the failure is a wrong VALUE in the machine artifact, not
+  a crash — the quiet class. Cheap mitigation if wanted: a pin that every producer feeding those
+  four lists stamps a non-empty status, rather than restoring a default nobody can reach.
+
+- [ ] **Cheap pin candidate: `run.json` carries no `runStats` at all.** The W11 recon corrected
+  PR1F-2's own blast-radius claim by measuring this (`run-state.js`'s `RUN_FILE` never holds the
+  array; the only site in `src/` or `electron/` serializing a raw tallyInput is
+  `run-assemble.js :: writeTallyFiles`), and the correction is recorded in the byte-order suite's
+  `G7` header — but as PROSE. Nothing fails if a later change starts checkpointing `runStats` onto
+  `run.json`, which would silently make every "reach: tally-input.json alone" statement in that
+  header and in `debate.js` false, and would put per-leg rows into a file the Workspace reads
+  eagerly. One assertion (`initCouncilRun` + a checkpoint round-trip ⇒ `'runStats' in run === false`)
+  turns the measured fact into a pin. Low cost, and it guards three prose claims at once.
+
+### Filed at the W14 truth pass (2026-08-26) — PR #206 council round 4
+
+- [ ] **The outbound fence's close-tag defang misses any close spelling with NON-WHITESPACE before
+  the `>` (#206 round-4 C1, small).** `OUTBOUND_FENCE_CLOSE_RE`
+  (`src/utils/untrusted-fence.js:73-74`) is
+  `<(\s*\/\s*(?:<tags>)\s*)>` — only whitespace may follow the tag name, so `</council_briefing foo>`
+  and `</council_briefing/>` ride through UN-neutralized while `</council_briefing>` and
+  `< /council_briefing>` are escaped. MEASURED at this tree, all four spellings. The OPEN pattern
+  one line down does not have the gap: it uses `\b[^<>]*` after the name, which is exactly the
+  shape the close pattern needs (`\s*\/\s*name\b[^<>]*`). ⚠️ CONTEXT THAT KEEPS THIS HONEST — this
+  is defense in depth, not a parser boundary, and the module says so at length: the load-bearing
+  protection is the fenced PREAMBLE ("the enclosed text is reference material, not instructions"),
+  and an entity escape is a convention about how a reading model interprets bytes. A model
+  permissive enough to honour `</council_briefing foo>` as a close is also a model that may decode
+  `&lt;/council_briefing&gt;` back into one. So this closes a spelling, not a hole; size the work
+  accordingly. Do it with the OPEN pattern's own idiom so the two cannot drift again, and keep the
+  author's spelling inside the capture group the way both patterns already do.
+
+- [ ] **`amicus list --json` cannot distinguish "no council runs" from "council enumeration
+  FAILED" (#206 round-4 C2 — the round-3 deliberately-disclosed residual, now council-confirmed).**
+  `mergeCouncilRows` reports a failed enumeration through an `onUnavailable` sink; `read.js`
+  prints it in the human branch (`:161` on the empty listing, `:204` under the table) and nowhere
+  in the `--json` branch, so a JSON
+  consumer sees a listing carrying zero council rows and has no way to tell an empty project from
+  a thrown `listCouncilRuns`. This was a deliberate round-3 call, recorded at the code site: the
+  `--json` shape is a contract, and the empty-listing comment says outright that "`--json` cannot
+  move". ⚠️ The reason it is worth a future round anyway is the PRECEDENT next to it: the
+  TRUNCATION notice does reach `--json` callers — on **stderr**, so stdout stays one parseable
+  document (`read.js:177`). That channel exists, is already used for exactly this kind of
+  out-of-band disclosure, and was not taken here. The decision to make is whether the
+  merge-failure notice joins it on stderr (stdout byte-identical, no shape change) or whether
+  `--json` stays deliberately silent — not whether the residual exists. Decide it on purpose.
+
+- [ ] **A warm engine-log HIT's stale excerpt is PERMANENT for a one-shot death report (#206
+  round-4 C3).** `src/utils/engine-log.js`'s module docblock already states the residual
+  honestly — the ≤10 s TTL bounds the MISSED WINDOW and bounds nothing about the AGE of what is
+  served, so "a minutes-old error can be quoted while a fatal line written two seconds ago sits
+  unread". What is NOT stated there, and is this filing's addition: a leg's death report reads the
+  excerpt ONCE. MEASURED, not argued: `engineErrorExcerptSafe` has exactly one call site in the
+  whole tree — `src/headless.js:647`, inside the backstop reason build — so there is no later poll,
+  no refresh, no second look. For that report the stale quote is not a transient window, it is the
+  final answer, and the run's only engine-side diagnostic can name the wrong error with nothing
+  downstream to correct it. (Filed fresh rather
+  than folded into an existing BACKLOG record: the residual was disclosed only at the code site;
+  grep found no prior warm-hit entry in this file.) Remedies to weigh, cheapest first: make a
+  DEATH-REPORT read bypass the memo the way a MISS already does (the round-1 A1+B2 fix established
+  that "an absence in a previous scan is not an absence on disk" — the same reasoning applies to
+  "a newest line in a previous scan is not the newest line on disk"); or stamp the served
+  excerpt's own age into the report so the reader can discount it. Do NOT just shorten the TTL —
+  the gap is unbounded regardless of TTL, which is the point the docblock already makes.
+
+- [ ] **The F-1 doc pin's DOCUMENTED set is SECTION-GLOBAL and placement-blind (#206 round-4 C4 —
+  pin hardening).** `tests/mcp-tool-params-docs.test.js` builds `DOCUMENTED` from every
+  backtick-quoted bare identifier anywhere in `docs/usage.md`'s whole `## MCP Server` section, then
+  asserts each tool's `inputSchema` keys are in that set. So a parameter counts as documented when
+  its NAME appears once anywhere in the section — beside a different tool, in an unrelated
+  sentence, or in a code sample — and a tool can declare a key that section never explains next to
+  it and still pass. The backtick rule (deliberately chosen over a bare substring scan, so that
+  `mode`/`status`/`search`/`model` as ordinary English do not create false greens) fixes the
+  word-collision half of the problem and not the placement half. Hardening shape: bind the
+  documented set to the tool it belongs to — split the section per tool heading and check each
+  tool's keys against ITS OWN sub-section, keeping the section-global set as the fallback for
+  genuinely shared params. ⚠️ Re-derive the floor in the last test (`> 40`, sized against 58
+  distinct documented keys measured 2026-08-26) if the extraction changes — a per-tool split
+  necessarily lowers it.
+
+### Filed at the W14 truth pass (2026-08-26) — PR #207 council round 6
+
+- [ ] **`armStream`'s handler is a PROCESS-LIFETIME listener with no removal seam — a design note,
+  not a defect (#207 round-6 A1).** `src/utils/alias-shadow-writer.js :: armStream` attaches one
+  `'error'` listener to `process.stderr`, once, and deliberately never detaches: round 5 measured
+  that attach-for-the-write-and-detach ALWAYS loses the race (delivery is on a later turn) and that
+  a callback-only variant observes the failure without disarming it. The scope is disclosed
+  honestly and at length at the docblock — the handler receives every `'error'` any producer raises
+  on that stream for the life of the process, sharpest in the MCP server, which is why the handler
+  DISCRIMINATES (benign reader-went-away class silent, everything else reported once per stream)
+  rather than being the no-op that would silently eat unrelated faults. Nothing to fix today.
+  ⚠️ THE FUTURE-SEAM CONDITION, so the next reader does not have to re-derive it: a removal seam
+  becomes necessary the moment amicus runs INSIDE a host process it does not own — an embedded
+  library use, or an Electron main that wants its own stderr policy. The tell is a second
+  discriminating handler on the same stream: `electron/main.js` already installs one for the same
+  round-3 reason and is all-silent for every code, so today the two coexist only because one of
+  them says nothing. If a host ever needs amicus to STOP reporting, the fix is a
+  `disarmStream(stream)` that removes this listener and clears the `ARMED`/`REPORTED` symbols —
+  not a config flag on the handler, which would leave a permanent listener behind pretending to be
+  removable.
+
+- [ ] **The CLI-side alias audit computes notices for runs the handler then REJECTS — the mirror of
+  the MCP fix that already landed (#207 round-6 A2 + B1).** Round 5's A1 moved
+  `mcp-council-bench.js :: auditBenchAliases` to immediately after the spawn succeeds, so "no dead
+  work on a rejected call" became STRUCTURAL rather than a property of which rejections happened to
+  sit above it (mutant `AUDITEARLY`). The CLI half was not moved and is still positional:
+  `cli-council-run-bench.js :: resolveBench` fires `auditAliasShadows` at bench-resolution time,
+  guarded only by `Array.isArray(res.bench)`, and `cli-handlers-council-run.js` calls it at `:118`
+  with **twelve** subsequent `failJson` rejection points before anything launches (`:135`, `:141`,
+  `:147`, `:161`, `:165`, `:176`, `:180`, `:183`, `:192`, `:198`, `:206`, `:221` — bench under two
+  seats, chair-is-a-bench-seat, critic-not-on-the-bench, critic+lenses mutual exclusion, lens count,
+  then `--timeout`, `--max-cost`, `--gateway`, `--tag`, `--intent`, `--run-id` and the `--out-dir`
+  containment check). The first three are the sharpest: the audit has already named a shadowed alias
+  on a bench the very next line refuses. ⚠️ The CLI docblock's own defence — "a rejected bench carries no `bench` key
+  and is therefore silent by construction" — is TRUE and answers a different question: it covers a
+  rejected BENCH, not a rejected RUN. Severity is low (the notice goes to a stderr that on the MCP
+  transport is a `debug.log` fd, and the audit is pure diagnosis), which is exactly why it should
+  be fixed as a MIRROR while the reasoning is fresh rather than as a bug later. Give it its own
+  `AUDITEARLY`-class mutant on the CLI side; the round-5 pin shape (a rejected call carries no
+  notice, exercised through the critic+lenses rejection) transfers directly.
+
+- [ ] **A FORWARD wall-clock jump inflates `ttftMs` past its documented one-poll bound (#207
+  round-6 A3).** `src/headless.js`'s TTFT stamp is a wall-clock delta
+  (`Date.now() - outputClockStartedAt`), and round 3's B3 ruling handled the BACKWARD jump: a
+  negative reading is dropped at the emit gates (`isMeasuredTtft`), never clamped, because clamping
+  to `0` would publish "first token inside the first poll" — the most consequential value in the
+  distribution the C2 derivation will read. The forward jump has no such treatment. An NTP
+  correction, a VM resuming from suspend, or a manual clock set between the origin and the stamping
+  poll produces a LARGE non-negative integer, which `isMeasuredTtft` accepts as a measurement,
+  and which silently violates the bound stated a few lines above it: "every measurement is an upper
+  bound carrying up to one `pollIntervalMs` (plus the getMessages round-trip) of slack". A
+  clock-jump reading can exceed that by any amount. **Two remedies, and they are alternatives —
+  the C2 derivation must be told which one it got:** (1) take the delta from a MONOTONIC source
+  (`process.hrtime.bigint()` / `performance.now()`) for the elapsed measurement, keeping
+  `Date.now()` for anything that must be an absolute timestamp — this makes both jump directions
+  structurally impossible and retires the round-3 negative-drop as dead code (do NOT delete that
+  gate in the same change; measure it dead first); or (2) leave the clock alone and WEAKEN the
+  documented sentence to the truth — an upper bound of one poll interval *absent a wall-clock
+  discontinuity* — so the schema prose stops promising something the mechanism does not deliver.
+  (1) is the better product; (2) is honest today and costs nothing.
+
+- [ ] **`cli-council-run-bench.js`'s export ORDER is load-bearing with no structural pin (#207
+  round-6 A4 — same pin-hardening class as #206 C4).** The module exports six names and
+  `scripts/generate-docs-helpers.js:107` keeps only the FIRST FIVE in source order for CLAUDE.md's
+  Key Exports column, so whichever name sits last is the one the generated table never shows.
+  Round 4's B3 deliberately ordered `CHAIR_DEFAULT` inside the cap — it is DEFINED here and merely
+  re-exported by `cli-handlers-council-run.js`, and the docs previously showed the re-exporter
+  mentioning a constant its definer appeared not to have — pushing the generic
+  `sanitizeCouncilName` off the end instead. The whole arrangement is held by a comment. Nothing
+  in the suite asserts it: grepped 2026-08-26, no test anywhere reads `Object.keys` of a module's
+  exports, for this file or any other. So an alphabetizing autofix, a merge, or a seventh export
+  added at the front silently restores the exact docs defect round 4 fixed, with a green suite.
+  Fix shape: one pin asserting the first five exported names of this module (naming the generator
+  cap as the reason), or — better, and it retires this whole class — the generator ruling already
+  filed above (render constants without `()`, and either raise the cap or mark truncation), after
+  which no module's export order is load-bearing for anything.

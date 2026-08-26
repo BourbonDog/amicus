@@ -228,7 +228,7 @@ Instruct the chair to write a **synthesized verdict** that:
 - Distinguishes findings the bench broadly endorsed from contested or singleton claims
 - Arrives at an overall assessment of the artifact
 
-**Chair verdict scale (optional element, when ON):** append the addendum from `SEAT-BRIEFS.md § Chair verdict-scale addendum` to the chair packet — the chair must close with 3–5 **hard questions** the artifact's author probably hasn't asked themselves, then a final parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`. Surface that line verbatim at the top of `report.md` and in the inline chat presentation. When debate mode is also ON, the chair packet is built from the *final* (post-rebuttal) tally and includes the defense/re-vote outcomes.
+**Chair closing scale (standard since v4.9 — not an opt-in element):** append the addendum from `SEAT-BRIEFS.md § Chair closing-scale addendum` to the chair packet — the chair must close with 3–5 **hard questions** the artifact's author probably hasn't asked themselves, then a final parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`. (On a task-intent run, use that section's ANSWER twin instead — `ANSWER: Converged | Split | Insufficient` — and never translate one scale into the other.) Surface that line verbatim at the top of `report.md` and in the inline chat presentation. When debate mode is also ON, the chair packet is built from the *final* (post-rebuttal) tally and includes the defense/re-vote outcomes.
 
 Save the chair's output to the run folder as `verdict.md`.
 

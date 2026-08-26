@@ -1,31 +1,48 @@
 ---
 name: second-opinion
 description: >
-  Run a structured, multi-model "council" review of material the user provides plus
-  an analysis request and criteria, turning it into decisions. Models review the
-  material independently, then anonymously rank and adjudicate each other's reviews
-  in a peer cross-review stage, and a designated non-Claude "chair" model synthesizes
-  the verdict — Claude orchestrates but does not synthesize. Trigger on "second
-  opinion", "multi-model review", "council review", "have other models
+  A structured, multi-model "council" that either REVIEWS material against criteria or
+  DOES the open-ended work asked for, turning either into decisions. Models work
+  independently, then anonymously rank and adjudicate each other's output; a non-Claude
+  "chair" synthesizes the verdict or answer — Claude orchestrates, never synthesizes.
+  Trigger on "second opinion", "multi-model review", "council review", "have other models
   review/critique/evaluate this", "cross-check this against the research",
-  "red-team/stress-test this doc", "what would other models conclude about this", or
-  any request to review provided material with external model(s) and turn it into
-  accept/deny decisions — even if the user never says "sidecar". This is NOT for
-  quick or exploratory single-model chats — "ask Gemini…", "what does DeepSeek
-  think", brainstorming with a model, or spawning/forking a conversation with
-  another model — use the sidecar skill instead.
+  "red-team/stress-test this doc", "what would other models conclude about this", or any
+  request to have external models review material and turn it into accept/deny decisions —
+  even without the word "sidecar". Also TASK mode: "have the council work this out", or
+  any request for several models to independently produce an analysis, answer, or artifact
+  and reconcile them. NOT for quick or exploratory single-model chats — "ask
+  Gemini…", brainstorming, or forking a chat with another model — use the sidecar
+  skill instead.
 ---
 
 # Second Opinion (LLM Council)
 
-Independent, multi-model review of material the user provides, turned into decisions. Any single model — including the one running this conversation — has consistent blind spots. Routing the same material through models from *different* families surfaces disagreements, missed issues, and overstated claims that one model alone won't catch.
+Independent, multi-model work — either a review of material the user provides or the work itself — turned into decisions. Any single model — including the one running this conversation — has consistent blind spots. Routing the same brief through models from *different* families surfaces disagreements, missed issues, and overstated claims that one model alone won't catch.
 
 Four principles govern this skill:
 
 1. **Secondary tool.** By the time this skill runs, Claude has already given its opinion in the main conversation. The skill exists to bring in *independent outside* views — it does not replace or re-run Claude's upstream analysis.
 2. **The council is the non-Claude bench by default.** Council members are models from families other than the orchestrator (Gemini, DeepSeek, GPT, etc.). Claude is not a first-opinion council member unless the optional "Claude in the council" toggle is on — and even then it is judged but does not vote or chair.
 3. **Claude orchestrates; Claude does not synthesize the verdict.** Claude preps material, recommends the council, drives the run, presents accept/deny decisions, and applies them. A designated non-Claude chair model synthesizes the final verdict. Claude's role ends at presenting it.
-4. **The subject of cross-review is the other reviews, not the artifact again.** In the peer cross-review stage, models critique and rank *each other's reviews* — not re-review the original artifact. This is the mechanism that surfaces reviewer blind spots and inflated confidence.
+4. **The subject of cross-review is the other reviews, not the artifact again.** In the peer cross-review stage, models critique and rank *each other's reviews* — not re-review the original artifact (in task mode: each other's *responses*; the subject is never the briefing again). This is the mechanism that surfaces reviewer blind spots and inflated confidence.
+
+**Two intents, one machine (v4.9).** The council runs in one of two intents, and choosing between
+them is a Stage-0 decision, not a wording preference:
+
+- **Review (default).** The user supplies material and the bench reviews it against criteria. Seats
+  raise findings; judges rank how accurate each review was; the chair closes
+  `VERDICT: Ship it | Fix these first | Fundamental rethink`.
+- **Task** (`--intent task`). The user asks for work to be DONE, and the bench does it — each seat
+  independently produces the analysis, answer, or artifact the briefing requests, plus the
+  load-bearing claims it rests on. Judges rank the responses by *how well each did the work* and
+  adjudicate those claims; the chair synthesizes an ANSWER across them and closes
+  `ANSWER: Converged | Split | Insufficient`.
+
+Everything else is shared: same seats, same anonymized bundle, same tier machinery (though a tier
+means peer *concurrence* on a task run, not peer verification of a defect), same commands, same
+artifacts under the same filenames (a seat's deliverable still lands in `review-<seat>.md`). Task
+mode is not a lesser mode or a fallback — see *Key mechanics → §5.5*.
 
 **The engine runs the mechanics (v4.1).** Stages 1–3 and the deterministic Stage-5 artifacts are
 ONE `amicus council run` call: the engine composes every model-facing briefing, runs the review
@@ -47,7 +64,8 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 - The user provides documents, artifacts, or links **and** an analysis request **and** criteria, and wants other models to weigh in independently.
 - They want a fact-check, critique, research-backed evaluation, red-team, or "what would another model conclude about this?"
 - They need actionable decisions (accept / defer / deny) on the material, not just a summary of findings.
-- A thorough **single-model** pass is wanted — scales down gracefully; the boundary vs the `sidecar` skill is **intent** (reviewing provided material against criteria), not model count.
+- **Task mode:** the ask is open-ended work — produce the analysis, the answer, the artifact — and they want several independent models to do it and the disagreements reconciled rather than one model's draft. Run it with `--intent task`; §5.5 has the mechanics.
+- A thorough **single-model** pass is wanted — scales down gracefully; the boundary vs the `sidecar` skill is **intent** (structured, criteria-bound work reconciled into decisions), not model count.
 
 ## When NOT to use
 
@@ -68,7 +86,15 @@ human-in-the-loop; the engine call itself is one background command you do not p
 
 ### Stage 0 — Intake & prep
 
-Confirm the three inputs before doing anything else: **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material). Ask only for what is missing; don't re-ask for what is already provided.
+**Settle the intent first — it changes what the inputs are.** Ask which the user wants only when
+the ask is genuinely ambiguous; usually it is plain. Review when there is a *thing* and the ask is a
+judgment on it ("is this right", "what did I miss", "red-team this"). Task when the deliverable does
+not exist yet and the ask is to produce it ("work out X", "draft the plan", "analyze this market").
+An ask that supplies material but wants new work built *from* it ("take these notes and write the
+strategy") is a TASK — the material is input, not the subject. State the intent in the run-shape
+disclosure below so the user can correct you before any spend.
+
+Then confirm the three inputs before doing anything else — **review:** **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material); **task:** **the brief** (the work to be done, stated precisely enough that two models can do it without asking), any **material** it should draw on, and **the criteria** (what a good answer must do — scope, depth, form, what counts as evidence). Ask only for what is missing; don't re-ask for what is already provided.
 
 **Establish the run folder first:** `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
 if no `output/` directory exists). Create it now — it is both your working directory and the
@@ -82,13 +108,18 @@ its absolute path in all path arguments.
 - Small, clean text → feed inline in the briefing.
 
 **Author ONE briefing file: `<run-folder>/briefing.md`.** This is the only briefing Claude
-writes, and it carries only the *review request*:
+writes, and it carries only the *request* — the review request, or in task mode the work request:
 
 - the material — inline when small and clean, otherwise the **absolute path** of the extracted
   clean-text file (Stage-1 seats run agentically in the invoking cwd and can read referenced files);
-- the analysis request;
+- the analysis request (task mode: the brief — what to produce, and in what form);
 - the criteria;
 - any material-specific cautions ("the appendix is out of scope", "treat the numbers as given").
+
+**Task mode: write the brief, not the answer.** The seats execute this file. Do not sketch the
+conclusion, pre-select an approach, or attach your own draft — every one of those collapses the
+independence the bench exists for, and unlike a leaked review contract the engine cannot detect it.
+State the goal, the constraints, the audience and the form; leave the work to the bench.
 
 **Do not restate output contracts in `briefing.md`.** The anti-sycophancy clause, the findings-JSON
 schema, the judge tasks, the no-tools preambles, the chair packet and the verdict-scale addendum
@@ -147,14 +178,18 @@ seats**; a 1-model run is the scale-down path below, not an engine run.
 bench and chair are picked and before asking for launch confirmation, present this menu once
 (adjust the run-shape numbers to the actual bench):
 
-> Optional council elements — all OFF unless you name them. Reply with any you want (e.g. "1 and 3", "critic + debate mode", or "none"). Note the chair's **verdict scale is now standard** — the engine always makes the chair close with `VERDICT: Ship it | Fix these first | Fundamental rethink` plus its hard questions, so it is no longer something to opt into:
+> Optional council elements — all OFF unless you name them. Reply with any you want (e.g. "1 and 3", "critic + debate mode", or "none"). Note the chair's **verdict scale is now standard** — the engine always makes the chair close with `VERDICT: Ship it | Fix these first | Fundamental rethink` plus its hard questions, so it is no longer something to opt into (a task run closes on the ANSWER twin instead — `Converged | Split | Insufficient`):
 >
 > 1. **Critic seat** (`--critic <model>`) — one reviewer, which must be one of the bench seats, swaps to an adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Same review count. Trade-off: that reviewer can recognize its own review during cross-review (disclosed in the report).
 > 2. **Expert lenses** (`--lenses s1,s2,s3`) — each reviewer gets a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, custom), one lens per seat. Trade-offs: weakens cross-review anonymity (disclosed) and the run is **not** recorded to the reliability ledger.
 > 3. **Debate mode** (`--debate`) — after cross-review, Contested and Disputed findings go back to their raisers to defend, amend, or withdraw, and the disputing judges re-vote before the final tally. Adds 1–2 short waves (up to ~2N extra calls, ~+5 min).
-> 4. **Claude in the council** (`--claude-review`) — I add my own fresh review to the bundle so the bench can rank and adjudicate it; I'm judged but do not vote or chair, so the verdict stays independent. +1 review in the bundle, no extra council calls.
+> 4. **Claude in the council** (`--claude-review`) — **review runs only.** I add my own fresh review to the bundle so the bench can rank and adjudicate it; I'm judged but do not vote or chair, so the verdict stays independent. +1 review in the bundle, no extra council calls.
 
 Rules for this menu:
+
+- **On a task run, offer 1–3 only.** `--claude-review` enters a *review* as review N+1 and has no
+  task-mode meaning; the engine rejects the pair pre-flight, exit 1 before any spend. Don't offer
+  it and then have the launch fail.
 
 - **Never enable an element the user did not explicitly name.** Silence, "no", or "none" = all off. Do not infer opt-in from the nature of the material ("this doc could use a critic…") — offer, don't decide.
 - If elements were **pre-requested in the invoking command** (e.g. `/council … with a critic seat and debate mode`), confirm them back by name ("Critic seat and debate mode are ON per your request; the others are off") instead of re-asking.
@@ -169,9 +204,15 @@ Rules for this menu:
 this file and fails the run *before any spend* if it is malformed, so a bad file costs nothing but a
 relaunch. See §5.4.
 
-**Disclose the run shape up front**, naming any enabled elements and their cost impact — e.g.:
+**Disclose the run shape up front**, naming the intent and any enabled elements and their cost
+impact — e.g.:
 
 > This run uses 3 council models across 2 engine waves + 1 chair call (~7 model runs), ~10 min.
+
+or, in task mode:
+
+> **Task run** — the 3 models each produce the analysis independently, then rank and adjudicate each
+> other's; the chair synthesizes one answer. 2 engine waves + 1 chair call (~7 model runs), ~10 min.
 
 or, with elements enabled:
 
@@ -190,17 +231,19 @@ The scale-down levels count **non-Claude judges**; `--claude-review` adds a judg
 
 ### The engine run — Stages 1–3 plus the Stage-5 artifacts
 
-ONE call. The engine executes the Stage-1 review wave, the per-leg findings validation and bounded
+ONE call. The engine executes the Stage-1 wave (reviews, or in task mode the seats' deliverables),
+the per-leg findings validation and bounded
 repair loop, anonymization and run-global finding-id rewriting, the identical judge bundle and
 cross-review wave, the optional rebuttal round, the tally (which appends the reliability ledger
-**once**), the chair synthesis with the verdict scale, and the deterministic
-`verdict.json` + `report.html` — checkpointing `run.json` as it goes.
+**once** — never on a task run, see §5.5), the chair synthesis with the standard closing scale, and
+the deterministic `verdict.json` + `report.html` — checkpointing `run.json` as it goes.
 
 **Canonical launch (shell contexts):**
 
 ```
 amicus council run --prompt-file <run-folder>/briefing.md \
   --models "<m1,m2,m3>" --chair <chair> --out-dir <run-folder> --json \
+  [--intent task] \
   [--critic <m>] [--lenses s1,s2,s3] [--debate] \
   [--claude-review <run-folder>/review-claude.md] \
   [--max-cost <$> | --no-cost-gate] [--timeout <min>] [--gateway auto|direct|openrouter]
@@ -224,8 +267,10 @@ Stage-1 wave, the repair re-prompts, the Stage-2 judge wave, the debate legs, an
 so a single invocation replaces the old per-call pass-through footgun entirely.
 
 **Cowork / no-Bash environments:** use the MCP tools instead. `amicus_council_run`
-`{briefingFile, models|council, chair, critic?, lenses?, debate?, claudeReviewFile?, outDir,
+`{briefingFile, models|council, chair, intent?, critic?, lenses?, debate?, claudeReviewFile?, outDir,
 maxCost?|noCostGate?, timeoutMinutes?, gateway?}` returns `{runId, runDir}` immediately.
+`intent: 'task'` is the MCP twin of `--intent task`; omit it for a review run — absence IS review,
+and passing `'review'` explicitly is accepted but never stored.
 Preferred: call `amicus_wait` with the runId — one blocking call; re-call it while it returns
 `timedOut: true`. Fallback: poll `amicus_status`, which shows stage progression. Then read the
 run-folder artifacts with the host's file tools. Council JSON returned by the MCP tools arrives
@@ -282,6 +327,15 @@ withdrew it in the rebuttal round (`findings[].debate.action === 'withdrawn'` in
 **auto-recorded `denied` in `decisions.json` and never presented for a user decision** — just note
 it as withdrawn when walking the tiers.
 
+**Task mode:** the findings are the **load-bearing claims** each response rests on, not defects — so
+a tier says how many peers CONCURRED with a claim, never that anyone verified it, and models
+correlate on priors. Say so when presenting, exactly as the rendered report does. Decide them as
+claims: `accepted` = the answer may rest on this, `denied` = it may not, and anything downstream of
+it goes with it, `modified` = it holds only in a narrower form, and the narrowing is recorded. A
+clean bench is a valid result here too — an answer whose reasoning is fully inline can declare no
+adjudicable claims at all, in which case there is nothing to tier and Stage 4 is one decision:
+does the chair's answer stand as written.
+
 **Consensus tier — Confirmed findings** (≥ 2 peer agreements with agrees dominating — or a lone corroborating peer with zero disputes)
 
 - Present the full list in one block: id, claim, severity, and which models raised / endorsed it.
@@ -322,6 +376,16 @@ Do not advance to Stage 5 until every finding has a recorded decision.
 - Do not attempt to produce a modified copy.
 - Write a **standalone reviewed report** instead: the full decision log, the chair's verdict, and clear callouts of what should be changed and where — formatted so the user can apply the changes manually.
 
+**Task mode** (there is no source to revise — the deliverable is the output):
+- The deliverable is the **chair's synthesized answer**, constrained by the Stage-4 decisions:
+  strike anything that rested on a `denied` claim, narrow anything a `modified` claim narrowed.
+- Write it as `<run-folder>/answer.md` — or, when the brief asked for a specific artifact
+  (a spec, a plan, a letter), as that artifact under the name the brief asked for, next to the
+  material it drew on.
+- **Never re-do the work yourself.** If the answer needs material the bench did not produce, say so
+  and offer a re-run with a sharper brief; silently writing your own version is the failure this
+  skill exists to prevent, and it is invisible to the user once the chair's prose is edited.
+
 **Run-folder artifacts.** The engine already wrote the deterministic set (see *Output & naming*).
 Two artifacts are yours:
 
@@ -354,7 +418,11 @@ Two artifacts are yours:
   `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on disk and
   returns the Markdown rendering for `report.md` below; it still does **not** write `verdict.json`.
 - `report.md` — Claude-authored: the chair's synthesis (read verbatim from
-  `<run-folder>/chair-output.md`, including its closing `VERDICT:` line at the top of the report) +
+  `<run-folder>/chair-output.md`, including its closing scale line at the top of the report —
+  `VERDICT: Ship it | Fix these first | Fundamental rethink` on a review run,
+  `ANSWER: Converged | Split | Insufficient` on a task run. Reproduce the line the chair actually
+  wrote; never translate one scale into the other, and a run whose chair produced none says
+  `VERDICT: none` / `ANSWER: none` rather than inventing a phrase) +
   the full Stage-4 decision log (one row per finding: `id` + claim + decision — the claim text
   comes from `tally-input.json`, joined on `id` exactly as in Stage 4, since `decisions.json`
   and `tally.json` both carry only the id) + a summary of what was applied (+ the "How Claude's
@@ -385,7 +453,7 @@ The fast path retires the manual path's two hand-written artifacts: there is no
 `report.html`/`report.md`) and no `verdict.md` (the chair's prose is `chair-output.md`, written by
 the engine). Do not recreate them — `MANUAL-ORCHESTRATION.md` is where they still live.
 
-Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed) plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. Never hand over only file paths.
+Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed), its closing `VERDICT:`/`ANSWER:` line, plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. On a task run lead with the answer itself, not the process. Never hand over only file paths.
 
 ---
 
@@ -405,8 +473,8 @@ Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that
 **Ledger — already appended; do not touch it.** The engine's finalize tally appended one row per
 (run × model × resolved executable) to the append-only `council-ledger.jsonl` under `getConfigDir()`
 as part of the run — one row per model on an ordinary bench, and since v4.8 one row per executable
-when an alias's seats resolved differently (expert-lens runs are deliberately excluded). **In the
-fast path, never run `council tally` yourself.** The ledger is append-only, so a second tally over
+when an alias's seats resolved differently (expert-lens runs **and task runs** are deliberately
+excluded — see §5.5). **In the fast path, never run `council tally` yourself.** The ledger is append-only, so a second tally over
 the same run double-appends: that permanently doubles every affected model's `conformance` histogram
 in `amicus council stats` and cannot be undone. (It does *not* skew the lifetime averages — a
 duplicated set of rows has the same mean — and since v4.8 it no longer inflates `runs`/`low-N`
@@ -516,6 +584,51 @@ in `--critic`, which must be a bench seat) with `council_claude_review_invalid`.
 
 ---
 
+### §5.5 Task mode (`--intent task`, default off)
+
+The bench does the work instead of judging someone else's. Every stage still runs; what each stage
+is *about* changes.
+
+**What the seats are told.** Execute the briefing — "produce the analysis, answer, or artifact it
+requests — you are not reviewing the briefing" — and close with the same trailing JSON block review
+mode uses, carrying the **load-bearing claims** the deliverable rests on instead of defects found in
+someone's work. The fenced JSON shape, the `blocker|major|minor|nit` enum and the required non-empty
+`location` are unchanged; here `location` is the grounding discipline — the source, the computation,
+or the literal word `assumption`. An empty claims list under a real answer is a valid result. Critic and lens seats
+have task twins (argue against the easy answer *while doing the work*; do the work through one
+expert perspective), so menu items 1–3 are all available.
+
+**What the judges rank.** Review mode ranks how ACCURATE a critique was; there is no critique here,
+so the axis is how well the asked-for work was DONE. Adjudication is unchanged — agree / dispute /
+neutral, per claim.
+
+**What the chair produces.** An ANSWER, not a verdict: adopt the strongest response, merge
+complementary ones, or refuse the premise if the bench showed it unsound; state the consensus and
+which way each disagreement went; close with a RESIDUAL RISK section naming the disputed claims the
+answer still depends on. Then the final line, alone — `ANSWER: Converged` (the bench substantially
+agrees and the synthesis is well-supported), `ANSWER: Split` (material disagreement remains; the
+synthesis states both positions and what would settle them), or `ANSWER: Insufficient` (the bench's
+work cannot support an answer — missing information, an unsound premise, or too little usable
+output; *which* is named in the synthesis, never on the ANSWER line).
+
+**What the mode refuses.** `--claude-review` is rejected pre-flight, exit 1 before any spend — it
+enters a REVIEW as review N+1 and has no task-mode meaning. There is no task twin, and that is the
+point: Claude contributing its own deliverable would be doing the work the bench was convened for.
+
+**What is not recorded.** A task run is kept out of the reliability ledger, for the reason
+expert-lens runs are: cred earned doing work is not comparable with cred earned reviewing. So
+`amicus council stats` never moves on a task run, its numbers stay a review-mode signal — still the
+right basis for bench selection — and a task run's rankings must not be read as if they fed it.
+
+**How it surfaces.** `intent: 'task'` is emit-when-task and rides `run.json`, the tally `meta` and
+`verdict.json`; absence means review, and `'review'` is never materialized. That one key is what
+makes `report.html`/`report.md` head their summary **Answer summary** rather than *Verdict summary*,
+print the peer-concurrence caveat, and makes the Workspace fold read `ANSWER:`. If a task run's fold
+or panels say *verdict*, the intent did not reach that artifact — report it, do not relabel it by
+hand.
+
+---
+
 ## Model-recommendation heuristics
 
 Use these together with `amicus council stats` (the ledger — authoritative quantitative reliability data: runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`:
@@ -536,13 +649,14 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 ## Output & naming
 
 - Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), passed to the engine as `--out-dir`. After a fast-path run it holds:
-  - `briefing.md` — the Stage-0 review request Claude authored (run provenance, not a temp file)
+  - `briefing.md` — the Stage-0 request Claude authored — the review request, or in task mode the work brief (run provenance, not a temp file)
   - `review-claude.md` — Claude's own fresh review, only when "Claude in the council" is on
   - `run.json` — the engine's run manifest: stage log, wave ids, degradation, `runStats`, cost
   - `review-<seat>.md` ×N and `judge-<seat>.md` ×N — the raw engine legs. `<seat>` is the bench
     seat's id, which **is** the model alias for any bench that names each alias once; seat one and
     seat two of a repeated alias write `…-<alias>-1.md` and `…-<alias>-2.md` instead of sharing
-    one file
+    one file. The names are intent-independent: on a task run `review-<seat>.md` holds that seat's
+    **deliverable**, not a review
   - `briefing-stage1.md`, `bundle-stage2.md`, `chair-packet.md` — the model-facing briefings the engine composed
   - `tally-input.json` and `tally.json` — the assembled input and the tiered record (plus `tally-provisional.json` and `debate.json` when `--debate` was on)
   - `rebuttal-<seat>.md` ×(raising seats) and `revote-bundle.md` + `revote-<seat>.md` ×(disputing seats) — the debate round's raw defense and re-vote leg outputs plus the shared re-vote prompt, only when `--debate` was on. Both waves are sized in seats, so a bench that repeats an alias buys up to two extra billed legs per duplicated pair per round (one defense solo, one re-vote leg), each of which may draw its own bounded repair solo
@@ -550,8 +664,9 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `decisions.json` — the Stage-4 decision array Claude writes
   - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5 (replacing the engine's undecided version)
   - `report.md` — Claude-authored; full contract defined once in *Stage 5 → Run-folder artifacts* above (chair's synthesis + Stage-4 decision log + run-stats table).
-  - `report.html` — a **separate, deterministic** artifact rendered from `verdict.json` (no chair prose, no decision-log narrative — see Stage 5's *Renderer* note); the default artifact to share.
-- Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
+  - `report.html` — a **separate, deterministic** artifact rendered from `verdict.json` (no chair prose, no decision-log narrative — see Stage 5's *Renderer* note); the default artifact to share. On a task run it heads **Answer summary** and carries the peer-concurrence caveat, off `verdict.json`'s `intent: 'task'`.
+  - `answer.md` — task runs only: the chair's answer as constrained by the Stage-4 decisions (or the named artifact the brief asked for, wherever the brief asked for it). See *Stage 5 → Task mode*.
+- Reviewed copy: `<stem>-reviewed.<ext>`, next to the source (review runs only — a task run revises nothing).
 - The only working file Claude writes in the fast path is the Stage-6 proposed MODEL-NOTES diff (`_tmp-proposed-model-notes-update.md`), cleaned up once the approval decision is resolved. The manual fallback's `_tmp-*.md` files are documented in `MANUAL-ORCHESTRATION.md`.
 
 ---
@@ -560,5 +675,5 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 
 - `MANUAL-ORCHESTRATION.md` — the **fallback path**: the hand-driven Stage 1/2/2.5/3 mechanics and the Stage-5 artifacts the engine replaced. **Read it when the engine is unavailable, too old, or misbehaving; when a seat needs a fully custom brief beyond `--critic`/`--lenses`; or when you need to inspect or intervene mid-stage.**
 - `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file. This copy is machine-local (never overwritten on update); the shipped seed lives in the amicus repo and absorbs durable lessons at release time.
-- `SEAT-BRIEFS.md` — the semantics of the optional council elements (critic seat, expert lenses, rebuttal round, chair verdict scale) plus the standard anti-sycophancy clause. The engine composes its own stricter-JSON variants of these headlessly; this file stays authoritative for the manual path and for what each element *means*. **Read it whenever any element is toggled on at Stage 0.**
-- `COUNCIL-DESIGN.md` — the design spec this skill implements (§12 covers the optional council elements). Consult it if a mechanics question arises that the skill prose does not resolve.
+- `SEAT-BRIEFS.md` — the semantics of the optional council elements (critic seat, expert lenses, rebuttal round, chair closing scale) plus the standard anti-sycophancy clause. Its blocks are REVIEW wording; the task twins are engine-composed, and the file names the swaps the manual path has to make (including the ANSWER-scale addendum). The engine composes its own stricter-JSON variants of all of them headlessly; this file stays authoritative for the manual path and for what each element *means*. **Read it whenever any element is toggled on at Stage 0.**
+- `COUNCIL-DESIGN.md` — the design spec this skill implements (§12 covers the optional council elements). Consult it if a mechanics question arises that the skill prose does not resolve. It predates task mode and does not describe it — §5.5 above is the authority there.

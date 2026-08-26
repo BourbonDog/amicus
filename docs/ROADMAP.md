@@ -13,10 +13,10 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.7.0** (tagged 2026-08-08). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.9.0** (2026-08-26). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.7.0** have **shipped** — everything on this page is a record of what
+**Status:** v4.0 through **v4.9.0** have **shipped** — everything on this page is a record of what
 landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -356,6 +356,93 @@ behaviour changes.
 - **The engine is pinned exactly** — `opencode-ai` and `@opencode-ai/sdk` at 1.18.15, moving dev and
   CI off 1.2.20. First release whose suite ran against the engine users actually get
 - Plus a `sidecar/reopen-spend.js` extraction, a dead-code deletion, and three documentation gates
+
+## v4.8 — "Every seat counts as itself" *(seat identity)* — ✅ SHIPPED v4.8.0, 2026-08-23
+**Benefit:** seat a model twice and the council finally treats the two seats as two reviewers —
+each with its own vote, its own row, its own file and its own dead-seat badge. Before this rev a
+repeated alias was a bench that quietly disagreed with itself about how many reviewers were in the
+room.
+
+**Scope note.** The design spec behind this number
+(`docs/superpowers/specs/2026-08-10-v4.8-ask-anything-count-everyone-design.md`) carried two halves,
+*ask anything* and *count everyone*. v4.8.0 shipped **count everyone** — the seat-identity spine —
+across the `v48-*` PR train; **ask anything** (task mode, #134/#130, with #146 folded in) was sized
+and moved whole to v4.9 rather than carried half-done. That is the ruling, not a slip.
+
+- **Seats are first-class.** A seat id *is* its alias on every bench with no repeated `--models`
+  entry; where an alias occupies more than one position the seats are `<alias>#1`, `<alias>#2`, and
+  the artifacts follow (`review-<alias>-1.md`, and the same rule for `judge-`/`rebuttal-`/`revote-`).
+  `meta.seats` rides the tally/verdict documents index-parallel with `meta.models` *(L)*
+- **⚠️ The peers-only filter excludes the raiser by SEAT, and findings on a repeated-alias bench
+  change tier in BOTH directions** — a genuine twin's corroboration is no longer discarded, and a
+  twin's *dispute* now demotes. Deliberate, measured case-by-case, and disclosed with its permanent
+  cost: `Disputed` feeds the append-only ledger's `factErrorRate`, which is never migrated.
+  Distinct-alias benches are byte-for-byte unaffected *(M)*
+- **Two new honesty marks on `tally.json`/`verdict.json`** — `findings[].sameModelCorroboration`
+  (corroboration that came from another seat of the same model, so it is not independent) and
+  `findings[].unattributedPeerDrops` (a count of votes excluded from `basis` that the engine could
+  not attribute to anyone). Both emit-when-set; both shipped with their own wrong-in-two-directions
+  disclosures rather than as clean wins *(M)*
+- **Prototype pollution closed across the alias tables** — a member literally named `toString`,
+  `constructor`, `valueOf` or `hasOwnProperty` is no longer a valid alias at any of five gates, and
+  `resolveModel('toString')` throws instead of returning the function itself. One table was not
+  enough: a spread into a plain `{}` re-creates the inherited prototype, so all three builders are
+  seeded *(M)*
+- **A finding with no named raiser stops corroborating itself**, on one principle applied in order —
+  *attribute when you can, mark only when you cannot* — with seat ids deciding first *(M)*
+- **The Workspace stops collapsing dead seats**, and a live seat no longer erases its dead twin;
+  dead rows, retry badges and DOM keys are keyed on the seat, with the producer emitting `null`
+  rather than the alias for a seat it could not identify. Residuals pinned by tests asserting the
+  known-wrong behaviour so they cannot rot silently *(M)*
+- **`streetCred[]` stops dropping or inventing rows** when a hand-assembled `meta.seats` disagrees
+  with `meta.models`, and a mixed reliability-ledger pair group stops reading narrower than one with
+  no seat information at all *(S–M)*
+> Why here: seat identity is a prerequisite, not a feature. Every surface that says *which model
+> said what* — the peer split, street-cred, the ledger join, the Workspace panels, the artifact
+> filenames — was keyed on the alias, so all of them told the same lie on the same bench shape.
+> Fixing them one at a time would have been six half-fixes; the spine makes all six the same fix.
+>
+> **Lineage.** v4.6 made a loss announce itself, v4.7 made the accounting match reality, v4.8 makes
+> the *attribution* match reality. Same invariant family, applied to identity.
+
+**v4.8.1 (shipped 2026-08-25):** the fast-follow patch — setup Step 2 offered one card per curated
+model *family* with no way to choose within it, and the route pill it wrote stored a **provider** id
+rather than a model id, so nothing downstream could tell two models of one family apart either
+(#138). Both wizard surfaces now offer a vendor-scoped drill-down on a new pure `model-shortlist.js`.
+
+## v4.9 — "The council does new work" *(task mode)* — ✅ SHIPPED v4.9.0, 2026-08-26
+**Benefit:** the council stops being able only to critique. Point it at open-ended work with
+`--intent task` and every seat *produces* the deliverable, the judges rank which response best does
+the work, and the chair synthesizes an **answer** — `Converged | Split | Insufficient` — instead of
+a verdict about a review that never happened.
+
+- **★ Task mode** — the *ask anything* half deferred out of v4.8, shipped whole: intent plumbing,
+  Stage-1 task frames at every dispatch site, task judging and the task chair, honest renderers on
+  every surface, and zero reliability rows written by a task run. **Closes #134, #130 and #146** —
+  `--intent task` on the CLI, `intent: 'task'` over MCP, and a review run that is byte-identical
+  everywhere *(L)*
+- **The engine speaks for itself** — a `NO_OUTPUT_BACKSTOP` death report now quotes the engine's own
+  newest ERROR line for that session, and names a server-vs-install engine skew when there is one,
+  with a remedy that says why `doctor` cannot see this class. **Closes #133** *(M)*
+- **Bench signals** — the `ttftMs` probe (measured off the backstop's own substantive-activity
+  predicate, never derived), and a one-per-run warning when a local alias shadows a curated one with
+  a different id, surfaced on the CLI, over MCP and in `models --check` *(M)*
+- **The dead-seat surface finishes the v4.8 job** — an unbound seat stops being invisible in the
+  Workspace, and the critic path keys on seat identity, closing the dead-bench-twin-beside-live-critic
+  erasure v4.8 disclosed as a residual *(M)*
+- **`amicus list` shows council runs on the CLI**, as `amicus_list` has over MCP since v4.0, with
+  the current-project-only scope stated out loud rather than left silent *(S–M)*
+- **Docs update** — task mode in `README.md`, `docs/council.md` and `docs/usage.md`; the `runStats`
+  builder unification, the SI-16 splits and the `seatKey` consolidation carry the internal half *(S)*
+> Why here: #130 and #134 are the same problem from two directions — #130 is the bug report of what
+> happens when a generative brief meets a review-shaped pipeline, #134 is the request to support
+> generative briefs properly — and both trace to one hard-coded frame telling every seat it was a
+> reviewer. One declaration serves both, which is why they were designed together and shipped
+> together rather than as a detector and a feature.
+>
+> **Lineage.** v4.6 through v4.8 each made the council *more honest about a run it already knew how
+> to do* — announcing losses, counting money, attributing seats. v4.9 changes what a council can be
+> asked for in the first place, which is a different kind of rev and is scoped as one.
 
 ## Backlog (tracked, not scheduled)
 

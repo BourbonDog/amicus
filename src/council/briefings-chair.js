@@ -25,7 +25,7 @@ const CHAIR_VERDICT_VALUES = ['Ship it', 'Fix these first', 'Fundamental rethink
 /** Shared date line (spec §4.3) — prepended to every model-facing briefing. */
 function dateLine(date) { return `Today's date is ${date}.`; }
 
-/** Verdict-scale addendum (SEAT-BRIEFS.md § Chair verdict-scale addendum; always on headless). */
+/** Verdict-scale addendum (SEAT-BRIEFS.md § Chair closing-scale addendum; always on headless). */
 const VERDICT_SCALE_ADDENDUM = [
   'After your synthesis, add two closing sections:',
   '',

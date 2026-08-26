@@ -15,11 +15,16 @@
  * These are PRESERVATION pins — green at HEAD by construction, written BEFORE
  * the folds so the folds' byte diffs are forced into the open rather than
  * discovered later, so they get a NAMED MUTANT rather than a RED-before-GREEN
- * cycle. UNIFYDRIFT = re-introduce one hand-rolled builder verbatim. Measured
- * red sets, whole suite (8632 tests):
+ * cycle. UNIFYDRIFT = re-introduce one hand-rolled builder verbatim. Red sets
+ * MEASURED at the W11 fold (PR #205), at whole-suite scope — `npx jest
+ * --no-coverage`, no path filter. The suite SIZE is deliberately not quoted: it
+ * is a denominator that moves with every test added (the two numbers this header
+ * used to carry, 8632 and 8623, were a total and a passed-only count taken at that
+ * tree, and both were stale by W14), and what is load-bearing is the red set, not
+ * the size of the green one.
  *   UNIFYDRIFT-mk     (debate.js)            ⇒ 1 red: G1. NOTHING ELSE IN THE
- *       REPO SEES IT — 8623 other tests stayed green, which is precisely why
- *       these goldens had to exist before the fold.
+ *       REPO SAW IT — every other test in the suite stayed green, which is
+ *       precisely why these goldens had to exist before the fold.
  *   UNIFYDRIFT-legRow (run-debate-revote.js) ⇒ 3 red: G2a, G2b, G2c.
  *   UNIFYDRIFT-claude (run-assemble.js)      ⇒ 0 red — an EQUIVALENT mutant.
  *       That fold is byte-identical by construction, so restoring the literal
@@ -32,7 +37,8 @@
  * G6 asserts is equivalent. G2a-c are legRow's drift pins; G6 is not.
  *
  * THE STATUS CENSUS behind dropping `mk`'s `|| 'unknown'` (debate.js points
- * here for it). Instrumented `mk` over the whole suite: 137 invocations,
+ * here for it), MEASURED at the same W11 tree as the mutants above.
+ * Instrumented `mk` over the whole suite: 137 invocations,
  * statuses "complete" x130 / "error" x5 / "timeout" x2 — ZERO falsy, so the
  * default never fired. It structurally cannot: a leg document's `status` is set
  * by result-schema.js :: buildRunResult, which already applies its own
@@ -86,15 +92,22 @@ function censusLists() {
 }
 
 describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
-  // ⚠️ W11 FOLD DIFF #1 (deliberate, the only one this fold produces).
+  // ⚠️ W11 FOLD DIFF #1 (deliberate, and the only REACHABLE one this fold produces —
+  // G1d below records a second that is measured-dead).
   // KEY SET: unchanged on all five rows. VALUES: unchanged on all five rows.
   // No own key with an undefined value is added.
   // KEY ORDER: `waveId` and `resolvedModel` move from AFTER `usage` to BEFORE
   // `status` — the hand-rolled `mk` emitted status/durationMs/usage ahead of its
-  // two spreads, buildRunStatsEntry emits its spreads first. That is the whole
-  // point of the fold: debate rows now sit in the SAME key order as every
-  // primary/superseded/dead-seat row, so a future entry field lands in the same
-  // place everywhere. Rows carrying NEITHER field (row 2 below) are byte-identical.
+  // two spreads, buildRunStatsEntry emits its spreads first. What the fold buys is
+  // ORDER, not propagation: debate rows now sit in the SAME key order as every
+  // primary/superseded/dead-seat row, so an entry field that DOES reach a debate row
+  // holds the position it holds everywhere else.
+  // ⚠️ It does NOT make new fields reach them, and the claim that once stood here —
+  // that a future entry field would land on these rows automatically — was false.
+  // `mk` copies an explicit five-field leg (status/durationMs/usage/waveId/model),
+  // so every other entry param and every future leg-sourced field needs `mk` itself
+  // widened. G1e is the measured proof, using the field that already shipped.
+  // Rows carrying NEITHER field (row 2 below) are byte-identical.
   test('G1 — a full debate round\'s rows, byte-exact and order-exact', () => {
     expect(JSON.stringify(debateRunStatsRows(censusLists()))).toBe(
       '[{"model":"gemini","role":"rebuttal","wasChair":false,"conformance":"repaired",'
@@ -131,6 +144,48 @@ describe('W11 byte-order goldens — debateRunStatsRows (mk)', () => {
     const rows = debateRunStatsRows(censusLists());
     expect(rows.some(r => 'summary' in r)).toBe(false);
     expect(rows.some(r => 'seat' in r)).toBe(false);
+  });
+
+  // The fold's SECOND divergence from the hand-rolled body, disclosed at the fold in
+  // debate.js. It is MEASURED-DEAD, not impossible: `mk` re-keys `l.resolvedModel` into
+  // the synthetic leg's `model`, and the entry falls back to `leg.model` when its own
+  // `model` param is undefined — so a normalized row with NO `model` but a set
+  // `resolvedModel` now emits the RESOLVED id in the alias slot, where the hand-rolled
+  // body emitted `model: undefined` (own key present, omitted by JSON.stringify).
+  // Dead because the W11 census found `l.model` a non-empty alias STRING on 137/137
+  // invocations — zero null, zero undefined — so no producer emits this shape. Pinned
+  // so the day one does, the change is a failing test rather than a silent relabel.
+  test('G1d — a `model`-less row with a resolvedModel emits the RESOLVED id as `model`', () => {
+    const rows = debateRunStatsRows({
+      defenseLegs: [{ status: 'complete', durationMs: 1, usage: null, conformance: 'clean',
+        resolvedModel: 'x/y' }],
+      revoteLegs: [], supersededLegs: [], repairLegs: [] });
+    expect(rows[0].model).toBe('x/y');
+    // the pre-fold bytes, frozen: `model` absent from the JSON entirely
+    expect(JSON.stringify(rows[0])).not.toBe(
+      '{"role":"rebuttal","wasChair":false,"conformance":"clean",'
+      + '"status":"complete","durationMs":1,"usage":null,"resolvedModel":"x/y"}');
+  });
+
+  // The corrected claim, MEASURED rather than argued from `mk`'s source: folding onto
+  // the shared entry did NOT make entry fields reach debate rows. `ttftMs` is the case
+  // that already shipped — W13 sources it off the LEG inside buildRunStatsEntry, which
+  // is exactly the "no caller change and none can be forgotten" shape that was supposed
+  // to cover every call site. It does not cover this one, because `mk` builds its own
+  // five-field leg. If `mk` is ever widened, THIS is the pin that must be re-decided.
+  test('G1e — a leg-sourced entry field (`ttftMs`) does NOT reach a debate row', () => {
+    const leg = { model: 'gemini', status: 'complete', durationMs: 50, usage: null,
+      conformance: 'clean', waveId: 'r1-d1', resolvedModel: 'google/gemini-3.5-pro', ttftMs: 1234 };
+    const [row] = debateRunStatsRows({ defenseLegs: [leg], revoteLegs: [], supersededLegs: [],
+      repairLegs: [] });
+    expect('ttftMs' in row).toBe(false);
+    // the discriminator: the SAME leg through the shared entry does carry it, so the
+    // absence above is `mk`'s field list, not a property of the entry or of the leg.
+    const direct = buildRunStatsEntry({
+      leg: { model: 'google/gemini-3.5-pro', status: 'complete', durationMs: 50, usage: null,
+        waveId: 'r1-d1', ttftMs: 1234 },
+      model: 'gemini', role: 'rebuttal', conformance: 'clean' });
+    expect(direct.ttftMs).toBe(1234);
   });
 });
 

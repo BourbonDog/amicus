@@ -132,6 +132,7 @@ The council is the hero — start with the everyday way, and reach for the more 
 - **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council (CI)](#headless-council-ci)
 - **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
 - **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
+- **Pointed at the work itself, not at a review of it.** Add `--intent task` and the same bench *produces* the deliverable instead of critiquing one. → [Task mode (v4.9)](#task-mode-v49)
 
 <p align="center"><img src="./docs/cards/same-table.svg" width="520" alt="A local Ollama model seated as an equal council member at $0.00 — a member, not a mode"></p>
 
@@ -167,6 +168,10 @@ amicus council run --pack review-bench --prompt-file plan.md --json
 ```
 
 Any flag you also type on that second line overrides just that value — a pack only fills in what you didn't say explicitly, and it's recorded on the run either way. Packs work the same way on `fanout`/`start` and on the `amicus_fanout`/`amicus_start`/`amicus_council_run` MCP tools. `amicus pack list`/`show`/`rm` manage them, and `--from-run <id>` builds one from a run you already liked instead of typing flags at all. Full reference: [docs/usage.md § Policy packs](./docs/usage.md#policy-packs).
+
+### Task mode (v4.9)
+
+A council reviews by default. `amicus council run --intent task --prompt-file brief.md` — or `intent: 'task'` on the `amicus_council_run` MCP tool — points the same pipeline at open-ended work instead: every seat **produces** the analysis, answer, or artifact the briefing asks for, the judges rank *which response best does the work* and adjudicate the claims each one declared, and the chair synthesizes an **answer** — `Converged | Split | Insufficient` — never a review verdict. The two scales share no value, so a task run can never report `Ship it` and a review run can never report `Converged`. Task runs deliberately write nothing to the reliability ledger (rankings there measure concurrence, not defect confirmation) and say so on the surfaces that would otherwise look empty; a review run is byte-identical to before. Full reference: [docs/council.md § Task mode](./docs/council.md#task-mode---intent-task).
 
 ### Briefing templates (v4.5)
 

@@ -18,6 +18,15 @@ non-Claude chair, per the council's core rule)._
 (`src/council/briefings.js` + `briefings-stage2.js` + `briefings-debate.js`). This file stays
 authoritative for the manual path and for element *semantics*.
 
+**v4.9 — everything below is REVIEW wording.** Task mode (`--intent task`, SKILL.md §5.5) has an
+engine-composed twin of every block here (`briefings-task.js`, `briefings-stage2-task.js`,
+`briefings-chair-task.js`, and the task frames in `briefings-debate.js`), so a fast-path task run
+needs nothing from this file. Only the **manual path** has to swap the wording by hand: the seat
+role becomes *do the work, do not review the briefing*; "findings" become the **load-bearing claims**
+the deliverable rests on (same JSON shape, same severity enum, `location` = source, computation, or
+the word `assumption`); the judge's ranking axis becomes *how well the work was done* rather than
+how accurate a critique was; and the chair closes on the ANSWER scale below.
+
 ---
 
 ## Standard anti-sycophancy clause (ALL Stage-1 briefings — not an optional element)
@@ -173,9 +182,11 @@ verbatim:
 
 ---
 
-## Chair verdict-scale addendum
+## Chair closing-scale addendum
 
-Append to the chair packet (`_tmp-chair-packet.md`) when the element is toggled ON:
+Append to the chair packet (`_tmp-chair-packet.md`). ⚠️ **No longer an opt-in element** — the engine
+makes every chair close on a scale, so the manual path must too; SKILL.md's Stage-0 menu says the
+same. Review runs use the VERDICT scale below; task runs use the ANSWER twin after it.
 
 > After your synthesis, add two closing sections:
 >
@@ -192,5 +203,26 @@ Append to the chair packet (`_tmp-chair-packet.md`) when the element is toggled 
 >    Name the gaps or the structural problems in the synthesis ABOVE, not on the VERDICT
 >    line itself — that line carries the phrase and nothing else.
 
-**Orchestration note:** surface the chair's `VERDICT:` line verbatim at the top of
-`report.md` and in the inline chat presentation of the results.
+### Task-mode twin — the ANSWER scale
+
+Same two closing sections, same "final line, alone" rule, same HARD QUESTIONS item (all three are
+scale-independent). Only the phrase list and its gloss change:
+
+>    `ANSWER: Converged` | `ANSWER: Split` | `ANSWER: Insufficient`
+>
+>    Pick one. "Converged" = the bench substantially agrees and the synthesis above is
+>    well-supported. "Split" = material disagreement remains; the synthesis states both positions
+>    and what would settle them. "Insufficient" = the bench's work cannot support an answer —
+>    missing information, an unsound premise, or too little usable output. Name which, in the
+>    synthesis ABOVE, not on the ANSWER line.
+
+The task chair's synthesis instruction also differs: adopt the strongest response, merge
+complementary ones, or refuse the premise if the bench showed it unsound — then close the synthesis
+with a **RESIDUAL RISK** section naming the disputed claims the answer still depends on, or the
+single line `RESIDUAL RISK: none — no load-bearing claim was disputed.` when that is the truth.
+(Drop the RESIDUAL RISK close when the bench declared no claims at all: it is defined as "the claims
+peers disputed", and asking for it over an empty set is an unfollowable instruction.)
+
+**Orchestration note:** surface the chair's closing line — `VERDICT:` or `ANSWER:`, whichever the
+chair actually wrote — verbatim at the top of `report.md` and in the inline chat presentation of
+the results. Never translate one scale into the other.
