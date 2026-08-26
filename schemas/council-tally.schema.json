@@ -21,6 +21,10 @@
         "seats": {
           "type": "array",
           "description": "v4.8, optional. The run's seat table, one {id, alias, role, lens, position} entry per BENCH seat in bench order, echoed verbatim from the tally input. The engine emits it only when the bench repeats an alias — the one case where the `alias#N` ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat resolve to nothing else in the document, since meta.models is the ALIAS list. Bench-only: 'claude' is never a seat, so meta.models.length need not equal seats.length and the two must never be joined positionally. ABSENCE DOES NOT MEAN the bench had no repeated alias — hand-assembled and MCP-assembled input reaches tally() with no seat machinery behind it; it means only that no seat table is available. `items` is deliberately unconstrained: consumers must tolerate a table that is not an array of seat objects (the report and Workspace renderers fall back to alias space whole rather than failing), and the MCP input schema accepts the same latitude."
+        },
+        "intent": {
+          "enum": ["review", "task"],
+          "description": "v4.9, optional. The run's intent. The engine emits it only when 'task' — a review run's meta never materializes the key, keeping every review artifact byte-identical — but an explicit 'review' from hand-assembled input is accepted."
         }
       }
     },

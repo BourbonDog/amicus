@@ -269,6 +269,41 @@ describe('published council-family schemas validate real builder output (v4.0 §
   });
 });
 
+// v4.9 W5.3: optional `intent` — council-tally meta + council-verdict top
+// level. Both schemas are OPEN at these levels (no additionalProperties:false),
+// so an ajv pass alone proves nothing about a new key — the enum must be pinned
+// structurally AND shown to be enforced when the key is present. The enum
+// includes 'review' although the ENGINE never emits it (emit-when-'task', the
+// W4/W5 plan's byte-identity ruling): hand-assembled input may spell it out.
+describe('v4.9 W5.3: intent (enum review|task) on council-tally meta and council-verdict top level', () => {
+  const avInput = require('./council/fixtures/av-receiver-input');
+  const { tally } = require('../src/council/tally');
+  const { buildVerdict } = require('../src/council/verdict');
+  const readSchema = (name) =>
+    JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, `${name}.schema.json`), 'utf-8'));
+
+  test('declared shape: enum [review, task], never required', () => {
+    const tallySchema = readSchema('council-tally');
+    const verdictSchema = readSchema('council-verdict');
+    expect(tallySchema.properties.meta.properties.intent.enum).toEqual(['review', 'task']);
+    expect(tallySchema.properties.meta.required).not.toContain('intent');
+    expect(verdictSchema.properties.intent.enum).toEqual(['review', 'task']);
+    expect(verdictSchema.required).not.toContain('intent');
+  });
+
+  test('enforced: task and explicit-review documents validate; a bogus intent FAILS both schemas', () => {
+    const task = tally({ ...avInput, meta: { ...avInput.meta, intent: 'task' } });
+    expectValid(compile('council-tally'), task);
+    expectValid(compile('council-verdict'), buildVerdict(task, []));
+    const review = tally({ ...avInput, meta: { ...avInput.meta, intent: 'review' } });
+    expectValid(compile('council-tally'), review);
+    expectValid(compile('council-verdict'), { ...buildVerdict(task, []), intent: 'review' });
+    const bogus = tally({ ...avInput, meta: { ...avInput.meta, intent: 'bogus' } });
+    expect(compile('council-tally')(bogus)).toBe(false);
+    expect(compile('council-verdict')({ ...buildVerdict(task, []), intent: 'bogus' })).toBe(false);
+  });
+});
+
 describe('published pack-family schemas validate policy packs (v4.5)', () => {
   test('pack.schema.json accepts council pack shape', () => {
     const validate = compile('pack');

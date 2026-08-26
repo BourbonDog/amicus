@@ -411,6 +411,27 @@ function getTools() {
         runId: z.string(), runType: z.string().optional(), date: z.string().optional(),
         models: z.array(z.string()).min(1), chair: z.string().optional(),
         claudeInCouncil: z.boolean().optional(), seats: z.array(z.any()).nullable().optional(),
+        // v4.9 W5.2: declared or zod strips it (the same #137-shaped silent
+        // fork as the seat keys above) — a task run's meta.intent would vanish
+        // from every hand-assembled MCP call and the ledger gates would see a
+        // review run.
+        // ⚠️ PR #200 round-4 C1: an ENUM here, NOT the permissive z.string()
+        // the neighbouring envelope keys use — because this key's failure
+        // direction is not inert. `intent` is read by exact match (`=== 'task'`)
+        // at every consumer, so a near-miss spelling ('Task') passed a
+        // z.string(), rode meta VERBATIM into tally.json, and matched NOTHING:
+        // the ledger gates in cli-handlers-council.js and mcp-server.js then
+        // APPEND the task run's rankings to the reliability ledger — the
+        // polluting direction. (PR #200 round-5 B1 closed the same hazard on the
+        // OTHER door: `amicus council tally` reads that file with no schema at
+        // all, so runTally now refuses an unmatched spelling before its own gate.
+        // Both doors state the same two values; neither gate was widened.)
+        // The `.nullable()`/permissive idiom above is for
+        // keys where tally() can still be the single arbiter of shape; it
+        // cannot arbitrate a value whose whole meaning is its exact spelling.
+        // Both spellings accepted, matching amicus_council_run's enum below, so
+        // one input does not mean two things at two doors.
+        intent: z.enum(['review', 'task']).optional(),
       }).describe('Run metadata; meta.models lists every reviewed model.'),
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),
@@ -505,10 +526,11 @@ function getTools() {
         tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
       })).optional().describe('Stage-4 per-finding decisions (default []).'),
       overallVerdict: z.string().nullable().optional().describe(
-        "The chair's VERDICT line, read from the engine-written <runDir>/verdict.json " +
-        '(or the closing VERDICT: line of chair-output.md). Pass it through whenever you ' +
-        'overwrite verdict.json — it is the only copy, tally.json has none. Omit when the ' +
-        'chair was skipped; never author one yourself.'),
+        "The chair's terminal line — VERDICT: on a review run, ANSWER: on a task run — read " +
+        'from the engine-written <runDir>/verdict.json (or the closing terminal line of ' +
+        'chair-output.md). Pass it through whenever you overwrite verdict.json — it is the ' +
+        'only copy, tally.json has none. Omit when the chair was skipped; never author one ' +
+        'yourself.'),
       seatLoss: z.record(z.any()).nullable().optional().describe(
         'The engine-written <runDir>/verdict.json seatLoss block (v4.5.2 — critic seating). ' +
         'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +
@@ -586,6 +608,12 @@ function getTools() {
       ),
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       tag: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, '1-64 chars, letters/digits/_/- only').optional().describe('Label this session for list/search/spend grouping'),
+      // v4.9 W5.2: `.optional()` never `.default()` — absent IS 'review'.
+      intent: z.enum(['review', 'task']).optional().describe(
+        "Run intent (v4.9). 'task' marks a task-mode run, recorded as intent: 'task' on " +
+        "run.json/verdict.json and kept out of the reliability ledger; 'review' is the " +
+        'default and is never stored.'
+      ),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
         'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +

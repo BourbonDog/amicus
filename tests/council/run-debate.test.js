@@ -123,7 +123,7 @@ const revoteOut = (rv) => `Re-voting.\n\`\`\`json\n${JSON.stringify({ revotes: r
 
 // v4.8 PR3 Task 3: models/seats/criticSeat + degrade widened onto ctxFor, mirroring
 // how PR2a widened run-stages.test.js's makeCtx (:58-101). Production sets seats/
-// criticSeat/models at run.js:131-135 (via asm.preflightSeats) and ctx.degrade at
+// criticSeat/models at run.js:140-145 (via asm.preflightSeats) and ctx.degrade at
 // run.js:119. Every debate fixture here runs the fixed 3-seat gemini/gpt/qwen bench
 // (provisionalInput()'s meta.models, e2eOpts()'s models) — no critic, no lenses —
 // so, unlike makeCtx, this stays a fixed table rather than a parameterized one.
@@ -1824,7 +1824,7 @@ describe('runDebate — an absent `o.seats` is re-derived, never treated as "no 
       waves: { 'r-rv': wave([leg('gpt', agreeBoth), leg('deepseek', agreeBoth), leg('deepseek', agreeBoth)]) },
     };
     const ctx = ctxFor(tmp, fakeLaunchers(script, launched), TWIN_BENCH);
-    ctx.o.seats = null;             // a direct-require caller; run.js:133 normally fills it
+    ctx.o.seats = null;             // a direct-require caller; run.js:142 normally fills it
     const res = await runDebate(ctx, { provisionalRecord, tallyInput: input });
     const captured = launched.flatMap(o => (o.models ? o.models : [o.model]));
     expect(captured.length).toBeGreaterThanOrEqual(3);          // 2 defense solos + the wave

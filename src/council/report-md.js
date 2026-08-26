@@ -27,9 +27,25 @@ function renderMd(m) {
     h.claudeInCouncil ? 'Claude in council' : null].filter(Boolean).join(' · ');
   out.push(`\n_${meta}_\n`);
 
-  out.push('## Verdict summary\n');
+  // v4.9 PR #200 round-4 B1: the section carrying the run's PRIMARY summary is
+  // named for what the run PRODUCED. A task run has no verdict — its chair closes
+  // with `ANSWER:` (`parse-stage2.js :: parseChairTerminal` picks that parser off
+  // the same intent, `verdict.js :: CHAIR_ANSWERS` is its scale) — so 'Verdict
+  // summary' named the wrong artifact on the one heading a skimmer reads. Forked
+  // in BOTH renderers, pinned SEPARATELY per renderer (the R8/street-cred rule:
+  // a shared pin would let either regress silently). Review runs keep the exact
+  // old string, which is what holds both .snap documents byte-identical.
+  // Named mutant: SUMMARYLABEL (tests/council/report-intent.test.js).
+  out.push(m.intent === 'task' ? '## Answer summary\n' : '## Verdict summary\n');
   out.push('| Tier | Count |\n|---|---|');
   for (const t of TIER_ORDER) { out.push(`| ${t} | ${m.tierCounts[t]} |`); }
+  // v4.9 W8 T-A (spec §5.4): the concurrence qualifier, on a TASK run only, and
+  // directly under the counts it qualifies — a reader who reads only the tier
+  // table must not be able to miss it. Gated exactly as the `†` legend below is:
+  // written unconditionally it would shift every later line of every review
+  // report and redden both .snap documents. Named mutant: QUALIFIERDROP
+  // (tests/council/report-intent.test.js).
+  if (m.intent === 'task') { out.push('\n_Tiers report peer concurrence, never verification._'); }
 
   // Heading-over-nothing: emitted ONLY when the run actually degraded, so a
   // clean verdict's report stays byte-identical to before this section
@@ -39,6 +55,16 @@ function renderMd(m) {
     out.push('\n## What was lost\n');
     // ONE voice (Plan 1's formatDegrade) — the report must not grow a dialect.
     for (const d of m.degrades) { out.push(`- ${formatDegrade(d).trimEnd()}`); }
+  }
+  // v4.9 W8 T-A: kind:'info' records are announcements, not losses (`report.js ::
+  // toModel` splits them), so they get their own list and NOT the '## What was
+  // lost' heading. A bold lead-in rather than an `##` heading — the same weight
+  // the debate sub-lists below carry, because a note is not headline news.
+  // `m.notes &&` matches the `m.degrades || []` tolerance report-html.js already
+  // has: hand-built models in the report suites carry neither key.
+  if (m.notes && m.notes.length) {
+    out.push('\n**Notes:**\n');
+    for (const d of m.notes) { out.push(`- ${formatDegrade(d).trimEnd()}`); }
   }
 
   out.push('\n## Adjudication matrix\n');
@@ -94,7 +120,9 @@ function renderMd(m) {
   // human-facing here rather than model-facing. State the clean bench instead
   // of leaving the heading to dangle.
   if (!m.findings.length) {
-    out.push('_No findings were raised on this bench — a clean review is a valid review._\n');
+    out.push(m.intent === 'task'
+      ? '_No adjudicable claims were declared on this bench — an answer whose reasoning is fully inline is a valid answer._\n'
+      : '_No findings were raised on this bench — a clean review is a valid review._\n');
   } else {
     for (const t of TIER_ORDER) {
       const group = m.findings.filter(f => f.tier === t);

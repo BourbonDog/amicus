@@ -375,7 +375,7 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
   /**
    * v4.6.3 PR2 (spec D4, "old-run resilience"): pre-`degrades[]` era (v4.5.2) runs carry the
    * bench half of a seat loss ONLY in `verdict.seatLoss.deadBenchSeats` (string[] of aliases,
-   * deriveSeatLoss/verdict.js:41-47) — `degrades[]` is absent from both docs entirely.
+   * verdict-seat-loss.js :: deriveSeatLoss) — `degrades[]` is absent from both docs entirely.
    * `deadSeats` itself only gains the deadBenchSeats consumption (the `add()` calls below, folded
    * in after the critic backstop, before the live-map/suppression section); the verdict.degrades
    * FALLBACK (task brief cases (b)/(c)) is a source-selection concern that lives in the two call

@@ -26,7 +26,7 @@ describe('anti-sycophancy clause (SEAT-BRIEFS.md, verbatim)', () => {
 });
 
 describe('structured-output contract', () => {
-  test('every Stage-1 briefing carries the findings JSON contract and the date', () => {
+  test('every Stage-1 review briefing carries the findings JSON contract and the date', () => {
     for (const text of [
       b.buildSeatBriefing(ARGS),
       b.buildCriticBriefing(ARGS),
@@ -42,7 +42,7 @@ describe('structured-output contract', () => {
 });
 
 describe('LC-10: the briefing and the validator finally say the same thing', () => {
-  // The contradiction this closes: every Stage-1 briefing has always shipped the
+  // The contradiction this closes: every Stage-1 review briefing has always shipped the
   // anti-sycophancy clause's "An empty severity category is a valid result" while
   // validateFindings rejected exactly that answer (EMPTY_FINDINGS) — so the only
   // way to satisfy the schema was to produce a finding. The clause is not the fix
@@ -56,7 +56,7 @@ describe('LC-10: the briefing and the validator finally say the same thing', () 
       expect(text).toMatch(/[Nn]ever invent a finding/);
     });
 
-  test('every Stage-1 briefing requires a non-empty "overall"', () => {
+  test('every Stage-1 review briefing requires a non-empty "overall"', () => {
     for (const text of [
       b.buildSeatBriefing(ARGS),
       b.buildCriticBriefing(ARGS),

@@ -15,7 +15,9 @@
  * file's own job that narrowed.
  */
 
-const { sumWaveUsage } = require('../utils/pricing');
+// v4.9 W8 T-A: the cost table's model lives in ./report-cost (extraction, this
+// file's headroom). Eager, not lazy: that module back-requires nothing here.
+const { buildCostModel } = require('./report-cost');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 // __proto__: null — an inherited/unknown vote key (e.g. "toString") must fold as unrecognized, never resolve off Object.prototype.
@@ -233,50 +235,48 @@ function toModel(verdict, wave) {
     noResponse: verdict.findings.filter(f => f.debate && f.debate.action === 'no-response')
       .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
   };
-  const runStats = verdict.runStats || [];
-  // Cost-row role tag (Plan 2 final review F1, extended v4.7 D6): #83 gave
-  // judges their own runStats row, so a bench model can now appear twice
-  // (seat + judge), indistinguishable by `model` alone. v4.7's row-per-launch
-  // producers (chair-attempt/repair/superseded) create the exact same
-  // collision for their model. Tag ONLY these four roles — old verdicts have
-  // none of them, so chair/critic/lens/seat rows stay byte-identical to their
-  // historical rendering (report.test.js:189-199 pins the judge case exactly).
-  // Object.create(null): a plain `{...}` literal inherits Object.prototype, so a role
-  // literally named 'constructor'/'toString'/etc would resolve to an inherited (truthy)
-  // function via bracket lookup instead of `undefined` — silently corrupting that row's
-  // rendered model label. A null-prototype object has no inherited keys to collide with.
-  const ROLE_SUFFIX = Object.create(null);
-  ROLE_SUFFIX.judge = 'judge';
-  ROLE_SUFFIX['chair-attempt'] = 'chair-attempt';
-  ROLE_SUFFIX.repair = 'repair';
-  ROLE_SUFFIX.superseded = 'superseded';
-  // v4.8 PR5a T5: name the row by its SEAT when it has one. On a twin bench the four
-  // seat/judge rows were previously indistinguishable. Depends on T4 — with T5 alone only
-  // the two seat rows separate, because judge rows carried no seat until then.
-  // ⚠️ Only seat and judge rows carry one: repair, superseded and debate rows still
-  // collapse on a twin, and the chair row is not a bench seat at all. Disclosed, not fixed.
-  const costRows = runStats.map(r => ({
-    model: ROLE_SUFFIX[r.role] ? `${r.seat || r.model} (${ROLE_SUFFIX[r.role]})` : (r.seat || r.model),
-    status: r.status, durationMs: r.durationMs,
-    cost: r.usage && r.usage.cost ? r.usage.cost : null,
-  }));
-  const total = (wave && wave.usage && wave.usage.cost) ? wave.usage.cost : sumWaveUsage(runStats).cost;
+  // v4.9 W8 T-A: ONE read of the run's intent, TWO consumers below — the model's
+  // own `intent` (both renderers fork the spec §5.4 concurrence qualifier on it)
+  // and the header WORD. `=== 'task'` fails everything else CLOSED to review, the
+  // same direction `verdict.js :: buildVerdict` points: it emits the key ONLY as
+  // the literal 'task', so every pre-v4.9 and every review verdict takes this
+  // default and renders byte-identically to HEAD.
+  const intent = verdict.intent === 'task' ? 'task' : 'review';
   return {
     header: {
-      runType: verdict.runType || 'review', runId: verdict.runId, date: verdict.date,
+      // The header WORD, not the key: `runType` is meta's free-form transport
+      // string ('headless' on every wired path), which on a task run names how the
+      // wave ran and not what it was — and the title is the first thing a reader
+      // sees. Forking the VALUE here forks both renderers, which print `h.runType`;
+      // renaming the key would edit two files to say the same thing.
+      runType: intent === 'task' ? 'task' : (verdict.runType || 'review'),
+      runId: verdict.runId, date: verdict.date,
       chair: verdict.chair, council, claudeInCouncil: verdict.claudeInCouncil === true,
     },
+    intent,
     tierCounts: verdict.tierCounts || { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 },
     judges, findings, debate,
     streetCred: verdict.streetCred || [],
     // v4.6 Plan 2: additive and OPTIONAL on the verdict (verdict.js only sets
     // it when the run actually degraded), so a clean verdict's model — and
     // therefore its rendered report — is byte-for-byte unchanged.
-    // Plan 2 final review F2: LOSSES ONLY — a heal is announced on stderr/run.json but
-    // is not a loss (spec D4, §8), so it must never render under "What was
-    // lost". deriveSeatLoss (verdict.js) applies the same kind !== 'heal' filter.
-    degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal'),
-    cost: { rows: costRows, total },
+    // Plan 2 final review F2 + v4.9 W8 T-A: LOSSES ONLY. A heal is announced on
+    // stderr/run.json but is not a loss (spec D4, §8), and neither is v4.9's
+    // kind:'info' — `ledger-skipped` says a task run wrote no reliability rows,
+    // which is speech, not damage. Info records ride `notes`, which both renderers
+    // list APART from "What was lost".
+    // ⚠️ NOT the positive `kind === 'degrade'`, and the difference is measured: a
+    // record with NO kind key — hand-written, or parsed off a verdict older than
+    // kinds, which `utils/degrade.js :: formatDegrade` still deliberately serves as
+    // 'Notice' — is a loss at HEAD, and the positive spelling drops it from BOTH
+    // lists. Pinned in report-intent.test.js (named mutant LEGACYDROP, measured).
+    // ⚠️ `verdict.js :: deriveSeatLoss` keeps `kind !== 'heal'` and is no longer the
+    // same predicate twice: it asks which announcements imply a LOST SEAT, and its
+    // `data` + dead-leg/dead-wave channel filters exclude 'ledger-skipped' anyway
+    // (W5.1 handoff — deliberately left alone).
+    degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal' && d.kind !== 'info'),
+    notes: (verdict.degrades || []).filter(d => d.kind === 'info'),
+    cost: buildCostModel(verdict.runStats || [], wave),
   };
 }
 

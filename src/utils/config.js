@@ -244,7 +244,7 @@ function getEffectiveAliases() {
   // The SAME defect class this release already closed at other lookup tables —
   // `tally.js :: VERDICTS`, `report.js :: SYMBOL`, `debate.js :: PAST_TENSE`
   // (all `__proto__: null`), plus `street-cred.js :: perJudgeRank` and
-  // `report.js :: ROLE_SUFFIX` (both `Object.create(null)`, the same guarantee
+  // `report-cost.js :: ROLE_SUFFIX` (both `Object.create(null)`, the same guarantee
   // in the other spelling). The ALIAS table was not among them.
   // ⚠️ SI-22.4 WIDENED it and that is why it is fixed here: at BASE the padded
   // spelling ('toString ') missed the prototype and was correctly dropped;

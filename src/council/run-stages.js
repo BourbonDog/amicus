@@ -197,7 +197,7 @@ async function runStage1(ctx) {
       runState.appendStageWave(o.runDir, 'stage1', waveId);
       const solo = await ctx.launchers.launchSolo({
         model: m.modelInput,
-        prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors, review: repairing }),
+        prompt: briefings.stage1RepairPrompt(o.intent, { errors: res.errors, review: repairing }),
         project: o.runDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,

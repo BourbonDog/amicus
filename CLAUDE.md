@@ -96,10 +96,14 @@ bin/
 src/
 ├── council/
 │   ├── anonymize.js
+│   ├── briefings-chair-task.js
 │   ├── briefings-chair.js
 │   ├── briefings-debate.js
+│   ├── briefings-stage2-task.js
 │   ├── briefings-stage2.js
+│   ├── briefings-task.js
 │   ├── briefings.js
+│   ├── chair-fallback.js
 │   ├── debate.js
 │   ├── findings.js
 │   ├── ledger-join.js
@@ -108,6 +112,7 @@ src/
 │   ├── parse-stage2.js
 │   ├── peer-split.js
 │   ├── presets-cli.js
+│   ├── report-cost.js
 │   ├── report-html.js
 │   ├── report-md.js
 │   ├── report.js
@@ -140,6 +145,7 @@ src/
 │   ├── stage1-bind.js
 │   ├── street-cred.js
 │   ├── tally.js
+│   ├── verdict-seat-loss.js
 │   └── verdict.js
 ├── design/
 │   ├── fonts/
@@ -522,18 +528,23 @@ evals/
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
-| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()`, `CHAIR_TASK()` |
+| `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES()`, `ANSWER_SCALE_ADDENDUM()`, `TASK_CHAIR_SYNTHESIS()`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS()`, `TASK_CONCURRENCE_CAVEAT()` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
+| `council/briefings-stage2-task.js` |  | `TASK_JUDGE_FRAME()`, `TASK_JUDGE_A()`, `TASK_JUDGE_B()`, `TASK_JUDGE_B_NO_CLAIMS()`, `NO_CLAIMS_INDEX()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
+| `council/briefings-task.js` |  | `TASK_ANTI_SYCOPHANCY_CLAUSE()`, `TASK_FINDINGS_JSON_SHAPE()`, `TASK_FINDINGS_CONTRACT()`, `buildTaskSeatBriefing()`, `buildTaskCriticBriefing()` |
 | `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
+| `council/chair-fallback.js` |  | `pickFallbackChair()`, `classifyChairAttempt()` |
 | `council/debate.js` |  | `applyDebate()`, `decorateRecord()`, `debateRunStatsRows()`, `PAST_TENSE()`, `DEBATE_ROLES()` |
 | `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()`, `countAttemptedFindings()` |
 | `council/ledger-join.js` |  | `benchLegs()`, `credFor()`, `splitFindingsBySeat()`, `meanCred()` |
 | `council/ledger-stats.js` |  | `LEDGER_FILE()`, `readRows()`, `avg()`, `countRuns()`, `deriveReliability()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
-| `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseDebateDefense()` |
+| `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseChairAnswer()` |
 | `council/peer-split.js` |  | `peersOf()`, `unattributedPeerDrops()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
+| `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report-md.js` |  | `renderMd()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
@@ -566,6 +577,7 @@ evals/
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
+| `council/verdict-seat-loss.js` |  | `summarizeSeatLoss()`, `deriveSeatLoss()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/council-legs.js` |  | `buildLegRows()` |

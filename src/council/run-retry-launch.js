@@ -15,13 +15,13 @@
 const briefings = require('./briefings');
 const { bindPaddedWave } = require('./stage1-bind');
 
-/** The briefing a retry unit re-issues — same builders Stage 1 used. */
+/** The briefing a retry unit re-issues — same intent-aware dispatchers Stage 1 used (v4.9 W6). */
 function briefingFor(o, unit) {
-  if (unit.unit === 'critic') { return briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }); }
+  if (unit.unit === 'critic') { return briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date }); }
   if (unit.unit === 'lens') {
-    return briefings.buildLensBriefing({ lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date });
+    return briefings.stage1LensBriefing(o.intent, { lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date });
   }
-  return briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date });
+  return briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date });
 }
 
 /**

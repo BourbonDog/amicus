@@ -204,6 +204,9 @@ async function handleCouncilRunTool(input, project, helpers) {
   // v4.7 F8 (D13): the spawned CLI child's own cli-handlers-council-run.js
   // stores the tag on the run.json seed (Task 3) — this handler only forwards.
   if (input.tag) { args.push('--tag', input.tag); }
+  // v4.9 W5.2: emit-when-'task' — 'review' (the zod-declared default spelled
+  // out) never reaches the child's argv; review-run argv stays byte-identical.
+  if (input.intent === 'task') { args.push('--intent', 'task'); }
 
   let child;
   try { child = helpers.spawnFn(args, runDir); } catch (err) {

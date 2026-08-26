@@ -77,9 +77,11 @@ describe('getRunDetail', () => {
     // "WITHOUT --debate run.json carries no `debate` key at all (durable contract)", whose
     // assertion is this exact array.
     // ⚠️ CITATION REPAIR 2026-08-21 (v4.8 Phase 5 T5.4 fix round 1) — four of the five anchors in
-    // this block were re-opened and were WRONG: run.js:236 is the Stage-2 conformance merge (the
-    // runChair call is :271), run-chair.js:92 is classifyChairAttempt (the 'chair' stamps are
-    // :187/:190/:219), run-state.js:95-102 is initCouncilRun's seed (the append is inside
+    // this block were re-opened and were WRONG: run.js:246 is the Stage-2 conformance merge (the
+    // runChair call is :271), run-chair.js:92 was classifyChairAttempt (the v4.9 W4 split moved
+    // its body to chair-fallback.js, still run-chair.js :: classifyChairAttempt via re-export;
+    // the 'chair' stamps sit at run-chair.js:109/:112/:152 inside runChair),
+    // run-state.js:95-102 is initCouncilRun's seed (the append is inside
     // updateStage), and run-debate.test.js:616 was a runStats-row assertion. That last one was
     // ALREADY stale at v4.8 Phase 5's BASE 9ef275e5 — verified by opening it there, so the +337
     // lines that phase added to that file did not cause it. Only
@@ -111,7 +113,7 @@ describe('getRunDetail', () => {
     const d = getRunDetail(project, 'bbbb2222');
     expect(d.derived.verdictPanel.overallVerdict).toBeNull();
     // ⚠️ PRE-FLIGHT (P3): was the raw fixture string. `run.error` is null on every partial run
-    // (verified: run.js:279 is the only exit-2 finalize and passes no error), so the reason is
+    // (verified: run.js:294 is the only exit-2 finalize and passes no error), so the reason is
     // derived from the chair stage's `status:'error'`. See degradedReason() in Step 4.
     expect(d.derived.verdictPanel.reason).toBe('Chair synthesis stage failed');
     expect(d.artifacts['chair-output.md'].present).toBe(false);
@@ -166,6 +168,93 @@ describe('getRunDetail', () => {
     expect(d.artifacts['report.html'].present).toBe(false);
   });
 
+  /**
+   * v4.9 W8 T-B — the verdict panel carries the run's INTENT.
+   *
+   * The electron renderer (`electron/workspace-ui/workspace-matrix.js ::
+   * renderVerdict`) is a plain browser script and cannot `require()` src/, so the
+   * only way it can label a task run's chip `ANSWER:` is for the panel payload to
+   * carry the fork key. `verdict.json` itself is emit-when-'task' (the W5 ruling),
+   * but this payload is an in-memory IPC model with no byte-identity contract and
+   * a CLOSED literal whose other keys are always present with null defaults — so
+   * `intent` is materialized both ways and defaults to 'review', matching the
+   * literal's own style. The renderer still treats an ABSENT key as review, since
+   * older payloads (and every hand-built fixture in the workspace suites) have none.
+   *
+   * Named mutant PANELINTENTSTUCK: collapse the ternary to a bare
+   * `intent: 'review'`. RED SET: "a task run's verdict panel carries intent:'task'".
+   * The two review pins are the absence controls and stay green by construction.
+   */
+  test("a task run's verdict panel carries intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
+    const verdict = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'verdict.json'), 'utf-8'));
+    verdict.intent = 'task';
+    verdict.overallVerdict = 'Converged';
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), JSON.stringify(verdict));
+    registerPointer(project, 'aaaa1111', runDir);
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.derived.verdictPanel.intent).toBe('task');
+    expect(d.derived.verdictPanel.overallVerdict).toBe('Converged');
+  });
+
+  test("a review run's verdict panel carries intent:'review' — the fixture has no intent key at all", () => {
+    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const raw = JSON.parse(fs.readFileSync(path.join(project, 'runs', 'council-aaaa1111', 'verdict.json'), 'utf-8'));
+    expect('intent' in raw).toBe(false);          // absence pin on the artifact itself
+    expect(getRunDetail(project, 'aaaa1111').derived.verdictPanel.intent).toBe('review');
+  });
+
+  test("an absent verdict yields a present:false panel that still defaults intent to 'review'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('review');
+  });
+
+  /**
+   * v4.9 fix round 2 (council B2) — `run.json` is the SECOND carrier of intent.
+   *
+   * The panel read `verdict.intent` alone, so on the narrow leg where a task run
+   * exits before the verdict write — or writes a corrupt one — the panel
+   * defaulted to review and the Workspace chip read "no chair verdict" on a run
+   * that was never on that scale. `run.json` checkpoints `intent: 'task'` at
+   * start (`run.js :: runCouncil`) and `run` is already this function's first
+   * parameter, so the honest source is `verdict.intent || run.intent`.
+   *
+   * Named mutant PANELINTENTVERDICTONLY: drop the `run.intent` half of both
+   * sources. RED SET: the two pins below. Every pin above is an absence control
+   * on a review fixture and stays green.
+   */
+  test("a task run with NO verdict.json labels its present:false panel intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.intent = 'task';
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('task');
+  });
+
+  test("a task run with a CORRUPT verdict.json still labels the panel intent:'task'", () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.intent = 'task';
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), '{ truncated mid-write');
+    registerPointer(project, 'aaaa1111', runDir);
+    const vp = getRunDetail(project, 'aaaa1111').derived.verdictPanel;
+    expect(vp.present).toBe(false);
+    expect(vp.intent).toBe('task');
+  });
+
   test('degradedReason exit-1 path: run.error.code/message drives the reason string', () => {
     // The other half of F04: `run.error` is only ever non-null on the exit-1 path, where the
     // engine writes a structured {code, message}. No fixture carries this shape, so it is
@@ -184,8 +273,8 @@ describe('getRunDetail', () => {
   /**
    * TST-8 — degradedReason()'s THIRD branch (a `skipped` stage) had no coverage. It was
    * deferred as YAGNI and is no longer: the v4.4 cost work added two fresh ways to skip a
-   * stage that did not exist when it was deferred — `overBudget()` (src/council/run-chair.js:84
-   * checkpoints the chair stage `skipped`; src/council/run.js:229 does the same for
+   * stage that did not exist when it was deferred — `overBudget()` (src/council/run-chair.js:97-110
+   * stamps the chair stage `skipped`; src/council/run.js:229 does the same for
    * debate-revote) and the pre-flight BUDGET_EXCEEDED refusal that stamps `budgetRefusals[]`.
    * A run that reaches the verdict panel with a cost-ceiling skip is now a normal outcome, and
    * this branch is the only thing that explains it to the user.
@@ -207,7 +296,7 @@ describe('getRunDetail', () => {
   };
 
   test('degradedReason skipped path: a cost-ceiling-skipped chair names the stage and the cause', () => {
-    // run-chair.js:84-90 — `if (overBudget()) { updateStage(…, {status:'skipped'}) }`, with no
+    // run-chair.js:97-110 — `if (overBudget()) { updateStage(…, {status:'skipped'}) }`, with no
     // startedAt and no run.error anywhere. Before this branch the panel had nothing to say.
     const d = withStages([
       { name: 'stage1', status: 'complete' },

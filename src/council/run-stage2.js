@@ -111,7 +111,14 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   const labeled = reviews
     .map((r, i) => ({ label: labels.entries[i].label, text: r.text }))
     .concat(extraLabeled);
-  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings, date: o.date });
+  // v4.9 W7: one dispatch, both intents (briefings-stage2.js :: judgeBundleFor —
+  // 'task' | absent, fail-closed). `briefing` is the EXTRA argument the task
+  // bundle needs and the review bundle ignores: task judges rank "which response
+  // best does the work the briefing asked for", which is unanswerable without the
+  // ask (spec §5.4). It rides `o.briefing` — the same field the Stage-1
+  // dispatchers compose from — so the text is never re-read off disk.
+  const bundle = stage2.judgeBundleFor(o.intent,
+    { reviews: labeled, findings: globalFindings, date: o.date, briefing: o.briefing });
   fs.writeFileSync(path.join(o.runDir, 'bundle-stage2.md'), bundle, { mode: 0o600 });
 
   // ROSTER, not bundle: derived ONLY from legs that actually ran, so a file-sourced
@@ -178,7 +185,12 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       runState.appendStageWave(o.runDir, 'stage2', waveId);
       const solo = await ctx.launchers.launchSolo({
         model: judge,
-        prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors, judgement: judging }),
+        // v4.9 W7 fix round (F1): the SAME intent channel the bundle dispatch
+        // above rides. A judge briefed on the task contract must be repaired
+        // against the task contract — a repair solo is a fresh session, so the
+        // contract embedded here is the only output shape it ever sees.
+        prompt: stage2.judgeRepairPromptFor(o.intent,
+          { errors: parsed.errors, judgement: judging }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,

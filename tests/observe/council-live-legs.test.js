@@ -192,7 +192,8 @@ describe('buildCouncilStatusPayload: legs[] + stall flags (DE-ROT F01)', () => {
     // Simulates run-chair.js's fallback chain: ch1/ch2 try run.chair's own
     // alias ('claude'); ch3 promotes a DIFFERENT, ledger-picked alias that can
     // coincide with a bench member ('gemini') — run.json's `chair` field is
-    // only checkpointed once the whole chain resolves (run-chair.js:122), so
+    // only checkpointed once the whole chain resolves — run-chair.js :: runChair's
+    // `checkpoint(o.runDir, { chair: actualChair || o.chair })` at :148 — so
     // while ch3 is live, alias-matching against run.chair would miss it, and
     // matching against bench would wrongly call it a 'seat'. The stage name
     // ('chair') is the only reliable signal.

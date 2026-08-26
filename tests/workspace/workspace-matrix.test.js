@@ -308,7 +308,32 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('chair stage failed');
     });
 
-    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js:48)', () => {
+    /**
+     * v4.9 fix round 2 (council B2), the renderer half — ALREADY GREEN by
+     * construction, and pinned here because it is the half that was never the
+     * defect. `renderVerdict` has forked this chip on `vp.intent` since W8; what
+     * was broken was upstream, in `src/workspace/run-detail.js :: verdictPanel`,
+     * which minted a hard-coded `intent: 'review'` on every present:false panel
+     * and so could never hand this branch a task payload. The fix sources the
+     * panel's intent as `verdict.intent || run.intent`; this pin states the
+     * contract that fix now satisfies, so a future edit cannot quietly retire
+     * the branch it feeds.
+     */
+    test("a task payload with no chair answer renders 'no chair answer', not 'no chair verdict'", () => {
+      const container = document.createElement('div');
+      const vp = {
+        present: false, intent: 'task', overallVerdict: null, tierCounts: null,
+        streetCred: [], decisions: [], reason: 'chair stage failed',
+      };
+      AmicusMatrix.renderVerdict(container, vp, {
+        labelOf: () => null, isBlind: () => false, reportPresent: false, onFold: () => {}, onOpenReport: () => {},
+      });
+      expect(container.textContent).toContain('no chair answer');
+      expect(container.textContent).not.toContain('no chair verdict');
+      expect(container.textContent).toContain('chair stage failed');
+    });
+
+    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js :: buildVerdict)', () => {
       const container = document.createElement('div');
       const vp = {
         present: true, overallVerdict: 'Fix these first',
@@ -353,6 +378,47 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(onFold).toHaveBeenCalledTimes(1);
       reportBtn._listeners.click[0]();
       expect(onOpenReport).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * v4.9 W8 T-B — the chip names the scale its phrase belongs to.
+     *
+     * Payload-driven ONLY: this file is a plain browser script loaded by the
+     * Electron renderer, so it cannot require() src/ to learn the run's intent.
+     * `vp.intent` is minted by src/workspace/run-detail.js :: verdictPanel, which
+     * always materializes it; the ternary below is `=== 'task'` rather than
+     * `!== 'review'` so a payload that predates v4.9 (no key at all — the shape
+     * every other workspace suite hand-builds) reads as review rather than
+     * flipping every legacy run's chip to ANSWER.
+     *
+     * Named mutant CHIPLABELSTUCK: drop the ternary back to the bare
+     * `'VERDICT: ' + vp.overallVerdict`. RED SET: the task test below.
+     */
+    test("a task payload's chip reads ANSWER:, never VERDICT:", () => {
+      const container = document.createElement('div');
+      const vp = {
+        present: true, intent: 'task', overallVerdict: 'Converged',
+        tierCounts: null, streetCred: [], decisions: [], reason: null,
+      };
+      AmicusMatrix.renderVerdict(container, vp, {
+        labelOf: () => null, isBlind: () => false, reportPresent: true, onFold: () => {}, onOpenReport: () => {},
+      });
+      expect(container.textContent).toContain('ANSWER: Converged');
+      expect(container.textContent).not.toContain('VERDICT');
+    });
+
+    test('a review payload keeps VERDICT: — and so does a legacy payload with no intent key (absence pin)', () => {
+      const render = (vp) => {
+        const container = document.createElement('div');
+        AmicusMatrix.renderVerdict(container, vp, {
+          labelOf: () => null, isBlind: () => false, reportPresent: true, onFold: () => {}, onOpenReport: () => {},
+        });
+        return container.textContent;
+      };
+      const base = { present: true, overallVerdict: 'Fix these first', tierCounts: null, streetCred: [], decisions: [], reason: null };
+      expect(render({ ...base, intent: 'review' })).toContain('VERDICT: Fix these first');
+      expect(render(base)).toContain('VERDICT: Fix these first');   // no intent key at all
+      expect(render(base)).not.toContain('ANSWER');
     });
 
     test('returns the chair-prose host element for the caller to render markdown into', () => {

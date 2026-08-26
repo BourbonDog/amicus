@@ -4,8 +4,9 @@
 /**
  * @module council/parse-stage2
  * Stage-2 output parsing for the headless council engine (spec §5): the
- * judge's trailing JSON block ({ranking, adjudications}) and the chair's
- * final `VERDICT:` line. Shares last-JSON-block extraction with findings.js.
+ * judge's trailing JSON block ({ranking, adjudications}) and the chair's final
+ * terminal line — `VERDICT:` on a review run, `ANSWER:` on a task run (v4.9
+ * W7 #146). Shares last-JSON-block extraction with findings.js.
  * Pure — the ≤2-repair loop lives in run-stages.js; the tri-state
  * (clean|repaired|unstructured) is recorded by the driver.
  */
@@ -14,6 +15,16 @@ const { lastJsonBlock } = require('./findings');
 
 const JUDGE_VERDICTS = ['agree', 'dispute', 'neutral'];
 const CHAIR_VERDICTS = ['Ship it', 'Fix these first', 'Fundamental rethink'];
+/**
+ * The TASK chair's scale (v4.9 W7, #146). Independently spelled from
+ * briefings-chair-task.js :: CHAIR_ANSWER_VALUES exactly as CHAIR_VERDICTS is
+ * from briefings-chair.js :: CHAIR_VERDICT_VALUES; both pairs are drift-pinned
+ * in tests/council/chair-scale-drift.test.js (named mutant ANSWERSCALEDRIFT).
+ * ⚠️ The two scales MUST stay disjoint — that disjointness plus the distinct
+ * keyword is what makes parseChairVerdict and parseChairAnswer unable to read
+ * each other's terminal line.
+ */
+const CHAIR_ANSWERS = ['Converged', 'Split', 'Insufficient'];
 
 /**
  * Parse + shape-validate one judge's output.
@@ -79,33 +90,69 @@ function parseJudgeOutput(text, { labels, findingIds }) {
 }
 
 /** Per-phrase `^<phrase>(?![A-Za-z0-9])` matchers — prefix-anchored, case-sensitive. */
-const CHAIR_VERDICT_PREFIXES = CHAIR_VERDICTS.map(
+const phrasePrefixes = (phrases) => phrases.map(
   (v) => new RegExp('^' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])')
 );
+const CHAIR_VERDICT_PREFIXES = phrasePrefixes(CHAIR_VERDICTS);
+const CHAIR_ANSWER_PREFIXES = phrasePrefixes(CHAIR_ANSWERS);
+const VERDICT_LINE = /^\s*VERDICT:\s*(.+?)\s*$/;
+const ANSWER_LINE = /^\s*ANSWER:\s*(.+?)\s*$/;
 
 /**
- * Parse the chair's final verdict line. Last matching `VERDICT:` line wins. A
- * line matches when the text after `VERDICT:` equals a canonical phrase, or
- * starts with one followed by a word boundary (trailing rationale, e.g.
- * `VERDICT: Fix these first — <gaps>`). Returns the canonical phrase, not the
- * trailing text.
- * @param {string} text
- * @returns {string|null} one of CHAIR_VERDICTS, or null
+ * The chair's terminal line, whichever keyword carries it. Last matching line
+ * wins. A line matches when the text after the keyword equals a canonical
+ * phrase, or starts with one followed by a word boundary (trailing rationale,
+ * e.g. `VERDICT: Fix these first — <gaps>`). Returns the canonical phrase,
+ * never the trailing text.
+ *
+ * v4.9 W7 generalized the matcher rather than copying it, on the W6
+ * `composeWith` precedent: the review path delegates, so it is byte-identical
+ * by construction and every tolerance this parser earned in production
+ * (live-gate bug runId b89b67d1 among them) holds for both intents at once.
  */
-function parseChairVerdict(text) {
+function parseTerminalLine(text, lineRe, phrases, prefixes) {
   let found = null;
   for (const line of String(text || '').split('\n')) {
-    const m = line.match(/^\s*VERDICT:\s*(.+?)\s*$/);
+    const m = line.match(lineRe);
     if (!m) { continue; }
     const rest = m[1];
-    for (let i = 0; i < CHAIR_VERDICTS.length; i++) {
-      if (rest === CHAIR_VERDICTS[i] || CHAIR_VERDICT_PREFIXES[i].test(rest)) {
-        found = CHAIR_VERDICTS[i];
+    for (let i = 0; i < phrases.length; i++) {
+      if (rest === phrases[i] || prefixes[i].test(rest)) {
+        found = phrases[i];
         break;
       }
     }
   }
   return found;
+}
+
+/**
+ * Parse the chair's final `VERDICT:` line (review intent).
+ * @param {string} text
+ * @returns {string|null} one of CHAIR_VERDICTS, or null
+ */
+function parseChairVerdict(text) {
+  return parseTerminalLine(text, VERDICT_LINE, CHAIR_VERDICTS, CHAIR_VERDICT_PREFIXES);
+}
+
+/**
+ * Parse the chair's final `ANSWER:` line (task intent, #146).
+ * @param {string} text
+ * @returns {string|null} one of CHAIR_ANSWERS, or null
+ */
+function parseChairAnswer(text) {
+  return parseTerminalLine(text, ANSWER_LINE, CHAIR_ANSWERS, CHAIR_ANSWER_PREFIXES);
+}
+
+/**
+ * The run-intent dispatcher run-chair.js parses through. `intent` is the W5
+ * channel (`'task'` | absent); anything else reads the VERDICT line
+ * (fail-closed), so a review run is byte-identical to the direct call.
+ * @param {string} text
+ * @param {string} [intent]
+ */
+function parseChairTerminal(text, intent) {
+  return intent === 'task' ? parseChairAnswer(text) : parseChairVerdict(text);
 }
 
 const DEBATE_ACTIONS = ['defend', 'amend', 'withdraw'];
@@ -189,5 +236,6 @@ function parseRevote(text, expectedIds) {
 
 module.exports = {
   parseJudgeOutput, parseChairVerdict, CHAIR_VERDICTS, JUDGE_VERDICTS,
+  parseChairAnswer, parseChairTerminal, CHAIR_ANSWERS,
   parseDebateDefense, parseRevote, DEBATE_ACTIONS, REVOTE_VERDICTS,
 };

@@ -426,6 +426,211 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
   });
 });
 
+// v4.9 W5.4 (V5): a task run that reaches the ledger-promotion step announces —
+// once, kind:'info', channel 'ledger-skipped' — that the ledger it is about to
+// draw on is fed by review runs only (task runs write no rows, gate 1). The
+// note is speech, not loss: on an otherwise-clean walk (fallback succeeds) the
+// run still exits 0 with degraded.value false — the T5.5-shaped end-to-end pin
+// (tests/council/run-finalize.test.js) driven through the real driver here.
+describe("task-mode promotion announcement (v4.9 W5.4 — 'ledger-skipped')", () => {
+  // ⚠️ v4.9 W7: the promoted chair's terminal line is INTENT-SPECIFIC — a task
+  // run's chair answers (`ANSWER:`), a review run's verdicts (`VERDICT:`), and
+  // the wrong one leaves the run with nothing parseable and buys an unscripted
+  // ch4 repair. The parameter is what keeps the review control below a genuine
+  // control rather than a second task fixture.
+  const promotionScript = (terminal) => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'timeout')], 1, 'error');
+    script['abc123-ch3'] = () => okWave([mkLeg('grok', `Fallback synthesis.\n${terminal}`, 'complete', 0.02)]);
+    return script;
+  };
+  const taskHappy = () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () =>
+      okWave([mkLeg('deepseek', 'Synthesis.\n\nANSWER: Converged', 'complete', 0.03)]);
+    return script;
+  };
+  const statsFn = () => [
+    { model: 'grok', avgStreetCredPeersOnly: 1.2 },
+    { model: 'gemini', avgStreetCredPeersOnly: 1.0 },
+  ];
+
+  test('task run reaching the promotion step emits EXACTLY ONE info note — and still exits 0 clean', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(promotionScript('ANSWER: Converged')),
+      appendRunFn: jest.fn(), statsFn, installSignalAbortFn: noSignals,
+    });
+    // degraded.value stayed false: a degraded run can never exit 0
+    // (resolveTerminalExit turns 0 into 2 off that flag).
+    expect(exitCode).toBe(0);
+    expect(run.status).toBe('complete');
+    const notes = (run.degrades || []).filter(d => d.channel === 'ledger-skipped');
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toEqual({
+      kind: 'info', channel: 'ledger-skipped',
+      what: 'task runs write no reliability rows',
+      why: 'ledger-driven chair promotion draws only on review-run history — task rankings measure concurrence, never defect confirmation',
+      effect: 'fallback candidates come from review runs only; a task-only install has none',
+    });
+    // toEqual above already excludes a data key; make the absence explicit.
+    expect('data' in notes[0]).toBe(false);
+  });
+
+  /**
+   * PR #200 round-3 finding A2, MEASURED and refuted. The finding read the note
+   * as firing once per FAILED CHAIR ATTEMPT and called the "announced once"
+   * comment false. It is not: the note sits in the else-arm of the whole
+   * fallback walk (ch1 and ch2 have already resolved by then), so it is reached
+   * at most once per runChair — and runChair is called exactly once per run.
+   *
+   * The pin above already covered TWO failed attempts. This one drives the
+   * longest walk there is — ch1, ch2 AND the promoted ch3 all failing, so the
+   * run gives up with no chair at all — because that is the walk a
+   * once-per-attempt defect would show up in most loudly. Still exactly one
+   * note. (No flag was added; a flag could only make a once-reached branch fire
+   * less than once.)
+   */
+  test('the LONGEST walk — ch1, ch2 and ch3 all failing — still emits exactly ONE info note', async () => {
+    const script = promotionScript('ANSWER: Converged');
+    script['abc123-ch3'] = () => okWave([mkLeg('grok', '', 'error')], 1, 'error');
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);                                  // gave up: no chair synthesis
+    expect(run.chairAttempts).toHaveLength(3);                 // the walk really did run three times
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toHaveLength(1);
+  });
+
+  test('review-run control: the same promotion walk WITHOUT intent emits no such note', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(promotionScript('VERDICT: Ship it')),
+      appendRunFn: jest.fn(), statsFn, installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toEqual([]);
+  });
+
+  test('a task run whose chair succeeds first try never reaches the step — no note', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(taskHappy()), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toEqual([]);
+  });
+});
+
+// v4.9 W7 T-A (#146): a task run's chair synthesizes an ANSWER — the packet
+// asks for one, the parser reads one, and verdict.json carries it. Driven
+// through the REAL runCouncil so every hop of the fork is exercised: run.js →
+// run-assemble.js :: buildChairPacketFile (intent off the record's meta) →
+// briefings-chair.js :: buildChairPacket → run-chair.js's parse + repair.
+describe('v4.9 W7 (#146): the TASK chair answers instead of verdicting', () => {
+  const chairTask = require('../../src/council/briefings-chair-task');
+  const taskScript = (chairText) => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', chairText, 'complete', 0.03)]);
+    return script;
+  };
+  const deps = (launchers) => ({
+    launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+  });
+  const readInput = () => JSON.parse(
+    fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+  const readPacket = () =>
+    fs.readFileSync(path.join(tmp, 'council-abc123', 'chair-packet.md'), 'utf-8');
+
+  test("task run: the chair's ANSWER: Converged becomes overallVerdict, clean", async () => {
+    const launchers = scriptedLaunchers(
+      taskScript('Synthesis.\n\nRESIDUAL RISK\nNone.\n\nANSWER: Converged'));
+    const { exitCode } = await runCouncil(baseOptions(tmp, { intent: 'task' }), deps(launchers));
+    expect(exitCode).toBe(0);
+    expect(readVerdict().overallVerdict).toBe('Converged');
+    expect(readVerdict().intent).toBe('task');
+    expect(readInput().runStats.find(r => r.wasChair).conformance).toBe('clean');
+    // No repair: the terminal line parsed on the first pass.
+    expect(launchers.calls.some(c => c.waveId === 'abc123-ch4')).toBe(false);
+  });
+
+  test('the packet a task chair is paid to read carries the ANSWER scale and the caveat', async () => {
+    const launchers = scriptedLaunchers(taskScript('S.\n\nANSWER: Split'));
+    await runCouncil(baseOptions(tmp, { intent: 'task' }), deps(launchers));
+    const packet = readPacket();
+    expect(launchers.calls.find(c => c.waveId === 'abc123-ch1').prompt).toBe(packet);
+    expect(packet).toContain('begin immediately with the answer.');
+    expect(packet).toContain(chairTask.TASK_CHAIR_SYNTHESIS);
+    expect(packet).toContain(chairTask.TASK_CONCURRENCE_CAVEAT);
+    expect(packet).toContain(chairTask.ANSWER_SCALE_ADDENDUM);
+    expect(packet).not.toContain('VERDICT');
+    expect(readVerdict().overallVerdict).toBe('Split');
+  });
+
+  test('review control: the same run WITHOUT intent gets the byte-identical VERDICT packet', async () => {
+    const launchers = scriptedLaunchers(happyScript());
+    await runCouncil(baseOptions(tmp), deps(launchers));
+    const packet = readPacket();
+    expect(packet).toContain('begin immediately with the verdict.');
+    expect(packet).toContain('VERDICT: Ship it');
+    expect(packet).not.toContain('ANSWER');
+    expect(packet).not.toContain(chairTask.TASK_CONCURRENCE_CAVEAT);
+  });
+
+  test('task run missing the line: the ch4 repair asks for the ANSWER phrases, carrying the synthesis', async () => {
+    const script = taskScript('Prose only, no answer line.');
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'ANSWER: Split')]);
+    const launchers = scriptedLaunchers(script);
+    const { exitCode } = await runCouncil(baseOptions(tmp, { intent: 'task' }), deps(launchers));
+    expect(exitCode).toBe(0);
+    const ch4 = launchers.calls.find(c => c.waveId === 'abc123-ch4');
+    expect(ch4.prompt).toContain('ANSWER: Converged');
+    expect(ch4.prompt).toContain('ANSWER: Split');
+    expect(ch4.prompt).toContain('ANSWER: Insufficient');
+    expect(ch4.prompt).not.toContain('VERDICT');
+    expect(ch4.prompt).toContain('Prose only, no answer line.');   // LC-12 carries
+    expect(readVerdict().overallVerdict).toBe('Split');
+    expect(readInput().runStats.find(r => r.wasChair).conformance).toBe('repaired');
+  });
+
+  test("task run with no parseable line at all: the chair-failed why names ANSWER", async () => {
+    const script = taskScript('Prose only, forever.');
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'still no terminal line')]);
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }),
+      deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(2);
+    expect(readVerdict().overallVerdict).toBeNull();
+    expect((run.degrades || []).find(d => d.channel === 'chair-failed').why)
+      .toBe('the chair ran but its output carried no parseable ANSWER: line');
+  });
+
+  test('review control: the same failure names VERDICT', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose only, forever.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'still no terminal line')]);
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(2);
+    expect((run.degrades || []).find(d => d.channel === 'chair-failed').why)
+      .toBe('the chair ran but its output carried no parseable VERDICT: line');
+  });
+
+  // The scales are disjoint END TO END, not just in the parser: a REVIEW run
+  // whose chair emits an ANSWER line has produced NO verdict, and the run must
+  // spend its one repair rather than silently scoring the wrong scale.
+  test('a review run never reads an ANSWER line: ch4 fires and supplies the VERDICT', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'S.\n\nANSWER: Converged', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'VERDICT: Ship it')]);
+    const launchers = scriptedLaunchers(script);
+    const { exitCode } = await runCouncil(baseOptions(tmp), deps(launchers));
+    expect(exitCode).toBe(0);
+    expect(launchers.calls.find(c => c.waveId === 'abc123-ch4').prompt)
+      .toContain('VERDICT: Fundamental rethink');
+    expect(readVerdict().overallVerdict).toBe('Ship it');
+    expect(readInput().runStats.find(r => r.wasChair).conformance).toBe('repaired');
+  });
+});
+
 describe('chair VERDICT-line repair (one re-prompt)', () => {
   // v4.3 Task 3 (spec §7.2): the ch4 VERDICT-repair launch is a SEPARATE call
   // site from the ch1/ch2/ch3 chain (attemptChair) — its own attribution wiring.

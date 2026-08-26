@@ -3,7 +3,7 @@
 
 /**
  * @module council/run-chair
- * Chair synthesis + VERDICT-line repair for the headless council driver,
+ * Chair synthesis + terminal-line repair (VERDICT | task ANSWER) for the driver,
  * lifted VERBATIM out of run.js for the 300-line gate (v4.1 Task 0.5). Pure
  * refactor: same launches, same waveIds, same run.json checkpoints, same
  * degradation rules. Launchers come in through `ctx` exactly as run-stages.js
@@ -16,96 +16,18 @@
  */
 
 const stage2 = require('./briefings-stage2');
-const { parseChairVerdict } = require('./parse-stage2');
+const { parseChairTerminal } = require('./parse-stage2');
 const runState = require('./run-state');
 const { isAbortExit } = require('./run-stages');
 const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 const { buildRunStatsEntry } = require('./run-assemble');
-
-/**
- * Chair fallback promotion (spec §4): the highest peers-only street-cred
- * model from `council stats` that is not a bench seat and not the failed
- * chair. "Highest street-cred" = BEST = numerically LOWEST mean rank
- * (deriveReliability's avgStreetCredPeersOnly; lower is better).
- *
- * The reserved seat name 'claude' is never eligible (v4.1 §4.4 "never chairs"):
- * a --claude-review run puts a real 'claude' row in the ledger, so without this
- * filter a LATER run could promote it and walk straight past the pre-flight
- * --chair claude guard — with no Claude leg to launch.
- *
- * v4.7 GOA-7 D11: exclusions test the group key AND aliases[]; the promoted
- * name is aliases[0] (most-recent alias) so the launch string stays routable
- * through the same alias policy both call sites (run.js mid-walk, run-server.js
- * pre-seed) already resolve.
- * @returns {string|null}
- */
-function pickFallbackChair(statsRows, bench, failedChair) {
-  const benchSet = new Set(bench);
-  // v4.7 GOA-7 D11: an aggregate's identity is its key PLUS every alias it was
-  // observed under — post-D10 keys may be executable ids while bench/o.chair
-  // stay alias-space, so every exclusion tests the whole name set (a bench
-  // seat's resolved-keyed group must never be promoted as its own chair).
-  // The LAUNCHED name is aliases[0] (most-recent alias): alias-space names
-  // re-enter the router's alias bridge and current key/gateway policy; a raw
-  // executable id would dodge them (divergent-vendor forms, openrouter-
-  // literals under --gateway direct, dropped aliases). aliases[] is non-empty
-  // for every ledger-derived group; the bare-model fallback covers pre-D10
-  // aggregate shapes only.
-  const names = (r) => [r.model, ...(Array.isArray(r.aliases) ? r.aliases : [])];
-  const excluded = (r) => names(r).some(n => n === 'claude' || benchSet.has(n) || n === failedChair);
-  // v4.8 PR4a: every sort term is read off the row, so CANDIDATE SELECTION is
-  // independent of the order `statsRows` arrives in — previously that order
-  // (deriveReliability's Map insertion order = council-ledger.jsonl row order)
-  // silently decided every exact street-cred tie, and such ties are an ordinary
-  // arithmetic outcome. Terms: street cred (lower mean rank = better), then
-  // council appearances, then model id for a guaranteed total order. ⚠️ `runs`
-  // is the count of DISTINCT runIds across the group's ledger rows (v4.8 PR4b
-  // R4b-1, ledger-stats.js's countRuns) — one council run contributes 1 however many
-  // seats that executable filled, and rows from `judged:false` runs that
-  // contributed no street cred still count. It is a tie-break, never a ranking
-  // signal. Always present on deriveReliability output; the default serves
-  // fixtures.
-  // Full rationale + the tie arithmetic: tests/council/run-chair.test.js.
-  const runsOf = (r) => (typeof r.runs === 'number' ? r.runs : 0);
-  const candidates = (statsRows || [])
-    .filter(r => !excluded(r) && typeof r.avgStreetCredPeersOnly === 'number')
-    .sort((a, b) => (a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly)
-      || (runsOf(b) - runsOf(a))
-      || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
-  if (!candidates.length) { return null; }
-  const top = candidates[0];
-  return (Array.isArray(top.aliases) && top.aliases.length) ? top.aliases[0] : top.model;
-}
-
-/**
- * Outcome taxonomy for one fallback-walk attempt (spec §8, LC-5). The ch4
- * VERDICT repair is deliberately NOT an attempt: its chair leg already
- * completed — only the verdict line is being re-prompted — and the outcome
- * enum has no honest value for it.
- * @param {object|null} rawLeg the UNFILTERED leg (attemptChair nulls `leg` on
- *   failure; this is the one before that narrowing, so a failed leg document
- *   is still visible here)
- * @param {object|null} [errorDoc] set when the launch never produced a wave
- *   at all (pre-flight refusal) — the only source of a reason in that case
- * @returns {{outcome: 'completed'|'error'|'timeout'|'no-output', reason: string|null}}
- */
-function classifyChairAttempt(rawLeg, errorDoc) {
-  if (!rawLeg) {
-    const reason = (errorDoc && (errorDoc.message || errorDoc.reason)) || 'no leg document';
-    return { outcome: 'error', reason };
-  }
-  if (rawLeg.status === 'timeout') { return { outcome: 'timeout', reason: rawLeg.reason || null }; }
-  if (rawLeg.status === 'complete') {
-    const hasOutput = rawLeg.summary && String(rawLeg.summary).trim();
-    return hasOutput ? { outcome: 'completed', reason: null }
-      : { outcome: 'no-output', reason: rawLeg.reason || null };
-  }
-  return { outcome: 'error', reason: rawLeg.reason || rawLeg.error || String(rawLeg.status) };
-}
+// v4.9 W4: pickFallbackChair + classifyChairAttempt moved to chair-fallback.js
+// (size-gate split); re-exported below so no caller changes.
+const { pickFallbackChair, classifyChairAttempt } = require('./chair-fallback');
 
 /**
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
- * single VERDICT-line repair re-prompt.
+ * single terminal-line repair re-prompt (VERDICT, or ANSWER when o.intent is 'task').
  * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
  * @param {{packet: string, degrade: {note: Function}, statsFn: Function,
  *   isSignalled: function(): (number|null)}} args
@@ -126,7 +48,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     const solo = await launchers.launchSolo({
       model, prompt: packet, project: o.runDir, waveId,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      // v4.1 §4.5d: the chair chain (ch1/ch2/ch3) and the ch4 VERDICT repair
+      // v4.1 §4.5d: the chair chain (ch1/ch2/ch3) and the ch4 terminal repair
       // below are the launches a re-armed price gate would refuse LAST, after
       // the whole bench has already been paid for.
       noCostGate: o.noCostGate,
@@ -203,6 +125,27 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     }
     if (attempt.leg) { actualChair = o.chair; }
     else if (!overBudget()) {
+      // v4.9 W5.4 (V5): the promotion below draws on the reliability ledger,
+      // which task runs never feed (run-finish.js gate 1) — announced once,
+      // kind 'info' (speech, not loss: the sink never flips `degraded` on it).
+      // ⚠️ PR #200 round-3 finding A2 read "announced once" as a promise a flag
+      // had to keep, and reported the note firing once per FAILED ATTEMPT.
+      // MEASURED and refuted: "once" here is STRUCTURAL. This is the
+      // else-arm of the whole fallback walk — ch1 and ch2 have already resolved
+      // above — so it is reached at most once per runChair, which is called
+      // exactly once per run (run.js :: runCouncil). A walk with ch1, ch2 AND
+      // ch3 all failing emits exactly ONE note; pinned in run-chair.test.js
+      // ("task run reaching the promotion step emits EXACTLY ONE info note").
+      // No flag: a flag would only be able to make a once-reached branch fire
+      // less than once.
+      if (o.intent === 'task') {
+        degrade.note({
+          kind: 'info', channel: 'ledger-skipped',
+          what: 'task runs write no reliability rows',
+          why: 'ledger-driven chair promotion draws only on review-run history — task rankings measure concurrence, never defect confirmation',
+          effect: 'fallback candidates come from review runs only; a task-only install has none',
+        });
+      }
       let statsRows = [];
       try { statsRows = statsFn(); } catch { /* no ledger yet */ }
       const fallback = pickFallbackChair(statsRows, o.models, o.chair);
@@ -228,16 +171,16 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   const chairText = chairLeg ? chairLeg.summary : null;
   let chairConformance = 'clean';
 
-  // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
-  let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
+  // ---- Chair terminal line — VERDICT, or ANSWER on a task run (v4.9 W7) ----
+  let overallVerdict = chairText ? parseChairTerminal(chairText, o.intent) : null;
   if (chairText && !overallVerdict && !overBudget()) {
     const waveId4 = `${o.runId}-ch4`;
     runState.appendStageWave(o.runDir, 'chair', waveId4);
     const repair = await launchers.launchSolo({
       // ⚠️ LC-12: the synthesis rides along. The chair leg SUCCEEDED — only the
-      // VERDICT line is missing — so a fresh repair session that cannot see the
+      // terminal line is missing — so a fresh repair session that cannot see the
       // synthesis is picking a verdict on an artifact it has never read.
-      model: actualChair, prompt: stage2.buildChairRepairPrompt({ synthesis: chairText }),
+      model: actualChair, prompt: stage2.chairRepairPromptFor(o.intent, { synthesis: chairText }),
       project: o.runDir, waveId: waveId4,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       noCostGate: o.noCostGate,
@@ -255,10 +198,10 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // (repair.leg)` guard below is therefore load-bearing on that exact
     // distinction: a launched ch4 (a leg document exists, whatever its
     // status) gets its own row so the repair's spend is attributed even when
-    // it never supplies a VERDICT; a ch4 that never even launched gets no
+    // it never supplies a terminal line; a ch4 that never launched gets no
     // row at all, because there is nothing billed to attribute. The push sits
     // AFTER the verdict parse so it stamps the ch4 leg's own measured outcome (PR 199 D1).
-    overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
+    overallVerdict = parseChairTerminal((repair.leg && repair.leg.summary) || '', o.intent);
     chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({
@@ -275,7 +218,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       channel: 'chair-failed',
       what: 'the council has no chair synthesis',
       why: chairLeg
-        ? 'the chair ran but its output carried no parseable VERDICT: line'
+        ? `the chair ran but its output carried no parseable ${o.intent === 'task' ? 'ANSWER' : 'VERDICT'}: line`
         : `no chair leg completed after the fallback walk — ${chairAttempts.map(a =>
           `${a.waveId.split('-').pop()} ${a.model}: ${a.reason || a.outcome}`).join(' · ')}`,
       effect: 'the verdict is written with overallVerdict null; will exit degraded (2)',

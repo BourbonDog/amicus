@@ -206,3 +206,27 @@ test('writeVerdictAtomic writes valid JSON via rename', () => {
   expect(fs.existsSync(file)).toBe(true);
   expect(JSON.parse(fs.readFileSync(file, 'utf-8')).runId).toBe('av-receiver-council');
 });
+
+// v4.9 W5.3: buildVerdict forwards the tally record's meta.intent — the same
+// emit-when-'task' idiom as run.json and meta (spec §5.3 as amended by the
+// W4/W5 plan's §7.5 byte-identity ruling). The verdict literal is a RENAMING
+// projection (see T10 above), so without an explicit line the key can never
+// arrive; and a review record must never materialize it.
+describe("v4.9 W5.3: verdict.intent — emit-when-'task', forwarded from meta", () => {
+  const withIntent = (intent) =>
+    tally({ ...avInput, meta: { ...avInput.meta, intent } });
+
+  test("record.meta.intent === 'task' → top-level intent:'task' on the VERDICT document", () => {
+    expect(buildVerdict(withIntent('task'), []).intent).toBe('task');
+  });
+
+  test('a review record (no meta.intent) carries NO intent key — `in`, not toBeUndefined', () => {
+    const v = buildVerdict(record, []);
+    expect('intent' in v).toBe(false);
+    expect(JSON.stringify(v, null, 2)).not.toContain('"intent"');
+  });
+
+  test("an explicit meta.intent 'review' (hand-assembled input) is NOT forwarded — emit-when-task only", () => {
+    expect('intent' in buildVerdict(withIntent('review'), [])).toBe(false);
+  });
+});

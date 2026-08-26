@@ -203,6 +203,7 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. |
 | `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. |
 | `--tag <t>` | Label this run for `list`/`--search`/`spend --group-by tag` (1-64 chars, `[A-Za-z0-9_-]`; rejected, not cleaned). Every stage's sub-waves (Stage-1, critic/lens solos, Stage-2, chair, debate) carry the same tag on their wave metadata. |
+| `--intent <review\|task>` | The run's intent (v4.9). `review` — the default — is never stored; `task` marks a task-mode run, recorded as `intent: "task"` on `run.json`/`verdict.json` and kept out of the reliability ledger. Over MCP: the `intent` param on `amicus_council_run`, and a hand-assembled `amicus_council_tally` input may carry `meta.intent` the same emit-when-`task` way. |
 
 **Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
 `overallVerdict: null` — a cost ceiling hit after the tally, or a `--max-cost` ceiling set over a

@@ -14,7 +14,7 @@ const { buildSeats } = require('./seats');
 /** Launch all Stage-1 legs (wave + critic/lens solos), collect run docs. */
 async function launchStage1(ctx) {
   const { o, launchers } = ctx;
-  // Seat identity for THIS launch. run.js:133 sets o.seats from asm.preflightSeats;
+  // Seat identity for THIS launch. run.js:142 sets o.seats from asm.preflightSeats;
   // buildSeats is pure and total, so a direct require() caller or a legacy run dir
   // reconstructs the same table rather than binding nothing (spec §4.3).
   const seats = Array.isArray(o.seats) && o.seats.length > 0
@@ -47,7 +47,7 @@ async function launchStage1(ctx) {
       seated.push({ waveId, models: [m], roster: seats.slice(i, i + 1) });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1LensBriefing(o.intent, { lens: o.lenses[i], briefing: o.briefing, date: o.date }),
       }));
     });
   } else {
@@ -61,7 +61,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias !== o.critic) });
       launches.push(launchers.launchWave({
         ...common, models: seats1, waveId: `${o.runId}-s1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date }),
       }));
     }
     if (o.critic) {
@@ -70,7 +70,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias === o.critic).slice(0, 1) });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date }),
       }));
     }
   }

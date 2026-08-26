@@ -126,9 +126,15 @@
     container.textContent = '';
     var head = R.el('div', { className: 'chips' }, []);
     if (vp.overallVerdict) {
-      head.appendChild(R.el('span', { className: 'chip complete' }, ['VERDICT: ' + vp.overallVerdict]));
+      // v4.9 W8: the chip names the SCALE the phrase belongs to — a task chair's
+      // phrase comes from CHAIR_ANSWERS and is never a verdict. Payload-driven:
+      // this file cannot require() src/, so run-detail.js :: verdictPanel mints
+      // `intent`. `=== 'task'` (not `!== 'review'`) so a pre-v4.9 payload with no
+      // intent key reads as review instead of relabelling every legacy run.
+      head.appendChild(R.el('span', { className: 'chip complete' },
+        [(vp.intent === 'task' ? 'ANSWER: ' : 'VERDICT: ') + vp.overallVerdict]));
     } else {
-      head.appendChild(R.el('span', { className: 'chip error' }, ['no chair verdict']));
+      head.appendChild(R.el('span', { className: 'chip error' }, [vp.intent === 'task' ? 'no chair answer' : 'no chair verdict']));
       if (vp.reason) { head.appendChild(R.el('span', { className: 'empty-note' }, [vp.reason])); }
     }
     container.appendChild(head);

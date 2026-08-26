@@ -93,6 +93,38 @@ describe('resolveTerminalExit', () => {
     } finally { fs.rmSync(runDir, { recursive: true, force: true }); }
   });
 
+  /**
+   * v4.9 W5.1. An info note (kind:'info', e.g. the task-mode 'ledger-skipped'
+   * announcement) is speech, not loss: driven through the REAL sink it leaves
+   * `degraded.value` false, so an otherwise-clean run still exits 0. The
+   * control half proves the pin bites: the same channel with kind:'degrade'
+   * flips the flag and the exit becomes 2.
+   */
+  test('an info note through the real sink leaves a clean run at exit 0', () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-finalize-'));
+    try {
+      const degraded = deg(false);
+      const degrade = createDegradeSink({ runDir, degraded, write: () => {} });
+      degrade.note({ kind: 'info', channel: 'ledger-skipped',
+        what: 'task runs write no reliability rows',
+        why: 'ledger-driven chair promotion draws only on review-run history',
+        effect: 'fallback candidates come from review runs only' });
+      expect(degraded.value).toBe(false);
+      expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded })).toBe(0);
+    } finally { fs.rmSync(runDir, { recursive: true, force: true }); }
+  });
+
+  test("control: a kind:'degrade' note on the same channel turns that 0 into 2", () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-finalize-'));
+    try {
+      const degraded = deg(false);
+      const degrade = createDegradeSink({ runDir, degraded, write: () => {} });
+      degrade.note({ channel: 'ledger-skipped', what: 'a', why: 'b', effect: 'c' });
+      expect(degraded.value).toBe(true);
+      expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded })).toBe(2);
+    } finally { fs.rmSync(runDir, { recursive: true, force: true }); }
+  });
+
   test('an EXACT total under a ceiling leaves the flag and the code alone', () => {
     const degraded = deg(false);
     expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded,

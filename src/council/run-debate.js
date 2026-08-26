@@ -47,7 +47,7 @@ const { legOpts, legRow, runRevoteWave } = require('./run-debate-revote');
  */
 async function runDefenseSolo(ctx, raiserKey, findings, idx, aliasOf) {
   const raiserAlias = aliasOf(raiserKey);
-  const brief = dbrief.buildDefenseBrief({ findings, date: ctx.o.date });
+  const brief = dbrief.buildDefenseBrief({ findings, date: ctx.o.date, intent: ctx.o.intent });
   const waveId = `${ctx.o.runId}-d${idx + 1}`;
   const expectedIds = findings.map(f => f.id);
   // Record the sub-wave BEFORE launching: `amicus abort` cascades over stages[].waveIds
