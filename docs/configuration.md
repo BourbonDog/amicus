@@ -78,6 +78,52 @@ not on every launch, and not when you explicitly chose the gateway with `--gatew
 `routing.prefer: "openrouter"` (or pass `--gateway openrouter` per call) to keep routing everything
 through OpenRouter as before.
 
+### Cost tier
+
+`routing.tier` is your standing answer to "when a vendor offers several models, which end of its
+range do you want by default?" It lives under `routing` for filing reasons only — **it does not
+change how a call is routed**, and it is not a gateway knob. Its one and only effect is which row
+the **cost-aware default picker** preselects (`src/utils/provider-default-picker.js`).
+
+| Tier | Means | Example (Anthropic) |
+|---|---|---|
+| `"frontier"` | the most capable / most expensive of the vendor's line | `claude-opus-*` |
+| `"balanced"` | the middle of the range — **the default** | `claude-sonnet-*` |
+| `"economy"` | the cheapest of the line | `claude-haiku-*` |
+
+Absent, misspelled or set to anything outside those three, the tier **coerces silently to
+`"balanced"`** — a junk value never errors and never blocks a launch. Per-vendor tier resolution
+lives in `src/utils/model-tiers.js`; when a vendor's catalog has no model matching the tier, the
+picker falls back to the cheapest priced row, then the first row.
+
+**`routing.tier` is hand-edited only.** No wizard step, CLI command or GUI control writes it — set
+it yourself in `~/.config/amicus/config.json` (the same rule as [`maxCostPerMtok`](#cost-gate)
+below):
+
+```jsonc
+{ "routing": { "prefer": "direct", "tier": "economy" } }
+```
+
+**Where the picker actually runs.** It offers you that vendor's models, priced, with the tier's pick
+flagged as recommended, and writes your choice to `aliases.<vendor>` (seeding `config.default` when
+that is still unset). Three surfaces reach it:
+
+- `amicus key <provider> <key>` — after a successful **cloud**-vendor key save (local-provider
+  bearer saves skip it).
+- `amicus setup` — the readline wizard runs it once per keyed provider, in detection order.
+- The **Electron setup window** — the same picker, with a family → model drill-down.
+
+Non-interactively (`--json`, `--quiet`, or no TTY) the picker takes the recommended pick silently and
+prints a one-line summary instead of prompting. It is also a graceful no-op for `openrouter`, which
+is a gateway rather than a model vendor.
+
+**`routing.tier_onboarded`** is bookkeeping, not a setting: a boolean written automatically the
+first time `amicus start` prints the one-time tip pointing existing users at the picker
+(`src/utils/start-helpers.js`). The tip only fires on an interactive run that already has a direct
+provider key and has not used the picker yet, and the flag is set only when the line actually
+printed — so a `--json` run never burns it. Don't hand-edit it; delete it if you want the tip once
+more.
+
 ---
 
 ## Behavior
@@ -343,12 +389,16 @@ level includes everything above it.
   },
 
   // Gateway routing policy (see Routing above). `prefer` defaults to "direct"
-  // when this key is absent entirely. `migration_notified` is written
-  // automatically the first time the one-time direct-migration notice fires
-  // for a vendor — don't hand-edit it.
+  // when this key is absent entirely. `tier` is the cost-tier preference the
+  // model picker preselects on ("frontier" | "balanced" | "economy"; anything
+  // else coerces to "balanced") — hand-edited only, see Cost tier above.
+  // `migration_notified` and `tier_onboarded` are both written automatically
+  // when their one-time notices fire — don't hand-edit either.
   "routing": {
     "prefer": "direct",
-    "migration_notified": { "openai": true }
+    "tier": "balanced",
+    "migration_notified": { "openai": true },
+    "tier_onboarded": true
   },
 
   // User-defined local / OpenAI-compatible providers (v4.2) — written by

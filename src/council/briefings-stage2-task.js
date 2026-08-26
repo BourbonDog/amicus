@@ -50,6 +50,7 @@ const {
   JUDGE_NO_TOOLS_PREAMBLE, FINDINGS_INDEX_HEADER, dateLine,
   judgeOutputContractWith, judgeRepairPromptWith,
 } = require('./briefings-stage2');
+const { defangOutboundFenceTags } = require('../utils/untrusted-fence');
 
 /** Task twin of the review frame — and the only pointer to the tail below. */
 const TASK_JUDGE_FRAME =
@@ -149,10 +150,25 @@ const BRIEFING_FENCE_PREAMBLE = [
  * ⚠️ Called ONLY on a real briefing. The absent-briefing note below is OUR
  * prose, and fencing it would tell the judge that engine text is material it
  * must not follow — no untrusted text, no fence.
+ * ⚠️ PR #200 tails B2/C2: the body is neutralized before it is embedded, or a
+ * briefing containing the close tag ends this fence early in the judge's eyes
+ * and every byte after it reads as engine prose. Round 3 (B3b) widened that to
+ * the OPEN tags of the same families — a lone open pairs with the REAL close
+ * for a judge that balances tags, which is the same escape one tag along. ONE
+ * mechanism, shared with the other outbound surface (src/prompt-builder.js ::
+ * buildContextSection) — see src/utils/untrusted-fence.js. A briefing carrying
+ * neither is byte-identical.
+ * ⚠️ THE BOUNDARY IS SOFT: an entity escape is a convention about how a reading
+ * model interprets bytes, not a parser guarantee — some models decode
+ * `&lt;/…&gt;` back while reading. It is defense in depth on top of the
+ * PREAMBLE above, which is the load-bearing protection, not a replacement for
+ * it. Stated at length in src/utils/untrusted-fence.js ::
+ * defangOutboundFenceTags.
  * @param {string} text the run's composed briefing
  */
 function fenceBriefing(text) {
-  return `${BRIEFING_FENCE_OPEN}\n${BRIEFING_FENCE_PREAMBLE}\n\n${text}\n${BRIEFING_FENCE_CLOSE}`;
+  return `${BRIEFING_FENCE_OPEN}\n${BRIEFING_FENCE_PREAMBLE}\n\n`
+    + `${defangOutboundFenceTags(text)}\n${BRIEFING_FENCE_CLOSE}`;
 }
 
 /**

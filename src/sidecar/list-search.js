@@ -13,7 +13,8 @@ const { safeSessionDir } = require('../utils/validators');
 
 const COUNCIL_MATERIAL_SEPARATOR = '--- MATERIAL / BRIEFING ---';
 
-// Council row search material (MCP-only): runDir/briefing.md when readable
+// Council row search material (BOTH surfaces since v4.9 W12 merged council
+// rows into the CLI list too — it was MCP-only): runDir/briefing.md when readable
 // (MCP-launched runs write one before the engine spawns), else the portion of
 // briefing-stage1.md after the separator (CLI-launched runs have only this),
 // else null. Re-derives runDir from the pointer and re-fences it with
