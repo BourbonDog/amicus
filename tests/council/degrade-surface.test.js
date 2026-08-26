@@ -40,7 +40,7 @@ test('a dead Stage-1 leg is named identically on stderr, run.json, verdict.json 
       // recorded lost; scripted as a dead retry so it stays lost.
       'abc123-s1r1': () => okWave([]),
       // Adaptation: Stage 2 launches ONE wave whose legs are the surviving
-      // judges (run-stage2.js:57-63 — `models: judges`, a WAVE call, never a
+      // judges (run-stage2.js :: runStage2 — `models: judges`, a WAVE call, never a
       // per-judge `.model` solo), so this keys off `o.models` like
       // happyScript()'s '-s2' entry. gemini/qwen are the only survivors and
       // rank each other via the two labels Stage 1 assigned them.
@@ -125,7 +125,7 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
   // counter modeled repeated per-judge solo calls, which is not how Stage 2
   // launches. A judge whose Stage-2 leg is 'complete' with non-empty (even if
   // unparseable) prose enters the bounded 2-attempt repair loop
-  // (run-stage2.js:87-106), so the two "bad" judges' repair solos must ALSO
+  // (run-stage2.js:174-202), so the two "bad" judges' repair solos must ALSO
   // stay unparseable — a successful repair would make that judge usable and
   // defeat the <2 condition this test pins.
   const stillBad = (o) => okWave([mkLeg(o.model, 'still no parseable block')]);

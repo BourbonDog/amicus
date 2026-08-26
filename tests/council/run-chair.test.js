@@ -338,7 +338,10 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
     const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
     const repairRows = input.runStats.filter(r => r.role === 'repair');
     expect(repairRows).toHaveLength(1);
-    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, waveId: 'abc123-ch4' });
+    // PR 199 D1: the row carries the ch4 leg's own measured outcome — its
+    // output DID parse a VERDICT, so 'clean' (stamped, not the row default).
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, waveId: 'abc123-ch4',
+      conformance: 'clean' });
 
     // Scenario B: a VERDICT line lands on the first attempt -> ch4 never
     // launches -> no repair row at all.
@@ -356,6 +359,26 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
     } finally {
       fs.rmSync(tmp2, { recursive: true, force: true });
     }
+  });
+
+  test("a FAILED ch4 repair's row reads 'unstructured' — the measured re-parse, never the row default (PR 199 D1)", async () => {
+    // ch4 launches, its leg completes, but the output still carries no VERDICT
+    // line: the repair leg's OWN outcome is unstructured. Before PR 199 D1 the
+    // push ran before parseChairVerdict and stamped nothing, so this row read
+    // 'clean' off buildRunStatsEntry's default — a false receipt for a repair
+    // that failed.
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose only, no verdict.', 'complete', 0.03, 'abc123-ch1')]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'Still prose, still no verdict.', 'complete', 0.01, 'abc123-ch4')]);
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);                                   // no verdict -> degraded
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const repairRows = input.runStats.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(1);
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, waveId: 'abc123-ch4',
+      conformance: 'unstructured' });
   });
 
   test('give-up after a walk: chairRows carry every failed attempt; no row has wasChair true', async () => {

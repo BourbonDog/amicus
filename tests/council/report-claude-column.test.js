@@ -5,7 +5,8 @@ const { buildVerdict } = require('../../src/council/verdict');
 const { buildReport } = require('../../src/council/report');
 const avInput = require('./fixtures/av-receiver-input');
 
-// SKILL.md:448 / run-stage2.js:61-62 guarantee: a --claude-review file is
+// SKILL.md:448 / run-stage2.js :: runStage2 (the ROSTER-not-bundle derivation
+// of `judges`) guarantee: a --claude-review file is
 // judged by the council but never joins the judge roster. 'claude' legitimately
 // sits in meta.models (verdict.council) — that's the street-cred universe
 // (run-assemble.js:226, and the `meta.models` row of docs/council.md's

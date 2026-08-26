@@ -885,12 +885,15 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   `src/pack/pack-forward.js` (96 lines) remains the natural receiving module for pack-domain
   spillover. **Any next-rev task, or any hotfix, touching a file in the table above must extract
   from it FIRST**, before adding anything.
-- [ ] **KNOWN_VARIABLES single-source (T3-m2).** `src/template/render.js:45` hand-maintains two
+- [x] **KNOWN_VARIABLES single-source (T3-m2).** — **DONE, v4.9 W1 (2026-08-25).** The gate is
+  satisfied ahead of `{{input}}`: `render.js` now derives BOTH the inline validation array and
+  the replacement chain from `KNOWN_VARIABLES` (the replacement chain was a THIRD hand-kept
+  enumeration this filing never counted), pinned by a drift test that extends the live exported
+  array and asserts a new entry validates AND renders. The `:45` citation had rotted to `:49`
+  before the fix; anchors are now by symbol. Original filing: `src/template/render.js:45`
+  hand-maintained two
   copies of the known-template-variable set — `KNOWN_VARIABLES` and a separate inline validation
-  array. Consistent today; the composition rev's `{{input}}` chaining variable (F6, now slotted
-  v4.7) adds a third
-  variable to both, and an edit that updates one copy but not the other fails silently. Single-source
-  them **before** `{{input}}` lands — hard gate, not a nice-to-have.
+  array — and an edit updating one copy but not the other failed silently.
 
 ### Fix-sized carries
 
@@ -1465,7 +1468,24 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   shape needs `buildRunStatsEntry` extracted to a **pure** module (`debate.js` is declared DI-free
   with zero requires). Stays deferred to its own TDD pass, as originally filed.
 
-- [ ] **Conformance drift between producers of the same non-primary role** — [S, defer-with-record]
+- [x] **Conformance drift between producers of the same non-primary role** — **DONE, v4.9 W1
+  (2026-08-25, ruling V18):** both repair-loop pushes (`run-stages.js :: runStage1`,
+  `run-stage2.js :: runStage2`) passed an explicit `conformance: 'unstructured'` — the flat
+  literal this entry's design call named, chosen because `res.ok`/`parsed.ok` are provably false
+  at each push. The `|| 'clean'` default was NOT flipped (the two primary error-row sites,
+  `run-finish.js :: finishRun` and `run-stage1-rows.js :: pushDeadSeatRows`, depend on it), and
+  the rows are pinned by behavior tests including two every-row pins.
+  — refined 2026-08-25 (council D1 on PR 199): the flat literal misdescribed SUCCESSFUL repair
+  legs — at the push, the false `res.ok`/`parsed.ok` was the PRE-repair validation, not the
+  repair's own outcome. Per this filing's other alternative, all three `buildRunStatsEntry`
+  repair pushes (the
+  two loops plus `run-chair.js`'s ch4 push, which had been taking the `'clean'` default —
+  debate's `mk('repair')` rows are a fourth, separate producer, already correct: debate emits
+  repair rows only for failed repairs, stamped `'unstructured'` at the call sites) now push
+  AFTER the re-validation/re-parse and stamp the measured value: `'clean'` when the repair leg's
+  own output parsed, `'unstructured'` when it did not. Failed-repair rows still read
+  `'unstructured'`; the primary rows' `'repaired'` state is unchanged. Original filing:
+  [S, defer-with-record]
   `buildRunStatsEntry` (`src/council/run-assemble.js:60`) defaults `conformance` to `'clean'` when
   the caller doesn't pass one explicitly — every engine-born `chair-attempt` row (`run-chair.js`'s
   `recordAttempt`) takes that default. `legRow` (`src/council/run-debate.js:39`, see above) has no
@@ -1588,7 +1608,11 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 ## v4.7 PR3 rider follow-ups (2026-08-07)
 
 - [x] **`sessions-index.json` has no maintenance step — it only ever grows** — **DONE — v4.8 Wave
-  2.5 (2026-08-22, ruling R16/T-R16.1, `0a6a8032`).** [M, needs a design
+  2.5 (2026-08-22, ruling R16/T-R16.1, `0a6a8032`).** ⚠️ **That hash is a dangling pre-squash
+  branch commit (v4.9 kickoff refute pass, 2026-08-25: `merge-base --is-ancestor` exits 1; no
+  branch or tag contains it). The commit on `main` is `dda1b8cf`, the squash of PR #187.** This
+  repo mixes true merges and squashes — verify ancestry per hash, never inherit one from a DONE
+  record. [M, needs a design
   decision] `recordSession` (`src/utils/session-index.js:64`) appends a `taskId -> project` entry on
   every session start and **nothing ever removes one**. Entries outlive their subject: a project that
   is deleted, renamed, or moved leaves its rows behind forever, and the index has no TTL, cap, or
@@ -3354,7 +3378,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   1`, commits above; its "then" half — `SI-25` sites (1)+(2), `#138` Pieces 1+2 — did NOT ship and
   is not scheduled into any wave below; see the note at the end of this entry).
 
-  ✅ **DONE — 2026-08-22.** `R16` shipped as `T-R16.1` (`0a6a8032`) — see the ticked
+  ✅ **DONE — 2026-08-22.** `R16` shipped as `T-R16.1` (`0a6a8032` — ⚠️ a dangling pre-squash
+  hash; the on-`main` commit is `dda1b8cf`, PR #187's squash — corrected at the v4.9 kickoff,
+  2026-08-25) — see the ticked
   `sessions-index.json` growth entry above for the full record. Suite after merge: 545 suites /
   7882 passed / 8 skipped, all six gates exit 0. See **"NEXT TASK — Wave 3"** below for the live
   resume point.
@@ -4068,7 +4094,9 @@ above were updated in place; these are the items it could not close, filed rathe
     Current sites: `src/council/run-retry-keys.js:28`, `src/workspace/seat-space.js:85`,
     `tests/council/run-retry-lockstep.test.js:35`,
     `tests/council/run-retry-twins-threading.test.js:124`, `tests/council/run-retry.test.js:1084`,
-    `tests/council/run-stages.test.js:1199`, `:1207`, `:1496`. Candidate fix, **not implemented
+    `tests/council/run-stages.test.js:1204`, `:1212`, `:1501` (⚠️ re-derived 2026-08-25 — v4.9
+    W1's pin insertions in that file shifted all three; the bare-line forms are invisible to
+    `check-citations`, so they rot silently — re-open on read). Candidate fix, **not implemented
     here**: either give SYMBOL a quoted-string alternative, or define quoted-title as its own
     citation form with its own check (does the quoted text occur as a test title in the resolved
     target — a STRONGER claim than a symbol anchor makes today, which is checked by substring, not
@@ -4264,6 +4292,19 @@ the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES · **SI-22.4 ri
 Workspace street-cred renderer (owner Christian; gated on `opts.labelOf` accepting a seat id)**.
 **Holds — not work, do not re-scope:** SI-21, PR5a-1, PR5c-DOMKEY, PR5c-STANDING.
 
+> ⚠️ **Triaged at the v4.9 kickoff (2026-08-25) — the list above is the dated 2026-08-16
+> record; three of its tokens do not survive re-measurement.** (1) **`#135 C4` DROPPED as
+> never-specified** (T6.5/W1-3 precedent): born in the phasing doc's own deferral line
+> (`4ee46696`), defined nowhere in any tree, and issue #135's body carries no C-taxonomy. The
+> real #135 remainder is **C5 + the C2 probe**, per ruling W1-4. (C0 shipped on `main` via
+> squash `919cb202`, PR #182 — its previously-recorded hashes `4391f0b4`/`b0d8e232` are
+> dangling pre-squash commits.) (2) **`#138 Piece 3` DROPPED as never-specified** — see the
+> struck entry at *Setup polish — #138*. (3) **"the prune check" ALREADY SHIPPED** in v4.8
+> Wave 2.5 (`dda1b8cf`, PR #187) — see the ticked `sessions-index.json` growth entries. The
+> live v4.9 scope, rulings V1–V18, and the wave train are in
+> `docs/superpowers/plans/2026-08-25-v49-phasing-and-rulings.md` (a plan doc — pruned at the
+> release cut; git history is the audit trail).
+
 ### Tracker state
 
 **Ten open issues, not eight** — #146 and #161 postdate this section and appear nowhere in it.
@@ -4398,7 +4439,10 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   on channel membership alone.
 
 - [ ] **PR4 · `run-stage2.js:57` builds its judge roster from `reviews[].modelInput`, so a twin
-  bench pays for two judge legs and clobbers one `judge-<alias>.md`.** Pre-existing, not
+  bench pays for two judge legs and clobbers one `judge-<alias>.md`.**
+  (⚠️ **2026-08-25, v4.9 W2: the roster line moved — `run-stage2.js :: runStage2`'s
+  `const judges = reviews.map(r => r.modelInput)` is `:119` today; `:57` now sits inside the
+  extracted `bindStage2Seats`.**) Pre-existing, not
   introduced by PR2b, and PR2b did not change how many reviews reach Stage 2: `materializeReviews`
   already returned one in-memory entry per complete leg, so a twin bench already handed Stage 2
   two reviews — only the FILE on disk was clobbered. What PR2b changed is that those two reviews
@@ -4694,7 +4738,10 @@ deliberately left alone:
   the file 274→268: the signature is `:153`, the `writeFileSync` `:158`, `seatKey` `:69`,
   its call site `:190`. The
   2026-08-22 reading is left standing as the dated measurement it is; the ANCHOR was already a
-  symbol, which is why this entry needed an annotation and not a re-derivation.**)
+  symbol, which is why this entry needed an annotation and not a re-derivation.**
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): `seatKey` has since LEFT this file entirely — the one
+  definition is `run-retry-keys.js :: seatKey` and `run-debate-revote.js` now imports it; the
+  symbol anchor above names where it lived when measured.**)
   falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
   keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
   seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:99`, **was `:81`,
@@ -4952,7 +4999,10 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   (v4.8 Phase 5 T5.4), when all three were re-opened and found stale** — that file grew above them
   after they were written. Today the spelling is `:232` (now anchored by symbol), the `Map` build
   `:233` and the two-key lookup `:235`. The mechanism this paragraph describes is unchanged; only
-  the numbers were wrong. **Latent, not reachable from
+  the numbers were wrong.
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): the `run.js` spelling itself is GONE — `:232` now holds
+  `const { seatKey } = require('./run-retry-keys')` and the definition lives at
+  `run-retry-keys.js:15`; the `Map` build (`:233`) and two-key lookup (`:235`) still stand.** **Latent, not reachable from
   production**: `src/sidecar/leg-ids.js:16` stamps every fanout leg's `taskId` as `${waveId}-${i+1}`,
   and `fanout-leg.js` writes that `taskId` into `buildRunResult` on both the normal completion path
   (`:191`) and the routing-failure path (`:61`) — so a real `-s2` wave cannot produce even one
@@ -5033,7 +5083,9 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   `run-retry.js` imports it. The old citations (`:56`/`:149`/`:224`) were all stale, in a clause
   that said "re-derived directly, not assumed" — the same self-certifying phrasing corrected in the
   SI-DUP entry below. Entry left SUPERSEDED, but no longer carrying three wrong numbers and a count
-  that is off by one. Separately, §3.4's
+  that is off by one.
+  ⚠️ **2026-08-25 (v4.9 W3, SI-DUP b): now ZERO files redefine it — `run.js` and
+  `run-debate-revote.js` both import `run-retry-keys.js :: seatKey`, the sole definition.** Separately, §3.4's
   roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
   WAS duplicated near-verbatim in a **different** set of three files:
   `run-retry-launch.js@2517a947:50-60`
@@ -5062,7 +5114,9 @@ had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being 
   true when written and are historical from here on. The pad/bind/drop core lives ONCE, in
   `stage1-bind.js :: bindPaddedWave`; each site keeps only its own orphan/missing tail. The
   `seatKey` half of this clause is **not** closed by SI-27 — that is SI-DUP disposition (b),
-  still v4.9. See the ticked SI-27 record under "NEXT TASK — Wave 3" for sizes, red sets and
+  still v4.9. (⚠️ **2026-08-25: and v4.9 W3 Task D has now DELIVERED disposition (b), closing the
+  `seatKey` half too — see SI-DUP's shipped note.**) See the ticked SI-27 record under "NEXT TASK —
+  Wave 3" for sizes, red sets and
   commits.
   - **Superseded 2026-08-16** by **SI-DUP**, the consolidated duplication filing that merges this
     note, SI-27, and the PR5c `seatKey` filing under one stated counting rule. Both of this note's
@@ -5299,8 +5353,12 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   still alias-labelled — is filed under *"SI-22.4 rider (2)"* above with a **named owner
   (Christian)** and a **stated gate** (`opts.labelOf` must accept a seat id), explicitly NOT as an
   adjacency. Do not re-file it as "adjacent to" anything.
-- [ ] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
-  re-materialises the prototype.** Found by the SI-22.4 round-3 re-review, 2026-08-23, while
+- [x] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
+  re-materialised the prototype.** — **FIXED, v4.9 W1 (2026-08-25)** by seeding on the far side
+  of the parse at the single embed site (`electron/setup-ui.js :: buildWizardScript`,
+  `Object.assign(Object.create(null), …)`), pinned by a vm-eval test that was RED at HEAD —
+  see the ticked release-cut pointer entry for the record. The generalizable rule this entry
+  states below stands. Found by the SI-22.4 round-3 re-review, 2026-08-23, while
   sweeping uncapped for every spelling of the alias-table hazard. `getDefaultAliases()` is
   null-prototype at HEAD, but `electron/setup-ui.js` and `electron/setup-ui-alias-script.js`
   `JSON.stringify` it and re-embed it as a `<script>` literal (`var defaultAliases = {…}`), which
@@ -5797,6 +5855,16 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     an alias string. Definitions and hand-inlined re-spellings count; **call sites of a definition
     do not**. → **8 spellings, all in `src/council/`, 0 in `electron/`.** (Was 9 at the `0080e372`
     measurement — see the correction note above.)
+    ✅ **FIVE since 2026-08-25 (v4.9 W3 Task D — disposition (b) shipped, see its note below):**
+    the `run.js :: seatKey` definition, the `run-debate-revote.js :: seatKey` definition and
+    `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias` all became CALL SITES
+    of the exported `run-retry-keys.js:15` copy — excluded by this bullet's own counting rule.
+    The five that remain, each re-opened 2026-08-25: `run-retry-keys.js:15` (the exported
+    definition), `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` and `run-stages.js:96 :: keyOf`
+    (both left on purpose — their else branch is a LEG read, `l.modelInput || l.model`, a sibling
+    form, not this rule over a bare alias), `run-stages.js:106` (the healed-filter's inline form —
+    outside the W3 replace list; `run-stages.js` was not touched), and `run.js:235` (hand-inlined,
+    stays: its `|| byJudge.get(r.model)` fallback is load-bearing, per disposition (b)).
     Sites, **re-derived by opening each line, 2026-08-17** (T-A2 fix round 3; the list previously
     read "all re-derived by execution against the final tree" as of 2026-08-16 and **three of the
     eight were stale by then or became so** — `run-retry-group.js:29`, `run-stage1-rows.js:55` and
@@ -5819,16 +5887,21 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `:188`; v4.8 Phase 5 grew that file 176→282 (T5.1 took it to 249; the two fix waves added the
     rest) and T5.5 took it to 274, and `:64` itself was unmoved through all of THAT, re-opened
     2026-08-22; ⚠️ **v4.8 SI-27 then took the file 274→268 and moved both — the definition is
-    `:69` and its one caller `:190` as of 2026-08-23, re-read at both lines**),
+    `:69` and its one caller `:190` as of 2026-08-23, re-read at both lines**;
+    ✅ **consolidated 2026-08-25, v4.9 W3: the definition is GONE — a header require at `:48`,
+    the caller at `:235` — no longer a Count-1 member**),
     `run-retry-keys.js:15`
     (the exported one, PR5c; **was `run-retry-group.js:52`, then `:29`, moved again by T-A1**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` (**was `:42`/`:45`/`:55`/`:57`**),
     `run-stage1-rows.js :: pushDeadSeatRows`' `const join = s ? s.id : alias;`
-    (**was `:85`/`:129`/`:138`/`:153`/`:155`**),
+    (**was `:85`/`:129`/`:138`/`:153`/`:155`**; ✅ **consolidated 2026-08-25, v4.9 W3: now
+    `const join = seatKey(s, alias)` at `:145` — a call site, not a spelling**),
     `run-stages.js:96 :: keyOf`, `run-stages.js:106`, `run.js :: seatKey` (**was `:228`; `:232`
-    today**, one caller `:233`, **was `:229`**),
+    today**, one caller `:233`, **was `:229`**; ✅ **consolidated 2026-08-25, v4.9 W3: `:232`
+    holds an in-place `require('./run-retry-keys')` now, caller still `:233`**),
     `run.js:235` (hand-inlined; **was `:231`**).
-    **The count is still EIGHT** — T2.2 added no spelling, only call sites.
+    **The count is still EIGHT** — T2.2 added no spelling, only call sites. ✅ **FIVE since
+    2026-08-25 (v4.9 W3) — see the count line above.**
     **Excluded, and why:** `run-retry-group.js:87` (`legs.push({ leg: l, seatId: bound ? bound.id :
     null })`, **was `:109`, then `:151`; −64 from T-A1, the same shift as `:128`→`:64` below**) and
     `run-retry-notes.js:58` fall back to
@@ -5852,7 +5925,44 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   - **Count 2 — string-form post-emit reads. Counting rule:** a bare two-term `||` resolving an
     **already-emitted row** to one identity string — the row's emitted `seat` field, else its alias
     field (`model`/`judge`); live code only, prose excluded. → **9 sites / 10 occurrences — `src/`
-    5 sites (6 occurrences), `electron/` 4 sites.** ⚠️ Site and occurrence counts differ because
+    5 sites (6 occurrences), `electron/` 4 sites.**
+    ✅ **Re-censused 2026-08-25 (v4.9 W3 Task D), by grepping `\.seat \|\|` and
+    `\|\| X.(model|judge)` over `src/` + `electron/` and opening every hit: 14 sites /
+    15 occurrences — `src/` 10 sites (11 occurrences), `electron/` 4 sites** (same rule as above,
+    restated: a bare two-term `||` resolving an already-emitted row to one identity string, the
+    row's emitted `seat` field else its alias field, live code only). **Five members are NEW since
+    the 2026-08-21 pass**, with inclusion rulings: `briefings-chair.js:180` (`r.seat || r.judge`,
+    ranking lines) and `:183` (`a.seat || a.judge`, adjudication lines), both inside
+    `buildChairPacket` — SI-25-born, unambiguous members (post-emit rankings/adjudications rows,
+    `seat` emitted-when-different); `street-cred.js:242 :: computeStreetCred`
+    (`perJudgeRank[j.seat || j.judge]`) — **INCLUDED**: `j` is the `judgePos` projection a dozen
+    lines up, which copies the emitted ranking row's `judge`/`seat` fields verbatim, so this read
+    resolves the emitted row's own field pair (excluding it on the projection technicality would
+    let a one-line refactor move a member out of the census); `report-md.js:86 :: renderMd` and
+    `report-html.js:57 :: renderHtml` (`s.seat || s.model` over `m.streetCred`) — both
+    **INCLUDED**: streetCred rows carry `seat` emit-when-set (`computeStreetCred`'s tail spread)
+    and each renderer resolves the emitted row to one label. **Adjacent, NOT members:**
+    `briefings-chair.js:178`'s `displayName(r.seat) || r.model` — its first term is a function of
+    the seat OBJECT, the pre-emit population (the conflation trap below, in reverse); and the
+    `|| null` family (`street-cred.js:227`, `run-retry.js:241`, `run-stages.js:264`,
+    `observe/council-legs.js:135`, `workspace/live-normalize.js:56`, `live-seats.js:99`) —
+    "seat or nothing" is a different value space, per the standing exclusions. **The nine
+    2026-08-21 members were each re-opened and re-anchored:** `debate.js :: applyDebate` `:107`
+    (was `:99`), `debate.js :: disputingJudges` `:207` (was `:199`), `report.js :: costRows` ×2
+    `:258` (was `:239`; the `const costRows` line is `:257`), `run-debate.js:276`/`:282` (were
+    `:259`/`:265`; both inside `runDebate`, moved by v4.9 W2 Task B); `electron/`:
+    `live-dead-seats.js:221` (was `:219`), `live-seats.js:96` (was `:95`),
+    `workspace-panels.js:122` (unmoved), `workspace-seats.js:247 :: renderDeadSeatRows` (was
+    `:245`). Excluded forms re-opened the same day: `debate.js :: raiserKey`
+    (`f.raiserSeat || f.raiser`) is `:258` now (was `:250`); `workspace-seats.js`' dual lookup is
+    `:189-190` now (was `:188`) and reads `(s.seat && retried[s.seat]) || retried[s.model]` — a
+    seat-GATED form today, further outside the bare-two-term rule than when it was excluded;
+    `workspace-seats.js:88`'s seatId chain and `workspace-render.js:195`/`:225` re-confirmed at
+    their stated lines. The four `electron/` members remain STRUCTURAL, per the standing paragraph
+    below — renderer modules cannot `require()` from `src/`, so none were consolidation
+    candidates and none become one via disposition (b).
+    ⚠️ The 2026-08-21 enumeration below is retained as the dated record its correction notes
+    already make it. Site and occurrence counts differ because
     `src/council/report.js :: costRows` spells the rule **twice on one line**, once per ternary
     branch: a bare "9" is
     ambiguous even inside this population. Sites — `src/`: `council/debate.js :: applyDebate`'s
@@ -5932,7 +6042,11 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     `stage1-bind.js :: bindPaddedWave` on the stated `(waveId, rosterSource, aliasAt, legs)`
     signature, returning `{seatOf, bindRes, placeholders}`, and every site kept its own tail.
     ⚠️ **Disposition (b) below is NOT closed by this** — the `seatKey` half is still v4.9.
-  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14.** ⚠️ The v4.8 PR4
+    (✅ And v4.9 W3 delivered it, 2026-08-25 — see (b)'s shipped note.)
+  - **Disposition (b) — `seatKey` cross-file consolidation → v4.9, ruling R14. ✅ SHIPPED
+    2026-08-25 (v4.9 W3 Task D) — the shipped note at the foot of this bullet says what moved;
+    everything between here and there is the pre-consolidation record (line numbers are where
+    things STOOD).** ⚠️ The v4.8 PR4
     draft refused the padding consolidation as *"a near-copy, not a win"* while **endorsing** this
     `seatKey` one; measured, that is exactly **INVERTED**. `seatKey` is **net-flat**:
     `run.js :: seatKey` (**was `:228`; `:232` today**)
@@ -5977,6 +6091,23 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     failure mode **"THE WRONG LEVER"** — the defect is in a *consumer*. PR5c deliberately did not
     unify them; that is a refactor with its own blast radius, and mixing it into a defect PR is what
     made PR5a's review expensive. Still **not** urgent; it is a tidy-up, not a defect.
+    ✅ **SHIPPED 2026-08-25 (v4.9 W3 Task D), own commit, zero behavior change.** What moved:
+    `run.js`'s local spelling became an **in-place** `const { seatKey } = require('./run-retry-keys');`
+    on the very line the spelling held (`:232`, caller still `:233`) — in-place ON PURPOSE, so the
+    many live `run.js:NNN` citations across src/tests/electron did not move; `run-debate-revote.js`'s
+    `function seatKey` is deleted, replaced by a header require (`:48`; its one caller is `:235`
+    now); and `run-stage1-rows.js`'s `const join = s ? s.id : alias` is `const join =
+    seatKey(s, alias)` (`:145`), routed through that file's EXISTING `./run-retry-group`
+    destructure (`:14`) — evaluated per the plan's cycle check: `run-retry-group` requires only the
+    require-free `run-retry-keys` (its `:5` header + the P2 pin in
+    `tests/council/run-retry-keys.test.js`), so no exclusion was needed. The exported copy now has
+    **ten** callers (the seven above + these three). `run.js:235`'s hand-inlined third copy stays,
+    exactly as ruled above. Preservation: named mutant **SEATKEYSKEW** (flip the export's rule to
+    `s.alias`) reds **7 suites / 34 tests** of the 12-suite focused set — including
+    `run-degrade.test.js` (the run.js twin-merge pins) and `run-debate.test.js` (the revote-join
+    pins), two suites NO export flip could red before this consolidation, because their sites had
+    local copies: the export now measurably guards all three new sites. Count 1 above is **5** as
+    of this ship; Count 2 was re-censused the same day (see its ✅ block).
 
 ### Bench adaptation — closes #135, finishes #129
 
@@ -6040,15 +6171,27 @@ this same branch, same reasoning as `9278f7c0`'s drop of this paragraph's commit
 `check-file-sizes.js --all`, `npm run lint`, and `check-citations.js --all` all clean. ⚠️ The real `<select>`-to-Finish path
 has no Jest coverage (no jsdom in this repo, and `pickRouteFor` is an in-page closure) — it is
 covered by CDP smoke only.
-**Piece 3 remains OPEN, deferred to v4.9.0**
+~~**Piece 3 remains OPEN, deferred to v4.9.0**
 (`docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md:769`). Its content is not defined
 anywhere in the tracked tree beyond that deferral tag — searched this file and the phasing doc for
 "Piece 3" and found only the bare name, no description to re-derive against. This branch does not
-touch it.
+touch it.~~ **DROPPED as never-specified at the v4.9 kickoff (2026-08-25), on the T6.5/W1-3
+precedent.** Exhaustive history check: `git log --all -S '#138 Piece'` returns exactly three
+commits — `4ee46696` (the phasing doc, which defines Pieces 1+2 and names Piece 3 only in its
+deferral line), `2ca728c1` (the #138 plan, which mentions Piece 3 only to ask whether it is
+open), and `102302d4` (the v4.8.1 cut, which DELETED both docs — the `:769` citation above now
+dangles; recover via `git show v4.8.0:docs/superpowers/plans/2026-08-16-v48-phasing-and-rulings.md`).
+No commit in any branch or tag ever gave it content. If #138 has a real third ask it must be
+re-filed fresh — there is nothing to inherit. (Pieces 1+2 shipped via PR #196, merge `3e3e29a0`;
+issue #138 is closed.)
 
 ### Carried from the dropped v4.7.2 scope
 
-- [ ] **`sessions-index.json` growth.** Design already recommended in this file (doctor check +
+- [x] **`sessions-index.json` growth.** — **SHIPPED v4.8 Wave 2.5 as `dda1b8cf` (PR #187,
+  T-R16.1): doctor check `sessions-index-prune` + `--fix`, liveness-based per R16-2.** This
+  carried checkbox was left unticked while the entry's own DONE records ticked — caught at the
+  v4.9 kickoff (2026-08-25). Struck from the v4.9 carried list. Original filing: design already
+  recommended in this file (doctor check +
   `--fix`, **liveness-based not age-based**). Impact measured, not theorized: 5.7 ms parse plus a
   0.69 MB write on **every session start** (`O(total sessions ever)` per launch), and
   `amicus list --all` at 8,275 ms → 53 ms after a prune.
@@ -6065,7 +6208,8 @@ touch it.
   hazard is **key order** changing `run.json` bytes, which the order-insensitive pins would not
   catch. PR1F-3's proposed expression was found to be a **constant** (`res.ok` is always false at
   `run-stages.js:181`), so it needs a design call.
-- [ ] **KNOWN_VARIABLES single-source (T3-m2)** — hard gate, but only bites when `{{input}}` lands.
+- [x] **KNOWN_VARIABLES single-source (T3-m2)** — ~~hard gate, but only bites when `{{input}}`
+  lands~~ **DONE, v4.9 W1 (2026-08-25)** — see the ticked T3-m2 entry under *Next-rev hard gates*.
 
 ### Explicitly NOT in v4.8.0
 
@@ -6137,6 +6281,23 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     | `srcLegStillDeadNote` (`:51`) | `dead-leg` | ❌ no `firstFailure` → `data.seat`, an ALIAS |
     | `waveStillDeadNote` (`:28`) dead-wave arm | `dead-wave` | ❌ `data.models[]`, ALIASES |
     | `waveStillDeadNote` (`:28`) partial arm | `seat-unbound` | ❌ alias only |
+
+    ⚠️ **THIS TABLE ROTTED AND ITS HEADLINE IS NOW FALSE — re-measured 2026-08-25 (v4.9
+    kickoff), table rows left standing as the dated 2026-08-15 record.** PR5c shipped producer
+    identity on two of the three ❌ rows: `srcLegStillDeadNote` (now
+    `run-retry-notes.js :: srcLegStillDeadNote`) gained a `seatId` parameter emitted on
+    `data.seatId`, and the dead-wave arm of `waveStillDeadNote` now emits `data.seats[]`
+    index-parallel with `models` (`so ? so.id : null` — an unidentified slot emits null, never
+    the alias). A seat id is therefore available on **four of five arms**; the only id-less arm
+    left is the **seat-unbound partial arm**, whose omission is deliberate and commented
+    (*"seat-unbound has no consumer"*) — and the seat OBJECT is already on the record it is
+    built from (`stage1-bind.js :: missingSeatDeadWave` carries `seats: [m.seat]`), so the
+    producer half of the v4.9 work is ~one line. The line numbers in the rows above have also
+    all moved — anchor by symbol. ⚠️ Two caveats that SURVIVE for any consumer change:
+    `firstFailure.seatId` can be ALIAS-valued on the inexact twin branch
+    (`run-retry-group.js :: recordFailure`), and `seat-unbound` is a SHARED channel (orphan-leg
+    notes carrying `data.legId`, and `reVoteUnboundNote`, ride it too) — never admit the
+    channel raw; gate on the retry-family fields (`retryWaveId || firstFailure`).
 
     Both consumers filter to `dead-leg`/`dead-wave` (`live-dead-seats.js :: deadSeats`,
     `workspace-seats.js :: retriedSeats` — re-anchored BY SYMBOL at T-A8, 2026-08-17, having read
@@ -6310,7 +6471,13 @@ Four items surfaced while cutting `[Unreleased]` → `[4.8.0]`. None was in the 
 Each is a live statement in a **shipped** file — `package.json`'s `files` ships `src/`, `skills/`
 and top-level `docs/*.md`.
 
-- [ ] **`src/sidecar/models.js :: fmtProbeLine` still prints `(accepted but not serving)`.**
+- [x] **`src/sidecar/models.js :: fmtProbeLine` printed `(accepted but not serving)`.** —
+  **FIXED, v4.9 W1 (2026-08-25):** the SILENT parenthetical now reads
+  `(no output within the probe window)` — a classification statement, not an acceptance
+  assertion — with the standalone pin updated and `docs/usage.md:406`'s verbatim example line
+  co-edited in the same commit (it quotes the runtime string). Class-name uses of
+  "accepted-but-silent" (`docs/configuration.md`, `no-output-backstop.js`'s comment) stand —
+  they name the classification, which is unchanged. Original filing:
   Owner-ruled 2026-08-23 as a product nit, **not** a release blocker: `docs/usage.md:406` quotes the
   runtime string and adds the honest caveat beside it, and nothing in the changelog claims the CLI
   line was corrected. What is left is that the terminal line asserts endpoint acceptance while the
@@ -6344,8 +6511,15 @@ and top-level `docs/*.md`.
   - **Gate:** none today. The sweep that produced this finding was
     `git grep -nE "240s|120s|240000|120000"`, uncapped, over the whole tree.
 
-- [ ] **The second-opinion skill's Stage-4 consensus headings still gloss Confirmed as "(≥ 2 peer
-  agreements, agrees dominate)"**, omitting the `a = 1, d = 0` case — `skills/second-opinion/SKILL.md:285`
+- [x] **The second-opinion skill's Stage-4 consensus headings glossed Confirmed as "(≥ 2 peer
+  agreements, agrees dominate)"**, omitting the `a = 1, d = 0` case — **FIXED, v4.9 W1
+  (2026-08-25):** both headings now read *"(≥ 2 peer agreements with agrees dominating — or a
+  lone corroborating peer with zero disputes)"*; the entry's own gate was run — both phrasings
+  re-grepped repo-wide, survivors are only the historical/frozen classes (this filing, the
+  released CHANGELOG entry, the 2026-06-23 frozen spec, MODEL-NOTES incident narrations).
+  ⚠️ The non-git runtime copy at `~/.claude/skills/second-opinion` carries the same two lines
+  and still needs the same edit (machine-local; handled outside this repo). Original filing —
+  anchors `skills/second-opinion/SKILL.md:285`
   and `skills/second-opinion/COUNCIL-DESIGN.md:113`. The formal cascade rows in both files were
   corrected in v4.8.0 (`c0a7c728`); that commit touched only the cascade table and two other
   bullets, so the *presentation* headings — the ones a Claude running the skill actually follows —
@@ -6354,9 +6528,47 @@ and top-level `docs/*.md`.
   - **Gate:** `docs/council.md` carries no such gloss (grep: zero hits), so the correct anchor has
     no twin. Fix both headings together and re-grep the phrase repo-wide before claiming closure.
 
-- [ ] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialises `Object.prototype` on the alias table.** Anchor on the variable name, not a line number -- it was `:37` at v4.8.0 and drifted to `:41` on branch `fix/138-model-level-default` (verified 2026-08-24); this file has already moved once.
+- [x] **`electron/setup-ui.js`'s `defaultAliasesJson` line re-materialised `Object.prototype` on the alias table.** — **FIXED, v4.9 W1 (2026-08-25):** the single embed site now seeds on the far side of the parse — `Object.assign(Object.create(null), ${defaultAliasesJson})` — so inherited names (`toString`, `constructor`) are unreachable through every bare-index reader of the page-level `var defaultAliases`. Pinned RED-before-GREEN by a vm-eval test (`tests/electron/setup-ui-proto.test.js`) named after the rule: *a null-prototype table cannot cross a serialization boundary and stay null-prototype*. Original filing — anchor on the variable name, not a line number (it was `:37` at v4.8.0 and drifted twice before the fix):
   `JSON.stringify(getDefaultAliases())` is re-embedded as a page literal, and the parser always
   gives the result a normal prototype, so the null-prototype seed this release added does not reach
   the Electron wizard. Traced and inert (`JSON.stringify` drops function values before the write,
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
+
+## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
+
+Filed past-tense in the same commit as the fixes, per the falsified-record rule.
+
+- **The `tests/mcp-headless-e2e.integration.test.js` double failure — DECIDED: live-LLM flake,
+  not a session leak; the standing "Jest did not exit" warning was a REAL, separate defect.**
+  Measured (keyless rail + `--detectOpenHandles`): the failures cannot be a leak — fresh
+  `mkdtempSync` dir and fresh server per run, `afterAll` closes on all paths — but the copied
+  `createMcpClient` helper leaked timers deterministically in THREE suites (`request()`'s 10 s
+  timeout never cleared on resolve; `close()`'s 3 s SIGKILL fallback never cleared), six open
+  handles measured. Fixed in all three (`mcp-headless-e2e`, `mcp-protocol`,
+  `shared-server-e2e`), re-measured at zero; `afterAll` now also aborts a still-running task on
+  failure paths (bounded real-money leak), and the stale `--forceExit` comment was corrected —
+  the live rail never had it. The gate is trustworthy; a live-tier failure is re-run variance
+  on a real LLM unless a NEW mechanism is measured.
+- **Council B2 (bare id offered under an empty vendor namespace goes gate-invalid when the key
+  arrives later) — ruling V16: self-diagnose at the failure site.** `catalogGate`'s
+  `model_not_found` on a `direct`-gateway bare id whose `openrouter/` twin classifies valid now
+  carries the `repairFabricatedAlias` hint (`doctor --fix` is the remediation layer), mirroring
+  the `localHint` precedent. Offer-under-`unknown` stays deliberate; revalidate-on-key-add is
+  the filed follow-up, not built.
+- **Council A4 (`directFormIfProven` TOCTOU via the two setup IPC fetches) — ruling V17: closed
+  structurally.** The wizard's apply handler now consumes the SAME catalog snapshot the offer
+  was built from (per-provider snapshot minted at the save-key build site), so the
+  check-vs-use window is gone *within an offer session*; `directFormIfProven` and its A4 pin
+  (`tests/model-canonicalization.test.js`) are byte-untouched, exactly as that pin's reasoning
+  requires. ⚠️ Snapshot LIFETIME was re-ruled twice on PR 199 and the final shape is
+  **offer-session** (2026-08-25): the council's B1/D2 (unbounded lifetime) was first answered
+  with delete-on-first-read, which the fix-wave review's F1 showed re-opens the A4 race for
+  every human pick (the wizard auto-applies on render, so the pick is always a later apply).
+  Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
+  clears the map. All four states pinned in
+  `tests/electron/ipc-setup-catalog-snapshot.test.js`.
+- **`MAX_CATALOG_AGE_MS` mirror (doctor-alias-check vs cli-handlers-doctor)** — retired to one
+  source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
+  it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is
+  acyclic, measured). Three copies → one; no drift test needed.

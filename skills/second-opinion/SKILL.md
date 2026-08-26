@@ -282,7 +282,7 @@ withdrew it in the rebuttal round (`findings[].debate.action === 'withdrawn'` in
 **auto-recorded `denied` in `decisions.json` and never presented for a user decision** — just note
 it as withdrawn when walking the tiers.
 
-**Consensus tier — Confirmed findings** (≥ 2 peer agreements, agrees dominate)
+**Consensus tier — Confirmed findings** (≥ 2 peer agreements with agrees dominating — or a lone corroborating peer with zero disputes)
 
 - Present the full list in one block: id, claim, severity, and which models raised / endorsed it.
 - Offer one **bulk accept/deny decision** over the whole tier:

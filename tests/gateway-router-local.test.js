@@ -39,7 +39,7 @@ describe('resolveRoute: local class', () => {
   });
 
   // D2/M4: step 2 ("explicit conflict: force-OR literal vs --gateway direct",
-  // gateway-router.js:80-83) fires BEFORE step 3 and returns gateway_conflict with no
+  // gateway-router.js:141-144) fires BEFORE step 3 and returns gateway_conflict with no
   // local carve-out, so without the step-2 bypass the local branch is never reached.
   // Spec §4.2 point 1 is unconditional: an explicit openrouter/<localId>/… literal is
   // ALWAYS no_openrouter_route, with no `direct` exception.
@@ -137,7 +137,7 @@ describe('resolveRoute: local class', () => {
   });
 
   // Review Finding 2 (post-Task-4 review): localHint(..., 'model_not_found')'s
-  // non-ollama branch (gateway-router.js:28-29) had zero coverage — a sentinel
+  // non-ollama branch (gateway-router.js:29-30) had zero coverage — a sentinel
   // replacement of either non-ollama string still passed the full suite. These
   // two mirror the existing lmstudio/vllm local_endpoint_unreachable pair above,
   // asserting the exact hint strings so a swapped/deleted branch is caught.

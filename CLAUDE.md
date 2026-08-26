@@ -402,6 +402,7 @@ electron/
 ├── ipc-workspace.js  # Council Workspace IPC (v4.4 §4.5) — all seven workspace: channels.
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
+├── offer-session.js  # Offer-session catalog snapshots for the setup wizard's provider-default
 ├── opencode-theme.js
 ├── preload-content.js  # Content Preload - OpenCode WebContentsView (minimal, no privileged bridge)
 ├── preload-setup.js  # Sidecar Preload - Setup Mode

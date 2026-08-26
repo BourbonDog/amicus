@@ -81,7 +81,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var selectedProvider = null;
   var modelChoicesData = ${modelChoicesJson};
   var providerNamesData = ${providerNamesJson};
-  var defaultAliases = ${defaultAliasesJson};
+  var defaultAliases = Object.assign(Object.create(null), ${defaultAliasesJson});
   var PROVIDER_FAMILY_NAMES = ${familyNamesJson};
   var directProviders = ${directProvidersJson};
   var routingChoices = {};
@@ -90,13 +90,18 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // means "use the family flagship", i.e. today's behavior.
   var modelChoiceIds = {};
   var modelOpenrouterIds = {};
-  var aliasEdits = {};
-  var aliasDisplay = {};
+  // T3 (PR 199): every table keyed by USER-controlled alias names is seeded
+  // null-prototype, same as defaultAliases above -- an alias literally named
+  // __proto__ on a plain {} hits the Object.prototype setter (silent no-op
+  // write) and reads back Object.prototype, which then throws on .split('/')
+  // in updateAliasesForConfiguredKeys.
+  var aliasEdits = Object.create(null);
+  var aliasDisplay = Object.create(null);
   // N1: the alias map as loaded from disk (init below), so buildReview can
-  // tell an actual change from a value-identical re-write. Stays {} until
+  // tell an actual change from a value-identical re-write. Stays empty until
   // init resolves (a fresh/offline config has nothing saved yet, so every
   // computed write IS new).
-  var savedAliases = {};
+  var savedAliases = Object.create(null);
   window.availableModels = null;
   var keyValid = false, validatedKey = '';
   var $ = function(id) { return document.getElementById(id); };
@@ -160,7 +165,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         // buildReview's N1 diff is not measured to be wrong today -- but the
         // copy is one line and removes a fragile "never mutate this" invariant
         // future edits would otherwise have to remember.
-        savedAliases = Object.assign({}, cfg.aliases); // N1: buildReview diffs against this
+        // T3: null-prototype target -- Object.assign onto a plain {} would
+        // route a literal __proto__ alias key through the prototype setter
+        // instead of landing it as an own key.
+        savedAliases = Object.assign(Object.create(null), cfg.aliases); // N1: buildReview diffs against this
         modelChoicesData.forEach(function(mc) {
           var currentModel = cfg.aliases[mc.alias];
           if (currentModel) {
@@ -485,7 +493,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // undefined) when the key is absent makes "delete of an absent alias"
     // compare equal to "still absent" without changing any other case --
     // every other savedAliases value here is a non-empty string.
-    var changedWrites = {};
+    // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
+    var changedWrites = Object.create(null);
     Object.keys(aliasWritesPreview).forEach(function(alias) {
       var oldVal = Object.prototype.hasOwnProperty.call(savedAliases, alias) ? savedAliases[alias] : null;
       if (aliasWritesPreview[alias] !== oldVal) {
@@ -570,7 +579,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // layer responsible for not SHOWING those value-identical entries as
   // changes (see its own N1 comment).
   function collectAliasWrites(selectedAlias, isCustomDefault) {
-    var aliasWrites = {};
+    // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
+    var aliasWrites = Object.create(null);
     Object.keys(aliasEdits).forEach(function(k) {
       aliasWrites[k] = aliasEdits[k];
     });

@@ -938,7 +938,11 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     });
     const { extraRows } = await runStage1(ctx);
     expect(extraRows).toHaveLength(1);
-    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1' });
+    // v4.9 V18 refined (PR 199 D1): the repair ROW carries the repair LEG's own
+    // measured re-validation outcome — this repair's output parsed, so its row
+    // reads 'clean'. The seat's primary row separately says 'repaired'.
+    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1',
+      conformance: 'clean' });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
   });
@@ -955,6 +959,7 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     expect(repairRows).toHaveLength(2);                          // cap = 2 re-prompts; BOTH get a row
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
   });
 
   test('a dead seat with no retry attempted gets a primary error row from its own (only) dead leg', async () => {
@@ -1932,6 +1937,10 @@ describe('runStage2', () => {
     expect(extraRows).toHaveLength(1);
     expect(extraRows[0]).toMatchObject({
       model: 'gemini', role: 'repair', wasChair: false, waveId: 'abc123-q1', status: 'complete',
+      // v4.9 V18 refined (PR 199 D1): the repair ROW carries the repair leg's own
+      // re-parse outcome — it landed, so 'clean'. 'repaired' stays the JUDGE's
+      // primary conformance, asserted above.
+      conformance: 'clean',
     });
     expect(extraRows[0].usage.cost.amount).toBe(0.01);
     expect(extraRows[0].durationMs).toBe(1000);
@@ -1955,6 +1964,7 @@ describe('runStage2', () => {
     expect(repairRows.map(r => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
     expect(repairRows.every(r => r.status === 'error')).toBe(true);
     expect(repairRows.every(r => r.model === 'gemini')).toBe(true);
+    expect(repairRows.every(r => r.conformance === 'unstructured')).toBe(true); // v4.9 V18: explicit, never the '|| clean' default
   });
 
   test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {
@@ -2146,7 +2156,8 @@ describe('runStage2', () => {
     //       and retry sites, so M2 == M1 == "NOPLACEHOLDERFILTER"
     //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
     //       seat-unbound loop — still a run-stage2.js CALL-SITE mutation (the tail
-    //       did not move); renamed `PLACEHOLDERLEAK`
+    //       never joined the shared helper; since v4.9 W2 it sits in
+    //       `run-stage2.js :: bindStage2Seats`); renamed `PLACEHOLDERLEAK`
     // MEASURED 2026-08-23, full `npx jest --no-coverage`: M2 at its new shared home
     // reds 19 tests in FOUR suites (run-stages 2, run-retry 9, run-retry-launch 4,
     // run-debate 4); PLACEHOLDERLEAK reds exactly one — M3's test below.

@@ -34,11 +34,8 @@
 
 const HINTS = require('./remediation-hints');
 
-// Mirrors cli-handlers-doctor.js's own MAX_CATALOG_AGE_MS (which itself
-// mirrors model-catalog.js's DEFAULT_MAX_AGE_MS) -- duplicated rather than
-// imported to avoid a require cycle (cli-handlers-doctor.js requires this
-// module at load time, before its own module.exports exists).
-const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+// Single source: model-catalog.js's DEFAULT_MAX_AGE_MS -- the same 24h window as doctor's own `catalog` check.
+const MAX_CATALOG_AGE_MS = require('./model-catalog').DEFAULT_MAX_AGE_MS;
 
 /**
  * @param {{fetchedAt?: number}|null} cache

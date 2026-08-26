@@ -1617,7 +1617,8 @@ describe('SI-22.5 (R17/R18): the two consumers agree on EVERY vote-key shape (fu
  * sources lever inherits the measured behaviour of BOTH sides rather than a
  * sentence about it. Filed in BACKLOG.md under the NEXT LEVER entry.
  *
- * ⚠️ NO ENGINE RUN EMITS THIS VOTE — `run-stage2.js:61-62` guarantees Claude is
+ * ⚠️ NO ENGINE RUN EMITS THIS VOTE — `run-stage2.js :: runStage2` (the
+ * ROSTER-not-bundle derivation of `judges`) guarantees Claude is
  * judged but never judges. It is reachable exactly the way every other shape in
  * this file is: the schema-free `JSON.parse` entry points.
  *

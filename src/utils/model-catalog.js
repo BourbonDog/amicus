@@ -152,4 +152,4 @@ async function getCatalogInfo(opts = {}) {
   };
 }
 
-module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, readCache, CATALOG_SCHEMA_VERSION };
+module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, readCache, CATALOG_SCHEMA_VERSION, DEFAULT_MAX_AGE_MS };
