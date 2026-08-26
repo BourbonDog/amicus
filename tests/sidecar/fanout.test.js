@@ -492,9 +492,10 @@ describe('runFanout orchestrator', () => {
    * Named mutant NULLGUARD: delete the leading `result &&`. RED measured
    * 2026-08-26 at the 7-suite/273-test focused scope — 1 test / 1 suite, this
    * one. It is the whole red set, which is the honest cost of a shape pin.
-   * RE-MEASURED at PR #207 round 3 (8 suites / 323 tests): still 1 test / 1
-   * suite, this one. The mutant survived the predicate swap below unchanged,
-   * which is exactly the point — the two properties are independent.
+   * RE-MEASURED at PR #207 round 3 (8 suites / 323 tests) and again at round 4
+   * (same 8 suites, 330 tests): still 1 test / 1 suite, this one. The mutant
+   * survived the predicate swap below unchanged, which is exactly the point —
+   * the two properties are independent.
    *
    * ⚠️ PR #207 council round 2 (B2): this used to be
    * `expect(src).toContain('<the exact source line>')`, which pinned the

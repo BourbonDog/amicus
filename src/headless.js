@@ -891,11 +891,28 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // output and whose completion landed in the SAME poll therefore never
         // reached the TTFT stamp, and those are exactly the FAST legs, so the
         // censoring truncated the left tail rather than sampling at random.
-        // Hoisting is safe and value-preserving by construction: `mirror` changes
-        // only at the `mirrorMessages` call above, and every `last*` tracker is
-        // written only here, so each delta reads the same numbers it read at the
-        // old site. The only difference is that a poll which BREAKS now advances
-        // the trackers first — and nothing reads them after the loop ends.
+        // Hoisting is value-preserving, and the AUDIT that says so is below rather
+        // than an appeal to construction (PR #207 round 4, B2 — the earlier wording
+        // here claimed "every `last*` tracker is written only here" and "nothing
+        // reads them after the loop", and BOTH are false as written, because
+        // `lastAssistantMsgId` is a `last*` tracker this block never writes).
+        // MEASURED, every reader in this file:
+        //   · `mirror` changes only at the `mirrorMessages` call above, so every
+        //     delta below reads the same numbers it read at the old site.
+        //   · This block WRITES exactly seven trackers — output length, tool-call
+        //     count, tool-result count, message count, reasoning length, settled-
+        //     tool count and `lastProgressAt`. Outside this block those seven have
+        //     exactly ONE reader in the whole file: `lastProgressAt`, in the B53
+        //     tool-stall gate further down. That gate sat below the block's OLD
+        //     position too, so their order is unchanged. None of the seven is read
+        //     after the loop.
+        //   · `lastAssistantMsgId` is READ here (`newAssistant`) and written where
+        //     it always was, at the BOTTOM of the loop below every gate — so the
+        //     comparison still runs against the previous poll's id, and the one
+        //     post-loop `last*` reader (`hasAssistantMsg` on the timeout result)
+        //     reads a tracker this block does not touch.
+        // The only behaviour change is that a poll which BREAKS now advances those
+        // seven first, and nothing observes them afterwards.
         // Hoisting the whole block (rather than adding a second stamp beside each
         // gate) is what keeps ONE definition of the predicate and ONE stamp site.
         const outputGrew = mirror.output.length > lastOutputLength;

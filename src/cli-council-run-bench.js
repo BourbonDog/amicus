@@ -160,6 +160,19 @@ function resolveBench(args, useJson) {
   return res;
 }
 
+// ⚠️ THIS ORDER IS LOAD-BEARING, and only for the docs (PR #207 round 4, B3).
+// `scripts/generate-docs-helpers.js:107` keeps the FIRST FIVE names in source
+// order for CLAUDE.md's Key Exports column, and this module exports six — so
+// whichever name sits last is the one the generated table never shows.
+// `CHAIR_DEFAULT` is DEFINED here and merely re-exported by
+// cli-handlers-council-run.js, whose row (3 exports, all inside the cap) always
+// listed it; the round-4 council read the definer's silence beside the
+// re-exporter's mention as the docs disagreeing about where the constant lives.
+// Moving it inside the cap makes the definer the visible source. The resolve
+// trio stays intact and `sanitizeCouncilName` — the one name here that is a
+// generic string helper rather than part of this module's headline — is the one
+// that falls off the end. Nothing else depends on this order: consumers
+// destructure by name.
 module.exports = {
-  parseList, sanitizeCouncilName, resolveBench, resolveChair, resolveCritic, CHAIR_DEFAULT,
+  resolveBench, resolveChair, resolveCritic, CHAIR_DEFAULT, parseList, sanitizeCouncilName,
 };

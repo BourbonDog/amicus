@@ -43,31 +43,37 @@
  *     returns an expanded `bench` on BOTH branches, so the handler seam covers
  *     every council_run call instead of the preset branch only.
  *
- * EIGHT named mutants. All red sets below were RE-MEASURED 2026-08-26 against
- * the PR #207 round-3 tree at ONE shared focused scope — 8 suites / 323 tests:
- * this file plus tests/no-output-backstop-wiring.test.js,
+ * TEN named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
+ * PR #207 round-4 tree at ONE shared focused scope — 8 suites / 330 tests: this
+ * file plus tests/no-output-backstop-wiring.test.js,
  * tests/sidecar/fanout.test.js, tests/council/run-stats-entry.test.js,
  * tests/council/runstats-byte-order.test.js,
  * tests/scripts/council-review-workflow.test.js,
  * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
- * (Round 2 measured 7 suites / 284 tests; runstats-byte-order.test.js joined the
- * scope and round 3 added the fixtures below, so the totals are not comparable
- * — the per-mutant sets are, and each is marked grown or unchanged.)
+ * (Round 2 measured 7 suites / 284 tests and round 3 measured 8 / 323;
+ * runstats-byte-order.test.js joined the scope at round 3 and each round added
+ * fixtures, so the TOTALS are not comparable — the per-mutant sets are, and each
+ * is marked grown or unchanged.)
  *
  * "SHADOWSILENT" — `src/utils/alias-shadow.js :: noteAliasShadows`, make the
  * emitter a no-op (an early `return;` after the writer and scope are bound, i.e.
- * the warning is computed and never spoken). RED: 26 tests / 2 suites — GROWN
- * from round 2's 17 by the nine round-3 fixtures (four A1, five B1), every one
- * of which asserts that a line was actually produced.
- *   tests/alias-shadow.test.js            — 24 failed
+ * the warning is computed and never spoken). RED: 31 tests / 2 suites — GROWN
+ * from round 3's 26 by five of the round-4 fixtures (three A1 hostile-value
+ * pins, the A1 byte-identical control, and the B1 cross-registry pin, which
+ * counts the lines both instances wrote). Every one asserts a line was actually
+ * produced; the A1 hostile-NAME control is the round-4 fixture that does NOT
+ * die, because a name that cannot become a row cannot become a line either.
+ *   tests/alias-shadow.test.js            — 29 failed
  *     · emits the plan's exact line, one per shadowed alias
  *     · once per scope: a second resolution of the same alias stays quiet
  *     · no module-global latch: two scope-less calls each speak (B3)
  *     · the B1 absence control (a healthy writer still gets every line)
  *     · the default writer is stderr
  *     · a check that CANNOT run says so rather than degrading silently
- *     · all four round-3 A1 async-failure fixtures
+ *     · all five round-3 A1 async-failure fixtures (round 4's cross-registry
+ *       pin joined that describe block)
  *     · all five round-3 B1 failure-branch fixtures
+ *     · four of the five round-4 A1 sanitizing fixtures
  *     · a bare --models bench notices the shadow
  *     · two councils in ONE process each get their own audit (A5)
  *     · all four A6 chair/critic pins
@@ -79,17 +85,20 @@
  * predicate, and the mutant kills only the speech act. That split is the point —
  * a silent degrade of a self-diagnosis feature is exactly the failure the
  * product principle forbids, so the speech act gets its own pins, and the
- * ABSENCE CONTROLS are the ones that stay green in BOTH directions. ⚠️ Two
- * fixtures LABELLED "ABSENCE CONTROL" do die here — round 3's injected-writer
- * control and its real-Error control. They are controls for OVER-REACH (of the
- * stream arming and of the message hardening), not controls for silence, and
- * each carries a positive "…and the line was still produced" assertion.
+ * ABSENCE CONTROLS are the ones that stay green in BOTH directions. ⚠️ FOUR
+ * fixtures LABELLED "ABSENCE CONTROL" do die here (round 3 counted two of them;
+ * re-counted against the measurement at round 4): the healthy-writer control,
+ * the injected-writer control, the real-Error control and round 4's
+ * byte-identical-rendering control. Every one is a control for OVER-REACH — of
+ * the writer guard, the stream arming, the message hardening, the sanitizer —
+ * not a control for silence, and each carries a positive "…and the line was
+ * still produced" assertion, which is exactly what SHADOWSILENT removes.
  *
  * "WRITERFATAL" (PR #207 round 2, B1) — drop the try/catch inside
- * `alias-shadow.js :: safeWrite`, i.e. let a SYNCHRONOUSLY throwing writer
+ * `alias-shadow-writer.js :: safeWrite`, i.e. let a SYNCHRONOUSLY throwing writer
  * escape again. RED: 3 tests / 1 suite, all in this file — the loop-path throw,
  * the failure-branch throw, and the same through `auditAliasShadows`.
- * RE-MEASURED at round 3: UNCHANGED. Disjoint from SHADOWSILENT (that mutant
+ * RE-MEASURED at rounds 3 and 4: UNCHANGED. Disjoint from SHADOWSILENT (that mutant
  * removes the speech, this one makes the speech lethal), and disjoint from
  * STREAMFATAL below, which is the ASYNCHRONOUS half of the same contract — no
  * fixture dies under both, which is what proves the two failure modes are
@@ -98,13 +107,33 @@
  * from meaning "mute".
  *
  * "STREAMFATAL" (PR #207 round 3, A1) — drop the `armStream(stream)` call from
- * the default stderr writer, i.e. stop attaching the no-op 'error' handler. RED:
- * 3 tests / 1 suite, all in this file — the later-turn failure, the second
- * later-turn failure (which is what forbids `once`), and the attach-once pin.
- * The measured Node contract this defends, and why a write callback is NOT a
- * substitute for it, is recorded on `armStream` itself and in the describe
- * block below. The injected-writer control stays green in BOTH directions, so
- * the arming is pinned as an addition rather than as a process-wide side effect.
+ * `alias-shadow-writer.js`'s default stderr writer, i.e. stop attaching the
+ * no-op 'error' handler. RED: 4 tests / 1 suite, all in this file — GROWN from
+ * round 3's 3 by the round-4 cross-registry pin, which counts listeners and so
+ * dies at zero as readily as at two. The set is the later-turn failure, the
+ * second later-turn failure (which is what forbids `once`), the attach-once pin
+ * and the cross-registry pin. The measured Node contract this defends, and why
+ * a write callback is NOT a substitute for it, is recorded on `armStream`
+ * itself and in the describe block below. The injected-writer control stays
+ * green in BOTH directions, so the arming is pinned as an addition rather than
+ * as a process-wide side effect. ⚠️ The round-4 META-PIN stays GREEN under this
+ * mutant on purpose: it is an upper bound ("at most one"), so removing the
+ * arming satisfies it. It is the pin for accumulation, not for absence.
+ *
+ * "ARMPERMODULE" (PR #207 round 4, B1) — put the module-scoped `WeakSet` back in
+ * place of the stream-keyed `Symbol.for` marker, i.e. make "attach once" mean
+ * once per MODULE INSTANCE again. RED: 2 tests / 1 suite, both in this file —
+ * the cross-registry pin and the suite-wide meta-pin (which measured SEVEN
+ * accumulated listeners on the real `process.stderr` before the fix, exactly
+ * the count the finding predicted). Disjoint from STREAMFATAL in one direction:
+ * every round-3 A1 fixture stays green here, because the handler IS attached —
+ * just too many times.
+ *
+ * "NOTICERAW" (PR #207 round 4, A1) — interpolate the config-sourced fragments
+ * into `formatAliasShadow`'s template unsanitized. RED: 3 tests / 1 suite — the
+ * CLI hostile-value pin, the MCP hostile-value pin and the length bound. The
+ * byte-identical control stays GREEN, which is the whole point of it: the
+ * sanitizer is a pass over hostile bytes, not a reformatting of the notice.
  *
  * "MESSAGERAW" (PR #207 round 3, B1) — interpolate `err.message` straight into
  * the failure line again, evaluating it before `safeWrite` can guard anything.
@@ -115,20 +144,23 @@
  * fix. MEASURED against a `describeThrown` written as a bare
  * `String((err && err.message) || err)` with no try/catch — the obvious repair,
  * and the one the finding itself suggested — that fixture is the ONLY failure in
- * the whole 323-test scope. `String(Object.create(null))` throws, so the naive
+ * the whole 330-test scope (re-measured at round 4). `String(Object.create(null))` throws, so the naive
  * repair moves the escape rather than closing it. Do not thin that fixture.
  *
  * "MCPMUTE" (PR #207 round 2, A1) — make
- * `mcp-council-bench.js :: auditBenchAliases` a no-op. RED: 3 tests / 1 suite —
- * the three MCP-surface pins. The three MCP ABSENCE CONTROLS (clean config,
- * untouched fenced body, rejected run) stay green in BOTH directions, so the
- * new surface is pinned as an ADDITION rather than as noise. Note the CLI
- * wiring pins do NOT move under it: the two surfaces are independent, which is
- * the property the finding asked for.
+ * `mcp-council-bench.js :: auditBenchAliases` a no-op. RED: 4 tests / 1 suite —
+ * GROWN from round 3's 3 by round 4's MCP hostile-value pin, which reaches the
+ * notices array through this same site. The set is the three MCP-surface pins
+ * plus that one. The three MCP ABSENCE CONTROLS (clean config, untouched fenced
+ * body, rejected run) stay green in BOTH directions, so the new surface is
+ * pinned as an ADDITION rather than as noise. Note the CLI wiring pins do NOT
+ * move under it: the two surfaces are independent, which is the property the
+ * finding asked for — and the round-4 A1 pins carry that same split, one
+ * fixture per surface rather than one fixture trusted for both.
  *
  * "GATEWAYFORM" — `findAliasShadows`, replace the canonical comparison with a
  * raw `local === shipped`. RED: 2 tests / 1 suite, both in this file
- * (RE-MEASURED at round 3: unchanged):
+ * (RE-MEASURED at rounds 3 and 4: unchanged):
  *   · the same model in the other gateway form is NOT a shadow
  *   · this repo's own CI alias map raises only genuine model differences
  * Disjoint from SHADOWSILENT's set by construction: one mutant kills the speech,
@@ -140,7 +172,7 @@
  * to drop any more — the module-global Set is gone and the scope is a fresh
  * `new Set()` created per audit. The equivalent mutation is to hoist that Set to
  * module scope and share it across audits. RED: 2 tests / 1 suite — GROWN from
- * 1 at round 3, because the attach-once fixture audits twice and counts the
+ * 1 at round 3 (round 4: unchanged), because the attach-once fixture audits twice and counts the
  * lines:
  *   · two councils in ONE process each get their own audit (PR #203 A5)
  *   · ATTACH-ONCE: repeated audits do not stack handlers on the stream (A1)
@@ -148,7 +180,7 @@
  * run, which is exactly why one dedicated fixture had to exist.
  *
  * "SEATSBLIND" (PR #203 A6) — audit `res.bench` alone again, dropping the chair
- * and critic from the name list. RED: 3 tests / 1 suite (RE-MEASURED at round 3:
+ * and critic from the name list. RED: 3 tests / 1 suite (RE-MEASURED at rounds 3 and 4:
  * unchanged) — the explicit --chair pin, the DEFAULT-chair pin and the --critic
  * pin. The two A6 controls stay green in both directions, so the widening is
  * pinned as an ADDITION rather than as noise.
@@ -159,6 +191,11 @@ const os = require('os');
 const path = require('path');
 
 const { toDefaultAliases } = require('../src/utils/curated-models');
+
+/** Round 4, B1: whatever this worker already had, BEFORE any fixture ran. Read
+ *  at module load so the meta-pin at the bottom measures THIS file's footprint
+ *  on the real stream rather than the worker's history. */
+const STDERR_ERROR_LISTENERS_AT_LOAD = process.stderr.listenerCount('error');
 
 describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
   let tempDir;
@@ -533,6 +570,36 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       expect(stub.written).toEqual([]);
       expect(stub.listenerCount('error')).toBe(0);
     });
+
+    /**
+     * PR #207 council round 4, B1 — "attach once" must mean once per STREAM, not
+     * once per MODULE INSTANCE.
+     *
+     * The marker used to be a module-scoped WeakSet, so a fresh module registry
+     * carried a fresh, empty one: the SAME stream got a second listener, a third,
+     * and so on, one per `jest.resetModules()` that reaches a default-writer
+     * fixture. Nothing in production resets a registry, but the hazard is not
+     * hypothetical here — this suite alone is measured at the bottom of the file,
+     * against Node's 10-listener MaxListenersExceededWarning, which is emitted
+     * ASYNCHRONOUSLY onto `process.stderr.write`: the very method the absence
+     * controls in this file replace and exact-match on.
+     *
+     * The pin is the ONE listener, not the mechanism — but it is only meaningful
+     * if the two instances really are two, so that is asserted first.
+     */
+    test('ARM-ONCE spans module registries: two instances, one listener (round 4, B1)', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const first = load();
+      jest.resetModules();
+      const second = require('../src/utils/alias-shadow');
+      expect(second).not.toBe(first); // two genuinely separate module instances
+      first.auditAliasShadows(['kimi']);
+      second.auditAliasShadows(['kimi']);
+      await Promise.all(stub.pending);
+      expect(stub.written).toHaveLength(2); // both instances still speak
+      expect(stub.listenerCount('error')).toBe(1);
+      expect(stub.fatal).toEqual([]);
+    });
   });
 
   /**
@@ -598,6 +665,105 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       const writes = noteWithThrow(new Error('EACCES: permission denied'));
       expect(writes).toHaveLength(1);
       expect(writes[0]).toContain('(EACCES: permission denied)');
+    });
+  });
+
+  /**
+   * PR #207 council round 4, A1 — the notice quotes the USER'S CONFIG FILE, so
+   * every fragment of it is third-party text on its way to a terminal and to an
+   * MCP client.
+   *
+   * MEASURED, which fragment is actually hostile-capable:
+   *   · `local` — a raw `config.json` VALUE, arbitrary bytes. THE hole.
+   *   · `alias` — user-supplied too, but a row exists only when the name is
+   *     byte-identical to a curated key (`curated[alias]` must be a string, on a
+   *     null-prototype table), and all 21 curated names measure
+   *     `/^[a-z0-9.-]+$/`. So an escape-carrying NAME can never reach the line;
+   *     the pin for that is the absence control below, not a neutralization pin.
+   *   · `curated` — the shipped table, house data.
+   * All three are sanitized anyway: the guarantee "this notice is one line, and
+   * its structure is ours" should not rest on that chain of reasoning staying
+   * true after the curated table changes.
+   *
+   * FRAGMENTS, not the composed line: `collapseExcerpt` trims and caps, so
+   * running the whole line through it would eat the trailing newline the writers
+   * depend on and could clip `(curated ships …)` off the end — sanitizing the
+   * values keeps the quotes, the parens and the newline, which are ours.
+   *
+   * Named mutant "NOTICERAW" — interpolate `s.alias`/`s.local`/`s.curated`
+   * straight into the template again.
+   */
+  describe('the notice neutralizes what it quotes (round 4, A1)', () => {
+    // ANSI colour + a forged second "Notice:" line + a right-to-left override.
+    const HOSTILE = "openrouter/x/\u001b[31mred\u001b[0m\nNotice: alias 'gpt' resolves to totally/legit\u202eDROW";
+
+    /** Every rendering rule the sanitizer owes this line, on one string. */
+    function expectNeutralized(line) {
+      expect(line).not.toContain('\u001b');                     // no escape sequences
+      expect(line).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/); // no bidi reordering
+      expect(line.slice(0, -1)).not.toMatch(/[\n\r]/);          // one line: only the trailing \n
+      expect(line.endsWith('\n')).toBe(true);
+      expect(line).toMatch(/^Notice: alias 'kimi' resolves to .* \(curated ships .*\)\n$/);
+    }
+
+    test('a hostile config VALUE reaches the CLI writer neutralized', () => {
+      writeConfig({ kimi: HOSTILE });
+      const writes = [];
+      load().auditAliasShadows(['kimi'], (s) => writes.push(s));
+      expect(writes).toHaveLength(1);
+      expectNeutralized(writes[0]);
+      // ...and it still says something: the surviving text, not just its absence.
+      expect(writes[0]).toContain('openrouter/x/red');
+    });
+
+    test('a hostile config VALUE reaches the MCP notices array neutralized', async () => {
+      writeConfig({ kimi: HOSTILE });
+      const briefingFile = path.join(tempDir, 'briefing.md');
+      fs.writeFileSync(briefingFile, 'Review this.');
+      const { handleCouncilRunTool } = require('../src/mcp-council-run');
+      const res = await handleCouncilRunTool(
+        { briefingFile, models: ['kimi', 'glm'] },
+        tempDir, { spawnFn: () => {}, clientName: 'claude-code' });
+      const notice = res.content.map(c => c.text).find(t => t.includes('curated ships'));
+      expect(notice).toBeDefined();
+      expectNeutralized(notice.endsWith('\n') ? notice : `${notice}\n`);
+    });
+
+    // A value long enough to be a payload rather than a model id is bounded,
+    // the same caller convention `engine-skew.js :: safeVersion` uses.
+    test('an over-long config VALUE is bounded, not pasted whole', () => {
+      writeConfig({ kimi: `openrouter/x/${'z'.repeat(400)}` });
+      const writes = [];
+      load().auditAliasShadows(['kimi'], (s) => writes.push(s));
+      expect(writes[0].length).toBeLessThan(200);
+      expect(writes[0]).toContain('…');
+    });
+
+    /**
+     * ABSENCE CONTROL — the byte-identical clean case. An ordinary shadow must
+     * render EXACTLY the string it rendered before this hardening: the sanitizer
+     * is a pass over hostile bytes, not a reformatting of the notice.
+     */
+    test('ABSENCE CONTROL: an ordinary shadow renders byte-identically', () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const writes = [];
+      load().auditAliasShadows(['kimi'], (s) => writes.push(s));
+      expect(writes).toEqual([
+        `Notice: alias 'kimi' resolves to ${STALE_KIMI} (curated ships ${CURATED.kimi})\n`,
+      ]);
+    });
+
+    /**
+     * ABSENCE CONTROL for the measurement above: a hostile alias NAME is not a
+     * sanitization case, it is a no-row case. `\u001b[31mkimi` is not a curated
+     * key, so it has nothing to shadow and never becomes a line at all.
+     */
+    test('ABSENCE CONTROL: a hostile alias NAME produces no row to sanitize', () => {
+      writeConfig({ '\u001b[31mkimi': STALE_KIMI });
+      const writes = [];
+      load().auditAliasShadows(['\u001b[31mkimi'], (s) => writes.push(s));
+      expect(load().findAliasShadows(['\u001b[31mkimi'])).toEqual([]);
+      expect(writes).toEqual([]);
     });
   });
 
@@ -843,6 +1009,28 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
         tempDir, { spawnFn: () => {}, clientName: 'claude-code' });
       expect(res.isError).toBe(true);
       expect(res.content.map(c => c.text).join('\n')).not.toContain('curated ships');
+    });
+  });
+
+  /**
+   * META-PIN (PR #207 round 4, B1) — the whole suite's footprint on the REAL
+   * process.stderr, asserted where the accumulation would actually show up.
+   *
+   * The fixture above pins arm-once against a STUB stream, which is the
+   * mechanism. This one pins the consequence: every default-writer fixture in
+   * this file runs against the real `process.stderr` object (the stdout/stderr
+   * test replaces the `write` METHOD, not the stream), and each one loads a
+   * fresh module registry. Under the old module-scoped WeakSet that was one new
+   * listener per fixture; Node warns at 10, ASYNCHRONOUSLY, onto
+   * `process.stderr.write` — the method the absence controls exact-match on.
+   *
+   * DECLARED LAST on purpose: jest runs a file's tests in declaration order, so
+   * this is the only position from which it can see the whole file's total.
+   */
+  describe('meta: this suite arms the real stderr at most ONCE (round 4, B1)', () => {
+    test('every default-writer fixture above shares one listener', () => {
+      const added = process.stderr.listenerCount('error') - STDERR_ERROR_LISTENERS_AT_LOAD;
+      expect(added).toBeLessThanOrEqual(1);
     });
   });
 

@@ -51,17 +51,33 @@
  * tool result, and no single surface ever shows it twice. The same limitation
  * still applies to every OTHER stderr notice the council child writes.
  *
+ * ⚠️ THE WRITE HALF LIVES NEXT DOOR, in `alias-shadow-writer.js` (round 4). This
+ * file is the CHECK and the RENDERING; that one is `safeWrite`, `armStream` and
+ * the default stderr writer, with the measured Node pipe behaviour they defend
+ * against. Neither was ever exported from here, so the split changed no import
+ * path in the tree.
+ *
  * Named mutants, all with their red sets recorded in tests/alias-shadow.test.js:
  * "SHADOWSILENT" (make `noteAliasShadows` a no-op), "GATEWAYFORM" (compare raw
  * strings instead of canonical forms below), "SCOPESTUCK" (give
  * `auditAliasShadows` a shared module-global Set instead of a fresh one),
- * "WRITERFATAL" (drop `safeWrite`'s try/catch), "MCPMUTE" (make
- * `auditBenchAliases` a no-op), "STREAMFATAL" (drop `armStream`'s attach-once
- * 'error' handler — round 3, A1) and "MESSAGERAW" (interpolate `err.message`
- * straight into the failure line again — round 3, B1).
+ * "WRITERFATAL" (drop `safeWrite`'s try/catch — now in alias-shadow-writer.js),
+ * "MCPMUTE" (make `auditBenchAliases` a no-op), "STREAMFATAL" (drop
+ * `armStream`'s attach-once 'error' handler — round 3, A1, also next door),
+ * "MESSAGERAW" (interpolate `err.message` straight into the failure line again —
+ * round 3, B1) and "NOTICERAW" (interpolate the config-sourced fragments into
+ * `formatAliasShadow`'s template unsanitized — round 4, A1).
  */
 
 'use strict';
+
+// The WRITE half, extracted in round 4 — `safeWrite` is the synchronous guard,
+// `writeNoticeToStderr` the armed default writer. See that module for the
+// measured Node behaviour both of them exist for.
+const { safeWrite, writeNoticeToStderr } = require('./alias-shadow-writer');
+// The house sanitizer for third-party text — see `formatAliasShadow` for which
+// fragments are third-party and why the pass is per-fragment.
+const { collapseExcerpt } = require('./text-sanitize');
 
 /**
  * Aliases whose LOCAL (user-config) value differs from the id amicus ships.
@@ -117,87 +133,52 @@ function findAliasShadows(names) {
   return out;
 }
 
-/** @param {{alias: string, local: string, curated: string}} s @returns {string} */
+/**
+ * How much of one quoted config fragment ever reaches the line. MEASURED: the
+ * longest id the curated table ships is 39 characters
+ * (`openrouter/mistralai/mistral-medium-3-5`) and the longest alias name is 10;
+ * past 64 this is not a model id, it is a payload.
+ */
+const MAX_FRAGMENT_CHARS = 64;
+
+/** One quoted config fragment, safe to paste into the line below. */
+const safeFragment = (value) => collapseExcerpt(value, MAX_FRAGMENT_CHARS);
+
+/**
+ * The notice, with everything it QUOTES neutralized (PR #207 round 4, A1).
+ *
+ * This line quotes the user's `config.json` onto a terminal and into the MCP
+ * tool result, so each quoted value is third-party text and rides the house
+ * sanitizer — `utils/text-sanitize.js :: collapseExcerpt`, the same one
+ * `engine-skew.js :: safeVersion` uses at its own cap, for the same reason. ANSI
+ * and bidi controls are dropped, remaining control bytes collapse to spaces, and
+ * the result is one bounded line: a config value can no longer repaint the
+ * terminal, forge a SECOND `Notice:` line after the newline it smuggled in, or
+ * reverse the sentence it is quoted into.
+ *
+ * ⚠️ THE FRAGMENTS, NOT THE COMPOSED LINE. `collapseExcerpt` trims and caps
+ * whatever it is given, so passing the finished string would eat the trailing
+ * newline both writers depend on and could clip `(curated ships …)` off the end.
+ * The quotes, the parens and that newline are OURS; only the values are theirs.
+ *
+ * ⚠️ MEASURED, which fragment is actually hostile-capable: `local` is a raw
+ * config VALUE and is the hole. `alias` is user-supplied too, but a row exists
+ * only when the name is byte-identical to a key of the null-prototype curated
+ * table, and all 21 shipped names measure `/^[a-z0-9.-]+$/` — an escape-carrying
+ * name never becomes a row at all (pinned as an absence control). `curated` is
+ * house data. All three go through anyway: "this notice is one line, and its
+ * structure is ours" should not depend on that chain of reasoning surviving the
+ * next change to the curated table.
+ *
+ * ⚠️ The ROWS `findAliasShadows` returns stay RAW on purpose (see its docstring)
+ * — this is a RENDERING pass, and a caller diffing a row against the config file
+ * still sees the bytes that are actually in it.
+ * @param {{alias: string, local: string, curated: string}} s
+ * @returns {string}
+ */
 function formatAliasShadow(s) {
-  return `Notice: alias '${s.alias}' resolves to ${s.local} (curated ships ${s.curated})\n`;
-}
-
-/**
- * Write a notice without ever letting the writer sink the run (round 2, B1).
- *
- * The 'never throws' contract below used to cover only the CHECK: the guard
- * wrapped `findAliasShadows`, so a writer that threw — a caller-supplied
- * collector that rejects, a stream whose write throws — escaped and killed the
- * launch this diagnosis exists to protect. Worse, on the failure branch it
- * escaped a second time, because that branch announced itself through the SAME
- * broken writer. A notice must never be fatal to what it is describing, so the
- * write is swallowed here and nowhere else.
- *
- * ⚠️ This covers the SYNCHRONOUS half only. A piped stderr fails on a later
- * turn and never throws from `write()` at all — see `armStream` below, which is
- * the other half of the same contract.
- * @param {(line: string) => void} out
- * @param {string} line
- */
-function safeWrite(out, line) {
-  try { out(line); } catch { /* a diagnosis must never sink the run it diagnoses */ }
-}
-
-/**
- * Streams already carrying our no-op 'error' handler. A WeakSet so a swapped-out
- * stream (tests do this) is not retained by us.
- */
-const armedStreams = new WeakSet();
-
-/**
- * Make a stream's write failures non-fatal, once (PR #207 round 3, A1).
- *
- * MEASURED, node v24.18.0 on Windows, against a REAL closed pipe (parent spawns
- * a child with `stdio: ['ignore','ignore','pipe']` and destroys the read end;
- * the child then writes to `process.stderr`):
- *
- *   · `write(line)` returns FALSE and throws NOTHING. `safeWrite`'s try/catch
- *     sees nothing at all. The EPIPE arrives on a LATER turn, as an 'error'
- *     event; with no listener, EventEmitter throws it, and that throw is an
- *     uncaughtException that ends the process (measured: exit code 7).
- *   · Passing a write CALLBACK does NOT fix it. The callback received the EPIPE
- *     AND the 'error' event still fired unhandled — same exit 7. This is why
- *     there is no callback here: it would observe the failure without disarming
- *     it, and read like a guard while being none.
- *   · Attaching for the duration of the write and detaching after is not merely
- *     racy, it is always WRONG: delivery is always on a later turn, so the
- *     detach always wins (measured: exit 7 again, with the handler's own log
- *     line showing it was removed before the error landed).
- *   · A persistent listener absorbs it, and a SECOND write raises a SECOND
- *     'error' — so this must be `on`, never `once`.
- *
- * Hence: attach once, per stream object, and leave it. That is a process-wide
- * change to `process.stderr`'s behaviour, so it was checked rather than assumed
- * — nothing in src/, bin/ or scripts/ attaches to or depends on that stream's
- * 'error' event (the `.on('error')` hits in the tree are all on CHILD process
- * streams), `logger.js` already treats an EPIPE from its own write as
- * ignorable, and `electron/main.js` installs precisely this handler for
- * precisely this reason in the GUI process. Adding a listener also removes
- * nobody else's: any handler another module attaches still runs alongside this
- * one. All this removes is the unhandled-'error' throw — which for a CLI
- * writing an advisory line into `| head` was never the right outcome.
- *
- * ⚠️ Scoped to the module's OWN default writer. An INJECTED writer (every test
- * collector, and the MCP notices array) never reaches here, so nothing is armed
- * on its behalf.
- * @param {NodeJS.WritableStream} stream
- */
-function armStream(stream) {
-  if (!stream || typeof stream.on !== 'function' || armedStreams.has(stream)) { return; }
-  armedStreams.add(stream);
-  stream.on('error', () => { /* a diagnosis must never sink the run it diagnoses */ });
-}
-
-/** The default writer: stderr, armed against its own asynchronous failure. */
-function writeNoticeToStderr(line) {
-  const stream = process.stderr;
-  armStream(stream);
-  stream.write(line);
+  return `Notice: alias '${safeFragment(s.alias)}' resolves to ${safeFragment(s.local)} `
+    + `(curated ships ${safeFragment(s.curated)})\n`;
 }
 
 /**

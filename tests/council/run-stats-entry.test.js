@@ -138,8 +138,11 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
  * `tests/no-output-backstop-wiring.test.js` (the probe's own clock-skew ruling).
  *
  * Named mutant "GATESPLIT" — revert ONE gate to a bare type test. Measured per
- * gate, 2026-08-26, at the shared 8-suite / 323-test scope named in
- * tests/alias-shadow.test.js's header. Every gate has BEHAVIOURAL cover; the
+ * gate, 2026-08-26, at the shared 8-suite scope named in
+ * tests/alias-shadow.test.js's header — 323 tests when these sets were first
+ * taken at round 3, 330 after round 4 grew that file; all four variants were
+ * re-run at 330 and every set below is UNCHANGED. Every gate has BEHAVIOURAL
+ * cover; the
  * structural pins are what make the drift legible when it happens:
  *   · rse           RED 2 / 1 — the dishonest-number row above · "…spells the
  *                   SAME expression by hand"

@@ -865,14 +865,16 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  * `pollIntervalMs` of slack.
  *
  * FIVE named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
- * PR #207 round-3 tree at ONE shared focused scope — 8 suites / 323 tests: this
+ * PR #207 round-4 tree at ONE shared focused scope — 8 suites / 330 tests: this
  * file plus tests/alias-shadow.test.js, tests/sidecar/fanout.test.js,
  * tests/council/run-stats-entry.test.js,
  * tests/council/runstats-byte-order.test.js,
  * tests/scripts/council-review-workflow.test.js,
  * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
- * (The earlier scope was 7 suites / 273 tests, so the TOTALS are not comparable;
- * every per-mutant set below is, and each is marked.)
+ * (The scope was 7 suites / 273 tests before round 3 and 8 / 323 at round 3;
+ * round 4 grew it to 330 with alias-shadow fixtures only. The TOTALS are not
+ * comparable; every per-mutant set below is, each is marked, and all five were
+ * re-run at 330 — every one UNCHANGED.)
  *
  * TTFTDROP — comment out the measure line in src/headless.js's poll loop
  *   (`if (ttftMs === null && substantiveActivity) { ... }`) so the probe never

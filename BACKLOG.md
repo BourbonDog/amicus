@@ -6273,7 +6273,8 @@ minutes to get started"*).
   and **disproved**: a write CALLBACK receives the error and the `'error'` event still fires
   unhandled (exit 7 again), and a scoped attach/detach always loses the race because delivery is
   always on a later turn. Only a persistent listener absorbs it, and a second write raises a
-  second event — so `on`, never `once`. Fix: `alias-shadow.js :: armStream`, an attach-once no-op
+  second event — so `on`, never `once`. Fix: `armStream` (round 4 moved it, with the rest of the
+  write half, to `alias-shadow-writer.js`), an attach-once no-op
   `'error'` handler on the specific stream the default writer uses. Checked, not assumed, before
   taking a process-wide behaviour: nothing in `src/`, `bin/` or `scripts/` attaches to or depends
   on `process.stderr`'s `'error'` event, `logger.js` already ignores its own EPIPE, and
@@ -6285,7 +6286,8 @@ minutes to get started"*).
   bare string printed `(undefined)`. Now extracted first, through a guarded `describeThrown`.
   ⚠️ The obvious repair is not sufficient: `String(Object.create(null))` THROWS (measured), so a
   bare `String((err && err.message) || err)` moves the escape rather than closing it — that case
-  has its own fixture, and it is the ONLY test in the 323-test scope that dies to the naive form.
+  has its own fixture, and it is the ONLY test in the focused scope that dies to the naive form (re-measured at
+  round 4: still the only one, now out of 330).
   Mutant `MESSAGERAW` (3 tests / 1 suite).
   **B2 —** `findAliasShadows`' docstring claimed that omitting `names` inspects "every alias the
   user has configured". It iterates the CURATED keys, which is CORRECT — a shadow needs a curated
@@ -6304,6 +6306,51 @@ minutes to get started"*).
   `GATESPLIT`, measured PER GATE — and the `result-schema` gate needed its own direct fixture,
   because `fanout-leg`'s gate drops the bad value one hop earlier, so a gate whose only exposure
   runs through another gate had no cover at all.
+- ✅ **DONE, PR #207 council round 4 (A1, B1, B3 + singleton B2): the notice neutralizes what it
+  quotes, and "attach once" means once per STREAM.**
+  **A1 —** the notice pastes the user's `config.json` onto a terminal AND into the MCP tool
+  result, and every fragment of it went in RAW: an alias VALUE carrying ANSI, a newline (forging a
+  second `Notice:` line) or a bidi override reached both surfaces intact. Fix at the compose site,
+  `alias-shadow.js :: formatAliasShadow`, through the house sanitizer
+  (`utils/text-sanitize.js :: collapseExcerpt`, cap 64 — the longest curated id measures 39).
+  ⚠️ THE FRAGMENTS, not the composed line: `collapseExcerpt` trims and caps, so passing the
+  finished string would eat the trailing newline both writers depend on and could clip
+  `(curated ships …)` off the end. MEASURED which fragment is actually hostile-capable: only
+  `local` is — a row exists only when the NAME is byte-identical to a key of the null-prototype
+  curated table, and all 21 shipped names are `/^[a-z0-9.-]+$/`, so a hostile name is a NO-ROW case
+  (its own absence control) rather than a sanitizing one. All three fragments go through anyway,
+  so the guarantee does not rest on that argument surviving the next curated-table change. The
+  `findAliasShadows` ROWS stay raw — this is a rendering pass. Mutant `NOTICERAW` (3 tests / 1
+  suite); the byte-identical control stays green under it.
+  **B1 —** `armStream`'s attach-once marker was a module-scoped `WeakSet`, so "once" meant once per
+  MODULE INSTANCE: `jest.resetModules()` re-armed the SAME `process.stderr`, MEASURED at SEVEN
+  listeners across tests/alias-shadow.test.js against Node's 10-listener threshold — and that
+  warning is emitted ASYNCHRONOUSLY onto `process.stderr.write`, the method this feature's absence
+  controls replace and exact-match on. Now keyed ON THE STREAM via `Symbol.for` (the registry is
+  per REALM, so every module instance computes the same key; a module-local `Symbol()` would re-arm
+  exactly like the WeakSet did), defined non-enumerably, and a stream that cannot be MARKED is left
+  unarmed rather than armed without a mark. Mutant `ARMPERMODULE` (2 tests / 1 suite: the
+  cross-registry pin and a suite-wide meta-pin on the real stream's listener count).
+  ⚠️ The write half moved to `src/utils/alias-shadow-writer.js` in the same round — `alias-shadow.js`
+  was at 286/300 and three rounds of measurement prose now hang off `safeWrite`/`armStream`. Nothing
+  there was ever exported, so no import path in the tree changed.
+  **B3 —** CLAUDE.md's generated table listed `CHAIR_DEFAULT()` on the RE-EXPORTER
+  (`cli-handlers-council-run.js`, 3 exports) and omitted it from the DEFINER
+  (`cli-council-run-bench.js`, 6 exports), because `extractExports` keeps only the first five in
+  SOURCE ORDER. Fixed by ordering the definer's `module.exports` so the constant sits inside the
+  cap, with the ruling recorded at the export site; `sanitizeCouncilName` is the name that now
+  falls off the end. Docs regenerated; `generate-docs:check` clean.
+  **Singleton B2 (accepted, real) —** the hoist's own safety argument was stated as two BLANKET
+  claims — "every `last*` tracker is written only here" and "nothing reads them after the loop" —
+  and BOTH are false as written, because `lastAssistantMsgId` is a `last*` tracker the block never
+  writes. The claims are true of the SEVEN trackers the block does write, and that is now an
+  enumerated audit at the site: those seven have exactly one reader outside the block
+  (`lastProgressAt`, in the B53 tool-stall gate, which sat below the block's OLD position too, so
+  their order is unchanged) and none after the loop, while `lastAssistantMsgId` is read here and
+  still written at the bottom of the loop, which is what the one post-loop `last*` reader
+  (`hasAssistantMsg`) sees. The finding asked for "a structural pin or a cited audit of tracker
+  readers"; the audit is the durable half, since a statement-order pin on a poll loop rots faster
+  than the code it guards.
 
 ### Quote the real engine error — #133 root fix
 
