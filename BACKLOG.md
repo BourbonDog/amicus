@@ -6578,6 +6578,17 @@ and top-level `docs/*.md`.
 
 ## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
 
+- [ ] **`auth-json.js` resolves with the same "first existing candidate wins" rule that
+  PR 201's A2 condemned in engine-log** (filed 2026-08-26, W10 fix round — the round-1 fix
+  commit's message claimed this filing one commit early; the edit's anchor missed on this
+  branch and it lands here, miss disclosed). `src/utils/auth-json.js :: resolveAuthJsonPath`
+  takes the first EXISTING candidate, so a stale `$XDG_DATA_HOME/opencode/auth.json` shadows
+  the live `~/.local/share/opencode/auth.json` exactly the way a stale XDG log dir shadowed
+  the live log tree — and engine-log's candidate list was explicitly modeled on this file.
+  The A2 fix shape (union across dirs) may not transfer directly (auth is one document, not
+  a newest-file search) — needs its own ruling on which candidate is authoritative when
+  several exist.
+
 Filed past-tense in the same commit as the fixes, per the falsified-record rule.
 
 - **The `tests/mcp-headless-e2e.integration.test.js` double failure — DECIDED: live-LLM flake,
