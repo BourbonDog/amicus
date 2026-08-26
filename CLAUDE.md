@@ -746,7 +746,7 @@ evals/
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
-| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceCloses()`, `OUTBOUND_FENCE_TAGS()` |
+| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |

@@ -17,6 +17,8 @@
 
 'use strict';
 
+const { collapseExcerpt } = require('../utils/text-sanitize');
+
 /** The MODEL column's width, shared by the header and every cell. Not exported
  *  — `padModel` is, so the width has exactly one home and THIS module's
  *  `Key Exports` cell does not advertise a constant as a function
@@ -89,16 +91,37 @@ function modelCell(row) {
  * prints.
  *
  * Never throws: a listing that cannot be built degrades to the session rows the
- * caller already had, which is exactly today's output.
+ * caller already had — and, since round 3 (B1), SAYS SO. The catch used to be
+ * blanket and mute, so a failed lazy require or a pointer that throws inside
+ * `listCouncilRuns` dropped EVERY council row while the output looked exactly
+ * like a project that has none: a correct-but-silent degrade, which the product
+ * principle rejects as hard as a crash. The failure now leaves through
+ * `opts.onUnavailable` and read.js prints it.
+ *
+ * WHY A SINK AND NOT A RETURN SHAPE (the seam, chosen rather than assumed). The
+ * merge cannot print — it is a pure row function, and its one consumer owns the
+ * two output modes. read.js cannot format either: the notice text belongs beside
+ * the rule it restates, which is why `councilScopeNotice` lives here. So this
+ * function formats and records. An envelope return (`{rows, failure}`) would
+ * rewrite the signature every caller and pin reads, to carry a field that is
+ * null on every call that works; an OPTIONAL sink leaves the array return
+ * byte-identical, fires at the moment of failure, and parks no state a later
+ * call could inherit. The sink is the caller's own function — this module makes
+ * no promise about one that throws.
  * @param {object[]} rows - already-sorted, already-status-filtered session rows
  * @param {string} project
- * @param {{status?: string, all?: boolean}} [opts]
+ * @param {{status?: string, all?: boolean, onUnavailable?: (note: string) => void}} [opts]
  * @returns {object[]}
  */
 function mergeCouncilRows(rows, project, opts = {}) {
   let council;
   try { council = require('../mcp-council-awareness').listCouncilRuns(project); }
-  catch { return rows; }
+  catch (err) {
+    if (typeof opts.onUnavailable === 'function') {
+      opts.onUnavailable(councilUnavailableNotice(err));
+    }
+    return rows;
+  }
   if (opts.status && opts.status !== 'all') {
     council = council.filter(r => r.status === opts.status);
   }
@@ -127,4 +150,29 @@ function councilScopeNotice() {
   return 'council runs: current project only (no cross-project index).';
 }
 
+/**
+ * The merge-failed disclosure, for the human-readable listing (round 3, B1).
+ *
+ * Names the CAUSE, not just the fact: "unavailable" alone would tell the reader
+ * their council rows are missing without telling them why, which is half a
+ * disclosure. The message is a THIRD PARTY's string — an fs error carries a
+ * path, a JSON error carries the bytes it choked on — so it rides the house
+ * sanitizer (`utils/text-sanitize.js :: collapseExcerpt`) like every other
+ * quoted foreign string in the tree: ANSI and bidi controls dropped, remaining
+ * control bytes collapsed to spaces, one line. The cap is 120 rather than that
+ * module's 200 default because this is a LISTING line sitting beside 80- and
+ * 100-column rules, not an error string standing on its own.
+ * @param {Error|*} err whatever the merge's catch caught
+ * @returns {string}
+ */
+function councilUnavailableNotice(err) {
+  const raw = (err && err.message) || String(err);
+  return `council runs: unavailable (${collapseExcerpt(raw, 120)})`;
+}
+
+// `councilUnavailableNotice` is deliberately NOT exported: its one caller is
+// `mergeCouncilRows` in this file (hoisted, so the definition may sit below it),
+// and the string reaches read.js through the sink rather than through an import.
+// The export list stays at four — see the MODEL_COL note above for why the size
+// of this list is worth minding at all.
 module.exports = { padModel, modelCell, mergeCouncilRows, councilScopeNotice };

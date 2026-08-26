@@ -16,14 +16,24 @@
  * ── NAMED MUTANTS with MEASURED red sets ───────────────────────────────────
  * Scope for all of these: this suite + tests/engine-log.test.js + the wiring
  * suite (`npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
- * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 133 tests
- * at HEAD; it read 91 before the round-3 tests, 118 before the text-sanitize
- * extraction and 121 before v4.9 W12's #201 tails — all three retired). RE-RUN
- * 2026-08-26 against the W12 tree, every one of them: the bench grew by 12
- * tests, so no number below is carried. Only the two recorded in
- * tests/engine-log.test.js moved (LOGBLIND, CUTATLASTPAIR); each mutant applied
- * ALONE and reverted, sources restored by byte copy and checksum-verified, never
- * by `git checkout`.
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → **3 suites / 136
+ * tests**; it read 91 before the round-3 tests, 118 before the text-sanitize
+ * extraction, 121 before v4.9 W12's #201 tails and 133 before PR #206's round-1
+ * A1+B2 fix — all four retired).
+ *
+ * ⚠️ THE 133 WAS STALE, and that is what PR #206 round 3 (B5) found: the fix
+ * round added three tests to tests/engine-log.test.js and updated THAT file's
+ * bench record to 136 while this one still described a 133-test tree, so the two
+ * records for one shared bench disagreed about what they had been measured
+ * against. Both now name the same scope and the same count. RE-RUN 2026-08-26
+ * against the round-3 tree, EVERY mutant recorded here — a superseding
+ * measurement, not a renumbering — and every red set below held at its previous
+ * value: the three added tests are resolver-level and none of them is killed by
+ * a parse-layer mutation, which is precisely why a scope can go stale without a
+ * single count moving, and precisely why the counts had to be re-run to know
+ * that. Each mutant applied ALONE and reverted; sources restored by byte copy
+ * and checksum-verified against a pre-mutation SHA-256, never by
+ * `git checkout`.
  *
  * `OWNEDBYOTHER` — `lineIsAboutSession` degrades to `mentionsSession`, the
  *   pre-round-2 behaviour (any whole-token mention wins the line):

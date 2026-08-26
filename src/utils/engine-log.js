@@ -33,11 +33,17 @@
  * re-reads before it is believed, because the engine writes a leg's error WHEN
  * that leg dies — possibly after the cached scan, possibly into a file it has
  * only just rolled over to — so an absence in a previous call's listing and
- * tails is not an absence on disk. The accepted residual runs the other way: a
- * warm HIT may quote a line up to one TTL older than the newest one on disk for
- * this session. That is a genuine ERROR line for this leg from the last ten
- * seconds, which is a true diagnostic; suppression — reporting silence while
- * the cause sits on disk unread — is the failure this module exists to end.
+ * tails is not an absence on disk. The accepted residual runs the other way,
+ * and round 3 states its REAL bound. What a warm HIT serves is the
+ * newest-for-THIS-SESSION line as of the moment the slot was built, so the
+ * TTL bounds the MISSED WINDOW — lines written in the last ≤10 seconds — and
+ * bounds nothing about the AGE of what is served: the GAP between the quoted
+ * line and the line it misses is unbounded, because the cached answer can be
+ * arbitrarily old and still have been newest when it was read. A minutes-old
+ * error can therefore be quoted while a fatal line written two seconds ago
+ * sits unread. What it quotes is still a genuine ERROR line for THIS leg,
+ * which is a true diagnostic; suppression — reporting silence while the cause
+ * sits on disk unread — is the failure this module exists to end.
  *
  * EVERYTHING HERE IS BEST-EFFORT: every path returns null rather than
  * throwing. A log read must never break a leg's death report — the report is

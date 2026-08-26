@@ -478,8 +478,17 @@ span every known project while the council rows do not: council runs are found t
 per-project pointer files and there is no cross-project council index to walk. The CLI says
 so at runtime rather than only here — every human-readable `--all` listing ends with
 `council runs: current project only (no cross-project index).`, under the table or right after
-`No amicus sessions found.` when there is no table. That line is human-surface only: `--json`
+`No amicus sessions found.` when there is no table, and after the `--limit` elision notice when
+one is printed. That line is human-surface only: `--json`
 keeps its shape, on stdout and stderr alike, because no flag can widen the scope it reports.
+If the merge itself cannot run — an unreadable or corrupt council pointer, say — the listing
+still prints the sessions it already had and adds `council runs: unavailable (<reason>)`,
+rather than dropping every council row in silence. It appears with or without `--all` (under
+`--all` it sits just above the scope note), and the reason is the underlying error message,
+sanitised and capped to one line. This one is human-surface only for a *different* reason than
+the scope note: not that nothing could widen it, but that `--json`'s shape is a contract and
+this is prose. The residual that leaves — a `--json` caller reads a well-formed document that
+is silently short — is recorded at the pins in `tests/list-council-merge.test.js`.
 The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,

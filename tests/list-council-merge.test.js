@@ -27,52 +27,76 @@
  * exact `createdAt` tie the session row (concatenated first) stays first.
  *
  * ── NAMED MUTANTS with MEASURED red sets ───────────────────────────────────
- * Scope for all six: `npx jest tests/list-council-merge.test.js
+ * Scope for all eight: `npx jest tests/list-council-merge.test.js
  * tests/list-limit.test.js tests/list-search.test.js
  * tests/mcp-council-list.test.js tests/read-json.test.js --maxWorkers=2` →
- * 5 suites / 68 tests. Measured 2026-08-26, each applied ALONE to
- * src/sidecar/list-council.js (`NOTEALWAYS`/`NOTEINJSON`: src/sidecar/read.js)
- * and reverted; source restored by byte copy and checksum-verified, never by
- * `git checkout`. Every count below was RE-RUN against the round-2 suite, not
- * renumbered from the round-1 record.
+ * **5 suites / 76 tests**. Measured 2026-08-26, each applied ALONE to
+ * src/sidecar/list-council.js (`NOTEALWAYS`/`NOTEINJSON`/`NOTEORDER`:
+ * src/sidecar/read.js) and reverted; source restored by byte copy and
+ * checksum-verified against a pre-mutation SHA-256, never by `git checkout`.
+ *
+ * ⚠️ ROUND 3 RE-RAN ALL SIX ROUND-2 RECORDS: B1 and B4 added eight tests here,
+ * taking the bench 68 → 76, so every number below is a fresh measurement rather
+ * than a carried one. Three moved — NOCOUNCILROWS 19 → 24, NORESORT 5 → 6,
+ * NOSCOPENOTE 3 → 5 — and three held. The "68" reading is superseded, not
+ * renumbered.
  *
  * `NOCOUNCILROWS` — `mergeCouncilRows` returns `rows` untouched, i.e. the
- *   pre-W12 CLI: **1 suite / 19 tests red**, all here. The seven that stay GREEN
- *   are the point, not a gap — "session rows are BYTE-IDENTICAL", "a wave row is
- *   untouched", the three note controls that seed no council run, "the premise
- *   is true" and "a status matching neither row kind" all assert an ABSENCE, and
- *   a merge that never happens satisfies every one of them by construction. The
- *   other four suites stay green too, which is what says the MCP surface was not
- *   disturbed.
+ *   pre-W12 CLI: **1 suite / 24 tests red**, all here (19 before round 3; the
+ *   five new ones are B1's three positive disclosures, which need the merge to
+ *   REACH `listCouncilRuns` before its throw can be seen at all, and B4's two
+ *   ordering pins, which need a council row to be merged before `--limit`
+ *   truncates anything). The ten that stay GREEN are the point, not a gap —
+ *   "session rows are BYTE-IDENTICAL", "a wave row is untouched", the three note
+ *   controls that seed no council run, "the premise is true", "a status matching
+ *   neither row kind" and B1's own three controls (the intact-degrade pin and
+ *   both `--json` pins) all assert an ABSENCE, and a merge that never happens
+ *   satisfies every one of them by construction. The other four suites stay
+ *   green too, which is what says the MCP surface was not disturbed.
  * `UNCAPPEDSTAGE` — the council MODEL cell stops owning its width (returns the
  *   raw `council(<stage>)`): **1 suite / 1 test red**, here — "the widest
- *   RUNNING stage name still leaves the column a space". Precisely scoped: the
- *   cap is pinned independently of the cell's content.
+ *   RUNNING stage name still leaves the column a space". Unmoved by round 3, and
+ *   precisely scoped: the cap is pinned independently of the cell's content.
  * `NORESORT` — council rows are appended instead of merged into the newest-first
- *   order: **1 suite / 5 tests red**, all here — the ordering test, `--limit`
- *   (which slices the top N of that order), `--json` (whose row order is the
- *   document's order), and round 2's two whole-document pins (the
- *   byte-identical listing and B3's exact-spelling row order). The TIE test
- *   stays green by design: appending and a stable re-sort agree on a tie, which
- *   is exactly why the tie needed its own test rather than being read off the
- *   ordering one — and B2's "keeps its concatenation slot" stays green for the
- *   same reason, which is itself the measurement B2 rests on.
+ *   order: **1 suite / 6 tests red**, all here (5 before round 3) — the ordering
+ *   test, `--limit` (which slices the top N of that order), `--json` (whose row
+ *   order is the document's order), round 2's two whole-document pins (the
+ *   byte-identical listing and B3's exact-spelling row order), and B4's
+ *   `--json --limit` control, which reads the one row that survives the slice.
+ *   The TIE test stays green by design: appending and a stable re-sort agree on
+ *   a tie, which is exactly why the tie needed its own test rather than being
+ *   read off the ordering one — and B2's "keeps its concatenation slot" stays
+ *   green for the same reason, which is itself the measurement B2 rests on.
  * `NOSCOPENOTE` — `councilScopeNotice` returns `''`, i.e. the round-1 CLI that
- *   documented the `--all` scope limit without ever saying it: **1 suite / 3
- *   tests red** — A1's three positive assertions (under the table, without a
- *   council row, and on the empty listing). A1's two controls stay green by
+ *   documented the `--all` scope limit without ever saying it: **1 suite / 5
+ *   tests red** (3 before round 3) — A1's three positive assertions (under the
+ *   table, without a council row, and on the empty listing) plus the two round-3
+ *   pins that assert the note's POSITION, B4's order pin and B1's sanitize pin,
+ *   both of which look for it as the last line. A1's two controls stay green by
  *   construction — they assert the note's ABSENCE without `--all` and in
  *   `--json`, which an empty note satisfies.
  * `NOTEALWAYS` — the print loses its `if (all)` gate in read.js's human branch:
- *   **1 suite / 7 tests red**. The intended killer is "WITHOUT --all the human
- *   output is byte-identical"; the other six are row-order assertions that read
- *   the printed `lines()` and now find one more of them. Named because that
- *   byte-identical control is a PRESERVATION pin — green at HEAD by
- *   construction — and a preservation pin without a mutant proves nothing.
+ *   **1 suite / 7 tests red**, unmoved by round 3. The intended killer is
+ *   "WITHOUT --all the human output is byte-identical"; the other six are
+ *   row-order assertions that read the printed `lines()` and now find one more
+ *   of them. Named because that byte-identical control is a PRESERVATION pin —
+ *   green at HEAD by construction — and a preservation pin without a mutant
+ *   proves nothing.
  * `NOTEINJSON` — the EMPTY-listing note loses its `!json` half (read.js's early
- *   return, the one line both modes share): **1 suite / 1 test red**, the
- *   `--json` empty control. The other preservation pin, precisely scoped: it
- *   fails for the guard alone, not for anything about the note's text.
+ *   return, the one line both modes share): **1 suite / 1 test red**, unmoved by
+ *   round 3 — the `--json` empty control. The other preservation pin, precisely
+ *   scoped: it fails for the guard alone, not for anything about the note's text.
+ * `SILENTCATCH` (round 3, B1) — `mergeCouncilRows` restores the blanket
+ *   `catch { return rows; }`: **1 suite / 3 tests red**, all here — B1's three
+ *   positive disclosures. Its three controls stay GREEN by construction: the
+ *   intact-degrade pin asserts the rows a silent catch still prints, and both
+ *   `--json` pins assert the note's ABSENCE, which a merge that never speaks
+ *   satisfies. See the describe's own block for the seam.
+ * `NOTEORDER` (round 3, B4) — read.js's human branch prints the truncation
+ *   notice BELOW the scope note again: **1 suite / 1 test red**, here — B4's
+ *   order pin. Round 2's "as the last line under the table" stays green by
+ *   construction: it drives no `--limit`, so it never sees a second trailing
+ *   line, which is why the `--limit` fixture had to be its own test.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -91,6 +115,9 @@ beforeEach(() => {
 afterEach(() => {
   logSpy.mockRestore();
   errSpy.mockRestore();
+  // Round 3 (B1) drives the merge's catch through a stubbed `listCouncilRuns`;
+  // a leaked stub would make every later test in the file measure the stub.
+  jest.restoreAllMocks();
   fs.rmSync(project, { recursive: true, force: true });
 });
 
@@ -338,6 +365,194 @@ describe('amicus list --all — the scope limit speaks (round 2, A1)', () => {
     expect(JSON.parse(stdout()).map(r => r.id)).toContain('cnlall06');
     expect(stdout()).not.toContain('council runs:');
     expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).not.toContain('council runs:');
+  });
+});
+
+/**
+ * ROUND 3, B1 — a merge that CANNOT run says so; it no longer fails silent.
+ *
+ * `mergeCouncilRows` wraps its lazy `require` and the `listCouncilRuns` call in
+ * one `try`. That was right — a listing must not die because a council pointer
+ * is corrupt — but the `catch` returned the session rows and said NOTHING, so
+ * every council row in the project could vanish from `amicus list` with the
+ * output looking exactly like a project that has none. A correct-but-SILENT
+ * degrade fails the product principle as hard as a crash (README / BACKLOG.md:
+ * self-heal or self-diagnose, ALWAYS transparently), and this is that failure
+ * in its purest form: the degrade is correct, and it is invisible.
+ *
+ * THE SEAM, measured rather than assumed. The merge cannot print — it is a pure
+ * row function and read.js is the only consumer — and read.js cannot format,
+ * because the notice strings live beside the rules they restate
+ * (`src/sidecar/list-council.js :: councilScopeNotice`, the same split as
+ * `list-limit.js :: truncationNotice`). So the merge FORMATS and RECORDS, and
+ * read.js prints. Of the two recording shapes, the return shape was rejected:
+ * `mergeCouncilRows` returns the merged array and every pin in this file reads
+ * it through `listSidecars`, so wrapping it in an envelope would rewrite the
+ * signature to carry a field that is null on every non-failing call. An
+ * OPTIONAL `opts.onUnavailable` sink leaves the array return byte-identical,
+ * pushes at the moment of failure, and keeps no state a later call inherits.
+ *
+ * HUMAN BRANCH ONLY, mirroring `NOTEINJSON`: `--json` is a shape contract, and
+ * this note is prose. The `--json` controls below are what hold that line.
+ *
+ * ⚠️ THE RESIDUAL THAT LEAVES, stated rather than absorbed: a `--json` consumer
+ * still gets no signal that the council rows were dropped — it reads a
+ * well-formed document that is silently short. That is a NARROWER silence than
+ * the one B1 closes (the terminal, where the omission was total and unremarked)
+ * but it is the same KIND, and it is not fixed here. It is also not the scope
+ * note's situation: that note reports a limit no flag can lift, while this one
+ * reports a FAILURE a caller could act on, which is the argument for eventually
+ * putting it on stderr the way the truncation notice goes. Deliberately out of
+ * scope for round 3 — moving it would change what a `--json` run writes to a
+ * stream some caller may already be reading — and recorded here so the next
+ * round decides it on purpose rather than inheriting it by omission.
+ *
+ * ── NAMED MUTANT `SILENTCATCH` ────────────────────────────────────────────
+ * MUTATION: in src/sidecar/list-council.js :: mergeCouncilRows, restore the
+ * blanket `catch { return rows; }` — the merge still degrades correctly and
+ * again does it in silence.
+ * MEASURED 2026-08-26, RED SET 3 of 76, applied and reverted by byte copy
+ * (restore checksum-verified). Same 5-suite scope as the file's other records:
+ *   list-council-merge 3 — the three positive disclosures below ("NAMES the
+ *     failure", "an EMPTY listing carries it too", "the message is SANITIZED").
+ * ⚠️ THREE of the six pins below stay GREEN by construction, and they are
+ * controls rather than gaps. "…the rows the caller already had are still
+ * printed" is a PRESERVATION pin — a silent catch degrades to exactly those rows,
+ * which is the property it exists to hold — and both `--json` pins assert the
+ * note's ABSENCE, which a merge that never speaks satisfies. That is why the
+ * three positives are the detector and these three are not.
+ * ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+ */
+describe('amicus list — an unavailable merge is DISCLOSED (round 3, B1)', () => {
+  const SCOPE = 'council runs: current project only (no cross-project index).';
+  /** Break the enumerator the merge lazily requires, exactly as a corrupt
+   *  pointer or a failed require would. Restored by `jest.restoreAllMocks`. */
+  const breakCouncil = (message) => jest
+    .spyOn(require('../src/mcp-council-awareness'), 'listCouncilRuns')
+    .mockImplementation(() => { throw new Error(message); });
+
+  it('the human listing NAMES the failure instead of degrading in silence', async () => {
+    breakCouncil('ENOENT: council-cnl00009.json');
+    seedSession('sesb1001', { createdAt: '2026-07-19T01:00:00.000Z' });
+    await listSidecars({ project });
+    expect(stdout()).toContain('council runs: unavailable (ENOENT: council-cnl00009.json)');
+  });
+
+  it('…and the rows the caller already had are still printed — the degrade is intact', async () => {
+    breakCouncil('boom');
+    seedSession('sesb1002', { createdAt: '2026-07-19T01:00:00.000Z' });
+    await listSidecars({ project });
+    const age = formatAge('2026-07-19T01:00:00.000Z');
+    expect(rowFor('sesb1002')).toBe(
+      'sesb1002'.padEnd(10) + 'vendorx/model-a'.padEnd(23) + 'complete'.padEnd(11)
+      + ''.padEnd(12) + age.padEnd(12) + 'ordinary session briefing');
+    expect(lines()[0]).toBe(
+      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11)
+      + 'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING');
+  });
+
+  it('an EMPTY listing carries it too — that is where the vanished rows hid best', async () => {
+    breakCouncil('pointer file is not JSON');
+    await listSidecars({ project });
+    expect(stdout()).toContain('No amicus sessions found.');
+    expect(stdout()).toContain('council runs: unavailable (pointer file is not JSON)');
+  });
+
+  it('the message is SANITIZED and capped — one line, no control bytes', async () => {
+    // The message is a third party's string (an fs error carries a path, a JSON
+    // parse error carries the bytes it choked on). It rides the house sanitizer
+    // — `utils/text-sanitize.js :: collapseExcerpt` — like every other quoted
+    // third-party string in the tree, so it cannot smuggle ANSI, a bidi
+    // override, or a second line into a listing.
+    // Control bytes and bidi controls as `\u….` escapes, never literals
+    // (the house rule this repo's other sanitizer suites keep: a literal ESC
+    // makes the file binary to `grep`, and a literal RLO in source IS the
+    // attack the sanitizer exists to strip).
+    breakCouncil(`\u001b[31mred\u202e\nrow2\t${'z'.repeat(400)}`);
+    seedSession('sesb1003', { createdAt: '2026-07-19T01:00:00.000Z' });
+    await listSidecars({ project, all: true });
+    const note = lines().find(l => l.startsWith('council runs: unavailable ('));
+    expect(note).toBeDefined();
+    // eslint-disable-next-line no-control-regex
+    expect(note).not.toMatch(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/);
+    expect(note).toContain('red row2 z');
+    expect(note.length).toBeLessThanOrEqual(160);
+    // …and it sits ABOVE the scope note, which still closes the listing (B4).
+    expect(lines().indexOf(SCOPE)).toBe(lines().indexOf(note) + 1);
+    expect(lines()[lines().length - 1]).toBe(SCOPE);
+  });
+
+  it('--json stdout is untouched — the note is prose, and prose is not the contract', async () => {
+    breakCouncil('boom');
+    seedSession('sesb1004', { createdAt: '2026-07-19T01:00:00.000Z' });
+    await listSidecars({ project, json: true });
+    expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['sesb1004']);
+    expect(stdout()).not.toContain('council runs:');
+    expect(errSpy.mock.calls.map(c => String(c[0])).join('\n')).not.toContain('council runs:');
+  });
+
+  it('…including the EMPTY --json listing, the one line both modes share', async () => {
+    breakCouncil('boom');
+    await listSidecars({ project, json: true });
+    expect(stdout()).toBe('No amicus sessions found.');
+  });
+});
+
+/**
+ * ROUND 3, B4 — the scope note is the LAST line, `--limit` included.
+ *
+ * docs/usage.md says every human-readable `--all` listing ENDS with the note.
+ * It did not: the truncation notice was printed after the human/JSON fork, so
+ * under `--all --limit N` the order was rows → note → `Showing N of M`, and the
+ * documented sentence was false on exactly the combination that produces two
+ * trailing lines. The notices are now both inside the human branch, ordered so
+ * the scope note closes the listing.
+ *
+ * WHY THAT ORDER and not the reverse. The truncation notice is about the ROWS
+ * (this many of that many); the scope note is about the LISTING (a whole class
+ * of row was never looked for). The narrower qualifier sits nearer the rows it
+ * qualifies, and the standing one closes — which is also the order the docs
+ * already committed to.
+ *
+ * ── NAMED MUTANT `NOTEORDER` ──────────────────────────────────────────────
+ * MUTATION: in src/sidecar/read.js :: listSidecars, move the truncation print
+ * back below the scope note inside the human branch — i.e. the pre-round-3
+ * order, with the fork left as it is now.
+ * MEASURED 2026-08-26, RED SET 1 of 76, applied and reverted by byte copy
+ * (restore checksum-verified). Same 5-suite scope as the file's other records:
+ *   list-council-merge 1 — "the truncation notice prints BEFORE the scope note"
+ *     below.
+ * ⚠️ The round-2 pin "as the last line under the table" stays GREEN by
+ * construction: it drives no `--limit`, so it never sees a second trailing line
+ * — which is exactly why the `--limit` fixture had to be its own test rather
+ * than an assertion bolted onto that one. The `--json --limit` control below
+ * stays green too, and honestly: this mutant never touches the JSON branch.
+ * ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+ */
+describe('amicus list --all --limit — the scope note still ends it (round 3, B4)', () => {
+  const NOTE = 'council runs: current project only (no cross-project index).';
+
+  it('the truncation notice prints BEFORE the scope note, which is still last', async () => {
+    seedSession('sesb4001', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlb4001', 'running', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, all: true, limit: 1 });
+    const out = lines();
+    const trunc = out.indexOf('Showing 1 of 2 sessions (--limit 1). Use --limit 0 for all.');
+    expect(trunc).toBeGreaterThan(-1);
+    expect(out.indexOf(NOTE)).toBe(trunc + 1);
+    expect(out[out.length - 1]).toBe(NOTE);
+  });
+
+  it('--json --limit keeps the notice on stderr and the note off both streams', async () => {
+    // The fork's other half, unmoved: a script still parses stdout whole, and
+    // the cap it CAN raise is still announced — on stderr, where it always was.
+    seedSession('sesb4002', { createdAt: '2026-07-19T01:00:00.000Z' });
+    seedCouncil('cnlb4002', 'running', '2026-07-19T02:00:00.000Z');
+    await listSidecars({ project, all: true, limit: 1, json: true });
+    expect(JSON.parse(stdout()).map(r => r.id)).toEqual(['cnlb4002']);
+    const err = errSpy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(err).toContain('Showing 1 of 2 sessions');
+    expect(err).not.toContain('council runs:');
   });
 });
 

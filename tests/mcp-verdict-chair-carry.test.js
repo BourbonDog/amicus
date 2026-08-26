@@ -137,7 +137,12 @@ test('a hand-trimmed record that DROPS meta.intent loses task mode — nothing e
 
 test('amicus_verdict\'s `record` parameter WARNS that meta.intent must survive a hand trim', () => {
   const tool = getTools().find(t => t.name === 'amicus_verdict');
-  const describe_ = tool.inputSchema.record._def.description;
+  // Round 3 (C2): the PUBLIC `.description` accessor, not zod-private `_def`.
+  // MEASURED on this tree's zod (3.25.76) rather than assumed: the two are
+  // `===` the same string here, so the swap is byte-identical today — and it
+  // is the documented surface, which is what makes it still true after a zod
+  // internals change that `_def` would not survive.
+  const describe_ = tool.inputSchema.record.description;
   expect(describe_).toMatch(/meta\.intent/);
   // Says what is lost, not merely that something is: a warning a caller can act
   // on has to name the consequence.

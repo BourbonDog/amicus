@@ -141,7 +141,11 @@
  *   positive cases. Both C1 controls stay green by design.
  * `OWNEDBYOTHER`, `BAREMENTION`, `WHOLELINEFIELDS`, `LOGFMTFIRST`,
  *   `ERRORANYWHERE`, `RAWEXCERPT`, `NOBIDI` — the parse-layer mutants; their red
- *   sets are recorded in tests/utils/engine-log-parse.test.js.
+ *   sets are recorded in tests/utils/engine-log-parse.test.js. That file's whole
+ *   bench (those seven plus `LEVELANYWHERE`) was RE-RUN at this same 3-suite /
+ *   136-test scope in PR #206 round 3 (B5), and every count held; what was stale
+ *   there was the SCOPE — it still described the 133-test tree this file's record
+ *   had already moved past.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -523,15 +527,19 @@ describe('engineErrorForSession: bounded reads', () => {
  * warm, which keeps the wave-sharing win, and the byte budget (MAX_SCAN_BYTES)
  * is what makes a miss-rescan affordable on the death path.
  *
- * THE RESIDUAL, stated rather than absorbed: a warm HIT can still serve an
- * excerpt up to one TTL older than the newest line on disk for that session —
- * "a cold call once the TTL has passed…" below pins exactly that, at 9,999 ms.
- * That is accepted, not overlooked: what it serves is a genuine ERROR line for
- * THIS session from within the last ten seconds, so the leg's death report
- * quotes the engine truthfully; the only cost is that a still-newer line for
- * the same session waits for the window to close. Suppression — reporting
- * silence while the cause sits on disk unread — is the failure this module
- * exists to end, and that is what the miss bypass removes.
+ * THE RESIDUAL, stated rather than absorbed, and with the bound round 3 got
+ * right: what a warm HIT serves is the newest-for-THIS-SESSION line as of the
+ * moment the slot was built. The TTL therefore bounds the MISSED WINDOW — lines
+ * written in the last ≤10 seconds — and bounds NOTHING about the age of what is
+ * served: the gap between the quoted line and the line it misses is unbounded,
+ * since a cached answer can be arbitrarily old and still have been newest when
+ * it was read. A minutes-old error can be quoted while a fatal line written two
+ * seconds ago sits unread. "a cold call once the TTL has passed…" below pins the
+ * window, at 9,999 ms. It is accepted, not overlooked: what it quotes is a
+ * genuine ERROR line for THIS session, so the leg's death report quotes the
+ * engine truthfully, and the newer line waits only for the window to close.
+ * Suppression — reporting silence while the cause sits on disk unread — is the
+ * failure this module exists to end, and that is what the miss bypass removes.
  */
 describe('engineErrorForSession: the death-path scan is memoized (#201 C2)', () => {
   /** Real fs, counting the calls a repeated scan is supposed to stop making. */

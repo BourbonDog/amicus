@@ -6646,7 +6646,8 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   `engine-skew.js` (10) and `engine-skew-records.js` (8) each keep five FUNCTIONS in the
   window and the cap hides the rest — and it does not reach a 3-export module. Dropping the
   export is not available either: `tests/utils/outbound-fence-defang.test.js` reads
-  `OUTBOUND_FENCE_TAGS` as the LIVE close-tag vocabulary, which is the whole point of there
+  `OUTBOUND_FENCE_TAGS` as the LIVE fence vocabulary (close tags only when this was written;
+  both ends since PR #206 round 3 B3b), which is the whole point of there
   being one list. Recorded at the export site and in `sidecar/list-council.js`'s header, which
   cited the no-constant rule as if the generator enforced it.
 
@@ -6756,16 +6757,19 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   `:600` that predates v4.9); re-derive each against the tree at fix time, not from the
   numbers here.
 
-- [ ] **The INBOUND fence does not defang its own close tag (observed at the W12 wave
-  review, 2026-08-26).** W12's `defangOutboundFenceCloses` (`src/utils/untrusted-fence.js`)
-  neutralizes house OUTBOUND close tags inside embedded bodies at both outbound surfaces —
+- [ ] **The INBOUND fence does not defang its own tags (observed at the W12 wave
+  review, 2026-08-26).** W12's `defangOutboundFenceTags` (`src/utils/untrusted-fence.js`;
+  named `defangOutboundFenceCloses` until PR #206 round 3 widened it to open tags too)
+  neutralizes house OUTBOUND tags inside embedded bodies at both outbound surfaces —
   but `fenceSidecarOutput` in the same file leaves its own close tag live, so sidecar output
   containing `</untrusted_sidecar_output>` still terminates the inbound fence early and the
   remainder reads as trusted text. The 200-series scoping (B2/C2 = outbound family only) was
   deliberate, so this is a fresh candidate, not a W12 violation. The fix shape already
   exists: run the same entity-escape over the inbound body before fencing (one helper, one
   tag list — extend `OUTBOUND_FENCE_TAGS` or a sibling constant; keep the author-spelling
-  and byte-identity-on-clean-text properties the outbound pins established).
+  and byte-identity-on-clean-text properties the outbound pins established). Round 3's
+  B3(a) applies here too: the escape is a SOFT boundary — defense in depth on top of the
+  preamble, not a parser guarantee — so say so wherever it lands.
 - [ ] **CI council glm/qwen stage-1 deaths: provider-side silent stall, MEASURED across all six
   2026-08-26 council runs (evidence-first recon; extends issue #202 from hypothesis to data).**
   Every dead leg is `NO_OUTPUT_BACKSTOP` at the deadline to the decisecond with ZERO tokens —
