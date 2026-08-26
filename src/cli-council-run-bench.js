@@ -4,8 +4,9 @@
  * Exports parseList, sanitizeCouncilName, resolveBench — extracted verbatim
  * from cli-handlers-council-run.js (v4.7 PR0). ⚠️ v4.9 W13 split `resolveBench`
  * into a private `resolveBenchCore` (the extracted body, still verbatim) plus a
- * thin exported wrapper that owns the ONE alias-shadow notice site; the export
- * name, its arguments and its return shapes are unchanged.
+ * thin exported wrapper that owns the CLI's alias-shadow notice site (the MCP
+ * surface has its own, in mcp-council-bench.js — PR #207 round 2, A1); the
+ * export name, its arguments and its return shapes are unchanged.
  * ⚠️ The top-level cli*.js name is LOAD-BEARING: the known-flags source scan
  * covers only src/cli*.js, and resolveBenchCore reads args['dropped-members'].
  */
@@ -74,8 +75,9 @@ function sanitizeCouncilName(name) {
  * --council, and the min-seat rule lives in both callers, not here) — change
  * a validation rule on one side, change the other.
  *
- * ⚠️ Not exported directly — `resolveBench` below wraps it so the alias-shadow
- * notice has exactly ONE site. Keep new return shapes going through that wrapper.
+ * ⚠️ Not exported directly — `resolveBench` below wraps it so this transport's
+ * alias-shadow notice has exactly ONE site. Keep new return shapes going through
+ * that wrapper.
  */
 function resolveBenchCore(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();
@@ -117,13 +119,17 @@ function resolveBenchCore(args, useJson) {
 }
 
 /**
- * `resolveBenchCore` plus the ONE alias-shadow notice site (v4.9 W13 Task B,
+ * `resolveBenchCore` plus the CLI's alias-shadow notice site (v4.9 W13 Task B,
  * BACKLOG C5). This is the shared bench-resolution helper BOTH council
  * transports execute: `mcp-council-run.js` always spawns the CLI child with an
  * already-expanded `--models` list (never `--council`), so the MCP path
  * re-enters here exactly like a hand-typed `amicus council run`. Measured, not
- * assumed — see tests/alias-shadow.test.js's header, and see alias-shadow.js's
- * own docblock for where the resulting line does and does NOT surface.
+ * assumed — see tests/alias-shadow.test.js's header.
+ *
+ * ⚠️ EXECUTES on both transports, SURFACES on one. The child's stderr is a
+ * `debug.log` fd, so the line this site writes never reaches an MCP client;
+ * `mcp-council-bench.js :: auditBenchAliases` is the parallel site that puts it
+ * on the tool result (PR #207 round 2, A1). See alias-shadow.js's own docblock.
  *
  * Wrapped rather than called from each `return`, so the rule cannot grow a twin
  * as branches are added. A rejected bench carries no `bench` key and is

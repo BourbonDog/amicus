@@ -19,7 +19,7 @@ const { isPathInside } = require('./project-root-allowlist');
 const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 // v4.6 Plan 4 Task 4b: resolveBenchInput moved to its own leaf (size gate) —
 // see mcp-council-bench.js's module docblock for why.
-const { resolveBenchInput } = require('./mcp-council-bench');
+const { resolveBenchInput, auditBenchAliases } = require('./mcp-council-bench');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -118,6 +118,9 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (critic && !bench.includes(critic)) {
     return textResult(`Critic '${critic}' must be one of the bench seats (${bench.join(', ')}).`, true);
   }
+  // PR #207 round 2 (A1): the MCP surface for the alias-shadow notice — the CLI
+  // seam runs in the child, whose stderr is a debug.log fd no client ever reads.
+  auditBenchAliases(bench, chair, critic, notices);
   const lenses = Array.isArray(input.lenses) && input.lenses.length ? input.lenses : null;
   if (critic && lenses) { return textResult('critic and lenses are mutually exclusive in v4.0.', true); }
   if (lenses && lenses.length !== bench.length) {
@@ -276,7 +279,8 @@ async function handleCouncilRunTool(input, project, helpers) {
   const content = [{ type: 'text', text: fenceSidecarOutput(body) }];
   // v4.5 Task 15: pack/template notices (e.g. a bench-override) are non-fatal —
   // surfaced as extra unfenced content blocks, same precedent as
-  // mcp-server.js's routeResult.notice (amicus_start).
+  // mcp-server.js's routeResult.notice (amicus_start). PR #207 round 2 (A1)
+  // added a third producer: the alias-shadow lines from auditBenchAliases.
   for (const n of notices) { content.push({ type: 'text', text: n }); }
   return { content };
 }

@@ -6233,16 +6233,25 @@ minutes to get started"*).
   printed every run) — so the kimi id and the `:112` line cited above are the dated 2026-08
   reading, not the tree. TTFT capture (the other half of this section) shipped the same wave
   as the probe (`ttftMs`, emit-when-set, R12: no derivation).
-- ⚠️ **The alias-shadow notice does not reach an MCP caller.** MEASURED (PR #203 round 1,
-  finding A4): `mcp-server.js :: spawnSidecarProcess` spawns the council child with
-  `stdio: ['ignore', 'ignore', <fd>]`, the fd being an open handle on `<runDir>/debug.log`
-  (or `'ignore'` when that dir cannot be created), and then `unref`s it — so the child's
-  stderr is a FILE, never a pipe the server reads and never anything the client sees. Both
-  transports run the check; only the CLI surfaces it. An MCP user has to open
-  `<runDir>/debug.log`. Giving it a real MCP channel (a notification, a field on the tool
-  result, or a line in the run document) is a transport change, not a diagnosis, and was
-  deliberately left out of W13's round-1 fix wave. Same limitation applies to every other
-  stderr notice the council child writes.
+- ✅ **DONE, PR #207 council round 2 (finding A1): the alias-shadow notice reaches MCP callers.**
+  Round 1 (finding A4) MEASURED that it did not: `mcp-server.js :: spawnSidecarProcess` spawns
+  the council child with `stdio: ['ignore', 'ignore', <fd>]`, the fd being an open handle on
+  `<runDir>/debug.log` (or `'ignore'` when that dir cannot be created), and then `unref`s it —
+  so the child's stderr is a FILE, never a pipe the server reads and never anything the client
+  sees. Both transports ran the check; only the CLI surfaced it. Round 1's disposition was
+  measure-and-document; the council re-raised it, so a second notice site now writes to the MCP
+  surface: `mcp-council-bench.js :: auditBenchAliases`, called from
+  `mcp-council-run.js :: handleCouncilRunTool` right after bench/chair/critic resolution, pushes
+  the lines into that handler's per-call `notices` array, which was already assembled into the
+  tool result as extra content blocks. **Lever measured, two candidates:** the
+  `utils/update-notice.js :: maybeAppendUpdateNotice` wrapper was REJECTED — its `_noticeShown`
+  is a per-PROCESS latch that fires once per server lifetime on whichever tool result is first,
+  which would re-introduce finding A5's silence on a new surface and has no access to the bench.
+  CLI output is unchanged and byte-identical (the parent writes into an array, never a stream);
+  the child still writes its own copy to `debug.log`, so the two surfaces never double-print.
+  Named mutant `MCPMUTE` (3 tests / 1 suite); three absence controls stay green both ways.
+  ⚠️ The underlying `debug.log` limitation still applies to every OTHER stderr notice the
+  council child writes — only the alias-shadow line has a real MCP channel.
 
 ### Quote the real engine error — #133 root fix
 

@@ -492,15 +492,26 @@ describe('runFanout orchestrator', () => {
    * Named mutant NULLGUARD: delete the leading `result &&`. RED measured
    * 2026-08-26 at the 7-suite/273-test focused scope — 1 test / 1 suite, this
    * one. It is the whole red set, which is the honest cost of a shape pin.
+   *
+   * ⚠️ PR #207 council round 2 (B2): this used to be
+   * `expect(src).toContain('<the exact source line>')`, which pinned the
+   * FORMATTING as tightly as the guard — a line wrap, a quote-style change or
+   * one added space broke the suite for a reason that had nothing to do with
+   * the null guard it exists to defend. Whitespace is collapsed first and the
+   * expression is matched as an ordered TOKEN sequence instead, so the pin
+   * survives any reformat and still dies to NULLGUARD (re-measured below).
    */
   it('the on-disk ttftMs hop keeps the `result &&` guard its siblings use (PR #203 A3/C1)', () => {
     const src = fsReal.readFileSync(
       pathReal.join(__dirname, '..', '..', 'src', 'sidecar', 'fanout-leg.js'), 'utf-8');
-    expect(src).toContain(
-      'ttftMs: result && typeof result.ttftMs === \'number\' ? result.ttftMs : undefined,');
+    const norm = src.replace(/\s+/g, ' ');
+    // Tokens in order: the `result &&` null guard, THEN the `typeof` number
+    // check, THEN the pass-through/undefined arms. Quote style is free.
+    expect(norm).toMatch(
+      /ttftMs:\s*result\s*&&\s*typeof\s+result\.ttftMs\s*===\s*['"]number['"]\s*\?\s*result\.ttftMs\s*:\s*undefined/);
     // …and the `typeof` half survives alongside it: `result && result.ttftMs`
     // alone would resurrect the 0-eating bug the guard shape exists to avoid.
-    expect(src).not.toMatch(/ttftMs:\s*result\s*&&\s*result\.ttftMs\s*\|\|/);
+    expect(norm).not.toMatch(/ttftMs:\s*result\s*&&\s*result\.ttftMs\s*\|\|/);
   });
 
   // A first substantive tick observed inside the first poll is a real 0, and 0
