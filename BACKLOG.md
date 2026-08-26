@@ -6933,6 +6933,13 @@ and top-level `docs/*.md`.
 
 ## v4.9 records — dispositions and rulings made in-cycle (2026-08-25)
 
+**✅ v4.9.0 RELEASED 2026-08-26** — tag `v4.9.0` → `68465b39`, npm `amicus@4.9.0` (OIDC publish),
+GH Release live. Cut gates: 580 suites / 8918 tests green; keyless + LIVE integration 0 failures
+(the one skip = mcp-repomix-e2e's documented fixture gate); six-place version pin; thirteen v4.9
+plan docs pruned in the cut. Issues #134/#130/#146/#133 closed; #135 stays open (C2 derivation
+waits for ttftMs observations). Open items in this section remain open — the checkboxes below are
+the durable post-4.9 worklist.
+
 Filed past-tense in the same commit as each fix, per the falsified-record rule.
 
 - [ ] **`src/utils/engine-skew.js` sits at 300/300 lines after PR 201 round 3 (2026-08-26)** — the
