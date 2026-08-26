@@ -8,7 +8,8 @@ const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings, buildValidateDoc } = require('./council/findings');
-const { buildVerdict, readOverallVerdict, readPriorVerdictSurfaces, writeVerdictAtomic } = require('./council/verdict');
+const { buildVerdict, readOverallVerdict, readPriorVerdictSurfaces, readPriorVerdictIntent,
+  writeVerdictAtomic } = require('./council/verdict');
 const { readRun } = require('./council/run-state');
 const {
   runSave: runCouncilSave,
@@ -206,19 +207,24 @@ function runVerdict(args, useJson) {
     // chair-output.md); tally.json carries no copy. Recover it from the RUN
     // folder — the tally's own directory, not `-o` — before rebuilding.
     const runDir = path.dirname(path.resolve(tallyPath));
-    // v4.9 fix round 2 (council B1/C2/C1): the run's INTENT decides which chair
-    // scale this rebuild may read, and rides onto the rebuilt document. TWO
-    // carriers, because neither alone covers both legs: the record's own
-    // `meta.intent` is what the run dir's tally.json carries (tally.js copies
-    // meta verbatim) but a hand-assembled or MCP-supplied record has none, and
-    // `run.json`'s checkpoint (run.js :: runCouncil) covers exactly that leg.
-    // Both are emit-when-'task', so absent/unreadable on both = review — the
-    // fail-closed direction, and what every pre-v4.9 run is.
-    // ⚠️ PR #200 C2: the run.json read carries the SAME runId guard as both of
-    // its siblings — readOverallVerdict (verdict.js:255) and
-    // readPriorVerdictSurfaces (verdict.js:279) — `!runId || doc.runId === runId`, waived
+    // v4.9 fix round 2 (council B1/C2/C1), extended by fix round 3 (C3): the
+    // run's INTENT decides which chair scale this rebuild may read, and rides
+    // onto the rebuilt document. THREE carriers, because no one of them covers
+    // every leg: the record's own `meta.intent` is what the run dir's tally.json
+    // carries (tally.js copies meta verbatim) but a hand-assembled or
+    // MCP-supplied record has none; `run.json`'s checkpoint (run.js ::
+    // runCouncil) covers that leg but can itself be absent or foreign; and the
+    // run folder's own prior verdict.json carries the key too (verdict.js ::
+    // buildVerdict writes it), which is the last document standing when the
+    // other two are missing. All three are emit-when-'task', so they combine as
+    // a DISJUNCTION — absence is no vote, not a vote for review — and
+    // absent/unreadable on all three = review, the fail-closed direction and
+    // what every pre-v4.9 run is.
+    // ⚠️ PR #200 C2 + C3: the run.json and verdict.json reads carry the SAME
+    // runId guard as their siblings — verdict.js :: readOverallVerdict and
+    // verdict.js :: readPriorVerdictSurfaces — `!runId || doc.runId === runId`, waived
     // only when the RECORD names no run, never when the DOCUMENT does not.
-    // Without it a stale or foreign run.json in the folder hands this rebuild
+    // Without it a stale or foreign document in the folder hands this rebuild
     // another run's intent, and intent SELECTS THE CHAIR PARSER in the
     // readOverallVerdict call just below — so the leak can also change
     // overallVerdict to a phrase off the wrong scale, exactly the failure the
@@ -226,7 +232,8 @@ function runVerdict(args, useJson) {
     const runDoc = readRun(runDir);
     const ownRunDoc = runDoc && (!record.meta.runId || runDoc.runId === record.meta.runId);
     const intent = (record.meta && record.meta.intent === 'task')
-      || (ownRunDoc && runDoc.intent === 'task') ? 'task' : 'review';
+      || (ownRunDoc && runDoc.intent === 'task')
+      || readPriorVerdictIntent(runDir, record.meta.runId) === 'task' ? 'task' : 'review';
     const overallVerdict = readOverallVerdict(runDir, record.meta.runId, intent);
     // #87: tally.json carries neither seatLoss nor degrades — recover both from
     // the run folder's verdict the same way the chair line is recovered.

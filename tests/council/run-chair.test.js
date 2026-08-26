@@ -477,6 +477,32 @@ describe("task-mode promotion announcement (v4.9 W5.4 — 'ledger-skipped')", ()
     expect('data' in notes[0]).toBe(false);
   });
 
+  /**
+   * PR #200 round-3 finding A2, MEASURED and refuted. The finding read the note
+   * as firing once per FAILED CHAIR ATTEMPT and called the "announced once"
+   * comment false. It is not: the note sits in the else-arm of the whole
+   * fallback walk (ch1 and ch2 have already resolved by then), so it is reached
+   * at most once per runChair — and runChair is called exactly once per run.
+   *
+   * The pin above already covered TWO failed attempts. This one drives the
+   * longest walk there is — ch1, ch2 AND the promoted ch3 all failing, so the
+   * run gives up with no chair at all — because that is the walk a
+   * once-per-attempt defect would show up in most loudly. Still exactly one
+   * note. (No flag was added; a flag could only make a once-reached branch fire
+   * less than once.)
+   */
+  test('the LONGEST walk — ch1, ch2 and ch3 all failing — still emits exactly ONE info note', async () => {
+    const script = promotionScript('ANSWER: Converged');
+    script['abc123-ch3'] = () => okWave([mkLeg('grok', '', 'error')], 1, 'error');
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);                                  // gave up: no chair synthesis
+    expect(run.chairAttempts).toHaveLength(3);                 // the walk really did run three times
+    expect((run.degrades || []).filter(d => d.channel === 'ledger-skipped')).toHaveLength(1);
+  });
+
   test('review-run control: the same promotion walk WITHOUT intent emits no such note', async () => {
     const { exitCode, run } = await runCouncil(baseOptions(tmp), {
       launchers: scriptedLaunchers(promotionScript('VERDICT: Ship it')),

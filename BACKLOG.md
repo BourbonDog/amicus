@@ -4417,7 +4417,8 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
     `grep -rn uniqueModels src/` — no hits); `artifact-guard.js:101` now gates every artifact read
     through this same `artifactAllowlist`, imported at `artifact-guard.js:25`.
 
-- [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
+- [ ] **PR4 · `verdict-seat-loss.js :: deriveSeatLoss` (extracted out of `verdict.js` by PR
+  #200's round-3 fix; the old `:68`/`:71` line citations went with it) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-dead-seats.js :: deadSeats` and
   `workspace-ui/workspace-seats.js :: retriedSeats` — gate on
   `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** (⚠️ **Both citations were re-derived and
@@ -6624,9 +6625,10 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   corrected by PR 200's fix round (council B1/C2): this said "the both-scale fallback (the W7
   fix-round F2 change)", which no longer exists — `readOverallVerdict` now takes the run's
   `intent` and dispatches ONE parser through `parseChairTerminal`. The measurement's OUTCOME is
-  unchanged and was re-verified: that fixture's tally carried `meta.intent:'task'`, which is one
-  of the two carriers the caller reads, so the ANSWER scale is still selected and `"Converged"`
-  is still recovered. The spec predates W5–W7 giving these paths an intent axis: the shipped
+  unchanged and was re-verified: that fixture's tally carried `meta.intent:'task'`, which is the
+  first of the three carriers the caller reads (round 3's council C3 added the prior
+  verdict.json's own `intent` as the third), so the ANSWER scale is still selected and
+  `"Converged"` is still recovered. The spec predates W5–W7 giving these paths an intent axis: the shipped
   design **carries** intent rather than refusing it, and a mismatch error would now break the
   exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
   clause is unaffected — it stays mode-free by design, as written.

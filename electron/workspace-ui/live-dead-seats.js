@@ -46,7 +46,7 @@
    * (and succeeded, producing a live `role: 'chair'` cost row) silently
    * erased the dead-critic row it was never a replacement for (spec §5, the
    * PR 102 rider). Candidates now carry a `role` (`'critic'` via alias equality
-   * with `runMeta.critic` — mirroring `deriveSeatLoss`, verdict.js:72 — or
+   * with `runMeta.critic` — mirroring verdict-seat-loss.js :: deriveSeatLoss — or
    * `null`), and only REVIEWING-role live legs (`seat`/`critic`/`lens:*`)
    * suppress at all; a `'critic'` candidate is cleared only by a live
    * CRITIC-role leg for that alias, never by a chair/judge/rebuttal/revote
@@ -75,7 +75,7 @@
    *                it on the alias is what collapsed two dead twins into one row.
    *   'legacy'     a pre-PR5c record with no seat id anywhere -> dedup on the alias,
    *                which still collapses twins. Disclosed residual R2.
-   *   'derivative' seatLoss-sourced. verdict.js:86 builds deadBenchSeats FROM the same
+   *   'derivative' seatLoss-sourced. verdict-seat-loss.js :: deriveSeatLoss builds deadBenchSeats FROM the same
    *                dead legs that emit degrades[], so it is always a duplicate and is
    *                the ONLY flavour that may be absorbed by an alias already covered.
    *                Absorbing a real degrade instead would erase an unidentified twin.

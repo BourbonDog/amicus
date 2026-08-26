@@ -255,6 +255,50 @@ describe('buildFoldText', () => {
       expect('intent' in run).toBe(false);          // absence pin on the fixture itself
       expect(foldRun(() => {}, null)[7]).toBe('VERDICT: none');
     });
+
+    /**
+     * ⚠️ PR #200 round-3 finding C1 (MEASURED, then REFUTED). The finding was
+     * that the B2 read above — `run.intent === 'task'` — has no null guard, so a
+     * missing or unparseable run.json throws a TypeError out of buildFoldText and
+     * breaks the fold's "never blocked, always labeled" contract (the module
+     * docblock's own promise). It does not: `const run = o.run || {}` at the top
+     * of buildFoldText has defaulted that read since long before the intent fork,
+     * so `run: null` renders a labeled, degraded fold — measured, both with the
+     * key absent and with it explicitly null. No guard was added; a `run &&` in
+     * front of `run.intent` would have been unreachable code.
+     *
+     * What was genuinely missing is this pin. The contract is stated only in
+     * prose, and the ONE line holding it up is four dereferences away from the
+     * three reads that depend on it (`run.chair`, `run.runId`, `run.usage`).
+     *
+     * Named mutant FOLDRUNUNGUARDED: `const run = o.run || {}` → `const run =
+     * o.run;` in src/workspace/fold-format.js :: buildFoldText.
+     */
+    test('C1: a fold with NO run document at all is still rendered and still labeled', () => {
+      for (const o of [
+        { nonce: NONCE, project: '/p', run: null, tally: null, verdict: null, chairText: null },
+        { nonce: NONCE, project: '/p' },                       // run key absent entirely
+      ]) {
+        const lines = buildFoldText(o).split('\n');
+        expect(lines[0]).toBe(buildFoldMarker(NONCE));
+        expect(lines[1]).toBe('Model: unknown');
+        expect(lines[2]).toBe('Session: unknown');
+        expect(lines[6]).toBe('---');
+        expect(lines[7]).toBe('VERDICT: none');                // labeled, review scale (fail-closed)
+        expect(lines[8]).toBe('Run: unknown — no stages recorded');
+        expect(lines[9]).toBe('Cost: —');                      // formatCost(null) — no usage block at all
+      }
+    });
+
+    test('C1: a verdict.json can still carry the task scale when run.json is gone', () => {
+      // The two carriers are independent: losing run.json must not cost the
+      // label when the verdict document itself knows the scale.
+      const lines = buildFoldText({
+        nonce: NONCE, project: '/p', run: null, tally: null, chairText: null,
+        verdict: { intent: 'task', overallVerdict: 'Converged' },
+      }).split('\n');
+      expect(lines[7]).toBe('ANSWER: Converged');
+    });
   });
 
   /**

@@ -2399,14 +2399,14 @@ describe('council MCP handlers', () => {
   // `record` arrives inline and `outDir` is a WRITE target for report.html
   // (mcp-tools.js's amicus_verdict inputSchema), so meta.intent is the only
   // carrier available here — and buildVerdict already reads that carrier
-  // FIRST (verdict.js:136, `(record.meta && record.meta.intent === 'task') ||
+  // FIRST (verdict.js :: buildVerdict, `(record.meta && record.meta.intent === 'task') ||
   // opts.intent === 'task'`). Threading opts.intent off the same field would
   // be a strict no-op. What was genuinely absent is a pin at THIS boundary:
   // verdict.test.js pins buildVerdict directly, and nothing pinned the MCP
   // tool's own document.
   //
   // Named mutant INTENTRECORDCARRIER: drop the `(record.meta && ...)` disjunct
-  // from verdict.js:136, leaving `opts.intent === 'task'`. MEASURED: this test
+  // from verdict.js :: buildVerdict, leaving `opts.intent === 'task'`. MEASURED: this test
   // RED; tests/cli-council-verdict-chair-carry.test.js stays fully green (the
   // CLI passes opts.intent explicitly), which is exactly why the MCP leg needed
   // a pin of its own. Reverted byte-exact.

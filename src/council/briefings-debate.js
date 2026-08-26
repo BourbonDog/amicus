@@ -109,11 +109,21 @@ const DEFENSE_FRAME =
  * a raiser defends here is a load-bearing CLAIM under its OWN answer, not a
  * finding about someone else's artifact — the frame is the only thing that has
  * to know that.
+ *
+ * ⚠️ PR #200 C4: the closing sentence is the review frame's CALIBRATION
+ * INCENTIVE, restored claim-worded. W7 wrote this frame fresh and dropped it,
+ * which quietly made the task debate a worse instrument than the review one:
+ * without it the cheapest move for a disputed raiser is to restate the claim,
+ * and a debate that rewards stubbornness measures conviction rather than
+ * evidence. Only 'anything' → 'any claim' changes; the rest is the review
+ * wording verbatim, because the point it makes is mode-neutral.
  */
 const TASK_DEFENSE_FRAME =
   'You produced an answer and declared the claims below as load-bearing. Peer ' +
   'analysts (anonymous) disputed them. For each claim: defend it with your ' +
-  'strongest argument, amend it if the dispute exposed a real flaw, or withdraw it.';
+  'strongest argument, amend it if the dispute exposed a real flaw, or withdraw it. ' +
+  'Withdraw any claim you cannot defend with evidence — an unsupported repeat ' +
+  'of the original claim is weaker than a withdrawal.';
 
 /** Re-vote frame — REVIEW intent, verbatim from v4.0 (spec §5.3b). */
 const REVOTE_FRAME =
@@ -123,11 +133,18 @@ const REVOTE_FRAME =
   'when the defense is convincing is good judging, not weakness; so is holding ' +
   'your dispute when it isn\'t.';
 
-/** Re-vote frame — TASK intent (v4.9 W7, ruling V2); same REVOTE_CONTRACT verdicts. */
+/**
+ * Re-vote frame — TASK intent (v4.9 W7, ruling V2); same REVOTE_CONTRACT verdicts.
+ * ⚠️ PR #200 C4: closes on the review frame's judge-side calibration incentive,
+ * reused VERBATIM — nothing in it speaks of findings-vs-claims, and a judge who
+ * reads holding a dispute as strength is the same failure on either scale.
+ */
 const TASK_REVOTE_FRAME =
   'You previously adjudicated claims from this bench\'s answers and disputed at ' +
   'least one of those below. The raiser has now responded. Re-vote each claim: ' +
-  'agree / dispute / neutral.';
+  'agree / dispute / neutral. Changing your verdict ' +
+  'when the defense is convincing is good judging, not weakness; so is holding ' +
+  'your dispute when it isn\'t.';
 
 /** One defense solo per raiser (spec §5.3a). `intent`: 'task' | absent (review). */
 function buildDefenseBrief({ findings, date, intent }) {

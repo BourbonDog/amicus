@@ -77,7 +77,7 @@ describe('T1a — the dead-wave arm carries seat ids, and null for unidentified 
     expect(note.data.seats).toHaveLength(note.data.models.length);
   });
 
-  test('data.seat stays the ALIAS on the partial arm (verdict.js:72 compares it to o.critic)', () => {
+  test('data.seat stays the ALIAS on the partial arm (verdict-seat-loss.js :: deriveSeatLoss compares it to o.critic)', () => {
     const note = waveStillDeadNote(
       { waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x', partial: true }, unit);
     expect(note.channel).toBe('seat-unbound');

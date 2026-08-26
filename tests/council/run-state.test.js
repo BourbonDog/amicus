@@ -100,8 +100,32 @@ describe('run.json init + checkpoint', () => {
     expect(run.exitCode).toBe(143); // must pin to canonical abort code, not undefined
   });
 
+  /**
+   * ⚠️ PR #200 round-3 finding C2 (MEASURED, then REFUTED — and the measurement
+   * exposed this pin overclaiming). The finding was that the Stage-5 rebuild's
+   * new `readRun(runDir)` call (cli-handlers-council.js :: runVerdict) is
+   * unguarded while every sibling read is try/catch'd, so a malformed run.json
+   * would throw out of it. It cannot: readRun's try encloses `runPath(runDir)`
+   * as well as the read and the parse, so a bad path, a missing file and
+   * unparseable bytes all return null — and the call site sits inside runVerdict's
+   * own try/catch besides.
+   *
+   * But the pin that should have SAID so only ever passed a path with no file at
+   * it: the name promised "corrupt" and the body tested "missing". Both cases
+   * are exercised now, so the name is true and the no-throw contract the Stage-5
+   * rebuild leans on is actually held down.
+   *
+   * Named mutant READRUNUNCAUGHT: drop the try/catch from run-state.js ::
+   * readRun (`return JSON.parse(fs.readFileSync(runPath(runDir), 'utf-8'));`).
+   */
   test('readRun returns null for a missing/corrupt file', () => {
     expect(rs.readRun(path.join(tmp, 'nope'))).toBeNull();
+    const corrupt = path.join(tmp, 'corrupt-run');
+    fs.mkdirSync(corrupt, { recursive: true });
+    fs.writeFileSync(path.join(corrupt, 'run.json'), '{ "runId": "abc123", trunc');
+    expect(rs.readRun(corrupt)).toBeNull();                 // unparseable → null, never a throw
+    fs.writeFileSync(path.join(corrupt, 'run.json'), '');
+    expect(rs.readRun(corrupt)).toBeNull();                 // empty file → null too
   });
 });
 

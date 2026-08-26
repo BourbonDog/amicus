@@ -119,10 +119,10 @@ async function runCouncil(options, deps = {}) {
   const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
-    // v4.9 W5.3: o.intent is 'task' or ABSENT — never 'review' (both transports strip it).
-    if (o.intent !== undefined && o.intent !== 'task') {
+    // v4.9 W5.3: o.intent is 'task' or ABSENT. ⚠️ PR #200 A3 (round-3 ruling): 'review' — the default spelled out loud, which both transports already strip (cli-handlers-council-run.js, mcp-council-run.js) — NORMALIZES to absent here rather than being refused, because runCouncil is a public door too and one input must not mean two things at two doors. `delete`, never `= undefined` (a present-but-undefined key still changes JSON output paths — the T10 lesson). Only a genuinely unknown value is BAD_ARGS. Pinned: tests/council/run-intent.test.js.
+    if (o.intent === 'review') { delete o.intent; } else if (o.intent !== undefined && o.intent !== 'task') {
       return finalize(1, { code: 'BAD_ARGS',
-        message: `Error: intent must be 'task' or omitted (review); got '${o.intent}'` });
+        message: `Error: intent must be 'task' or 'review' (omitted means review); got '${o.intent}'` });
     }
     if (o.intent === 'task' && o.claudeReviewFile) {   // V12: a file review is REVIEW machinery
       return finalize(1, { code: 'BAD_ARGS', message:

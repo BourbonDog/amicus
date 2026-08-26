@@ -15,7 +15,7 @@
  * unconditionally (src/council/tally.js :: tally) — it is never a real source for
  * either the override badge or the post-override tier. Only `buildVerdict`
  * materializes `{from,to,reason}` and rewrites `tier` to `tierOverride.to`
- * (src/council/verdict.js:128-132). So both fields are joined in from
+ * (src/council/verdict.js :: buildVerdict). So both fields are joined in from
  * verdict.findings[] by `id`; when verdict is absent/unparseable (caller
  * passes null/undefined, or a finding has no verdict-side counterpart) the
  * row falls back to tally's own (pre-override) tier and renders no badge.
@@ -183,7 +183,7 @@ function buildMatrixModel(tally, labelMap, verdict) {
       // ⚠️ DE-ROT (F29): v4.1 decorates tally.json findings in place with
       // `debate: {action, previousTier}` (src/council/debate.js :: decorateRecord; action ∈
       // defended|amended|withdrawn|no-response) and verdict.json carries it through
-      // (src/council/verdict.js:43). Consumed by electron/workspace-ui/workspace-matrix.js's
+      // (src/council/verdict.js :: buildVerdict). Consumed by electron/workspace-ui/workspace-matrix.js's
       // renderMatrix, which renders a `.debate-badge` in the tier cell (alongside the
       // thin/tierOverride badges) so a withdrawn/amended/defended/no-response finding never
       // renders as an ordinary live row. Absent on non-debate runs, hence `|| null`.

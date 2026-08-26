@@ -2,92 +2,16 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { parseChairTerminal } = require('./parse-stage2');
+const { parseChairTerminal, CHAIR_VERDICTS, CHAIR_ANSWERS } = require('./parse-stage2');
+// v4.9 PR #200 fix round 3: the seat-loss pair lives in its own leaf module (the
+// 300-line gate), re-exported below so every existing caller and pin is unchanged.
+const { summarizeSeatLoss, deriveSeatLoss } = require('./verdict-seat-loss');
 
 // v4.0 §7: council family v2 — verdict docs carry {schemaVersion, type} and a
 // nullable overallVerdict (the chair's terminal line — `VERDICT:` on a review
 // run, `ANSWER:` on a task one; populated by the headless engine in Plan B via
 // opts.overallVerdict, null in every Stage-4 manual path).
 const VERDICT_SCHEMA_VERSION = 2;
-
-/**
- * Describe which requested seats actually reviewed, for the verdict's own face.
- *
- * ⚠️ ADDED v4.5.2 from a field report. The critic is a SOLO wave with one leg,
- * so losing it loses 100% of the adversarial role — and unlike a dead bench wave
- * (which trips the quorum gate and fails the run loudly) a dead critic is
- * survivable, so the run continues to a full verdict, tally and chair synthesis
- * that never saw the critic's findings. Run `dfb6a692` did exactly that and the
- * only record was `deadWaves` in run.json, a file nobody opens when the verdict
- * reads clean. A user who typed `--critic` asked for adversarial review; a
- * verdict produced without it must say so where the verdict is read.
- *
- * Returns null when no critic was requested — there is nothing to report, and an
- * always-present block would train readers to ignore it.
- *
- * @param {{runId: string, critic: ?string,
- *   deadWaves: Array<{waveId: string, models: string[], reason: string}>}} o
- * @returns {?{criticRequested: string, criticSeated: boolean, reason: ?string,
- *   deadBenchSeats: string[]}}
- */
-function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
-  if (!critic) { return null; }
-  // Match on EITHER carrier. The `-c1` suffix is the convention run-stages.js
-  // uses, but a wave that names the critic model is the critic wave whatever it
-  // is called — and relying on the id alone would silently under-report if that
-  // convention ever changes.
-  const isCriticWave = w =>
-    w.waveId === `${runId}-c1` || (w.models || []).includes(critic);
-  const dead = deadWaves.find(isCriticWave) || null;
-  return {
-    criticRequested: critic,
-    criticSeated: !dead,
-    reason: dead ? dead.reason : null,
-    deadBenchSeats: deadWaves.filter(w => !isCriticWave(w))
-      .flatMap(w => w.models || []),
-  };
-}
-
-/**
- * seatLoss, derived from the sink's records (v4.6 Plan 2, spec D3 — closes #84).
- *
- * WHY A DERIVATION: two fields reporting lost seats can disagree; deriving one
- * from the other makes contradiction inexpressible. `summarizeSeatLoss` stays
- * exactly as v4.5.2 shipped it (its tests pass unedited — that is the proof the
- * shape survived); this function rebuilds its wave input from `dead-wave`
- * records and then adds the losses waves can never show: `dead-leg` records —
- * a solo critic wave that STARTED but whose one leg died is invisible to
- * deadWaves, which is #84's second half.
- *
- * Reads ONLY record.data (Task 1's machine surface) — never the prose fields.
- * @param {{runId: string, critic: ?string, degrades: Array<object>}} o
- * @returns {?object} the summarizeSeatLoss shape, or null when no critic was requested
- */
-function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
-  if (!critic) { return null; }
-  const real = degrades.filter(d => d.kind !== 'heal' && d.data);
-  const waves = real.filter(d => d.channel === 'dead-wave')
-    .map(d => ({ waveId: d.data.waveId, models: d.data.models || [], reason: d.data.reason }));
-  const base = summarizeSeatLoss({ runId, critic, deadWaves: waves });
-  const legs = real.filter(d => d.channel === 'dead-leg');
-  const criticLeg = legs.find(l => l.data.seat === critic) || null;
-  return {
-    ...base,
-    criticSeated: base.criticSeated && !criticLeg,
-    // SL-2 handoff: a reconciliation note (run-retry-notes.js's
-    // missingLegStillDeadNote) carries data.status: null when the retry
-    // produced no leg for the seat at all — there is no status to name, so
-    // the old `ended '${status}'` template rendered the literal string
-    // "ended 'null'". A status-carrying record keeps the original text.
-    reason: base.reason || (criticLeg
-      ? (criticLeg.data.reason || (criticLeg.data.status
-        ? `the critic leg ended '${criticLeg.data.status}' with no usable output`
-        : 'the critic leg produced no usable output'))
-      : null),
-    deadBenchSeats: [...base.deadBenchSeats,
-      ...legs.filter(l => l.data.seat !== critic).map(l => l.data.seat)],
-  };
-}
 
 /**
  * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
@@ -167,8 +91,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // row's flat {model, seat} shape — model is the alias, seat is the seat
     // id, so on a unique-alias bench they are byte-equal and nothing is
     // emitted (same semantics as `seat.id !== seat.alias` one layer up,
-    // run-stats-entry.js:64). NOT a plain pass-through like `raiserSeat`
-    // above (:141) — that field's upstream producer already holds a real
+    // run-stats-entry.js:64). NOT a plain pass-through like the `raiserSeat`
+    // spread in the findings literal above — that field's upstream producer already holds a real
     // {id, alias} seat OBJECT at its own decision point (run.js:212:
     // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
     // through here is safe. The street-cred producer never has such an object
@@ -219,7 +143,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
  * verdict belongs to the run, not to wherever the caller writes the result):
  *   1. `<runDir>/verdict.json` `overallVerdict` — the value the engine already
  *      parsed. Guarded by `runId`: a stale or foreign verdict.json sitting in
- *      the folder must never inject another run's chair line.
+ *      the folder must never inject another run's chair line. Guarded by SCALE
+ *      too (v4.9 fix round 3, council A1/B1 — see below).
  *   2. `<runDir>/chair-output.md`, re-parsed with the engine's OWN parser, so
  *      there is no second parser to drift. This also recovers runs whose
  *      verdict.json was already nulled by the defect.
@@ -238,20 +163,35 @@ function buildVerdict(record, decisions = [], opts = {}) {
  *
  * So `intent` dispatches through `parseChairTerminal` — one parser, never both.
  * W7 rejected that call believing a Stage-5 rebuild has no intent to pass; it has
- * two, and the caller reads both (cli-handlers-council.js :: runVerdict): the
- * record's `meta.intent`, and `run.json`'s `intent` from the run folder this
- * function already anchors on. Absent — and anything but 'task' — is review,
+ * THREE, and the caller reads all of them (cli-handlers-council.js :: runVerdict):
+ * the record's `meta.intent`, `run.json`'s `intent` from the run folder this
+ * function already anchors on, and — since fix round 3, council C3 — the prior
+ * verdict.json's own `intent` (readPriorVerdictIntent below), which is the last
+ * carrier standing when the other two are absent. Absent — and anything but 'task' — is review,
  * restoring pre-W7 review behaviour exactly. Never invents: an absent, skipped or
  * unstructured chair yields null.
+ *
+ * ⚠️ AND THE CARRY OBEYS THE SAME SCALE (v4.9 fix round 3, council A1+B1 — one
+ * mechanism, one fix). Round 2 dispatched branch 2 and left branch 1 with no
+ * scale check at all, so the whole guard was inert whenever a prior verdict.json
+ * existed: `overallVerdict: 'Ship it'` was carried onto a task rebuild verbatim
+ * and every downstream surface then labelled a CHAIR_VERDICTS phrase `ANSWER:`
+ * — the defect round 2 measured on the prose leg, one branch earlier. So the
+ * carried phrase must be a member of the scale `intent` selects; off-scale is
+ * treated as NO CARRY and falls through to branch 2, which is intent-dispatched
+ * and therefore already right. This also subsumes the old string/non-empty
+ * check: every member of both scales is a non-empty string, and `includes`
+ * refuses a number, null or object without a separate typeof.
  * @param {string} runDir
  * @param {string} [runId] record.meta.runId — the run being rebuilt
  * @param {?string} [intent] 'task' selects the ANSWER scale; anything else review
  * @returns {string|null} a canonical chair verdict OR answer phrase, or null
  */
 function readOverallVerdict(runDir, runId, intent) {
+  const scale = intent === 'task' ? CHAIR_ANSWERS : CHAIR_VERDICTS;
   try {
     const prior = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
-    if (typeof prior.overallVerdict === 'string' && prior.overallVerdict
+    if (scale.includes(prior.overallVerdict)
       && (!runId || prior.runId === runId)) {
       return prior.overallVerdict;
     }
@@ -286,6 +226,35 @@ function readPriorVerdictSurfaces(runDir, runId) {
   return { seatLoss: null, degrades: null };
 }
 
+/**
+ * The run's intent as the prior verdict.json records it (v4.9 fix round 3,
+ * council C3) — the THIRD carrier for a Stage-5 rebuild, after the record's
+ * `meta.intent` and run.json's checkpoint.
+ *
+ * A SEPARATE function rather than a fourth key on readPriorVerdictSurfaces
+ * directly above: intent has to be resolved BEFORE readOverallVerdict runs
+ * (it selects that call's scale), while the loss surfaces are recovered after
+ * the parse; and #87's pins assert that function's return shape exactly
+ * (verdict-degrades.test.js), so widening it would edit a pin to fit a change
+ * rather than the other way round.
+ *
+ * Same contract as both siblings: the run folder's own verdict.json, the same
+ * `!runId || prior.runId === runId` guard — waived only when the RECORD names
+ * no run, never when the DOCUMENT does not — and absence yields null.
+ * Emit-when-'task' at the source (buildVerdict), so ONLY 'task' is reported;
+ * anything else, including a hand-written `intent: 'review'`, is no vote.
+ * @param {string} runDir
+ * @param {string} [runId]
+ * @returns {'task'|null}
+ */
+function readPriorVerdictIntent(runDir, runId) {
+  try {
+    const prior = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
+    if ((!runId || prior.runId === runId) && prior.intent === 'task') { return 'task'; }
+  } catch { /* no prior verdict.json, or unreadable — no vote */ }
+  return null;
+}
+
 /** Atomic write: tmp + rename (matches the repo's wave.json convention). */
 function writeVerdictAtomic(filePath, verdict) {
   const tmp = `${filePath}.tmp-${process.pid}`;
@@ -295,5 +264,5 @@ function writeVerdictAtomic(filePath, verdict) {
 
 module.exports = {
   buildVerdict, summarizeSeatLoss, deriveSeatLoss, readOverallVerdict, readPriorVerdictSurfaces,
-  writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
+  readPriorVerdictIntent, writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
 };

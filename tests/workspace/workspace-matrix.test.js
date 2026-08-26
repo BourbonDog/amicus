@@ -333,7 +333,7 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('chair stage failed');
     });
 
-    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js:48)', () => {
+    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js :: buildVerdict)', () => {
       const container = document.createElement('div');
       const vp = {
         present: true, overallVerdict: 'Fix these first',

@@ -119,6 +119,16 @@ describe('buildDebateAddendum (spec §5.3c)', () => {
 // constant it is pinning cannot notice that constant changing. Both directions
 // are pinned — the task frame present under 'task' AND absent under review, the
 // review frame present under review AND absent under 'task'.
+//
+// ⚠️ PR #200 round-3 finding C4: the two TASK frames were written fresh and
+// dropped the review frames' CALIBRATION INCENTIVES — the sentences that tell a
+// raiser an unsupported repeat is weaker than a withdrawal, and a judge that
+// changing a verdict is good judging. Those are not review-specific: they are
+// what stop a task debate from rewarding stubbornness on both sides. Restored
+// as claim-worded twins (the defense one swaps "anything" for "any claim"; the
+// re-vote one is mode-neutral and is reused VERBATIM), pinned by the exact-text
+// assemblies below. Named mutant DEBATEINCENTIVEDROP: delete the trailing
+// sentence from either task frame in src/council/briefings-debate.js.
 const REVIEW_DEFENSE_FRAME =
   'You reviewed an artifact and raised the findings below. Peer reviewers ' +
   '(anonymous) disputed them for the stated reasons. For EACH finding decide: ' +
@@ -128,7 +138,9 @@ const REVIEW_DEFENSE_FRAME =
 const TASK_DEFENSE_FRAME =
   'You produced an answer and declared the claims below as load-bearing. Peer ' +
   'analysts (anonymous) disputed them. For each claim: defend it with your ' +
-  'strongest argument, amend it if the dispute exposed a real flaw, or withdraw it.';
+  'strongest argument, amend it if the dispute exposed a real flaw, or withdraw it. ' +
+  'Withdraw any claim you cannot defend with evidence — an unsupported repeat ' +
+  'of the original claim is weaker than a withdrawal.';
 const REVIEW_REVOTE_FRAME =
   'You previously adjudicated findings on this artifact and disputed at least ' +
   'one of those below. The (anonymous) raiser has now responded. Re-adjudicate ' +
@@ -138,7 +150,9 @@ const REVIEW_REVOTE_FRAME =
 const TASK_REVOTE_FRAME =
   'You previously adjudicated claims from this bench\'s answers and disputed at ' +
   'least one of those below. The raiser has now responded. Re-vote each claim: ' +
-  'agree / dispute / neutral.';
+  'agree / dispute / neutral. Changing your verdict ' +
+  'when the defense is convincing is good judging, not weakness; so is holding ' +
+  'your dispute when it isn\'t.';
 
 describe('debate task twins (v4.9 W7 T-C, ruling V2)', () => {
   const DEF_FINDINGS = [

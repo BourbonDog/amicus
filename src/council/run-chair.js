@@ -128,6 +128,16 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       // v4.9 W5.4 (V5): the promotion below draws on the reliability ledger,
       // which task runs never feed (run-finish.js gate 1) — announced once,
       // kind 'info' (speech, not loss: the sink never flips `degraded` on it).
+      // ⚠️ PR #200 round-3 finding A2 read "announced once" as a promise a flag
+      // had to keep, and reported the note firing once per FAILED ATTEMPT.
+      // MEASURED and refuted: "once" here is STRUCTURAL. This is the
+      // else-arm of the whole fallback walk — ch1 and ch2 have already resolved
+      // above — so it is reached at most once per runChair, which is called
+      // exactly once per run (run.js :: runCouncil). A walk with ch1, ch2 AND
+      // ch3 all failing emits exactly ONE note; pinned in run-chair.test.js
+      // ("task run reaching the promotion step emits EXACTLY ONE info note").
+      // No flag: a flag would only be able to make a once-reached branch fire
+      // less than once.
       if (o.intent === 'task') {
         degrade.note({
           kind: 'info', channel: 'ledger-skipped',

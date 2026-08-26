@@ -38,7 +38,7 @@ function waveStillDeadNote(w, unit) {
       + 'launch and will exit degraded (2)',
     // `seat` rides ONLY on the partial shape: adding it unconditionally breaks
     // degrade-channels.test.js's exact toEqual on a real dead wave. It stays the
-    // ALIAS because verdict.js:72 compares data.seat against o.critic, an alias,
+    // ALIAS because verdict-seat-loss.js :: deriveSeatLoss compares data.seat against o.critic, an alias,
     // and because it is the same key the dead-leg shape uses — one vocabulary
     // for one field. ⚠️ It is NOT read by the Workspace today: the kind/channel filters in
     // live-dead-seats.js (deadSeats) and workspace-seats.js (retriedSeats), and verdict.js's
@@ -64,8 +64,8 @@ function waveStillDeadNote(w, unit) {
  * Leg-origin, retry wave died wholesale (bench-batch case).
  *
  * v4.8 PR5c: `seatId` is the caller's Stage-1 leg->seat binding, or null when the leg was
- * never bound. It is a SEPARATE key from `seat`, which stays the ALIAS — verdict.js:72
- * compares `data.seat` against `o.critic`, an alias, so re-pointing it breaks critic-loss
+ * never bound. It is a SEPARATE key from `seat`, which stays the ALIAS — verdict-seat-loss.js
+ * :: deriveSeatLoss compares `data.seat` against `o.critic`, an alias, so re-pointing it breaks critic-loss
  * detection. Add a key; never repurpose that one.
  */
 function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
