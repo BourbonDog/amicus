@@ -38,6 +38,38 @@ describe('the task synthesis pair frames an ANSWER, never a verdict', () => {
       + '— the claims peers disputed that your answer still depends on');
   });
 
+  /**
+   * v4.9 fix round 2 (council C3) — the RESIDUAL RISK close must be SATISFIABLE
+   * on the bench that actually raised claims but disputed none of them.
+   *
+   * The no-claims twin below already handles the empty bench by dropping the
+   * section outright (LC-10). But the ORDINARY instruction runs on the far more
+   * common middle case: claims were raised, adjudicated, and every one of them
+   * was concurred. "The claims peers disputed that your answer still depends on"
+   * then names the empty set, and the only satisfiable reading of an
+   * unfollowable directive is to invent material — the exact LC-10 failure, one
+   * bench-shape over.
+   *
+   * The fix is an escape hatch, not a second instruction: the template names the
+   * honest single line for that case. Named mutant RESIDUALNOOUT: delete the
+   * escape-hatch clause. RED SET: this pin.
+   */
+  test('the RESIDUAL RISK close names the honest line for a bench that disputed nothing', () => {
+    expect(t.TASK_CHAIR_SYNTHESIS).toContain(
+      "RESIDUAL RISK: none — no load-bearing claim was disputed.");
+    // The escape hatch is offered as an alternative to the section, not as a
+    // separate demand: it has to sit inside the same sentence as the close.
+    const close = t.TASK_CHAIR_SYNTHESIS.slice(t.TASK_CHAIR_SYNTHESIS.indexOf('RESIDUAL RISK section'));
+    expect(close).toMatch(/or the single line/);
+    expect(close).toMatch(/when that is the truth/);
+  });
+
+  test('the escape hatch does not smuggle the review scale into a task instruction', () => {
+    // The task packet pins `not.toContain('VERDICT')` wholesale; keep the
+    // softening on the ANSWER side of that line.
+    expect(t.TASK_CHAIR_SYNTHESIS).not.toContain('VERDICT');
+  });
+
   test('it never speaks in reviews or findings', () => {
     expect(t.TASK_CHAIR_SYNTHESIS).not.toMatch(/review/i);
     expect(t.TASK_CHAIR_SYNTHESIS).not.toMatch(/finding/i);
@@ -260,9 +292,18 @@ describe('chairRepairPromptFor dispatcher (the W6 shape)', () => {
     // Same discipline as the W6 dispatchers: the task module is required AT CALL
     // TIME so the chair surface can never deadlock into a half-initialized module
     // object if the task twins ever need a shared fragment back.
-    // ⚠️ The W6 spelling of this pin (briefings-task.test.js) trims each line
-    // before testing it, which reads an INDENTED call-time require as top-level.
-    // Anchored at column 0 here — that is what "top-level" actually means.
+    // ⚠️ Anchored at column 0 — that is what "top-level" actually means. The W6
+    // spelling trimmed each line first, which reads an INDENTED call-time
+    // require as top-level. MEASURED (v4.9 fix round 2, council C4): both
+    // spellings catch the real defect — a genuine column-0 `const … require` —
+    // so the trimming variant is not blind, it is OVER-eager: it counts a
+    // legitimate lazy require written in `const` form and REDS on correct code.
+    // This pin needs the strict spelling to exist at all, because
+    // `briefings-chair.js` lazy-requires exactly that way
+    // (`  const task = intent === 'task' ? require('./briefings-chair-task') : null;`)
+    // — under the trimming variant this test fails at HEAD. Fix round 2 brought
+    // briefings-task.test.js and briefings-stage2-task.test.js onto this
+    // spelling too, so all three now read identically; copy a fourth from any.
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'briefings-chair.js'), 'utf-8');
     const topLevelRequires = src.split('\n')

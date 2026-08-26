@@ -2,7 +2,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { parseChairVerdict, parseChairAnswer } = require('./parse-stage2');
+const { parseChairTerminal } = require('./parse-stage2');
 
 // v4.0 §7: council family v2 — verdict docs carry {schemaVersion, type} and a
 // nullable overallVerdict (the chair's terminal line — `VERDICT:` on a review
@@ -93,11 +93,13 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
  * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
  * @param {object} record  tally() output
  * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
- * @param {{overallVerdict?: (string|null), seatLoss?: object, degrades?: Array<object>}} [opts]
+ * @param {{overallVerdict?: (string|null), intent?: (string|null),
+ *   seatLoss?: object, degrades?: Array<object>}} [opts]
  *   `overallVerdict` is the engine hook (Plan B): the parsed chair terminal line
  *   (`VERDICT:` on a review run, `ANSWER:` on a task run — v4.9 W5/W7);
- *   omitted/undefined → null. `seatLoss` (v4.5.2) and `degrades` (v4.6
- *   Plan 2) are additive and OPTIONAL — each lands on the verdict only when
+ *   omitted/undefined → null. `intent` is the Stage-5 rebuild's carrier (v4.9 fix
+ *   round 2 — see the emit-when-'task' line below). `seatLoss` (v4.5.2) and
+ *   `degrades` (v4.6 Plan 2) are additive and OPTIONAL — each lands only when
  *   truthy/non-empty, absent otherwise (never fabricated).
  */
 function buildVerdict(record, decisions = [], opts = {}) {
@@ -118,12 +120,21 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // matching the `seatLoss` sibling below; PR5 codes against that name.
     ...(record.meta.seats ? { seats: record.meta.seats } : {}),
     claudeInCouncil: record.meta.claudeInCouncil,
-    // v4.9 W5.3: task-mode marker, forwarded from the tally record's meta —
-    // emit-when-'task' (the W4/W5 plan's §7.5 byte-identity ruling): a review
-    // record never materializes the key, so a review verdict.json is unchanged
-    // byte for byte, and an explicit meta.intent 'review' (hand-assembled
-    // input) is deliberately NOT forwarded either.
-    ...(record.meta && record.meta.intent === 'task' ? { intent: 'task' } : {}),
+    // v4.9 W5.3: task-mode marker — emit-when-'task' (the W4/W5 plan's §7.5
+    // byte-identity ruling): a review record never materializes the key, so a
+    // review verdict.json is unchanged byte for byte, and an explicit
+    // meta.intent 'review' (hand-assembled input) is NOT forwarded either.
+    // ⚠️ v4.9 fix round 2 (council C1): `opts.intent` is a SECOND carrier, not a
+    // redundant one. MEASURED: the run dir's tally.json copies `meta` verbatim
+    // (tally.js), so the canonical Stage-5 rebuild already came through the first
+    // guard — but a hand-assembled or MCP-supplied record has none (mcp-tools.js
+    // :: amicus_verdict types `record` as `z.record(z.any())`), and on THAT leg
+    // the rebuild dropped the key, regressing the fold line and Workspace chip to
+    // review scale. Passed through `opts` rather than assigned after the call, so
+    // the key keeps its SLOT here and a rebuilt document's key order still
+    // matches the engine's (pinned, cli-council-verdict-chair-carry.test.js).
+    ...((record.meta && record.meta.intent === 'task') || opts.intent === 'task'
+      ? { intent: 'task' } : {}),
     overallVerdict: opts.overallVerdict === undefined ? null : opts.overallVerdict,
     findings: record.findings.map(f => {
       const d = byId.get(f.id) || {};
@@ -209,28 +220,35 @@ function buildVerdict(record, decisions = [], opts = {}) {
  *   1. `<runDir>/verdict.json` `overallVerdict` — the value the engine already
  *      parsed. Guarded by `runId`: a stale or foreign verdict.json sitting in
  *      the folder must never inject another run's chair line.
- *   2. `<runDir>/chair-output.md`, re-parsed with the engine's OWN parsers, so
+ *   2. `<runDir>/chair-output.md`, re-parsed with the engine's OWN parser, so
  *      there is no second parser to drift. This also recovers runs whose
  *      verdict.json was already nulled by the defect.
  *
- * ⚠️ BOTH scales (v4.9 W7 fix round, review MEDIUM F2). A task chair closes on
- * an `ANSWER:` line and never emits a `VERDICT:` one, so a VERDICT-only fallback
- * recovered null for every task run — this function's whole reason to exist,
- * failing on the newer half of the runs it guards. Trying both is safe rather
- * than merely convenient: the two scales are DISJOINT by pinned construction
- * (tests/council/chair-scale-drift.test.js), and each parser matches only its
- * own keyword line, so neither can read the other's phrase and the order of the
- * two calls cannot change an outcome. `parseChairTerminal(text, intent)` is
- * deliberately NOT used: a Stage-5 rebuild reads a tally record that carries no
- * intent on the manual path, and guessing one would fail closed to review —
- * i.e. straight back to this defect.
+ * ⚠️ ONE scale, chosen by the run's INTENT (v4.9 fix round 2, council B1/C2 —
+ * CORRECTING W7's MEDIUM F2, recorded because it was wrong instructively). W7 was
+ * right that a VERDICT-only fallback recovered null for every task run; its fix
+ * tried BOTH parsers unconditionally, justified thus — the two scales are
+ * DISJOINT by pinned construction (tests/council/chair-scale-drift.test.js), so
+ * neither can read the other's phrase and the order of the two calls cannot
+ * change an outcome. The premise is true; the conclusion does not follow.
+ * Disjointness is a property of the PHRASE SETS, not of the DOCUMENT: chair prose
+ * that quotes, contrasts or merely mentions the other scale carries BOTH keyword
+ * lines, and then order decides everything — measured red in both directions, now
+ * pinned in both (cli-council-verdict-chair-carry.test.js, SCALEFREEFALLBACK).
  *
- * Never invents: an absent, skipped, or unstructured chair yields null.
+ * So `intent` dispatches through `parseChairTerminal` — one parser, never both.
+ * W7 rejected that call believing a Stage-5 rebuild has no intent to pass; it has
+ * two, and the caller reads both (cli-handlers-council.js :: runVerdict): the
+ * record's `meta.intent`, and `run.json`'s `intent` from the run folder this
+ * function already anchors on. Absent — and anything but 'task' — is review,
+ * restoring pre-W7 review behaviour exactly. Never invents: an absent, skipped or
+ * unstructured chair yields null.
  * @param {string} runDir
  * @param {string} [runId] record.meta.runId — the run being rebuilt
+ * @param {?string} [intent] 'task' selects the ANSWER scale; anything else review
  * @returns {string|null} a canonical chair verdict OR answer phrase, or null
  */
-function readOverallVerdict(runDir, runId) {
+function readOverallVerdict(runDir, runId, intent) {
   try {
     const prior = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
     if (typeof prior.overallVerdict === 'string' && prior.overallVerdict
@@ -240,7 +258,7 @@ function readOverallVerdict(runDir, runId) {
   } catch { /* no prior verdict.json, or unreadable — try the chair prose */ }
   try {
     const text = fs.readFileSync(path.join(runDir, 'chair-output.md'), 'utf-8');
-    return parseChairVerdict(text) || parseChairAnswer(text);
+    return parseChairTerminal(text, intent);
   } catch { /* no chair-output.md — the chair genuinely produced nothing */ }
   return null;
 }

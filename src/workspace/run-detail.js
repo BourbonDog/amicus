@@ -150,14 +150,23 @@ function degradedReason(run) {
 // model whose literal is CLOSED and always materializes every key with a default,
 // so `intent` is materialized both ways and defaults to 'review'. The renderer
 // still treats an ABSENT key as review: pre-v4.9 payloads carry none.
+// ⚠️ v4.9 fix round 2 (council B2): sourced from `run` as well as `verdict`.
+// Reading `verdict.intent` ALONE meant the two panels that exist to explain a
+// broken run could not label it: on the narrow leg where a task run exits before
+// the verdict write — or leaves a truncated one — there is no verdict.intent to
+// read, and the panel defaulted to review, so the Workspace chip said "no chair
+// verdict" about a run that was never on that scale. `run.json` checkpoints
+// `intent: 'task'` at start (run.js :: runCouncil) and `run` is already this
+// function's first parameter, so the honest source costs nothing to reach.
 function verdictPanel(run, verdict) {
   const reason = degradedReason(run);
+  const intent = (verdict && verdict.intent === 'task') || (run && run.intent === 'task') ? 'task' : 'review';
   if (!verdict || verdict.parseError) {
-    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason, intent: 'review' };
+    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason, intent };
   }
   return {
     present: true,
-    intent: verdict.intent === 'task' ? 'task' : 'review',
+    intent,
     overallVerdict: verdict.overallVerdict === undefined ? null : verdict.overallVerdict,
     tierCounts: verdict.tierCounts || null,
     streetCred: Array.isArray(verdict.streetCred) ? verdict.streetCred : [],

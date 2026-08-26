@@ -212,13 +212,34 @@ describe('dispatcher contract (briefings.stage1Xxx)', () => {
     // The task module top-requires briefings for the shared skeleton; the
     // dispatchers must lazy-require at call time or the cycle deadlocks into
     // a half-initialized module object.
+    // ⚠️ v4.9 fix round 2 (council C4): this variant used to `.test(l.trim())`.
+    // Anchored at column 0 now — that is what "top-level" actually means —
+    // matching briefings-chair-task.test.js and briefings-stage2-task.test.js.
+    // MEASURED, because the obvious reading of the trimming variant is the wrong
+    // one: it is not BLIND to the defect (both spellings catch a genuine column-0
+    // `const … require`), it is OVER-eager — it counts a legitimate lazy require
+    // written in `const` form and REDS on correct code. briefings-chair.js
+    // lazy-requires in exactly that form, which is why the sibling pin had to be
+    // strict from the start.
+    //
+    // ⚠️ MEASURED while unifying them: briefings.js has NO top-level requires at
+    // ALL (its four task requires are every one a call-time
+    // `return … require('./briefings-task')`), so `topLevelRequires` is [] and a
+    // bare "none of them names briefings-task" is VACUOUS — in BOTH spellings,
+    // which is why the loose regex never showed it. The sibling variants can use
+    // `topLevelRequires.length > 0` as their non-vacuity control because their
+    // targets really do top-require something; here the honest control is the
+    // other direction — the file DOES require the task module, and every one of
+    // those requires is indented.
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'briefings.js'), 'utf-8');
-    const topLevelRequires = src.split('\n')
-      .filter(l => /^(const|let|var)\s.*require\(/.test(l.trim()));
+    const lines = src.split('\n');
+    const topLevelRequires = lines.filter(l => /^(const|let|var)\s.*require\(/.test(l));
     expect(topLevelRequires.filter(l => l.includes('briefings-task'))).toHaveLength(0);
+    // Non-vacuous: there is something here for the heuristic to have caught.
+    expect(lines.filter(l => l.includes("require('./briefings-task')")).length).toBeGreaterThan(0);
   });
 });
 

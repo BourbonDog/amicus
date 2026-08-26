@@ -548,24 +548,35 @@ function appendLedgerRows(rows) {
  * "tally with meta.intent 'task' computes the record but appends NO ledger row").
  * One line closes that, at the only site that can know the table is empty.
  *
+ * ⚠️ FIX ROUND 2 REWORDED THE LINE (council C5). The shipped wording —
+ * "Task runs never write reliability rows; a task-only install has no history
+ * here." — printed on EVERY empty ledger, and its second clause ASSERTS the
+ * reader has a task-only install. On a fresh install (much the commoner empty
+ * ledger) that assertion is simply false, so the line meant to disambiguate two
+ * states was itself only true in one of them. The replacement is a parenthetical
+ * EXPLAINER of where rows come from, which is true on any empty ledger and still
+ * closes the same ambiguity.
+ *
  * Named mutant STATSSILENT: drop the second line from the `!agg.length` branch.
  * RED SET: the zero-rows test below. The non-empty control stays green — it is
  * the absence pin, and the five renderStats tests below it are the byte-level
  * proof that a populated table is untouched.
  */
 describe('renderStats zero-rows self-diagnosis (v4.9 W8)', () => {
-  test('an empty ledger says WHY it can be empty — task runs write no reliability rows', async () => {
+  test('an empty ledger says WHERE rows come from — without asserting which empty state this is', async () => {
     const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
     expect(code).toBe(0);
     expect(out).toBe('No council runs recorded yet.\n'
-      + 'Task runs never write reliability rows; a task-only install has no history here.\n');
+      + '(reliability history comes from review runs; task runs never write rows here)\n');
+    // The claim the old wording made about the READER is gone.
+    expect(out).not.toContain('a task-only install');
   });
 
   test('a populated ledger renders no self-diagnosis line (control)', async () => {
     appendLedgerRows([ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' })]);
     const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
     expect(code).toBe(0);
-    expect(out).not.toContain('Task runs never write reliability rows');
+    expect(out).not.toContain('reliability history comes from review runs');
     expect(out).not.toContain('No council runs recorded yet');
     expect(out).toContain('openai/gpt-5.2');       // non-vacuous: the table really rendered
   });
@@ -573,7 +584,7 @@ describe('renderStats zero-rows self-diagnosis (v4.9 W8)', () => {
   test('--json is unchanged — the line is human-render only', async () => {
     const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
     expect(code).toBe(0);
-    expect(out).not.toContain('Task runs never write reliability rows');
+    expect(out).not.toContain('reliability history comes from review runs');
     expect(JSON.parse(out).models).toEqual([]);
   });
 });

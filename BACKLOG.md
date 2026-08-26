@@ -6583,14 +6583,22 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
   clears the map. All four states pinned in
   `tests/electron/ipc-setup-catalog-snapshot.test.js`.
-- [ ] **A task run with a missing/corrupt `verdict.json` labels its fold and Workspace panels
-  review-scale** (W8 wave review finding 3, filed 2026-08-25). `fold-format.js` and
-  `run-detail.js`'s verdict panel read only `verdict.intent`; on the narrow leg where a task
-  run exits 1 BEFORE the verdict write (the normal degraded ladder writes verdict.json WITH
-  intent and is honest), the fold prints `VERDICT: none` and the panel defaults review.
-  `run.json` checkpoints `intent: 'task'` (`run.js :: runCouncil`'s start checkpoint) and
-  `detail.run` is in scope at both call sites — the fix is a `verdict.intent || run.intent`
-  source. Follow-up, not a blocker.
+- **A task run with a missing/corrupt `verdict.json` labelled its fold and Workspace panels
+  review-scale — FIXED** (filed as W8 wave review finding 3 2026-08-25; re-raised as PR 200
+  council B2 and fixed the same day). `fold-format.js` and `run-detail.js`'s verdict panel read
+  only `verdict.intent`; on the narrow leg where a task run exits 1 BEFORE the verdict write
+  (the normal degraded ladder writes verdict.json WITH intent and is honest), the fold printed
+  `VERDICT: none` and the panel defaulted review. Both now source it as `verdict.intent ||
+  run.intent` — `run.json` checkpoints `intent: 'task'` (`run.js :: runCouncil`'s start
+  checkpoint), and the run doc was already in scope at both sites (`verdictPanel`'s first
+  parameter; `o.run` in `buildFoldText`, which `electron/ipc-workspace.js` fills from
+  `detail.run`). Pinned in `tests/workspace/run-detail.test.js` (missing AND corrupt
+  verdict.json → `intent:'task'`), `tests/workspace/fold-format.test.js` (`ANSWER: none` on both,
+  plus a review absence control) and `tests/workspace/workspace-matrix.test.js` (the chip reads
+  `no chair answer`). ⚠️ `src/council/report.js :: toModel` still reads `verdict.intent` alone and
+  is deliberately UNCHANGED: it takes no run doc, and it cannot be wrong — it only ever runs on a
+  verdict that exists, and both producers of one now carry intent (the engine via `meta.intent`,
+  the Stage-5 rebuild via `opts.intent`).
 - [ ] **Offer-session snapshots leak for a window destroyed without `setup-done`** (PR 199
   round-3 council B3, nit, filed as latent 2026-08-25). `electron/offer-session.js`'s map is
   reclaimed only by `endSession` (setup-done) or a same-key re-offer; a Settings window closed
@@ -6612,8 +6620,13 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   `council-ledger.jsonl` at all (the W5.4 gate-2 intent gate in `cli-handlers-council.js ::
   runTally`); `council verdict <tally.json> -o verdict.json --json` then exited **0** and
   emitted `intent:"task"` with `overallVerdict:"Converged"` — a CHAIR_ANSWERS phrase recovered
-  from `chair-output.md` by `verdict.js :: readOverallVerdict`'s both-scale fallback (the W7
-  fix-round F2 change). The spec predates W5–W7 giving these paths an intent axis: the shipped
+  from `chair-output.md` by `verdict.js :: readOverallVerdict`. ⚠️ The MECHANISM named here was
+  corrected by PR 200's fix round (council B1/C2): this said "the both-scale fallback (the W7
+  fix-round F2 change)", which no longer exists — `readOverallVerdict` now takes the run's
+  `intent` and dispatches ONE parser through `parseChairTerminal`. The measurement's OUTCOME is
+  unchanged and was re-verified: that fixture's tally carried `meta.intent:'task'`, which is one
+  of the two carriers the caller reads, so the ANSWER scale is still selected and `"Converged"`
+  is still recovered. The spec predates W5–W7 giving these paths an intent axis: the shipped
   design **carries** intent rather than refusing it, and a mismatch error would now break the
   exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
   clause is unaffected — it stays mode-free by design, as written.

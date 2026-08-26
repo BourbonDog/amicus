@@ -82,7 +82,15 @@ function buildFoldText(o) {
   // so labelling a CHAIR_ANSWERS phrase `VERDICT:` asserts a scale it is not on.
   // `intent` is emit-when-'task' (verdict.js :: buildVerdict, the W5 ruling), so
   // absence — and an explicit 'review' — keep the review fold byte-identical.
-  const terminalLabel = verdict && verdict.intent === 'task' ? 'ANSWER' : 'VERDICT';
+  // ⚠️ v4.9 fix round 2 (council B2): `run.intent` is the SECOND carrier, and it
+  // is what covers the DEGRADED fold — the one a user reaches for precisely when
+  // a task run went wrong. With no verdict.json (or a parse-failed one) there is
+  // no verdict.intent, and the fold headed `VERDICT: none` on a run that was
+  // never on that scale. `o.run` is the parsed run.json, which checkpoints
+  // `intent: 'task'` at start (src/council/run.js :: runCouncil):
+  // electron/ipc-workspace.js passes `run: detail.run` and run-detail.js ::
+  // getRunDetail reads it straight from `<runDir>/run.json`.
+  const terminalLabel = (verdict && verdict.intent === 'task') || run.intent === 'task' ? 'ANSWER' : 'VERDICT';
   const tierCounts = (verdict && verdict.tierCounts) || (tally && tally.tierCounts) || null;
   const cost = run.usage && run.usage.cost ? run.usage.cost : null;
 

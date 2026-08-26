@@ -9,6 +9,7 @@ const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings, buildValidateDoc } = require('./council/findings');
 const { buildVerdict, readOverallVerdict, readPriorVerdictSurfaces, writeVerdictAtomic } = require('./council/verdict');
+const { readRun } = require('./council/run-state');
 const {
   runSave: runCouncilSave,
   runList: runCouncilList,
@@ -65,9 +66,14 @@ function renderStats(agg) {
   // task-only install look the same, because task runs never append a row (the
   // intent gate in runTally above). Say so here rather than let silence imply that
   // no council ever ran. Human render only; --json's doc shape is untouched.
+  // ⚠️ v4.9 fix round 2 (council C5): the line must be true on ANY empty ledger,
+  // and the first wording was not. "…a task-only install has no history here"
+  // ASSERTS which of the two states the reader is in, and printed that assertion
+  // on every fresh install, where it is false. An EXPLAINER of where rows come
+  // from disambiguates the same pair without claiming anything about the reader.
   if (!agg.length) {
     return 'No council runs recorded yet.\n'
-      + 'Task runs never write reliability rows; a task-only install has no history here.\n';
+      + '(reliability history comes from review runs; task runs never write rows here)\n';
   }
   // v4.7 GOA-7 D10: group keys may be executable ids (>16 chars) — size the
   // model column to the longest key; legacy (alias-keyed) groups get a notes
@@ -200,11 +206,22 @@ function runVerdict(args, useJson) {
     // chair-output.md); tally.json carries no copy. Recover it from the RUN
     // folder — the tally's own directory, not `-o` — before rebuilding.
     const runDir = path.dirname(path.resolve(tallyPath));
-    const overallVerdict = readOverallVerdict(runDir, record.meta.runId);
+    // v4.9 fix round 2 (council B1/C2/C1): the run's INTENT decides which chair
+    // scale this rebuild may read, and rides onto the rebuilt document. TWO
+    // carriers, because neither alone covers both legs: the record's own
+    // `meta.intent` is what the run dir's tally.json carries (tally.js copies
+    // meta verbatim) but a hand-assembled or MCP-supplied record has none, and
+    // `run.json`'s checkpoint (run.js :: runCouncil) covers exactly that leg.
+    // Both are emit-when-'task', so absent/unreadable on both = review — the
+    // fail-closed direction, and what every pre-v4.9 run is.
+    const runDoc = readRun(runDir);
+    const intent = (record.meta && record.meta.intent === 'task')
+      || (runDoc && runDoc.intent === 'task') ? 'task' : 'review';
+    const overallVerdict = readOverallVerdict(runDir, record.meta.runId, intent);
     // #87: tally.json carries neither seatLoss nor degrades — recover both from
     // the run folder's verdict the same way the chair line is recovered.
     const prior = readPriorVerdictSurfaces(runDir, record.meta.runId);
-    verdict = buildVerdict(record, decisions, { overallVerdict,
+    verdict = buildVerdict(record, decisions, { overallVerdict, intent,
       ...(prior.seatLoss ? { seatLoss: prior.seatLoss } : {}),
       ...(prior.degrades ? { degrades: prior.degrades } : {}) });
   }

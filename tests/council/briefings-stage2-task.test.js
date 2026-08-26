@@ -304,12 +304,22 @@ describe('dispatcher contract (briefings-stage2.judgeBundleFor)', () => {
     // The task module top-requires briefings-stage2 for the shared vocabulary;
     // the dispatcher must lazy-require at call time or the cycle deadlocks into
     // a half-initialized module object.
+    // ⚠️ v4.9 fix round 2 (council C4): anchored at column 0, not `.test(l.trim())`.
+    // The trimming spelling reads an INDENTED call-time require as top-level.
+    // MEASURED: that makes it OVER-eager, not blind — both spellings catch a
+    // genuine column-0 `const … require`, but the trimming one also counts a
+    // legitimate lazy require written in `const` form and REDS on correct code.
+    // This module happens to lazy-require in `return … require(…)` form, which
+    // neither spelling matches, which is why the loose variant survived here
+    // while the briefings-chair-task sibling had to be strict from day one. All
+    // three variants of the heuristic now read identically.
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'council', 'briefings-stage2.js'), 'utf-8');
     const topLevelRequires = src.split('\n')
-      .filter(l => /^(const|let|var)\s.*require\(/.test(l.trim()));
+      .filter(l => /^(const|let|var)\s.*require\(/.test(l));
     expect(topLevelRequires.filter(l => l.includes('briefings-stage2-task'))).toHaveLength(0);
+    expect(topLevelRequires.length).toBeGreaterThan(0);   // non-vacuous: the heuristic still binds
   });
 });

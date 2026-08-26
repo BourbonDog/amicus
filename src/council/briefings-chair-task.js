@@ -41,6 +41,17 @@ const CHAIR_ANSWER_VALUES = ['Converged', 'Split', 'Insufficient'];
  * case). Task mode asks for an ANSWER, not an assessment: the chair adopts,
  * merges or refuses, and the disputed claims its answer still rests on are
  * named in a RESIDUAL RISK section rather than left implicit.
+ *
+ * ⚠️ v4.9 fix round 2 (council C3) — the close carries an ESCAPE HATCH, and it
+ * is the same lesson as the no-claims twin below, one bench-shape over. That
+ * twin drops the section entirely because a bench that declared NO adjudicable
+ * claims cannot have disputed any. But this instruction runs on the commoner
+ * middle case: claims WERE raised and adjudicated, and every one of them was
+ * concurred. "The claims peers disputed" then names the empty set, and the only
+ * satisfiable reading of an unfollowable directive is to invent material —
+ * LC-10 exactly. Naming the honest line is a satisfiable instruction for that
+ * bench; deleting the section here is not an option, because unlike the twin
+ * this template cannot know at composition time whether any dispute survived.
  */
 const TASK_CHAIR_SYNTHESIS =
   'You are the council chair. Write the synthesized ANSWER across the responses, ' +
@@ -48,7 +59,8 @@ const TASK_CHAIR_SYNTHESIS =
   'complementary ones, or refuse the premise if the bench showed it unsound. State ' +
   'the consensus, the disagreements and which way they went, and close the synthesis ' +
   'with a RESIDUAL RISK section — the claims peers disputed that your answer still ' +
-  'depends on.';
+  'depends on, or the single line "RESIDUAL RISK: none — no load-bearing claim was ' +
+  'disputed." when that is the truth.';
 
 /**
  * The chair's opening instruction when the bench declared no adjudicable claims

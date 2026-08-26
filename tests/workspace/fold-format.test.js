@@ -215,6 +215,46 @@ describe('buildFoldText', () => {
       const lines = foldWith((v) => { v.intent = 'review'; });
       expect(lines[7]).toBe('VERDICT: Fix these first');
     });
+
+    /**
+     * v4.9 fix round 2 (council B2) — `run.intent` is the SECOND carrier.
+     *
+     * The label read `verdict.intent` alone, so a task run with no verdict.json
+     * (or a corrupt one) folded as `VERDICT: none` — the degraded fold, which is
+     * exactly the fold a user reaches for when a task run went wrong, labelled
+     * on the wrong scale. `run.json` checkpoints `intent: 'task'` at start
+     * (`src/council/run.js :: runCouncil`), and `o.run` here IS that parsed
+     * document: `electron/ipc-workspace.js` passes `run: detail.run`, which
+     * `run-detail.js :: getRunDetail` reads straight from `<runDir>/run.json`.
+     * MEASURED — this is not an assumed reachability.
+     *
+     * Named mutant FOLDLABELVERDICTONLY: drop the `run.intent` half. RED SET:
+     * the two pins below. Every pin above rides the review fixture's run.json
+     * (no intent key) and stays green.
+     */
+    const foldRun = (mutateRun, verdict) => {
+      const run = load('council-run-complete', 'run.json');
+      mutateRun(run);
+      return buildFoldText({
+        nonce: NONCE, project: '/p', run, tally: load('council-run-complete', 'tally.json'),
+        verdict, chairText: null,
+      }).split('\n');
+    };
+
+    test('a task run with NO verdict.json degrades in the task scale: ANSWER: none', () => {
+      expect(foldRun((r) => { r.intent = 'task'; }, null)[7]).toBe('ANSWER: none');
+    });
+
+    test('a task run with a PARSE-FAILED verdict.json degrades in the task scale too', () => {
+      expect(foldRun((r) => { r.intent = 'task'; }, { parseError: 'Unexpected end of JSON input' })[7])
+        .toBe('ANSWER: none');
+    });
+
+    test('absence control: a review run with no verdict.json still reads VERDICT: none', () => {
+      const run = load('council-run-complete', 'run.json');
+      expect('intent' in run).toBe(false);          // absence pin on the fixture itself
+      expect(foldRun(() => {}, null)[7]).toBe('VERDICT: none');
+    });
   });
 
   /**
