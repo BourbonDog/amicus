@@ -3,22 +3,22 @@
 
 /**
  * @module council/run-debate-revote
- * v4.8 PR3 Task 1: `legOpts`, `legRow`, and `runRevoteWave` extracted verbatim
- * out of run-debate.js (283/300 — the 300-line-per-file gate) with NO
- * behaviour change. run-debate.js requires all three back; runDebate still
- * calls runRevoteWave for the re-vote mini-wave (spec §5.1).
+ * v4.8 PR3 Task 1: `legOpts`, `legRow`, and `runRevoteWave` extracted verbatim out of
+ * run-debate.js (283/300 — the 300-line-per-file gate) with NO behaviour change.
+ * run-debate.js requires all three back; runDebate still calls runRevoteWave for the
+ * re-vote mini-wave (spec §5.1).
  *
- * That "verbatim" claim held for all three only through Task 1. `legOpts` and
- * `legRow` are still byte-identical to the extraction. `runRevoteWave` is NOT:
- * PR3 Task 6 gave it real seat-binding behaviour — the padded roster + bind
- * (`stage1-bind.js :: bindPaddedWave` since v4.8 SI-27; an inline `bindSeats`
- * call before it), the seat-keyed `byJudge`, the `sanitizeName`'d per-seat
- * repair id, and the `seat` field on the pushed legs (see the function's own
- * docblock below). Do not treat `runRevoteWave` as a behaviour-neutral mirror
- * of the old run-debate.js code — only `legOpts`/`legRow` still are. Since
- * v4.9 W2 (SI-16) the one-bounded-repair block lives in the in-file
- * `repairRevoteLeg`, called from runRevoteWave's leg loop — a structural
- * split only, no behaviour change.
+ * That "verbatim" claim held for all three only through Task 1 and now holds for
+ * `legOpts` ALONE: v4.9 W11 (PR1F-2) folded `legRow`'s body onto `buildRunStatsEntry`
+ * (its own docblock points at the diff), so it is no longer byte-identical either.
+ * `runRevoteWave` diverged first — PR3 Task 6 gave it real seat-binding behaviour:
+ * the padded roster + bind (`stage1-bind.js :: bindPaddedWave` since v4.8 SI-27;
+ * an inline `bindSeats` call before it), the seat-keyed `byJudge`, the
+ * `sanitizeName`'d per-seat repair id, and the `seat` field on the pushed legs
+ * (see the function's own docblock below). Do not treat `runRevoteWave` as a
+ * behaviour-neutral mirror of the old run-debate.js code. Since v4.9 W2 (SI-16)
+ * the one-bounded-repair block lives in the in-file `repairRevoteLeg`, called from
+ * runRevoteWave's leg loop — a structural split only, no behaviour change.
  *
  * `isAbortExit` comes from ./run-launch, NEVER from ./run-stages: run-stage2.js:12
  * records that taking it from run-launch.js "is what dissolved the old cycle
@@ -46,6 +46,10 @@ const { bindPaddedWave } = require('./stage1-bind');
 // run-retry-keys.js export (same rule, one home). ./run-retry-keys is
 // REQUIRE-FREE by design (its own docblock), so this leaf stays cycle-free.
 const { seatKey } = require('./run-retry-keys');
+// v4.9 W11 (PR1F-2): the ONE runStats row builder. ./run-stats-entry is REQUIRE-FREE
+// by design, so this leaf stays cycle-free — taking the same function off
+// ./run-assemble would drag that module's whole graph in.
+const { buildRunStatsEntry } = require('./run-stats-entry');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
@@ -58,19 +62,19 @@ function legOpts(ctx, waveId) {
 
 /**
  * v4.7 D2/E4: normalize a raw (possibly leg-absent) leg into the shape
- * debateRunStatsRows' superseded/repair lists expect. Same never-invent-a-waveId
- * discipline as buildRunStatsEntry (run-assemble.js) — only spread `waveId` when
- * the leg genuinely carries one — but keyed on an explicit `model` (the raiser or
- * judge identity), since a leg-absent attempt has no `.model` of its own to read.
- * Threads resolvedModel (the raw leg's .model, the executable id) emit-only-when-set — v4.7 GOA-7 D8.
+ * debateRunStatsRows' superseded/repair lists expect — keyed on an explicit `model` (the
+ * raiser or judge identity), since a leg-absent attempt has no `.model` of its own to
+ * read, and threading resolvedModel emit-only-when-set (v4.7 GOA-7 D8).
+ *
+ * v4.9 W11 (PR1F-2): the never-invent-a-waveId / never-invent-a-duration discipline
+ * this restated is now INHERITED — this is a call to buildRunStatsEntry, whose `leg`
+ * contract this argument already satisfies exactly (a raw leg doc: `.model` IS the
+ * resolved id, `model` here IS the alias). `role` is deliberately not passed: which
+ * role this is depends on which list the caller pushes it onto, and `debate.js :: mk`
+ * stamps it. Its byte diff + the pin that all of it is invisible to `mk`: "FOLD DIFF #2" and G6, tests/council/runstats-byte-order.test.js.
  */
 function legRow(model, leg, conformance) {
-  return leg
-    ? { model, status: leg.status, durationMs: typeof leg.durationMs === 'number' ? leg.durationMs : null,
-        usage: leg.usage || null, conformance, summary: leg.summary || '',
-        ...(leg.waveId ? { waveId: leg.waveId } : {}),
-        ...(leg.model ? { resolvedModel: leg.model } : {}) }
-    : { model, status: 'error', durationMs: null, usage: null, conformance, summary: '' };
+  return buildRunStatsEntry({ leg, model, conformance, summary: leg && leg.summary });
 }
 
 /**

@@ -12,6 +12,11 @@
  */
 
 const { peersOf, unattributedPeerDrops } = require('./peer-split');
+// v4.9 W11 (PR1F-2): the ONE runStats row builder. This module is DI-free, not
+// require-free (it already takes ./peer-split), and ./run-stats-entry is
+// require-FREE by its own design contract precisely so consumers outside
+// ./run-assemble's graph can import it — so this adds only a leaf edge.
+const { buildRunStatsEntry } = require('./run-stats-entry');
 
 // __proto__: null — an inherited/unknown action (e.g. "toString") must fall
 // through the `|| 'no-response'` guards below and in run-debate.js, never
@@ -161,14 +166,26 @@ function decorateRecord(record, debateFindings) {
  * @returns {Array<object>}
  */
 function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLegs }) {
-  const mk = (role) => (l) => ({
-    model: l.model, role, wasChair: false, conformance: l.conformance || 'clean',
-    status: l.status || 'unknown',
-    durationMs: typeof l.durationMs === 'number' ? l.durationMs : null,
-    usage: l.usage || null,
-    ...(l.waveId ? { waveId: l.waveId } : {}),
-    ...(l.resolvedModel ? { resolvedModel: l.resolvedModel } : {}),
-  });
+  // v4.9 W11 (PR1F-2): one builder, so seat/findingsUnverified/repairRefused and
+  // every future entry field reach debate rows without a fourth hand-rolled copy.
+  //
+  // ⚠️ The four lists hold NORMALIZED rows, not leg docs, and their two model fields
+  // are the MIRROR IMAGE of the entry's `leg` contract: `l.model` is the council
+  // ALIAS and `l.resolvedModel` the executable id, where the entry reads `leg.model`
+  // AS the resolved id and takes the alias as its own `model`. Passing `l` as the leg
+  // unchanged would stamp the alias into `resolvedModel` on 118 of the 137 measured
+  // rows — hence the re-key back into leg-space; nothing is invented. `summary`/`seat`
+  // are deliberately NOT passed: no runStats row has ever carried review prose, and
+  // `seat` here is a materializeDebate filename input, not a seat OBJECT (pin G1b).
+  //
+  // ⚠️ `l.status || 'unknown'` is GONE, not moved: it never fired, and cannot, because
+  // a leg doc's status comes from result-schema.js :: buildRunResult, which applies
+  // its own `metadata.status || 'unknown'` a layer down. The MEASURED census and the
+  // pin both live in tests/council/runstats-byte-order.test.js (G1c).
+  const mk = (role) => (l) => buildRunStatsEntry({
+    leg: { status: l.status, durationMs: l.durationMs, usage: l.usage,
+      waveId: l.waveId, model: l.resolvedModel },
+    model: l.model, role, conformance: l.conformance });
   return [
     ...(defenseLegs || []).map(mk('rebuttal')),
     ...(revoteLegs || []).map(mk('revote')),
