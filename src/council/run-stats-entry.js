@@ -40,9 +40,20 @@
  * `seat` (v4.8 PR4c §3.1) is the seat OBJECT — {id, alias, role, lens, position}
  * or null — never an id string. Callers pass `r.seat` / the dead-seat loop's own
  * `seat` verbatim, so the object IS the contract instead of a prose one.
+ *
+ * `summary` (v4.9 W11 / PR1F-2) is the one field the folded
+ * `run-debate-revote.js :: legRow` needed that this entry did not emit. It is
+ * EXPLICIT-ONLY and emit-when-set: it is deliberately NOT sourced from
+ * `leg.summary`, because that is the model's raw review prose and no runStats
+ * row has ever carried it — a leg-sourced default would push review text into
+ * tally-input.json for every existing caller. It stops there: `tally.js ::
+ * tally`'s re-projection allowlist does not name `summary`, so it reaches
+ * neither tally.json/verdict.json nor the ledger (MEASURED). Passing nothing
+ * leaves every row byte-for-byte unchanged (pins G4a/G4b/G4c,
+ * tests/council/runstats-byte-order.test.js).
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
-  repairRefused, seat }) {
+  repairRefused, seat, summary }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
@@ -50,6 +61,7 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     conformance: conformance || 'clean',
     ...(findingsUnverified ? { findingsUnverified: true } : {}),
     ...(repairRefused ? { repairRefused } : {}),
+    ...(summary ? { summary } : {}),
     ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
     ...(leg && leg.model ? { resolvedModel: leg.model } : {}),
     // v4.8 PR4c §3.1 / R4c-9: emit-when-DIFFERENT, compared against the seat's

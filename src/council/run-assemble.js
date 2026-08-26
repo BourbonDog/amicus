@@ -102,10 +102,17 @@ function labelClaudeReview(claudeReview, labels) {
 /**
  * The synthesized runStats row for a review that never ran a leg (v4.1 §4.4).
  * durationMs/usage are null per the never-invent rule — nothing was launched.
+ *
+ * v4.9 W11 (PR1F-2): folded onto buildRunStatsEntry, byte-for-byte (pin G3,
+ * tests/council/runstats-byte-order.test.js). The one-key stand-in leg is the
+ * whole trick: this review COMPLETED (a file the orchestrator authored), so
+ * `status: 'complete'` is a fact, not an invention — and a leg carrying only a
+ * status leaves every other entry field on its never-invent default
+ * (durationMs/usage null, no waveId, no resolvedModel). Passing `leg: null`
+ * instead would emit `status: 'error'` and call a valid review dead.
  */
 function claudeRunStatsRow() {
-  return { model: CLAUDE_SEAT, role: CLAUDE_SEAT, wasChair: false, conformance: 'clean',
-    status: 'complete', durationMs: null, usage: null };
+  return buildRunStatsEntry({ leg: { status: 'complete' }, model: CLAUDE_SEAT, role: CLAUDE_SEAT });
 }
 
 /**

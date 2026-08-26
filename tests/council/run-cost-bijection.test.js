@@ -133,8 +133,11 @@ const cleanChair = () =>
  * hands back is recorded as it's emitted — the GROUND TRUTH for "what model
  * should this leg's row carry" (`leg.modelInput || leg.model`, the alias
  * every fixture in this file passes to `wLeg`), independent of whatever
- * model a row builder (buildRunStatsEntry, debate.js's legRow) actually
- * stamps onto the row it produces. `driveAndAssertBijection` compares this
+ * model a row builder actually stamps onto the row it produces. Since v4.9
+ * W11 there is only ONE such builder — `buildRunStatsEntry`; this used to
+ * name "debate.js's legRow" as a second, which was doubly stale (legRow moved
+ * to run-debate-revote.js in v4.8 PR3 Task 1, and W11 folded it onto the
+ * entry). `driveAndAssertBijection` compares this
  * against the row-key multiset to catch a MIS-ATTRIBUTION bug a totals-only
  * check cannot see — for every scenario that uses this helper, not just the
  * ones with their own per-scenario `toMatchObject` pins (review fix wave,
@@ -220,8 +223,10 @@ async function driveAndAssertBijection(opts, script) {
   // carried (instrumentedLaunchers, above) against the row-key multiset.
   // This closes the mis-attribution seam the totals-only checks above cannot
   // — a row stamped with the WRONG model (buildRunStatsEntry's `model`
-  // override, or debate.js's legRow, disagreeing with the leg it actually
-  // priced) leaves every total untouched, since the leg's cost is still
+  // override disagreeing with the leg it actually priced; since v4.9 W11 that
+  // override is the ONLY way it can happen, because `run-debate-revote.js ::
+  // legRow` and `debate.js :: mk` are now calls to that same builder)
+  // leaves every total untouched, since the leg's cost is still
   // counted once, just credited to the wrong seat, while this assertion
   // catches it directly — for every future scenario using this helper, not
   // only the six with their own per-scenario `toMatchObject` pins below.
