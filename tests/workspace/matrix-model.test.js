@@ -38,7 +38,7 @@ describe('buildMatrixModel', () => {
   // every real run (tally.js :: tally) — it is not a fallback source. Without a
   // verdict.json, the row must show no badge and the PRE-override tier. Only
   // when verdict.json is joined by id does the post-override tier + the real
-  // {from,to,reason} badge appear (verdict.js:122-126).
+  // {from,to,reason} badge appear (verdict.js :: buildVerdict).
   test('thin confidence and basis pass through; tierOverride/tier are verdict-sourced, tally-tier as fallback', () => {
     const c2 = m.rows.find((r) => r.id === 'C2');
     expect(c2.thin).toBe(true);

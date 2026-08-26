@@ -28,6 +28,30 @@ test('a heal announces but does NOT flip degraded', () => {
   expect(sink.all()).toHaveLength(1);
 });
 
+// v4.9 W5.1: kind 'info' is an announcement, never a loss — the sink records
+// and announces it, but the degraded flag (and therefore the exit code) is
+// untouched. The control test below proves the CHANNEL is not what spares the
+// flag: a kind:'degrade' on the same channel still degrades.
+test('an info note announces and records but does NOT flip degraded', () => {
+  const runDir = mkRunDir(); const out = []; const degraded = { value: false };
+  const sink = createDegradeSink({ runDir, degraded, write: (s) => out.push(s) });
+  sink.note({ kind: 'info', channel: 'ledger-skipped', what: 'a', why: 'b', effect: 'c' });
+  expect(out[0].startsWith('Note: ')).toBe(true);
+  expect(degraded.value).toBe(false);
+  const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+  expect(run.degrades).toHaveLength(1);
+  expect(run.degrades[0].kind).toBe('info');
+  expect(sink.all()).toHaveLength(1);
+});
+
+test("control: a kind:'degrade' note on ledger-skipped still degrades", () => {
+  const runDir = mkRunDir(); const out = []; const degraded = { value: false };
+  const sink = createDegradeSink({ runDir, degraded, write: (s) => out.push(s) });
+  sink.note({ channel: 'ledger-skipped', what: 'a', why: 'b', effect: 'c' });
+  expect(out[0].startsWith('Notice: ')).toBe(true);
+  expect(degraded.value).toBe(true);
+});
+
 test('a malformed record becomes an internal degrade instead of throwing', () => {
   const runDir = mkRunDir(); const out = []; const degraded = { value: false };
   const sink = createDegradeSink({ runDir, degraded, write: (s) => out.push(s) });

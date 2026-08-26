@@ -35,7 +35,7 @@ const JUDGES = [
 
 describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
   // ⚠️ v4.8 PR4c §3.2: this fixture PASSES a real `seats` array on purpose. The
-  // engine always does (run.js:133 sets o.seats unconditionally past the
+  // engine always does (run.js:142 sets o.seats unconditionally past the
   // preflight, and buildSeats always returns an array), so a fixture that omits
   // it exercises a state that never occurs — and measured, both the meta pin
   // below and T8 are GREEN against the vacuous `...(seats ? …)` guard when

@@ -234,3 +234,52 @@ describe('repair prompts', () => {
     expect(text).toContain('VERDICT: Ship it');
   });
 });
+
+describe('review judges never see the briefing — the anonymity narrowing (v4.9 W7 T-B)', () => {
+  // Spec §5.4 makes the briefing tail the ONE thing a TASK bundle adds. The
+  // converse — that a REVIEW bundle carries no briefing at all — is the half
+  // that was never written down: review judges rank critiques of material they
+  // are deliberately not shown, and nothing pinned that. Written now, so the
+  // review bundle can never be widened by accident under a task-mode edit.
+  const BRIEFING = 'Size the SMB churn risk of a 12% price increase.';
+  const BRIEFING_HEADER = '--- THE BRIEFING (what every response was asked to do) ---';
+
+  test('the review bundle renders no briefing section, even when handed one', () => {
+    const withArg = s2.buildJudgeBundle({ reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING });
+    expect(withArg).not.toContain(BRIEFING_HEADER);
+    expect(withArg).not.toContain('THE BRIEFING');
+    expect(withArg).not.toContain(BRIEFING);
+    expect(withArg).toBe(s2.buildJudgeBundle({ reviews: REVIEWS, findings: FINDINGS }));
+  });
+
+  test('it ends on the last labeled review — nothing is appended after the bench', () => {
+    const bundle = s2.buildJudgeBundle({ reviews: REVIEWS, findings: FINDINGS });
+    expect(bundle.endsWith('--- Review B ---\nB prose review.')).toBe(true);
+  });
+
+  test('the task twin is the ONLY builder that carries the tail', () => {
+    const task = require('../../src/council/briefings-stage2-task').buildTaskJudgeBundle({
+      reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING,
+    });
+    expect(task).toContain(BRIEFING_HEADER);
+    expect(task).toContain(BRIEFING);
+  });
+
+  // PR #200 round-5 B2 — the REVIEW-CONTROL ABSENCE PIN for the briefing fence.
+  // The fence exists because the task tail puts caller-supplied text in front of
+  // the judges whose rankings drive the answer. A review bundle carries no such
+  // text, so it must carry no fence either: this is the pin that fails if the
+  // fence is ever composed unconditionally and the review bundle's bytes move.
+  test('the review bundle carries NO briefing fence — it has no untrusted tail to fence', () => {
+    const review = s2.buildJudgeBundle({ reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING });
+    expect(review).not.toContain('<council_briefing');
+    expect(review).not.toContain('</council_briefing>');
+    expect(review).not.toContain('READ-ONLY reference material');
+    expect(review).not.toContain('purpose="background_reference_only"');
+    // Non-vacuous: the task twin, built from the same args, does carry it.
+    const task = require('../../src/council/briefings-stage2-task').buildTaskJudgeBundle({
+      reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING,
+    });
+    expect(task).toContain('<council_briefing purpose="background_reference_only">');
+  });
+});

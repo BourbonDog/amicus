@@ -136,7 +136,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // ONLY when the bench repeats an alias — the one case where the `alias#N`
     // seat ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat
     // resolve to nothing else in the document (meta.models is the ALIAS list).
-    // ⚠️ `seats ?` alone would be VACUOUS: run.js:133 sets o.seats unconditionally
+    // ⚠️ `seats ?` alone would be VACUOUS: run.js:142 sets o.seats unconditionally
     // past the preflight and buildSeats always returns an ARRAY ([] is still
     // truthy), so that spelling writes a full table into tally-input.json,
     // tally.json AND verdict.json on every unique-alias bench.
@@ -152,7 +152,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     // joined positionally to meta.models (`claude` is pushed onto that inside
     // run-assemble.js :: buildTallyInput) or to streetCred[].
     // .slice() is defence-in-depth only: the array is shared with
-    // runState.checkpoint (run.js:135) and with both tally inputs. Nothing
+    // runState.checkpoint (run.js:144) and with both tally inputs. Nothing
     // mutates meta.seats — unlike models, which meta.models.push mutates below —
     // so no test can distinguish the copy from the reference.
     ...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {}),
@@ -207,8 +207,10 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
   // whose wave leg died still gets an honest error row.
   // v4.8 PR5a T4 (R5-8): the judge row carries its SEAT. PR4c withheld it because
-  // `joinsLedger` has no 'judge' member, so nothing consumed it; report.js's cost
-  // table does now, and without it a twin bench's two judge rows are identical.
+  // `joinsLedger` has no 'judge' member, so nothing consumed it;
+  // `report-cost.js :: buildCostModel` (the report's cost table, extracted from
+  // report.js in v4.9 W8) does now, and without it a twin bench's two judge rows
+  // are identical.
   // `buildRunStatsEntry` (run-stats-entry.js :: buildRunStatsEntry) applies the
   // shared emit-when-DIFFERENT predicate, so a unique bench stays byte-identical
   // and no new predicate enters the tree.
@@ -261,6 +263,12 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
     // line here and keeps every rendering decision in briefings-chair.js.
     findings: record.findings,
     tierCounts: record.tierCounts, date,
+    // v4.9 W7: the chair's intent is READ OFF the tallied record's meta rather than
+    // added to this signature — run.js already stamps meta.intent emit-when-'task'
+    // (run.js :: runCouncil's mkInput), and both the provisional and the debated
+    // record inherit it by spread. A record with no meta at all (hand-assembled
+    // input, and every pre-W7 caller) composes the review packet.
+    ...(record.meta && record.meta.intent === 'task' ? { intent: 'task' } : {}),
   }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
   fs.writeFileSync(path.join(runDir, 'chair-packet.md'), packet, { mode: 0o600 });
   return packet;

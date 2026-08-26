@@ -2921,9 +2921,9 @@ lines. Whoever takes this on needs an extraction first, not an edit.
        *"the same three … **as a malformed seats table**"*. Under A the two sets coincide, so both
        sentences were **correct as written**.
        **Measured** by enumerating every `buildReport` caller in live code: `runReport`
-       (`cli-handlers-council.js:95`), `runVerdict` on `--render` (`:210`, via `buildVerdict`, which
-       copies `adjudications` straight through at `verdict.js:128`), `run-verdict-files.js:44`
-       (engine-internal, not schema-free), and `mcp-server.js :: amicus_verdict` (`:1462`/`:1472`).
+       (`cli-handlers-council.js:97`), `runVerdict` on `--render` (`:212`, via `buildVerdict`, which
+       copies `adjudications` straight through at `verdict.js:134`), `run-verdict-files.js:44`
+       (engine-internal, not schema-free), and `mcp-server.js :: amicus_verdict` (`:1466`/`:1476`).
        `runTally` never calls `buildReport` at all. So a non-array `adjudications` reaches exactly
        **A** — the same three a malformed seats table reaches.
        ⚠️ **The error chain, recorded so it is not repeated:** a re-reviewer flagged the sentence
@@ -4417,7 +4417,8 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
     `grep -rn uniqueModels src/` — no hits); `artifact-guard.js:101` now gates every artifact read
     through this same `artifactAllowlist`, imported at `artifact-guard.js:25`.
 
-- [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
+- [ ] **PR4 · `verdict-seat-loss.js :: deriveSeatLoss` (extracted out of `verdict.js` by PR
+  #200's round-3 fix; the old `:68`/`:71` line citations went with it) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-dead-seats.js :: deadSeats` and
   `workspace-ui/workspace-seats.js :: retriedSeats` — gate on
   `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** (⚠️ **Both citations were re-derived and
@@ -4702,8 +4703,8 @@ deliberately left alone:
   reference (`:121`), so PR3's per-vote `seat` survives; `raiserSeat` has no slot and is dropped.
   Measured on a twin bench: the tally finding carries `"raiserSeat":"deepseek#1"`, the verdict
   finding does not, while both carry `adjudications[0].seat === "deepseek#2"`. Every caller writes
-  through `buildVerdict` (`run-verdict-files.js:41`, `cli-handlers-council.js:198`,
-  `mcp-server.js:1452`), so there is no second path that could add it.
+  through `buildVerdict` (`run-verdict-files.js:41`, `cli-handlers-council.js:200`,
+  `mcp-server.js:1456`), so there is no second path that could add it.
   ⚠️ **CORRECTED at T-A8, 2026-08-17, by re-opening all three.** This entry cited
   `run-assemble.js:223` for the first caller; `run-assemble.js` **does not call `buildVerdict` at
   all** (`grep -n 'buildVerdict(' src/council/run-assemble.js` — no hits) and `:223` there is
@@ -4722,7 +4723,7 @@ deliberately left alone:
   Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
   document" gap.
   - **Verified by execution (2026-08-16):** `src/council/verdict.js :: buildVerdict` —
-    `findings[].raiserSeat` is emitted at `verdict.js:141`: `...(f.raiserSeat ? { raiserSeat:
+    `findings[].raiserSeat` is emitted at `verdict.js:147`: `...(f.raiserSeat ? { raiserSeat:
     f.raiserSeat } : {})`.
 - [x] **DONE (v4.8 Phase 5 T5.1 + T5.2, 2026-08-21) · PR4 · an `-rv` leg that binds to NO seat makes
   `applyDebate` invent an adjudication row —
@@ -5272,7 +5273,7 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
 - [x] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
   cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
   flip the launched name from the short alias to the raw executable id, the exact failure
-  `src/council/run-chair.js:48-52` argues against). So on a mixed live/dead twin, the leg-less
+  `src/council/run-chair.js:48-52` argues against — citation true when written; since 2026-08-25 (v4.9 W4 size-gate split) that argument lives verbatim in `chair-fallback.js :: pickFallbackChair`, old range = `run-chair.js@eb0ff79c:48-52`). So on a mixed live/dead twin, the leg-less
   group keeps a numeric street cred borrowed from its live twin while carrying zero findings, and
   `pickFallbackChair` can rank it above the executable it routes to. The borrowed cred is
   **pre-existing** — today it is merged into one group — but PR4b splits it out as its own
@@ -5636,7 +5637,7 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   prototype chain and `basis["function toString() { [native code] }"] = NaN`, serialized as `null`
   in both `tally.json` and `verdict.json`. Reachable on the schema-free CLI path only — the MCP
   path's `adjudications[].verdict` is `z.enum(['agree','dispute','neutral'])`
-  (`src/mcp-tools.js:420`), which rejects every `Object.prototype` key before `tally()` ever runs.
+  (`src/mcp-tools.js:426`), which rejects every `Object.prototype` key before `tally()` ever runs.
   PR4c's `sameModelCorroboration` stamp (`tally.js :: sameModelCorroboration`) reads the same
   `VERDICTS[v.verdict]` expression — measured harmless: it resolves the same `undefined`, so
   nothing downstream corrupts.
@@ -5863,7 +5864,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     definition), `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` and `run-stages.js:96 :: keyOf`
     (both left on purpose — their else branch is a LEG read, `l.modelInput || l.model`, a sibling
     form, not this rule over a bare alias), `run-stages.js:106` (the healed-filter's inline form —
-    outside the W3 replace list; `run-stages.js` was not touched), and `run.js:235` (hand-inlined,
+    outside the W3 replace list; `run-stages.js` was not touched **by W3's seatKey replaces** —
+    ⚠️ read PR-wide that clause was FALSE the day it merged: the same PR's V18 conformance hunk
+    edited `run-stages.js`' repair push; scoped here per round-3 council B4, 2026-08-25), and
+    `run.js:235` (hand-inlined,
     stays: its `|| byJudge.get(r.model)` fallback is load-bearing, per disposition (b)).
     Sites, **re-derived by opening each line, 2026-08-17** (T-A2 fix round 3; the list previously
     read "all re-derived by execution against the final tree" as of 2026-08-16 and **three of the
@@ -6535,9 +6539,21 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
-## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
+## v4.9 records — dispositions and rulings made in-cycle (2026-08-25)
 
-Filed past-tense in the same commit as the fixes, per the falsified-record rule.
+Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- **W5 ruling — a spec self-contradiction resolved: `intent` is emit-when-`'task'`
+  EVERYWHERE.** The v4.8 design spec's §5.3 declares verdict-`intent` "mandatory" while its
+  §7.5 promises byte-identical review-run `verdict.json`; both cannot hold. v4.9 W5 shipped
+  the §7.5 side — `intent` appears on `run.json`, tally `meta`, and `verdict.json` only when
+  `'task'`; absence means review and `'review'` is never materialized (the engine rejects an
+  explicit `intent:'review'` option pre-spend, pinned). §5.3's rationale — renderers need a
+  fork key on the verdict — is fully served by emit-when-task. Byte identity for review runs
+  is pinned at the key level AND the byte level (`tests/council/run-intent.test.js`).
+- **W5 size note: `src/council/run.js` hit exactly 300/300** with the intent validation +
+  V12 block. Any W6+ edit to it needs an extraction or a same-line-count swap first — the W6
+  briefing-write fork is designed as a dispatch-helper swap for exactly this reason.
 
 - **The `tests/mcp-headless-e2e.integration.test.js` double failure — DECIDED: live-LLM flake,
   not a session leak; the standing "Jest did not exit" warning was a REAL, separate defect.**
@@ -6568,7 +6584,51 @@ Filed past-tense in the same commit as the fixes, per the falsified-record rule.
   Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
   clears the map. All four states pinned in
   `tests/electron/ipc-setup-catalog-snapshot.test.js`.
+- **A task run with a missing/corrupt `verdict.json` labelled its fold and Workspace panels
+  review-scale — FIXED** (filed as W8 wave review finding 3 2026-08-25; re-raised as PR 200
+  council B2 and fixed the same day). `fold-format.js` and `run-detail.js`'s verdict panel read
+  only `verdict.intent`; on the narrow leg where a task run exits 1 BEFORE the verdict write
+  (the normal degraded ladder writes verdict.json WITH intent and is honest), the fold printed
+  `VERDICT: none` and the panel defaulted review. Both now source it as `verdict.intent ||
+  run.intent` — `run.json` checkpoints `intent: 'task'` (`run.js :: runCouncil`'s start
+  checkpoint), and the run doc was already in scope at both sites (`verdictPanel`'s first
+  parameter; `o.run` in `buildFoldText`, which `electron/ipc-workspace.js` fills from
+  `detail.run`). Pinned in `tests/workspace/run-detail.test.js` (missing AND corrupt
+  verdict.json → `intent:'task'`), `tests/workspace/fold-format.test.js` (`ANSWER: none` on both,
+  plus a review absence control) and `tests/workspace/workspace-matrix.test.js` (the chip reads
+  `no chair answer`). ⚠️ `src/council/report.js :: toModel` still reads `verdict.intent` alone and
+  is deliberately UNCHANGED: it takes no run doc, and it cannot be wrong — it only ever runs on a
+  verdict that exists, and both producers of one now carry intent (the engine via `meta.intent`,
+  the Stage-5 rebuild via `opts.intent`).
+- [ ] **Offer-session snapshots leak for a window destroyed without `setup-done`** (PR 199
+  round-3 council B3, nit, filed as latent 2026-08-25). `electron/offer-session.js`'s map is
+  reclaimed only by `endSession` (setup-done) or a same-key re-offer; a Settings window closed
+  by the OS/user without finishing leaks one entry per provider it offered (bounded, tiny).
+  The sender-less `endSession` wipe-all path is harness-only — real windows carry sender ids.
+  Clean fix when wanted: a window-closed hook calling `endSession` for that sender.
 - **`MAX_CATALOG_AGE_MS` mirror (doctor-alias-check vs cli-handlers-doctor)** — retired to one
   source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
   it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is
   acyclic, measured). Three copies → one; no drift test needed.
+- **Spec §10.6 REFUTED BY MEASUREMENT — `council tally` / `council verdict` on a task run work
+  end to end; no `COUNCIL_INTENT_MISMATCH` guard was built (v4.9 W8 T-B).** The v4.8 design
+  spec's §10.6 claimed both commands "have no valid input path and must fail with a named
+  `COUNCIL_INTENT_MISMATCH`, not an ENOENT". Measured against the real CLI (`node
+  bin/amicus.js`, `AMICUS_CONFIG_DIR` redirected to a scratch dir) on a task tally-input built
+  from `tests/council/fixtures/av-receiver-input.js` with `meta.intent:'task'`: `council tally
+  <input> --json` exited **0**, returned the full record with `meta.intent:"task"` and
+  `tierCounts {Confirmed:29, Contested:2, Singleton:1, Disputed:3}`, and wrote **no**
+  `council-ledger.jsonl` at all (the W5.4 gate-2 intent gate in `cli-handlers-council.js ::
+  runTally`); `council verdict <tally.json> -o verdict.json --json` then exited **0** and
+  emitted `intent:"task"` with `overallVerdict:"Converged"` — a CHAIR_ANSWERS phrase recovered
+  from `chair-output.md` by `verdict.js :: readOverallVerdict`. ⚠️ The MECHANISM named here was
+  corrected by PR 200's fix round (council B1/C2): this said "the both-scale fallback (the W7
+  fix-round F2 change)", which no longer exists — `readOverallVerdict` now takes the run's
+  `intent` and dispatches ONE parser through `parseChairTerminal`. The measurement's OUTCOME is
+  unchanged and was re-verified: that fixture's tally carried `meta.intent:'task'`, which is the
+  first of the three carriers the caller reads (round 3's council C3 added the prior
+  verdict.json's own `intent` as the third), so the ANSWER scale is still selected and
+  `"Converged"` is still recovered. The spec predates W5–W7 giving these paths an intent axis: the shipped
+  design **carries** intent rather than refusing it, and a mismatch error would now break the
+  exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
+  clause is unaffected — it stays mode-free by design, as written.

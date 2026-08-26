@@ -124,7 +124,7 @@ function costPanel(run, tally) {
 
 // ⚠️ PRE-FLIGHT (P3): F04's correction is implemented here rather than left as prose.
 // VERIFIED on shipped main (Task 0): `finalize(exitCode, error)` writes `error: error || null`
-// (run-finalize.js :: writeRunTerminal), and `return finalize(degraded.value ? 2 : 0)` (run.js:279) is the ONLY
+// (run-finalize.js :: writeRunTerminal), and `return finalize(degraded.value ? 2 : 0)` (run.js:294) is the ONLY
 // exit-2 path — it passes NO error. Every error-bearing call is `finalize(1, …)`. So on a
 // `status:'partial'` run — precisely the run this panel exists to explain — `run.error` is
 // GUARANTEED null, and the old one-line formula rendered "undefined: undefined".
@@ -142,13 +142,32 @@ function degradedReason(run) {
   return null;
 }
 
+// v4.9 W8 T-B: `intent` rides this payload so the renderer can label a task run's
+// chip `ANSWER:` (electron/workspace-ui/workspace-matrix.js :: renderVerdict is a
+// plain browser script and cannot require() src/, so a fork key it cannot read is
+// a fork it cannot make). Unlike verdict.json — emit-when-'task' per the W5 ruling,
+// because that artifact has a byte-identity contract — this is an in-memory IPC
+// model whose literal is CLOSED and always materializes every key with a default,
+// so `intent` is materialized both ways and defaults to 'review'. The renderer
+// still treats an ABSENT key as review: pre-v4.9 payloads carry none.
+// ⚠️ v4.9 fix round 2 (council B2): sourced from `run` as well as `verdict`.
+// Reading `verdict.intent` ALONE meant the two panels that exist to explain a
+// broken run could not label it: on the narrow leg where a task run exits before
+// the verdict write — or leaves a truncated one — there is no verdict.intent to
+// read, and the panel defaulted to review, so the Workspace chip said "no chair
+// verdict" about a run that was never on that scale. `run.json` checkpoints
+// `intent: 'task'` at start (run.js :: runCouncil) and `run` is already this
+// function's first parameter, so the honest source costs nothing to reach.
 function verdictPanel(run, verdict) {
   const reason = degradedReason(run);
+  // PR #200 round-5 B3: parens on the whole disjunction — behaviour-identical.
+  const intent = ((verdict && verdict.intent === 'task') || (run && run.intent === 'task')) ? 'task' : 'review';
   if (!verdict || verdict.parseError) {
-    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason };
+    return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason, intent };
   }
   return {
     present: true,
+    intent,
     overallVerdict: verdict.overallVerdict === undefined ? null : verdict.overallVerdict,
     tierCounts: verdict.tierCounts || null,
     streetCred: Array.isArray(verdict.streetCred) ? verdict.streetCred : [],

@@ -2,8 +2,8 @@
 
 /**
  * @module utils/degrade
- * The degrade/heal record: one shape, one vocabulary, shared by the council
- * runtime and `doctor`. Pure — no I/O, no council knowledge.
+ * The degrade/heal/info record: one shape, one vocabulary, shared by the
+ * council runtime and `doctor`. Pure — no I/O, no council knowledge.
  *
  * WHY validation lives here and THROWS: it is what makes the announcement
  * contract real. A degrade that does not say what was lost, why, and what it
@@ -17,6 +17,8 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
   'stage1-retry',
+  // v4.9 task mode: a task run writes no reliability-ledger rows — announced as kind:'info'.
+  'ledger-skipped',
   // v4.8: the seat<->leg join failed. THREE shapes, one channel: a launched seat whose wave
   // returned legs but none its own; a returned leg matching no roster slot; and (T5.5, `-rv` only)
   // a leg that DID match a slot but whose join key names no judge the wave launched.
@@ -27,13 +29,16 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'doctor-check-failed', 'doctor-fix',
 ]));
 
-const KINDS = Object.freeze(new Set(['degrade', 'heal']));
+// 'info' (v4.9): an announcement that is neither a loss nor a recovery — the
+// sink records and prints it but never flips `degraded` (run-degrade.js gates
+// the flip on kind === 'degrade').
+const KINDS = Object.freeze(new Set(['degrade', 'heal', 'info']));
 const REQUIRED = ['what', 'why', 'effect'];
 
 function makeDegrade(input = {}) {
   const kind = input.kind === undefined ? 'degrade' : input.kind;
   if (!KINDS.has(kind)) {
-    throw new Error(`degrade: unknown kind '${kind}' (expected 'degrade' or 'heal')`);
+    throw new Error(`degrade: unknown kind '${kind}' (expected 'degrade', 'heal', or 'info')`);
   }
   if (!DEGRADE_CHANNELS.has(input.channel)) {
     throw new Error(`degrade: unknown channel '${input.channel}'`);
@@ -66,7 +71,9 @@ function makeDegrade(input = {}) {
  * @returns {string} one line, newline-terminated
  */
 function formatDegrade(record) {
-  const lead = record.kind === 'heal' ? 'Recovered' : 'Notice';
+  // Lead map: degrade → Notice, heal → Recovered, info → Note. Anything else
+  // (a legacy JSON-parsed record with no kind) keeps the pre-info default, Notice.
+  const lead = record.kind === 'heal' ? 'Recovered' : record.kind === 'info' ? 'Note' : 'Notice';
   const remedy = record.remedy ? ` Try: ${record.remedy}.` : '';
   return `${lead}: ${record.what} — ${record.why}. ${record.effect}.${remedy}\n`;
 }

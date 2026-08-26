@@ -9,7 +9,7 @@
  * live in ./briefings-stage2.js (300-line gate split).
  */
 
-/** SEAT-BRIEFS.md standard anti-sycophancy clause — verbatim, EVERY Stage-1 briefing. */
+/** SEAT-BRIEFS.md standard anti-sycophancy clause — verbatim, EVERY Stage-1 review briefing (task briefings carry briefings-task.js's claims-worded twin). */
 const ANTI_SYCOPHANCY_CLAUSE =
   'Do not soften findings to be agreeable. Lead with your most severe finding. ' +
   'No praise cushions before criticism, and never perform enthusiasm you don\'t hold — ' +
@@ -97,15 +97,27 @@ function dateLine(date) {
   return `Today's date is ${date}.`;
 }
 
-function compose(role, { briefing, date }) {
+/**
+ * The generalized Stage-1 skeleton (v4.9 W6): role / clause / date / contract /
+ * separator / briefing. Both intents compose through here, which is what makes
+ * the `--- MATERIAL / BRIEFING ---` separator — a PRODUCTION contract,
+ * src/sidecar/list-search.js:14 splits briefing-stage1.md on it — a single
+ * spelling in both modes. briefings-task.js top-requires this.
+ */
+function composeWith(role, clause, contract, { briefing, date }) {
   return [
     role,
-    ANTI_SYCOPHANCY_CLAUSE,
+    clause,
     dateLine(date),
-    FINDINGS_CONTRACT,
+    contract,
     '--- MATERIAL / BRIEFING ---',
     briefing,
   ].join('\n\n');
+}
+
+/** Review-mode skeleton — delegates, so the review path is byte-identical by construction. */
+function compose(role, args) {
+  return composeWith(role, ANTI_SYCOPHANCY_CLAUSE, FINDINGS_CONTRACT, args);
 }
 
 /** Standard seat briefing (Stage-1 fanout wave). */
@@ -191,7 +203,32 @@ function buildFindingsRepairPrompt({ errors, review }) {
   ].join('\n\n');
 }
 
+/**
+ * Stage-1 per-surface dispatchers (v4.9 W6). `intent` is the run's task-mode
+ * channel (W5 plumbing: `'task'` | absent) — a task run composes the task twin
+ * from ./briefings-task, anything else composes the review builder
+ * byte-identically (fail-closed). The require is lazy AT CALL TIME:
+ * briefings-task top-requires this module for composeWith, so a top-level
+ * require here would be a load cycle.
+ */
+function stage1SeatBriefing(intent, args) {
+  return intent === 'task' ? require('./briefings-task').buildTaskSeatBriefing(args) : buildSeatBriefing(args);
+}
+
+function stage1CriticBriefing(intent, args) {
+  return intent === 'task' ? require('./briefings-task').buildTaskCriticBriefing(args) : buildCriticBriefing(args);
+}
+
+function stage1LensBriefing(intent, args) {
+  return intent === 'task' ? require('./briefings-task').buildTaskLensBriefing(args) : buildLensBriefing(args);
+}
+
+function stage1RepairPrompt(intent, args) {
+  return intent === 'task' ? require('./briefings-task').buildTaskFindingsRepairPrompt(args) : buildFindingsRepairPrompt(args);
+}
+
 module.exports = {
   ANTI_SYCOPHANCY_CLAUSE, FINDINGS_CONTRACT, FINDINGS_JSON_SHAPE, FINDINGS_TWO_PART_FRAMING,
   buildSeatBriefing, buildCriticBriefing, buildLensBriefing, buildFindingsRepairPrompt,
+  composeWith, stage1SeatBriefing, stage1CriticBriefing, stage1LensBriefing, stage1RepairPrompt,
 };

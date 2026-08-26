@@ -24,7 +24,7 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   const table = mustSection(readme, /## Commands[\s\S]*?(?=\n## )/, 'README.md Commands table');
 
   it('the switch labels and getCommandNames() agree', () => {
-    // Free cross-check: src/cli.js:751 exports getCommandNames() as the
+    // Free cross-check: src/cli.js:753 exports getCommandNames() as the
     // repo's stated anti-rot idiom for "every command amicus recognizes",
     // but nothing pinned it against the actual bin/amicus.js switch. If a
     // command is added to one and not the other, this goes red.

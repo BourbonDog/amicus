@@ -164,6 +164,144 @@ describe('buildFoldText', () => {
   });
 
   /**
+   * v4.9 W8 T-B — the terminal line names the scale its phrase belongs to.
+   *
+   * A task chair closes on an `ANSWER:` line drawn from CHAIR_ANSWERS and never
+   * emits a `VERDICT:` one; the two scales are DISJOINT by pinned construction
+   * (src/council/parse-stage2.js, tests/council/chair-scale-drift.test.js). So a
+   * task fold headed `VERDICT: Converged` labels the phrase with a scale it does
+   * not belong to — the dishonesty this task exists to remove.
+   *
+   * `intent` is emit-when-`'task'` (src/council/verdict.js :: buildVerdict — the
+   * W5 ruling), so the review fold is unchanged byte for byte and BOTH absence
+   * cases (no key at all, and an explicit `'review'`) keep `VERDICT:`.
+   *
+   * Named mutant FOLDLABELSTUCK — hard-code the head line back to
+   * `` `VERDICT: ${overall || 'none'}` `` (the label ignores intent).
+   * RED SET: "a task fold's terminal line reads ANSWER:, never VERDICT:" and
+   * "a task fold with no chair phrase still degrades in the task scale". The two
+   * review pins stay GREEN by construction — they are the absence controls, and
+   * a mutant that turns them red would be a different defect.
+   */
+  describe('the terminal line names the scale the phrase belongs to (v4.9 W8)', () => {
+    const foldWith = (mutate) => {
+      const run = load('council-run-complete', 'run.json');
+      const tally = load('council-run-complete', 'tally.json');
+      const verdict = load('council-run-complete', 'verdict.json');
+      mutate(verdict);
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally, verdict, chairText: null }).split('\n');
+    };
+
+    test("a task fold's terminal line reads ANSWER:, never VERDICT:", () => {
+      const lines = foldWith((v) => { v.intent = 'task'; v.overallVerdict = 'Converged'; });
+      expect(lines[7]).toBe('ANSWER: Converged');
+      expect(lines[7]).not.toContain('VERDICT');
+      // Non-vacuous: the rest of the head is untouched by the fork.
+      expect(lines[6]).toBe('---');
+      expect(lines[8]).toBe('Tiers: Confirmed 1 · Disputed 1 · Contested 1 · Singleton 1');
+    });
+
+    test('a task fold with no chair phrase still degrades in the task scale: ANSWER: none', () => {
+      const lines = foldWith((v) => { v.intent = 'task'; v.overallVerdict = null; });
+      expect(lines[7]).toBe('ANSWER: none');
+    });
+
+    test('a review fold carries no intent key at all and is byte-identical — VERDICT: (absence pin)', () => {
+      const lines = foldWith((v) => { expect('intent' in v).toBe(false); });
+      expect(lines[7]).toBe('VERDICT: Fix these first');
+    });
+
+    test("an explicit intent:'review' is not task — emit-when-task means everything else reads review", () => {
+      const lines = foldWith((v) => { v.intent = 'review'; });
+      expect(lines[7]).toBe('VERDICT: Fix these first');
+    });
+
+    /**
+     * v4.9 fix round 2 (council B2) — `run.intent` is the SECOND carrier.
+     *
+     * The label read `verdict.intent` alone, so a task run with no verdict.json
+     * (or a corrupt one) folded as `VERDICT: none` — the degraded fold, which is
+     * exactly the fold a user reaches for when a task run went wrong, labelled
+     * on the wrong scale. `run.json` checkpoints `intent: 'task'` at start
+     * (`src/council/run.js :: runCouncil`), and `o.run` here IS that parsed
+     * document: `electron/ipc-workspace.js` passes `run: detail.run`, which
+     * `run-detail.js :: getRunDetail` reads straight from `<runDir>/run.json`.
+     * MEASURED — this is not an assumed reachability.
+     *
+     * Named mutant FOLDLABELVERDICTONLY: drop the `run.intent` half. RED SET:
+     * the two pins below. Every pin above rides the review fixture's run.json
+     * (no intent key) and stays green.
+     */
+    const foldRun = (mutateRun, verdict) => {
+      const run = load('council-run-complete', 'run.json');
+      mutateRun(run);
+      return buildFoldText({
+        nonce: NONCE, project: '/p', run, tally: load('council-run-complete', 'tally.json'),
+        verdict, chairText: null,
+      }).split('\n');
+    };
+
+    test('a task run with NO verdict.json degrades in the task scale: ANSWER: none', () => {
+      expect(foldRun((r) => { r.intent = 'task'; }, null)[7]).toBe('ANSWER: none');
+    });
+
+    test('a task run with a PARSE-FAILED verdict.json degrades in the task scale too', () => {
+      expect(foldRun((r) => { r.intent = 'task'; }, { parseError: 'Unexpected end of JSON input' })[7])
+        .toBe('ANSWER: none');
+    });
+
+    test('absence control: a review run with no verdict.json still reads VERDICT: none', () => {
+      const run = load('council-run-complete', 'run.json');
+      expect('intent' in run).toBe(false);          // absence pin on the fixture itself
+      expect(foldRun(() => {}, null)[7]).toBe('VERDICT: none');
+    });
+
+    /**
+     * ⚠️ PR #200 round-3 finding C1 (MEASURED, then REFUTED). The finding was
+     * that the B2 read above — `run.intent === 'task'` — has no null guard, so a
+     * missing or unparseable run.json throws a TypeError out of buildFoldText and
+     * breaks the fold's "never blocked, always labeled" contract (the module
+     * docblock's own promise). It does not: `const run = o.run || {}` at the top
+     * of buildFoldText has defaulted that read since long before the intent fork,
+     * so `run: null` renders a labeled, degraded fold — measured, both with the
+     * key absent and with it explicitly null. No guard was added; a `run &&` in
+     * front of `run.intent` would have been unreachable code.
+     *
+     * What was genuinely missing is this pin. The contract is stated only in
+     * prose, and the ONE line holding it up is four dereferences away from the
+     * three reads that depend on it (`run.chair`, `run.runId`, `run.usage`).
+     *
+     * Named mutant FOLDRUNUNGUARDED: `const run = o.run || {}` → `const run =
+     * o.run;` in src/workspace/fold-format.js :: buildFoldText.
+     */
+    test('C1: a fold with NO run document at all is still rendered and still labeled', () => {
+      for (const o of [
+        { nonce: NONCE, project: '/p', run: null, tally: null, verdict: null, chairText: null },
+        { nonce: NONCE, project: '/p' },                       // run key absent entirely
+      ]) {
+        const lines = buildFoldText(o).split('\n');
+        expect(lines[0]).toBe(buildFoldMarker(NONCE));
+        expect(lines[1]).toBe('Model: unknown');
+        expect(lines[2]).toBe('Session: unknown');
+        expect(lines[6]).toBe('---');
+        expect(lines[7]).toBe('VERDICT: none');                // labeled, review scale (fail-closed)
+        expect(lines[8]).toBe('Run: unknown — no stages recorded');
+        expect(lines[9]).toBe('Cost: —');                      // formatCost(null) — no usage block at all
+      }
+    });
+
+    test('C1: a verdict.json can still carry the task scale when run.json is gone', () => {
+      // The two carriers are independent: losing run.json must not cost the
+      // label when the verdict document itself knows the scale.
+      const lines = buildFoldText({
+        nonce: NONCE, project: '/p', run: null, tally: null, chairText: null,
+        verdict: { intent: 'task', overallVerdict: 'Converged' },
+      }).split('\n');
+      expect(lines[7]).toBe('ANSWER: Converged');
+    });
+  });
+
+  /**
    * v4.4.1 DOC-5 — the Cost line said the same thing twice. `formatCost`
    * (src/utils/pricing.js) already encodes inexactness as a leading `~` for both
    * 'estimated' and 'mixed', and returns a bare `?` for 'unknown'; appending the

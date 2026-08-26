@@ -20,7 +20,24 @@ const JUDGE_NO_TOOLS_PREAMBLE =
   'begin immediately with A1:';
 
 /**
- * Stage-2 headless output contract (spec §5, embedded in the judge bundle).
+ * The review-path ranking bullet — the ONE contract line that forks on intent
+ * (v4.9 W7 fix round, review MAJOR F1). It names the REVIEW ranking axis, which
+ * is the same axis the review bundle's Task A states three paragraphs above it;
+ * a task bundle composing this verbatim would order its judge, in the one
+ * machine-readable instruction that actually produces `"ranking"`, to rank by
+ * critique accuracy when its own Task A ranks by how well the asked-for work was
+ * DONE. Extracted rather than reworded: the review text is unchanged, and the
+ * task twin lives beside its own frame in ./briefings-stage2-task.
+ */
+const REVIEW_RANKING_BULLET =
+  '- "ranking": every review label below, ordered most to least accurate and insightful.';
+
+/**
+ * Stage-2 headless output contract (spec §5, embedded in the judge bundle),
+ * as a template over its ranking bullet — the W6 `briefings.js :: composeWith`
+ * precedent. Everything BUT that bullet is ONE text in both modes (V11): the
+ * fenced-block shape, the worked example, the ties rule, the adjudication
+ * verdicts and the LC-10 empty-index line all read identically to a task judge.
  *
  * ⚠️ LC-10 fast-follow (review minor M1): on a clean bench, JUDGE_TASK_B_NO_FINDINGS
  * tells the judge to emit `"adjudications": []` — but this contract immediately
@@ -33,28 +50,34 @@ const JUDGE_NO_TOOLS_PREAMBLE =
  * that happens to allow it. It is unconditional (shown on every bench, including
  * the ordinary and repair paths) because it is inert when findings exist and the
  * repair prompt has no findings-state argument to swap on.
+ * @param {string} rankingBullet the intent's own `- "ranking": …` line
  */
-const JUDGE_OUTPUT_CONTRACT = [
-  'End your response with a trailing fenced ```json block — no text after it — in',
-  'exactly this shape:',
-  '',
-  '```json',
-  '{',
-  '  "ranking": ["Review B", "Review A", "Review C"],',
-  '  "adjudications": [',
-  '    { "id": "A1", "verdict": "agree" },',
-  '    { "id": "B2", "verdict": "dispute" }',
-  '  ]',
-  '}',
-  '```',
-  '',
-  '- "ranking": every review label below, ordered most to least accurate and insightful.',
-  '  Ties: use a nested array for tied labels, e.g. [["Review A", "Review B"], "Review C"].',
-  '- "adjudications": one entry per listed finding id; "verdict" is one of:',
-  '  agree | dispute | neutral. An "I missed this — it\'s valid" counts as agree.',
-  '- If the FINDINGS INDEX below is empty, "adjudications" must be exactly `[]` — do',
-  '  not invent a finding id merely to have something to adjudicate.',
-].join('\n');
+function judgeOutputContractWith(rankingBullet) {
+  return [
+    'End your response with a trailing fenced ```json block — no text after it — in',
+    'exactly this shape:',
+    '',
+    '```json',
+    '{',
+    '  "ranking": ["Review B", "Review A", "Review C"],',
+    '  "adjudications": [',
+    '    { "id": "A1", "verdict": "agree" },',
+    '    { "id": "B2", "verdict": "dispute" }',
+    '  ]',
+    '}',
+    '```',
+    '',
+    rankingBullet,
+    '  Ties: use a nested array for tied labels, e.g. [["Review A", "Review B"], "Review C"].',
+    '- "adjudications": one entry per listed finding id; "verdict" is one of:',
+    '  agree | dispute | neutral. An "I missed this — it\'s valid" counts as agree.',
+    '- If the FINDINGS INDEX below is empty, "adjudications" must be exactly `[]` — do',
+    '  not invent a finding id merely to have something to adjudicate.',
+  ].join('\n');
+}
+
+/** Review-mode contract — delegates, so its bytes are the shipped ones by construction. */
+const JUDGE_OUTPUT_CONTRACT = judgeOutputContractWith(REVIEW_RANKING_BULLET);
 
 /** Task B when there is something to adjudicate (the ordinary case). */
 const JUDGE_TASK_B =
@@ -84,6 +107,15 @@ const JUDGE_TASK_B_NO_FINDINGS =
 const NO_FINDINGS_INDEX = '(none — no review in this bundle raised a finding)';
 
 /**
+ * The index section header — SHARED across both intents (V11, v4.9 W7). It is a
+ * constant rather than an inline literal because the contract template names it
+ * in prose ("If the FINDINGS INDEX below is empty…") and briefings-stage2-task.js
+ * renders the same section over CLAIMS: a second copy is how the two silently
+ * drift apart and leave that shared contract line pointing at nothing.
+ */
+const FINDINGS_INDEX_HEADER = '--- FINDINGS INDEX (run-global ids) ---';
+
+/**
  * The single shared anonymized judge bundle.
  * @param {{reviews: Array<{label: string, text: string}>,
  *   findings: Array<{id: string, severity: string, claim: string}>}} args
@@ -105,7 +137,7 @@ function buildJudgeBundle({ reviews, findings, date }) {
     'Task A — Rank: order the reviews from most to least accurate and insightful.',
     raised.length ? JUDGE_TASK_B : JUDGE_TASK_B_NO_FINDINGS,
     JUDGE_OUTPUT_CONTRACT,
-    '--- FINDINGS INDEX (run-global ids) ---',
+    FINDINGS_INDEX_HEADER,
     findingLines,
     reviewBlocks,
   );
@@ -125,9 +157,16 @@ function buildJudgeBundle({ reviews, findings, date }) {
  * recreate the defect in a subtler form (repairing a judgement the model can only
  * half see) — and the absent case is STATED rather than papered over with an
  * empty block.
+ *
+ * Templated over the contract for the same reason the bundle is (F1): a repair
+ * solo is a FRESH session whose only statement of the required shape is the
+ * contract embedded here, so a task judge repaired against the review bullet
+ * would be told to re-rank on the wrong axis — on the paid path the run reaches
+ * precisely because that judge already got its output wrong once.
+ * @param {string} contract the intent's judge output contract
  * @param {{errors?: Array<{code:string,detail:string}>, judgement?: string}} args
  */
-function buildJudgeRepairPrompt({ errors, judgement }) {
+function judgeRepairPromptWith(contract, { errors, judgement }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
   const text = typeof judgement === 'string' ? judgement.trim() : '';
   const prior = text
@@ -144,16 +183,54 @@ function buildJudgeRepairPrompt({ errors, judgement }) {
     lines,
     'Re-emit ONLY the corrected JSON block (the same rankings and adjudications, fixed — '
     + 'do not change your votes), as a single fenced ```json block:',
-    JUDGE_OUTPUT_CONTRACT,
+    contract,
   ].join('\n\n');
+}
+
+/** Review-mode repair prompt — delegates, so the review path is byte-identical. */
+function buildJudgeRepairPrompt(args) {
+  return judgeRepairPromptWith(JUDGE_OUTPUT_CONTRACT, args);
+}
+
+/**
+ * Stage-2 bundle dispatcher (v4.9 W7, mirroring W6's briefings.js :: stage1SeatBriefing).
+ * `intent` is the run's task-mode channel (W5 plumbing: `'task'` | absent) — a
+ * task run composes the task twin from ./briefings-stage2-task, anything else
+ * composes the review bundle byte-identically (fail-closed). The require is lazy
+ * AT CALL TIME: briefings-stage2-task top-requires this module for the shared
+ * vocabulary, so a top-level require here would be a load cycle.
+ *
+ * `args` gains one field the review builder ignores: `briefing` (spec §5.4 —
+ * task judges see the ask, review judges never do).
+ */
+function judgeBundleFor(intent, args) {
+  return intent === 'task' ? require('./briefings-stage2-task').buildTaskJudgeBundle(args) : buildJudgeBundle(args);
+}
+
+/**
+ * Repair-prompt twin of `judgeBundleFor` — same channel, same fail-closed rule,
+ * same CALL-TIME require for the same load-cycle reason. Both Stage-2 prompts a
+ * judge can receive now fork on one value, so a task judge cannot be briefed on
+ * one contract and repaired against the other (F1).
+ */
+function judgeRepairPromptFor(intent, args) {
+  return intent === 'task'
+    ? require('./briefings-stage2-task').buildTaskJudgeRepairPrompt(args)
+    : buildJudgeRepairPrompt(args);
 }
 
 module.exports = {
   JUDGE_NO_TOOLS_PREAMBLE, CHAIR_NO_TOOLS_PREAMBLE: chair.CHAIR_NO_TOOLS_PREAMBLE,
   CHAIR_VERDICT_VALUES: chair.CHAIR_VERDICT_VALUES,
   JUDGE_OUTPUT_CONTRACT, VERDICT_SCALE_ADDENDUM: chair.VERDICT_SCALE_ADDENDUM, dateLine,
-  JUDGE_TASK_B, JUDGE_TASK_B_NO_FINDINGS, NO_FINDINGS_INDEX,
+  JUDGE_TASK_B, JUDGE_TASK_B_NO_FINDINGS, NO_FINDINGS_INDEX, FINDINGS_INDEX_HEADER,
+  judgeBundleFor, judgeRepairPromptFor,
+  // The two seams the task twin composes through (F1) — never called directly
+  // by the run loop, which reaches both surfaces through the dispatchers above.
+  judgeOutputContractWith, judgeRepairPromptWith, REVIEW_RANKING_BULLET,
   CHAIR_TASK: chair.CHAIR_TASK, CHAIR_TASK_NO_FINDINGS: chair.CHAIR_TASK_NO_FINDINGS,
   buildJudgeBundle, buildJudgeRepairPrompt,
   buildChairPacket: chair.buildChairPacket, buildChairRepairPrompt: chair.buildChairRepairPrompt,
+  // v4.9 W7: run-chair.js reaches the chair surface through this module only.
+  chairRepairPromptFor: chair.chairRepairPromptFor,
 };

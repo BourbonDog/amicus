@@ -1,6 +1,7 @@
 // tests/council/parse-stage2.test.js
 'use strict';
-const { parseJudgeOutput, parseChairVerdict, CHAIR_VERDICTS } =
+const { parseJudgeOutput, parseChairVerdict, CHAIR_VERDICTS,
+  parseChairAnswer, parseChairTerminal, CHAIR_ANSWERS } =
   require('../../src/council/parse-stage2');
 
 const CTX = { labels: ['Review A', 'Review B', 'Review C'], findingIds: ['A1', 'B1', 'B2'] };
@@ -116,6 +117,99 @@ describe('parseChairVerdict', () => {
 
   test('does not over-match a longer word sharing the phrase as a prefix', () => {
     expect(parseChairVerdict('VERDICT: Ship its all good')).toBeNull();
+  });
+});
+
+/**
+ * v4.9 W7 T-A (#146) — the TASK chair's terminal line. `parseChairAnswer` is
+ * the same matcher as `parseChairVerdict` over a different keyword and a
+ * different phrase list, so every tolerance the review parser earned in
+ * production (trailing rationale, leading whitespace, last-line-wins,
+ * prefix anchoring) must hold here too — pinned case for case rather than
+ * asserted by inspection.
+ */
+describe('parseChairAnswer', () => {
+  test('parses each enum value', () => {
+    for (const a of CHAIR_ANSWERS) {
+      expect(parseChairAnswer(`Synthesis…\n\nANSWER: ${a}`)).toBe(a);
+    }
+  });
+
+  test('LAST matching ANSWER line wins', () => {
+    expect(parseChairAnswer('ANSWER: Converged\nmore synthesis…\nANSWER: Split\n')).toBe('Split');
+  });
+
+  test('missing or non-enum line → null', () => {
+    expect(parseChairAnswer('no answer here')).toBeNull();
+    expect(parseChairAnswer('ANSWER: Mostly agreed')).toBeNull();
+  });
+
+  test('tolerates leading whitespace and trailing spaces', () => {
+    expect(parseChairAnswer('  ANSWER: Insufficient  ')).toBe('Insufficient');
+  });
+
+  test('tolerates trailing rationale after the phrase', () => {
+    expect(parseChairAnswer('ANSWER: Split — the bench divided on the elasticity assumption'))
+      .toBe('Split');
+    expect(parseChairAnswer('ANSWER: Insufficient. Two seats produced no usable output.'))
+      .toBe('Insufficient');
+  });
+
+  test('is prefix-anchored — a canonical phrase later in the rationale must not win', () => {
+    expect(parseChairAnswer('ANSWER: Split — not a Converged bench')).toBe('Split');
+  });
+
+  test('does not over-match a longer word sharing the phrase as a prefix', () => {
+    expect(parseChairAnswer('ANSWER: Splitting the difference')).toBeNull();
+  });
+});
+
+/**
+ * ⚠️ `ANSWER:` and `VERDICT:` are DISJOINT BY CONSTRUCTION, and both directions
+ * are pinned: the keyword differs AND the phrase lists share no member. A run
+ * can therefore never read one intent's terminal line as the other's — the
+ * failure mode would be silent (a task chair's `ANSWER: Converged` scored as a
+ * review verdict, or vice versa), and it would reach verdict.json.
+ */
+describe('the two terminal lines cannot be read as each other', () => {
+  test('parseChairVerdict is null on ANSWER text — keyword AND phrase', () => {
+    for (const a of CHAIR_ANSWERS) {
+      expect(parseChairVerdict(`ANSWER: ${a}`)).toBeNull();
+      expect(parseChairVerdict(`VERDICT: ${a}`)).toBeNull();
+    }
+  });
+
+  test('parseChairAnswer is null on VERDICT text — keyword AND phrase', () => {
+    for (const v of CHAIR_VERDICTS) {
+      expect(parseChairAnswer(`VERDICT: ${v}`)).toBeNull();
+      expect(parseChairAnswer(`ANSWER: ${v}`)).toBeNull();
+    }
+  });
+
+  test('a chair that emitted BOTH lines yields each parser its own phrase', () => {
+    const text = 'Synthesis…\n\nVERDICT: Ship it\nANSWER: Converged\n';
+    expect(parseChairVerdict(text)).toBe('Ship it');
+    expect(parseChairAnswer(text)).toBe('Converged');
+  });
+});
+
+describe('parseChairTerminal dispatches on the run intent', () => {
+  const text = 'Synthesis…\n\nVERDICT: Ship it\nANSWER: Converged\n';
+
+  test("intent 'task' reads the ANSWER line", () => {
+    expect(parseChairTerminal(text, 'task')).toBe('Converged');
+    expect(parseChairTerminal('ANSWER: Split', 'task')).toBe('Split');
+    expect(parseChairTerminal('VERDICT: Ship it', 'task')).toBeNull();
+  });
+
+  test('an absent intent reads the VERDICT line, byte-identically to the direct call', () => {
+    expect(parseChairTerminal(text, undefined)).toBe(parseChairVerdict(text));
+    expect(parseChairTerminal('ANSWER: Converged', undefined)).toBeNull();
+  });
+
+  test('any other intent value falls back to the review parser (fail-closed)', () => {
+    expect(parseChairTerminal(text, 'review')).toBe('Ship it');
+    expect(parseChairTerminal(text, 'TASK')).toBe('Ship it');
   });
 });
 

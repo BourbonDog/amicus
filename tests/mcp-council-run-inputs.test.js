@@ -247,3 +247,34 @@ describe('droppedMembers threads through the MCP council-preset resolution path 
     expect(args).not.toContain('--dropped-members');
   });
 });
+
+// v4.9 W5.2: `intent` on amicus_council_run — emit-when-'task' at the argv
+// boundary: only 'task' is spawned onto the CLI child ('review' is the
+// zod-declared default spelled out; absent and 'review' spawn byte-identical
+// argv, matching the engine's absent-key idiom everywhere else).
+describe("intent reaches the spawned council run argv (v4.9 W5.2, emit-when-'task')", () => {
+  test("intent:'task' spawns --intent task", async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ intent: 'task' }), tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const args = calls[0].args;
+    expect(args[args.indexOf('--intent') + 1]).toBe('task');
+  });
+
+  test("intent:'review' spawns NO --intent (the default spelled out)", async () => {
+    const calls = [];
+    await handleCouncilRunTool(input({ intent: 'review' }), tmp, helpers(calls));
+    expect(calls[0].args).not.toContain('--intent');
+  });
+
+  test('omitted intent spawns NO --intent (review-run argv byte-unchanged)', async () => {
+    const calls = [];
+    await handleCouncilRunTool(input(), tmp, helpers(calls));
+    expect(calls[0].args).not.toContain('--intent');
+  });
+
+  test('the intent input is declared on the amicus_council_run schema', () => {
+    const tool = getTools().find(t => t.name === 'amicus_council_run');
+    expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['intent']));
+  });
+});

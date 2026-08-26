@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-verdict.schema.json",
   "title": "amicus council-verdict document",
-  "description": "Verdict record (`council verdict --json`, amicus_verdict, verdict.json). overallVerdict is the chair's parsed VERDICT line — null in every Stage-4 manual path, populated by the headless engine.",
+  "description": "Verdict record (`council verdict --json`, amicus_verdict, verdict.json). overallVerdict is the chair's parsed terminal line — the VERDICT line on a review run, the ANSWER line on a task run (v4.9 W7) — null in every Stage-4 manual path, populated by the headless engine.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -56,13 +56,21 @@
     "claudeInCouncil": {
       "type": "boolean"
     },
+    "intent": {
+      "enum": ["review", "task"],
+      "description": "v4.9, optional. The run's intent, forwarded from the tally record's meta.intent. The engine emits it only when 'task' — a review verdict never materializes the key, keeping review-run verdict.json byte-identical — but an explicit 'review' from hand-assembled input is accepted."
+    },
     "overallVerdict": {
+      "description": "v4.9 W7: the chair's parsed terminal line on EITHER scale — a review run's VERDICT phrase ('Ship it' | 'Fix these first' | 'Fundamental rethink') or a task run's ANSWER phrase ('Converged' | 'Split' | 'Insufficient'). The two scales are disjoint by construction, so the value alone identifies the intent; `intent` above states it explicitly on task runs.",
       "oneOf": [
         {
           "enum": [
             "Ship it",
             "Fix these first",
-            "Fundamental rethink"
+            "Fundamental rethink",
+            "Converged",
+            "Split",
+            "Insufficient"
           ]
         },
         {
@@ -222,13 +230,13 @@
       ]
     },
     "degrades": {
-      "description": "v4.6 Plan 2: what this run lost — copied verbatim from the sink at verdict assembly. Additive; absent on a clean run.",
+      "description": "v4.6 Plan 2: what this run lost — copied verbatim from the sink at verdict assembly. Additive; absent when the sink recorded nothing. v4.9 widened kind with 'info': an announcement that is neither a loss nor a recovery (e.g. a task run's ledger-skipped note) — carried here without degrading the run.",
       "type": "array",
       "items": {
         "type": "object",
         "required": ["kind", "channel", "what", "why", "effect"],
         "properties": {
-          "kind": { "enum": ["degrade", "heal"] },
+          "kind": { "enum": ["degrade", "heal", "info"] },
           "channel": { "type": "string" },
           "what": { "type": "string" },
           "why": { "type": "string" },

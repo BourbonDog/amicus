@@ -3,7 +3,7 @@
 //
 // M3: two dead twins collapsed to one row.  M4: a live twin erased its dead twin entirely
 // (silent data loss).  D1 (round-1 council blocker): seat-keying the dedup split the keyspace
-// against seatLoss.deadBenchSeats, which verdict.js:86 derives from the SAME dead legs that
+// against seatLoss.deadBenchSeats, which verdict-seat-loss.js :: deriveSeatLoss derives from the SAME dead legs that
 // emit degrades[] — so a naive fix rendered 3 rows for 2 dead seats.
 //
 // The residual pins at the bottom assert KNOWN-WRONG behaviour on purpose. The owner ruling

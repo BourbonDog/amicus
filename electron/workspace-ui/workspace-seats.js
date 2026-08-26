@@ -160,7 +160,7 @@
       // `s.seat` is a SEAT ID (`alias#N`, from src/council/run-stats-entry.js :: buildRunStatsEntry
       // via the cost row). The degrade records keyed into `retried` above use `data.seat`,
       // which is an ALIAS and stays one
-      // deliberately (run-retry-notes.js:39-45 — verdict.js:72 compares it against `o.critic`).
+      // deliberately (run-retry-notes.js:39-45 — verdict-seat-loss.js :: deriveSeatLoss compares it against `o.critic`).
       // Reading one as the other is precisely how an earlier revision of this fix paired an
       // alias-keyed map with a seat-id lookup and dropped every badge. When touching either
       // side, say which space you are in.

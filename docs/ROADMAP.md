@@ -206,7 +206,8 @@ list. Two findings drove it:
    An earlier draft of this note said *"all three had already rotted"*; that universal is false and
    is corrected here. The other two HAD already rotted before T2.4 began (`report.js:79` and
    `ledger.js:24` are comments at `ed5c0c02`), so their drift is pre-existing, not this release's.
-   The report fallback is now at `src/council/report.js :: toModel`'s `total`; all three claims
+   The report fallback is now at `src/council/report-cost.js :: buildCostModel`'s `total` (it was
+   `report.js :: toModel`'s until v4.9 W8 extracted the cost table); all three claims
    themselves still hold. So CA-4's omissions are not a schema nicety — they under-report spend on the
    surface the owner relies on, which collides with the cost-truth principle (*reported > estimated
    > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never
@@ -222,9 +223,9 @@ list. Two findings drove it:
   (`run-assemble.js:180-184`) and one `repair` row per `-q<N>` solo, failed ones included
   (`run-stage2.js:122`).
   ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
-  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:133` cites LC-5 by name), and
+  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:71` cites LC-5 by name), and
   failed-chair cost already reaches `runStats` too: a failed ch1–ch3 attempt gets its own
-  `chair-attempt` row there carrying that leg's real `usage` (`run-chair.js:154-156`), so no third
+  `chair-attempt` row there carrying that leg's real `usage` (`run-chair.js:91-95`), so no third
   row class was needed.
 - **GOA-7 prerequisite — segment the ledger by RESOLVED model, not alias** *(S–M)*: **shipped.**
   `ledger.js:124` now keys on `row.resolvedModel || row.model` and `LEDGER_SCHEMA_VERSION` is 2.
@@ -278,7 +279,7 @@ a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for rulin
 | **CA-4** | `tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`) | `M` — a schema question, not a fix |
 | **CA-5** | `isSubagentToolCall` is still a `name === 'task'` string proxy | `M`, and **reduced** by v4.4.0: it is now only the fallback when the real subtree walk finds nothing |
 | **LC-1** | B53's stall kill is skipped while a tool-settle deferral is active | `S–M` — shipped deliberately; the author wants a second opinion, which needs data from real runs |
-| ~~**LC-5**~~ | ~~A chair fallback leaves no trace in `run.json`~~ — ✅ **CLOSED by v4.6.2**: `chairAttempts[]` records every attempt (`{waveId, model, outcome, reason}`), checkpointed after each; `run-chair.js:113` cites LC-5 by name. **Do not re-file.** | — |
+| ~~**LC-5**~~ | ~~A chair fallback leaves no trace in `run.json`~~ — ✅ **CLOSED by v4.6.2**: `chairAttempts[]` records every attempt (`{waveId, model, outcome, reason}`), checkpointed after each; `run-chair.js@v4.6.2:113` cites LC-5 by name. **Do not re-file.** | — |
 | **RN-1** | `sanitizeName` collisions surface as a banner rather than a refusal | `S` + a product decision that was already argued once |
 | **RN-2** | `renderRunList` blind masking is best-effort — only the open run resolves labels | `M` |
 | **RN-5** | A blind-mode flip closes every open prose panel and repaints twice | `S–M` |

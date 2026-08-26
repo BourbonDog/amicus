@@ -31,13 +31,45 @@ function stripDescriptions(node) {
 // stay the same record shape. STRUCTURE-ONLY: per-file `description` prose
 // legitimately differs (e.g. doctor's `data` field names a doctor-flavored
 // example), so every description is stripped before comparing.
+// v4.9 W5.3 amendment: the two COUNCIL schemas widened `kind` to admit 'info'
+// (the ledger-skipped announcement) while doctor keeps the two-kind enum —
+// doctor never emits info, and widening it would advertise a value its
+// producer cannot produce. The divergence is DELIBERATE and confined to the
+// kind vocabulary; everything else stays lockstep across all three.
 describe('degrades.items schema lockstep across council-run/council-verdict/doctor (v4.6 Plan 4 Task 6a)', () => {
-  test('the three schemas define the identical degrade/heal record shape, structure-only', () => {
-    const runItems = stripDescriptions(readSchema('council-run').properties.degrades.items);
-    const verdictItems = stripDescriptions(readSchema('council-verdict').properties.degrades.items);
-    const doctorItems = stripDescriptions(readSchema('doctor').properties.degrades.items);
-    expect(runItems).toEqual(verdictItems);
-    expect(verdictItems).toEqual(doctorItems);
+  const items = (name) => stripDescriptions(readSchema(name).properties.degrades.items);
+
+  test('council-run and council-verdict define the identical record shape, structure-only', () => {
+    expect(items('council-run')).toEqual(items('council-verdict'));
+  });
+
+  test("kind vocabulary: council carries v4.9 'info'; doctor stays two-kind BY RULING", () => {
+    expect(items('council-run').properties.kind).toEqual({ enum: ['degrade', 'heal', 'info'] });
+    expect(items('doctor').properties.kind).toEqual({ enum: ['degrade', 'heal'] });
+  });
+
+  test('outside the kind vocabulary, doctor stays lockstep with the council shape', () => {
+    const dropKind = (i) => ({ ...i, properties: { ...i.properties, kind: null } });
+    expect(dropKind(items('council-verdict'))).toEqual(dropKind(items('doctor')));
+  });
+
+  // v4.9 W5.3: the widening itself, pinned through the REAL producer — the
+  // record the sink stores for a task run's ledger-skipped note must validate
+  // against both council degrades.items (run.json carries degrades too), and
+  // stay INVALID against doctor's.
+  test("a makeDegrade kind:'info' record validates against BOTH council schemas' degrades.items", () => {
+    const { makeDegrade } = require('../src/utils/degrade');
+    const rec = makeDegrade({ kind: 'info', channel: 'ledger-skipped',
+      what: 'task runs write no reliability rows',
+      why: 'ledger-driven chair promotion draws only on review-run history',
+      effect: 'fallback candidates come from review runs only' });
+    for (const name of ['council-run', 'council-verdict']) {
+      const validate = new Ajv2020({ strict: false }).compile(readSchema(name).properties.degrades.items);
+      const ok = validate(rec);
+      if (!ok) { throw new Error(`${name}: ` + JSON.stringify(validate.errors, null, 2)); }
+    }
+    expect(new Ajv2020({ strict: false })
+      .compile(readSchema('doctor').properties.degrades.items)(rec)).toBe(false);
   });
 });
 

@@ -20,6 +20,8 @@
  * without it has to say so on its own face.
  */
 
+const fs = require('fs');
+const path = require('path');
 const { buildVerdict, summarizeSeatLoss } = require('../../src/council/verdict');
 
 const RUN_ID = 'dfb6a692';
@@ -115,5 +117,54 @@ describe('buildVerdict surfaces seat loss', () => {
     expect(v.overallVerdict).toBe('ship');
     expect(v.runId).toBe(RUN_ID);
     expect(v.type).toBe('council-verdict');
+  });
+});
+
+/**
+ * v4.9 PR #200 fix round 3 — the seat-loss extraction (the W4 chair-fallback
+ * shape: pure move + re-export, taken to make room under the 300-line gate for
+ * the carried-phrase scale check in readOverallVerdict).
+ *
+ * The MOVE itself needs no new behavioural coverage: both functions were cut and
+ * pasted byte-for-byte and every assertion above (plus
+ * tests/council/verdict-degrades.test.js) still imports them THROUGH
+ * verdict.js's re-export, so a move that changed anything reds there.
+ *
+ * What is new is the claim the split makes: ONE implementation, re-exported —
+ * never re-implemented. Identity (`toBe` on the function reference), not
+ * equivalence: a copy that merely behaves the same today would pass a
+ * behavioural check and fail here.
+ */
+describe('one implementation, re-exported (verdict-seat-loss extraction)', () => {
+  const leaf = require('../../src/council/verdict-seat-loss');
+  const verdict = require('../../src/council/verdict');
+
+  test('summarizeSeatLoss is the SAME function object at both layers', () => {
+    expect(verdict.summarizeSeatLoss).toBe(leaf.summarizeSeatLoss);
+  });
+
+  test('deriveSeatLoss is the SAME function object at both layers', () => {
+    expect(verdict.deriveSeatLoss).toBe(leaf.deriveSeatLoss);
+  });
+
+  test('run-verdict-files.js reaches the same two objects through verdict.js', () => {
+    // The only production consumer (run-verdict-files.js :: writeVerdictFiles)
+    // imports from ./verdict, which is why the re-export is load-bearing rather
+    // than courtesy.
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'run-verdict-files.js'), 'utf-8');
+    expect(src).toContain("require('./verdict')");
+  });
+
+  test('the extracted module exports exactly the two functions', () => {
+    expect(Object.keys(leaf).sort()).toEqual(['deriveSeatLoss', 'summarizeSeatLoss']);
+  });
+
+  test('it stays a LEAF: the module requires nothing at all', () => {
+    // A require back into verdict.js would make the split circular; a require of
+    // anything else would give the seat-loss pair a dependency it never had.
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'council', 'verdict-seat-loss.js'), 'utf-8');
+    expect(src).not.toContain('require(');
   });
 });
