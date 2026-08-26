@@ -1,18 +1,15 @@
 /**
- * Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1,
- * v4.6.2 PR4): moved verbatim out of workspace-panels.js, which was pressed
- * up against the 300-line size gate — this file is where Task 2 adds
- * dead-seat rows. Loads immediately before workspace-panels.js (index.html),
- * which keeps a thin delegate; reads `window.AmicusApp` at CALL time, same
- * discipline as every sibling renderer file (workspace-app.js boots last and
- * owns `state`).
+ * Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1, v4.6.2 PR4): moved
+ * verbatim out of workspace-panels.js, which was pressed up against the 300-line size gate —
+ * this file is where Task 2 adds dead-seat rows. Loads immediately before workspace-panels.js
+ * (index.html), which keeps a thin delegate; reads `window.AmicusApp` at CALL time, same
+ * discipline as every sibling renderer file (workspace-app.js boots last and owns `state`).
  *
- * Task 2 ("dead-seat rows"): `state.detail.run` and `state.detail.verdict`
- * are the raw run.json/verdict.json docs (src/workspace/run-detail.js —
- * `getRunDetail` returns them wholesale, unfiltered), so `run.degrades` and
- * `verdict.seatLoss` are already on `state.detail` today; no data-layer
- * threading was needed. Only the derivation (window.AmicusLive.deadSeats,
- * live-seats.js) and this file's painting are new.
+ * Task 2 ("dead-seat rows"): `state.detail.run` and `state.detail.verdict` are the raw
+ * run.json/verdict.json docs (src/workspace/run-detail.js — `getRunDetail` returns them
+ * wholesale, unfiltered), so `run.degrades` and `verdict.seatLoss` are already on
+ * `state.detail` today; no data-layer threading was needed. Only the derivation
+ * (window.AmicusLive.deadSeats, live-seats.js) and this file's painting are new.
  *
  * NOTE (scope, matches the plan's file list): renderSeatsPanel() (below) is reached from
  * renderDetail() — called both from openRun() (a fresh run open) and from the blind toggle
@@ -50,41 +47,57 @@
    * seat-keyed and deadSeats still dedup'd on the alias; PR5c seat-keyed the other side too,
    * so both now key on "seat id where the record supplies one, alias otherwise". The
    * kind/channel FILTER still mirrors window.AmicusLive.deadSeats — now at
-   * live-dead-seats.js, which PR5c split out of live-seats.js for the 300-line gate — and
-   * must keep doing so. Two spellings of one rule is PR5a council finding B1.
+   * live-dead-seats.js, where PR5c's size-gate split put it and v4.9 W9 named it `isSeatLoss` —
+   * and must keep doing so; the two moved together in W9's one commit. Two spellings of one rule
+   * is PR5a council finding B1; only the behavioural drift pin in workspace-seats.test.js holds it.
    *
    * ⚠️ The two sides are NOT identical, and the difference is deliberate: deadSeats decides
    * whether a seat is RENDERED, so it fails toward showing a row; this decides whether a
    * badge is PAINTED, so an unidentified record falls back to the alias and marks every seat
    * sharing it. Over-badging is visible and self-correcting; a missing badge is silent.
    *
-   * The kind/channel filter is load-bearing: run.degrades[] also carries
-   * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
-   * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
+   * The kind/channel filter is load-bearing: run.degrades[] also carries kind:'heal' /
+   * channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields for seats that
+   * RECOVERED, and a field-only scan would tag a recovered seat "retried once".
    *
-   * ⚠️ firstFailure is TRUTHINESS ONLY. Two shapes, both built in
-   * run-retry-group.js :: groupStage1Losses — its deadLegs loop emits {seat, class:'leg',
-   * status, reason}; its deadWaves loop emits {seat, class: lossClass(w), waveId, reason}
-   * at THREE sites (lens/critic/bench), none carrying a status key, where
-   * `const lossClass = w => (w.partial ? 'missing' : 'wave')` — so firstFailure.status is
-   * undefined on every wave-origin seat. ⚠️ T-A8 DROPPED five line numbers here: re-opened
-   * 2026-08-17 they had all rotted a uniform +31 (T-A3 +15, T-A6 +16), and "now 235" is 266.
+   * ⚠️ `firstFailure` is no longer a retried MARKER here — the W9 fix round narrowed the gate to
+   * `retryWaveId` (see below) — and the only thing left read off it is `.seatId`. THREE shapes
+   * carry that key today: `run-retry-group.js :: groupStage1Losses` builds two, its deadLegs
+   * loop's {seat, class:'leg', status, reason} and its deadWaves loop's {seat, class:
+   * lossClass(w), waveId, reason} at three sites (lens/critic/bench), both stamped with `seatId`
+   * by `recordFailure`; `run-retry-notes.js :: skippedWaveNote` builds a third, {seat, class:
+   * 'missing', waveId, reason}, which never passes through recordFailure and so carries NO
+   * seatId — it puts the seat id on `data.seatId` instead, which the key read below falls
+   * through to. ⚠️ T-A8 DROPPED five line numbers here: re-opened 2026-08-17 they had all rotted
+   * a uniform +31 (T-A3 +15, T-A6 +16), and "now 235" is 266.
    */
   function retriedSeats(degrades) {
     var out = Object.create(null);
     (degrades || []).forEach(function (d) {
-      if (!d || d.kind !== 'degrade') { return; }
-      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
+      // A kind-LESS record IS a degrade (W9 fix round, C4) — this panel falls back to
+      // `verdict.degrades` below, documents that can predate kinds. Mirrors isSeatLoss.
+      if (!d || (d.kind !== undefined && d.kind !== 'degrade')) { return; }
       var data = d.data || {};
-      if (!(data.retryWaveId || data.firstFailure)) { return; }
-      if (d.channel === 'dead-leg') {
-        // ⚠️ Prefer the SEAT ID when the record names one. TWO mechanisms now supply it, not
-        // one: retryLegStillDeadNote and missingLegStillDeadNote via `firstFailure.seatId`
-        // (pinned by tests/council/run-retry.test.js:628 on a twin bench), and — since
-        // v4.8 PR5c — srcLegStillDeadNote via its own `data.seatId`. Reading only the first
-        // meant a srcLeg record keyed by ALIAS and badged the live twin "retried once" while
-        // the seat that was actually retried showed nothing.
-        // `data.seat` remains the last fallback for pre-PR5c records (residual R6).
+      // Hoisted ABOVE the channel test (behaviour-preserving — the two loss channels already
+      // required it) because it is ALSO the `seat-unbound` gate v4.9 W9 admits that shared channel
+      // through: orphan-leg, re-vote and Stage-2 judge notes ride it, are not retried seats, and
+      // none carries a retry-family field. ⚠️ NARROWED to `retryWaveId` alone in the W9 fix round
+      // (mutant SKIPRETRIED): this is a RETRIED set, and `run-retry-notes.js :: skippedWaveNote`
+      // carries a `firstFailure` for a seat the retry never ATTEMPTED, so badging it would be
+      // false. `isSeatLoss` still admits that record as a LOSS — its gate keeps both fields; only
+      // the retried READ differs (the drift pin compares exactly that read). Every RETRIED seat's
+      // builder emits `retryWaveId` — never-attempted skippedWaveNote alone lacks it — so no badge is lost.
+      if (!data.retryWaveId) { return; }
+      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave'
+        && !(d.channel === 'seat-unbound' && (data.seatId || data.seat))) { return; }
+      if (d.channel !== 'dead-wave') {
+        // ⚠️ Prefer the SEAT ID when the record names one. TWO mechanisms supply it, not one:
+        // retryLegStillDeadNote and missingLegStillDeadNote via `firstFailure.seatId` (pinned by
+        // tests/council/run-retry.test.js:628 on a twin bench), and — since v4.8 PR5c —
+        // srcLegStillDeadNote via its own `data.seatId`, joined on that key by waveStillDeadNote's
+        // partial `seat-unbound` arm in v4.9 W9. Reading only the first meant a srcLeg record
+        // keyed by ALIAS and badged the live twin "retried once" while the seat that was actually
+        // retried showed nothing. `data.seat` is the last fallback, for pre-PR5c records (R6).
         var key = (data.firstFailure && data.firstFailure.seatId) || data.seatId || data.seat;
         if (key) { out[key] = true; }
       } else {
@@ -102,9 +115,8 @@
     return out;
   }
 
-  // Mirrors isReviewing at live-dead-seats.js (moved there by PR5c's size-gate split) —
-  // a chair/judge/rebuttal/revote row must not
-  // carry a reviewer's retry marker.
+  // Mirrors isReviewing at live-dead-seats.js (moved there by PR5c's size-gate split) — a
+  // chair/judge/rebuttal/revote row must not carry a reviewer's retry marker.
   function isReviewingRole(role) {
     return role === 'seat' || role === 'critic' ||
       (typeof role === 'string' && role.indexOf('lens:') === 0);
@@ -117,11 +129,16 @@
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
     var seatLoss = d.verdict && d.verdict.seatLoss;
-    var runMeta = { critic: (d.run && d.run.critic) || null };
+    // `criticSeat` (v4.9 W9 / R4): run.json's resolved critic SEAT id (run-state.js ::
+    // initCouncilRun seeds it, seats.js :: preflightSeats supplies it) — what lets deadSeats
+    // tag the critic by seat identity. Null with no critic, and on pre-field run.json.
+    var runMeta = { critic: (d.run && d.run.critic) || null,
+      criticSeat: (d.run && d.run.criticSeat) || null };
     // Source-selection (v4.6.3 PR2, spec D4): run-degrade.js swallows checkpoint failures, so
-    // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it
-    // ONLY when run.degrades is empty/absent. A fallback, never a union: both docs can carry
-    // records for the SAME run, and the persisted run.json copy is authoritative when present.
+    // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it ONLY
+    // when run.degrades is empty/absent. A fallback, never a union: both docs can carry records for
+    // the SAME run, and the persisted run.json copy is authoritative when present. (This fallback
+    // is why the kind test above must admit a kind-LESS record: verdict.json can predate kinds.)
     var deg = (d.run && d.run.degrades && d.run.degrades.length) ? d.run.degrades
       : ((d.verdict && d.verdict.degrades) || []);
     var retried = retriedSeats(deg);
@@ -130,16 +147,14 @@
     // composed doc's leg order — so tbody.children[i] is not seats[i]. Build the key exactly the
     // way renderSeats does or the lookup silently misses.
     var rowsByKey = Object.create(null);
-    Array.prototype.slice.call(tbody.children).forEach(function (row) {
-      rowsByKey[row.dataset.key] = row;
-    });
+    Array.prototype.slice.call(tbody.children).forEach(function (row) { rowsByKey[row.dataset.key] = row; });
     seats.forEach(function (s) {
       var row = rowsByKey[String(s.id || s.model)];
       if (!row || !row.children[8]) { return; }
-      // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>).
-      // It carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats
-      // hardcodes stalled:false (live-seats.js, seatsFromRunStats), so it is always empty here and free to use.
-      // If that ever changes, this is the collision site.
+      // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>). It
+      // carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats hardcodes
+      // stalled:false, so it is always empty here and free to use — the collision site if that
+      // ever changes.
       // Fix wave (whole-branch review, finding 2): this pass must be SYMMETRIC. renderSeats
       // reuses rows keyed on `model:role` across calls — including across two different
       // terminal runs opened in sequence that happen to share an alias+role — and never resets
@@ -158,34 +173,35 @@
       //
       // ⚠️ NAMING HAZARD (council A1): `seat` means TWO different things three lines apart.
       // `s.seat` is a SEAT ID (`alias#N`, from src/council/run-stats-entry.js :: buildRunStatsEntry
-      // via the cost row). The degrade records keyed into `retried` above use `data.seat`,
-      // which is an ALIAS and stays one
-      // deliberately (run-retry-notes.js:39-45 — verdict-seat-loss.js :: deriveSeatLoss compares it against `o.critic`).
-      // Reading one as the other is precisely how an earlier revision of this fix paired an
-      // alias-keyed map with a seat-id lookup and dropped every badge. When touching either
-      // side, say which space you are in.
+      // via the cost row). The degrade records keyed into `retried` above use `data.seat`, which is
+      // an ALIAS and stays one deliberately (run-retry-notes.js :: waveStillDeadNote's `data`
+      // comment; `verdict-seat-loss.js :: deriveSeatLoss`'s `criticLeg` compares it to `o.critic` —
+      // both by SYMBOL since W9). Reading one as the other is precisely how an earlier revision of
+      // this fix paired an alias-keyed map with a seat-id lookup and dropped every badge. When
+      // touching either side, say which space you are in.
       //
       // ⚠️ The pre-PR expression was `retried[s.modelInput || s.model]` (council B1). The
       // `modelInput` arm is dropped on purpose: this loop only ever iterates
       // `seatsFromRunStats(...)` output (assigned in workspace-seats.js :: renderSeatsPanel), and
       // that projection emits no `modelInput` at all — live payload seats, which DO carry it,
       // reach `deadSeats` in workspace-seats.js :: appendDeadRows and never reach here. The
-      // invariant is pinned by test (12) in workspace-seats.test.js;
-      // if that test ever fails, restore the `s.modelInput` arm rather than deleting the test.
-      // ⚠️ `s.seat &&` is LOAD-BEARING (council A1). `s.seat` is null on a unique bench, and a
-      // bare `retried[s.seat]` coerces null to the STRING key 'null' — so a seat with no seat id
-      // would match a degrade record whose alias is literally `null`. Measured: with
-      // `m = Object.create(null); m['null'] = true`, `m[null]` is `true`. Contrived, but this
-      // module already guards the same class elsewhere — live-dead-seats.js, deadSeats' Object.create(null) note, records a model
-      // named `toString` crashing the seats repaint, which is why Object.create(null) is used
-      // throughout. The guard costs nothing and closes it.
+      // invariant is pinned by test (12) in workspace-seats.test.js; if that test ever fails,
+      // restore the `s.modelInput` arm rather than deleting the test.
+      // ⚠️ `s.seat &&` is LOAD-BEARING (council A1). `s.seat` is null on a unique bench, and a bare
+      // `retried[s.seat]` coerces null to the STRING key 'null' — so a seat with no seat id would
+      // match a degrade record whose alias is literally `null`. Measured: with
+      // `m = Object.create(null); m['null'] = true`, `m[null]` is `true`. Contrived, but this module
+      // already guards the same class elsewhere — live-dead-seats.js's Object.create(null) note in
+      // deadSeats records a model named `toString` crashing the seats repaint, which is why
+      // Object.create(null) is used throughout. The guard costs nothing and closes it.
       //
-      // ⚠️ KEYSPACE (council B1): `retried` deliberately mixes seat ids (`alias#N`) and bare
-      // aliases as keys, because only one of five emitter arms supplies a seat id. That is a
-      // real collision surface and a KNOWN one — src/council/seats.js:236 already records that
-      // a literal alias containing '#' collides with a minted #N id, and preflightSeats refuses
-      // exactly that shape. This map inherits that guarantee rather than re-deriving it; if
-      // preflightSeats ever stops refusing it, this lookup becomes ambiguous.
+      // ⚠️ KEYSPACE (council B1): `retried` deliberately mixes seat ids (`alias#N`) and bare aliases
+      // as keys — every emitter arm supplies a seat id since v4.9 W9 P1, but a slot the producer
+      // could NOT identify still emits null and falls back to the alias. That is a real collision
+      // surface and a KNOWN one — src/council/seats.js:236 already records that a literal alias
+      // containing '#' collides with a minted #N id, and preflightSeats refuses exactly that shape.
+      // This map inherits that guarantee rather than re-deriving it; if preflightSeats ever stops
+      // refusing it, this lookup becomes ambiguous.
       var isRetried = isReviewingRole(s.role)
         && !!((s.seat && retried[s.seat]) || retried[s.model]);
       if (isRetried) {
@@ -201,13 +217,12 @@
   }
 
   /**
-   * Paints the dead-seat rows appended after live rows. Deliberately NOT
-   * folded into workspace-render.js's renderSeats (293/300 — must not grow)
-   * and NOT run through its keyed diff: dead rows carry no per-tick-changing
-   * field, so a full rebuild every call is correct and cheap, and renderSeats
-   * just above already self-cleans any PRIOR dead row as an unrecognized
-   * `data-key` (its own seen-set only knows about the live `seats` it was
-   * just given), so nothing here needs to track dead rows across calls.
+   * Paints the dead-seat rows appended after live rows. Deliberately NOT folded into
+   * workspace-render.js's renderSeats (293/300 — must not grow) and NOT run through its keyed
+   * diff: dead rows carry no per-tick-changing field, so a full rebuild every call is correct
+   * and cheap, and renderSeats just above already self-cleans any PRIOR dead row as an
+   * unrecognized `data-key` (its own seen-set only knows about the live `seats` it was just
+   * given), so nothing here needs to track dead rows across calls.
    *
    * Cells route through window.AmicusLive.seatCells(...) — the SAME function
    * live rows use — so name masking (and every other column's blank/em-dash
@@ -264,7 +279,8 @@
     var A = window.AmicusApp;
     var d = A.state.detail;
     var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
-    var runMeta = { critic: (d && d.run && d.run.critic) || null };
+    var runMeta = { critic: (d && d.run && d.run.critic) || null,
+      criticSeat: (d && d.run && d.run.criticSeat) || null };
     // Source-selection (v4.6.3 PR2, spec D4), live-path twin of renderSeatsPanel's fallback
     // above: the tick's own live.degrades wins when non-empty; state.detail.verdict.degrades is
     // usually absent mid-run (verdict.json doesn't exist until the run finishes) — fine, this

@@ -124,7 +124,7 @@ function toModel(verdict, wave) {
   // never judges, so its reserved seat must never grow a matrix column — filter
   // it out ONLY when claudeInCouncil is true. This is name+flag gated, not
   // vote-derived: a bench judge that cast zero adjudications (dead/unstructured
-  // leg, run-stages.js:204-207) is still in council/judges and must still get
+  // leg, run-stages.js:192-195) is still in council/judges and must still get
   // its (blank) column — deriving the roster from "who actually voted" would
   // silently delete that column too and break the byte-unchanged-artifact
   // contract for degraded v4.0.1-shaped runs.
@@ -260,20 +260,22 @@ function toModel(verdict, wave) {
     // v4.6 Plan 2: additive and OPTIONAL on the verdict (verdict.js only sets
     // it when the run actually degraded), so a clean verdict's model — and
     // therefore its rendered report — is byte-for-byte unchanged.
-    // Plan 2 final review F2 + v4.9 W8 T-A: LOSSES ONLY. A heal is announced on
-    // stderr/run.json but is not a loss (spec D4, §8), and neither is v4.9's
-    // kind:'info' — `ledger-skipped` says a task run wrote no reliability rows,
-    // which is speech, not damage. Info records ride `notes`, which both renderers
-    // list APART from "What was lost".
-    // ⚠️ NOT the positive `kind === 'degrade'`, and the difference is measured: a
-    // record with NO kind key — hand-written, or parsed off a verdict older than
-    // kinds, which `utils/degrade.js :: formatDegrade` still deliberately serves as
-    // 'Notice' — is a loss at HEAD, and the positive spelling drops it from BOTH
-    // lists. Pinned in report-intent.test.js (named mutant LEGACYDROP, measured).
-    // ⚠️ `verdict.js :: deriveSeatLoss` keeps `kind !== 'heal'` and is no longer the
-    // same predicate twice: it asks which announcements imply a LOST SEAT, and its
-    // `data` + dead-leg/dead-wave channel filters exclude 'ledger-skipped' anyway
-    // (W5.1 handoff — deliberately left alone).
+    // Plan 2 final review F2 + v4.9 W8 T-A: LOSSES ONLY. A heal is announced on stderr/run.json
+    // but is not a loss (spec D4, §8), and neither is v4.9's kind:'info' — `ledger-skipped` says
+    // a task run wrote no reliability rows, which is speech, not damage. Info records ride
+    // `notes`, which both renderers list APART from "What was lost".
+    // ⚠️ NOT the positive `kind === 'degrade'`, and the difference is measured: a record with NO
+    // kind key — hand-written, or parsed off a verdict older than kinds, which
+    // `utils/degrade.js :: formatDegrade` still deliberately serves as 'Notice' — is a loss at
+    // HEAD, and the positive spelling drops it from BOTH lists. Pinned in report-intent.test.js
+    // (named mutant LEGACYDROP, measured).
+    // ⚠️ The other three consumers of this rule AGREE with the line above about kind-less records
+    // as of the v4.9 W9 fix round (council C4): `verdict-seat-loss.js :: deriveSeatLoss` and both
+    // Workspace renderers went from the positive `kind === 'degrade'` — which W9 shipped, and
+    // which silently dropped every pre-kind record — to `kind === undefined || kind ===
+    // 'degrade'`, citing THIS lesson by name. Their kind LISTS still differ from this one's, and
+    // deliberately (over there the question is narrower: which announcements imply a LOST SEAT).
+    // Align the treatment of an ABSENT kind; never the lists.
     degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal' && d.kind !== 'info'),
     notes: (verdict.degrades || []).filter(d => d.kind === 'info'),
     cost: buildCostModel(verdict.runStats || [], wave),

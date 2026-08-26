@@ -48,7 +48,7 @@ function claudeInCouncilVerdict() {
 
 // The trap: a NON-claude run where one bench judge (qwen) cast zero
 // adjudications — e.g. it failed its repair loop and was dropped
-// (run-stages.js:204-207). It is still in meta.models and MUST still render
+// (run-stages.js:192-195). It is still in meta.models and MUST still render
 // its (blank) column. A vote-derived judge roster would silently delete this
 // column too, which is exactly the shortcut item 8 forbids.
 function degradedNonClaudeVerdict() {

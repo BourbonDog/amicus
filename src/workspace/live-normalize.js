@@ -50,7 +50,8 @@ function seatOf(leg) {
     model: leg.model || null,
     modelInput: leg.modelInput || null,
     role: leg.role || null,
-    // ⚠️ v4.8 R5: the leg's seat id, and the reason live-dead-seats.js:209's
+    // ⚠️ v4.8 R5: the leg's seat id, and the reason live-dead-seats.js ::
+    // deadSeats' `if (s.seat)` suppression arm's
     // `if (s.seat)` arm is reachable at all. Null on a unique-alias bench, so the
     // guard there stays load-bearing — see the comment at that line.
     seat: leg.seat || null,

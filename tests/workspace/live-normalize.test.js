@@ -60,7 +60,7 @@ describe('normalizeLive', () => {
 
   // v4.8 R5 (T4.5): carry the leg's seat id (T4.2 stampLegAttribution -> T4.3 metadata.json ->
   // T4.4 buildLegRow's `meta.seat || null`) through to the live seat row — the field
-  // electron/workspace-ui/live-dead-seats.js:209's `if (s.seat)` arm reads.
+  // electron/workspace-ui/live-dead-seats.js :: deadSeats' `if (s.seat)` suppression arm reads.
   // Named mutant LIVESEATBLIND (delete seatOf's `seat: leg.seat || null,` line): measured to red
   // BOTH this test (received `undefined`) and dead-seat-rows.test.js's "a live seat suppresses
   // its OWN revived seat id, and only that one (v4.8 R5)" (received `['a#1','a#2']`) — a red set

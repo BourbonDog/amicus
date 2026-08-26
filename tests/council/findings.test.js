@@ -466,7 +466,7 @@ describe('countAttemptedFindings (LC-11: the repair contract is checked by cardi
  * below it threw `TypeError: Cannot read properties of null (reading 'findings')`.
  *
  * Why it was worth fixing on release eve rather than deferring: the call site is
- * `run-stages.js:164`, which sits inside `run.js`'s try/catch — so ONE seat emitting
+ * `run-stages.js:152`, which sits inside `run.js`'s try/catch — so ONE seat emitting
  * a `null` body aborted an entire PAID council as exit 1 instead of degrading that one
  * seat. That is exactly the fail-closed shape this release exists to remove.
  *

@@ -4,12 +4,16 @@ const { makeFakeDom } = require('./helpers/fake-workspace-page');
 
 /**
  * v4.6.2 PR4 Task 2 ("dead-seat rows"): a seat the run announced dead — via
- * run.json's `degrades[]` (dead-leg/dead-wave) or verdict.json's derived
+ * run.json's `degrades[]` (dead-leg/dead-wave, joined in v4.9 W9 by the GATED `seat-unbound`
+ * family, whose own cases live in dead-seat-twins.test.js) or verdict.json's derived
  * `seatLoss` (the critic backstop) — must render a row on the seats panel.
  * Record shapes below are verified against src/council/run-retry-notes.js
  * (retryLegStillDeadNote/missingLegStillDeadNote: a still-dead-after-retry
- * record carries `data.retryWaveId` + `data.firstFailure`; the run-stages.js
- * skipped-path notes carry neither) and src/council/verdict.js
+ * record carries `data.retryWaveId` + `data.firstFailure`. ⚠️ Corrected in the v4.9 W9 fix
+ * round: `skippedWaveNote` — the skipped-retry WAVE note, moved into that module from
+ * run-stages.js — carries a `firstFailure` and deliberately NO `retryWaveId`, so "the
+ * skipped-path notes carry neither" is true only of the skipped-LEG note still emitted in
+ * run-stages.js) and src/council/verdict-seat-loss.js
  * (summarizeSeatLoss/deriveSeatLoss's `criticRequested`/`criticSeated`
  * shape). Test (a)'s fixture models the real run `2039b2d1` shape the task
  * brief cites: one dead critic carrying firstFailure+retryWaveId, five live

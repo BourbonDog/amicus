@@ -721,7 +721,7 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
 // just not this seat's, so the loss lands in neither deadLegs (no leg object
 // exists) nor deadWaves (the wave produced legs). It is routed into the retry as
 // a single-seat `partial` dead wave, and — per the SL-2 invariant at
-// run-stages.js:77-78 — announced ONLY when the retry does not save it.
+// run-stages.js:78-79 — announced ONLY when the retry does not save it.
 describe('v4.8 PR2b Task 7: an unbound seat is retried, then announced', () => {
   test('a partial wave return is retried, and healing it emits NO degrade', async () => {
     // roster (-s1): ['a','b'] -> a=slot1, b=slot2. Only a's leg comes back, so
@@ -778,9 +778,10 @@ describe('v4.8 PR2b Task 7: an unbound seat is retried, then announced', () => {
   });
 
   test('a budget-SKIPPED partial seat is announced on seat-unbound, with no retry launch', async () => {
-    // The third emission site (run-stages.js's skippedDeadWaves loop): the loss
-    // is real, the retry was never affordable, and the plain dead-wave sentence
-    // would still be false about a wave that produced a's leg.
+    // The third emission site (run-stages.js's skippedDeadWaves loop — the loop still lives
+    // there; the note BUILDER moved to run-retry-notes.js :: skippedWaveNote in the W9 fix
+    // round): the loss is real, the retry was never affordable, and the plain dead-wave
+    // sentence would still be false about a wave that produced a's leg.
     const ctx = makeCtx({ models: ['a', 'b'], overBudget: () => true });
     ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
       legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 });
@@ -789,9 +790,55 @@ describe('v4.8 PR2b Task 7: an unbound seat is retried, then announced', () => {
     const note = ctx._notes.find(n => n.channel === 'seat-unbound');
     expect(note.what).toBe('seat b did not review');
     expect(note.why).toBe("the wave returned 1 of 2 legs and none of them was this seat's");
+    // v4.9 W9 fix round 1 (A1/C1). The old shape carried NO retry-family field, so all three
+    // W9 consumers dropped a genuinely dead seat — pinned known-wrong as R-W9a and escalated.
+    // The honest producer lever: this arm carries the FIRST-FAILURE fact (the canonical
+    // `run-retry-group.js :: recordFailure` shape for a partial wave, class 'missing'), which
+    // opens the retry-family gate without loosening it, plus the seat identity the record has
+    // been carrying since stage1-bind.js :: missingSeatDeadWave (`seats: [m.seat]`).
     expect(note.data).toEqual({ waveId: 'abc123-s1', models: ['b'],
-      reason: "the wave returned 1 of 2 legs and none of them was this seat's", seat: 'b' });
+      reason: "the wave returned 1 of 2 legs and none of them was this seat's",
+      seat: 'b', seatId: 'b',
+      firstFailure: { seat: 'b', class: 'missing', waveId: 'abc123-s1',
+        reason: "the wave returned 1 of 2 legs and none of them was this seat's" } });
+    // ⚠️ NO `retryWaveId`, ever: this seat was never retried. That field is the one the two
+    // renderers' `retried` flag reads, so its absence is what keeps the row's phrasing plain.
+    expect(note.data.retryWaveId).toBeUndefined();
     expect(r.degraded).toBe(true);
+  });
+
+  test('a budget-SKIPPED partial seat reaches the REAL consumers, end to end', async () => {
+    // ⚠️ Every W9 consumer pin is driven by a HAND-BUILT fixture, so a producer regression is
+    // invisible to all three: measured — deleting `firstFailure` from `skippedWaveNote` (mutant
+    // SKIPFF) reds exactly ONE test in the whole suite, the shape pin above. This closes that
+    // by feeding the note the engine actually emitted to the two production readers.
+    const { deriveSeatLoss } = require('../../src/council/verdict-seat-loss');
+    const LS = require('../../electron/workspace-ui/live-seats');
+    const ctx = makeCtx({ models: ['a', 'b'], overBudget: () => true });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 });
+    await runStage1(ctx);
+    // The sink stamps `kind` (utils/degrade.js :: makeDegrade); this ctx's stub collects raw notes.
+    // `critic` is a name no seat on this bench holds — deriveSeatLoss returns null without one,
+    // and a bench loss is what this record is.
+    const degrades = ctx._notes.map(n => ({ kind: 'degrade', ...n }));
+    expect(deriveSeatLoss({ runId: 'abc123', critic: 'zz', degrades }).deadBenchSeats).toEqual(['b']);
+    const rows = LS.deadSeats(degrades, null, [], { critic: 'zz', criticSeat: 'zz' });
+    expect(rows.map(r => r.model)).toEqual(['b']);
+    expect(rows[0].statusText).toBe('did not review');   // never retried, never labelled retried
+  });
+
+  test('a budget-SKIPPED partial TWIN carries the seat id, never the alias', async () => {
+    // The null/identity discipline the dead-wave array already keeps, on the SIXTH arm's
+    // scalar: a twin bench is the only place a seat id and its alias differ, so it is the
+    // only place a collapse onto the alias is observable.
+    const ctx = makeCtx({ models: ['d', 'd'], overBudget: () => true });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('d', 'abc123-s1', 1)] }, exitCode: 0 });
+    await runStage1(ctx);
+    const note = ctx._notes.find(n => n.channel === 'seat-unbound');
+    expect(note.data.seat).toBe('d');            // the ALIAS — what the row displays
+    expect(note.data.seatId).toBe('d#2');        // …and the seat that actually died
   });
 
   test('a budget-SKIPPED run counts the MISSING seat in the dead-leg denominator', async () => {
@@ -1558,8 +1605,18 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     // production reader, and the SAME record on a seat-loss channel DOES move it, so the equality
     // is a property of the channel and not of an inert consumer.
     const seatLoss = (ds) => deriveSeatLoss({ runId: 'r1', critic: 'gpt', degrades: ds });
-    expect(seatLoss([notes[0]])).toEqual(seatLoss([]));
-    expect(seatLoss([{ ...notes[0], channel: 'dead-leg' }]).deadBenchSeats).toEqual(['deepseek']);
+    // ⚠️ The record this test's `degrade` spy captures is the RAW note — `pushDeadSeatRows`
+    // builds it without a `kind` key and the sink stamps one on the way out
+    // (`run-stage1-superseded.js :: STDERR_NOTICE` spreads `kind: 'degrade'`; the real sink goes
+    // through `makeDegrade`, whose default is the same). Stamped here so the pin measures what
+    // production hands the consumer. (v4.9 W9 made `deriveSeatLoss`'s kind test POSITIVE, which
+    // meant an unstamped record was dropped for the wrong reason and the equality below proved
+    // nothing about `internal`. The W9 fix round's C4 widened it to admit a kind-LESS record, so
+    // the equality now rests on the CHANNEL either way — the stamp is fidelity, not scaffolding.)
+    const asDegrade = (r) => ({ kind: 'degrade', ...r });
+    expect(seatLoss([asDegrade(notes[0])])).toEqual(seatLoss([]));
+    expect(seatLoss([asDegrade({ ...notes[0], channel: 'dead-leg' })]).deadBenchSeats)
+      .toEqual(['deepseek']);
   });
 
   test('the announcement cannot be defeated by omitting the sink', () => {

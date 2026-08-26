@@ -38,7 +38,9 @@ describe('buildMatrixModel', () => {
   // every real run (tally.js :: tally) — it is not a fallback source. Without a
   // verdict.json, the row must show no badge and the PRE-override tier. Only
   // when verdict.json is joined by id does the post-override tier + the real
-  // {from,to,reason} badge appear (verdict.js :: buildVerdict).
+  // {from,to,reason} badge appear (verdict.js :: buildVerdict's `findings` map — by SYMBOL,
+  // the old `:128-132` having been shifted out from under itself twice over: the
+  // verdict-seat-loss.js extraction, then v4.9 W9's deriveSeatLoss work).
   test('thin confidence and basis pass through; tierOverride/tier are verdict-sourced, tally-tier as fallback', () => {
     const c2 = m.rows.find((r) => r.id === 'C2');
     expect(c2.thin).toBe(true);

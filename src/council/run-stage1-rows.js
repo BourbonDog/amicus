@@ -1,7 +1,7 @@
 // src/council/run-stage1-rows.js
 'use strict';
 // Superseded-seat rows + primary-error dead-seat rows (v4.7 D2/E4), moved
-// verbatim from run-stages.js:230-279 (v4.8 PR0 size-gate split, zero
+// verbatim from run-stages.js:218-267 (v4.8 PR0 size-gate split, zero
 // behavior). The code ran inline in runStage1; it is now a function.
 // roleFor and seatOf are PARAMETERS, not requires — requiring them back from
 // run-stages would recreate the parent-child cycle that file's tail comment
