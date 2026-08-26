@@ -5272,7 +5272,7 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
 - [x] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
   cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
   flip the launched name from the short alias to the raw executable id, the exact failure
-  `src/council/run-chair.js:48-52` argues against — citation true when written; since 2026-08-25 (v4.9 W4 size-gate split) that argument lives verbatim in `chair-fallback.js :: pickFallbackChair`, old range = `run-chair.js@70a3ef3d:48-52`). So on a mixed live/dead twin, the leg-less
+  `src/council/run-chair.js:48-52` argues against — citation true when written; since 2026-08-25 (v4.9 W4 size-gate split) that argument lives verbatim in `chair-fallback.js :: pickFallbackChair`, old range = `run-chair.js@eb0ff79c:48-52`). So on a mixed live/dead twin, the leg-less
   group keeps a numeric street cred borrowed from its live twin while carrying zero findings, and
   `pickFallbackChair` can rank it above the executable it routes to. The borrowed cred is
   **pre-existing** — today it is merged into one group — but PR4b splits it out as its own

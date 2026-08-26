@@ -4,7 +4,7 @@
 /**
  * @module council/chair-fallback
  * Chair fallback promotion + attempt classification for the headless chair
- * walk. Moved verbatim from run-chair.js@70a3ef3d:25-104 (v4.9 W4 size-gate
+ * walk. Moved verbatim from run-chair.js@eb0ff79c:25-104 (v4.9 W4 size-gate
  * split, zero behavior): pickFallbackChair (spec §4 promotion) and
  * classifyChairAttempt (spec §8 LC-5 outcome taxonomy), each with its full
  * docblock. run-chair.js re-exports both, so every existing import path
