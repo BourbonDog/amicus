@@ -16,8 +16,10 @@
  * import path anywhere in the tree that changes.
  *
  * Named mutants live with their red sets in tests/alias-shadow.test.js:
- * "WRITERFATAL" (drop `safeWrite`'s try/catch) and "STREAMFATAL" (drop
- * `armStream`'s attach-once 'error' handler).
+ * "WRITERFATAL" (drop `safeWrite`'s try/catch), "STREAMFATAL" (drop
+ * `armStream`'s attach-once 'error' handler) and "STREAMDEAF" (round 5 — put
+ * the PURE no-op handler back, so the arming goes deaf to every class again
+ * instead of only the benign one).
  */
 
 'use strict';
@@ -69,7 +71,42 @@ function safeWrite(out, line) {
 const ARMED = Symbol.for('amicus.alias-shadow.armed');
 
 /**
- * Make a stream's write failures non-fatal, once (PR #207 round 3, A1).
+ * The self-report marker (PR #207 round 5, A3+B2+D1+C2). Same `Symbol.for`
+ * registry discipline, and the same reason, as `ARMED` above: one report per
+ * STREAM, agreed on by every instance of this module.
+ */
+const REPORTED = Symbol.for('amicus.alias-shadow.reported');
+
+/**
+ * Stream failures that mean "the reader went away", and nothing more.
+ *
+ * This is the class the arming exists for: `amicus … | head`, a closed MCP
+ * client, a terminal that went away mid-write. There is nobody left to tell, so
+ * telling is pointless — these are swallowed in silence. Everything else is a
+ * real fault and gets said out loud (see `armStream`).
+ *
+ * `EOF` is here beside `EPIPE` because that is what a severed pipe reports on
+ * Windows, where this is developed; `ERR_STREAM_DESTROYED` and
+ * `ERR_STREAM_WRITE_AFTER_END` are Node's own spellings of the same "the sink is
+ * gone" fact for a destroyed/ended stream.
+ */
+const BENIGN_STREAM_ERRORS = new Set([
+  'EPIPE', 'EOF', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END',
+]);
+
+/**
+ * Is this the reader-went-away class? A code-less error is NOT assumed benign —
+ * nothing says it is, and the honest default for an unrecognised fault is to
+ * report it.
+ * @param {*} err
+ */
+function isBenignStreamError(err) {
+  return !!err && BENIGN_STREAM_ERRORS.has(err.code);
+}
+
+/**
+ * Make a stream's write failures non-fatal, once — WITHOUT going deaf (round 3
+ * A1; round 5 A3+B2+D1, and the contested C2, same mechanism).
  *
  * MEASURED, node v24.18.0 on Windows, against a REAL closed pipe (parent spawns
  * a child with `stdio: ['ignore','ignore','pipe']` and destroys the read end;
@@ -90,23 +127,45 @@ const ARMED = Symbol.for('amicus.alias-shadow.armed');
  *   · A persistent listener absorbs it, and a SECOND write raises a SECOND
  *     'error' — so this must be `on`, never `once`.
  *
- * Hence: attach once, per stream object, and leave it. That is a process-wide
- * change to `process.stderr`'s behaviour, so it was checked rather than assumed
- * — nothing in src/, bin/ or scripts/ attaches to or depends on that stream's
- * 'error' event (the `.on('error')` hits in the tree are all on CHILD process
- * streams), `logger.js` already treats an EPIPE from its own write as
- * ignorable, and `electron/main.js` installs precisely this handler for
- * precisely this reason in the GUI process. Adding a listener also removes
- * nobody else's: any handler another module attaches still runs alongside this
- * one. All this removes is the unhandled-'error' throw — which for a CLI
- * writing an advisory line into `| head` was never the right outcome.
+ * Hence: attach once, per stream object, and leave it.
+ *
+ * ⚠️ THE SCOPE IS THE WHOLE PROCESS, PERMANENTLY, and the round-3 text undersold
+ * it. From the first notice onward this handler receives EVERY 'error' raised on
+ * `process.stderr` by ANY producer in the process — not only the EPIPE from this
+ * feature's own write, and not only for the duration of the notice. It is
+ * sharpest in the MCP server, which imports this in-tree and then outlives every
+ * individual run. A pure no-op there would silently discard unrelated stderr
+ * faults for the life of the server, which is precisely the correct-but-SILENT
+ * degrade the product principle forbids. So the handler DISCRIMINATES: the
+ * benign reader-went-away class above is swallowed, and anything else is
+ * reported through the house logger.
+ *
+ * ⚠️ WHY THE REPORT IS BOUNDED TO ONE. MEASURED: `utils/logger.js` writes with
+ * `console.error`, i.e. onto `process.stderr` — the same stream that just
+ * failed (its own header: "Outputs JSON-formatted logs to stderr"). An unbounded
+ * report could therefore provoke the next 'error', handle it, report again, and
+ * spin the event loop forever — round 3's B1 defect ("the announcement becomes
+ * the next escape") in its asynchronous form. One report per stream, wrapped in
+ * its own try/catch, is what makes speaking up safe. The report is best-effort
+ * BY CONSTRUCTION and is documented as such rather than promised.
+ *
+ * Checked rather than assumed: nothing in src/, bin/ or scripts/ attaches to or
+ * depends on `process.stderr`'s 'error' event (the `.on('error')` hits in the
+ * tree are all on CHILD process streams), and adding a listener removes nobody
+ * else's — any handler another module attaches still runs alongside this one.
+ * `electron/main.js` installs a listener on the same stream for the same
+ * round-3 reason, but its handler is silent for EVERY code; this one
+ * deliberately departs from that precedent for the non-benign class, which is
+ * exactly why the bound above had to exist first.
  *
  * ⚠️ Scoped to the module's OWN default writer. An INJECTED writer (every test
  * collector, and the MCP notices array) never reaches here, so nothing is armed
  * on its behalf.
  * @param {NodeJS.WritableStream} stream
+ * @param {(msg: string, ctx: object) => void} [log] the diagnostic seam —
+ *   injected by tests; defaults to the house logger's `error`.
  */
-function armStream(stream) {
+function armStream(stream, log) {
   if (!stream || typeof stream.on !== 'function' || stream[ARMED]) { return; }
   try {
     // `configurable` so a test that borrows a real stream can still take it
@@ -120,7 +179,33 @@ function armStream(stream) {
     // `process.stderr`, so this is a guard, not a path.
     return;
   }
-  stream.on('error', () => { /* a diagnosis must never sink the run it diagnoses */ });
+  stream.on('error', (err) => {
+    // The reader went away. Nobody to tell; a diagnosis must never sink the run
+    // it diagnoses, and here it must not natter at a dead pipe either.
+    if (isBenignStreamError(err)) { return; }
+    if (stream[REPORTED]) { return; }
+    try {
+      Object.defineProperty(stream, REPORTED, { value: true, configurable: true });
+    } catch {
+      // Unreachable in practice: `ARMED` was defined on this same object moments
+      // ago, so the object takes symbol properties. Bounded-over-loud if it ever
+      // is reached — an unbounded report is the one failure mode worse than a
+      // missed one.
+      return;
+    }
+    try {
+      const report = log || require('./logger').logger.error;
+      // The message rides in the CONTEXT, not the format string: the logger
+      // JSON.stringifies the entry, and JSON.stringify escapes every C0 byte
+      // (MEASURED: ESC serializes as the six characters \u001b), so its text
+      // cannot repaint a terminal from here the way `formatAliasShadow`'s
+      // config fragments could.
+      report('alias-shadow notice: unexpected error on the notice stream', {
+        code: (err && err.code) || null,
+        error: err && err.message ? String(err.message) : String(err),
+      });
+    } catch { /* a diagnosis must never sink the run it diagnoses */ }
+  });
 }
 
 /** The default writer: stderr, armed against its own asynchronous failure. */

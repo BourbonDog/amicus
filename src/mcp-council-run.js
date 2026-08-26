@@ -118,9 +118,6 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (critic && !bench.includes(critic)) {
     return textResult(`Critic '${critic}' must be one of the bench seats (${bench.join(', ')}).`, true);
   }
-  // PR #207 round 2 (A1): the MCP surface for the alias-shadow notice — the CLI
-  // seam runs in the child, whose stderr is a debug.log fd no client ever reads.
-  auditBenchAliases(bench, chair, critic, notices);
   const lenses = Array.isArray(input.lenses) && input.lenses.length ? input.lenses : null;
   if (critic && lenses) { return textResult('critic and lenses are mutually exclusive in v4.0.', true); }
   if (lenses && lenses.length !== bench.length) {
@@ -225,6 +222,9 @@ async function handleCouncilRunTool(input, project, helpers) {
   // read-merge-write has no lock (see run-state.writeSpawnPid).
   try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
   catch { /* best-effort */ }
+  // PR #207 round 2 (A1) + round 5 (A1): the alias-shadow notice's MCP surface,
+  // sited past every return that discards `notices` — rationale on its own def.
+  auditBenchAliases(bench, chair, critic, notices);
   // Task 15 (spec §5.3): the run is now known-launched under runId — mark it
   // for a best-effort terminal notify. runWait's poll loop (mcp-wait.js) is
   // the only code that later sees this council run reach terminal state.

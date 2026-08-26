@@ -6253,7 +6253,9 @@ minutes to get started"*).
   sees. Both transports ran the check; only the CLI surfaced it. Round 1's disposition was
   measure-and-document; the council re-raised it, so a second notice site now writes to the MCP
   surface: `mcp-council-bench.js :: auditBenchAliases`, called from
-  `mcp-council-run.js :: handleCouncilRunTool` right after bench/chair/critic resolution, pushes
+  `mcp-council-run.js :: handleCouncilRunTool` (⚠️ round 2 sited that call right after
+  bench/chair/critic resolution; **round 5 finding A1 moved it past every rejection**, to
+  immediately after the spawn succeeds — see that round's entry), pushes
   the lines into that handler's per-call `notices` array, which was already assembled into the
   tool result as extra content blocks. **Lever measured, two candidates:** the
   `utils/update-notice.js :: maybeAppendUpdateNotice` wrapper was REJECTED — its `_noticeShown`
@@ -6261,7 +6263,8 @@ minutes to get started"*).
   which would re-introduce finding A5's silence on a new surface and has no access to the bench.
   CLI output is unchanged and byte-identical (the parent writes into an array, never a stream);
   the child still writes its own copy to `debug.log`, so the two surfaces never double-print.
-  Named mutant `MCPMUTE` (3 tests / 1 suite); three absence controls stay green both ways.
+  Named mutant `MCPMUTE` (7 tests / 1 suite at the round-5 scope, GROWN from 3); three absence
+  controls stay green both ways.
   ⚠️ The underlying `debug.log` limitation still applies to every OTHER stderr notice the
   council child writes — only the alias-shadow line has a real MCP channel.
 - ✅ **DONE, PR #207 council round 3 (A1, B1, B2, B3): the notice survives an ASYNCHRONOUS
@@ -6274,21 +6277,24 @@ minutes to get started"*).
   unhandled (exit 7 again), and a scoped attach/detach always loses the race because delivery is
   always on a later turn. Only a persistent listener absorbs it, and a second write raises a
   second event — so `on`, never `once`. Fix: `armStream` (round 4 moved it, with the rest of the
-  write half, to `alias-shadow-writer.js`), an attach-once no-op
+  write half, to `alias-shadow-writer.js`), an attach-once
   `'error'` handler on the specific stream the default writer uses. Checked, not assumed, before
   taking a process-wide behaviour: nothing in `src/`, `bin/` or `scripts/` attaches to or depends
   on `process.stderr`'s `'error'` event, `logger.js` already ignores its own EPIPE, and
-  `electron/main.js` installs the same handler for the same reason. An INJECTED writer is never
-  armed. Mutant `STREAMFATAL` (3 tests / 1 suite), disjoint from `WRITERFATAL` (re-measured
-  unchanged) — the two halves of one contract, separately pinned.
+  `electron/main.js` attaches to the same stream for the same reason. An INJECTED writer is never
+  armed. Mutant `STREAMFATAL` (4 tests / 1 suite at the round-5 scope), disjoint from
+  `WRITERFATAL` (re-measured unchanged) — the two halves of one contract, separately pinned.
+  ⚠️ This round's handler was a PURE NO-OP, which round 5 (A3/B2/D1 + the contested C2) found to
+  be a process-wide deafness rather than a targeted guard — see that entry; the arming itself
+  survived the challenge unchanged, only its judgement was added.
   **B1 —** the failure branch interpolated `err.message` before `safeWrite` could guard anything,
   so a thrown `null`/`undefined` raised a TypeError inside the catch and escaped, and a thrown
   bare string printed `(undefined)`. Now extracted first, through a guarded `describeThrown`.
   ⚠️ The obvious repair is not sufficient: `String(Object.create(null))` THROWS (measured), so a
   bare `String((err && err.message) || err)` moves the escape rather than closing it — that case
   has its own fixture, and it is the ONLY test in the focused scope that dies to the naive form (re-measured at
-  round 4: still the only one, now out of 330).
-  Mutant `MESSAGERAW` (3 tests / 1 suite).
+  round 5 against the sanitizing body: still the only one, now out of 346).
+  Mutant `MESSAGERAW` (5 tests / 1 suite at the round-5 scope, GROWN from 3 by C1's two pins).
   **B2 —** `findAliasShadows`' docstring claimed that omitting `names` inspects "every alias the
   user has configured". It iterates the CURATED keys, which is CORRECT — a shadow needs a curated
   twin — so the docstring was fixed, not the code, and the honest behaviour got a control pin. Two
@@ -6351,6 +6357,72 @@ minutes to get started"*).
   (`hasAssistantMsg`) sees. The finding asked for "a structural pin or a cited audit of tracker
   readers"; the audit is the durable half, since a statement-order pin on a poll loop rots faster
   than the code it guards.
+- ✅ **DONE, PR #207 council round 5 (A1, C1, D2, D3 + A3/B2/D1/C2 as one mechanism; A2 and B3
+  REFUTED by measurement): the arming listener stops being deaf, and the notice stops doing dead
+  work.**
+  **A3 + B2 + D1, and the CONTESTED C2 — four raisers, ONE mechanism.** Round 3's `armStream`
+  attached a PURE NO-OP `'error'` handler to `process.stderr`. That is a process-wide, permanent
+  change: from the first notice onward EVERY `'error'` on that stream, from any producer, was
+  silently discarded — sharpest in the long-lived MCP server, which imports this in-tree and
+  outlives every run. Round 4's measurement was re-checked and STANDS, so the arming survives
+  unchanged (a scoped attach/detach always loses the race; a write callback is inert). What
+  changed is the handler's JUDGEMENT: the benign reader-went-away class
+  (`EPIPE`/`EOF`/`ERR_STREAM_DESTROYED`/`ERR_STREAM_WRITE_AFTER_END`) is still swallowed in
+  silence, and anything else — a code-less throw included — is reported through the house logger.
+  ⚠️ **The brief's premise was wrong and was measured before being relied on:** `utils/logger.js`
+  does NOT write to a file, it writes via `console.error` onto `process.stderr` — the same stream
+  that just failed. So the self-report is bounded to ONE per stream (a second `Symbol.for` marker)
+  and wrapped, precisely so the announcement cannot become the next `'error'` and spin the loop —
+  round 3's B1 defect in its asynchronous form. `electron/main.js`'s stderr handler is silent for
+  every code; this one deliberately departs for the non-benign class, which is why the bound had
+  to exist first. Mutant `STREAMDEAF` (4 tests / 1 suite); the three benign-class controls and
+  both never-re-raises controls stay green BOTH ways.
+  **A1 —** the MCP audit sat ABOVE the critic+lenses exclusion, the lens-count mismatch and every
+  later rejection, while `notices` is only read when the tool result is assembled — so each of
+  those rejections read `config.json`, compared two alias tables and formatted lines, then threw
+  them away. Dead work, contradicting the CLI's "a rejected bench is silent by construction" and
+  the suite's own rejected-run control (which passed only because it exercised the ONE rejection
+  returning before the audit). Moved to immediately after the spawn succeeds — the first point
+  from which the success content is guaranteed — making the property structural rather than a
+  fact about which rejections happen to sit above it. Mutant `AUDITEARLY` (2 tests / 1 suite); the
+  accepted-call control stays green, so "never computed on a rejection" cannot be satisfied by
+  never computing. `mcp-council-run.js` stays at 299/300: three lines out, three in, with the
+  rationale parked on `auditBenchAliases`'s own docblock where there is room for it.
+  **C1 —** round 4 sanitized the SHADOW notice's fragments and left the FAILURE notice's raw:
+  `describeThrown`'s result went unsanitized and unbounded onto a terminal AND into an MCP tool
+  result, though a thrown value carries provider text, a filesystem path, or the user's own
+  config. Same `collapseExcerpt` pass. **Cap picked and recorded: the house default 200, NOT the
+  64-char fragment cap** — a fragment is a MODEL ID (longest measured 39), a thrown message is a
+  SENTENCE (`EACCES: permission denied, open '…config.json'` already exceeds 64), so clipping at
+  64 would bound the payload by destroying the diagnosis. Mutant `THROWNRAW` (2 tests / 1 suite);
+  the byte-identical control and all four round-3 B1 fixtures stay green.
+  **D2 —** `sidecar/models.js` claimed `--check` "audits the whole configured set". It audits
+  curated ∩ configured — the exact overstatement round 3's B2 struck from `findAliasShadows`'
+  docstring, whose TWIN here outlived the correction. Comment-only.
+  **D3 —** the lines pushed into the MCP `notices` array kept `formatAliasShadow`'s stderr-shaped
+  trailing `\n`, where their siblings from `pack-resolve.js` carry none — a stray blank line in
+  the client's rendering. Trimmed at the MCP writer, not at the compose site: the newline is
+  correct for the two STREAM surfaces and round 4's pins assert it there. Mutant `MCPNEWLINE`
+  (1 test / 1 suite).
+  **A2 — REFUTED, with the finding's instinct honoured anyway.** The claim was that
+  `jest.dontMock('../../src/utils/config')` "cannot work by the mechanism its comment describes",
+  because "statements directly in a describe body execute during suite collection". It is not in a
+  describe body — it is the last statement of an `it()` callback, so it runs at test time, after
+  the `isolateModulesAsync` block and after every earlier test; and the stub is `doMock`, which is
+  not hoisted, so the second horn does not apply either. MEASURED: delete the line and the file
+  fails 2 tests with 21 `loadConfig is not a function` notices, so the leak and the fix are both
+  real (`doMock` registers in the MOCK registry; `isolateModulesAsync` and `resetModules` sandbox
+  only the MODULE one). ⚠️ But a REAL gap sat next to it: the undo was unreachable if the body
+  threw. MEASURED — force the inner assertion to fail and one red test becomes THREE, two of them
+  pointing at an unrelated describe. Now a `try/finally`, with the measurement recorded at the
+  site.
+  **B3 — REFUTED by measurement.** The claim was that "the hoist moved the amendment-2 comment to
+  BELOW the stamp site". At the reviewed commit it is above in BOTH candidate files
+  (`headless.js` 943 vs the stamp at 961; the test file's amendment-2 describe at 263 vs the doc
+  block at 817), and the sibling "the placeholder case below" correctly forward-references the
+  DISCRIMINATOR test further down. Re-anchored by NAME anyway at both sites, because a positional
+  pointer is the one thing in those comments a later hoist can falsify — which is the defect class
+  the finding was reaching for even though this instance had not occurred.
 
 ### Quote the real engine error — #133 root fix
 

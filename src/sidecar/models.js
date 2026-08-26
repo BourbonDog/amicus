@@ -164,10 +164,10 @@ function fmtProbeLine(r) {
 async function runCheck(args) {
   // v4.9 W13 Task B (BACKLOG C5). FIRST — ahead of the catalog-unavailable return
   // below, exactly when an offline user most needs to know what their aliases bind
-  // to. No name list: `--check` audits the whole configured set. stderr only, so
-  // `--json` stays byte-clean. `audit…` (not `note…`) opens a fresh notice scope so
-  // a second `--check` in one process still reports — PR #203 round 1, A5. See
-  // src/utils/alias-shadow.js — diagnosis, never resolution.
+  // to. No name list, so the subject is curated ∩ configured — NOT "the whole
+  // configured set", the overstatement round 3's B2 struck from findAliasShadows'
+  // docstring and whose twin here outlived it (round 5, D2). stderr only, so
+  // `--json` stays byte-clean; `audit…` opens a fresh scope (PR #203 A5).
   require('../utils/alias-shadow').auditAliasShadows();
   const catalogInfo = await getCatalogInfo();
   const catalog = catalogInfo.models;

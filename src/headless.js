@@ -961,8 +961,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // v4.9 W13 Task A — THE TTFT STAMP. One shot, never re-armed, reading
         // the same `substantiveActivity` const the backstop is ticked with
         // below. Keyed on `progressed` it would report a first-token time for
-        // OpenCode's empty acceptance placeholder, the exact lie amendment 2
-        // above removed from the backstop.
+        // OpenCode's empty acceptance placeholder — the exact lie the
+        // amendment-2 narrowing of `substantiveActivity` removed from the backstop.
         //
         // ⚠️ RESIDUAL CENSORING — READ THIS BEFORE DERIVING ANYTHING (the C2
         // derivation must know the bias; PR #203 round 1, B1). With the hoist

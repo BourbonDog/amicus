@@ -831,7 +831,14 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  *     prompt ACCEPTANCE, so `progressed` goes true there while nothing was
  *     served. A probe keyed on `progressed` would report a time-to-first-token
  *     for a leg that never produced a token — precisely the accepted-but-not-
- *     serving lie amendment 2 (above) removed from the backstop itself.
+ *     serving lie the amendment-2 narrowing of `substantiveActivity` removed
+ *     from the backstop itself (the "amendment 2:" describe block in this file).
+ *     ⚠️ PR #207 round 5 (B3) read this as a rotted direction word and asked for
+ *     a re-anchor. MEASURED at the reviewed commit: the direction was already
+ *     right — the amendment-2 block sits above this one, and the placeholder
+ *     DISCRIMINATOR it forward-references sits below. Re-anchored by NAME
+ *     anyway, here and at the stamp in headless.js, because a positional
+ *     pointer is the one thing in this comment that a later hoist can falsify.
  *
  *  2. EMIT-WHEN-SET. No measurement ⇒ no key. Never 0, never null. `0` is a
  *     legitimate measurement (first substantive tick inside the first poll), so

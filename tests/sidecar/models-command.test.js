@@ -210,34 +210,49 @@ describe('amicus models', () => {
   });
 
   it('marks rows using the user\'s effective aliases, not curated defaults', async () => {
-    await jest.isolateModulesAsync(async () => {
-      jest.doMock('../../src/utils/model-catalog', () => ({
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('../../src/utils/model-catalog', () => ({
         getCatalogInfo: jest.fn(async () => ({
           models: [
             { id: 'openrouter/x-ai/grok-4.3', name: 'Grok 4.3', contextLength: 256000, pricing: null },
           ],
-          fetchedAt: 1718000000000,
-        })),
-        refreshCatalog: jest.fn(async () => []),
-        catalogPath: () => 'C:/fake/model-catalog.json',
-      }));
-      jest.doMock('../../src/utils/config', () => ({
-        getEffectiveAliases: () => ({ myalias: 'openrouter/x-ai/grok-4.3' }),
-        getDefaultAliases: () => ({ gemini: 'openrouter/google/not-in-catalog' }),
-      }));
-      const { handleModels } = require('../../src/sidecar/models');
-      const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
-      expect(code).toBe(0);
-      expect(out).toContain('[myalias] openrouter/x-ai/grok-4.3');
-    });
-    // ⚠️ MOCK LEAK, measured v4.9 W13 Task B. `jest.isolateModulesAsync` scopes
-    // the MODULE registry, NOT the mock registry — so the config stub above
-    // (which exports only getEffectiveAliases/getDefaultAliases) stayed
-    // installed for the whole file, and every later `require('utils/config')`
-    // got an object carrying ONLY those two exports — no `loadConfig`. It only
-    // surfaced when a new test needed a third export. Undo it explicitly here,
-    // at the leak, rather than defensively in each later describe.
-    jest.dontMock('../../src/utils/config');
+            fetchedAt: 1718000000000,
+          })),
+          refreshCatalog: jest.fn(async () => []),
+          catalogPath: () => 'C:/fake/model-catalog.json',
+        }));
+        jest.doMock('../../src/utils/config', () => ({
+          getEffectiveAliases: () => ({ myalias: 'openrouter/x-ai/grok-4.3' }),
+          getDefaultAliases: () => ({ gemini: 'openrouter/google/not-in-catalog' }),
+        }));
+        const { handleModels } = require('../../src/sidecar/models');
+        const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
+        expect(code).toBe(0);
+        expect(out).toContain('[myalias] openrouter/x-ai/grok-4.3');
+      });
+    } finally {
+      // ⚠️ MOCK LEAK — RE-MEASURED at PR #207 council round 5 (A2), which
+      // challenged the mechanism. Both halves hold, and both were measured on
+      // this file:
+      //   · The leak is REAL. Delete this line and the file fails 2 tests with
+      //     21 copies of "could not check whether local aliases shadow the
+      //     curated table (loadConfig is not a function)". `doMock` registers in
+      //     the MOCK registry; `isolateModulesAsync` sandboxes only the MODULE
+      //     registry, and `loadHandler`'s `jest.resetModules()` clears only that
+      //     one too — so the stub above (exporting just getEffectiveAliases and
+      //     getDefaultAliases) answers every later `require('utils/config')` in
+      //     the file, with no `loadConfig` on it.
+      //   · The FINALLY is what round 5 was right about, by a different route.
+      //     Measured: force the assertion inside the block to fail and the undo
+      //     is skipped entirely — one red test becomes three, and two of them
+      //     point at an unrelated describe. A leak this wide must not depend on
+      //     the body succeeding.
+      // Undone here, at the leak, rather than defensively in each later describe.
+      // (`doMock` is not hoisted, and this runs after the block, so no earlier
+      // test in declaration order ever sees the stub removed.)
+      jest.dontMock('../../src/utils/config');
+    }
   });
 
   it('--search without a value errors instead of dumping the catalog', async () => {

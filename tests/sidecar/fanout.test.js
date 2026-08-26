@@ -552,7 +552,14 @@ describe('runFanout orchestrator', () => {
 
   // A first substantive tick observed inside the first poll is a real 0, and 0
   // is exactly the value a `|| undefined` omit-if-absent idiom would silently
-  // eat — which is why both hops guard on `typeof === 'number'` instead.
+  // eat — which is why both hops guard on a VALUE TEST instead.
+  //
+  // PR #207 round 5 (B1): that test is no longer the local `typeof === 'number'`
+  // this comment used to name — round 3's B3 replaced it with the shared
+  // `utils/ttft.js :: isMeasuredTtft`, which the production line asserted just
+  // above now spells. What survives 0 is `Number.isInteger(0) && 0 >= 0`, both
+  // true; what the widening ADDED is the rejection of NaN, ±Infinity, negatives
+  // and fractions, none of which `typeof` excluded.
   it('a ttftMs of 0 survives both hops (it is a measurement, not an absence)', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: 0 }))

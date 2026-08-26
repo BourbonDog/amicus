@@ -69,6 +69,33 @@ function resolveBenchInput(input) {
  * on every council_run call while a wiring inside `resolveBenchInput` would sit
  * on both of its branches but still miss nothing else. Diagnosis only: this
  * changes no id, no exit code and no artifact.
+ *
+ * ⚠️ WHERE IN THE HANDLER, and why it moved (PR #207 round 5, A1). The call used
+ * to sit beside the bench validation, ABOVE the critic+lenses mutual exclusion,
+ * the lens-count mismatch and every later rejection. `notices` is only ever read
+ * at the very end, when the tool result is assembled, so each of those
+ * rejections computed an audit — reading the user's `config.json` off disk,
+ * comparing two alias tables, formatting lines — and then discarded every line
+ * with the rest of the result. Dead work, and it contradicted the CLI's "a
+ * rejected bench is silent by construction" as well as the suite's own
+ * rejected-run control (which passed only because it exercised the ONE rejection
+ * that returns before the audit).
+ *
+ * So the site is now immediately after the spawn succeeds — the first point from
+ * which the handler is guaranteed to return the success content. Everything left
+ * below it is best-effort (the pid write, the notify request, auto-open), and
+ * none of it can return early. "Never computed on a rejected call" is therefore
+ * structural rather than a property of which rejections happen to sit above it,
+ * which is what the previous placement got wrong.
+ *
+ * ⚠️ AND THE LINE IS RE-SHAPED FOR THIS SURFACE (PR #207 round 5, D3).
+ * `formatAliasShadow` terminates every notice with `\n`, because both of its
+ * stream writers need it to make the text a line. An MCP content block is not a
+ * stream: its sibling notices (`pack-resolve.js`) carry no trailing newline, so
+ * an un-trimmed alias-shadow block rendered with a stray blank line after it.
+ * The trim lives HERE, at the one writer whose sink is not a stream, rather than
+ * in `formatAliasShadow` — the newline is correct for the CLI and `models
+ * --check`, and the round-4 sanitizing pins assert `endsWith('\n')` on that side.
  * @param {string[]} bench resolved bench seats (already expanded)
  * @param {string} chair explicit or default chair alias
  * @param {string|null} critic critic alias, when one was named
@@ -76,7 +103,8 @@ function resolveBenchInput(input) {
  */
 function auditBenchAliases(bench, chair, critic, notices) {
   require('./utils/alias-shadow').auditAliasShadows(
-    [...bench, chair, ...(critic ? [critic] : [])], (line) => notices.push(line));
+    [...bench, chair, ...(critic ? [critic] : [])],
+    (line) => notices.push(String(line).trimEnd()));
 }
 
 module.exports = { resolveBenchInput, auditBenchAliases };

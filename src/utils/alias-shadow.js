@@ -65,8 +65,12 @@
  * "MCPMUTE" (make `auditBenchAliases` a no-op), "STREAMFATAL" (drop
  * `armStream`'s attach-once 'error' handler — round 3, A1, also next door),
  * "MESSAGERAW" (interpolate `err.message` straight into the failure line again —
- * round 3, B1) and "NOTICERAW" (interpolate the config-sourced fragments into
- * `formatAliasShadow`'s template unsanitized — round 4, A1).
+ * round 3, B1), "NOTICERAW" (interpolate the config-sourced fragments into
+ * `formatAliasShadow`'s template unsanitized — round 4, A1), "THROWNRAW" (drop
+ * `describeThrown`'s sanitizing pass, leaving the FAILURE line raw and unbounded
+ * — round 5, C1) and "STREAMDEAF" (put `armStream`'s pure no-op handler back, so
+ * the arming goes deaf to every error class again — round 5, A3/B2/D1/C2, in
+ * alias-shadow-writer.js).
  */
 
 'use strict';
@@ -196,11 +200,34 @@ function formatAliasShadow(s) {
  * throws `TypeError: Cannot convert object to primitive value` — so the
  * conversion carries its own guard. Nothing in a catch block may throw,
  * including the code that describes what was caught.
+ *
+ * ⚠️ AND IT IS THIRD-PARTY TEXT (PR #207 round 5, C1). Round 3 made this total;
+ * round 4 sanitized the SHADOW notice's fragments and left this one's result
+ * raw, so the FAILURE line still pasted an arbitrary thrown message —
+ * unsanitized and unbounded — onto a terminal and into an MCP tool result. A
+ * thrown value is not house data: it carries provider text, a filesystem path,
+ * or the user's own config file (the case that motivated round 4). Same
+ * `collapseExcerpt` pass, same reasons, one function later.
+ *
+ * ⚠️ THE CAP IS THE HOUSE DEFAULT (200), NOT `MAX_FRAGMENT_CHARS` (64). Both are
+ * the same discipline — a caller sizing the cap to what its field legitimately
+ * holds, as `engine-skew.js :: safeVersion` does at 32 — and the two fields are
+ * not the same kind of text. A fragment is a MODEL ID (measured longest: 39), so
+ * 64 bounds it with room to spare. A thrown message is a SENTENCE: `EACCES:
+ * permission denied, open 'C:\\Users\\…\\config.json'` already exceeds 64, and
+ * clipping there would bound the payload by destroying the diagnosis. 200 is
+ * what `text-sanitize.js` documents as "long enough for a real engine error",
+ * and it leaves this composed line the same order of magnitude as the shadow
+ * line's three 64-char fragments.
+ *
+ * The pass runs INSIDE the try, so a value whose `String()` throws still lands
+ * in the catch rather than escaping through the sanitizer's argument.
  * @param {*} err whatever was thrown — an Error, a string, null, anything.
- * @returns {string}
+ * @returns {string} one bounded line, safe to paste into the notice.
  */
 function describeThrown(err) {
-  try { return String((err && err.message) || err); } catch { return 'unprintable error'; }
+  try { return collapseExcerpt(String((err && err.message) || err)); }
+  catch { return 'unprintable error'; }
 }
 
 /**

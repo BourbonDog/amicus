@@ -43,27 +43,37 @@
  *     returns an expanded `bench` on BOTH branches, so the handler seam covers
  *     every council_run call instead of the preset branch only.
  *
- * TEN named mutants. All red sets below were RE-MEASURED 2026-08-26 against the
- * PR #207 round-4 tree at ONE shared focused scope — 8 suites / 330 tests: this
- * file plus tests/no-output-backstop-wiring.test.js,
+ * FOURTEEN named mutants. All red sets below were RE-MEASURED 2026-08-26 against
+ * the PR #207 round-5 tree at ONE shared focused scope — 8 suites / 346 tests:
+ * this file plus tests/no-output-backstop-wiring.test.js,
  * tests/sidecar/fanout.test.js, tests/council/run-stats-entry.test.js,
  * tests/council/runstats-byte-order.test.js,
  * tests/scripts/council-review-workflow.test.js,
  * tests/sidecar/models-command.test.js, tests/cli-council-run.test.js.
- * (Round 2 measured 7 suites / 284 tests and round 3 measured 8 / 323;
- * runstats-byte-order.test.js joined the scope at round 3 and each round added
- * fixtures, so the TOTALS are not comparable — the per-mutant sets are, and each
- * is marked grown or unchanged.)
+ * (Round 2 measured 7 suites / 284 tests, round 3 measured 8 / 323 and round 4
+ * 8 / 330; runstats-byte-order.test.js joined the scope at round 3 and each
+ * round added fixtures, so the TOTALS are not comparable — the per-mutant sets
+ * are, and each is marked grown or unchanged.)
+ *
+ * ROUND 5 added four: "STREAMDEAF" and "THROWNRAW" below, plus "AUDITEARLY"
+ * (A1 — put the MCP audit back above the remaining rejections; RED 2 tests / 1
+ * suite, both in this file: the critic+lenses and lens-count rejection pins. The
+ * accepted-call control stays GREEN, which is what keeps "never computed on a
+ * rejection" from being satisfied by never computing at all) and "MCPNEWLINE"
+ * (D3 — push the stderr-shaped line into the MCP notices array untrimmed; RED
+ * 1 test / 1 suite).
  *
  * "SHADOWSILENT" — `src/utils/alias-shadow.js :: noteAliasShadows`, make the
  * emitter a no-op (an early `return;` after the writer and scope are bound, i.e.
- * the warning is computed and never spoken). RED: 31 tests / 2 suites — GROWN
- * from round 3's 26 by five of the round-4 fixtures (three A1 hostile-value
- * pins, the A1 byte-identical control, and the B1 cross-registry pin, which
- * counts the lines both instances wrote). Every one asserts a line was actually
- * produced; the A1 hostile-NAME control is the round-4 fixture that does NOT
- * die, because a name that cannot become a row cannot become a line either.
- *   tests/alias-shadow.test.js            — 29 failed
+ * the warning is computed and never spoken). RED: 36 tests / 2 suites — GROWN
+ * from round 4's 31 by five round-5 fixtures (the two C1 hostile-thrown pins and
+ * its byte-identical control, the A1 accepted-call control, and the D3 newline
+ * pin — all five assert a line was actually produced). Every one asserts a line
+ * was actually produced; the A1 hostile-NAME control is the round-4 fixture that
+ * does NOT die, because a name that cannot become a row cannot become a line
+ * either, and round 5's own arming fixtures do not die because they never emit
+ * a notice at all.
+ *   tests/alias-shadow.test.js            — 34 failed
  *     · emits the plan's exact line, one per shadowed alias
  *     · once per scope: a second resolution of the same alias stays quiet
  *     · no module-global latch: two scope-less calls each speak (B3)
@@ -108,8 +118,10 @@
  *
  * "STREAMFATAL" (PR #207 round 3, A1) — drop the `armStream(stream)` call from
  * `alias-shadow-writer.js`'s default stderr writer, i.e. stop attaching the
- * no-op 'error' handler. RED: 4 tests / 1 suite, all in this file — GROWN from
- * round 3's 3 by the round-4 cross-registry pin, which counts listeners and so
+ * 'error' handler at all. RED: 4 tests / 1 suite, all in this file — UNCHANGED
+ * at round 5, whose own fixtures call `armStream` DIRECTLY and so cannot notice
+ * that the default writer stopped calling it. GROWN at round 4 from round 3's 3
+ * by the cross-registry pin, which counts listeners and so
  * dies at zero as readily as at two. The set is the later-turn failure, the
  * second later-turn failure (which is what forbids `once`), the attach-once pin
  * and the cross-registry pin. The measured Node contract this defends, and why
@@ -135,23 +147,46 @@
  * byte-identical control stays GREEN, which is the whole point of it: the
  * sanitizer is a pass over hostile bytes, not a reformatting of the notice.
  *
+ * "STREAMDEAF" (PR #207 round 5, A3+B2+D1+C2) — put `armStream`'s PURE no-op
+ * handler back, so the arming swallows every error class again instead of only
+ * the benign one. RED: 4 tests / 1 suite, all in this file — the non-EPIPE
+ * report, the bounded-report pin, the code-less error and the default-seam
+ * wiring pin. The three benign-class controls and both never-re-raises controls
+ * stay GREEN in both directions, which is what pins the change as a widening of
+ * what the handler SAYS rather than a change to what it SURVIVES. Disjoint from
+ * STREAMFATAL: that one removes the handler, this one removes its judgement.
+ *
+ * "THROWNRAW" (PR #207 round 5, C1) — return `describeThrown`'s `String(...)`
+ * without the sanitizing pass, leaving the FAILURE line raw and unbounded. RED:
+ * 2 tests / 1 suite — the CLI hostile-thrown pin and the MCP one. The
+ * byte-identical control stays GREEN, and so do all four round-3 B1 fixtures:
+ * the pass is over hostile bytes, not a reformatting of the notice, which is the
+ * same split round 4's NOTICERAW carries one function away.
+ *
  * "MESSAGERAW" (PR #207 round 3, B1) — interpolate `err.message` straight into
  * the failure line again, evaluating it before `safeWrite` can guard anything.
- * RED: 3 tests / 1 suite — the thrown null, the thrown undefined and the thrown
- * bare string.
+ * RED: 5 tests / 1 suite — GROWN from 3 at round 5 by the two C1 hostile-thrown
+ * pins, which this mutant kills by bypassing `describeThrown` (and therefore its
+ * sanitizer) altogether. The set is the thrown null, the thrown undefined, the
+ * thrown bare string and those two.
  * ⚠️ The fourth B1 fixture ("a thrown value with NO printable form") stays GREEN
  * under MESSAGERAW, and that is deliberate: it is the pin for the OTHER wrong
- * fix. MEASURED against a `describeThrown` written as a bare
- * `String((err && err.message) || err)` with no try/catch — the obvious repair,
- * and the one the finding itself suggested — that fixture is the ONLY failure in
- * the whole 330-test scope (re-measured at round 4). `String(Object.create(null))` throws, so the naive
+ * fix. MEASURED against a `describeThrown` with no try/catch — the obvious
+ * repair, and the one the finding itself suggested — that fixture is the ONLY
+ * failure in the whole scope (re-measured at round 5 against the sanitizing
+ * body: still the only one, now out of 346).
+ * `String(Object.create(null))` throws, so the naive
  * repair moves the escape rather than closing it. Do not thin that fixture.
  *
  * "MCPMUTE" (PR #207 round 2, A1) — make
- * `mcp-council-bench.js :: auditBenchAliases` a no-op. RED: 4 tests / 1 suite —
- * GROWN from round 3's 3 by round 4's MCP hostile-value pin, which reaches the
- * notices array through this same site. The set is the three MCP-surface pins
- * plus that one. The three MCP ABSENCE CONTROLS (clean config, untouched fenced
+ * `mcp-council-bench.js :: auditBenchAliases` a no-op. RED: 7 tests / 1 suite —
+ * GROWN from round 4's 4 by three round-5 fixtures (the C1 MCP hostile-thrown
+ * pin, the A1 accepted-call control and the D3 newline pin), all of which reach
+ * the notices array through this same site. The set is the three MCP-surface
+ * pins, round 4's hostile-value pin and those three. ⚠️ The two A1 REJECTION
+ * pins stay green under it by construction: they assert the site is never
+ * CALLED, and this mutant empties the site rather than removing the call. The
+ * three MCP ABSENCE CONTROLS (clean config, untouched fenced
  * body, rejected run) stay green in BOTH directions, so the new surface is
  * pinned as an ADDITION rather than as noise. Note the CLI wiring pins do NOT
  * move under it: the two surfaces are independent, which is the property the
@@ -603,6 +638,123 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
   });
 
   /**
+   * PR #207 council round 5 — A3 + B2 + D1, and the CONTESTED C2: three raisers,
+   * one mechanism. The arming listener has to be HONEST, not merely quiet.
+   *
+   * Round 3 (A1) bought the right thing — an unhandled 'error' on stderr is an
+   * uncaughtException, and a CLI writing an advisory line into `| head` must not
+   * die of it — but it paid with a PURE NO-OP handler. Attaching one is a
+   * PROCESS-WIDE change: from the first notice onward, EVERY future 'error' on
+   * `process.stderr`, raised by any producer anywhere in the process, lands in
+   * this handler and is discarded. Sharpest in the long-lived MCP server, which
+   * imports this in-tree and outlives every individual run. That is the exact
+   * correct-but-SILENT degrade the product principle forbids.
+   *
+   * The round-4 measurement stands and is NOT relitigated here: scoped
+   * attach/detach always loses (delivery is on a later turn, so the detach always
+   * wins) and a write callback observes the failure without disarming it. So the
+   * arming stays; what changes is what the handler DOES.
+   *
+   * ⚠️ MEASURED, and it is why the self-report is bounded: `utils/logger.js`
+   * writes through `console.error`, i.e. onto `process.stderr` — the SAME stream
+   * that just failed. (Its own header says so: "Outputs JSON-formatted logs to
+   * stderr".) An unbounded report would therefore be able to provoke the next
+   * 'error', handle it, report again, and spin the event loop forever. Hence: at
+   * most ONE report per stream, wrapped, and never a re-raise.
+   *
+   * Named mutant "STREAMDEAF" — put the pure no-op handler back
+   * (`stream.on('error', () => {})`), i.e. swallow every class silently again.
+   */
+  describe('the arming listener swallows only the BENIGN class (round 5, A3/B2/D1/C2)', () => {
+    const { EventEmitter } = require('events');
+
+    /** A stream error as Node raises one: an Error carrying a `code`. */
+    const streamError = (code, message = `${code}: stream failed, write`) =>
+      Object.assign(new Error(message), { code });
+
+    /** A bare armable stream plus the reports its logger seam received. */
+    function armed() {
+      const { armStream } = require('../src/utils/alias-shadow-writer');
+      const stream = new EventEmitter();
+      const reports = [];
+      armStream(stream, (msg, ctx) => reports.push({ msg, ctx }));
+      return { stream, reports };
+    }
+
+    test('a NON-EPIPE stderr error reaches the logger seam instead of vanishing', () => {
+      const { stream, reports } = armed();
+      stream.emit('error', streamError('ENOSPC', 'ENOSPC: no space left on device, write'));
+      expect(reports).toHaveLength(1);
+      expect(JSON.stringify(reports[0])).toContain('ENOSPC');
+    });
+
+    /**
+     * The bound is the whole reason this can report at all — see the ⚠️ above.
+     * Two DIFFERENT codes, so this cannot pass by de-duplicating on the code.
+     */
+    test('the self-report is BOUNDED: a second non-EPIPE error does not re-report', () => {
+      const { stream, reports } = armed();
+      stream.emit('error', streamError('ENOSPC'));
+      stream.emit('error', streamError('ECONNRESET'));
+      expect(reports).toHaveLength(1);
+    });
+
+    test.each([['EPIPE'], ['EOF'], ['ERR_STREAM_DESTROYED']])(
+      'ABSENCE CONTROL: %s stays silent — the benign class this feature exists to survive',
+      (code) => {
+        const { stream, reports } = armed();
+        expect(() => stream.emit('error', streamError(code))).not.toThrow();
+        expect(reports).toEqual([]);
+      });
+
+    // The round-3 contract, unchanged by the round-5 widening: NEITHER class may
+    // re-raise. This is the fixture that keeps "speak up" from meaning "throw".
+    test('ABSENCE CONTROL: nothing ever re-raises — neither class escapes the handler', () => {
+      const { stream } = armed();
+      expect(() => stream.emit('error', streamError('EPIPE'))).not.toThrow();
+      expect(() => stream.emit('error', streamError('ENOSPC'))).not.toThrow();
+    });
+
+    // A code-less throw is not the benign class (nothing says it is), so it is
+    // reported — and reporting it must not become the next failure either.
+    test('an error with NO code is reported, not assumed benign', () => {
+      const { stream, reports } = armed();
+      expect(() => stream.emit('error', new Error('bare'))).not.toThrow();
+      expect(reports).toHaveLength(1);
+    });
+
+    test('a THROWING logger seam cannot sink the run it is diagnosing', () => {
+      const { armStream } = require('../src/utils/alias-shadow-writer');
+      const stream = new EventEmitter();
+      armStream(stream, () => { throw new Error('logger exploded'); });
+      expect(() => stream.emit('error', streamError('ENOSPC'))).not.toThrow();
+    });
+
+    /**
+     * WIRING: the default seam is the HOUSE logger, not a second private one.
+     * The `finally` is not decoration — it is the lesson of round 5's A2, in the
+     * same suite run: a mock left installed by a throwing body leaks into every
+     * later test in the file.
+     */
+    test('the DEFAULT seam is the house logger (utils/logger.js)', () => {
+      const error = jest.fn();
+      jest.doMock('../src/utils/logger', () => ({
+        logger: { error, warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
+        LOG_LEVELS: { error: 0, warn: 1, info: 2, debug: 3 },
+      }));
+      try {
+        const { armStream } = require('../src/utils/alias-shadow-writer');
+        const stream = new EventEmitter();
+        armStream(stream);
+        stream.emit('error', streamError('ENOSPC'));
+        expect(error).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.dontMock('../src/utils/logger');
+      }
+    });
+  });
+
+  /**
    * PR #207 council round 3, B1 — the failure branch must survive what it caught.
    *
    * The catch block built its line with a template literal, so `${err.message}`
@@ -665,6 +817,90 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
       const writes = noteWithThrow(new Error('EACCES: permission denied'));
       expect(writes).toHaveLength(1);
       expect(writes[0]).toContain('(EACCES: permission denied)');
+    });
+
+    /**
+     * PR #207 council round 5, C1 — round 4 sanitized the SHADOW notice's
+     * fragments and left the FAILURE notice's raw.
+     *
+     * `describeThrown`'s result is interpolated straight into a line that
+     * reaches a terminal AND an MCP tool result, and the thrown value is not
+     * house data: it carries a provider's text, a filesystem path, or (the case
+     * that actually motivated round 4) a config file the user controls. Same
+     * hole, same surfaces, one describe later.
+     *
+     * THE CAP, picked and recorded: the house default, 200
+     * (`text-sanitize.js :: MAX_EXCERPT_CHARS`), NOT `alias-shadow.js`'s
+     * 64-char fragment cap. A fragment is a MODEL ID — measured longest 39 — so
+     * 64 bounds it with room to spare. A thrown error's message is a SENTENCE:
+     * `EACCES: permission denied, open 'C:\\Users\\…\\config.json'` already runs
+     * past 64, and clipping it there would bound the payload by destroying the
+     * diagnosis. 200 is the cap `text-sanitize.js` documents as "long enough for
+     * a real engine error", and it leaves this composed line the same order of
+     * magnitude as the shadow line's three 64-char fragments.
+     *
+     * Named mutant "THROWNRAW" — return `describeThrown`'s `String(...)` without
+     * the sanitizing pass.
+     */
+    describe('...and neutralizes it, on both surfaces (round 5, C1)', () => {
+      const { MAX_EXCERPT_CHARS } = require('../src/utils/text-sanitize');
+      // ANSI colour + a forged second "Notice:" line + a right-to-left override,
+      // then padded past the cap: every rule at once, on one thrown message.
+      const HOSTILE_MESSAGE = "EACCES \u001b[31mred\u001b[0m\nNotice: alias 'gpt' resolves"
+        + ` to totally/legit\u202eDROW ${'z'.repeat(500)}`;
+
+      /** Every rendering rule the failure line owes, on one string. */
+      function expectNeutralized(line) {
+        expect(line).not.toContain('\u001b');                     // no escape sequences
+        expect(line).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/); // no bidi reordering
+        expect(line.slice(0, -1)).not.toMatch(/[\n\r]/);          // one line: only the trailing \n
+        expect(line).toMatch(/^Notice: could not check .*\(.*\)\n$/);
+        // ...and BOUNDED: the quoted reason cannot be the whole payload.
+        expect(line.match(/\(([\s\S]*)\)\n$/)[1].length).toBeLessThanOrEqual(MAX_EXCERPT_CHARS);
+      }
+
+      test('a hostile thrown message reaches the CLI writer neutralized and bounded', () => {
+        const writes = noteWithThrow(new Error(HOSTILE_MESSAGE));
+        expect(writes).toHaveLength(1);
+        expectNeutralized(writes[0]);
+        // ...and it still diagnoses: the surviving text, not just its absence.
+        expect(writes[0]).toContain('EACCES');
+      });
+
+      test('a hostile thrown message reaches the MCP notices array neutralized and bounded', async () => {
+        const briefingFile = path.join(tempDir, 'briefing.md');
+        fs.writeFileSync(briefingFile, 'Review this.');
+        // Only `loadConfig` throws — the handler's other config consumers
+        // (resolveCouncilMembers, getWorkspaceAutoOpen) stay real.
+        jest.doMock('../src/utils/config', () => ({
+          ...jest.requireActual('../src/utils/config'),
+          loadConfig: () => { throw new Error(HOSTILE_MESSAGE); },
+        }));
+        let res;
+        try {
+          const { handleCouncilRunTool } = require('../src/mcp-council-run');
+          res = await handleCouncilRunTool(
+            { briefingFile, models: ['kimi', 'glm'] },
+            tempDir, { spawnFn: () => {}, clientName: 'claude-code' });
+        } finally { jest.dontMock('../src/utils/config'); }
+        const notice = res.content.map(c => c.text).find(t => t.includes('could not check'));
+        expect(notice).toBeDefined();
+        expectNeutralized(notice.endsWith('\n') ? notice : `${notice}\n`);
+      });
+
+      /**
+       * ABSENCE CONTROL, and the point of the whole pass: an ordinary reason is
+       * rendered BYTE-IDENTICALLY. The sanitizer is a pass over hostile bytes,
+       * not a reformatting of the notice — the four round-3 B1 fixtures above
+       * (null/undefined/bare string/unprintable) are the rest of that control,
+       * and every one of them stays green under this change.
+       */
+      test('ABSENCE CONTROL: an ordinary reason is rendered byte-identically', () => {
+        const writes = noteWithThrow(new Error('EACCES: permission denied'));
+        expect(writes[0]).toBe(
+          'Notice: could not check whether local aliases shadow the curated table '
+          + '(EACCES: permission denied)\n');
+      });
     });
   });
 
@@ -1009,6 +1245,93 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
         tempDir, { spawnFn: () => {}, clientName: 'claude-code' });
       expect(res.isError).toBe(true);
       expect(res.content.map(c => c.text).join('\n')).not.toContain('curated ships');
+    });
+
+    /**
+     * PR #207 council round 5, A1 — the audit must not be DEAD WORK.
+     *
+     * The control above only ever exercised the models+council rejection, which
+     * returns from `resolveBenchInput` BEFORE the audit site. Every rejection
+     * AFTER it — critic+lenses mutual exclusion, the lens-count mismatch,
+     * timeoutMinutes, maxCost, the outDir containment check — computed the
+     * notices and then threw them away with the rest of the result. That is work
+     * whose only output is discarded, and it contradicts both the CLI's "a
+     * rejected bench is silent by construction" and this block's own claim.
+     *
+     * So the site moved past the last thing that can fail. The fixture spies on
+     * the audit FUNCTION rather than on the absent output, because absent output
+     * is exactly what the old placement also produced — only a call count can
+     * tell "never computed" from "computed and discarded".
+     */
+    describe('a rejected call computes NO audit at all (round 5, A1)', () => {
+      /** Run the tool with `auditBenchAliases` spied on; returns the spy. */
+      async function runWithAuditSpy(extra) {
+        const briefingFile = path.join(tempDir, 'briefing.md');
+        fs.writeFileSync(briefingFile, 'Review this.');
+        const actual = jest.requireActual('../src/mcp-council-bench');
+        const spy = jest.fn(actual.auditBenchAliases);
+        jest.doMock('../src/mcp-council-bench', () => ({ ...actual, auditBenchAliases: spy }));
+        try {
+          const { handleCouncilRunTool } = require('../src/mcp-council-run');
+          const res = await handleCouncilRunTool(
+            { briefingFile, models: ['kimi', 'glm'], ...extra },
+            tempDir, { spawnFn: () => {}, clientName: 'claude-code' });
+          return { spy, res };
+        } finally { jest.dontMock('../src/mcp-council-bench'); }
+      }
+
+      test('the critic+lenses rejection never reaches the audit', async () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const { spy, res } = await runWithAuditSpy({ critic: 'kimi', lenses: ['a', 'b'] });
+        expect(res.isError).toBe(true);
+        expect(res.content[0].text).toMatch(/mutually exclusive/);
+        expect(spy).not.toHaveBeenCalled();
+      });
+
+      test('the lens-count rejection never reaches the audit either', async () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const { spy, res } = await runWithAuditSpy({ lenses: ['only-one'] });
+        expect(res.isError).toBe(true);
+        expect(spy).not.toHaveBeenCalled();
+      });
+
+      /**
+       * ABSENCE CONTROL, in the other direction: the move must not have muted
+       * the surface. An ACCEPTED call still audits exactly once, and the notice
+       * still arrives — otherwise "never computed on rejection" would be
+       * satisfied by never computing at all.
+       */
+      test('ABSENCE CONTROL: an ACCEPTED call still audits exactly once', async () => {
+        writeConfig({ kimi: STALE_KIMI });
+        const { spy, res } = await runWithAuditSpy({});
+        expect(res.isError).toBeUndefined();
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(res.content.map(c => c.text).join('\n')).toContain('curated ships');
+      });
+    });
+
+    /**
+     * PR #207 council round 5, D3 — the line is shaped for a STREAM, not for a
+     * tool result.
+     *
+     * `formatAliasShadow` ends every notice with `\n` because both writers write
+     * it to a stream, where the newline is what makes it a line. An MCP content
+     * block is not a stream: its sibling notices from `pack-resolve.js` carry no
+     * trailing newline ("…which amicus_council_run does not support over MCP —
+     * ignored."), so the alias-shadow blocks were the odd ones out, arriving with
+     * a stray blank line in the client's rendering.
+     *
+     * Trimmed at the MCP WRITER, not in `formatAliasShadow`: the newline is
+     * correct for the two stream surfaces, and both of them still depend on it
+     * (the round-4 sanitizing pins assert `line.endsWith('\n')` on the CLI side).
+     */
+    test('the MCP notice carries no stderr-shaped trailing newline (round 5, D3)', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const texts = await runTool({ models: ['kimi', 'glm'] });
+      const notice = texts.find(t => t.includes('curated ships'));
+      expect(notice).toBeDefined();
+      expect(notice.endsWith('\n')).toBe(false);
+      expect(notice).not.toMatch(/[\n\r]/); // and it is still exactly ONE line
     });
   });
 
