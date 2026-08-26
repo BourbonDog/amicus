@@ -160,7 +160,8 @@ function degradedReason(run) {
 // function's first parameter, so the honest source costs nothing to reach.
 function verdictPanel(run, verdict) {
   const reason = degradedReason(run);
-  const intent = (verdict && verdict.intent === 'task') || (run && run.intent === 'task') ? 'task' : 'review';
+  // PR #200 round-5 B3: parens on the whole disjunction — behaviour-identical.
+  const intent = ((verdict && verdict.intent === 'task') || (run && run.intent === 'task')) ? 'task' : 'review';
   if (!verdict || verdict.parseError) {
     return { present: false, overallVerdict: null, tierCounts: null, streetCred: [], decisions: [], reason, intent };
   }

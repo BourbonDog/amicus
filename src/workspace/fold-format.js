@@ -90,7 +90,8 @@ function buildFoldText(o) {
   // `intent: 'task'` at start (src/council/run.js :: runCouncil):
   // electron/ipc-workspace.js passes `run: detail.run` and run-detail.js ::
   // getRunDetail reads it straight from `<runDir>/run.json`.
-  const terminalLabel = (verdict && verdict.intent === 'task') || run.intent === 'task' ? 'ANSWER' : 'VERDICT';
+  // PR #200 round-5 B3: parens on the whole disjunction — behaviour-identical.
+  const terminalLabel = ((verdict && verdict.intent === 'task') || run.intent === 'task') ? 'ANSWER' : 'VERDICT';
   const tierCounts = (verdict && verdict.tierCounts) || (tally && tally.tierCounts) || null;
   const cost = run.usage && run.usage.cost ? run.usage.cost : null;
 

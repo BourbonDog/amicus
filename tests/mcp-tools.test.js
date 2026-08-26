@@ -903,9 +903,13 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   // `z.string()` accepted any string, so a near-miss spelling ('Task', 'TASK')
   // passed validation, rode `meta` VERBATIM into tally.json, and then matched
   // NONE of the `=== 'task'` consumers downstream. For the ledger gates
-  // (`cli-handlers-council.js`, `mcp-server.js`, both `record.meta.intent ===
-  // 'task'`) the silent degrade lands on the POLLUTING side: the task run's
-  // rankings ARE appended to the reliability ledger. A permissive envelope is
+  // (`mcp-server.js`, and `cli-handlers-council.js` until PR #200 round-5 B1 put
+  // a matching refusal in front of its gate) the silent degrade lands on the
+  // POLLUTING side: the task run's rankings ARE appended to the reliability
+  // ledger. Both gates still test the exact spelling — what B1 changed is that
+  // the CLI's unschema'd file can no longer reach its gate carrying an unmatched
+  // one (tests/council/cli-handlers-council.test.js, mutant TALLYINTENTOPEN).
+  // A permissive envelope is
   // only safe when the failure direction is inert; here it is not. The enum
   // matches amicus_council_run's own `z.enum(['review','task'])`, so one input
   // does not mean two things at two doors.

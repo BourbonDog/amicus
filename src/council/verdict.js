@@ -57,7 +57,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // review scale. Passed through `opts` rather than assigned after the call, so
     // the key keeps its SLOT here and a rebuilt document's key order still
     // matches the engine's (pinned, cli-council-verdict-chair-carry.test.js).
-    ...((record.meta && record.meta.intent === 'task') || opts.intent === 'task'
+    // PR #200 round-5 B3: parens on the whole disjunction — behaviour-identical.
+    ...(((record.meta && record.meta.intent === 'task') || opts.intent === 'task')
       ? { intent: 'task' } : {}),
     overallVerdict: opts.overallVerdict === undefined ? null : opts.overallVerdict,
     findings: record.findings.map(f => {

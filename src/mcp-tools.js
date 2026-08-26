@@ -422,7 +422,11 @@ function getTools() {
         // z.string(), rode meta VERBATIM into tally.json, and matched NOTHING:
         // the ledger gates in cli-handlers-council.js and mcp-server.js then
         // APPEND the task run's rankings to the reliability ledger — the
-        // polluting direction. The `.nullable()`/permissive idiom above is for
+        // polluting direction. (PR #200 round-5 B1 closed the same hazard on the
+        // OTHER door: `amicus council tally` reads that file with no schema at
+        // all, so runTally now refuses an unmatched spelling before its own gate.
+        // Both doors state the same two values; neither gate was widened.)
+        // The `.nullable()`/permissive idiom above is for
         // keys where tally() can still be the single arbiter of shape; it
         // cannot arbitrate a value whose whole meaning is its exact spelling.
         // Both spellings accepted, matching amicus_council_run's enum below, so

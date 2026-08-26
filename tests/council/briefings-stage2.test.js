@@ -264,4 +264,22 @@ describe('review judges never see the briefing — the anonymity narrowing (v4.9
     expect(task).toContain(BRIEFING_HEADER);
     expect(task).toContain(BRIEFING);
   });
+
+  // PR #200 round-5 B2 — the REVIEW-CONTROL ABSENCE PIN for the briefing fence.
+  // The fence exists because the task tail puts caller-supplied text in front of
+  // the judges whose rankings drive the answer. A review bundle carries no such
+  // text, so it must carry no fence either: this is the pin that fails if the
+  // fence is ever composed unconditionally and the review bundle's bytes move.
+  test('the review bundle carries NO briefing fence — it has no untrusted tail to fence', () => {
+    const review = s2.buildJudgeBundle({ reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING });
+    expect(review).not.toContain('<council_briefing');
+    expect(review).not.toContain('</council_briefing>');
+    expect(review).not.toContain('READ-ONLY reference material');
+    expect(review).not.toContain('purpose="background_reference_only"');
+    // Non-vacuous: the task twin, built from the same args, does carry it.
+    const task = require('../../src/council/briefings-stage2-task').buildTaskJudgeBundle({
+      reviews: REVIEWS, findings: FINDINGS, briefing: BRIEFING,
+    });
+    expect(task).toContain('<council_briefing purpose="background_reference_only">');
+  });
 });

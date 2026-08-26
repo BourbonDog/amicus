@@ -34,12 +34,19 @@ function runTally(inputPath, useJson, opts = {}) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `malformed tally input: ${e.message}`,
       hint: 'input needs meta.models, findings[], adjudications[], rankings[]' });
   }
+  // ⚠️ PR #200 round-5 B1 — DOOR PARITY with the MCP enum (mcp-tools.js ::
+  // amicus_council_tally, round-4 C1): raw JSON.parse, no schema, exact-match
+  // consumers, so a near-miss ('Task') slid past the gate below into the ledger.
+  // Refused whatever `opts.append` says — meta rides VERBATIM into tally.json.
+  const intent = record.meta && record.meta.intent;
+  if (intent !== undefined && intent !== 'task' && intent !== 'review') {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `malformed tally input: meta.intent must be 'task' or 'review', got ${JSON.stringify(intent)}`,
+      hint: "omit meta.intent for a review run; 'task' is the only spelling that marks a task run" });
+  }
   // Auto-append the run to the reliability ledger (consumed by `amicus council
-  // stats`). Tally is the council's finalize step, so this is where the row is
-  // recorded. Best-effort: a ledger write failure must not fail the tally.
-  // v4.9 W5.4 gate 2: task-run records never feed it — gated on the RECORD's
-  // meta.intent (tally copies meta verbatim from the input, measured).
-  if (opts.append !== false && !(record.meta && record.meta.intent === 'task')) {
+  // stats`) — tally is the council's finalize step. Best-effort: a ledger write
+  // failure must not fail the tally. v4.9 W5.4 gate 2: task runs never feed it.
+  if (opts.append !== false && intent !== 'task') {
     try { appendRun(record); }
     catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
   }
@@ -228,12 +235,12 @@ function runVerdict(args, useJson) {
     // another run's intent, and intent SELECTS THE CHAIR PARSER in the
     // readOverallVerdict call just below — so the leak can also change
     // overallVerdict to a phrase off the wrong scale, exactly the failure the
-    // foreign-verdict.json guard exists to prevent one file over.
+    // foreign-verdict.json guard exists to prevent one file over. PR #200 round-5 B3 parenthesized the whole three-carrier disjunction below before the `?` — behaviour-identical (`||` already binds tighter than `?:`), readability only.
     const runDoc = readRun(runDir);
     const ownRunDoc = runDoc && (!record.meta.runId || runDoc.runId === record.meta.runId);
-    const intent = (record.meta && record.meta.intent === 'task')
+    const intent = ((record.meta && record.meta.intent === 'task')
       || (ownRunDoc && runDoc.intent === 'task')
-      || readPriorVerdictIntent(runDir, record.meta.runId) === 'task' ? 'task' : 'review';
+      || readPriorVerdictIntent(runDir, record.meta.runId) === 'task') ? 'task' : 'review';
     const overallVerdict = readOverallVerdict(runDir, record.meta.runId, intent);
     // #87: tally.json carries neither seatLoss nor degrades — recover both from
     // the run folder's verdict the same way the chair line is recovered.

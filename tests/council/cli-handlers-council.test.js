@@ -70,6 +70,141 @@ test("tally with an explicit meta.intent 'review' still appends (hand-assembled 
   expect(gpt.runs).toBe(1);
 });
 
+// ---------------------------------------------------------------------------
+// PR #200 round-5 finding B1 — the CLI door validates meta.intent (parity with
+// the MCP enum that round-4 C1 put on mcp-tools.js :: amicus_council_tally).
+//
+// `amicus council tally <input.json>` is a raw `JSON.parse` with NO schema in
+// between, and every consumer reads intent by exact match (`=== 'task'`). So a
+// near-miss spelling rode `meta` verbatim onto the record and matched NOTHING:
+// the append gate two tests above saw a review run and APPENDED a task run's
+// rankings to the reliability ledger — the polluting direction, silently. The
+// MCP door refuses that at the boundary; this one printed a clean record.
+//
+// ── NAMED MUTANT "TALLYINTENTOPEN" ─────────────────────────────────────────
+// MUTATION: delete the meta.intent guard from src/cli-handlers-council.js ::
+// runTally — the four lines `if (intent !== undefined && intent !== 'task' &&
+// intent !== 'review') { return failJson(…); }`, leaving `const intent` and the
+// append gate below it untouched.
+// MEASURED 2026-08-26, RED SET 5 of 113, applied and reverted BY HAND (restore
+// verified: 112 passed / 1 skipped / 299 lines, the pre-mutant baseline). Scope
+// — every suite that requires src/cli-handlers-council.js (grepped, not
+// assumed): `npx jest tests/council/cli-handlers-council.test.js
+// tests/cli-council-verdict-chair-carry.test.js
+// tests/cli-council-verdict-render.test.js --maxWorkers=2` = 3 suites / 113 tests:
+//   cli-handlers-council 5 — the five refusal tests in this describe:
+//     "a near-miss spelling 'Task' is REFUSED, and no ledger row is written"
+//     "every other misspelling is refused the same way"
+//     "a non-string meta.intent is refused too (the MCP enum rejects null…)"
+//     "--no-ledger does NOT waive the refusal — the value outlives the ledger"
+//     "human mode reports the same refusal on stderr, exit 1, nothing on stdout"
+// ⚠️ The two CONTROLS below stay green under the mutant BY CONSTRUCTION — they
+// pin the behaviour the guard must not disturb, so they are the pins that fail
+// if the guard over-refuses, not the ones that prove it refuses at all.
+// ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+describe("meta.intent at the CLI tally door (PR #200 round-5 B1)", () => {
+  function writeInput(dir, intent) {
+    const file = path.join(dir, 'input.json');
+    fs.writeFileSync(file, JSON.stringify({ ...avInput, meta: { ...avInput.meta, intent } }));
+    return file;
+  }
+
+  test("a near-miss spelling 'Task' is REFUSED, and no ledger row is written", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-nearmiss-'));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'tally', writeInput(dir, 'Task')], json: true }));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out);
+    expect(doc.error.code).toBe('BAD_ARGS');
+    // Loudly: the refusal NAMES both accepted values and echoes what it got, so
+    // the one-character fix is readable off the error itself.
+    expect(doc.error.message).toMatch(/meta\.intent/);
+    expect(doc.error.message).toMatch(/'task'/);
+    expect(doc.error.message).toMatch(/'review'/);
+    expect(doc.error.message).toMatch(/Task/);
+    // The whole point: the polluting append never happens.
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
+    // …and no record is printed either — a refusal is not a half-success.
+    expect(doc.tierCounts).toBeUndefined();
+  });
+
+  test('every other misspelling is refused the same way', async () => {
+    for (const bad of ['TASK', 'Review', 'tasks', 'bogus', '']) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-bad-'));
+      const { code, out } = await capture(() =>
+        handleCouncil({ _: ['council', 'tally', writeInput(dir, bad)], json: true }));
+      expect(code).toBe(1);
+      expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+    }
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
+  });
+
+  test('a non-string meta.intent is refused too (the MCP enum rejects null, not just bad strings)', async () => {
+    // `z.enum([...]).optional()` accepts `undefined` and NOTHING else — a
+    // hand-assembled `"intent": null` fails that door, so it fails this one.
+    for (const bad of [null, true, 7, { intent: 'task' }]) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-type-'));
+      const { code, out } = await capture(() =>
+        handleCouncil({ _: ['council', 'tally', writeInput(dir, bad)], json: true }));
+      expect(code).toBe(1);
+      expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+    }
+  });
+
+  test('--no-ledger does NOT waive the refusal — the value outlives the ledger', async () => {
+    // meta rides VERBATIM into tally.json (tally.js copies it), where `council
+    // verdict` reads intent to select the chair scale. Suppressing the append
+    // is no reason to let an unmatched spelling through onto disk.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-noledger-'));
+    const { code, out } = await capture(() => handleCouncil({
+      _: ['council', 'tally', writeInput(dir, 'Task')], json: true, 'no-ledger': true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('human mode reports the same refusal on stderr, exit 1, nothing on stdout', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-human-'));
+    const errs = [];
+    const origErr = process.stderr.write;
+    process.stderr.write = (s) => { errs.push(s); return true; };
+    let result;
+    try {
+      result = await capture(() => handleCouncil({ _: ['council', 'tally', writeInput(dir, 'Task')] }));
+    } finally { process.stderr.write = origErr; }
+    expect(result.code).toBe(1);
+    expect(result.out).toBe('');
+    expect(errs.join('')).toMatch(/meta\.intent/);
+  });
+
+  // The two VALID spellings and the absent case are the controls. They live in
+  // the three tests above this describe ("tally auto-appends…", "…'task'
+  // computes the record but appends NO ledger row", "…explicit 'review' still
+  // appends"); these restate the outcome the guard must not disturb, so the
+  // mutant's red set cannot be satisfied by a guard that refuses everything.
+  test("control: 'task' still computes the record and still gates the ledger", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-ok-task-'));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'tally', writeInput(dir, 'task')], json: true }));
+    expect(code).toBe(0);
+    expect(JSON.parse(out).meta.intent).toBe('task');
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
+  });
+
+  test("control: 'review' still appends, and an absent intent still appends", async () => {
+    const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-ok-rev-'));
+    expect((await capture(() =>
+      handleCouncil({ _: ['council', 'tally', writeInput(dirA, 'review')], json: true }))).code).toBe(0);
+    expect(deriveReliability({ dir: ledgerDir }).find(a => a.model === 'gpt').runs).toBe(1);
+    const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-ok-absent-'));
+    const bare = path.join(dirB, 'input.json');
+    // A DISTINCT runId: ledger-stats.js :: countRuns counts distinct runIds, so
+    // re-appending av-receiver's own id would leave `runs` at 1 and prove nothing.
+    fs.writeFileSync(bare, JSON.stringify({ ...avInput, meta: { ...avInput.meta, runId: 'second-run' } }));
+    expect((await capture(() => handleCouncil({ _: ['council', 'tally', bare], json: true }))).code).toBe(0);
+    expect(deriveReliability({ dir: ledgerDir }).find(a => a.model === 'gpt').runs).toBe(2);
+  });
+});
+
 test('stats --json emits the wrapped council-stats doc, not a bare array (v4.0 §7)', async () => {
   const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
   expect(code).toBe(0);
