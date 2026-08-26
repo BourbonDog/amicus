@@ -584,9 +584,10 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
  * the leg quote the engine; piece 3 makes it say WHICH engines, at the failure
  * site, without the user running anything.
  *
- * The skew record is real module state in src/utils/engine-skew.js, driven here
- * through its own public entry point (`noteSessionVersion`) with the
- * installed-version reader and the notice sink injected — so these pins
+ * The skew record is real module state — it lives in
+ * src/utils/engine-skew-records.js since the round-2 extraction — driven here
+ * through src/utils/engine-skew.js's public entry point (`noteSessionVersion`)
+ * with the installed-version reader and the notice sink injected, so these pins
  * exercise the production path from "the server reported a version" all the way
  * to the rendered leg error, with no seam invented for the test. Reset before
  * AND after every case so no skew leaks into another suite's controls.
@@ -604,10 +605,11 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
  *  · SKEWBLIND — `noteSessionVersion`'s mismatch branch returns null. The full
  *    measured red set is recorded in tests/utils/engine-skew.test.js.
  *  · STICKYSKEW — the record degrades to ONE process-wide slot, written once
- *    and never retracted (the pre-review behaviour): reds the two attribution
+ *    and never retracted (the pre-round-1 behaviour): reds the two attribution
  *    tests here — "a skew observed on ANOTHER server is not stamped on this
  *    leg" and "a skew RETRACTED by a later matching session is not reported" —
- *    plus 5 in tests/utils/engine-skew.test.js.
+ *    plus 20 in tests/utils/engine-skew.test.js (re-measured 2026-08-26 after
+ *    the round-2 identity, clearing and bound tests landed; the record read 5).
  * The two no-skew controls stay GREEN under both by design: that is what makes
  * them controls.
  */

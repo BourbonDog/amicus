@@ -25,6 +25,11 @@
  * **DOCTORREMEDY** (the notice points at `amicus doctor` again). Measured red
  * sets recorded at the foot of this file.
  *
+ * SERVER IDENTITY AND THE RECORD STORE MOVED (round 2) to
+ * src/utils/engine-skew-records.js, re-exported from engine-skew.js — see the
+ * extraction pin below. This suite still drives everything through the parent,
+ * because the rules under test are about the comparison, not the map.
+ *
  * No fixture here is a real log line or a real machine path.
  */
 
@@ -37,6 +42,7 @@ const {
   formatSkewSuffix,
   installedEngineVersion,
   defaultReadInstalledEngineVersion,
+  MAX_SKEW_SERVERS,
   _resetEngineSkew,
 } = require('../../src/utils/engine-skew');
 
@@ -75,6 +81,30 @@ const pkg = (version) => JSON.stringify({ name: 'opencode-ai', version });
 
 beforeEach(() => { _resetEngineSkew(); });
 afterEach(() => { _resetEngineSkew(); });
+
+/**
+ * The extraction pin (W10 round 2). Server identity and the bounded record
+ * store moved to `src/utils/engine-skew-records.js` when this module hit the
+ * 300-line gate; `engine-skew.js` re-exports the public half so callers keep
+ * one import site. These are the SAME objects, not a second copy.
+ */
+describe('the extraction to engine-skew-records.js is a move, not a copy', () => {
+  const records = require('../../src/utils/engine-skew-records');
+  const skew = require('../../src/utils/engine-skew');
+
+  test.each([
+    ['serverKeyForClient'], ['currentEngineSkew'], ['UNKNOWN_SERVER_KEY'], ['MAX_SKEW_SERVERS'],
+  ])('engine-skew.%s is engine-skew-records\' own value', (name) => {
+    expect(records[name]).toBeDefined();
+    expect(skew[name]).toBe(records[name]);
+  });
+
+  test('one store, not two: a record written through the parent is visible in the child', () => {
+    const a = clientAt('http://127.0.0.1:4096');
+    noteSessionVersion('1.17.3', { readInstalledVersion: () => '1.18.15', notify: () => {}, client: a });
+    expect(records.currentEngineSkew(a)).toEqual({ server: '1.17.3', installed: '1.18.15' });
+  });
+});
 
 describe('noteSessionVersion: the comparison', () => {
   test('server version equal to the installed engine is silent and records no skew', () => {
@@ -186,11 +216,44 @@ describe('noteSessionVersion: the comparison', () => {
  * client is built from one spawned server's own `sdkServer.url`.
  */
 describe('serverKeyForClient: the smallest honest identity', () => {
-  test('the client\'s base URL, normalized to its origin', () => {
+  test('the client\'s base URL, normalized to origin + path', () => {
     expect(serverKeyForClient(clientAt('http://127.0.0.1:4096'))).toBe('http://127.0.0.1:4096');
     expect(serverKeyForClient(clientAt('http://127.0.0.1:4096/'))).toBe('http://127.0.0.1:4096');
     expect(serverKeyForClient(clientAt('http://127.0.0.1:4097'))).not
       .toBe(serverKeyForClient(clientAt('http://127.0.0.1:4096')));
+  });
+
+  /**
+   * W10 round-2 review A3. The key used to be `new URL(raw).origin`, which
+   * DISCARDS the path — and, MEASURED 2026-08-26, collapses every opaque-origin
+   * URL to the literal string `"null"`:
+   *   new URL('unix:///tmp/a.sock').origin === 'null'
+   *   new URL('unix:///tmp/b.sock').origin === 'null'
+   * Two distinct servers sharing one record is the exact failure per-server
+   * keying exists to prevent — a skew on one is stamped on the other's death
+   * report, and a match on one RETRACTS the other's real skew. Keeping the path
+   * costs one expression and closes the class.
+   *
+   * It is not reachable from amicus's own topology today: `startServer` is the
+   * only production client builder and always passes one spawned server's
+   * `http://127.0.0.1:<port>`, so distinct servers already get distinct ports.
+   * The fix is for the external/shared-server case this module was written for
+   * (see the SCOPE paragraph in the module docblock).
+   */
+  test('two servers behind ONE origin keep two identities', () => {
+    expect(serverKeyForClient(clientAt('http://gw:8080/engine-a')))
+      .not.toBe(serverKeyForClient(clientAt('http://gw:8080/engine-b')));
+    expect(serverKeyForClient(clientAt('unix:///tmp/a.sock')))
+      .not.toBe(serverKeyForClient(clientAt('unix:///tmp/b.sock')));
+  });
+
+  test('a path-keyed server\'s skew never rides out on its neighbour', () => {
+    const notify = jest.fn();
+    const a = clientAt('http://gw:8080/engine-a');
+    const b = clientAt('http://gw:8080/engine-b');
+    noteSessionVersion('1.17.3', { readInstalledVersion: () => '1.18.15', notify, client: a });
+    expect(currentEngineSkew(a)).toEqual({ server: '1.17.3', installed: '1.18.15' });
+    expect(currentEngineSkew(b)).toBeNull();
   });
 
   test.each([
@@ -242,6 +305,149 @@ describe('noteSessionVersion: every silent path', () => {
       .not.toThrow();
     // The skew is still on the record even though announcing it failed.
     expect(currentEngineSkew()).toEqual({ server: '1.17.3', installed: '1.18.15' });
+  });
+});
+
+/**
+ * W10 round-2 review B3 — the half that was REFUTED, pinned so it stays that
+ * way. The finding is right that the docblock's old claim ("a coarser
+ * attribution, never a wrong retraction") was false in both halves: under the
+ * shared UNKNOWN bucket a record can be attributed to the wrong server AND
+ * retracted by the wrong one. The proposed hardening — never retract under
+ * UNKNOWN — was measured against the property it was meant to protect, over the
+ * sequence "A skewed, B healthy, A fixed, A regresses":
+ *   retract       → B dies clean; A-after-fix dies clean; A's regression is
+ *                   re-recorded on its very next create
+ *   never retract → B wears A's skew; A wears its own stale skew after the fix;
+ *                   nothing can ever clear either
+ * Retraction's error is transient (this runs on EVERY create, so a wrongly
+ * cleared skew comes back); no-retraction's error is a permanent wrong
+ * attribution. Retraction stays.
+ */
+describe('the UNKNOWN bucket retracts too — the recoverable error', () => {
+  test('a matching version DOES retract a skew recorded under the UNKNOWN key', () => {
+    const notify = jest.fn();
+    const deps = { readInstalledVersion: () => '1.18.15', notify };
+    noteSessionVersion('1.17.3', deps); // no client ⇒ the UNKNOWN bucket
+    expect(currentEngineSkew()).toEqual({ server: '1.17.3', installed: '1.18.15' });
+
+    expect(noteSessionVersion('1.18.15', deps)).toBeNull();
+    expect(currentEngineSkew()).toBeNull();
+  });
+
+  test('and a skew wrongly cleared there comes straight back on the next create', () => {
+    // This is what makes retraction the recoverable error rather than a loss.
+    const notify = jest.fn();
+    const deps = { readInstalledVersion: () => '1.18.15', notify };
+    noteSessionVersion('1.17.3', deps);
+    noteSessionVersion('1.18.15', deps); // a healthy server sharing the bucket
+    noteSessionVersion('1.17.3', deps); // the skewed one creates again
+    expect(currentEngineSkew()).toEqual({ server: '1.17.3', installed: '1.18.15' });
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  test('a newer MISMATCH under the UNKNOWN key still replaces the record', () => {
+    const notify = jest.fn();
+    const deps = { readInstalledVersion: () => '1.18.15', notify };
+    noteSessionVersion('1.17.3', deps);
+    noteSessionVersion('0.9.0', deps);
+    expect(currentEngineSkew()).toEqual({ server: '0.9.0', installed: '1.18.15' });
+  });
+});
+
+/**
+ * W10 round-2 review B4. A server that reports NO version is an older SDK or an
+ * older engine — which is a different server from the one that reported a
+ * version a moment ago on the same URL. Absence of a version is not evidence of
+ * SKEW, but it IS evidence that the standing record no longer describes what is
+ * answering: unknown beats stale.
+ */
+describe('a version-less create clears a named server\'s standing record', () => {
+  test.each([
+    ['undefined', undefined], ['null', null], ['empty string', ''], ['a non-string', 3],
+  ])('a server version that is %s clears the record for THAT server', (_label, value) => {
+    const notify = jest.fn();
+    const a = clientAt('http://127.0.0.1:4096');
+    const deps = { readInstalledVersion: () => '1.18.15', notify, client: a };
+    noteSessionVersion('1.17.3', deps);
+    expect(currentEngineSkew(a)).toEqual({ server: '1.17.3', installed: '1.18.15' });
+
+    expect(noteSessionVersion(value, deps)).toBeNull();
+    expect(currentEngineSkew(a)).toBeNull();
+    expect(notify).toHaveBeenCalledTimes(1); // the clear is silent, like a match
+  });
+
+  test('it clears only that server — a neighbour\'s skew still stands', () => {
+    const notify = jest.fn();
+    const a = clientAt('http://127.0.0.1:4096');
+    const b = clientAt('http://127.0.0.1:4097');
+    const deps = { readInstalledVersion: () => '1.18.15', notify };
+    noteSessionVersion('1.17.3', { ...deps, client: a });
+    noteSessionVersion('0.9.0', { ...deps, client: b });
+
+    noteSessionVersion(undefined, { ...deps, client: a });
+    expect(currentEngineSkew(a)).toBeNull();
+    expect(currentEngineSkew(b)).toEqual({ server: '0.9.0', installed: '1.18.15' });
+  });
+
+  test('the UNKNOWN bucket is cleared the same way, for the same reason', () => {
+    // Same ruling as the retraction above: under a shared bucket the clear can
+    // be wrong, and being wrong in the direction the next create repairs beats
+    // carrying a stale record nothing can ever remove.
+    const notify = jest.fn();
+    const deps = { readInstalledVersion: () => '1.18.15', notify };
+    noteSessionVersion('1.17.3', deps);
+    noteSessionVersion(undefined, deps);
+    expect(currentEngineSkew()).toBeNull();
+  });
+
+  // NOT PINNED HERE, deliberately: "an unreadable installed version clears
+  // nothing" is real in the code (the guard returns before any delete) but is
+  // unreachable a second time in one process — `installedEngineVersion` is
+  // memoized, so a test that seeds a record and then swaps in a failing reader
+  // never consults it (MEASURED: the second reader is not called) and would go
+  // green without exercising the path at all. The from-cold case is already
+  // pinned by "an unreadable installed version is silent" above.
+});
+
+/**
+ * W10 round-2 review B7. The record map is process-lifetime state on a path
+ * that runs once per session create — every fanout leg, every council seat, for
+ * as long as an MCP server stays up. Unbounded growth is a slow leak keyed by
+ * something an operator controls (server URLs).
+ */
+describe('the record map is bounded', () => {
+  test('MAX_SKEW_SERVERS is a real, positive bound', () => {
+    // Guards the two tests below from passing VACUOUSLY: with an undefined
+    // bound their loop counts are NaN and nothing runs.
+    expect(Number.isInteger(MAX_SKEW_SERVERS)).toBe(true);
+    expect(MAX_SKEW_SERVERS).toBeGreaterThan(0);
+  });
+
+  test(`at most ${MAX_SKEW_SERVERS} servers are remembered; the oldest are evicted`, () => {
+    const deps = { readInstalledVersion: () => '1.18.15', notify: () => {} };
+    const at = (i) => clientAt(`http://127.0.0.1:${5000 + i}`);
+    const total = MAX_SKEW_SERVERS + 8;
+    for (let i = 0; i < total; i++) {
+      noteSessionVersion('1.17.3', { ...deps, client: at(i) });
+    }
+    for (let i = 0; i < 8; i++) { expect(currentEngineSkew(at(i))).toBeNull(); }
+    for (let i = 8; i < total; i++) {
+      expect(currentEngineSkew(at(i))).toEqual({ server: '1.17.3', installed: '1.18.15' });
+    }
+  });
+
+  test('a re-observed server is recent again, and outlives newer ones', () => {
+    const deps = { readInstalledVersion: () => '1.18.15', notify: () => {} };
+    const at = (i) => clientAt(`http://127.0.0.1:${5000 + i}`);
+    for (let i = 0; i < MAX_SKEW_SERVERS; i++) {
+      noteSessionVersion('1.17.3', { ...deps, client: at(i) });
+    }
+    noteSessionVersion('1.17.3', { ...deps, client: at(0) }); // touched again
+    noteSessionVersion('1.17.3', { ...deps, client: at(900) }); // pushes one out
+
+    expect(currentEngineSkew(at(0))).toEqual({ server: '1.17.3', installed: '1.18.15' });
+    expect(currentEngineSkew(at(1))).toBeNull(); // the true oldest went instead
   });
 });
 
@@ -332,49 +538,55 @@ describe('the two rendered strings', () => {
 /**
  * MUTANT RED SETS (MEASURED, not argued from where the code sits).
  *
- * Focused bench: engine-skew · no-output-backstop-wiring · no-output-backstop ·
- * opencode-client · engine-log · sidecar/models-probe · sidecar/models-command ·
- * council/run-retry · headless — 9 suites, **402 passed / 2 skipped at HEAD**
- * (re-measured 2026-08-26; it read 379/2 before the round-1 review tests landed
- * in this suite, the wiring suite and engine-log).
+ * Wide bench, re-measured 2026-08-26 for round 2: engine-skew ·
+ * no-output-backstop-wiring · no-output-backstop · opencode-client · engine-log ·
+ * engine-log-parse · sidecar/models-probe · sidecar/models-command ·
+ * council/run-retry · headless — 10 suites, **454 passed / 2 skipped at HEAD**.
+ * (It read 402/2 over 9 suites before the round-2 fixes and the engine-log-parse
+ * extraction; 379/2 before the round-1 tests. Both earlier numbers are retired.)
  *
- * **SKEWBLIND** (re-run 2026-08-26; the earlier record read 8) —
- * `noteSessionVersion`'s mismatch branch returns null instead of recording the
+ * The three mutants below were applied on the THREE suites that can observe a
+ * record change — engine-skew · no-output-backstop-wiring · opencode-client,
+ * 3 suites / 169 passed + 2 skipped at HEAD — each alone, then reverted by byte
+ * copy with checksums verified afterwards (never by `git checkout`).
+ *
+ * **SKEWBLIND** (re-measured for round 2; the record read 13, and 8 before that)
+ * — `noteSessionVersion`'s mismatch branch returns null instead of recording the
  * skew and announcing it (the comparison never fires):
- *   **2 suites / 13 tests red.**
- *   tests/utils/engine-skew.test.js (9):
- *     · a differing server version is recorded and announced once
- *     · ONCE PER STANDING SKEW, not once per session
- *     · a DIFFERENT skew on the same server replaces the record and is announced
- *     · a non-skewed session BEFORE a skewed one does not suppress the later announcement
- *     · a version MATCH clears the standing skew
- *     · a skew is recorded PER SERVER
- *     · two skewed servers keep two records, and both are announced
- *     · clearing one server's skew leaves another server's standing
- *     · a notifier that THROWS cannot become the failure it reports on
+ *   **2 suites / 25 tests red.**
+ *   tests/utils/engine-skew.test.js (21): every test that expects a record to
+ *     exist — the whole comparison block bar the equal-version case, the
+ *     extraction store-identity pin, the path-keyed neighbour test, all three
+ *     UNKNOWN-bucket tests, FIVE of the six version-less-clear tests, both bound
+ *     tests, and "a notifier that THROWS cannot become the failure it reports
+ *     on". The sixth ("the UNKNOWN bucket is cleared the same way") stays green
+ *     because it asserts null and a blind comparison never records anything —
+ *     the same "green by design" shape the LOGBLIND record describes.
  *   tests/no-output-backstop-wiring.test.js (4):
  *     · the #133 composite: the engine's line AND the two engine versions
  *     · a skew is reported even when the log read finds nothing
  *     · pre-send firing site: the skew clause reaches the site that dies upstream
  *     · THIS leg's own server's skew still reaches the report
+ *   NOTE the version-less and UNKNOWN tests go red here only because their
+ *   SETUP cannot record a skew to clear — they are not evidence about the clear
+ *   rules themselves. STICKYSKEW is the mutant that isolates those.
  *
- * **STICKYSKEW** (round-1 review A3+B3; measured 2026-08-26 on the three suites
- * that can observe the record — engine-skew · no-output-backstop-wiring ·
- * opencode-client) — the records degrade to ONE process-wide slot, written once
- * and never retracted, which is exactly the pre-review behaviour:
- *   **2 suites / 7 tests red.**
- *   tests/utils/engine-skew.test.js (5):
- *     · a DIFFERENT skew on the same server replaces the record and is announced
- *     · a version MATCH clears the standing skew
- *     · a skew is recorded PER SERVER
- *     · two skewed servers keep two records, and both are announced
- *     · clearing one server's skew leaves another server's standing
+ * **STICKYSKEW** (round-1 review A3+B3; re-measured for round 2, the record read
+ * 7) — three edits to engine-skew-records.js together: `serverKeyForClient`
+ * always answers UNKNOWN, `rememberSkew` is write-once, `forgetSkew` is a no-op.
+ * That is exactly the pre-round-1 behaviour, one process-wide slot never
+ * retracted:
+ *   **2 suites / 22 tests red.**
+ *   tests/utils/engine-skew.test.js (20): the five per-server/replacement/
+ *     retraction tests from round 1, all four `serverKeyForClient` identity
+ *     tests (including the round-2 same-origin pair), all three UNKNOWN-bucket
+ *     tests, all six version-less-clear tests, and both bound tests.
  *   tests/no-output-backstop-wiring.test.js (2):
  *     · a skew observed on ANOTHER server is not stamped on this leg
  *     · a skew RETRACTED by a later matching session is not reported
  *
- * **DOCTORREMEDY** (round-1 review B1; measured 2026-08-26) — the notice reverts
- * to "… ; see amicus doctor":
+ * **DOCTORREMEDY** (round-1 review B1; re-measured 2026-08-26, unchanged at 2) —
+ * the notice reverts to "… ; see amicus doctor":
  *   **1 suite / 2 tests red**, both here — "formatSkewWarning names both
  *   versions AND an action that can actually fix it" and "formatSkewWarning does
  *   NOT send the user to doctor for this class".

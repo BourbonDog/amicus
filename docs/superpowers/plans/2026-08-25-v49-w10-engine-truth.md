@@ -32,6 +32,12 @@ on real machines; two line formats (logfmt `session.id=ses_… error=…` at 1.1
   byte-identical to today's — pinned.
 - Log reads are bounded: read at most the LAST 256 KiB of each candidate file (the legacy
   single file is 2.4 MB on the reference machine); at most the 3 newest files by mtime.
+  **SUPERSEDED in PR 201 round 2 (finding B1):** the file-count half of this bound was
+  wrong for the case the module exists for. The engine writes one log PER PROCESS, so in a
+  mass-death wave the surviving seats keep writing and push the DEAD leg's own log out of
+  the newest three. The bound is now on TOTAL BYTES READ (`MAX_SCAN_BYTES`, 2 MiB) with the
+  scan running newest-first over every candidate until it matches; the 256 KiB per-file
+  tail is unchanged. See `src/utils/engine-log.js`.
 - No secrets in tests: fixture logs are synthetic.
 - No git mutations; focused suites, `--maxWorkers=2`; sizes/citations clean.
 

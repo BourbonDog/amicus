@@ -13,52 +13,71 @@
  * engine log on any machine — the two line SHAPES are taken from the plan's
  * recon (logfmt at 1.17.x, columnar at 1.2.x) and the payloads are invented.
  *
+ * THE LINE-SHAPE RULES MOVED (round 2): `isErrorLine`, `extractMessage`,
+ * `collapseExcerpt`, `mentionsSession` and `lineIsAboutSession` now live in
+ * src/utils/engine-log-parse.js and are unit-tested in
+ * tests/utils/engine-log-parse.test.js. This suite drives them end to end
+ * through the resolver, which is where the correlation rules actually have to
+ * hold. Both suites share the mutant bench below.
+ *
  * ── NAMED MUTANT `LOGBLIND`, with its MEASURED red set ────────────────────
  * MUTATION: `engineErrorForSession` returns null unconditionally — i.e. the
  * resolver ships but is blind, the exact silent degrade this module exists to
  * end (a leg dies, the engine's line is on disk, nothing quotes it).
  * Applied as the first statement of the function body in src/utils/engine-log.js.
  *
- * MEASURED red set (RE-RUN 2026-08-26 after the round-1 review tests landed —
- * the earlier record read 14 and was taken before Task B's cases existed in the
- * wiring suite; focused scope: this suite + the wiring suite, `npx jest
- * tests/engine-log.test.js tests/no-output-backstop-wiring.test.js
- * --maxWorkers=2` → 2 suites / 58 tests): 2 suites / 23 tests.
- *   tests/engine-log.test.js — 18: every test that expects a NON-null excerpt
+ * MEASURED red set (RE-MEASURED 2026-08-26 for round 2 — the record read 23
+ * before the extraction and the round-2 tests; the two earlier numbers, 14 then
+ * 23, are retired. Focused scope: this suite + the parse suite + the wiring
+ * suite, `npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 91
+ * tests): **2 suites / 25 tests red.**
+ *   tests/engine-log.test.js — 20: every test that expects a NON-null excerpt
  *     (both format tests, the unquoted-value test, the interior-`key=value`
  *     test, newest-file, last-line, bare-id, exact-id-beats-longer-id,
- *     non-id-boundary, empty-excerpt-fallthrough, in-tail match,
- *     legacy-candidate, CRLF, 200-char collapse, whitespace collapse, and all
- *     three union-of-candidate-dirs tests).
+ *     non-id-boundary, owned-by-another-session, empty-excerpt-fallthrough,
+ *     in-tail match, legacy-candidate, mass-death-wave, CRLF, 200-char collapse,
+ *     whitespace collapse, and all three union-of-candidate-dirs tests).
  *   tests/no-output-backstop-wiring.test.js — 5: the Task A poll-loop and
  *     pre-send firing sites, and the three Task B cases that carry an excerpt
  *     (the #133 composite, its pre-send twin, and the no-skew control).
+ *   tests/utils/engine-log-parse.test.js — 0, by construction: it calls the
+ *     parse functions directly and never goes through the resolver.
  *
  * GREEN BY DESIGN under LOGBLIND — and this is the point, not a gap: every
  * miss-path test asserts null, and the four wiring controls assert the message
  * is BYTE-IDENTICAL to today's. A blind resolver satisfies all of them, which
  * is precisely what "clean fallback" means. The two bound tests that assert
- * null ("older match beyond the tail is invisible", "a 4th-newest file is NOT
+ * null ("older match beyond the tail is invisible", "the scan stops at 2 MiB
  * read") therefore cannot, alone, tell a respected bound from a dead resolver
  * — each is deliberately PAIRED with a positive twin in the red set ("a match
- * INSIDE the tail is found", "the legacy opencode.log stays a candidate"), and
- * it is the pair that pins the bound. The same pairing covers the round-1
- * review's own null-asserting test ("a LONGER id is never borrowed"), whose
- * twin is "the EXACT id still wins".
+ * INSIDE the tail is found", "a mass-death wave: this leg's own log answers even
+ * at 5th-newest"), and it is the pair that pins the bound. The same pairing
+ * covers the round-1 review's own null-asserting test ("a LONGER id is never
+ * borrowed"), whose twin is "the EXACT id still wins".
  *
- * ── THREE MORE NAMED MUTANTS, from the round-1 review (measured 2026-08-26,
- *    same 2-suite scope; each applied alone and reverted) ───────────────────
+ * ── THE OTHER NAMED MUTANTS (all measured 2026-08-26 on the same 3-suite
+ *    scope; each applied alone and reverted, sources restored by byte copy and
+ *    checksum-verified — never by `git checkout`) ────────────────────────────
  * `UNANCHORED` — `mentionsSession` degrades to `line.includes(needle)`, the
- *   pre-review behaviour: **2 tests red**, both in this suite — "a LONGER id is
- *   never borrowed" and "the EXACT id still wins".
+ *   pre-round-1 behaviour: **2 suites / 4 tests red** (was 2 before the round-2
+ *   left-boundary tests) — here, "a LONGER id is never borrowed" and "the EXACT
+ *   id still wins"; in the parse suite, both `mentionsSession` anchor tests.
  * `FIRSTDIRONLY` — `existingEngineLogDirs` returns after the first existing
- *   dir: **2 tests red**, both in this suite — "a stale XDG dir does not
+ *   dir: **1 suite / 2 tests red**, both here — "a stale XDG dir does not
  *   shadow…" and "a present-but-EMPTY XDG dir does not swallow…". The third
  *   union test stays green by design: it is the control that proves the fix did
  *   not invert precedence.
- * `CUTATLASTPAIR` — `extractMessage` cuts at the last `key=value` anywhere on
- *   the line: **1 test red** — "a key=value INSIDE a columnar message is text,
- *   not a cut point".
+ * `CUTATLASTPAIR` — the structural run keeps scanning past the message, so the
+ *   cut lands at the last `key=value` anywhere on the line: **2 suites / 3 tests
+ *   red** (was 1) — "a key=value INSIDE a columnar message is text" here, plus
+ *   both round-2 A2 cases in the parse suite.
+ * `THREENEWEST` — `candidateLogFiles` truncates to the 3 newest by mtime, the
+ *   pre-round-2 bound: **1 suite / 2 tests red**, both here — "a mass-death
+ *   wave…" and "the legacy opencode.log is just another candidate". That second
+ *   one is what says the retired reserved slot is genuinely unnecessary now.
+ * `OWNEDBYOTHER`, `LOGFMTFIRST`, `RAWEXCERPT` — the three round-2 parse mutants;
+ *   their red sets are recorded in tests/utils/engine-log-parse.test.js.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -219,6 +238,26 @@ describe('engineErrorForSession: correlation and filtering', () => {
     expect(engineErrorForSession(SES, { dataDir: dataDir2 })).toBe('trailing fixture');
   });
 
+  /**
+   * W10 round-2 review A1. A whole-token mention is not ownership: an ERROR
+   * line whose OWN `session.id` names a different session can still carry our
+   * id somewhere else (a parent field, a storage path), and the resolver used
+   * to hand that stranger's failure to this leg verbatim. The scan skips it and
+   * keeps walking back to a line that is actually ours.
+   */
+  test('a line another session OWNS is skipped even though it names us', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      LOGFMT_ERROR,
+      'time=2026-08-25T18:55:33Z level=ERROR service=session session.id=ses_other '
+      + `parent.id=${SES} error="another session's failure"`,
+      'ERROR 2026-08-25T18:55:34 +2ms service=storage session.id=ses_other '
+      + `write failed for storage/session/${SES}/msg.json`,
+    ]);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
   test('non-ERROR lines mentioning the session are ignored (INFO/WARN are not failures)', () => {
     const dataDir = makeDataDir();
     writeLog(dataDir, '2026-08-25T185532.log', [
@@ -282,7 +321,7 @@ describe('engineErrorForSession: bounded reads', () => {
       .toBe('SQLiteError: no such column: fixture_seq');
   });
 
-  test('at most the 3 newest timestamped files are read, but the legacy opencode.log stays a candidate', () => {
+  test('the legacy opencode.log is just another candidate, reached in mtime order', () => {
     const dataDir = makeDataDir();
     // Four newer timestamped files with no match, plus the OLD legacy file that has one.
     for (let i = 0; i < 4; i++) {
@@ -293,12 +332,37 @@ describe('engineErrorForSession: bounded reads', () => {
       .toBe('SQLiteError: no such column: fixture_seq');
   });
 
-  test('a 4th-newest timestamped file is NOT read (the bound is real, not decorative)', () => {
+  /**
+   * W10 round-2 review B1 — the sharp one. The cut used to be "the 3 newest
+   * files by mtime", and the engine writes ONE log PER PROCESS. In a mass-death
+   * wave every seat has its own file and the SURVIVORS keep writing, so the
+   * dead leg's own log is pushed down the mtime order by the very legs that did
+   * not die — the excerpt went missing precisely in the wave it exists for.
+   * The bound is now on BYTES READ, not on how many files may be opened.
+   */
+  test('a mass-death wave: this leg\'s own log answers even at 5th-newest', () => {
     const dataDir = makeDataDir();
-    writeLog(dataDir, '2026-08-25T185500.log', [LOGFMT_ERROR], 1000); // oldest, has the match
-    for (let i = 0; i < 3; i++) {
-      writeLog(dataDir, `2026-08-25T18553${i}.log`, ['nothing for us here'], 5000 + i);
+    for (let i = 0; i < 4; i++) { // four survivors, still writing
+      writeLog(dataDir, `2026-08-25T18560${i}.log`, ['nothing for us here'], 9000 + i);
     }
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR], 5000); // 5th-newest: ours
+    writeLog(dataDir, '2026-08-25T185500.log', ['older still'], 1000);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  /**
+   * The bound that replaced the file count, pinned in the direction that costs
+   * something: PAIRED with the test above, which is what proves this null comes
+   * from a respected budget rather than from a dead resolver.
+   */
+  test('the scan stops at 2 MiB read — a match past the budget is invisible', () => {
+    const dataDir = makeDataDir();
+    const bulk = `${'x'.repeat(120)}\n`.repeat(2600); // ~315 KiB: over one tail read
+    for (let i = 0; i < 8; i++) { // 8 x 256 KiB of tail = the whole budget
+      writeLog(dataDir, `2026-08-25T1857${String(i).padStart(2, '0')}.log`, bulk, 9000 + i);
+    }
+    writeLog(dataDir, '2026-08-25T185500.log', [LOGFMT_ERROR], 1000); // 9th-newest
     expect(engineErrorForSession(SES, { dataDir })).toBeNull();
   });
 });

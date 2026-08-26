@@ -6579,7 +6579,9 @@ and top-level `docs/*.md`.
 ## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
 
 - [ ] **`auth-json.js` resolves with the same "first existing candidate wins" rule that
-  PR 201's A2 condemned in engine-log** (filed 2026-08-26, W10 fix round — the round-1 fix
+  PR 201's ROUND-1 A2 condemned in engine-log** (round 2 has an A2 of its own — the logfmt
+  extractor firing on columnar lines — so the round is load-bearing in that reference)
+  (filed 2026-08-26, W10 fix round — the round-1 fix
   commit's message claimed this filing one commit early; the edit's anchor missed on this
   branch and it lands here, miss disclosed). `src/utils/auth-json.js :: resolveAuthJsonPath`
   takes the first EXISTING candidate, so a stale `$XDG_DATA_HOME/opencode/auth.json` shadows
@@ -6588,6 +6590,23 @@ and top-level `docs/*.md`.
   The A2 fix shape (union across dirs) may not transfer directly (auth is one document, not
   a newest-file search) — needs its own ruling on which candidate is authoritative when
   several exist.
+
+- [ ] **`scripts/generate-docs-helpers.js` mis-renders the Key Modules registry repo-wide —
+  three separate defects, MEASURED 2026-08-26** (filed in the PR 201 round-2 fix wave, where
+  finding B8 hit all three on the two new modules; fixed AT THE SOURCE there for
+  `engine-log`, `engine-log-parse`, `engine-skew` and `engine-skew-records`, and left
+  unfixed everywhere else because the generator change is a whole-table regeneration).
+  (1) `extractJSDocDescription` only matches a JSDoc block that is the FIRST thing in the
+  file, so any module whose docblock sits below `'use strict';` gets an EMPTY Purpose cell —
+  **127 of them**. (2) `collectModules` renders every export as `` `name()` ``, so a
+  constant reads as a function — **124 occurrences**, e.g. `utils/degrade.js ::
+  DEGRADE_CHANNELS`, `utils/engine-lock.js :: STALE_MS`, `utils/error-doc.js ::
+  ERROR_CODES`. (3) `extractExports` caps at 5 with no marker, so **62 rows** silently omit
+  real exports (`council/briefings-stage2.js` shows 5 of 15). The per-module workaround used
+  in PR 201 — hoist the docblock above `'use strict'`, order `module.exports` so the five
+  that matter come first, stop exporting internal constants — is not a fix for the other
+  ~120 files. Needs a generator ruling: skip a directive prologue when locating the
+  docblock, render constants without `()`, and either raise the cap or mark truncation.
 
 Filed past-tense in the same commit as the fixes, per the falsified-record rule.
 

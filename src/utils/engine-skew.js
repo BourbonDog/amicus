@@ -1,10 +1,9 @@
-'use strict';
-
 /**
  * @module utils/engine-skew
- * Runtime detection of an opencode ENGINE version skew: the version the server
- * we are actually talking to reports, against the engine sitting in THIS
- * install's node_modules.
+ * Runtime detection of an opencode ENGINE version skew: server vs installed.
+ *
+ * The version the server we are actually talking to reports, against the engine
+ * sitting in THIS install's node_modules.
  *
  * WHY (#133, piece 3). The outage was one engine version (npx cache, 1.17.3)
  * serving every MCP session while another (global install, 1.18.15) served the
@@ -34,9 +33,11 @@
  *
  * SHAPE. `src/opencode-client.js :: createSession` pushes the observed version
  * here together with its client (it discarded both before); this module owns
- * the comparison, the announcement, and the standing record — one per SERVER,
- * refreshed on every create — that `src/headless.js` appends to a leg's death
- * report. That keeps the client's return type a plain session-id string —
+ * the comparison, the announcement and the remedy text, while
+ * `./engine-skew-records.js` owns the server identity and the standing record —
+ * one per SERVER, refreshed on every create — that `src/headless.js` appends to
+ * a leg's death report. That keeps the client's return type a plain
+ * session-id string —
  * measured: all three production callers (`headless.js`, `mcp-server.js`,
  * `sidecar/interactive.js`) assign it straight to a `sessionId` string — so no
  * caller had to change.
@@ -45,69 +46,23 @@
  * reports on. Every path returns null/undefined rather than throwing.
  */
 
-const path = require('path');
+'use strict';
 
-/**
- * The standing skew records: server identity -> `{server, installed}`, holding
- * the LAST comparison observed for that server (see noteSessionVersion). Not a
- * single process-wide slot (W10 round-1 review A3+B3): one slot stamped the
- * first skew ever seen onto every later failure, including failures of an
- * unrelated server and failures after the skew was fixed mid-run.
- */
-const _skewByServer = new Map();
+const path = require('path');
+const {
+  serverKeyForClient, currentEngineSkew, skewForKey, rememberSkew, forgetSkew,
+  UNKNOWN_SERVER_KEY, MAX_SKEW_SERVERS, _resetSkewRecords,
+} = require('./engine-skew-records');
+
 /** Memo for the installed-version disk read (see installedEngineVersion). */
 let _installedRead = false;
 let _installedCache;
 
-/** The key used when the client cannot name its server. Distinct from every
- *  real base URL, so an unidentified server borrows no one else's record. */
-const UNKNOWN_SERVER_KEY = '<unknown server>';
-
 /** Test-only: clear the standing records and the read memo. */
 function _resetEngineSkew() {
-  _skewByServer.clear();
+  _resetSkewRecords();
   _installedRead = false;
   _installedCache = undefined;
-}
-
-/**
- * The identity of the server this client talks to — its base URL, normalized to
- * an origin.
- *
- * MEASURED 2026-08-25 against this checkout's `@opencode-ai/sdk`, not read off
- * the types: `createOpencodeClient({ baseUrl })` returns an object whose only
- * non-namespace key is `_client`, and `client._client.getConfig()` answers
- * `{bodySerializer, headers, parseAs, querySerializer, baseUrl, fetch}` — the
- * `baseUrl` being exactly the string passed in, and `undefined` when none was.
- * That is the SMALLEST honest key available at session-create time: no round
- * trip, no new SDK call, and in production `startServer` always builds the
- * client from one spawned server's own `sdkServer.url`, so distinct servers get
- * distinct ports and distinct keys. It is an identity, not proof of identity —
- * two amicus processes that spawn servers on the same port at different times
- * would collide — which is why every record is also refreshed on each create.
- *
- * `_client` is the SDK's own internal handle and the ONLY route to that value
- * (measured: the client's other keys are all resource namespaces). If a future
- * SDK renames it, this returns UNKNOWN_SERVER_KEY and every server shares one
- * bucket again — a coarser attribution, never a wrong retraction, since the
- * refresh-on-create rule does not depend on the key being distinct.
- *
- * @param {object} [client] - the SDK client, or nothing
- * @returns {string} the origin, the raw value if it will not parse, else
- *   UNKNOWN_SERVER_KEY. Never throws: an identity read on a diagnostic path
- *   must not be able to fail a session create.
- */
-function serverKeyForClient(client) {
-  let raw;
-  try {
-    raw = client && client._client && typeof client._client.getConfig === 'function'
-      ? client._client.getConfig().baseUrl
-      : undefined;
-  } catch (_e) {
-    return UNKNOWN_SERVER_KEY;
-  }
-  if (typeof raw !== 'string' || !raw.trim()) { return UNKNOWN_SERVER_KEY; }
-  try { return new URL(raw).origin; } catch (_e) { return raw.trim(); }
 }
 
 /**
@@ -218,18 +173,6 @@ function formatSkewSuffix(skew) {
 }
 
 /**
- * The standing skew record for ONE server, or null.
- *
- * A caller with no client gets the UNKNOWN key's record — never another
- * server's. Reading is defensive but cannot meaningfully throw.
- * @param {object} [client] - the SDK client whose server is being asked about
- * @returns {{server: string, installed: string}|null}
- */
-function currentEngineSkew(client) {
-  try { return _skewByServer.get(serverKeyForClient(client)) || null; } catch (_e) { return null; }
-}
-
-/**
  * Record a server-reported session version as the LAST comparison for that
  * server, announcing a mismatch the first time that server shows it.
  *
@@ -240,10 +183,29 @@ function currentEngineSkew(client) {
  * one. Records are per server identity, so a skewed server's clause never rides
  * out on an unrelated server's death report.
  *
- * Silent — returns null, announces nothing, touches no record — when the server
- * reported no usable version (an older SDK/engine: absence of the field is not
- * evidence of anything) or the installed version cannot be read. A version
- * MATCH is also silent, but it does clear that server's record.
+ * A version-less create CLEARS that server's record (round-2 review B4).
+ * Absence of the field means an older SDK or engine is answering — which is not
+ * evidence of SKEW, but is evidence that whatever the record describes is no
+ * longer what is on that URL. Unknown beats stale. Announcing nothing and
+ * returning null, exactly like a match. An unreadable INSTALLED version is
+ * different: with one side of the comparison missing there is no observation at
+ * all, so that path touches nothing.
+ *
+ * BOTH CLEARS APPLY UNDER `UNKNOWN_SERVER_KEY` TOO, deliberately (round-2
+ * review B3, which proposed the opposite). Under that shared bucket a clear can
+ * be wrong — server B's healthy create can delete server A's real skew — so the
+ * rule was re-derived against the property that matters, "never attribute a
+ * skew to a server that does not have it", and MEASURED as a three-step
+ * sequence (A skewed, B healthy, A fixed, A regresses):
+ *   retract     → B dies clean, A-after-fix dies clean, A's regression is
+ *                 re-recorded on its very next create
+ *   never retract → B wears A's skew, A wears its own stale skew after the fix,
+ *                 and NOTHING can ever clear either
+ * Retraction's error (briefly losing a true skew) is self-healing, because this
+ * runs on EVERY create; no-retraction's error is a wrong attribution that no
+ * later observation can undo. The shared bucket stays a genuinely degraded
+ * mode — see serverKeyForClient — but it is degraded in the recoverable
+ * direction.
  *
  * The notice repeats only when the record CHANGES: the skewed leg of a 20-seat
  * wave must not print 20 identical lines.
@@ -255,34 +217,41 @@ function currentEngineSkew(client) {
  * @returns {{server: string, installed: string}|null} that server's record
  */
 function noteSessionVersion(serverVersion, deps = {}) {
-  if (typeof serverVersion !== 'string' || !serverVersion) { return null; }
+  const key = serverKeyForClient(deps.client);
+  if (typeof serverVersion !== 'string' || !serverVersion) {
+    forgetSkew(key); // an older engine answers here NOW — unknown beats stale
+    return null;
+  }
   const installed = installedEngineVersion(deps);
   if (typeof installed !== 'string' || !installed) { return null; }
-  const key = serverKeyForClient(deps.client);
   if (serverVersion === installed) {
-    _skewByServer.delete(key); // the two agree NOW — any older mismatch is stale
+    forgetSkew(key); // the two agree NOW — any older mismatch is stale
     return null;
   }
 
-  const prior = _skewByServer.get(key);
+  const prior = skewForKey(key);
   const skew = { server: serverVersion, installed };
   // Record BEFORE announcing: a notifier that throws must not cost us the
   // enrichment clause too.
-  _skewByServer.set(key, skew);
+  rememberSkew(key, skew);
   if (prior && prior.server === skew.server && prior.installed === skew.installed) { return skew; }
   const notify = deps.notify || defaultNotify;
   try { notify(formatSkewWarning(skew)); } catch (_e) { /* best-effort */ }
   return skew;
 }
 
+// Ordered so the FUNCTIONS this module is used for come first: the generated
+// `Key Exports` cell in CLAUDE.md keeps five names and renders each as `name()`,
+// so a constant in that window reads as a function it is not (round-2 B8).
 module.exports = {
   noteSessionVersion,
   currentEngineSkew,
   serverKeyForClient,
-  UNKNOWN_SERVER_KEY,
   formatSkewWarning,
   formatSkewSuffix,
   installedEngineVersion,
   defaultReadInstalledEngineVersion,
+  UNKNOWN_SERVER_KEY,
+  MAX_SKEW_SERVERS,
   _resetEngineSkew,
 };
