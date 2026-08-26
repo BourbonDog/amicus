@@ -40,9 +40,23 @@
  * `seat` (v4.8 PR4c §3.1) is the seat OBJECT — {id, alias, role, lens, position}
  * or null — never an id string. Callers pass `r.seat` / the dead-seat loop's own
  * `seat` verbatim, so the object IS the contract instead of a prose one.
+ *
+ * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
+ * the leg document and emitted only when it is a number. PROBE ONLY — nothing
+ * derives a backstop, threshold, or routing decision from it yet (ruling R12:
+ * probe first, derive later). Absent means no substantive tick was observed,
+ * which is neither `0` (a real measurement) nor `null`.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
   repairRefused, seat }) {
+  // v4.9 W13 Task A: the TTFT probe's last hop, read off the LEG document the
+  // same way `waveId` and `resolvedModel` below are. DEVIATION from the plan's
+  // literal "thread from the leg at the callers": ten call sites across seven
+  // council modules hold a leg, and threading a parameter through each would
+  // (a) reach outside this task's file scope and (b) make a forgotten caller a
+  // SILENT gap. Sourcing it here covers every caller that holds a leg by
+  // construction, and a dead seat (`leg: null`) still carries no key.
+  const ttftMs = leg ? leg.ttftMs : undefined;
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
@@ -64,6 +78,10 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
+    // Emit-when-set, NOT `durationMs`'s null-coercion one line above: this row
+    // is the C2 derivation's future input, and a null there would be read as a
+    // measurement. Absent means "never observed" and must stay absent.
+    ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
     usage: (leg && leg.usage) || null,
   };
 }

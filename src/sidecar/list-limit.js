@@ -26,7 +26,9 @@
  *   accepted-but-ignored failure src/utils/known-flags.js exists to prevent.
  */
 function normalizeLimit(limit) {
-  // parseArgs sets `true` for a valueless flag; mirrors models.js:279-281.
+  // parseArgs sets `true` for a valueless flag; mirrors the first guard in
+  // `sidecar/models.js :: handleModels` (was cited as `:279-281`, re-anchored by
+  // symbol in v4.9 W13 after an insert above it moved those lines).
   if (limit === true) { throw new Error('--limit requires a value'); }
   if (limit === undefined || limit === null || limit === '') { return 0; }
   const n = Number(limit);

@@ -189,6 +189,17 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // survive onto disk. runHeadless sets it only when the ceiling was hit, so
     // passing it through unchanged keeps a clean leg carrying neither field.
     toolSettleAborted: result ? result.toolSettleAborted : undefined,
+    // v4.9 W13 Task A: the TTFT probe's on-disk hop. Same omit-if-absent
+    // convention as status/reason/usage/opencodeSessionId above (writeLegPatch
+    // drops only `undefined`), but guarded on `typeof === 'number'` rather than
+    // `||` ON PURPOSE: `0` is a real measurement — the first substantive tick
+    // landed inside the first poll — and `|| undefined` would silently eat it,
+    // turning "instant first token" into "never produced anything". A leg that
+    // genuinely produced nothing carries no key at all, so absence keeps its one
+    // meaning. `result` is always assigned by the try/catch above, so no null
+    // guard is needed here (unlike toolSettleAborted, which needs one only
+    // because it deliberately preserves a meaningful `false`).
+    ttftMs: typeof result.ttftMs === 'number' ? result.ttftMs : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

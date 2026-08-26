@@ -162,6 +162,12 @@ function fmtProbeLine(r) {
 }
 
 async function runCheck(args) {
+  // v4.9 W13 Task B (BACKLOG C5). FIRST — ahead of the catalog-unavailable
+  // return below, which is exactly when an offline user most needs to know what
+  // their aliases bind to. No name list: `--check` audits the whole configured
+  // set. stderr only, so the `--json` document stays byte-clean. See
+  // src/utils/alias-shadow.js — diagnosis, never resolution.
+  require('../utils/alias-shadow').noteAliasShadows();
   const catalogInfo = await getCatalogInfo();
   const catalog = catalogInfo.models;
   if (!catalog || catalog.length === 0) {

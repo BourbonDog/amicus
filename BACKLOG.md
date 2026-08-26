@@ -6126,11 +6126,21 @@ minutes to get started"*).
   neither. It likely means `--no-output-backstop-ms` and per-model backstop config never need to
   exist — revisit only if adaptation proves insufficient.
 - Capture OpenRouter-vs-direct variance in the model notes log.
-- ⚠️ Related, from #129's own side observation: `curated-models.js:112` ships
+- [x] ⚠️ Related, from #129's own side observation: `curated-models.js:112` ships
   `kimi → openrouter/moonshotai/kimi-k2.6` while a local config override repoints it to `kimi-k3`.
   Per-model operating notes keyed on an alias can therefore describe a different model than the
   alias now resolves to. Surface the resolved target in run artifacts, or warn when a local override
   shadows a curated alias.
+  ✅ **DONE, v4.9 W13 (2026-08-26): the C5 alias-shadow warning + the pin refresh.**
+  `src/utils/alias-shadow.js` warns once per run when a user alias shadows a curated alias
+  with a DIFFERENT id (canonical-form compare, so a gateway-spelling of the same id stays
+  silent — mutant `GATEWAYFORM`), at the shared `resolveBench` seam both transports flow
+  through, plus `models --check`. AND the anchors above are re-derived: the curated pins
+  themselves were a generation behind and moved — kimi → `kimi-k3`, qwen → `qwen3.8-max`,
+  glm → `glm-5.3` (the review reproduced a standing glm-5.1-vs-5.3 shadow line CI would have
+  printed every run) — so the kimi id and the `:112` line cited above are the dated 2026-08
+  reading, not the tree. TTFT capture (the other half of this section) shipped the same wave
+  as the probe (`ttftMs`, emit-when-set, R12: no derivation).
 
 ### Quote the real engine error — #133 root fix
 

@@ -230,6 +230,14 @@ describe('amicus models', () => {
       expect(code).toBe(0);
       expect(out).toContain('[myalias] openrouter/x-ai/grok-4.3');
     });
+    // ⚠️ MOCK LEAK, measured v4.9 W13 Task B. `jest.isolateModulesAsync` scopes
+    // the MODULE registry, NOT the mock registry — so the config stub above
+    // (which exports only getEffectiveAliases/getDefaultAliases) stayed
+    // installed for the whole file, and every later `require('utils/config')`
+    // got an object carrying ONLY those two exports — no `loadConfig`. It only
+    // surfaced when a new test needed a third export. Undo it explicitly here,
+    // at the leak, rather than defensively in each later describe.
+    jest.dontMock('../../src/utils/config');
   });
 
   it('--search without a value errors instead of dumping the catalog', async () => {
@@ -726,6 +734,83 @@ describe('amicus models', () => {
       const { getUsage } = require('../../src/cli');
       const usage = getUsage();
       expect(usage).toContain('--live');
+    });
+  });
+
+  /**
+   * v4.9 W13 Task B (BACKLOG C5): `models --check` is the alias-audit surface,
+   * so the alias-shadow notice fires here too — the second of its two measured
+   * wiring sites (the first is `cli-council-run-bench.js :: resolveBench`; see
+   * tests/alias-shadow.test.js's header for the site measurement and the full
+   * SHADOWSILENT red set). It is stderr-only on purpose: `--check --json` writes
+   * an audit document to stdout and must stay byte-clean.
+   */
+  describe('alias-shadow notice (v4.9 W13 Task B, C5)', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { toDefaultAliases } = require('../../src/utils/curated-models');
+    const CURATED = toDefaultAliases();
+    const STALE_KIMI = 'openrouter/moonshotai/kimi-k2.6';
+
+    let tempDir;
+    let originalEnv;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-models-shadow-'));
+      originalEnv = { ...process.env };
+      process.env.AMICUS_CONFIG_DIR = tempDir;
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    function writeConfig(aliases) {
+      fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify({ aliases }, null, 2));
+    }
+
+    function capture(fn) {
+      const outWrites = []; const errWrites = [];
+      const origOut = process.stdout.write; const origErr = process.stderr.write;
+      process.stdout.write = (s) => { outWrites.push(String(s)); return true; };
+      process.stderr.write = (s) => { errWrites.push(String(s)); return true; };
+      return Promise.resolve().then(fn).finally(() => {
+        process.stdout.write = origOut; process.stderr.write = origErr;
+      }).then(code => ({ code, out: outWrites.join(''), err: errWrites.join('') }));
+    }
+
+    it('--check names a local alias that shadows a curated pin, on stderr', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const { handleModels } = loadHandler();
+      const { err } = await capture(() => handleModels({ _: ['models'], check: true }));
+      expect(err).toContain(
+        `Notice: alias 'kimi' resolves to ${STALE_KIMI} (curated ships ${CURATED.kimi})\n`);
+    });
+
+    it('--check --json: the notice never enters the audit document on stdout', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const { handleModels } = loadHandler();
+      const { out, err } = await capture(() =>
+        handleModels({ _: ['models'], check: true, json: true }));
+      const doc = JSON.parse(out); // throws if the notice corrupted stdout
+      expect(doc.type).toBe('alias-audit');
+      expect(err).toContain("alias 'kimi' resolves to");
+    });
+
+    it('ABSENCE CONTROL: a config whose aliases match the shipped ids says nothing', async () => {
+      writeConfig({ kimi: CURATED.kimi, glm: CURATED.glm });
+      const { handleModels } = loadHandler();
+      const { err } = await capture(() => handleModels({ _: ['models'], check: true }));
+      expect(err).not.toContain('curated ships');
+    });
+
+    it('ABSENCE CONTROL: plain `models` (no --check) is not an audit surface and stays quiet', async () => {
+      writeConfig({ kimi: STALE_KIMI });
+      const { handleModels } = loadHandler();
+      const { err } = await capture(() => handleModels({ _: ['models'] }));
+      expect(err).not.toContain('curated ships');
     });
   });
 });

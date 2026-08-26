@@ -100,7 +100,19 @@
         }
       }
     },
-    "runStats": { "type": "array", "items": { "type": "object" } },
+    "runStats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ttftMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "v4.9 W13, optional. Time-to-first-token for this row's leg: milliseconds from the leg asking OpenCode for output to the first poll carrying substantive activity (output, reasoning, a tool call, a tool result, or a tool call reaching a terminal status) — the very same predicate the no-output backstop disarms on, read at the one site in src/headless.js's poll loop, so the two can never drift. EMIT-WHEN-SET: absent means no substantive tick was ever OBSERVED, which is NOT the same as `0` (a first token inside the first poll, a real value that must survive) and NOT the same as `null`. Absence is also not proof the model produced nothing — four completion gates break earlier in the poll body than the activity block, so a leg that first produced output and finished within one poll carries none. PROBE ONLY at v4.9 W13 (ruling R12, probe first / derive later): nothing in the engine derives a backstop, threshold, or routing decision from it. No `additionalProperties: false` on this row means additive fields were always accepted here — this documents the shape rather than changing what is accepted, exactly as streetCred[].seat above does."
+          }
+        }
+      }
+    },
     "tierCounts": {
       "type": "object",
       "required": ["Confirmed", "Contested", "Singleton", "Disputed"],

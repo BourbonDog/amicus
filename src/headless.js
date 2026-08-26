@@ -585,7 +585,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const backstopFromEnv = !Number.isFinite(options.noOutputBackstopMs);
     const noOutputBackstopMs = backstopFromEnv
       ? resolveNoOutputBackstopMs(options._env) : options.noOutputBackstopMs;
-    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
+    // v4.9 W13 Task A: ONE clock origin, captured once and shared with the
+    // backstop instead of a second `Date.now()`. `startedAt` here already means
+    // "time since the leg asked for output" (see the block comment above), so
+    // the TTFT probe below measures from exactly the instant the backstop
+    // starts counting — the two can never disagree about when the wait began.
+    const outputClockStartedAt = Date.now();
+    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: outputClockStartedAt });
     let backstopFired = false;
     // Single source for the reason string so the pre-send firing site below and
     // the per-poll firing site further down (still ticking the SAME instance)
@@ -708,6 +714,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastMessageCount = 0;
     let lastReasoningLength = 0; // B53: track reasoning-output growth to detect thinking
     let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
+    // v4.9 W13 Task A — THE TTFT PROBE. Milliseconds from the leg asking for
+    // output (outputClockStartedAt — the backstop's OWN clock origin) to the
+    // first poll where `substantiveActivity` is true. `null` until then, and
+    // EMIT-WHEN-SET from there: a leg that never produced anything carries no
+    // ttftMs key on the result, on disk, or in any downstream document. `0` is
+    // a real measurement (first substantive tick inside the first poll), which
+    // is why the absence is a missing key rather than a falsy value.
+    //
+    // ⚠️ PROBE ONLY — nothing derives from this number. No backstop change, no
+    // threshold, no per-model window. W13 ruling R12 is explicitly "probe
+    // first, derive later": the C2 derivation (per-model backstops from
+    // evidence) waits for real field observations, which cannot exist until
+    // this ships. Do not wire it into a decision without that evidence.
+    let ttftMs = null;
     let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
     let lastSettledToolCount = 0; // B4: tool calls observed reaching a terminal status
 
@@ -936,9 +956,25 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // assistant placeholder on prompt ACCEPTANCE, which is precisely the
         // accepted-but-not-serving bookkeeping the backstop must not trust.
         // `progressed` itself (and every stall/idle consumer of it above) is
-        // deliberately untouched — this is a narrower, backstop-only signal.
+        // deliberately untouched — this is the narrower signal.
+        //
+        // v4.9 W13 Task A: it now has TWO readers — the backstop below and the
+        // TTFT probe immediately below that — which is why it stopped being
+        // described as "backstop-only". They read the SAME const on purpose:
+        // "the time to first token" and "the moment the backstop disarms" are
+        // the same instant BY CONSTRUCTION, and a second definition of the
+        // predicate is exactly how those two would silently drift apart.
         const substantiveActivity = outputGrew || toolActivity || resultActivity
           || reasoningActivity || settleActivity;
+
+        // v4.9 W13 Task A: the TTFT probe stamps the FIRST substantive tick and
+        // is never re-armed. It reads the SAME `substantiveActivity` const the
+        // backstop is ticked with on the next line — that shared read is what
+        // makes this one definition rather than a twin that could drift. Keyed
+        // on `progressed` it would report a first-token time for OpenCode's
+        // empty acceptance placeholder, the exact lie amendment 2 above removed
+        // from the backstop.
+        if (ttftMs === null && substantiveActivity) { ttftMs = Date.now() - outputClockStartedAt; }
 
         // No-output backstop: one tick per poll. Fired is terminal — break the
         // loop; the post-loop block below mirrors the timeout path.
@@ -1379,6 +1415,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // #133 P1: sessionId was assigned at :413/:417, well before this
         // return — guaranteed set here, same as `taskId` above.
         opencodeSessionId: sessionId,
+        // v4.9 W13 Task A: emit-when-set. This return is reached by legs that
+        // failed with no USABLE output, which is not the same as no output at
+        // all — a leg that streamed reasoning and then errored has a real ttft
+        // and must keep it.
+        ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
         error: sessionError
       };
     }
@@ -1396,6 +1437,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ...subtreeResult,
       // #133 P1: see the comment on the sibling return above — guaranteed set.
       opencodeSessionId: sessionId,
+      // v4.9 W13 Task A: emit-when-set — see the sibling return above.
+      ...(typeof ttftMs === 'number' ? { ttftMs } : {}),
       exitCode: 0
     };
 

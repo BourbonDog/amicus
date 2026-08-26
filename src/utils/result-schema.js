@@ -70,6 +70,12 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     durationMs,
     sessionDir,
     opencodeSessionId: metadata.opencodeSessionId || null,
+    // v4.9 W13 Task A (probe only, R12): time-to-first-token, sourced straight
+    // off `metadata` like `opencodeSessionId` above. ADDITIVE and emit-when-set
+    // (the pack/tag spread form below, not the `|| null` coercion above): an
+    // absent ttft means "no substantive tick was observed", which is neither
+    // zero nor null, so it must not be coerced into either.
+    ...(typeof metadata.ttftMs === 'number' ? { ttftMs: metadata.ttftMs } : {}),
     usage: usage !== null ? usage : (metadata.usage || null),
     ...(metadata.pack ? { pack: metadata.pack } : {}),
     ...(metadata.tag ? { tag: metadata.tag } : {}),

@@ -23,6 +23,11 @@
     "opencodeSessionId": { "type": ["string", "null"] },
     "usage": { "type": ["object", "null"] },
     "pack": { "type": "object" },
-    "tag": { "type": "string" }
+    "tag": { "type": "string" },
+    "ttftMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "v4.9 W13, optional. Time-to-first-token for this leg: milliseconds from the leg asking OpenCode for output to the first poll carrying substantive activity — the same predicate the no-output backstop disarms on. EMIT-WHEN-SET, like `pack` and `tag` above and unlike `opencodeSessionId`/`durationMs`: absent means no substantive tick was observed, which is neither `0` (a real first-token-inside-the-first-poll measurement) nor `null`. PROBE ONLY at v4.9 W13 — nothing derives from it yet."
+    }
   }
 }

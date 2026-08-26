@@ -98,7 +98,14 @@ const CARDLESS = [
   // (live smoke wave 47278069) — the entry was OpenRouter-only at authoring.
   { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5',
                               anthropic: 'anthropic/claude-fable-5' } },
-  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.7-max' } },
+  // qwen/kimi refreshed 2026-08-26 (v4.9 W13): both were a model generation
+  // behind. These are the FALLBACK FLOOR — a caller or fork with no CI alias map
+  // resolves its whole bench through this table (see `inkling` below), while the
+  // owner's machine and .github/amicus-ci-aliases.json already ran the newer ids.
+  // Cardless entries have no `idPattern`, so `models --check` can only ask
+  // whether the OLD id still EXISTS — which is how a pin sits a generation back
+  // with every gate green (scripts/check-ci-alias-pins.js asks the other one).
+  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.8-max' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
   { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
   { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-medium-3-5' } },
@@ -106,10 +113,11 @@ const CARDLESS = [
   // whole devstral family and the alias had no other route. No retarget — no
   // served model is a devstral successor ("no pinned guess is better than a
   // wrong one"); `mistral` remains the vendor's alias.
-  { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5.1' } },
+  { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5.3' } },
   { alias: 'minimax', routes: { openrouter: 'openrouter/minimax/minimax-m2.7' } },
   { alias: 'grok', routes: { openrouter: 'openrouter/x-ai/grok-4.3' } },
-  { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k2.6' } },
+  // kimi: see the qwen refresh note above (both moved 2026-08-26, v4.9 W13).
+  { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k3' } },
   { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-lite' } },
   // inkling added 2026-08-14: the council-review workflow's default bench
   // names it, and this table is the FLOOR a runner falls back to when no

@@ -446,6 +446,53 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[1].opencodeSessionId).toBeNull();
   });
 
+  // v4.9 W13 Task A — the TTFT probe's middle hops: runHeadless's `ttftMs` onto
+  // the on-disk leg patch (fanout-leg.js) and onto the emitted run document
+  // (result-schema.js :: buildRunResult). Modeled on the #133 P1 pin directly
+  // above, with ONE deliberate difference in the absence half: `ttftMs` is
+  // emit-when-set on BOTH ends — the leg with no measurement carries no key on
+  // disk AND no key in the wave doc, where `opencodeSessionId` coerces its
+  // absence to a schema-required null. That is the point: an absent ttft is not
+  // "zero milliseconds to first token", and it is not "null"; it is "this leg
+  // produced nothing substantive, so there is nothing to report". run.schema.json
+  // declares it optional-integer for exactly that reason.
+  //
+  // ⚠️ Like its #133 P1 sibling, this pin mocks runHeadless and therefore stays
+  // GREEN under the named mutant TTFTDROP (which deletes the measure inside
+  // runHeadless). It pins the threading, a different unit. Do not "fix" it.
+  it('threads a leg\'s ttftMs from runHeadless onto its on-disk leg patch and the wave doc (v4.9 W13 Task A)', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: 8123 }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // never produced output
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'ttft1234' });
+
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft1234-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.ttftMs).toBe(8123);
+    expect(wave.legs[0].ttftMs).toBe(8123);
+
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft1234-2', 'metadata.json'), 'utf-8'));
+    expect(legMeta2.status).toBe('complete');
+    expect('ttftMs' in legMeta2).toBe(false);
+    expect('ttftMs' in wave.legs[1]).toBe(false);
+  });
+
+  // A first substantive tick observed inside the first poll is a real 0, and 0
+  // is exactly the value a `|| undefined` omit-if-absent idiom would silently
+  // eat — which is why both hops guard on `typeof === 'number'` instead.
+  it('a ttftMs of 0 survives both hops (it is a measurement, not an absence)', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: 0 }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'ttft0000' });
+
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft0000-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.ttftMs).toBe(0);
+    expect(wave.legs[0].ttftMs).toBe(0);
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))

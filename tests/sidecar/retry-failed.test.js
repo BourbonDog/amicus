@@ -305,7 +305,10 @@ describe('Task 8: --retry-failed inherits the original wave tag', () => {
           JSON.stringify({ taskId: legId, model: legs[i].model, status: 'complete' }));
         const usage = { tokens: { input: 1, output: 1, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
           cost: { amount: 0, currency: 'USD', source: 'reported' } };
-        // mirrors fanout-leg.js:210 exactly, routed to a scratch ledger dir
+        // mirrors fanout-leg.js :: runLeg's own recordAttemptSpend call exactly,
+        // routed to a scratch ledger dir. (Was `fanout-leg.js:210`, which had
+        // already rotted to a bare `}` before v4.9 W13 re-derived it — the line
+        // gate only proves NNN is in range, so it never fired. Symbol anchor now.)
         recordAttemptSpend({ doc: { status: 'complete', usage }, leg: legs[i], currentModel: legs[i].model,
           legId, waveId: o.waveId, project: proj, attempt: 0, originalModel: legs[i].model }, { spendDir });
         return { taskId: legId, model: legs[i].model, status: 'complete', usage };
