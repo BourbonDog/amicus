@@ -4,10 +4,13 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-08-03 (per-section fold-back, both directions — the haiku "hard-404"
-re-diagnosed as a `/v1`-less `ANTHROPIC_BASE_URL`, pre-degrade-era claims re-grounded in the
-announcement contract (`degrades[]`/`seatLoss`/exit 2/one Stage-1 retry), three model sections and
-the peer-consensus≠evidence rule upstreamed from the field ledger; see changelog)._
+_Last updated: 2026-08-25 (per-section fold-back, both directions — the `NO_OUTPUT_BACKSTOP`
+mechanism, conformance-vs-content plus the credit-exhaustion attribution correction, the
+inlined-source-pack technique, and per-model calibration nuances upstreamed from the field ledger;
+the `runStats` allowlist correction adopted back into the local ledger; see changelog). Prior:
+2026-08-03 (haiku "hard-404" re-diagnosed as a `/v1`-less `ANTHROPIC_BASE_URL`, pre-degrade-era
+claims re-grounded in the announcement contract, three model sections and the peer-consensus≠
+evidence rule upstreamed)._
 
 ## Global operating rules (all models)
 - **Fast path:** `council run` applies `--agent Plan` / `--no-context` / `--summary-length
@@ -34,6 +37,28 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
 - **Read results from the JSON documents** (`--json`): a wave's `legs[].summary` / a run's
   `summary` is the model's output; `status`/`error`/`counts` are ground truth for failures. Never
   scrape stderr logs to judge success.
+- **`conformance` measures FORMAT, not content — read an `unstructured` leg before writing it
+  off.** A leg that fails to emit a parseable findings block scores zero findings in the tally even
+  when its prose review is the bench's strongest — hand-extracted, one such "zero-finding" leg has
+  tied for the best peers-only street-cred on its bench and carried the round's deepest structural
+  finding no other seat found. Open every non-`clean` `review-<seat>.md` and judge it by substance
+  before discarding it. Before blaming a model's format for a run of `unstructured`/zero-finding
+  legs, **check account credit health** — a mid-run credit exhaustion produces the same signature
+  (repair and judge legs failing together) and has been traced to billing, not model behavior. Tell:
+  a cluster of legs failing in seconds with zero tokens, especially if OpenRouter-routed seats die
+  while direct-routed seats on the same run keep working.
+- **`NO_OUTPUT_BACKSTOP` is a fixed no-first-token deadline (120s by default) — it kills slow
+  models, not just dead ones, and the once-only auto-retry cannot save them.** A model-agnostic
+  dead-man's switch arms at leg launch and disarms only on substantive activity (output growth,
+  reasoning-token growth, or a tool call); it is independent of `--timeout`, and the only override
+  is the env var `AMICUS_NO_OUTPUT_BACKSTOP_MS` — there is no CLI flag or per-model setting. The
+  retry reuses the same threshold, so a slow-but-alive model can burn its one retry for nothing and
+  still exit degraded. It fires identically on a genuinely dead route and on a live model that
+  simply thinks past 120s before its first token — **distinguish them with a solo re-run before
+  blaming the model.** Size an override from the *slowest observed leg × 2* with real headroom; a
+  merely-doubled setting has still been killed by the slowest legs seen in practice. It applies to
+  every leg in the process, so raising it loses the genuine dead-endpoint fast-fail for the whole
+  bench while it's set.
 - **Transient provider errors** (502s, connection drops): re-run the affected leg (solo
   `amicus start --json`, same briefing file) or the wave — see per-model notes for
   model-specific signals. Never present a half-finished run as an answer.
@@ -75,6 +100,15 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   multi-file packet despite the standard preamble. Treat a many-file briefing as a long-read task:
   expect stubs, retry solo once with the identical briefing, then substitute the model — or
   pre-concatenate the packet into one file for weaker readers.
+- **For code/plan review, inline a curated source pack and forbid tools — it eliminates the
+  narrate-then-stub class outright.** Instead of pointing seats at a repo to read live, put the
+  artifact plus a line-numbered extract of exactly the cited source regions directly in the
+  briefing, each headed with its real file path, under an explicit "everything is inline; do NOT
+  use any tools or read any files" preamble. This has produced first-attempt findings from every
+  seat on a bench — including models whose documented failure mode is multi-file agentic reads —
+  and it makes citation-checking possible, since reviewers can verify line numbers against the
+  pack. Trade is a bigger briefing per seat; worth it whenever the question is "are these claims
+  true of this code?"
 - **`--agent Plan` can trigger a literal, hard "planning mode — cannot execute" refusal on some
   models** (terse, near-zero-token responses), not just the intended read-only tool restriction —
   and prompt wording alone has not fixed it; switching that model to `--agent Build` has, immediately.
@@ -106,6 +140,11 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   own `runStats` rows too — so anything keying `runStats` by model must use an **allowlist**, not a
   judge exclusion; see `docs/council.md`'s `runStats[].role` roster (under `amicus council tally`)
   for the exact set.
+- **Budget Stage 2 at rough parity with Stage 1 on a multi-seat bench, not as a rounding error.**
+  Every judge reads the *whole* anonymized bundle, so judge input scales with `seats ×
+  review-length` while Stage-1 input is just the briefing — on a 4-seat bench the bundle is often
+  larger than the briefing itself. Rule of thumb: estimate Stage 2 ≈ Stage 1, then add the chair.
+  The old habit of treating cross-review as cheap comes from small benches with short reviews.
 - **Expect agreement inflation in Stage-2 adjudication.** The judge contract defines `agree` by
   worked example ("an 'I missed this — it's valid' counts as agree") but gives no example for
   `dispute` and no positive definition of `neutral`, while requiring a verdict on EVERY finding —
@@ -124,6 +163,11 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
     `~/.config/amicus/config.json` take precedence over the shipped routes, so a bench you picked for
     price can resolve to a Pro/preview tier and trip a low `--max-cost` (exit 1) — or quietly cost
     5-10× what you budgeted. Confirm what each seat actually resolves to before a budget bench.
+  - **`amicus models` shows what THIS machine resolves an alias to, not the shipped catalog.** It
+    merges local `config.json` overrides silently, so a CI runner or a teammate's machine — which
+    carries no user config — can seat a materially different model under the identical alias and
+    price. To know what actually ships, read the alias table in `src/utils/curated-models.js`
+    directly rather than trusting a local `amicus models` listing.
 - **The chair cannot also hold a bench seat**, so a bench built from budget aliases cannot chair
   itself with one of them — pick the chair from *outside* the bench list.
 - **Stage-6 approvals:** write the proposed MODEL-NOTES diff to a run-folder file and put that path
@@ -199,6 +243,12 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
 - **Asserts context-dependent facts (dates, "is this future?") without verifying** — and self-confirms them in adjudication. Cross-check any time-dependent claim it raises.
 - A good calibration anchor in cross-review: confirms observational findings, disputes interpretive overreach. A repeatable role: the seat most likely to catch **confidence inflation** in an otherwise-correct argument (theoretical risk asserted as demonstrated mechanism, proxies used as pseudo-diagnostics).
 - **When gpt disputes a specific numeric claim, weight that dispute heavily before a debate round erodes it** — it has been right and then talked out of the objection by a persuasive rebuttal (see the peer-consensus rule).
+- **On long, dense, code-heavy artifacts it returns fast and skims — seat it for calibration, not
+  coverage, there.** Where it returns 25-32 findings on prose/resumes/business docs, on a dense
+  technical/code plan it has come in the fastest leg on the bench by a wide margin with only a
+  couple of findings against peers' 8 — both real, both confirmed, so this is shallow rather than
+  wrong; its lifetime confirm-rate held. Put a slower, deeper model on coverage and let gpt anchor
+  calibration on artifacts like this.
 
 ### Grok  (`--model grok` → via OpenRouter)
 - Very fast legs; credible judge and chair (rejected its own weak findings as chair; honest blind self-rank).
@@ -221,8 +271,15 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
 - Its specificity is also its risk: it reaches for **exhaustive quantitative claims ("every",
   "all", "none") that are directionally right and literally wrong** — and it has successfully
   DEFENDED one in a debate round against a correct dispute. Verify its universal quantifiers
-  against a primary source (see the peer-consensus rule).
-- **Very slow legs (4-8× its peers)** — it gates wave wall-clock; budget timeouts around it.
+  against a primary source (see the peer-consensus rule). It has also been observed doing the
+  opposite well: correctly scoping its own blocker-severity finding as *contingent on an unprobed
+  precondition* rather than asserting it outright — a genuine calibration improvement worth
+  crediting when it shows up.
+- **Its time-to-first-token now sits directly on the `NO_OUTPUT_BACKSTOP` cliff, not comfortably
+  under it** — observed legs have run well past the 120s default, and even a doubled 180-240s
+  override has been killed by the slowest of them. Size the override from the *slowest observed
+  leg × 2* with real headroom (see the Global `NO_OUTPUT_BACKSTOP` rule); it still gates wave
+  wall-clock either way.
 - Stalls on long agentic reads (poller "Incomplete" with only a preamble). Reserve for short-artifact work.
 
 ### Mistral  (`--model mistral` → via OpenRouter)
@@ -271,8 +328,16 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
 - Honest under pressure both ways: it refused to fabricate on repair attempts, and it has
   withdrawn a contested finding cleanly in debate. An honest refusal still costs the seat — watch
   `conformance` per seat, not just the finding count.
+- **Cheap-seat pattern across repeat use: low finding count, high calibration value.** It has
+  repeatedly been the cheapest seat on its bench while contributing fewer findings by volume than
+  peers, but its findings have skewed toward internal-consistency catches (a claim contradicted by
+  an earlier section of the same artifact) rather than raw coverage — read them for that, not for
+  volume, before discounting a low count.
+- **First use as chair was clean and notably good:** recognized when two surviving reviews had
+  split the labor rather than duplicated it and synthesized across that seam instead of flattening
+  it. A viable chair candidate alongside deepseek.
 
-### Qwen  (`--model qwen` → qwen3.7-max via OpenRouter; distinct from `qwen-coder`)
+### Qwen  (`--model qwen` → qwen3.8-max via OpenRouter; distinct from `qwen-coder`)
 - Very large context (1M tokens per catalog). As a red-team substitute it has produced a thorough,
   well-organized adversarial review with accurate, specific line citations and genuinely unique
   catches that verified true against the source — weight its specific, cited claims heavily.
@@ -283,8 +348,12 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   short-artifact work: a book-length single-file read succeeded on retry with the anti-narration
   preamble, but multi-file packets have produced narration stubs twice in one run — with the
   preamble present, under both Plan and Build. It narrates rather than refuses under Plan.
+- **Inlining removes its multi-file-read failure mode entirely.** On a fully inlined briefing (no
+  agentic file reads) it has tied for most findings on the bench and ranked #2 by every judge —
+  the counterpart to the multi-file-read stalls above. Seat qwen for inlined verification-
+  scaffolding review; keep it off agentic multi-file reads.
 
-### minimax  (`--model minimax` → via OpenRouter)
+### minimax  (`--model minimax` → minimax-m2.7 via OpenRouter)
 - Fast (~2 min review legs), cheap, `clean` findings-JSON conformance on debut.
 - Took the **critic seat** brief exceptionally well: unanimously ranked #1 by its bench, full
   coverage on a ground-truth test, zero padded findings under the anti-padding rule. A strong
@@ -410,3 +479,13 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   gemini-3.1-pro), and gemini/deepseek/gpt/grok/kimi/Claude enrichments. Standing practice: each
   release cherry-picks generalizable lessons per-section (docs/publishing.md release checklist),
   never a bulk copy.
+- **2026-08-25 (fold-back, both directions)** — Folded in from the field ledger: the
+  `NO_OUTPUT_BACKSTOP` no-first-token-deadline mechanism and sizing rule; `conformance` measures
+  format not content, with the credit-exhaustion attribution correction; the `amicus models`
+  local-vs-shipped alias-resolution caveat; the inlined-source-pack technique; the Stage-2
+  cost-parity rule; kimi's backstop-cliff and contingent-precondition calibration nuance; gpt's
+  technical-artifact shallowness and qwen's inlining rehabilitation; glm's calibration-over-volume
+  and chair-debut notes; minimax's pinned route id. Adopted back into the local ledger: the v4.7
+  `runStats` allowlist correction to the spend-tracking rule (the local copy's v4.6
+  judge-exclusion description was superseded). No client/engagement material, run identifiers, or
+  dollar figures carried over.
