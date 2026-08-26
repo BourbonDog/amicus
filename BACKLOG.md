@@ -6135,11 +6135,52 @@ minutes to get started"*).
 ### Quote the real engine error — #133 root fix
 
 v4.7.1 only softens the wording; this replaces the guess with the truth. When a leg dies, read the
-session's line from `~/.local/share/opencode/log/opencode.log` and surface it. In the #133 outage the
-actual cause — `SQLiteError: no such column: replacement_seq` — sat in that file the entire 30
+session's line from the engine's own log and surface it. In the #133 outage the
+actual cause — `SQLiteError: no such column: replacement_seq` — sat in that log the entire 30
 minutes, appearing at the exact timestamp of every failed MCP session and never for the CLI sessions
 succeeding in the same window. Needs log-path resolution, session correlation, and a clean fallback
 when no line exists.
+
+⚠️ **This item's original log path was stale and is corrected here** (measured 2026-08-25, v4.9 W10
+Task A): it read `~/.local/share/opencode/log/opencode.log`, but current engine builds write ONE
+TIMESTAMPED FILE PER PROCESS in that directory (`2026-08-25T185532.log`), and both schemes are live
+across machines — the reference machine keeps a 2.4 MB legacy `opencode.log`, this one holds 12
+timestamped files and no `opencode.log` at all. A resolver written to the original single-file
+premise would have returned nothing, silently, on a current install. See `src/utils/engine-log.js`.
+
+### The startup schema check — #133 fix 4, DISPOSITION (v4.9 W10 Task B, 2026-08-25)
+
+Issue #133's fourth suggested fix asks for *"a startup schema check — if the engine's expected
+schema doesn't match the on-disk DB, fail fast with that message instead of hanging for 120s."*
+
+**Disposition: the runtime version handshake shipped as W10 piece 3 IS that check's honest core,
+and no separate schema validation was built.** What actually diverged in #133 was not a schema
+amicus can inspect — it was the ENGINE: 1.17.3 serving MCP against a `~/.local/share/opencode`
+database written by 1.18.15. `SQLiteError: no such column: replacement_seq` is that divergence's
+symptom, not its identity. `src/utils/engine-skew.js` now takes the engine's own `Session.version`
+off every `createSession` response (the SDK returned it all along and `opencode-client.js` threw
+it away) and compares it against the `opencode-ai` version in the RUNNING install's
+`node_modules` — announced on stderr once per standing skew per server, and appended to the
+`NO_OUTPUT_BACKSTOP` death report of any leg whose OWN server has a skew standing at the time it
+dies, as ` (engine skew: server <a> ≠ installed <b>)`. (Round-1 review of the PR made the record
+per-server and refreshed on every create: the first cut kept one process-wide slot, written once,
+which stamped a skew onto unrelated servers' failures and kept reporting one that had been fixed
+mid-run.)
+
+A full engine-response / DB schema validation **was considered and not built** because the schema
+is the engine's private contract with its own SQLite file: amicus neither owns those migrations
+nor can enumerate the expected columns without vendoring opencode internals that move every
+release, so such a check would be a guess that rots on each engine bump — while the version pair
+is already published by both sides and is exactly the fact that was missing.
+
+⚠️ Measured 2026-08-25 while building this, and the reason piece 3 uses **no global baseline**:
+`doctor`'s existing skew check (`doctor-engine-check.js`, v4.7.1) compares npx-cache copies
+against the GLOBAL install and is structurally blind to the copy the running process loaded. On
+this machine it reports clean — global `1.18.15` vs npx `1.18.15` — while the running checkout
+loads engine **`1.2.20`**: a live instance of #133's own class, invisible to the check written
+for it. (Also measured against a real locally spawned engine, not read off the SDK types:
+`session.create` returns `data.version`, and it was byte-identical to the running install's
+`opencode-ai` version — so the two sides really are comparable.)
 
 ### Setup polish — #138
 
@@ -6542,6 +6583,50 @@ and top-level `docs/*.md`.
 ## v4.9 records — dispositions and rulings made in-cycle (2026-08-25)
 
 Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- [ ] **`src/utils/engine-skew.js` sits at 300/300 lines after PR 201 round 3 (2026-08-26)** — the
+  known `run-retry.js` hazard shape: the gate passes, so nothing warns, and the NEXT editor pays
+  for a one-line change with an unplanned extraction under time pressure. Extract first, then
+  edit. The seam already exists as precedent: `./engine-skew-records.js` (identity + record store)
+  was split off in round 2, and round 3 split the sanitizer out to `./text-sanitize.js` — the
+  remaining file is comparison, announcement and remedy text, of which the remedy/announcement
+  strings are the natural next cut. (`engine-log-parse.js` was the other 300/300 file in that
+  round and is back to 260 after the sanitizer move; it needs nothing.)
+
+- [ ] **`auth-json.js` resolves with the same "first existing candidate wins" rule that
+  PR 201's ROUND-1 A2 condemned in engine-log** (round 2 has an A2 of its own — the logfmt
+  extractor firing on columnar lines — so the round is load-bearing in that reference)
+  (filed 2026-08-26, W10 fix round — the round-1 fix
+  commit's message claimed this filing one commit early; the edit's anchor missed on this
+  branch and it lands here, miss disclosed). `src/utils/auth-json.js :: resolveAuthJsonPath`
+  takes the first EXISTING candidate, so a stale `$XDG_DATA_HOME/opencode/auth.json` shadows
+  the live `~/.local/share/opencode/auth.json` exactly the way a stale XDG log dir shadowed
+  the live log tree — and engine-log's candidate list was explicitly modeled on this file.
+  The A2 fix shape (union across dirs) may not transfer directly (auth is one document, not
+  a newest-file search) — needs its own ruling on which candidate is authoritative when
+  several exist.
+
+- [ ] **`scripts/generate-docs-helpers.js` mis-renders the Key Modules registry repo-wide —
+  three separate defects, MEASURED 2026-08-26** (filed in the PR 201 round-2 fix wave, where
+  finding B8 hit all three on the two new modules; fixed AT THE SOURCE there for
+  `engine-log`, `engine-log-parse`, `engine-skew` and `engine-skew-records`, and left
+  unfixed everywhere else because the generator change is a whole-table regeneration).
+  (1) `extractJSDocDescription` only matches a JSDoc block that is the FIRST thing in the
+  file, so any module whose docblock sits below `'use strict';` gets an EMPTY Purpose cell —
+  **127 of them**. (2) `collectModules` renders every export as `` `name()` ``, so a
+  constant reads as a function — **124 occurrences**, e.g. `utils/degrade.js ::
+  DEGRADE_CHANNELS`, `utils/engine-lock.js :: STALE_MS`, `utils/error-doc.js ::
+  ERROR_CODES`. (3) `extractExports` caps at 5 with no marker, so **62 rows** silently omit
+  real exports (`council/briefings-stage2.js` shows 5 of 15). The per-module workaround used
+  in PR 201 — hoist the docblock above `'use strict'`, order `module.exports` so the five
+  that matter come first, stop exporting internal constants — is not a fix for the other
+  ~120 files. Needs a generator ruling: skip a directive prologue when locating the
+  docblock, render constants without `()`, and either raise the cap or mark truncation.
+  **The workaround has a floor, found 2026-08-26 (PR 201 round 3):** `utils/text-sanitize.js`
+  exports exactly two names, so defect (2) renders `MAX_EXCERPT_CHARS()` with no way to hide
+  it — ordering only helps a module with more than five exports, where the cap does the
+  concealing. That row is a known-defect instance, not a fresh bug; it goes away with the
+  generator ruling above, and inventing exports to pad past the cap is not a fix.
 
 - **W5 ruling — a spec self-contradiction resolved: `intent` is emit-when-`'task'`
   EVERYWHERE.** The v4.8 design spec's §5.3 declares verdict-`intent` "mandatory" while its

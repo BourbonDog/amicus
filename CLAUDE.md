@@ -258,7 +258,11 @@ src/
 │   ├── engine-ensure.js  # ensureEngine() — runtime engine self-heal at server start (report #2).
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
 │   ├── engine-lock.js  # Stale-aware single-flight lock for the engine self-heal (report #2).
+│   ├── engine-log-parse.js  # Line-shape parsing for the engine log: level, session, message.
+│   ├── engine-log.js  # Resolve the OpenCode engine's own error line for one session.
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
+│   ├── engine-skew-records.js  # Server identity and the bounded store of standing engine-skew records.
+│   ├── engine-skew.js  # Runtime detection of an opencode ENGINE version skew: server vs installed.
 │   ├── env-loader.js  # Credential Loader
 │   ├── env-num.js
 │   ├── env-raw-store.js  # Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6).
@@ -322,6 +326,7 @@ src/
 │   ├── shared-server.js
 │   ├── spend-ledger.js
 │   ├── start-helpers.js  # Start Command Helpers
+│   ├── text-sanitize.js  # One third-party string, safe to render: no escapes, no bidi, one short line.
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
 │   ├── update-notice.js  # The MCP server is the one entry point that skips bin/amicus.js's update
@@ -667,7 +672,11 @@ evals/
 | `utils/engine-ensure.js` | ensureEngine() — runtime engine self-heal at server start (report #2). | `ensureEngine()`, `_resetEnsureEngine()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()`, `resolveNpmRootG()` |
 | `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
+| `utils/engine-log-parse.js` | Line-shape parsing for the engine log: level, session, message. | `isErrorLine()`, `extractMessage()`, `collapseExcerpt()`, `mentionsSession()`, `lineIsAboutSession()` |
+| `utils/engine-log.js` | Resolve the OpenCode engine's own error line for one session. | `engineErrorForSession()`, `engineLogDirCandidates()`, `isErrorLine()`, `extractMessage()`, `collapseExcerpt()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
+| `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
+| `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
 | `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |
@@ -731,6 +740,7 @@ evals/
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
+| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |

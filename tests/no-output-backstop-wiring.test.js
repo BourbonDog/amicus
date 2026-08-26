@@ -373,7 +373,10 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
  * activity — never a cause. The removed guess ("likely a listed-but-not-
  * serving model or a dead endpoint") sent 30 minutes of #133's debugging at
  * model ids and API keys while the real cause (an opencode engine version
- * skew) sat in ~/.local/share/opencode/log/opencode.log the whole time.
+ * skew) sat in the engine's own log the whole time. (v4.9 W10: that log is
+ * now read and quoted — see the last describe in this file. The single
+ * `opencode/log/opencode.log` path this comment used to name was already
+ * stale; src/utils/engine-log.js records the measured scheme.)
  *
  * Task 6 REVIEW (Important finding, superseding this suite's original
  * contract): `fromEnv` answers "did `ms` arrive as a direct numeric option",
@@ -441,5 +444,365 @@ describe('formatNoOutputBackstopReason: reports only what the deadline observed,
     const msg = formatNoOutputBackstopReason({ ms: 240000, fromEnv: true });
     expect(msg).toMatch(/240s/);
     expect(msg).not.toMatch(/\b120s\b/);
+  });
+});
+
+/**
+ * v4.9 W10 Task A (#133 piece 2) — the death report now QUOTES the engine.
+ *
+ * Task 6 stopped the message from guessing a cause. It did not make the
+ * message say the true one, which was on disk the whole time: in #133 the
+ * engine logged its real failure at the exact timestamp of every dead MCP
+ * session, and nothing read it. Reporting silence while the cause sits
+ * unread is a correct-but-SILENT degrade — the product principle rates that
+ * as bad as a crash. src/utils/engine-log.js reads it; both firing sites
+ * append it.
+ *
+ * TWO INVARIANTS, pinned here as a matched pair:
+ *  1. ENRICHED — the excerpt lands AFTER the byte-stable `NO_OUTPUT_BACKSTOP:`
+ *     prefix and after the whole of today's sentence, so
+ *     src/sidecar/models-probe.js's prefix classification is untouched. These
+ *     assert the FULL string equals today's + the suffix, not just a substring.
+ *  2. CONTROL — on every miss path the message is BYTE-IDENTICAL to today's.
+ *
+ * The resolver's own rules (formats, bounds, correlation) are pinned in
+ * tests/engine-log.test.js. These drive the REAL resolver through the REAL
+ * runHeadless wiring over a synthetic fixture tree — this suite mocks `fs`, so
+ * the fixture is built and read with `jest.requireActual('fs')`, injected via
+ * the `_engineLog` seam (same shape of test-only option as `_env` above).
+ * FIXTURES ARE SYNTHETIC: no line here came from any machine's engine log.
+ */
+describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s own error line', () => {
+  const realFs = jest.requireActual('fs');
+  const os = require('os');
+  const path = require('path');
+  const MADE = [];
+
+  const ERROR_LINE = 'time=2026-08-25T18:55:32Z level=ERROR service=session '
+    + 'session.id=ses_parent error="SQLiteError: no such column: fixture_seq"';
+  const EXPECTED_EXCERPT = 'SQLiteError: no such column: fixture_seq';
+
+  /** A synthetic data dir holding `opencode/log/<one file>`. */
+  function fixtureDataDir(lines) {
+    const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'amicus-w10-wiring-'));
+    MADE.push(dir);
+    const logDir = path.join(dir, 'opencode', 'log');
+    realFs.mkdirSync(logDir, { recursive: true });
+    realFs.writeFileSync(path.join(logDir, '2026-08-25T185532.log'), `${lines.join('\n')}\n`);
+    return dir;
+  }
+
+  const engineLogOpts = (dataDir) => ({ dataDir, fs: realFs });
+
+  afterAll(() => {
+    for (const dir of MADE) {
+      try { realFs.rmSync(dir, { recursive: true, force: true }); } catch (_e) { /* best effort */ }
+    }
+  });
+
+  test('poll-loop firing site: the excerpt is appended after the whole of today\'s message', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogpoll1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+    // The prefix models-probe.js classifies on is still the first bytes.
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(statusFromResult(result)).toBe('error');
+  }, 20000);
+
+  test('pre-send firing site: a prompt send that never resolves also carries the excerpt', async () => {
+    // The #133 shape: the leg dies upstream of the poll loop entirely.
+    mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
+    mockGetMessages.mockResolvedValue([]);
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogsend1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+  }, 20000);
+
+  test('control — no engine log dir: the message is byte-identical to today\'s', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const absent = path.join(os.tmpdir(), `amicus-w10-absent-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).not.toMatch(/engine log/);
+  }, 20000);
+
+  test('control — a log with no ERROR line for this session: byte-identical to today\'s', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const dataDir = fixtureDataDir([
+      'time=2026-08-25T18:55:30Z level=INFO service=session session.id=ses_parent message="created"',
+      'time=2026-08-25T18:55:32Z level=ERROR service=session session.id=ses_other error="not ours"',
+    ]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss2', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+  }, 20000);
+
+  test('a resolver that throws cannot break the death report — the leg still dies with today\'s message', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const boom = () => { throw new Error('fixture fs is down'); };
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'englogboom1', '/proj', 60000, 'build',
+      { ...OPTS,
+        noOutputBackstopMs: 200,
+        _engineLog: { dataDir: '/nope', fs: { existsSync: boom, readdirSync: boom, statSync: boom } } });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.completed).toBe(false);
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  test('formatNoOutputBackstopReason without an excerpt is unchanged; with one, it appends', () => {
+    const base = formatNoOutputBackstopReason({ ms: 200, fromEnv: true });
+    expect(formatNoOutputBackstopReason({ ms: 200, fromEnv: true, engineLogExcerpt: null })).toBe(base);
+    expect(formatNoOutputBackstopReason({ ms: 200, fromEnv: true, engineLogExcerpt: '' })).toBe(base);
+    expect(formatNoOutputBackstopReason({ ms: 200, fromEnv: true, engineLogExcerpt: 'boom' }))
+      .toBe(`${base} — engine log: boom`);
+  });
+});
+
+/**
+ * v4.9 W10 Task B (#133 piece 3) — the death report also names an ENGINE
+ * VERSION SKEW when one was detected at session-create time.
+ *
+ * This is the #133 outage's literal shape: every MCP leg died behind one engine
+ * version serving the server while a different one sat installed. Piece 2 makes
+ * the leg quote the engine; piece 3 makes it say WHICH engines, at the failure
+ * site, without the user running anything.
+ *
+ * The skew record is real module state — it lives in
+ * src/utils/engine-skew-records.js since the round-2 extraction — driven here
+ * through src/utils/engine-skew.js's public entry point (`noteSessionVersion`)
+ * with the installed-version reader and the notice sink injected, so these pins
+ * exercise the production path from "the server reported a version" all the way
+ * to the rendered leg error, with no seam invented for the test. Reset before
+ * AND after every case so no skew leaks into another suite's controls.
+ *
+ * SHAPES, pinned as a set:
+ *  1. skew + excerpt  — the composite #133 message (both clauses, in order).
+ *  2. skew, no excerpt — the skew clause is NOT gated on the log read
+ *     succeeding (see the deviation note in the test).
+ *  3. no skew         — byte-identical to Task A's output, enriched or not.
+ *  4. ATTRIBUTION (round-1 review A3+B3) — the clause belongs to THIS leg's own
+ *     server, now: another server's skew never rides along, a retracted one
+ *     stops appearing, and this leg's own still lands.
+ *
+ * Named mutants, both measured against this suite:
+ *  · SKEWBLIND — `noteSessionVersion`'s mismatch branch returns null. The full
+ *    measured red set is recorded in tests/utils/engine-skew.test.js.
+ *  · STICKYSKEW — the record degrades to ONE process-wide slot, written once
+ *    and never retracted (the pre-round-1 behaviour): reds the two attribution
+ *    tests here — "a skew observed on ANOTHER server is not stamped on this
+ *    leg" and "a skew RETRACTED by a later matching session is not reported" —
+ *    plus 22 in tests/utils/engine-skew.test.js (re-measured 2026-08-26 after
+ *    the round-3 tests landed; the record read 5, then 20).
+ *  · SDKSHAPE — round-3 review C1b: `serverKeyForClient` reads a renamed private
+ *    SDK handle, so no client can be named. Reds ONE test here — "a skew
+ *    observed on ANOTHER server is not stamped on this leg" — plus 16 in
+ *    tests/utils/engine-skew.test.js. The retraction test survives because a
+ *    retraction under one shared bucket still clears the record it reads.
+ * The two no-skew controls stay GREEN under all of these by design: that is what
+ * makes them controls.
+ */
+describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version skew', () => {
+  const realFs = jest.requireActual('fs');
+  const os = require('os');
+  const path = require('path');
+  const skewMod = require('../src/utils/engine-skew');
+  const MADE = [];
+
+  const ERROR_LINE = 'time=2026-08-25T18:55:32Z level=ERROR service=session '
+    + 'session.id=ses_parent error="SQLiteError: no such column: fixture_seq"';
+  const EXPECTED_EXCERPT = 'SQLiteError: no such column: fixture_seq';
+  const SKEW_SUFFIX = ' (engine skew: server 1.17.3 ≠ installed 1.18.15)';
+
+  /** A synthetic data dir holding `opencode/log/<one file>`. FIXTURE ONLY. */
+  function fixtureDataDir(lines) {
+    const dir = realFs.mkdtempSync(path.join(os.tmpdir(), 'amicus-w10b-'));
+    MADE.push(dir);
+    const logDir = path.join(dir, 'opencode', 'log');
+    realFs.mkdirSync(logDir, { recursive: true });
+    realFs.writeFileSync(path.join(logDir, '2026-08-25T185532.log'), `${lines.join('\n')}\n`);
+    return dir;
+  }
+
+  const engineLogOpts = (dataDir) => ({ dataDir, fs: realFs });
+
+  /**
+   * Put a real skew on the record, exactly as a skewed create would.
+   *
+   * `client` defaults to undefined — the same identity the leg's own client has
+   * here, since `mockStartServer` hands runHeadless a bare `{}` with no SDK
+   * transport on it. Pass a client to arm a DIFFERENT server's record.
+   */
+  function armSkew(client) {
+    skewMod.noteSessionVersion('1.17.3', {
+      readInstalledVersion: () => '1.18.15',
+      client,
+      notify: () => {}, // the notice itself is pinned in tests/utils/engine-skew.test.js
+    });
+  }
+
+  /** A client that names its server, matching the measured SDK shape. */
+  const clientAt = (baseUrl) => ({ _client: { getConfig: () => ({ baseUrl }) } });
+
+  beforeEach(() => { skewMod._resetEngineSkew(); });
+  afterEach(() => { skewMod._resetEngineSkew(); });
+
+  afterAll(() => {
+    for (const dir of MADE) {
+      try { realFs.rmSync(dir, { recursive: true, force: true }); } catch (_e) { /* best effort */ }
+    }
+  });
+
+  test('the #133 composite: the engine\'s line AND the two engine versions, in that order', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    armSkew();
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewcomp1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}`);
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/); // models-probe.js's prefix is still first
+    expect(statusFromResult(result)).toBe('error');
+  }, 20000);
+
+  test('a skew is reported even when the log read finds nothing', async () => {
+    // DELIBERATE, and a deviation from the plan bullet's literal "when Piece 2's
+    // backstop enrichment fires AND skew was detected": gating the skew clause
+    // on a successful log read would make the RELIABLE signal (two version
+    // strings both sides already published) depend on the UNRELIABLE one (a log
+    // file that may be absent, rotated, or unreadable). In #133 the skew WAS the
+    // answer; a user whose log dir is missing would get silence.
+    mockGetMessages.mockResolvedValue([]);
+    armSkew();
+    const absent = path.join(os.tmpdir(), `amicus-w10b-absent-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewnolog1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}`);
+    expect(result.error).not.toMatch(/engine log:/);
+  }, 20000);
+
+  test('pre-send firing site: the skew clause reaches the site that dies upstream of the poll loop', async () => {
+    mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
+    mockGetMessages.mockResolvedValue([]);
+    armSkew();
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewsend1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}`);
+  }, 20000);
+
+  test('control — no skew on the record: the enriched message is byte-identical to Task A\'s', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const dataDir = fixtureDataDir([ERROR_LINE]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewnone1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+    expect(result.error).not.toMatch(/engine skew/);
+  }, 20000);
+
+  test('control — a session whose server version MATCHES arms nothing', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    skewMod.noteSessionVersion('1.18.15', {
+      readInstalledVersion: () => '1.18.15', notify: () => {},
+    });
+    const absent = path.join(os.tmpdir(), `amicus-w10b-match-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewmatch1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+  }, 20000);
+
+  /**
+   * W10 round-1 review A3+B3 — the clause names THIS leg's server, now.
+   *
+   * The record used to be one process-wide slot written once, so the first skew
+   * anyone observed was stamped on every later death report: another server's
+   * legs wore it, and so did legs that died after the skew was fixed. A death
+   * report that names the wrong cause is the guess this whole piece replaced.
+   */
+  test('a skew observed on ANOTHER server is not stamped on this leg', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    armSkew(clientAt('http://127.0.0.1:9999')); // some other server, in this process
+    const absent = path.join(os.tmpdir(), `amicus-w10b-other-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewother1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).not.toMatch(/engine skew/);
+  }, 20000);
+
+  test('THIS leg\'s own server\'s skew still reaches the report', async () => {
+    // The positive twin of the test above: same mechanism, same run shape, only
+    // the server identity differs — so the pair pins attribution, not silence.
+    mockGetMessages.mockResolvedValue([]);
+    const client = clientAt('http://127.0.0.1:9999');
+    mockStartServer.mockResolvedValue({
+      client, server: { url: 'http://127.0.0.1:9999', close: jest.fn() },
+    });
+    armSkew(client);
+    const absent = path.join(os.tmpdir(), `amicus-w10b-own-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewown1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}`);
+  }, 20000);
+
+  test('a skew RETRACTED by a later matching session is not reported', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    armSkew();
+    skewMod.noteSessionVersion('1.18.15', { // the operator fixed it mid-process
+      readInstalledVersion: () => '1.18.15', notify: () => {},
+    });
+    const absent = path.join(os.tmpdir(), `amicus-w10b-fixed-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewfixed1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+  }, 20000);
+
+  test('formatNoOutputBackstopReason composes the two clauses independently', () => {
+    const base = formatNoOutputBackstopReason({ ms: 200, fromEnv: true });
+    const skew = { server: '1.17.3', installed: '1.18.15' };
+    expect(formatNoOutputBackstopReason({ ms: 200, fromEnv: true, engineSkew: null })).toBe(base);
+    expect(formatNoOutputBackstopReason({ ms: 200, fromEnv: true, engineSkew: skew }))
+      .toBe(`${base}${SKEW_SUFFIX}`);
+    expect(formatNoOutputBackstopReason({
+      ms: 200, fromEnv: true, engineLogExcerpt: 'boom', engineSkew: skew,
+    })).toBe(`${base} — engine log: boom${SKEW_SUFFIX}`);
   });
 });
