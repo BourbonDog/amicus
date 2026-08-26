@@ -26,19 +26,21 @@
  * end (a leg dies, the engine's line is on disk, nothing quotes it).
  * Applied as the first statement of the function body in src/utils/engine-log.js.
  *
- * MEASURED red set (RE-MEASURED 2026-08-26 for round 3 — the record read 25
- * before the round-3 tests; the three earlier numbers, 14, 23 and 25, are
+ * MEASURED red set (RE-MEASURED 2026-08-26 for v4.9 W12's #201 tails — the
+ * record read 28 before them; the four earlier numbers, 14, 23, 25 and 28, are
  * retired. Focused scope: this suite + the parse suite + the wiring suite,
  * `npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
- * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 121
- * tests): **2 suites / 28 tests red.**
- *   tests/engine-log.test.js — 23: every test that expects a NON-null excerpt
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 133
+ * tests): **2 suites / 34 tests red.**
+ *   tests/engine-log.test.js — 29: every test that expects a NON-null excerpt
  *     (both format tests, the unquoted-value test, the interior-`key=value`
  *     test, newest-file, last-line, bare-id, exact-id-beats-longer-id,
  *     non-id-boundary, owned-by-another-session, the empty-excerpt group — the
  *     next-file fallthrough plus the three round-3 same-file cases — in-tail
  *     match, legacy-candidate, mass-death-wave, CRLF, 200-char collapse,
- *     whitespace collapse, and all three union-of-candidate-dirs tests).
+ *     whitespace collapse, all three union-of-candidate-dirs tests, and the six
+ *     W12 additions: C1's "an older REAL error still answers…" plus all five
+ *     C2 memo tests, each of which asserts a real excerpt somewhere).
  *   tests/no-output-backstop-wiring.test.js — 5: the Task A poll-loop and
  *     pre-send firing sites, and the three Task B cases that carry an excerpt
  *     (the #133 composite, its pre-send twin, and the no-skew control).
@@ -55,11 +57,17 @@
  * INSIDE the tail is found", "a mass-death wave: this leg's own log answers even
  * at 5th-newest"), and it is the pair that pins the bound. The same pairing
  * covers the round-1 review's own null-asserting test ("a LONGER id is never
- * borrowed"), whose twin is "the EXACT id still wins".
+ * borrowed"), whose twin is "the EXACT id still wins", and W12's C1 pair ("an
+ * INFO line whose quoted value contains level=ERROR is never quoted" asserts
+ * null and stays green; its twin "an older REAL error still answers" does not).
  *
- * ── THE OTHER NAMED MUTANTS (all measured 2026-08-26 on the same 3-suite
- *    scope; each applied alone and reverted, sources restored by byte copy and
- *    checksum-verified — never by `git checkout`) ────────────────────────────
+ * ── THE OTHER NAMED MUTANTS (ALL of them RE-RUN 2026-08-26 against the W12
+ *    tree — the bench grew by 12 tests, so every number below was re-measured
+ *    rather than carried; two moved, LOGBLIND 28→34 and CUTATLASTPAIR 6→7, and
+ *    both were predicted "unchanged" by reading the code, which is exactly why
+ *    they were run. Same 3-suite scope; each applied alone and reverted, sources
+ *    restored by byte copy and checksum-verified — never by `git checkout`)
+ *    ──────────────────────────────────────────────────────────────────────
  * `UNANCHORED` — `mentionsSession` degrades to `line.includes(needle)`, the
  *   pre-round-1 behaviour: **2 suites / 4 tests red** (was 2 before the round-2
  *   left-boundary tests) — here, "a LONGER id is never borrowed" and "the EXACT
@@ -70,11 +78,12 @@
  *   union test stays green by design: it is the control that proves the fix did
  *   not invert precedence.
  * `CUTATLASTPAIR` — the structural run keeps scanning past the message, so it
- *   ends at the last `key=value` anywhere on the line: **2 suites / 6 tests red**
- *   (was 1, then 3) — "a key=value INSIDE a columnar message is text" here, plus
- *   both round-2 A2 cases and three round-3 ownership cases in the parse suite.
- *   The run is now shared by the message cut AND the ownership rule, which is
- *   exactly why one mutation reds both.
+ *   ends at the last `key=value` anywhere on the line: **2 suites / 7 tests red**
+ *   (was 1, then 3, then 6) — "a key=value INSIDE a columnar message is text"
+ *   here, plus both round-2 A2 cases, three round-3 ownership cases, and W12's
+ *   "level=ERROR in FREE TEXT, past the structural run, is prose too" in the
+ *   parse suite. The run is now shared by the message cut, the ownership rule
+ *   AND the level test, which is exactly why one mutation reds all three.
  * `THREENEWEST` — `candidateLogFiles` truncates to the 3 newest by mtime, the
  *   pre-round-2 bound: **1 suite / 2 tests red**, both here — "a mass-death
  *   wave…" and "the legacy opencode.log is just another candidate". That second
@@ -85,6 +94,22 @@
  *   exhausts the file before moving on". "a file with ONLY empty excerpts still
  *   yields to the next file" stays GREEN by design: it is the control that says
  *   the fix did not cost the cross-file fallthrough it builds on.
+ * `NOMEMO` — v4.9 W12 tail C2: `scanSlot` never finds a slot, so every firing
+ *   re-lists the dir and re-reads every tail (the pre-W12 behaviour): **1 suite
+ *   / 3 tests red**, all here — the three memo tests that COUNT I/O or depend on
+ *   a warm slot ("a wave of dying seats…", "a DIFFERENT session…", "a cold call
+ *   once the TTL has passed…"). The other 130 stay green, and that is the
+ *   absence-of-change proof this fix needed: turning the memo off changes no
+ *   excerpt anywhere in the bench, only how often the disk is touched.
+ * `STALEMEMO` — the TTL alone: the slot is key-checked but never expires:
+ *   **1 suite / 1 test red**, here — "a cold call once the TTL has passed
+ *   re-reads — and sees a log written since". Precisely scoped, which is what
+ *   says the TTL is pinned separately from the memo itself.
+ * `LEVELANYWHERE` — v4.9 W12 tail C1: `isErrorLine`'s logfmt half reverts to the
+ *   substring regex `/(^|\s)level=ERROR(\s|$)/` over the raw line: **2 suites /
+ *   5 tests red** — here, "an INFO line whose quoted value contains level=ERROR
+ *   is never quoted as the failure" and its twin; in the parse suite, all three
+ *   positive cases. Both C1 controls stay green by design.
  * `OWNEDBYOTHER`, `BAREMENTION`, `WHOLELINEFIELDS`, `LOGFMTFIRST`,
  *   `ERRORANYWHERE`, `RAWEXCERPT`, `NOBIDI` — the parse-layer mutants; their red
  *   sets are recorded in tests/utils/engine-log-parse.test.js.
@@ -278,6 +303,33 @@ describe('engineErrorForSession: correlation and filtering', () => {
     expect(engineErrorForSession(SES, { dataDir })).toBeNull();
   });
 
+  /**
+   * #201 final-round tail C1, end to end. An INFO line for THIS session whose
+   * quoted value merely contains `level=ERROR` used to be classified as an
+   * error line and its message quoted as the leg's cause of death — a
+   * confidently wrong diagnosis, the one failure mode this module exists to
+   * end. The unit rule lives in tests/utils/engine-log-parse.test.js; this
+   * drives it through the resolver, where the misclassification actually bites.
+   */
+  const INFO_QUOTING_A_LEVEL = `time=2026-08-25T18:55:31Z level=INFO service=session session.id=${SES} `
+    + 'msg="upstream logged level=ERROR moments ago" fixture fell back to the cache';
+
+  test('an INFO line whose quoted value contains level=ERROR is never quoted as the failure', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [INFO_QUOTING_A_LEVEL]);
+    expect(engineErrorForSession(SES, { dataDir })).toBeNull();
+  });
+
+  test('and an older REAL error still answers when such a line sits below it', () => {
+    // Paired with the test above: that one says the quoted text no longer
+    // classifies, this one says the walk keeps going and finds the truth
+    // instead of stopping at the newest line that merely LOOKED like an error.
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR, INFO_QUOTING_A_LEVEL]);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
   test('an empty excerpt is not returned — the file falls through to the next candidate', () => {
     const dataDir = makeDataDir();
     // Newest file: an ERROR line for this session whose message part is empty.
@@ -415,6 +467,137 @@ describe('engineErrorForSession: bounded reads', () => {
     }
     writeLog(dataDir, '2026-08-25T185500.log', [LOGFMT_ERROR], 1000); // 9th-newest
     expect(engineErrorForSession(SES, { dataDir })).toBeNull();
+  });
+});
+
+/**
+ * #201 final-round tail C2. This resolver runs on a leg's DEATH PATH, and legs
+ * die in waves: every seat of one wave starts together, so every seat's
+ * backstop deadline lands inside the same couple of 2 s poll ticks
+ * (src/headless.js:80). Each firing used to re-stat the whole log directory and
+ * re-read every tail from scratch — the same bytes, N times, at the exact
+ * moment the machine is already unhappy.
+ *
+ * The scan is therefore memoized per fs impl with a short TTL. These are
+ * ABSENCE-OF-CHANGE pins: the excerpt a warm call returns must be the one a
+ * cold call returns (the rest of this suite is that assertion, 30-odd times
+ * over), and what changes is only the I/O — counted here through the fs seam.
+ */
+describe('engineErrorForSession: the death-path scan is memoized (#201 C2)', () => {
+  /** Real fs, counting the calls a repeated scan is supposed to stop making. */
+  function countingFs(counts) {
+    return {
+      existsSync: (p) => { counts.exists++; return fs.existsSync(p); },
+      readdirSync: (p) => { counts.readdir++; return fs.readdirSync(p); },
+      statSync: (p) => { counts.stat++; return fs.statSync(p); },
+      openSync: (p, flags) => { counts.open++; return fs.openSync(p, flags); },
+      readSync: (...args) => fs.readSync(...args),
+      closeSync: (fd) => fs.closeSync(fd),
+    };
+  }
+  const zero = () => ({ exists: 0, readdir: 0, stat: 0, open: 0 });
+
+  afterEach(() => { if (Date.now.mock) { Date.now.mockRestore(); } });
+
+  test('a wave of dying seats inside the window: one scan, and every seat gets the same excerpt', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR]);
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    const cold = { ...counts };
+    expect(cold.readdir).toBeGreaterThan(0);
+    expect(cold.stat).toBeGreaterThan(0);
+    expect(cold.open).toBeGreaterThan(0);
+
+    // Four more seats of the same wave, same instant.
+    for (let i = 0; i < 4; i++) {
+      expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+        .toBe('SQLiteError: no such column: fixture_seq');
+    }
+    expect(counts.readdir).toBe(cold.readdir);
+    expect(counts.stat).toBe(cold.stat);
+    expect(counts.open).toBe(cold.open);
+  });
+
+  test('a DIFFERENT session inside the window still gets its OWN line out of the cached tail', () => {
+    // The memo caches the SCAN (listing + tails), never the answer — the whole
+    // point on a mass-death path is that N seats share one read and each still
+    // gets the line that is actually about it.
+    const other = 'ses_w10other';
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      `time=2026-08-25T18:55:32Z level=ERROR session.id=${other} error="the other seat's failure"`,
+      LOGFMT_ERROR,
+    ]);
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    const cold = { ...counts };
+    expect(engineErrorForSession(other, { dataDir, fs: fsSeam }))
+      .toBe("the other seat's failure");
+    expect(counts.open).toBe(cold.open);
+  });
+
+  test('a cold call once the TTL has passed re-reads — and sees a log written since', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR], 5000);
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+    const t0 = 1_800_000_000_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(t0);
+
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    const cold = { ...counts };
+
+    // A newer file appears — invisible while the memo is warm…
+    writeLog(dataDir, '2026-08-25T185600.log',
+      [`time=2026-08-25T18:56:00Z level=ERROR session.id=${SES} error="the newer failure"`], 9000);
+    now.mockReturnValue(t0 + 9_999); // SCAN_CACHE_TTL_MS is 10_000: still inside
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    expect(counts.readdir).toBe(cold.readdir);
+
+    // …and picked up the moment the window closes.
+    now.mockReturnValue(t0 + 10_000);
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam })).toBe('the newer failure');
+    expect(counts.readdir).toBeGreaterThan(cold.readdir);
+  });
+
+  test('the memo is keyed by the dirs scanned — another dir is never served from this one', () => {
+    // Bounded means ONE slot per fs impl, so this is the case that would break
+    // if the slot were not key-checked: the second dir must scan for itself.
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+    const a = makeDataDir();
+    const b = makeDataDir();
+    writeLog(a, '2026-08-25T185532.log', [LOGFMT_ERROR]);
+    writeLog(b, '2026-08-25T185533.log',
+      [`time=2026-08-25T18:55:33Z level=ERROR session.id=${SES} error="dir b failure"`]);
+
+    expect(engineErrorForSession(SES, { dataDir: a, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    expect(engineErrorForSession(SES, { dataDir: b, fs: fsSeam })).toBe('dir b failure');
+    // …and back to A, which the single slot has since evicted: it re-reads
+    // rather than answering from B's tails.
+    expect(engineErrorForSession(SES, { dataDir: a, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('the memo never crosses fs impls — a hostile seam does not poison a real one', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR]);
+    const boom = () => { throw new Error('fixture fs is hostile'); };
+    expect(engineErrorForSession(SES, {
+      dataDir, fs: { existsSync: boom, readdirSync: boom, statSync: boom },
+    })).toBeNull();
+    expect(engineErrorForSession(SES, { dataDir, fs: countingFs(zero()) }))
+      .toBe('SQLiteError: no such column: fixture_seq');
   });
 });
 

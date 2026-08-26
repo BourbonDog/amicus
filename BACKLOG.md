@@ -1715,7 +1715,12 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
     `session-manager.js:127`'s `metadata.project || projectDir` — the actual write path into
     `sessions-index.json` — was not traced to its own origin. Open, not exhaustively verified.
 
-- [ ] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — [S] The MCP
+- [x] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — ✅ CLOSED
+  v4.9 W12 (2026-08-26): `src/sidecar/list-council.js :: mergeCouncilRows` merges council rows
+  into `listSidecars` on both surfaces; both real decisions below were ruled exactly as this
+  filing anticipated (CLI re-truncates the 80-char preview to its own 30; MODEL renders
+  `council(<stage>)`, width-capped, bare `council` for terminal runs). Original filing kept
+  below for the reasoning. — [S] The MCP
   `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
   `.concat(councilRows)` with `type: 'council-run'`); the CLI `listSidecars`
   (`src/sidecar/read.js:133`) never calls `listCouncilRuns` at all. So `amicus council run …`
@@ -6717,3 +6722,30 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   design **carries** intent rather than refusing it, and a mismatch error would now break the
   exact flow this wave's renderers exist to serve. **Nothing built.** §10.6's `council validate`
   clause is unaffected — it stays mode-free by design, as written.
+
+- [ ] **Eight pre-existing rotted `mcp-server.js` citations — a hygiene sweep, MEASURED
+  2026-08-26 (filed at the W12 wave review; none caused by W12 — all verified already wrong
+  at the W12 base, and the citation gate passes because it only range-checks).** Seven point
+  at the shared-server error chain instead of the wave status-doc composer they describe:
+  `src/observe/council-legs.js:15` (cites `:592-608`), `src/observe/live-doc.js:28` and
+  `tests/observe/watch-render.test.js:317` (both cite `:687`),
+  `src/workspace/live-normalize.js:24` (cites `:592-662`),
+  `tests/workspace/live-model.test.js:59` (cites `:603`),
+  `tests/workspace/live-normalize.test.js:86` (cites `:590-665`),
+  `src/mcp-council-awareness.js:116` (cites `:586`). The eighth:
+  `tests/pack/mcp-pack-params.test.js:155` cites `mcp-server.js:289-291` for the pack-error
+  branch keeping the hint via `buildErrorDoc` — that call sits at `:309-310`; `:289-291` is
+  the pack-resolution comment. All eight likely share one root (a block of insertions above
+  `:600` that predates v4.9); re-derive each against the tree at fix time, not from the
+  numbers here.
+
+- [ ] **The INBOUND fence does not defang its own close tag (observed at the W12 wave
+  review, 2026-08-26).** W12's `defangOutboundFenceCloses` (`src/utils/untrusted-fence.js`)
+  neutralizes house OUTBOUND close tags inside embedded bodies at both outbound surfaces —
+  but `fenceSidecarOutput` in the same file leaves its own close tag live, so sidecar output
+  containing `</untrusted_sidecar_output>` still terminates the inbound fence early and the
+  remainder reads as trusted text. The 200-series scoping (B2/C2 = outbound family only) was
+  deliberate, so this is a fresh candidate, not a W12 violation. The fix shape already
+  exists: run the same entity-escape over the inbound body before fencing (one helper, one
+  tag list — extend `OUTBOUND_FENCE_TAGS` or a sibling constant; keep the author-spelling
+  and byte-identity-on-clean-text properties the outbound pins established).

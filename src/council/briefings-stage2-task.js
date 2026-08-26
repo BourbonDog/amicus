@@ -50,6 +50,7 @@ const {
   JUDGE_NO_TOOLS_PREAMBLE, FINDINGS_INDEX_HEADER, dateLine,
   judgeOutputContractWith, judgeRepairPromptWith,
 } = require('./briefings-stage2');
+const { defangOutboundFenceCloses } = require('../utils/untrusted-fence');
 
 /** Task twin of the review frame — and the only pointer to the tail below. */
 const TASK_JUDGE_FRAME =
@@ -149,10 +150,16 @@ const BRIEFING_FENCE_PREAMBLE = [
  * ⚠️ Called ONLY on a real briefing. The absent-briefing note below is OUR
  * prose, and fencing it would tell the judge that engine text is material it
  * must not follow — no untrusted text, no fence.
+ * ⚠️ PR #200 tails B2/C2: the body is neutralized before it is embedded, or a
+ * briefing containing the close tag ends this fence early in the judge's eyes
+ * and every byte after it reads as engine prose. ONE mechanism, shared with the
+ * other outbound surface (src/prompt-builder.js :: buildContextSection) — see
+ * src/utils/untrusted-fence.js. A briefing with no close tag is byte-identical.
  * @param {string} text the run's composed briefing
  */
 function fenceBriefing(text) {
-  return `${BRIEFING_FENCE_OPEN}\n${BRIEFING_FENCE_PREAMBLE}\n\n${text}\n${BRIEFING_FENCE_CLOSE}`;
+  return `${BRIEFING_FENCE_OPEN}\n${BRIEFING_FENCE_PREAMBLE}\n\n`
+    + `${defangOutboundFenceCloses(text)}\n${BRIEFING_FENCE_CLOSE}`;
 }
 
 /**

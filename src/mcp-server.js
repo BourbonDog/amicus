@@ -390,8 +390,34 @@ const handlers = {
     // The file itself is written just before the spawn fallback below (the
     // shared-server path passes the prompt in-process and never reads args).
     const briefingPath = path.join(sessionDir, 'briefing.md');
+    // ⚠️ W1-M4 (v4.9 W12), the amicus_start half of the divergence Task 7 closed
+    // for src/mcp-server.js :: amicus_fanout — same shape, same reason.
+    // `briefing.md` and the initial `metadata.briefing` below both used to be
+    // written from the RAW `input.prompt` while the shared-server branch's own
+    // metadata write recorded the rendered text, and for a `start` row
+    // `metadata.briefing` IS the `--search` corpus
+    // (src/sidecar/list-search.js :: rowMatchesSearch falls through to
+    // `row.briefing` for anything that is not a wave or a council run). A child that dies before
+    // its own createSessionMetadata therefore left the session permanently
+    // unfindable by the text the user actually sees. So: the RENDERED text goes
+    // on disk, and the child is handed the RAW input through a sibling
+    // `briefing-input.md`, keeping its own later render byte-identical and still
+    // the provenance source for `promptMeta.template`.
+    //
+    // ⚠️ Both defaults are LOAD-BEARING: with no pack-forwarded template nothing
+    // renders, so the rendered text IS the raw prompt and childPromptPath must
+    // fall back to briefingPath — otherwise every ordinary start would spawn
+    // with `--prompt-file undefined`.
+    //
+    // Hoisted here (it was local to the shared-server branch) so ONE expression
+    // serves both paths: two copies of "rendered, else raw" is the drift that
+    // produced this defect in the first place.
+    const renderedPrompt = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
+    const childPromptPath = fwd.renderedPrompt !== undefined
+      ? path.join(sessionDir, 'briefing-input.md')
+      : briefingPath;
     const detectedClient = detectClient(mcpServer);
-    const args = ['start', '--prompt-file', briefingPath, '--task-id', taskId, '--client', detectedClient];
+    const args = ['start', '--prompt-file', childPromptPath, '--task-id', taskId, '--client', detectedClient];
     // resolvedModel is always defined here — a routing failure already
     // returned above — and is the router's executableId, not the raw alias.
     args.push('--model', resolvedModel);
@@ -434,11 +460,12 @@ const handlers = {
       let sessionId;
       try {
         // v4.5 decision 1 + Wave-1 fix (I1/I2): the template was already
-        // rendered by the shared prepareForward call above — reuse its text
-        // instead of rendering again. Notices stay LOCAL (not packNotices):
-        // a fall-through to the spawn-fallback catch must never leak one.
+        // rendered by the shared prepareForward call above — this path reuses
+        // its text (`renderedPrompt`, hoisted above with the spawn fallback in
+        // W12) instead of rendering again. Notices stay LOCAL (not
+        // packNotices): a fall-through to the spawn-fallback catch must never
+        // leak one.
         const inProcessNotices = [...fwd.notices];
-        const renderedPrompt = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
         // v4.7 PR6: the gate used to hang off `packForward.maxCost !== undefined`,
         // so a no-pack MCP start skipped it while the CLI (cli-handlers-run.js:90)
         // gated unconditionally with a cfg.maxCost fallback. Same guard, both doors.
@@ -660,13 +687,18 @@ const handlers = {
     }
 
     // Feature flag disabled (or shared server failed): fall back to per-process spawn.
-    // BL-1: create the session dir and write the prompt to briefing.md BEFORE the
-    // spawn so --prompt-file (built above) resolves to a real file, keeping the
-    // full prompt off the ~32KB-capped Windows command line.
+    // BL-1: create the session dir and write the prompt files BEFORE the spawn so
+    // --prompt-file (built above) resolves to a real file, keeping the full
+    // prompt off the ~32KB-capped Windows command line. W1-M4: briefing.md is
+    // the RENDERED text; the sibling briefing-input.md exists only when a pack
+    // template actually rendered something (see childPromptPath above).
     let child;
     try {
       fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      fs.writeFileSync(briefingPath, renderedPrompt, { mode: 0o600 });
+      if (childPromptPath !== briefingPath) {
+        fs.writeFileSync(childPromptPath, input.prompt, { mode: 0o600 });
+      }
       child = spawnSidecarProcess(args, sessionDir);
     } catch (err) {
       return textResult(`Failed to start Amicus: ${err.message}`, true);
@@ -681,8 +713,11 @@ const handlers = {
           headless: !!input.noUi,
           // Seed briefing/mode so list/status are informative even before the
           // CLI child's createSessionMetadata overwrite (or if it crashes first).
+          // W1-M4 (see the briefing.md block above): the RENDERED text, twin of
+          // the shared-server branch's own write — this field is a start row's
+          // `--search` corpus.
           mode: input.noUi ? 'headless' : 'interactive',
-          briefing: input.prompt,
+          briefing: renderedPrompt,
           // v4.5 Task 15: additive-only — absent (not null) without a pack.
           ...(packRecord ? { pack: packRecord } : {}),
         }, null, 2), { mode: 0o600 });
@@ -1316,7 +1351,8 @@ const handlers = {
       // ⚠️ W1-M4: briefing.md is the SEARCH CORPUS — src/sidecar/list-search.js reads it verbatim
       // — and a child that aborts before fanout.js:145 never re-renders it, leaving the wave
       // permanently unfindable by the text the user actually sees. Write the RENDERED text here
-      // (parity with the amicus_start path at :441/:506) and hand the child the raw input in a
+      // (parity with src/mcp-server.js :: amicus_start, whose own `renderedPrompt` was hoisted
+      // above both of its branches in v4.9 W12 — see its W1-M4 block) and hand the child the raw input in a
       // sibling file, so its own later re-render still produces byte-identical output and
       // promptMeta.template provenance survives.
       const briefingText = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;

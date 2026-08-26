@@ -221,7 +221,11 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
         ? `the chair ran but its output carried no parseable ${o.intent === 'task' ? 'ANSWER' : 'VERDICT'}: line`
         : `no chair leg completed after the fallback walk — ${chairAttempts.map(a =>
           `${a.waveId.split('-').pop()} ${a.model}: ${a.reason || a.outcome}`).join(' · ')}`,
-      effect: 'the verdict is written with overallVerdict null; will exit degraded (2)',
+      // v4.9 W12 (PR #200 tail C4): the noun forks the way `why` above already
+      // does — a task run is told its ANSWER was lost, not its verdict. The
+      // `overallVerdict` KEY does not fork (verdict.js emits it on both scales),
+      // and `what` above is intent-neutral, so this is the only word that moves.
+      effect: `the ${o.intent === 'task' ? 'answer' : 'verdict'} is written with overallVerdict null; will exit degraded (2)`,
     });
   }
 

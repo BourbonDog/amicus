@@ -16,10 +16,13 @@
  * ── NAMED MUTANTS with MEASURED red sets ───────────────────────────────────
  * Scope for all of these: this suite + tests/engine-log.test.js + the wiring
  * suite (`npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
- * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 121 tests
- * at HEAD; it read 91 before the round-3 tests and 118 before the text-sanitize
- * extraction, and both numbers are retired). Measured 2026-08-26, each applied
- * ALONE and reverted; sources restored by byte copy and checksum-verified, never
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 133 tests
+ * at HEAD; it read 91 before the round-3 tests, 118 before the text-sanitize
+ * extraction and 121 before v4.9 W12's #201 tails — all three retired). RE-RUN
+ * 2026-08-26 against the W12 tree, every one of them: the bench grew by 12
+ * tests, so no number below is carried. Only the two recorded in
+ * tests/engine-log.test.js moved (LOGBLIND, CUTATLASTPAIR); each mutant applied
+ * ALONE and reverted, sources restored by byte copy and checksum-verified, never
  * by `git checkout`.
  *
  * `OWNEDBYOTHER` — `lineIsAboutSession` degrades to `mentionsSession`, the
@@ -58,8 +61,15 @@
  *   here — the sanitizer moved there in round 3 (see the extraction pin above).
  *   Both red sets were RE-MEASURED after the move and are unchanged, which is
  *   what says the move was a move and not a rewrite.
+ * `LEVELANYWHERE` — v4.9 W12 tail C1: `isErrorLine`'s logfmt half reverts to the
+ *   substring regex over the whole raw line: **2 suites / 5 tests red** — the
+ *   three positive cases here (quoted INFO value, quoted DEBUG value, free text
+ *   past the run) and both end-to-end cases in tests/engine-log.test.js. The two
+ *   controls here stay green by design: they say the fix did not cost the logfmt
+ *   field or the columnar word it was built to keep.
  * The parse layer is ALSO covered by `LOGBLIND`, `UNANCHORED`, `CUTATLASTPAIR`,
- * `THREENEWEST` and `NEXTFILE`, whose records live in tests/engine-log.test.js.
+ * `THREENEWEST`, `NEXTFILE`, `NOMEMO` and `STALEMEMO`, whose records live in
+ * tests/engine-log.test.js.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -438,5 +448,49 @@ describe('isErrorLine: unchanged by the extraction', () => {
     expect(isErrorLine(`ERROR 2026-08-25T18:55:32 +2ms id=${SES}`)).toBe(true);
     expect(isErrorLine(`time=2026-08-25T18:55:32Z level=WARN session.id=${SES}`)).toBe(false);
     expect(isErrorLine(`WARN 2026-08-25T18:55:32 +2ms id=${SES}`)).toBe(false);
+  });
+});
+
+/**
+ * #201 final-round tail C1. `isErrorLine`'s logfmt branch was the LAST substring
+ * sweep left in this module: `/(^|\s)level=ERROR(\s|$)/` over the raw line, the
+ * exact shape rounds 2 and 3 replaced everywhere else (A2 for the format test,
+ * C5 for `error=`, B2 for the ownership fields). A quoted value containing the
+ * delimited text — an engine line that QUOTES a level, which is ordinary prose
+ * in a retry/downgrade message — false-classified the whole line as an ERROR.
+ *
+ * The tokenizer already holds a quoted value together as ONE token, and
+ * `structuralRunEnd` already says where fields end and prose begins, so the fix
+ * is the same one the other three got: read `level` as a TOP-LEVEL FIELD in the
+ * structural run, never as text.
+ */
+describe('isErrorLine: level is a top-level field, not a substring (#201 C1)', () => {
+  test('an INFO line whose QUOTED value contains level=ERROR is not an ERROR line', () => {
+    expect(isErrorLine(`time=2026-08-25T18:55:32Z level=INFO session.id=${SES} `
+      + 'msg="retrying: last attempt logged level=ERROR upstream"')).toBe(false);
+  });
+
+  test('the same text in a DEBUG line, with the quoted field last', () => {
+    expect(isErrorLine('time=2026-08-25T18:55:32Z level=DEBUG '
+      + 'note="grep for level=ERROR to find it"')).toBe(false);
+  });
+
+  test('level=ERROR in FREE TEXT, past the structural run, is prose too', () => {
+    // Same rule as lineIsAboutSession: once the run ends, the rest of the line
+    // is text, `=` and all.
+    expect(isErrorLine(`time=2026-08-25T18:55:32Z level=WARN session.id=${SES} `
+      + 'set level=ERROR in the config to see more')).toBe(false);
+  });
+
+  test('control — a real logfmt ERROR field still classifies, wherever it sits in the run', () => {
+    expect(isErrorLine(`time=2026-08-25T18:55:32Z level=ERROR session.id=${SES}`)).toBe(true);
+    expect(isErrorLine(`time=2026-08-25T18:55:32Z msg="starting up" level=ERROR session.id=${SES}`))
+      .toBe(true);
+    expect(isErrorLine(`session.id=${SES} level=ERROR`)).toBe(true);
+  });
+
+  test('control — the columnar branch is untouched: a leading ERROR word still classifies', () => {
+    expect(isErrorLine(`ERROR 2026-08-25T18:55:32 +2ms id=${SES} boom`)).toBe(true);
+    expect(isErrorLine(`  ERROR 2026-08-25T18:55:32 +2ms id=${SES} boom`)).toBe(true);
   });
 });

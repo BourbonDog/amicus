@@ -88,3 +88,59 @@ test('#87: explicit null seatLoss AND degrades is schema-valid and leaves both a
   expect(v).not.toHaveProperty('seatLoss');
   expect(v).not.toHaveProperty('degrades');
 });
+
+// ── PR #200 tail B1 — the record's `meta.intent` is load-bearing on THIS path ──
+//
+// MEASURED 2026-08-26, and the reason the tool description now says so out
+// loud: `src/mcp-server.js :: amicus_verdict` calls
+// `buildVerdict(record, decisions, {overallVerdict, seatLoss?, degrades?})` and
+// passes NO `intent`, while `src/council/verdict.js :: buildVerdict` emits the
+// key on `(record.meta && record.meta.intent === 'task') || opts.intent ===
+// 'task'`. On the MCP transport the SECOND disjunct is dead, so
+// `record.meta.intent` is the ONLY carrier of task mode — unlike the CLI, which
+// reads three (the record, run.json, and the prior verdict.json:
+// `cli-handlers-council.js :: runVerdict`). A caller that trims the record to
+// save tokens and drops `meta.intent` therefore silently rebuilds the run on
+// the REVIEW scale: `report.js` reads `verdict.intent === 'task' ? … : 'review'`,
+// so the rendered heading flips from "Answer summary" back to "Verdict summary".
+//
+// ── NAMED MUTANT "MCPINTENTCARRIER" ────────────────────────────────────────
+// MUTATION: in src/council/verdict.js :: buildVerdict, delete the
+// `(record.meta && record.meta.intent === 'task') ||` disjunct, leaving only
+// `opts.intent === 'task'` — the exact carrier the MCP path relies on.
+// MEASURED 2026-08-26, RED SET 2 of 26, applied and reverted BY HAND (restore
+// verified: 26 passed, the pre-mutant baseline). Scope — `npx jest
+// tests/mcp-verdict-chair-carry.test.js tests/council/verdict.test.js
+// --maxWorkers=2` = 2 suites / 26 tests:
+//   mcp-verdict-chair-carry 1 — "a record that KEEPS meta.intent rebuilds on
+//     the task scale" (the preserve half below).
+//   verdict 1 — "record.meta.intent === 'task' → top-level intent:'task' on the
+//     VERDICT document".
+// ⚠️ The DROP half below survives it honestly: it asserts an ABSENCE the mutant
+// also produces. It is the control, not a second detector — which is precisely
+// why the preserve half has to sit beside it.
+// ⚠️ RE-RUN, NEVER RENUMBER (house rule, tests/council/chair-packet-seat-mutants.js).
+test('a record that KEEPS meta.intent rebuilds on the task scale', async () => {
+  const r = record();
+  r.meta.intent = 'task';
+  const res = await handlers.amicus_verdict({ record: r, decisions: [] }, process.cwd());
+  expect(verdictOf(res).intent).toBe('task');
+});
+
+test('a hand-trimmed record that DROPS meta.intent loses task mode — nothing else carries it', async () => {
+  const r = record();
+  r.meta.intent = 'task';
+  delete r.meta.intent;
+  const res = await handlers.amicus_verdict({ record: r, decisions: [] }, process.cwd());
+  expect(verdictOf(res)).not.toHaveProperty('intent');
+});
+
+test('amicus_verdict\'s `record` parameter WARNS that meta.intent must survive a hand trim', () => {
+  const tool = getTools().find(t => t.name === 'amicus_verdict');
+  const describe_ = tool.inputSchema.record._def.description;
+  expect(describe_).toMatch(/meta\.intent/);
+  // Says what is lost, not merely that something is: a warning a caller can act
+  // on has to name the consequence.
+  expect(describe_).toMatch(/trim/i);
+  expect(describe_).toMatch(/ANSWER|task/);
+});

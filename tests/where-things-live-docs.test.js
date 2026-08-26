@@ -178,6 +178,97 @@ describe('B50 — "Where things live" section (docs/configuration.md)', () => {
   });
 });
 
+/**
+ * F-5 — the `routing.tier` / `routing.tier_onboarded` cost-tier surface.
+ *
+ * Filed 2026-08-08 (BACKLOG § "v4.7 docs PR — filed, not shipped"), excluded
+ * from that PR because closing it means documenting the cost-aware default
+ * picker end to end — an M-sized doc task, not a one-line correction. Shipped
+ * v4.9 W12. Both keys have been live since v3.2.0 (`git log -S setCostTier` →
+ * `8aa5d6f3`), so this was a four-rev-old hole.
+ *
+ * Anchored BY SYMBOL, re-verified 2026-08-26 (the filing's own note: the old
+ * `:543–599` line range rotted once v4.8 SI-22.4 added lines above it, and
+ * nothing caught it because `check:citations` does not scan the doc tree):
+ *   - `src/utils/config.js :: COST_TIERS`      — ['frontier','balanced','economy']
+ *   - `src/utils/config.js :: getCostTier`     — reads config.routing.tier, coerces
+ *                                                anything unrecognized to 'balanced'
+ *   - `src/utils/config.js :: setCostTier`     — persists it, throws on an unknown tier
+ *   - `src/utils/config.js :: hasTierOnboarded` / `:: markTierOnboarded`
+ *                                              — the one-time notice flag
+ * MEASURED the same day, and load-bearing for what the docs may claim:
+ *   - `setCostTier` has ZERO production callers (grep over src/, electron/,
+ *     bin/, scripts/ — only config.js's own export and tests/config.test.js).
+ *     `routing.tier` is therefore hand-edited only, like `maxCostPerMtok`.
+ *   - `getCostTier` has exactly ONE production reader:
+ *     `src/utils/provider-default-picker.js :: computePreselectedId`, via
+ *     `buildProviderDefaultChoices` — i.e. the tier decides ONLY which row the
+ *     picker preselects, nothing about routing or launch.
+ *   - `markTierOnboarded` is called from
+ *     `src/utils/start-helpers.js :: maybeOfferProviderDefaults`, itself called
+ *     from `src/cli-handlers-run.js` on `amicus start`, and only after the tip
+ *     actually printed.
+ */
+describe('F-5 — the cost-tier surface is documented (docs/configuration.md)', () => {
+  const config = read('docs/configuration.md');
+  const routingSection = mustSection(config, /## Routing[\s\S]*?(?=\n## )/, 'docs/configuration.md Routing section');
+  // Scoped to the cost-tier subsection, not the whole Routing section: the
+  // `routing.prefer` prose above it already says "hand-editing" and names
+  // `amicus setup`, so a section-wide matcher would pass on the NEIGHBOUR's
+  // words and pin nothing. The subsection must live INSIDE `## Routing` (F-5's
+  // filing puts it there) — mustSection over `routingSection` enforces both.
+  // Lazy (like `section()` above): a missing subsection must fail the pins that
+  // name it, not blow up collection for the whole file.
+  const costTier = () => mustSection(routingSection, /### Cost tier[\s\S]*/, 'configuration.md "### Cost tier" subsection');
+  const wtl = config.slice(mustIndexOf(config, '## Where things live', 'configuration.md "Where things live"'));
+
+  it('the Routing section names both keys', () => {
+    expect(costTier()).toMatch(/`routing\.tier`/);
+    expect(costTier()).toMatch(/`routing\.tier_onboarded`/);
+  });
+
+  it('names all three tiers, in COST_TIERS\' own vocabulary', () => {
+    for (const tier of ['frontier', 'balanced', 'economy']) {
+      expect(costTier()).toMatch(new RegExp('`"?' + tier + '"?`'));
+    }
+  });
+
+  it('states the default tier and that an unrecognized value coerces to it (getCostTier)', () => {
+    expect(costTier()).toMatch(/balanced/);
+    expect(costTier()).toMatch(/default/i);
+    // getCostTier does not error on junk — it silently returns 'balanced'.
+    expect(costTier()).toMatch(/coerce|falls back|treated as|anything else/i);
+  });
+
+  it('says routing.tier is hand-edited only — no command writes it (setCostTier has no caller)', () => {
+    expect(costTier()).toMatch(/hand-edit/i);
+  });
+
+  it('says what the tier actually DECIDES — the picker\'s preselected row, not routing', () => {
+    expect(costTier()).toMatch(/preselect/i);
+    expect(costTier()).toMatch(/cost-aware default picker|default picker/i);
+    // The tier is not a gateway/routing knob despite living under `routing`.
+    expect(costTier()).toMatch(/does not (change|affect)|never (changes|affects)|not a .*gateway/i);
+  });
+
+  it('names every surface the priced picker runs from', () => {
+    expect(costTier()).toMatch(/amicus key/);
+    expect(costTier()).toMatch(/amicus setup/);
+    expect(costTier()).toMatch(/Electron|setup window/i);
+  });
+
+  it('describes tier_onboarded as an automatically-written one-time flag, not a knob', () => {
+    expect(costTier()).toMatch(/one-time|once/i);
+    expect(costTier()).toMatch(/amicus start/);
+    expect(costTier()).toMatch(/don't hand-edit|do not hand-edit|written automatically/i);
+  });
+
+  it('the config.json example under "Where things live" carries both keys', () => {
+    expect(wtl).toMatch(/"tier"/);
+    expect(wtl).toMatch(/"tier_onboarded"/);
+  });
+});
+
 describe('B48 — plugin-channel command treatment (absorbs B41)', () => {
   const readme = read('README.md');
 

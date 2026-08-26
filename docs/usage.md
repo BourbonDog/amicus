@@ -465,12 +465,14 @@ amicus setup --add-alias fast=google/gemini-2.5-flash   # Add/override one alias
 the same core fields everywhere: `id`, `model`, `status`, `mode` (`interactive`/`headless`),
 `type` (`run` by default), `parentWave` (`null` unless the row is a fan-out leg), `legCount`
 (`null` unless the row is a wave), and `tag` — the one field that's omitted, not `null`, when the
-session has none. The human-readable CLI table adds a `TAG` column. Council-run rows are an
-**MCP-only** row class: the CLI's own directory scan skips their `council-<runId>.json` pointer
-files (a pointer's filename fails the session-ID pattern every other row's directory name must
-match), so `amicus list` never shows a council run — only the MCP `amicus_list` tool merges them
-in, each carrying `type: 'council-run'`, a fixed `mode: 'headless'`, and its own 80-char sanitized
-`briefing` preview plus a `stage` field naming whichever stage is currently running. The MCP tool
+session has none. The human-readable CLI table adds a `TAG` column. Council-run rows join the
+listing on **both surfaces** through a separate merge (`src/sidecar/list-council.js`): the
+directory scan itself still skips their `council-<runId>.json` pointer files (a pointer's
+filename fails the session-ID pattern every other row's directory name must match), which is
+exactly why the merge exists. Each merged row carries `type: 'council-run'`, a fixed
+`mode: 'headless'`, and its own 80-char sanitized `briefing` preview plus a `stage` field naming
+whichever stage is currently running; the CLI table renders `council(<stage>)` in its MODEL
+column and re-truncates that 80-char preview to its usual 30-char slice. The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,
 `latestPreview`) — enrichments the CLI table doesn't apply, since it prints the raw 30-char slice
@@ -482,10 +484,10 @@ at a missing or unreadable project is skipped rather than surfaced as an error. 
 fan-out wave row reads its full `briefing.md` off disk (falling back to the row's 200-char excerpt
 if that file isn't readable), and a leg row (one spawned by a wave) matches on `id`/`tag` only —
 its briefing is the parent wave's, and matching it there would surface the same wave once per leg
-it spawned. On the MCP tool specifically, a council-run row's search material is `briefing.md`
-written at MCP launch time, or falls back to the portion of `briefing-stage1.md` after
-`--- MATERIAL / BRIEFING ---` (CLI-launched runs only ever have the latter file) — this clause is
-MCP-only, since the CLI never lists a council row to search in the first place. A bare `--search`
+it spawned. A council-run row's search material (both surfaces, now that the CLI merges council
+rows too) is `briefing.md` written at MCP launch time, or falls back to the portion of
+`briefing-stage1.md` after `--- MATERIAL / BRIEFING ---` (CLI-launched runs only ever have the
+latter file). A bare `--search`
 with no value is a usage error on the CLI. Tag itself is set at launch with `--tag <t>` on
 `start`/`fanout`/`council run` (see those sections above), and is also a dimension for
 `amicus spend --group-by tag`. `amicus continue` and `amicus resume` don't take a `--tag` of
@@ -849,6 +851,102 @@ The async pattern is **start → status → read**: `amicus_start` (or `amicus_f
 `amicus_spend` is the read-only exception to that pattern: it's synchronous, takes the same filters as the [`amicus spend`](#amicus-spend) CLI command (`since`, `wave`, `council`, `filterProject`, `model`, `op`, `failed`, `groupBy`, `rows`), and returns the same versioned spend doc — unfenced, since spend docs are ids/numbers/paths only, never model-generated text. `since` takes the same `<N>d` format as the CLI's `--since` (e.g. `'7d'`). `filterProject` (not `project`) names the ledger row filter, since `project` is reserved on every MCP tool for the working-directory selector and the spend ledger is global, not per-project. Unlike the CLI, this tool never fetches the OpenRouter credit footer (`credit` is always `null`) — that's the one network-bound piece of `amicus spend`, deliberately excluded so a read-only MCP query never waits on the network.
 
 Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `timed-out`, `idle-timeout`
+
+### MCP tool parameters
+
+Every tool below also takes an optional `project` — an absolute path naming the working directory the call resolves against, auto-detected from the caller's cwd when omitted. `amicus_setup` and `amicus_guide` take no parameters at all; `amicus_council_stats` takes only `project`; and `amicus_spend`'s nine filters are described in the paragraph above. A handful of parameters not listed here are filled in by the calling agent from facts only it can see (the Cowork VM process name, the parent session UUID) rather than chosen by you — they are documented in the tool schema the agent reads, and pinned as such in `tests/mcp-tool-params-docs.test.js`.
+
+**`amicus_start`** — spawn a session with another model.
+
+- `model` — short alias (`gemini`, `gpt`, `opus`, `deepseek`, …) or a full `provider/model` id. Omitted uses your configured default.
+- `gateway` — routing preference: `auto` (direct-first, the default), `direct`, or `openrouter`.
+- `prompt` — the task briefing: objective, background, files of interest, success criteria.
+- `agent` — OpenCode agent mode (`Chat`, `Plan`, `Build`); see [OpenCode Agent Types](#opencode-agent-types) below.
+- `noUi` — run headless instead of opening the Electron window. Default `false`.
+- `thinking` — reasoning effort (`low` | `medium` | `high`). Default `medium`.
+- `timeout` — headless timeout in minutes (default 15); applies only when `noUi` is true.
+- `contextTurns` — max parent-conversation turns to include. Default 50; the MCP twin of `--context-turns`.
+- `contextSince` — time window for parent context (`30m`, `2h`, `1d`); overrides `contextTurns` when set. The MCP twin of `--context-since`.
+- `contextMaxTokens` — cap on the included context, in tokens. Default 80000.
+- `includeContext` — include the parent conversation at all. Default `true`; set `false` for a self-contained briefing (the MCP twin of `--no-context`).
+- `summaryLength` — fold-summary verbosity: `brief`, `normal` (default), or `verbose`.
+- `windowPosition` — where the interactive window lands: `right` (default), `left`, or `center`.
+- `pack` — [policy pack](#policy-packs) name or path supplying defaults; explicit params still win.
+- `tag` — a 1-64 character label (letters, digits, `_`, `-`) for `list`/`search`/`spend` grouping.
+
+**`amicus_status`** — one-shot status. Takes `taskId` (a session or wave id).
+
+**`amicus_abort`** — stop a running session. Takes `taskId`.
+
+**`amicus_wait`** — block until a run reaches a terminal state, replacing a sleep+poll loop.
+
+- `taskId` — the session or wave id to wait on.
+- `waveId` — alias for `taskId` when waiting on a fan-out wave.
+- `timeoutMs` — max wait in milliseconds. Default 50000, capped at 110000 so the call returns before typical MCP client kill windows; on expiry you get `{timedOut: true}`, not an error, and re-call.
+
+**`amicus_read`** — read a finished session. Every mode is capped at ~50KB.
+
+- `taskId` — the task to read.
+- `mode` — `summary` (default), `conversation`, or `metadata`. Paging is ignored in `metadata`.
+- `offset` — byte offset to start from (0-based). Suppresses the cap and the truncation notice, and takes precedence over `tail`.
+- `limit` — max bytes to return (1-51200). Defaults to the cap.
+- `tail` — return the LAST `limit` bytes instead of the first. Ignored when `offset` is given; it is also the implicit behaviour when content exceeds the cap and neither is set.
+
+**`amicus_list`** — list sessions.
+
+- `status` — filter by status (`all`, `running`, `complete`, `error`, `aborted`, …). Default: everything.
+- `search` — case-insensitive substring filter over id, tag, and briefing material.
+
+**`amicus_resume`** — reopen a finished session. Takes `taskId`, plus `noUi` and `timeout` with the same meanings as on `amicus_start`.
+
+**`amicus_continue`** — send a follow-up turn into a previous session.
+
+- `taskId` — the session to continue from; `prompt` — the new task description.
+- `model` / `gateway` — override the model or routing for the continuation.
+- `noUi` / `timeout` — headless mode and its timeout, as on `amicus_start`.
+- `contextTurns` / `contextMaxTokens` — how much of the previous session's conversation rides along.
+
+**`amicus_fanout`** — same briefing, many models, one wave.
+
+- `models` — 1-10 aliases or full ids (2+ for a genuine fan-out). Mutually exclusive with `council`.
+- `council` — a saved council or a built-in bench (`free`, `budget`, `frontier`) instead of `models`.
+- `prompt` — the briefing every leg receives; `agent`, `thinking`, `timeout`, `summaryLength`, `gateway`, `includeContext`, `pack` and `tag` all mean what they do on `amicus_start`, applied to every leg (`timeout` is per-leg).
+- `onComplete` — `mcp-notify`: send an MCP info notification carrying the terminal event doc when the wave finishes. Advisory and best-effort — `amicus_wait` stays the reliable completion mechanism, and exec commands are never accepted over MCP.
+
+**`amicus_council_tally`** — deterministic tiers + street-cred from an assembled council record.
+
+- `meta` — run metadata; `meta.models` lists every reviewed model, and `meta.intent` marks a task run.
+- `findings` — the run-global findings, ids already `A1`/`B2`/`C3`-prefixed.
+- `adjudications` — one row per (judge × finding): `judge`, `findingId`, `verdict`.
+- `rankings` — each judge's preference order over the reviews; ties are a nested array.
+- `runStats` — optional per-model run stats (status/duration/usage).
+
+**`amicus_verdict`** — merge a tally record with Stage-4 decisions into `verdict.json`.
+
+- `record` — a tally output record (from `amicus_council_tally`).
+- `decisions` — per-finding Stage-4 decisions; defaults to `[]`.
+- `overallVerdict` — the chair's terminal line, carried through from the engine-written `verdict.json`. It is the only copy; omit it when the chair was skipped, and never author one yourself.
+- `seatLoss` / `degrades` — the engine-written critic-seating block and the "what was lost" list, carried through the same way. Omitted means absent, never fabricated.
+- `render` — also return the markdown rendering of the decided verdict.
+- `outDir` — where to refresh `report.html` when `render` is true; rejected if it escapes the project dir. Omit to write nothing.
+
+**`amicus_council_run`** — the full headless council engine, no orchestrating agent required.
+
+- `briefingFile` — path to the briefing (self-contained material + criteria). Councils always brief via file; the file is copied into the run dir.
+- `models` — 2-10 bench seats, or `council` to name a saved council or a built-in bench instead.
+- `chair` — the synthesizing model (default `deepseek`). Must NOT be a bench seat.
+- `critic` — swap one bench seat to an adversarial brief. Must BE a bench seat; mutually exclusive with `lenses`.
+- `lenses` — one expert lens per seat (count must equal seat count). Forces no-ledger; mutually exclusive with `critic`.
+- `outDir` — the run directory. Default `<project>/council-<runId>/`.
+- `maxCost` — whole-run USD ceiling, checked before each paid stage launch.
+- `noCostGate` — disable the per-leg price gate for the WHOLE run, repairs and chair included. Independent of `maxCost`, which still caps the total. See [Cost gate](configuration.md#cost-gate).
+- `timeoutMinutes` — per-leg timeout in minutes (fanout semantics). Default 15.
+- `gateway` — routing preference, as on `amicus_start`.
+- `debate` — add a Stage-2.5 rebuttal round before the chair synthesizes.
+- `claudeReviewFile` — path to Claude's own review, included as a judged entry. Claude is reviewed and ranked like a seat, but never judges or chairs.
+- `intent` — `task` marks a task-mode run (recorded on `run.json`/`verdict.json`, kept out of the reliability ledger). `review` is the default and is never stored.
+- `ui` — auto-open the Council Workspace window for this run. Default: opens under Claude Code (local) when Electron and a display exist and `workspace.autoOpen` is not `false`.
+- `onComplete`, `pack`, `tag` — as on `amicus_fanout`.
 
 > Legacy `sidecar_*` tool names were removed entirely in v2.0.0 — the tool surface is `amicus_*` only, always. `AMICUS_LEGACY_ALIASES=1` (the v1.8.0 opt-in switch that used to restore the `sidecar_*` twins) is now a no-op: setting it on the MCP server entry changes nothing. See [docs/SHIMS.md](./SHIMS.md) for the removal record.
 

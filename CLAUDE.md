@@ -203,6 +203,7 @@ src/
 │   ├── interactive-process.js  # Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
 │   ├── leg-ids.js
+│   ├── list-council.js  # Council rows on the CLI `amicus list` surface (v4.9 W12).
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
 │   ├── models-probe.js
@@ -619,6 +620,7 @@ evals/
 | `sidecar/interactive-process.js` | Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `runInteractive()` |
 | `sidecar/leg-ids.js` |  | `deriveLegIds()` |
+| `sidecar/list-council.js` | Council rows on the CLI `amicus list` surface (v4.9 W12). | `padModel()`, `modelCell()`, `mergeCouncilRows()` |
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
@@ -742,7 +744,7 @@ evals/
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
-| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
+| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceCloses()`, `OUTBOUND_FENCE_TAGS()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |

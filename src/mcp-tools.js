@@ -519,7 +519,15 @@ function getTools() {
       'synchronous; returns the verdict. Writes nothing unless render:true AND ' +
       'outDir are given — then it also refreshes <outDir>/report.html.',
     inputSchema: {
-      record: z.record(z.any()).describe('A tally() output record (from amicus_council_tally).'),
+      // PR #200 tail B1: the trim warning lives HERE, on `record`, not on the
+      // tool description — every sibling that can be silently destroyed
+      // (overallVerdict, seatLoss, degrades) states its own preserve-or-lose
+      // rule in its own describe, and this is the same class of loss.
+      record: z.record(z.any()).describe('A tally() output record (from amicus_council_tally). '
+        + 'If you trim it by hand to save tokens, PRESERVE meta.intent: on this tool it is the '
+        + 'ONLY carrier of task mode (the CLI has three), so dropping it silently rebuilds a task '
+        + "run on the review scale — ANSWER: becomes VERDICT: and the report's Answer summary "
+        + 'becomes Verdict summary.'),
       decisions: z.array(z.object({
         id: z.string(), decision: z.string().optional(), applied: z.boolean().optional(),
         duplicateOf: z.string().nullable().optional(),

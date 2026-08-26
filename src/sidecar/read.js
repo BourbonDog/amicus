@@ -15,6 +15,10 @@ const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 // this module's own searchSessions re-export below.
 const { searchSessions } = require('./list-search');
 const { normalizeLimit, truncationNotice } = require('./list-limit');
+// v4.9 W12: council runs are first-class rows on this surface too — the merge
+// amicus_list has done since v4.0 §8, split out for the same line-budget reason
+// as the two modules above. Owns the MODEL cell's rendering and width.
+const { padModel, modelCell, mergeCouncilRows } = require('./list-council');
 
 /**
  * Format a timestamp as relative age
@@ -141,6 +145,7 @@ async function listSidecars(options) {
   let sessions = all
     ? enumerateAllProjects({ status, project })
     : enumerateSessions(project, { status });
+  sessions = mergeCouncilRows(sessions, project, { status, all });
   if (search) { sessions = searchSessions(sessions, search, { project }); }
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
@@ -159,7 +164,7 @@ async function listSidecars(options) {
     console.log(JSON.stringify(sessions, null, 2));
   } else {
     console.log(
-      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11) +
+      'ID'.padEnd(10) + padModel('MODEL') + 'STATUS'.padEnd(11) +
       'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING' +
       (all ? '  PROJECT' : '')
     );
@@ -170,7 +175,7 @@ async function listSidecars(options) {
         ((s.briefing?.length > 30) ? '...' : '');
       console.log(
         `${(s.id || '').padEnd(10)}` +
-        `${(s.type === 'wave' ? `wave(${s.legCount ?? 0} legs)` : (s.model || '')).padEnd(23)}` +
+        `${padModel(modelCell(s))}` +
         `${(s.status || 'unknown').padEnd(11)}` +
         `${(s.tag || '').padEnd(12)}` +
         `${age.padEnd(12)}` +

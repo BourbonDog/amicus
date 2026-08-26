@@ -24,8 +24,8 @@
  * THE TWO LINE FORMATS (logfmt at 1.17.x, columnar at 1.2.x), which line is an
  * ERROR, which line is about this session, and where its message begins all
  * live in `./engine-log-parse.js` — extracted in W10 round 2 and re-exported
- * below. This file is the I/O half: which files to open, in what order, and how
- * many bytes of them to read.
+ * below. This file is the I/O half: which files to open, in what order, how
+ * many bytes to read — and how long one scan is reused (#201 tail C2).
  *
  * EVERYTHING HERE IS BEST-EFFORT: every path returns null rather than
  * throwing. A log read must never break a leg's death report — the report is
@@ -56,6 +56,38 @@ const MAX_TAIL_BYTES = 256 * 1024;
  * position in the mtime order decide whether it is ever read.
  */
 const MAX_SCAN_BYTES = 2 * 1024 * 1024;
+/**
+ * How long ONE scan (the listing plus the tails it read) is reused (#201 tail
+ * C2). MEASURED, not guessed: this runs on a leg's DEATH PATH and legs die in
+ * WAVES — a wave's seats launch together, so their backstop deadlines land
+ * together, each observed on a 2-second poll tick (`POLL_INTERVAL_MS`,
+ * src/headless.js:80). Ten seconds is five of those ticks: wide enough for a
+ * whole wave to share one scan, short enough that a LATER failure gets a
+ * genuinely fresh read instead of a stale answer about an older death. Not a
+ * knob — any second-granularity value trades the same way.
+ */
+const SCAN_CACHE_TTL_MS = 10 * 1000;
+const scanCaches = new WeakMap();
+
+/**
+ * The live scan slot — `{key, at, files, tails}` — freshly reset when absent,
+ * stale, or built for other dirs. Bounded BY CONSTRUCTION: ONE slot per fs
+ * impl, holding one listing and one scan's worth of tails (MAX_SCAN_BYTES);
+ * another dir set evicts rather than accumulating. Keyed by the fs IMPL:
+ * production always passes the same `require('fs')` object, so a wave of seats
+ * shares one slot, while a test seam (or a hostile one) is a fresh object with
+ * a slot of its own — the fs seam is this module's whole testability and a
+ * shared cache would quietly break it.
+ */
+function scanSlot(fsImpl, key) {
+  const now = Date.now();
+  let slot = scanCaches.get(fsImpl);
+  if (!slot || slot.key !== key || now - slot.at >= SCAN_CACHE_TTL_MS) {
+    slot = { key, at: now, files: null, tails: new Map() };
+    scanCaches.set(fsImpl, slot);
+  }
+  return slot;
+}
 
 /**
  * Ordered, de-duplicated candidate engine-log DIRECTORIES, most specific first
@@ -178,13 +210,23 @@ function readTail(file, fsImpl, budget) {
  * built here, inside the walk, and an empty one just keeps walking. It costs no
  * extra I/O: the tail is already in memory, so the byte budget is unchanged.
  *
- * `isErrorLine` runs FIRST because it is the cheap test — ownership tokenizes
- * the line, and only ERROR lines can ever answer.
+ * `isErrorLine` runs FIRST because it is the cheaper test — it rejects a
+ * non-ERROR line on one `indexOf` and tokenizes only when the level substring
+ * is actually present (#201 tail C1), while ownership tokenizes every line it
+ * is handed. Only ERROR lines can ever answer.
+ *
+ * `tails` is the caller's memo (#201 tail C2); a cached entry carries the bytes
+ * its ORIGINAL read spent, charged again here, so the budget accounts
+ * identically warm or cold and both walk the same files to the same stop. A
+ * FAILED read is deliberately not cached — an unreadable file is a transient.
  * @returns {{excerpt: string|null, bytes: number}} `bytes` is the budget spent.
  */
-function newestExcerptInFile(file, needle, fsImpl, budget) {
-  let read;
-  try { read = readTail(file, fsImpl, budget); } catch (_e) { return { excerpt: null, bytes: 0 }; }
+function newestExcerptInFile(file, needle, fsImpl, budget, tails) {
+  let read = tails && tails.get(file);
+  if (!read) {
+    try { read = readTail(file, fsImpl, budget); } catch (_e) { return { excerpt: null, bytes: 0 }; }
+    if (tails) { tails.set(file, read); }
+  }
   const lines = read.text.split(/\r?\n/);
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
@@ -221,12 +263,17 @@ function engineErrorForSession(sessionId, options = {}) {
       : existingEngineLogDirs(options.env || process.env, fsImpl);
     if (!dirs.length) { return null; }
     const needle = sessionId.startsWith('ses_') ? sessionId : `ses_${sessionId}`;
+    // Listing and tails are shared with any other seat that died in the same
+    // window (#201 tail C2, see SCAN_CACHE_TTL_MS) — the SCAN is memoized,
+    // never the ANSWER: each seat still walks the lines for its OWN id.
+    const slot = scanSlot(fsImpl, dirs.join('\0'));
+    if (!slot.files) { slot.files = candidateLogFiles(dirs, fsImpl); }
     // Newest first, reading until the answer turns up or the byte budget is
     // spent — NOT "the N newest files" (round-2 review B1, see MAX_SCAN_BYTES).
     let budget = MAX_SCAN_BYTES;
-    for (const file of candidateLogFiles(dirs, fsImpl)) {
+    for (const file of slot.files) {
       if (budget <= 0) { break; }
-      const found = newestExcerptInFile(file, needle, fsImpl, budget);
+      const found = newestExcerptInFile(file, needle, fsImpl, budget, slot.tails);
       budget -= found.bytes;
       if (found.excerpt) { return found.excerpt; }
     }
@@ -239,9 +286,9 @@ function engineErrorForSession(sessionId, options = {}) {
 // The line-shape helpers are RE-EXPORTED from their new home in
 // `engine-log-parse.js` so this module stays the single import site a consumer
 // needs (tests/engine-log.test.js pins that they are the same function objects,
-// not copies). The internal read bounds are deliberately NOT exported: nothing
-// outside this file consumed them, and a constant in a `Key Exports` cell reads
-// as a function it is not.
+// not copies). The internal read bounds — and the scan TTL beside them — are
+// deliberately NOT exported: nothing outside this file consumed them, and a
+// constant in a `Key Exports` cell reads as a function it is not.
 module.exports = {
   engineErrorForSession,
   engineLogDirCandidates,
