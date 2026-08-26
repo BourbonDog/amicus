@@ -77,13 +77,19 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
   // `live-dead-seats.js :: isSeatLoss` and `workspace-seats.js :: retriedSeats`, which cannot
   // require src/ — all three move together, enforced only by workspace-seats.test.js's drift
   // pin. `seat-unbound` is GATED: orphan-leg, re-vote and Stage-2 judge notes share it, are NOT
-  // seat losses, and carry no retry-family field (residual R-W9a — neither does run-stages.js's
-  // skipped-retry partial note, a real loss this drops). The POSITIVE kind test aligns the
-  // three consumers and future-proofs `info`; report.js keeps the negative spelling on purpose,
-  // for pre-kind verdict.json docs this never sees.
+  // seat losses, and carry no retry-family field. (R-W9a is CLOSED at the producer in the W9 fix
+  // round: `run-retry-notes.js :: skippedWaveNote` emits the `firstFailure` fact its record
+  // already carried, so this unchanged gate admits that real loss and still excludes the three.)
+  // ⚠️ The kind test admits a kind-LESS record as a degrade — W9 fix round, council C4. The
+  // POSITIVE-only spelling rested on an ASSERTED caller inventory (everything here comes from
+  // `makeDegrade`, which stamps the default), which is convention, not structure: one new
+  // caller, or one hand-written record, and a real seat loss vanishes silently. `report.js`
+  // learned it as mutant LEGACYDROP; the two renderers now spell it exactly as this line does.
+  // What all four agree on is that an ABSENT kind is a loss — their kind LISTS still differ,
+  // deliberately. `heal`/`info` name themselves here and are still excluded.
   const gatedUnbound = d => d.channel === 'seat-unbound'
     && (d.data.retryWaveId || d.data.firstFailure) && (d.data.seatId || d.data.seat);
-  const real = degrades.filter(d => d.kind === 'degrade' && d.data
+  const real = degrades.filter(d => (d.kind === undefined || d.kind === 'degrade') && d.data
     && (d.channel === 'dead-leg' || d.channel === 'dead-wave' || gatedUnbound(d)));
   const waves = real.filter(d => d.channel === 'dead-wave')
     .map(d => ({ waveId: d.data.waveId, models: d.data.models || [], reason: d.data.reason }));

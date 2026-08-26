@@ -267,8 +267,11 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
   ];
 
   test('(9) PR5b: a record naming ONE twin by seatId badges exactly that seat', () => {
-    // retryLegStillDeadNote / missingLegStillDeadNote on their dead-leg branch: the only
-    // emitter arm of five that names a seat (run-retry.test.js:628 pins the seatIds).
+    // retryLegStillDeadNote / missingLegStillDeadNote on their dead-leg branch, which at PR5b
+    // was the only emitter arm of five that named a seat (run-retry.test.js:628 pins the
+    // seatIds). ⚠️ Dated: PR5c and v4.9 W9 P1 closed the rest, and the W9 fix round added a
+    // sixth arm (`skippedWaveNote`) that names one too — so the "only" is 2026-08-15 history.
+    // The case below is unaffected; it pins the arm it names, not the count.
     const degrades = [{
       kind: 'degrade', channel: 'dead-leg', what: 'seat deepseek did not review',
       why: 'retried once', effect: '1 of 2 seats reviewed',
@@ -363,7 +366,9 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
   /**
    * v4.8 PR5c Task 4 — restore the retriedSeats mirror.
    *
-   * workspace-seats.js:49-54 said, verbatim, to "restore the full mirror rather than letting
+   * workspace-seats.js :: retriedSeats's docblock said, verbatim — in its PRE-PR5c wording,
+   * which that PR then replaced; cited by line until the v4.9 W9 fix round re-opened it and
+   * found the quoted sentence gone from the cited span — to "restore the full mirror rather than letting
    * the two drift silently" WHEN the deferred M3/M4 PR landed. This is that PR: Task 1 gave
    * srcLeg records `data.seatId` and dead-wave records `data.seats[]`, so the two comments
    * claiming "exactly one arm supplies it" and "dead-wave carries models[] — ALIASES, with no
@@ -531,6 +536,11 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
       }],
     },
     {
+      // ⚠️ W9 fix round: this fixture carried `firstFailure` and NO `retryWaveId`, a shape no
+      // shipped builder emits — every still-dead-after-retry arm of run-retry-notes.js emits
+      // both, and the `why` here already claims a retry wave ran. `retryWaveId` restored so
+      // the case pins what it always meant to. The firstFailure-WITHOUT-retryWaveId shape now
+      // has a real producer (`skippedWaveNote`) and its own case at the end of this list.
       name: 'dead-wave record with models[] and firstFailure',
       alias: 'bravo',
       expected: true,
@@ -538,7 +548,7 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
         kind: 'degrade', channel: 'dead-wave', what: 'Stage-1 wave r1-s1 (bravo) produced NO legs',
         why: 'no reason recorded; the once-only retry wave also produced no legs', effect: '0 of 1 seats reviewed',
         data: {
-          waveId: 'r1-s1', models: ['bravo'], reason: 'no reason recorded',
+          waveId: 'r1-s1', models: ['bravo'], reason: 'no reason recorded', retryWaveId: 'r1-s1r1',
           firstFailure: { seat: 'bravo', class: 'wave', waveId: 'r1-s1', reason: 'no legs produced' },
         },
       }],
@@ -573,8 +583,11 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
     // sets that land HERE: UNBOUNDBLIND-A (channel dropped from `live-dead-seats.js ::
     // isSeatLoss`) and UNBOUNDBLIND-B (dropped from `retriedSeats` instead) each red the two
     // `expected=true` cases below — and for B these two ARE the whole red set, so this pin is
-    // the only thing holding the mirror. GATERAW-B (retry-family conjunct dropped from
-    // `retriedSeats`) reds the ORPHAN-LEG case. Full table: dead-seat-twins.test.js's W9 header.
+    // the only thing holding the mirror. GATERAW-B (the hoisted guard removed from
+    // `retriedSeats`) reds THREE cases as of the W9 fix round, re-measured: the ORPHAN-LEG case,
+    // the "NEITHER retryWaveId nor firstFailure" case above, and the SKIPPED case below — the set
+    // grew because that guard was narrowed to `retryWaveId` and now carries the whole retried
+    // rule. Full table: dead-seat-twins.test.js's W9 header.
     {
       name: 'W9: seat-unbound PARTIAL-wave record (waveStillDeadNote, retryWaveId + seatId)',
       alias: 'echo',
@@ -623,6 +636,40 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
         why: "its join key 'hotel' names none of the judges this wave launched",
         effect: 'the re-vote was NOT applied; the provisional verdict stands',
         data: { waveId: 'r1-rv', legId: 'leg-9', judge: 'hotel', key: 'hotel' },
+      }],
+    },
+    {
+      // ---- v4.9 W9 FIX ROUND (council A1/C1 + the SKIPRETRIED narrowing). The third consumer's
+      // half of R-W9a's closure. `run-retry-notes.js :: skippedWaveNote` is a real LOSS —
+      // `isSeatLoss` admits it and `deadSeats` renders a row (pinned in dead-seat-twins.test.js)
+      // — but the retry never ATTEMPTED the seat, so neither surface may call it retried. That is
+      // what makes this case sharper than the three above: the two consumers must agree on
+      // "not retried" for a record they DISAGREE about admitting as a row at all.
+      // Mutant SKIPRETRIED (either consumer's retried read widened back to
+      // `retryWaveId || firstFailure`) reds this case — one-sidedly, so the pin also holds the
+      // mirror the way UNBOUNDBLIND-B does.
+      name: 'W9: SKIPPED-retry seat-unbound note (firstFailure, no retryWaveId) — a loss, but NOT retried',
+      alias: 'india',
+      expected: false,
+      degrades: [{
+        kind: 'degrade', channel: 'seat-unbound', what: 'seat india did not review',
+        why: "the wave returned 1 of 2 legs and none of them was this seat's",
+        effect: 'Those seats are NOT in this council.',
+        data: { waveId: 'r1-s1', models: ['india'], reason: 'x', seat: 'india', seatId: 'india',
+          firstFailure: { seat: 'india', class: 'missing', waveId: 'r1-s1', reason: 'x' } },
+      }],
+    },
+    {
+      // C4: the same record with NO `kind` key at all — a verdict.json document older than
+      // kinds, which this panel reads through its `verdict.degrades` fallback. The positive
+      // `kind === 'degrade'` dropped it from both consumers silently.
+      name: 'C4: a KIND-LESS dead-leg record is still a degrade on both sides',
+      alias: 'juliett',
+      expected: true,
+      degrades: [{
+        channel: 'dead-leg', what: 'seat juliett did not review',
+        why: "the leg ended 'error'", effect: '0 of 1 seats reviewed',
+        data: { seat: 'juliett', status: 'error', reason: null, retryWaveId: 'r1-s1r1' },
       }],
     },
   ];

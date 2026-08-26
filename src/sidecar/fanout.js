@@ -203,7 +203,7 @@ async function runFanout(options) {
   // ⚠️ v4.4.1 Task 0.5 — the external-server seam runHeadless has carried since
   // v4.0 (src/headless.js:245): a caller that already owns a server passes it in
   // and we must NOT close it. Added here because a council run launches its
-  // Stage-1 seat wave and its critic solo under ONE Promise.all (run-stages.js:83)
+  // Stage-1 seat wave and its critic solo under ONE Promise.all (run-stages.js:84)
   // and two concurrent startOpenCodeServer calls race on OpenCode's SQLite —
   // run v441plan01 lost four of five seats in 736ms to `database is locked`.
   // NAME DIVERGENCE, deliberate: runHeadless spells the pair client+server, but

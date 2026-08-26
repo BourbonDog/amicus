@@ -69,6 +69,52 @@ function waveStillDeadNote(w, unit) {
 }
 
 /**
+ * The retry pass never ATTEMPTED this wave (run-retry.js's two `skipped` arms: an unmappable
+ * or zero-model unit, or `ctx.overBudget()`). Lifted out of run-stages.js's emit loop in the
+ * v4.9 W9 fix round so it sits beside `waveStillDeadNote`, whose partial arm it mirrors: two
+ * spellings of ONE record shape in two files is what let them drift apart in the first place.
+ *
+ * ⚠️ Carries NO `retryWaveId`, and must not: no retry wave was ever launched, so naming one
+ * would be a false statement about spend, and the two Workspace renderers read exactly that
+ * field to decide the 'retried once' phrasing.
+ *
+ * v4.9 W9 fix round 1 (council A1/C1). The partial arm previously carried `{waveId, models,
+ * reason, seat}` and no retry-family field at all, so all three W9 consumers
+ * (`live-dead-seats.js :: isSeatLoss`, `workspace-seats.js :: retriedSeats`,
+ * `verdict-seat-loss.js :: deriveSeatLoss`) dropped a genuinely dead seat — residual R-W9a,
+ * pinned known-wrong and escalated. It now emits the two facts it has ALREADY:
+ *   `seatId`  — from the record's own `seats[0]` (stage1-bind.js :: missingSeatDeadWave carries
+ *               it), same null discipline as the arms above: an unidentified slot emits `null`,
+ *               NEVER the alias.
+ *   `firstFailure` — the canonical `run-retry-group.js :: recordFailure` shape for a partial
+ *               wave (`class: 'missing'`, the record's own waveId/reason). It restates this
+ *               record's first-pass loss and claims nothing about a retry, which is what opens
+ *               the consumers' retry-family gate WITHOUT loosening it: orphan-leg, re-vote and
+ *               Stage-2 judge notes still carry neither field and stay excluded.
+ */
+function skippedWaveNote(d) {
+  const partial = !!d.partial;
+  const alias = (d.models || [])[0];
+  return {
+    channel: partial ? 'seat-unbound' : 'dead-wave',
+    // A `partial` record is one seat of a wave that DID produce legs, so the plain dead-wave
+    // sentence would be false. Everything below `models` rides on that shape ONLY: adding any
+    // of it unconditionally breaks an exact toEqual on a real dead wave.
+    what: partial
+      ? `seat ${alias} did not review`
+      : `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
+    why: d.reason,
+    effect: 'Those seats are NOT in this council. The run continues with the bench that did '
+      + 'launch and will exit degraded (2)',
+    data: { waveId: d.waveId, models: d.models, reason: d.reason,
+      ...(partial ? { seat: alias,
+        seatId: ((d.seats || [])[0] && (d.seats || [])[0].id) || null,
+        firstFailure: { seat: alias, class: 'missing', waveId: d.waveId, reason: d.reason },
+      } : {}) },
+  };
+}
+
+/**
  * Leg-origin, retry wave died wholesale (bench-batch case).
  *
  * v4.8 PR5c: `seatId` is the caller's Stage-1 leg->seat binding, or null when the leg was
@@ -133,4 +179,5 @@ function missingLegStillDeadNote(seat, ff, unit, counts) {
     data: { seat, status: null, reason: null, firstFailure: ff, retryWaveId: unit.waveId } };
 }
 
-module.exports = { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote };
+module.exports = { waveStillDeadNote, skippedWaveNote, srcLegStillDeadNote,
+  retryLegStillDeadNote, missingLegStillDeadNote };

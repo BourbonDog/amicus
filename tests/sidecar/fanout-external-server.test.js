@@ -5,7 +5,7 @@
  * v4.4.1 Task 0.5 — runFanout's external-server seam.
  *
  * The defect: a council run launches its Stage-1 seat wave and its critic solo
- * under ONE Promise.all (run-stages.js:83). Both called runFanout, and runFanout
+ * under ONE Promise.all (run-stages.js:84). Both called runFanout, and runFanout
  * started a server unconditionally — so two starts ~140ms apart raced on
  * OpenCode's SQLite and the loser died with `database is locked`. Run
  * v441plan01 lost four of five seats in 736ms and failed quorum.

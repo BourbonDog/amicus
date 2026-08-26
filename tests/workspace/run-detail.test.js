@@ -443,7 +443,7 @@ describe('getRunDetail', () => {
 
   // Final-review fix wave (finding 1): getRunDetail returns `run` and `verdict` wholesale (the
   // `return { runId, runDir, run, tally, verdict, artifacts, derived }` line above) — the
-  // renderer feature (electron/workspace-ui/workspace-seats.js:11-15) reads
+  // renderer feature (electron/workspace-ui/workspace-seats.js:8-12) reads
   // `state.detail.run.degrades` / `state.detail.verdict.seatLoss` straight off that payload, with
   // no `derived` field carrying either separately. Nothing pinned that either field actually
   // survives the round trip — a future payload-trim refactor (stripping "unrecognized" keys off

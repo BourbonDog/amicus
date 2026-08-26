@@ -35,7 +35,7 @@ function bindStage1Waves(waves) {
     // either: an orphan leg is a review that LANDED — materializeReviews writes it
     // under its alias name — for a seat we cannot name. Retrying that seat would
     // buy a SECOND paid leg and put two reviews on one seat, breaking the
-    // invariant run-stages.js:142-151 states. The orphan is already announced on
+    // invariant run-stages.js:130-139 states. The orphan is already announced on
     // `seat-unbound` at bind time (R-B: orphans are not a loss and not retryable).
     if (legs.length === 0 || strays.length > 0) { continue; }
     for (const seat of unbound) {

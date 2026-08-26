@@ -402,7 +402,7 @@ electron/
 │   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
 │   ├── workspace-panels.js  # Council Workspace — name resolution + the matrix/verdict/seats panel adapters
 │   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
-│   ├── workspace-seats.js  # Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1,
+│   ├── workspace-seats.js  # Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1, v4.6.2 PR4): moved
 │   ├── workspace-verbs.js  # Council Workspace — action verbs (v4.4 §5, ⚠️ DE-ROT F05 split of
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
@@ -561,7 +561,7 @@ evals/
 | `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()`, `planStillDeadSources()`, `seatKey()` |
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
-| `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
+| `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |

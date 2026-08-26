@@ -155,16 +155,20 @@ describe('SL-2: heals never count as losses', () => {
 /**
  * v4.9 W9 (SI-02) — `deriveSeatLoss` is the THIRD consumer that was blind to `seat-unbound`,
  * and the one whose output reaches verdict.json. Two changes, one commit with the renderers:
- *   1. the kind predicate is now the POSITIVE `kind === 'degrade'`, aligning all three
- *      consumers and future-proofing v4.9's `info` kind;
+ *   1. the kind predicate names the kinds it EXCLUDES rather than trusting who calls it —
+ *      `kind === undefined || kind === 'degrade'`, aligning all three consumers and
+ *      future-proofing v4.9's `info` kind. (W9 shipped this as the positive test alone; the
+ *      fix round's council C4 widened it to admit a kind-LESS record — see that block below.)
  *   2. the gated `seat-unbound` family joins `dead-leg` as a seat loss.
  * `deadBenchSeats` stays a list of ALIAS strings — `live-dead-seats.js`'s derivative-absorb
  * rule reads it that way, and `data.seat` compares against `o.critic`, an alias.
  *
  * Named mutant GATERAW-C (measured, applied and reverted): drop the retry-family conjunct from
- * `gatedUnbound` — red set (4), all in this block: both ORPHAN-LEG controls, the Stage-2
- * judge-side control, and R-W9a. The full mutant table for W9, including the two renderer
- * twins, is in `tests/workspace/dead-seat-twins.test.js`'s W9 header.
+ * `gatedUnbound` — red set (3), all in this block: both ORPHAN-LEG controls and the Stage-2
+ * judge-side control. ⚠️ RE-MEASURED at the W9 fix round: it was 4, and R-W9a left the set when
+ * that record started being admitted on its own merits, so raw admission no longer changes its
+ * answer. The full mutant table for W9, including the two renderer twins and the fix round's
+ * five additions, is in `tests/workspace/dead-seat-twins.test.js`'s W9 header.
  */
 describe('W9: deriveSeatLoss admits the gated seat-unbound family', () => {
   const unbound = (data) => mk('seat-unbound', data);
@@ -235,16 +239,29 @@ describe('W9: deriveSeatLoss admits the gated seat-unbound family', () => {
     expect(s.deadBenchSeats).toEqual([]);
   });
 
-  test('R-W9a (known-wrong): the SKIPPED-path partial note is excluded — no retry family', () => {
-    // Disclosed residual, mirroring the renderers' identical pin in dead-seat-twins.test.js.
+  test('R-W9a (CLOSED): the SKIPPED-path partial note IS a lost seat', () => {
+    // Closed at the producer in the W9 fix round (council A1/C1): `run-retry-notes.js ::
+    // skippedWaveNote` emits the `firstFailure` fact the record already carried, so this
+    // gate admits it UNCHANGED. Mirrors the renderers' flipped pin in dead-seat-twins.test.js.
     const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
-      unbound({ waveId: 'r1-s1', models: ['beta'], reason: 'x', seat: 'beta' }),
+      unbound({ waveId: 'r1-s1', models: ['beta'], reason: 'x', seat: 'beta', seatId: 'beta#2',
+        firstFailure: { seat: 'beta', class: 'missing', waveId: 'r1-s1', reason: 'x' } }),
     ] });
+    expect(s.deadBenchSeats).toEqual(['beta']);
+  });
+
+  test('R-W9a: a skipped note naming the CRITIC unseats it', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-c1', models: ['critic-m'], reason: 'over budget', seat: 'critic-m',
+        seatId: 'critic-m',
+        firstFailure: { seat: 'critic-m', class: 'missing', waveId: 'r1-c1', reason: 'over budget' } }),
+    ] });
+    expect(s.criticSeated).toBe(false);
     expect(s.deadBenchSeats).toEqual([]);
   });
 });
 
-describe('W9: the kind predicate is the positive `kind === degrade`', () => {
+describe('W9: the kind predicate excludes `heal`/`info` and admits a kind-LESS record', () => {
   test("an `info` record on a loss channel is not a loss (kind !== 'heal' admitted it)", () => {
     const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
       mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null }, { kind: 'info' }),
@@ -266,15 +283,32 @@ describe('W9: the kind predicate is the positive `kind === degrade`', () => {
     expect(s.deadBenchSeats).toEqual(['beta']);
   });
 
-  test('MEASURED CONSEQUENCE: a record with NO kind key is no longer a loss here', () => {
-    // Deliberate and NOT the same call report.js made. Every record `deriveSeatLoss` sees in
-    // production comes from `utils/degrade.js :: makeDegrade` via the run's own sink, which
-    // stamps kind:'degrade' by default — its only production caller is
-    // `run-verdict-files.js :: writeVerdictFiles`, fed in-process records from that sink.
-    // report.js reads verdict.json documents that may PREDATE kinds, which is why it keeps the
-    // negative spelling (see its LEGACYDROP note). Pinned so the asymmetry is intentional.
+  test('C4: a record with NO kind key IS a loss — convention made structural', () => {
+    // W9 fix round, council C4. The positive spelling's safety rested on an ASSERTED caller
+    // inventory ("every record here comes from makeDegrade, which stamps kind:'degrade'") —
+    // true today, unenforced, and one new caller away from a silent drop. `report.js` already
+    // learned this the hard way (named mutant LEGACYDROP): a kind-LESS record is a loss, and
+    // `utils/degrade.js :: formatDegrade` still renders one as 'Notice'. Same rule here now,
+    // so the three consumers agree without depending on who calls them.
     const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m',
       degrades: [{ channel: 'dead-leg', what: 'w', why: 'y', effect: 'e', data: { seat: 'beta' } }] });
+    expect(s.deadBenchSeats).toEqual(['beta']);
+  });
+
+  test('C4: a kind-LESS record naming the CRITIC unseats it too', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m',
+      degrades: [{ channel: 'dead-leg', what: 'w', why: 'y', effect: 'e',
+        data: { seat: 'critic-m', status: 'timeout' } }] });
+    expect(s.criticSeated).toBe(false);
+  });
+
+  test('C4 CONTROL: kind-less does not mean kind-blind — an explicit heal is still excluded', () => {
+    // The property the positive spelling existed for, restated against the widened predicate:
+    // only the ABSENCE of the key is admitted, never a `heal`/`info` that names itself.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null }, { kind: 'heal' }),
+      mk('dead-leg', { seat: 'gamma', status: 'timeout', reason: null }, { kind: 'info' }),
+    ] });
     expect(s.deadBenchSeats).toEqual([]);
   });
 });

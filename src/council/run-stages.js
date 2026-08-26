@@ -27,6 +27,7 @@ const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
 const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
+const { skippedWaveNote } = require('./run-retry-notes');
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -108,22 +109,9 @@ async function runStage1(ctx) {
       }).filter(w => w.models.length > 0) };
   }
 
-  for (const d of retry.skippedDeadWaves) {
-    // A `partial` record is one seat of a wave that DID produce legs, so the
-    // plain dead-wave sentence would be false. `seat` rides only on that shape:
-    // adding it unconditionally breaks an exact toEqual on a real dead wave.
-    ctx.degrade.note({
-      channel: d.partial ? 'seat-unbound' : 'dead-wave',
-      what: d.partial
-        ? `seat ${(d.models || [])[0]} did not review`
-        : `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
-      why: d.reason,
-      effect: 'Those seats are NOT in this council. The run continues with the bench that did '
-        + 'launch and will exit degraded (2)',
-      data: { waveId: d.waveId, models: d.models, reason: d.reason,
-        ...(d.partial ? { seat: (d.models || [])[0] } : {}) },
-    });
-  }
+  // Same shape as `stillDeadNotes` below: the builder lives in run-retry-notes.js (v4.9 W9
+  // fix round), beside `waveStillDeadNote` whose partial arm it mirrors; this file EMITS.
+  for (const d of retry.skippedDeadWaves) { ctx.degrade.note(skippedWaveNote(d)); }
   for (const leg of retry.skippedDeadLegs) {
     ctx.degrade.note({
       channel: 'dead-leg',

@@ -4246,6 +4246,12 @@ Reference points measured in the same pass, for anyone reading a stale number el
 file: `src/council/run-launch.js` **244**, `electron/workspace-ui/live-seats.js` **125**,
 `electron/workspace-ui/live-dead-seats.js` **226**, `src/council/stage1-bind.js` **86**,
 `src/council/run-retry-notes.js` **126**.
+⚠️ Three of those five moved in v4.9 W9 and its round-1 council fix wave (2026-08-26), which is
+exactly the "stale number elsewhere" this paragraph warns about, so: `live-dead-seats.js` **300**
+(at the gate's ceiling), `run-retry-notes.js` **183** (it absorbed `skippedWaveNote` from
+run-stages.js), `run-stages.js` **282** (it gave that builder up). ⚠️ `live-dead-seats.js` and
+`workspace-seats.js` both sit at **300/300** — the next line either file gains needs an extraction
+first, not a comment trim.
 
 ### Size gate — re-measured 2026-08-16 (kept: the Phase 0/Phase 1 before-and-after)
 
@@ -4443,22 +4449,62 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   identically in `live-dead-seats.js :: isSeatLoss`, `retriedSeats` and `deriveSeatLoss`'s
   `gatedUnbound`; the two renderer filters moved in ONE commit per the mirror constraint, and
   the behavioural drift pin in `workspace-seats.test.js` gained four cases so a one-sided
-  revert reds. The producer half shipped too: `waveStillDeadNote`'s partial arm emits a scalar
-  `data.seatId` (v4.9 W9 P1), closing the fifth of five emitter arms. `deriveSeatLoss` also
-  moved to the POSITIVE `kind === 'degrade'`, aligning the three consumers — `report.js` keeps
-  its negative spelling on purpose and its comment now says why.
+  revert reds — six as of the fix round. The producer half shipped too: `waveStillDeadNote`'s
+  partial arm emits a scalar `data.seatId` (v4.9 W9 P1), closing the fifth of five emitter arms.
+  `deriveSeatLoss` also moved to the POSITIVE `kind === 'degrade'`, aligning the three consumers.
+  ⚠️ **Two of those sentences were CORRECTED by the round-1 council fix wave (2026-08-26)**, and
+  are kept above as the dated 2026-08-25 record:
+  - the kind predicate is no longer the positive test alone. Council **C4** (Confirmed): its
+    safety rested on an asserted caller inventory, which is convention, not structure — so all
+    three consumers now spell it `kind === undefined || kind === 'degrade'`, citing `report.js`'s
+    LEGACYDROP lesson by name. `report.js` still excludes a different KIND LIST, deliberately;
+    what the four now agree on is that an ABSENT kind is a loss.
+  - there are **SIX** emitter arms, not five: `run-retry-notes.js :: skippedWaveNote` joined the
+    module in the fix round, lifted out of `run-stages.js`'s emit loop so it sits beside the
+    `waveStillDeadNote` partial arm it mirrors. It emits `data.seatId` on the same null
+    discipline, so the "five of five" property holds as six of six.
   ⚠️ **The `data.legId` discriminator this entry prescribed was NOT added as a separate rule:
   measured, both `legId`-carrying shapes (`orphanLegNote`, `reVoteUnboundNote`) carry no
   retry-family field, so the one gate subsumes it — and the retry-family gate additionally
   excludes `run-stage2.js`'s judge-side `seat-unbound` note, which a `legId`-only rule would
   have admitted as a false "did not review" row.
-  ⚠️ **Disclosed residual R-W9a (new, measured):** `run-stages.js`'s SKIPPED-retry partial note
-  (`{waveId, models, reason, seat}` on `seat-unbound`, emitted when the once-only retry never
-  attempted the seat) is a genuine loss carrying no retry-family field, so the gate drops it.
-  Pinned known-wrong in `dead-seat-twins.test.js` and `verdict-degrades.test.js`. Closing it
-  needs either a producer field or an extra gate arm — a design call, deliberately not taken
-  inside W9. **Residual R-W9b:** with no `run.criticSeat` on the document the critic ROLE is
+  ✅ **Residual R-W9a — CLOSED 2026-08-26 by the round-1 council fix wave (findings A1 + C1,
+  both Confirmed).** The residual as filed: the SKIPPED-retry partial note (`{waveId, models,
+  reason, seat}` on `seat-unbound`, emitted when the once-only retry never attempted the seat)
+  is a genuine loss carrying no retry-family field, so all three consumers dropped it; the
+  entry called closing it "a design call, deliberately not taken inside W9". The council
+  refused that deferral and it did not survive contact: the choice was between a producer
+  field and an extra gate arm, and only ONE of those is honest.
+  Closed at the **producer**, with the gate untouched. `run-retry-notes.js :: skippedWaveNote`
+  now emits the `firstFailure` fact the record has always carried implicitly — the canonical
+  `run-retry-group.js :: recordFailure` shape for a partial wave (`class: 'missing'`, the
+  record's own waveId/reason) — plus the `data.seatId` its `seats[0]` supplies. The gate is
+  byte-unchanged, so the three exclusion controls (orphan-leg, re-vote, Stage-2 judge) stay
+  green; their mutants were re-measured and two of the three red sets moved.
+  ⚠️ It emits **NO `retryWaveId`, and must not**: nothing was retried, and naming a wave that
+  never launched is a false statement about spend. That field is also what the two renderers
+  read to decide the "retried once" phrasing — which the W9 gate spelled as
+  `retryWaveId || firstFailure`, the SAME expression, so admitting the record would have
+  labelled a never-retried seat retried. Both renderers' `retried` READ is therefore narrowed
+  to `retryWaveId` alone (mutant SKIPRETRIED-A/B). Measured and safe: no shipped builder emits
+  `firstFailure` without `retryWaveId`.
+  ⚠️ **Gap this exposed, now closed:** every W9 consumer pin was fixture-based, so mutant SKIPFF
+  (drop `firstFailure` at the producer) red exactly ONE test in the entire suite. An end-to-end
+  case in `run-stages.test.js` now feeds the note the engine actually emits to both production
+  readers.
+  **Residual R-W9b:** with no `run.criticSeat` on the document the critic ROLE is
   still alias-inferred (the row now survives regardless — see R4 below).
+  ✅ **Round-1 council C2/C3 (both Confirmed, minor) — also closed in that wave**, both in
+  `live-dead-seats.js :: deadSeats`. **C2:** seat-keying the `byRole` READ dropped the
+  alias-side suppression the pre-W9 read had, so a live critic leg carrying no seat id (a
+  terminal cost row, or any document written before v4.8 R5) left a seat-KEYED critic candidate
+  matching nothing — a ghost "critic did not review" row. The read now consults both keyspaces,
+  with the alias arm fed ONLY by unseated live legs so R4's fix cannot re-open. **C3:** `roleOf`
+  trusted a truthy key to be seat-space, but `firstFailure.seatId` is ALIAS-valued on the
+  inexact-twin branch (residual R3) — so the critic's OWN record came back role null while
+  `deriveSeatLoss`, comparing `data.seat` to the alias, called it a critic loss. The critic tag
+  now also compares the key against the critic alias, and the cross-surface agreement the
+  finding named is pinned as a test that drives both surfaces with one record.
   (⚠️ **Both citations were re-derived and
   re-opened at T-A8, 2026-08-17.** They read `live-seats.js:188` and `workspace-seats.js:61`: the
   first was OUT OF RANGE — `live-seats.js` is **125** lines, and the filter moved to
@@ -6380,6 +6426,11 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     (*"seat-unbound has no consumer"*) — and the seat OBJECT is already on the record it is
     built from (`stage1-bind.js :: missingSeatDeadWave` carries `seats: [m.seat]`), so the
     producer half of the v4.9 work is ~one line.
+    ⚠️ **The ARM COUNT moved again 2026-08-26** (v4.9 W9 round-1 council fix wave, A1/C1): the
+    skipped-retry note that lived inline in `run-stages.js`'s emit loop was lifted into this same
+    module as `skippedWaveNote`, beside the partial arm it mirrors — so the table is **SIX of
+    six**, and the new arm keeps the same scalar-`seatId` null discipline. Read "five of five"
+    below as the dated 2026-08-25 record.
     ✅ **CLOSED 2026-08-25 (v4.9 W9 P1) — FIVE of five.** That partial arm now emits a SCALAR
     `data.seatId` (`((w.seats || [])[0] && (w.seats || [])[0].id) || null`; an unidentified slot
     emits `null`, never the alias — the dead-wave array's discipline, scalar because this arm

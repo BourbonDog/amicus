@@ -9,6 +9,10 @@
 // The residual pins at the bottom assert KNOWN-WRONG behaviour on purpose. The owner ruling
 // conditions acceptance on naming and pinning each one, so they cannot rot into a surprise.
 const LS = require('../../electron/workspace-ui/live-seats');
+// The verdict-side twin of the same rule. Required HERE — not only in verdict-degrades.test.js —
+// because the W9 fix round's C3 finding is a DIVERGENCE between the two surfaces, and a
+// divergence cannot be pinned from inside either one of them alone.
+const { deriveSeatLoss } = require('../../src/council/verdict-seat-loss');
 
 const deadLeg = (seat, seatId) => ({
   kind: 'degrade', channel: 'dead-leg',
@@ -22,11 +26,13 @@ const deadWave = (models, seats) => ({
 const rows = (degrades, seatLoss, live, runMeta) =>
   LS.deadSeats(degrades, seatLoss || null, live || [], runMeta || null);
 
-// v4.9 W9 — the `seat-unbound` shapes. SEVEN emit sites ride this channel (three arms of
-// run-retry-notes.js plus one each in stage1-bind.js, run-debate-revote.js, run-stage2.js and
-// run-stages.js) and they do not mean the same thing, which is why the consumers gate rather
-// than admitting it raw. The five fixtures below cover every family: the first two are
-// retried-and-still-dead seat losses; the rest are not losses this surface owns.
+// v4.9 W9 — the `seat-unbound` shapes. SEVEN emit sites ride this channel (FOUR arms of
+// run-retry-notes.js — `skippedWaveNote` joined them in the W9 fix round, lifted out of
+// run-stages.js's emit loop — plus one each in stage1-bind.js, run-debate-revote.js and
+// run-stage2.js) and they do not mean the same thing, which is why the consumers gate rather
+// than admitting it raw. The five fixtures below cover every family: the first three are seat
+// LOSSES (two retried-and-still-dead, one never retried at all); the rest are not losses this
+// surface owns.
 const unboundPartial = (seat, seatId) => ({          // run-retry-notes.js :: waveStillDeadNote
   kind: 'degrade', channel: 'seat-unbound',
   data: { waveId: 'r1-s1', models: [seat], reason: 'x', retryWaveId: 'w1',
@@ -45,9 +51,13 @@ const reVoteUnbound = () => ({                       // run-debate-revote.js :: 
   kind: 'degrade', channel: 'seat-unbound',
   data: { waveId: 'r1-rv', legId: 'leg-9', judge: 'd', key: 'd' },
 });
-const skippedPartial = (seat) => ({                  // run-stages.js, skipped-retry path
+// :: skippedWaveNote — the retry pass never ATTEMPTED this seat (unmappable unit, or over
+// budget). A LOSS, admitted since the W9 fix round, and the one loss shape with NO
+// `retryWaveId`: nothing was retried, so the row must not say it was.
+const skippedPartial = (seat, seatId) => ({
   kind: 'degrade', channel: 'seat-unbound',
-  data: { waveId: 'r1-s1', models: [seat], reason: 'x', seat },
+  data: { waveId: 'r1-s1', models: [seat], reason: 'x', seat, seatId: seatId || null,
+    firstFailure: { seat, class: 'missing', waveId: 'r1-s1', reason: 'x' } },
 });
 const stage2Unbound = (seat) => ({                   // run-stage2.js, judge leg never returned
   kind: 'degrade', channel: 'seat-unbound',
@@ -86,30 +96,58 @@ describe('T2 — the fix', () => {
 /**
  * v4.9 W9 (SI-02) — `seat-unbound` stops being invisible.
  *
- * NAMED MUTANTS, all measured against `tests/workspace/` (533 tests at HEAD) and
- * `tests/council/verdict-degrades.test.js` (26). Every red set below was OBSERVED, not
- * predicted; each mutation was applied, run, and reverted one at a time.
+ * NAMED MUTANTS. Every red set below was OBSERVED, not predicted; each mutation was applied,
+ * run, and reverted byte-exact, one at a time. ⚠️ RE-MEASURED IN FULL at the v4.9 W9 fix round
+ * (council A1/C1, C2, C3, C4) against `tests/workspace/` + `tests/council/verdict-degrades.test.js`
+ * — 584 tests. FIVE of the eight pre-existing sets moved (UNBOUNDBLIND-A, GATERAW-A/B/C,
+ * ALIASROLE) and three did not; all eight were re-run, because the first draft of this header
+ * asserted "three moved" from reasoning about which code the fix touched and the measurement
+ * said five. Re-measure the whole table or none of it.
  *
  * UNBOUNDBLIND-A — `live-dead-seats.js :: isSeatLoss`, seat-unbound arm disabled.
- *   9 red: the five W9-deadSeats cases, "a mixed array admits ONLY the gated record",
- *   "a seat-unbound critic record is seat-keyed on the same rule", "the gated seat-unbound
- *   family reaches the live path too", and BOTH drift-pin W9 cases in workspace-seats.test.js.
+ *   11 red (was 9): the five W9-deadSeats cases, "a mixed array…", "a seat-unbound critic record
+ *   is seat-keyed on the same rule", "the gated seat-unbound family reaches the live path too",
+ *   BOTH drift-pin W9 cases in workspace-seats.test.js, and — new — the two R-W9a cases.
  * UNBOUNDBLIND-B — the `workspace-seats.js :: retriedSeats` twin disabled instead.
  *   2 red: the two drift-pin W9 cases. That pin is the ONLY thing holding the mirror, which
  *   is why it is the one that must never be deleted "because deadSeats already covers it".
  * GATERAW-A — `isSeatLoss` drops the retry-family conjunct.
- *   6 red: both ORPHAN-LEG controls, the Stage-2 judge control, "a mixed array…", R-W9a, and
- *   the live-path case. (Re-measured after the Stage-2 control was added; it was 5 before.)
- * GATERAW-B — `retriedSeats` drops it. 1 red: the drift pin's ORPHAN-LEG case.
+ *   5 red (was 6): both ORPHAN-LEG controls, the Stage-2 judge control, "a mixed array…", and
+ *   the live-path case. R-W9a LEFT this set at the fix round — that record is now admitted on
+ *   its own merits, so raw admission no longer changes its answer.
+ * GATERAW-B — `retriedSeats` drops it. 3 red (was 1): the drift pin's ORPHAN-LEG case, its
+ *   "NEITHER retryWaveId nor firstFailure" case and its SKIPPED case. The set grew because the
+ *   fix round narrowed that one guard to `retryWaveId`, so it now carries the whole retried rule.
  * GATERAW-C — `verdict-seat-loss.js :: deriveSeatLoss`'s `gatedUnbound` drops it.
- *   4 red in verdict-degrades: both orphan controls, the Stage-2 judge control, R-W9a.
- * ALIASROLE — `roleOf` loses its seat-identity branch (R4 reverted).
- *   2 red: "R4 FIXED…" and "a seat-unbound critic record is seat-keyed…".
+ *   3 red in verdict-degrades (was 4): both orphan controls and the Stage-2 judge control —
+ *   R-W9a left this set for the same reason it left GATERAW-A's.
+ * ALIASROLE — `roleOf` loses its seat-identity branch entirely (R4 AND C3 reverted).
+ *   3 red (was 2): "R4 FIXED…", "a seat-unbound critic record is seat-keyed…", and — new — the
+ *   "C3 CONTROL: a real bench-twin seat id is still NOT the critic" case.
  * BYROLEALIAS — the critic filter looks up `s.model` instead of `s.seat || s.model`.
- *   2 red: "byRole is seat-keyed too…" and the R-W9b fallback.
+ *   2 red, unchanged: "byRole is seat-keyed too…" and the R-W9b fallback. ⚠️ Re-measured rather
+ *   than assumed: C2 rewrote that very expression, so its set could have moved and did not.
  * BYROLEUNSEATED — the seat-keyed `byRole` WRITE is removed but the lookup kept.
- *   1 red: "the dead CRITIC seat itself is still tagged critic, and still suppressed…".
+ *   1 red, unchanged: "the dead CRITIC seat itself is still tagged critic, and still suppressed…".
  *   Both halves of that pair are therefore load-bearing in opposite directions.
+ *
+ * Added by the fix round, each measured the same way:
+ * SKIPRETRIED-A — `isSeatLoss`'s consumer widens `retried` back to `retryWaveId || firstFailure`.
+ *   2 red: "R-W9a (CLOSED) … NOT labelled retried" here, and the drift pin's SKIPPED case.
+ * SKIPRETRIED-B — the `retriedSeats` guard widened back instead. 1 red: the drift pin's SKIPPED
+ *   case. (So A and B are held together by that one shared case — the mirror again.)
+ * BYROLEUNSEATEDREAD — the critic filter drops its `byRoleUnseated` disjunct (C2 reverted).
+ *   1 red: "C2: a live critic leg with NO seat id…".
+ * ALIASKEYROLE — `roleOf` drops `|| key === critic` (C3 reverted). 1 red: "C3: an ALIAS-valued
+ *   seatId…", whose second half is the verdict surface, so the mutant breaks CROSS-surface
+ *   agreement and not just one renderer's label.
+ * KINDLESS-A/B/C — each consumer's kind test narrowed back to the positive `=== 'degrade'`
+ *   (C4 reverted). A: 1 red (the drift pin's kind-less case). B: the same 1. C: 2 red in
+ *   verdict-degrades ("a record with NO kind key IS a loss", "…naming the CRITIC").
+ * SKIPFF — the PRODUCER drops `firstFailure` from `run-retry-notes.js :: skippedWaveNote`.
+ *   ⚠️ Measured at 1 red across the WHOLE suite — every pin in this file is hand-built, so no
+ *   consumer test can see a producer regression. `run-stages.test.js`'s end-to-end case was
+ *   added for exactly that, and takes the set to 2.
  *
  * ⚠️ The seat-presence conjunct (`data.seatId || data.seat`) is NOT pinnable here: dropping it
  * from either renderer reds nothing, because `add()` and `retriedSeats`' `if (key)` already
@@ -170,24 +208,38 @@ describe('W9 — controls: the OTHER seat-unbound shapes stay out (mutant GATERA
     expect(rows([stage2Unbound('d')])).toHaveLength(0);
   });
 
-  test('a mixed array admits ONLY the gated record', () => {
+  test('a mixed array admits ONLY the gated records', () => {
     const out = rows([orphanLeg('d'), unboundPartial('e', 'e#1'), reVoteUnbound(),
       stage2Unbound('f'), skippedPartial('g')]);
-    expect(out.map(r => r.model)).toEqual(['e']);
+    expect(out.map(r => r.model)).toEqual(['e', 'g']);
   });
 
   /**
-   * ⚠️ DISCLOSED RESIDUAL (v4.9 W9, measured — reported to the wave lead, not ruled on here).
-   * `run-stages.js`'s skipped-retry path emits a PARTIAL `seat-unbound` note carrying
-   * `{waveId, models, reason, seat}` and no retry-family field at all, because that seat was
-   * never retried. It is a genuine loss, and the retry-family gate this plan specifies
-   * excludes it. Widening the gate to admit it (e.g. on `models` presence) would also have to
-   * keep out `run-stage2.js`'s judge-side `seat-unbound` note — `{waveId, seat}` for a seat
-   * that DID review and merely failed to judge — which the retry-family gate excludes for
-   * free. Pinned here so the exclusion is deliberate rather than accidental.
+   * R-W9a — CLOSED in the v4.9 W9 fix round (council A1/C1, Confirmed). The residual was
+   * real: the skipped-retry partial note is a genuine loss the gate dropped. It is closed at
+   * the PRODUCER, not by widening the gate — `run-retry-notes.js :: skippedWaveNote` now
+   * emits the `firstFailure` fact that record has always carried implicitly, so the SAME
+   * retry-family gate admits it and `run-stage2.js`'s judge-side note (which has neither
+   * field) still gets excluded for free. The pin below is FLIPPED, not renamed.
+   *
+   * ⚠️ It carries no `retryWaveId`, because it was never retried — so the row must read the
+   * PLAIN phrasing. Measured: mutant SKIPRETRIED-A (`isSeatLoss`'s consumer widens `retried`
+   * back to `retryWaveId || firstFailure`) reds the statusText assertion below AND the drift
+   * pin's SKIPPED case; SKIPRETRIED-B, the same widening on `retriedSeats`, reds only the
+   * latter — which is what holds the two sides together.
    */
-  test('R-W9a (known-wrong): the SKIPPED-path partial note is excluded — it has no retry family', () => {
-    expect(rows([skippedPartial('d')])).toHaveLength(0);
+  test('R-W9a (CLOSED): the SKIPPED-path partial note renders — and is NOT labelled retried', () => {
+    const out = rows([skippedPartial('d', 'd#2')]);
+    expect(out).toHaveLength(1);
+    expect(out[0].model).toBe('d');
+    expect(out[0].seat).toBe('d#2');
+    expect(out[0].statusText).toBe('did not review');
+  });
+
+  test('R-W9a: the skipped note is seat-keyed — a dead twin beside a LIVE twin still renders', () => {
+    const out = rows([skippedPartial('d', 'd#2')], null, [{ model: 'd', seat: 'd#1', role: 'seat' }]);
+    expect(out).toHaveLength(1);
+    expect(out[0].seat).toBe('d#2');
   });
 });
 
@@ -382,6 +434,68 @@ describe('W9 — R4: the critic path is seat-keyed', () => {
     expect(out).toHaveLength(1);
     expect(out[0].role).toBe('critic');
     expect(out[0].seat).toBeNull();
+  });
+
+  /**
+   * v4.9 W9 fix round, council C2 (Confirmed, minor). Seat-keying the `byRole` READ dropped a
+   * suppression the pre-W9 alias read had: the live side writes the seat key only when the leg
+   * CARRIES one, and it does not always. A terminal cost row (`run-stats-entry.js ::
+   * buildRunStatsEntry`) and the live tick (`live-normalize.js :: seatOf`) both emit `seat` only
+   * when `seat.id !== seat.alias`, and any document written before v4.8 R5 carries none at all —
+   * so a seat-KEYED critic candidate matched nothing and a ghost 'critic did not review' row
+   * appeared beside the live critic leg that WAS its record.
+   *
+   * The read now consults both keyspaces, mirroring the write, but the alias arm is fed ONLY by
+   * unseated live legs — which is what keeps R4's fix intact three tests up: an alias entry
+   * written by a SEATED leg still cannot clear a different seat's candidate.
+   *
+   * Named mutant BYROLEUNSEATEDREAD (drop the `byRoleUnseated` disjunct): 1 red, this test.
+   */
+  test('C2: a live critic leg with NO seat id still suppresses a seat-KEYED critic candidate', () => {
+    expect(rows([deadLeg('d', 'd#1')], null,
+      [{ model: 'd', seat: null, role: 'critic' }], criticMeta)).toHaveLength(0);
+  });
+
+  test('C2 CONTROL: an unseated live BENCH leg does not suppress the dead critic', () => {
+    // The role half of the key still decides. Only a live CRITIC leg may clear a critic
+    // candidate — the v4.6.3 PR2 rider (a chair-fallback landing on the alias) unchanged.
+    expect(rows([deadLeg('d', 'd#1')], null,
+      [{ model: 'd', seat: null, role: 'seat' }], criticMeta)).toHaveLength(1);
+  });
+
+  /**
+   * v4.9 W9 fix round, council C3 (Confirmed, minor). `roleOf` trusted a truthy key to be
+   * seat-space, but it is not always: on the INEXACT twin branch `run-retry-group.js ::
+   * recordFailure` keys `firstFailure.seatId` by the ALIAS (the R3 residual two blocks up), so
+   * the critic's OWN dead record arrives keyed 'd' against a criticSeat of 'd#1' and came back
+   * role null — a bench label on the critic's row — while `deriveSeatLoss`, comparing
+   * `data.seat` to the alias, called the very same record a critic loss. One record, two
+   * surfaces, opposite answers.
+   *
+   * Named mutant ALIASKEYROLE (drop the `|| key === critic` disjunct): 1 red, this test.
+   */
+  test('C3: an ALIAS-valued seatId on the critic record is tagged critic — both surfaces agree', () => {
+    const aliasValued = { kind: 'degrade', channel: 'dead-leg',
+      data: { seat: 'd', retryWaveId: 'w1', firstFailure: { seat: 'd', seatId: 'd', class: 'leg' } } };
+    const out = rows([aliasValued], null, [], criticMeta);
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe('critic');
+    // …and the verdict surface, reading the identical record, says the same thing.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'd', degrades: [aliasValued] });
+    expect(s.criticSeated).toBe(false);
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('C3 CONTROL: a real bench-twin seat id is still NOT the critic (R4 unmoved)', () => {
+    // The disjunct can only fire on the critic ALIAS itself: 'd#2' equals neither operand,
+    // so the case R4 exists for is untouched — this is the same fixture as "R4 FIXED", asked
+    // of `roleOf` directly rather than through the suppression path.
+    // ⚠️ NOT extended to `deriveSeatLoss`: THIS shape is the one place the two surfaces still
+    // diverge on purpose. That function stays alias-keyed because `seats.js :: preflightSeats`
+    // refuses a critic alias holding a second bench seat, zero-spend, before any leg launches —
+    // so its in-process input can never contain this record, while the renderers read disk.
+    const out = rows([deadLeg('d', 'd#2')], null, [], criticMeta);
+    expect(out[0].role).toBeNull();
   });
 });
 

@@ -142,7 +142,7 @@ function validateFindings(jsonText) {
   // ⚠️ v4.4.1 FINAL-REVIEW C — a body that parses to nothing usable.
   // `JSON.parse('null')` SUCCEEDS: it returns null and throws nothing, so the catch
   // above never sees it and every `parsed.<key>` below threw
-  // `TypeError: Cannot read properties of null`. Because run-stages.js:164 calls this
+  // `TypeError: Cannot read properties of null`. Because run-stages.js:152 calls this
   // from inside run.js's try/catch, ONE seat emitting a `null` body aborted an entire
   // PAID council as exit 1 rather than degrading that seat — the fail-closed shape
   // this release exists to remove.
