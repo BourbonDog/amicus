@@ -6,7 +6,7 @@
 // ("Re-emit ONLY the corrected findings JSON block") and concluded the seat's
 // deliverable is DISCARDED, so a repaired task seat reaches Stage 2 without
 // having produced the requested work. The engine never substitutes it:
-// run-stages.js:270 pushes `text: m.text` — the seat's OWN Stage-1 output —
+// run-stages.js:258 pushes `text: m.text` — the seat's OWN Stage-1 output —
 // and only `res.findings` comes from the repair leg. The on-disk
 // review-<seat>.md was written by materializeReviews (run-launch.js:218)
 // BEFORE the repair loop runs, from that same original text, and no repair leg
@@ -19,7 +19,7 @@
 // run-stage1-task-dispatch + run-happy = 132 tests), both reverted byte-exact
 // (sha256 c6ece472…).
 //
-// "REPAIRTEXTSWAP" — the IN-MEMORY path. In run-stages.js:270 push the repair's
+// "REPAIRTEXTSWAP" — the IN-MEMORY path. In run-stages.js:258 push the repair's
 // output instead of the seat's prose (`text: repairing,` — literally the state
 // A1 asserts). 6 RED: THIS file 3 — "the repaired seat's review body is still
 // the DELIVERABLE", "Stage 2 judges the DELIVERABLE…", and the review control;

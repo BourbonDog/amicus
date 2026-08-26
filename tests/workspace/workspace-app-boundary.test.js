@@ -668,14 +668,44 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
   });
 
   // ── v4.8 PR5a fix-wave 3 (council-3 C2) ───────────────────────────────────────────────
-  // A malformed seats[] drops the WHOLE run to alias space. Fail-safe, but silent until now:
-  // two seats on one model become indistinguishable in every panel with nothing said.
+  // A malformed seats[] drops the run's ARTIFACT NAMING to alias space. Fail-safe, but silent
+  // until now: two seats on one model become indistinguishable in the prose panels, with
+  // nothing said. ⚠️ This header read "drops the WHOLE run … in every panel" until v4.9 W9,
+  // which measured that as false — see the PR5b-1 test below for the evidence and the scope.
   test('a rejected seat table is bannered rather than degrading silently', async () => {
     const text = await bannerFor([], { seatTableRejected: true });
     // Killing mutant: delete the seatTableRejected branch -> banner is empty and the user is
     // told nothing about a run whose per-seat behaviour is off.
     expect(text).toContain('seat table could not be read');
     expect(text).toContain('cannot be told apart');
+  });
+
+  // ── v4.9 W9 PR5b-1 (ruling V15: disclosure over uniformity) ───────────────────────────
+  // The banner used to say the run "cannot be told apart below", full stop — a blanket claim
+  // over the whole detail view, and MEASURABLY too wide. `seatTableRejected` reaches exactly
+  // one place: `derived.seatSpace` is false, so `workspace-lazy.js :: roster` falls back to
+  // `bench` and the reviews/judges/re-vote panels name their artifacts by alias. Everything
+  // sourced from tally.json is untouched — `run-detail.js :: costPanel` maps `tally.runStats`
+  // and `live-seats.js :: seatsFromRunStats` keys the seats panel on `r.seat || r.model`, and
+  // `r.seat` is stamped by `run-stats-entry.js :: buildRunStatsEntry` from the in-memory seat
+  // at assembly (`run-assemble.js :: buildTallyInput`), NOT from the run.json table that
+  // failed to parse. So a twin bench still gets TWO seat rows with their own numbers.
+  // V15's ruling: disclose the split rather than force the seats panel to `derived.seatSpace`
+  // for uniformity, which would discard data that is truthful.
+  // ⚠️ The rows are per-seat, the NAMES are not: `live-seats.js :: seatCells` prints
+  // `seat.modelInput || seat.model` (the alias), never the seat id — measured, which is why
+  // the sentence claims separate numbers and not distinguishable names.
+  // WORDING PIN (full-string): the banner is the whole disclosure, so a silent reword is the
+  // regression. Killing mutant: drop the second sentence, or restore "below".
+  test('PR5b-1: the rejected-seat-table banner DISCLOSES the split instead of overclaiming', async () => {
+    const text = await bannerFor([], { seatTableRejected: true });
+    expect(text).toBe(
+      'This run\'s seat table could not be read (a malformed entry), so the reviews, judges ' +
+      'and re-vote panels name their artifacts by model alias instead of per seat — two seats ' +
+      'running the same model cannot be told apart there. The seats panel is NOT affected: its ' +
+      'rows come from tally.json\'s runStats, one per seat, so both seats\' numbers are still ' +
+      'shown separately, sharing the alias as a name. Artifacts: /fake/run/aaaa1111',
+    );
   });
 
   test('a collision OUTRANKS a rejected seat table — one banner, the worse fact', async () => {

@@ -882,17 +882,18 @@ matrix does not carry — `` `†` `` marks a finding corroborated only by anoth
 same model — so from v4.8.0 the two legends are no longer interchangeable. That line, and the `†`
 itself, appear only on a run that actually raised such a finding, which is a twin bench only.
 
-⚠️ **v4.8 — a SECOND report/Workspace divergence, in the street-cred table, filed not fixed.** The
-sentence above is scoped to the **matrix**, and stays true. The street-cred table is a different
-story: both renderers (`report-md.js`, `report-html.js`) label each row `seat || model`, so a twin
-bench reads `gemini#1` / `gemini#2`, while the Workspace's street-cred table still labels from the
-model alias
-and reads `gemini` twice with different numbers under one identical name. **On a bench that repeats
-an alias the two street-cred tables now disagree**; on any bench with no repeated alias they are
-identical, because every seat id there *is* its alias. The report side is the corrected one. The
-Workspace side is not a one-liner — its blind mode resolves the label through `opts.labelOf(...)`,
-which would have to accept a seat id first — and is filed in `BACKLOG.md` for v4.9 with that
-signature change as its gate.
+⚠️ **v4.8 filed a SECOND report/Workspace divergence, in the street-cred table — CLOSED in v4.9.**
+The sentence above is scoped to the **matrix**, and stays true. All three street-cred renderers now
+label each row `seat || model`: `report-md.js` and `report-html.js` (v4.8), and the Workspace's own
+(`electron/workspace-ui/workspace-matrix.js :: renderVerdict`, v4.9). A twin bench reads
+`gemini#1` / `gemini#2` in every one of them, instead of the Workspace reading `gemini` twice with
+different numbers under one identical name; on any bench with no repeated alias all three are
+unchanged, because every seat id there *is* its alias. ⚠️ **Blind mode is the deliberate exception
+and is unchanged**: the Workspace still shows the anonymised label, falls back to the model alias
+when no label resolves, and renders a seat id in neither case — a seat id contains its alias, so
+printing one would defeat blind mode (the same rule the matrix follows two paragraphs above).
+`BACKLOG.md` filed this behind the gate *"`opts.labelOf` must accept a seat id"*, which the fix did
+not need: `labelOf` stays alias-keyed, because the value blind mode has to show was never the seat.
 
 This is the same renderer the `second-opinion` skill calls in Stage 5 to produce `report.html`.
 **`report.md` and this renderer's output are two different files** — `report.md` is Claude-authored

@@ -196,7 +196,7 @@ describe('buildLegRows', () => {
    * v4.4.1 LC-4. `legRole` is evaluated for every leg on every status poll, and
    * it feeds THREE surfaces off one file: `amicus status`, the amicus_status MCP
    * tool, and `amicus watch`. roleFor's lens branch does
-   * `o.models.indexOf(alias)` (src/council/run-stages.js:132), so a run.json
+   * `o.models.indexOf(alias)` (src/council/run-stages.js:120), so a run.json
    * with truthy `lenses` and a missing or non-array `bench` threw a TypeError
    * that escaped buildLegRow entirely — it ran outside both of its try blocks.
    * The whole-branch review called it "closest of the deferred set to a real

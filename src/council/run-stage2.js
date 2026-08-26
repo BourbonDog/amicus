@@ -48,7 +48,7 @@ function bindStage2Seats(ctx, { reviews, judges, s2Legs, runId }) {
   // in `reviews` order — judges is built from that same array by the same
   // `.map`, and real fanout stamps `${waveId}-${i+1}` off that same index
   // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
-  // are appended, run-stages.js:153, so `reviews` order is no longer seat order
+  // are appended, run-stages.js:141, so `reviews` order is no longer seat order
   // — both arrays still derive from the same `reviews`).
   // §3.4's padding pattern now lives in `stage1-bind.js :: bindPaddedWave`
   // (v4.8 SI-27) — why the roster is padded rather than filtered, and why
@@ -153,7 +153,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   // v4.7 D2: every judge-repair launch is a billed leg of its own, distinct from
   // the judge's original Stage-2 wave leg it is trying to fix — it gets its own
   // row so its cost is never folded into, or lost from, the judge's row (mirrors
-  // runStage1's -p<N> extraRows, ./run-stages.js:117-120).
+  // runStage1's -p<N> extraRows, run-stages.js :: runStage1). ⚠️ Cited by LINE until the v4.9 W9
+  // fix round re-opened it: run-stages.js@5830ece3:117-120 was the skipped-wave note's `what`
+  // arm, not extraRows at all, and it has since moved to run-retry-notes.js :: skippedWaveNote.
+  // Anchored by symbol now, per the anti-rot rule.
   const extraRows = [];
   let repairSeq = 0;
   for (const leg of (wave && wave.legs) || []) {

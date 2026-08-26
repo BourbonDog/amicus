@@ -48,7 +48,7 @@ describe('seatCells', () => {
   // carries both; the alias arrives as `modelInput` (Task 0.5 must stamp it on each leg row,
   // Task 14's seatOf maps it through — normalizeLive is pure and cannot read run.json itself).
   // ⚠️ DE-ROT (F34): `role` exists on a live leg ONLY because Task 0.5 stamps it, and roleFor
-  // (src/council/run-stages.js:95-101) keys on the ALIAS (run.json bench/critic/lenses are all
+  // (src/council/run-stages.js:96-102) keys on the ALIAS (run.json bench/critic/lenses are all
   // alias-valued). Deriving role from the resolved leg.model is a silent no-op that leaves the
   // Role column em-dash for the entire run.
   const seat = {

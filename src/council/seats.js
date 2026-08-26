@@ -73,7 +73,7 @@ function buildSeats(bench, critic, lenses) {
 /**
  * Role of a seat by its id. Returns 'seat' for an unknown id, matching
  * roleFor's fallthrough for any alias that is not the critic. (roleFor returns
- * 'critic' for an OFF-BENCH critic because run-stages.js:40 is not gated on
+ * 'critic' for an OFF-BENCH critic because run-stages.js:41 is not gated on
  * bench membership; buildSeats never mints a seat for one and preflightSeats
  * rejects that state pre-spend, so 'seat' is right for every run v4.8 creates.)
  * @param {?Array<object>} seats

@@ -784,7 +784,9 @@ describe('v4.6.2 PR2 Task 3: backstop reason inherits the SL-2 retry + degrade c
 
     // (3) degraded.value flips (exit-2 semantics). run-retry.js never notes a
     // degrade itself (see the sink-invariant pin above); in production
-    // run-stages.js:175 feeds stillDeadNotes to the REAL degrade sink. Wire
+    // run-stages.js :: runStage1 feeds stillDeadNotes to the REAL degrade sink (cited `:175`
+    // until the v4.9 W9 fix round re-opened it: that line was already prose about the repair
+    // loop, and the gate cannot catch a citation that merely stays IN RANGE). Wire
     // that same sink here (not the fakeCtx stub) to prove the chain actually
     // reaches exit-2, not just that the note LOOKS right.
     const { createDegradeSink } = require('../../src/council/run-degrade');

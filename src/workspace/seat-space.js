@@ -75,8 +75,10 @@ function isSeatTable(seats) {
  * bound seat a `rebuttal-` an orphan may have written, re-arming RN-1 in the debate
  * namespace (MEASURED; the one regression this fix wave introduced). The question is:
  * does the note POSITIVELY PROVE the orphan did NOT write this kind? Exactly one such
- * proof exists. `orphanLegNote` has three call sites — run-stages.js:71 and :140 (Stage-1
- * and its retry) and run-stage2.js :: bindStage2Seats (the -s2 judge wave) — and
+ * proof exists. `orphanLegNote` has three call sites — two in run-stages.js :: runStage1
+ * (Stage-1's own bind and its retry pass; cited `:71 and :140` until the v4.9 W9 fix round
+ * moved a builder out of that function and both numbers rotted — anchored by SYMBOL now, per
+ * the anti-rot rule) and run-stage2.js :: bindStage2Seats (the -s2 judge wave) — and
  * `data.waveId` separates them EXACTLY, not heuristically: run-stage2.js :: bindStage2Seats
  * and the launch site in run-stage2.js :: runStage2 both build it as `${runId}-s2` from
  * the runId this run.json carries. A -s2 note says the leg BOUND in Stage 1, so its review
