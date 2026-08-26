@@ -537,7 +537,7 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
     },
     {
       // ⚠️ W9 fix round: this fixture carried `firstFailure` and NO `retryWaveId`, a shape no
-      // shipped builder emits — every still-dead-after-retry arm of run-retry-notes.js emits
+      // still-dead-after-retry builder emits — every retried arm of run-retry-notes.js emits
       // both, and the `why` here already claims a retry wave ran. `retryWaveId` restored so
       // the case pins what it always meant to. The firstFailure-WITHOUT-retryWaveId shape now
       // has a real producer (`skippedWaveNote`) and its own case at the end of this list.

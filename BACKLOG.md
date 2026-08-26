@@ -4486,8 +4486,10 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   read to decide the "retried once" phrasing — which the W9 gate spelled as
   `retryWaveId || firstFailure`, the SAME expression, so admitting the record would have
   labelled a never-retried seat retried. Both renderers' `retried` READ is therefore narrowed
-  to `retryWaveId` alone (mutant SKIPRETRIED-A/B). Measured and safe: no shipped builder emits
-  `firstFailure` without `retryWaveId`.
+  to `retryWaveId` alone (mutant SKIPRETRIED-A/B). Measured and safe: every builder describing
+  a seat that WAS retried emits `retryWaveId` — `skippedWaveNote` itself is the sole shipped
+  `firstFailure`-without-`retryWaveId` producer, and its seat was never retried, which is
+  exactly why the narrowed read must not badge it.
   ⚠️ **Gap this exposed, now closed:** every W9 consumer pin was fixture-based, so mutant SKIPFF
   (drop `firstFailure` at the producer) red exactly ONE test in the entire suite. An end-to-end
   case in `run-stages.test.js` now feeds the note the engine actually emits to both production

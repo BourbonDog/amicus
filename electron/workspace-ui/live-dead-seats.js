@@ -65,8 +65,8 @@
    * seat: every still-dead-after-retry builder emits it, and both skipped-path notes (the retry
    * never attempted the seat — an unmappable lens loss, an out-of-range index, a zero-model
    * unit, or `overBudget()`) emit none, so they keep the plain phrasing. ⚠️ `firstFailure` is
-   * NOT a retry marker: `skippedWaveNote` carries one to describe the FIRST-pass loss of a seat
-   * never retried at all. Measured: no shipped builder emits `firstFailure` without the former.
+   * NOT a retry marker: `skippedWaveNote` (the sole `firstFailure`-without-`retryWaveId`
+   * producer) describes a seat never retried; every RETRIED seat's builder emits the former.
    *
    * D6 filter (zero usable legs ONLY, "no ghost when a live row already exists"): a candidate
    * already present in `liveSeats` is dropped. Two different things can put it there and both

@@ -85,8 +85,8 @@
       // (mutant SKIPRETRIED): this is a RETRIED set, and `run-retry-notes.js :: skippedWaveNote`
       // carries a `firstFailure` for a seat the retry never ATTEMPTED, so badging it would be
       // false. `isSeatLoss` still admits that record as a LOSS — its gate keeps both fields; only
-      // the retried READ differs, and the drift pin compares exactly that read. No shipped builder
-      // emits `firstFailure` without `retryWaveId`, so no retried seat loses its badge.
+      // the retried READ differs (the drift pin compares exactly that read). Every RETRIED seat's
+      // builder emits `retryWaveId` — never-attempted skippedWaveNote alone lacks it — so no badge is lost.
       if (!data.retryWaveId) { return; }
       if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave'
         && !(d.channel === 'seat-unbound' && (data.seatId || data.seat))) { return; }
