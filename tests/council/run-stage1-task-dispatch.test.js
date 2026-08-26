@@ -132,9 +132,19 @@ describe('runCouncil end to end: briefing-stage1.md + the repair solo fork on in
     return script;
   }
 
+  // v4.9 W7: a TASK chair closes with an `ANSWER:` line, never a `VERDICT:` one
+  // (src/council/briefings-chair-task.js :: ANSWER_SCALE_ADDENDUM). happyScript's
+  // chair speaks review mode, so a task run driven with it has no parseable
+  // terminal line and buys an unscripted ch4 repair — the Stage-1 assertions
+  // below are about the -s1/-p1 prompts, so the chair simply answers.
+  const taskChair = (script) => ({
+    ...script,
+    'abc123-ch1': () => okWave([mkLeg('deepseek', 'Synthesis.\n\nANSWER: Converged', 'complete', 0.03)]),
+  });
+
   test('task run-dir: briefing-stage1.md IS the composed task seat brief and still splits on the separator', async () => {
     const opts = baseOptions(tmp, { intent: 'task' });
-    const launchers = scriptedLaunchers(happyScript());
+    const launchers = scriptedLaunchers(taskChair(happyScript()));
     const result = await runCouncil(opts, {
       launchers, appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
     });
@@ -151,7 +161,7 @@ describe('runCouncil end to end: briefing-stage1.md + the repair solo fork on in
   });
 
   test('task run: the findings-repair solo composes the TASK repair frame', async () => {
-    const launchers = scriptedLaunchers(repairScript());
+    const launchers = scriptedLaunchers(taskChair(repairScript()));
     const result = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
       launchers, appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
     });

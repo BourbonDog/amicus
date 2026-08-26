@@ -5863,7 +5863,10 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
     definition), `run-stage1-rows.js :: pushDeadSeatRows`' `keyOf` and `run-stages.js:96 :: keyOf`
     (both left on purpose — their else branch is a LEG read, `l.modelInput || l.model`, a sibling
     form, not this rule over a bare alias), `run-stages.js:106` (the healed-filter's inline form —
-    outside the W3 replace list; `run-stages.js` was not touched), and `run.js:235` (hand-inlined,
+    outside the W3 replace list; `run-stages.js` was not touched **by W3's seatKey replaces** —
+    ⚠️ read PR-wide that clause was FALSE the day it merged: the same PR's V18 conformance hunk
+    edited `run-stages.js`' repair push; scoped here per round-3 council B4, 2026-08-25), and
+    `run.js:235` (hand-inlined,
     stays: its `|| byJudge.get(r.model)` fallback is load-bearing, per disposition (b)).
     Sites, **re-derived by opening each line, 2026-08-17** (T-A2 fix round 3; the list previously
     read "all re-derived by execution against the final tree" as of 2026-08-16 and **three of the
@@ -6580,6 +6583,12 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   Final semantics: applies read WITHOUT consuming; a re-offer overwrites the entry; setup-done
   clears the map. All four states pinned in
   `tests/electron/ipc-setup-catalog-snapshot.test.js`.
+- [ ] **Offer-session snapshots leak for a window destroyed without `setup-done`** (PR 199
+  round-3 council B3, nit, filed as latent 2026-08-25). `electron/offer-session.js`'s map is
+  reclaimed only by `endSession` (setup-done) or a same-key re-offer; a Settings window closed
+  by the OS/user without finishing leaks one entry per provider it offered (bounded, tiny).
+  The sender-less `endSession` wipe-all path is harness-only — real windows carry sender ids.
+  Clean fix when wanted: a window-closed hook calling `endSession` for that sender.
 - **`MAX_CATALOG_AGE_MS` mirror (doctor-alias-check vs cli-handlers-doctor)** — retired to one
   source: `model-catalog.js :: DEFAULT_MAX_AGE_MS` is now exported and both doctor files import
   it (the documented require-cycle was doctor↔alias-check; both-import-model-catalog is

@@ -196,7 +196,7 @@ async function repairRevoteLeg(ctx, { waveId, key, judge, leg, parsed, expectedI
  * @param {function(string): string} aliasOf seat id → bench alias
  */
 async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf) {
-  const bundle = dbrief.buildRevoteBundle({ findings: bundleFindings, date: ctx.o.date });
+  const bundle = dbrief.buildRevoteBundle({ findings: bundleFindings, date: ctx.o.date, intent: ctx.o.intent });
   // spec §5.1 names `revote-bundle.md` a run-dir artifact: the shared re-vote prompt goes to
   // disk exactly like Stage 2's bundle-stage2.md, so the round's model-facing input is
   // auditable alongside briefing-stage1.md and chair-packet.md.

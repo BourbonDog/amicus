@@ -10,7 +10,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { runCouncil } = require('../../src/council/run');
-const { scriptedLaunchers, happyScript, baseOptions } = require('./helpers/fake-launchers');
+const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
+  require('./helpers/fake-launchers');
+
+// v4.9 W7: a TASK chair closes with an `ANSWER:` line, never a `VERDICT:` one
+// (src/council/briefings-chair-task.js :: ANSWER_SCALE_ADDENDUM). happyScript's
+// chair speaks review mode, so a task run driven with it has no parseable
+// terminal line and buys an unscripted ch4 repair — the task runs below answer.
+const taskChair = (script) => ({
+  ...script,
+  'abc123-ch1': () => okWave([mkLeg('deepseek', 'Synthesis.\n\nANSWER: Converged', 'complete', 0.03)]),
+});
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-intent-')); });
@@ -71,7 +81,7 @@ describe('v4.9 W5.3: runCouncil intent validation — BAD_ARGS pre-spend', () =>
 describe("v4.9 W5.3: a task run stamps intent:'task' on meta, run.json and the verdict", () => {
   test('emit-when-task, all four artifacts', async () => {
     const { exitCode } = await runCouncil(
-      baseOptions(tmp, { intent: 'task' }), deps(scriptedLaunchers(happyScript())));
+      baseOptions(tmp, { intent: 'task' }), deps(scriptedLaunchers(taskChair(happyScript()))));
     expect(exitCode).toBe(0);
     expect(readDoc('tally-input.json').meta.intent).toBe('task');
     expect(readDoc('tally.json').meta.intent).toBe('task');
@@ -80,7 +90,8 @@ describe("v4.9 W5.3: a task run stamps intent:'task' on meta, run.json and the v
   });
 
   test('meta.intent is a pure TAIL — the shipped six-key meta order is untouched', async () => {
-    await runCouncil(baseOptions(tmp, { intent: 'task' }), deps(scriptedLaunchers(happyScript())));
+    await runCouncil(baseOptions(tmp, { intent: 'task' }),
+      deps(scriptedLaunchers(taskChair(happyScript()))));
     expect(Object.keys(readDoc('tally.json').meta)).toEqual(
       ['runId', 'date', 'runType', 'models', 'chair', 'claudeInCouncil', 'intent']);
   });

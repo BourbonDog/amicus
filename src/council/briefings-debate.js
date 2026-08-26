@@ -9,6 +9,23 @@
  * trailing-JSON style (prose first, one fenced ```json block last, nothing
  * after it). Every brief opens with the no-tools preamble and the date stamp
  * (spec §4.3). No IO, no model calls.
+ *
+ * v4.9 W7 (ruling V2) — the TASK twins live IN THIS FILE rather than in a
+ * sibling module the way W6's Stage-1 twins do: the fork is one PARAGRAPH per
+ * builder, the file is well under the 300-line gate, and a sibling would have
+ * to re-import every renderer below. Each builder takes `intent` on its args
+ * object; `'task'` composes the task frame and ANYTHING ELSE — absent included
+ * — composes the review frame byte-identically, fail-closed exactly like
+ * briefings.js's Stage-1 dispatchers. run-debate.js :: runDefenseSolo and
+ * run-debate-revote.js :: runRevoteWave are the only two callers; both thread
+ * `ctx.o.intent` straight through.
+ *
+ * V11 (one vocabulary) as extended here: ONLY the frame paragraph forks. The
+ * no-tools preamble, the date line, both trailing-JSON contracts, both
+ * finding-block renderers (`- <id> [<severity>]`, the anonymized peer split,
+ * the **AMENDED** mark), the shared `repair()` and buildDebateAddendum are one
+ * spelling across both intents — which is also why parse-stage2.js ::
+ * parseDebateDefense / parseRevote are frame-neutral and W7 does not touch them.
  */
 
 const { dateLine } = require('./briefings-stage2');
@@ -78,16 +95,46 @@ function findingBlockRevote(f) {
   return `- ${f.id} [${f.severity}]${mark}: ${f.claim}\n  Raiser's response: ${f.argument}`;
 }
 
-/** One defense solo per raiser (spec §5.3a). */
-function buildDefenseBrief({ findings, date }) {
+/** Defense frame — REVIEW intent, verbatim from v4.0 (spec §5.3a). */
+const DEFENSE_FRAME =
+  'You reviewed an artifact and raised the findings below. Peer reviewers ' +
+  '(anonymous) disputed them for the stated reasons. For EACH finding decide: ' +
+  'DEFEND it with evidence, AMEND it with corrected replacement text, or WITHDRAW ' +
+  'it. Withdraw anything you cannot defend with evidence — an unsupported repeat ' +
+  'of the original claim is weaker than a withdrawal.';
+
+/**
+ * Defense frame — TASK intent (v4.9 W7, ruling V2). Mirrors the review frame's
+ * structure: same three actions, same DEFENSE_CONTRACT, same block list. What
+ * a raiser defends here is a load-bearing CLAIM under its OWN answer, not a
+ * finding about someone else's artifact — the frame is the only thing that has
+ * to know that.
+ */
+const TASK_DEFENSE_FRAME =
+  'You produced an answer and declared the claims below as load-bearing. Peer ' +
+  'analysts (anonymous) disputed them. For each claim: defend it with your ' +
+  'strongest argument, amend it if the dispute exposed a real flaw, or withdraw it.';
+
+/** Re-vote frame — REVIEW intent, verbatim from v4.0 (spec §5.3b). */
+const REVOTE_FRAME =
+  'You previously adjudicated findings on this artifact and disputed at least ' +
+  'one of those below. The (anonymous) raiser has now responded. Re-adjudicate ' +
+  'ONLY the findings listed, in light of each response. Changing your verdict ' +
+  'when the defense is convincing is good judging, not weakness; so is holding ' +
+  'your dispute when it isn\'t.';
+
+/** Re-vote frame — TASK intent (v4.9 W7, ruling V2); same REVOTE_CONTRACT verdicts. */
+const TASK_REVOTE_FRAME =
+  'You previously adjudicated claims from this bench\'s answers and disputed at ' +
+  'least one of those below. The raiser has now responded. Re-vote each claim: ' +
+  'agree / dispute / neutral.';
+
+/** One defense solo per raiser (spec §5.3a). `intent`: 'task' | absent (review). */
+function buildDefenseBrief({ findings, date, intent }) {
   const parts = [DEBATE_NO_TOOLS_PREAMBLE];
   if (date) { parts.push(dateLine(date)); }
   parts.push(
-    'You reviewed an artifact and raised the findings below. Peer reviewers ' +
-    '(anonymous) disputed them for the stated reasons. For EACH finding decide: ' +
-    'DEFEND it with evidence, AMEND it with corrected replacement text, or WITHDRAW ' +
-    'it. Withdraw anything you cannot defend with evidence — an unsupported repeat ' +
-    'of the original claim is weaker than a withdrawal.',
+    intent === 'task' ? TASK_DEFENSE_FRAME : DEFENSE_FRAME,
     findings.map(findingBlockDefense).join('\n\n'),
     DEFENSE_CONTRACT,
   );
@@ -95,15 +142,11 @@ function buildDefenseBrief({ findings, date }) {
 }
 
 /** One shared re-vote bundle, fanned out to disputing judges (spec §5.3b). */
-function buildRevoteBundle({ findings, date }) {
+function buildRevoteBundle({ findings, date, intent }) {
   const parts = [DEBATE_NO_TOOLS_PREAMBLE];
   if (date) { parts.push(dateLine(date)); }
   parts.push(
-    'You previously adjudicated findings on this artifact and disputed at least ' +
-    'one of those below. The (anonymous) raiser has now responded. Re-adjudicate ' +
-    'ONLY the findings listed, in light of each response. Changing your verdict ' +
-    'when the defense is convincing is good judging, not weakness; so is holding ' +
-    'your dispute when it isn\'t.',
+    intent === 'task' ? TASK_REVOTE_FRAME : REVOTE_FRAME,
     findings.map(findingBlockRevote).join('\n\n'),
     REVOTE_CONTRACT,
   );
@@ -116,6 +159,12 @@ function buildRevoteBundle({ findings, date }) {
  * `prior` is embedded verbatim and uncapped; the absent case is stated rather
  * than papered over with an empty block, so a model with nothing to correct is
  * told to say so instead of left to invent a position.
+ *
+ * NO intent fork (v4.9 W7, ruling V2 — verified, not forked): a repair turn
+ * carries the trailing-JSON CONTRACT and the prior text, never a frame, so
+ * there is nothing here that speaks in findings-vs-claims. Both repair builders
+ * therefore stay one spelling for both intents; pinned in
+ * tests/council/briefings-debate.test.js ("frame-neutral in both intents").
  * @param {string} kind 'defense' | 're-vote'
  * @param {string} contract the trailing-JSON contract for that kind
  * @param {Array<{code:string,detail:string}>} errors

@@ -3,7 +3,7 @@
 
 /**
  * @module council/run-chair
- * Chair synthesis + VERDICT-line repair for the headless council driver,
+ * Chair synthesis + terminal-line repair (VERDICT | task ANSWER) for the driver,
  * lifted VERBATIM out of run.js for the 300-line gate (v4.1 Task 0.5). Pure
  * refactor: same launches, same waveIds, same run.json checkpoints, same
  * degradation rules. Launchers come in through `ctx` exactly as run-stages.js
@@ -16,7 +16,7 @@
  */
 
 const stage2 = require('./briefings-stage2');
-const { parseChairVerdict } = require('./parse-stage2');
+const { parseChairTerminal } = require('./parse-stage2');
 const runState = require('./run-state');
 const { isAbortExit } = require('./run-stages');
 const { emitStageStarted, emitStageTerminal } = require('../observe/events');
@@ -27,7 +27,7 @@ const { pickFallbackChair, classifyChairAttempt } = require('./chair-fallback');
 
 /**
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
- * single VERDICT-line repair re-prompt.
+ * single terminal-line repair re-prompt (VERDICT, or ANSWER when o.intent is 'task').
  * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
  * @param {{packet: string, degrade: {note: Function}, statsFn: Function,
  *   isSignalled: function(): (number|null)}} args
@@ -48,7 +48,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     const solo = await launchers.launchSolo({
       model, prompt: packet, project: o.runDir, waveId,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      // v4.1 §4.5d: the chair chain (ch1/ch2/ch3) and the ch4 VERDICT repair
+      // v4.1 §4.5d: the chair chain (ch1/ch2/ch3) and the ch4 terminal repair
       // below are the launches a re-armed price gate would refuse LAST, after
       // the whole bench has already been paid for.
       noCostGate: o.noCostGate,
@@ -161,16 +161,16 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   const chairText = chairLeg ? chairLeg.summary : null;
   let chairConformance = 'clean';
 
-  // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
-  let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
+  // ---- Chair terminal line — VERDICT, or ANSWER on a task run (v4.9 W7) ----
+  let overallVerdict = chairText ? parseChairTerminal(chairText, o.intent) : null;
   if (chairText && !overallVerdict && !overBudget()) {
     const waveId4 = `${o.runId}-ch4`;
     runState.appendStageWave(o.runDir, 'chair', waveId4);
     const repair = await launchers.launchSolo({
       // ⚠️ LC-12: the synthesis rides along. The chair leg SUCCEEDED — only the
-      // VERDICT line is missing — so a fresh repair session that cannot see the
+      // terminal line is missing — so a fresh repair session that cannot see the
       // synthesis is picking a verdict on an artifact it has never read.
-      model: actualChair, prompt: stage2.buildChairRepairPrompt({ synthesis: chairText }),
+      model: actualChair, prompt: stage2.chairRepairPromptFor(o.intent, { synthesis: chairText }),
       project: o.runDir, waveId: waveId4,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       noCostGate: o.noCostGate,
@@ -188,10 +188,10 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // (repair.leg)` guard below is therefore load-bearing on that exact
     // distinction: a launched ch4 (a leg document exists, whatever its
     // status) gets its own row so the repair's spend is attributed even when
-    // it never supplies a VERDICT; a ch4 that never even launched gets no
+    // it never supplies a terminal line; a ch4 that never launched gets no
     // row at all, because there is nothing billed to attribute. The push sits
     // AFTER the verdict parse so it stamps the ch4 leg's own measured outcome (PR 199 D1).
-    overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
+    overallVerdict = parseChairTerminal((repair.leg && repair.leg.summary) || '', o.intent);
     chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({
@@ -208,7 +208,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       channel: 'chair-failed',
       what: 'the council has no chair synthesis',
       why: chairLeg
-        ? 'the chair ran but its output carried no parseable VERDICT: line'
+        ? `the chair ran but its output carried no parseable ${o.intent === 'task' ? 'ANSWER' : 'VERDICT'}: line`
         : `no chair leg completed after the fallback walk — ${chairAttempts.map(a =>
           `${a.waveId.split('-').pop()} ${a.model}: ${a.reason || a.outcome}`).join(' · ')}`,
       effect: 'the verdict is written with overallVerdict null; will exit degraded (2)',

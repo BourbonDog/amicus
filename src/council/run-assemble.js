@@ -261,6 +261,12 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
     // line here and keeps every rendering decision in briefings-chair.js.
     findings: record.findings,
     tierCounts: record.tierCounts, date,
+    // v4.9 W7: the chair's intent is READ OFF the tallied record's meta rather than
+    // added to this signature — run.js already stamps meta.intent emit-when-'task'
+    // (run.js :: runCouncil's mkInput), and both the provisional and the debated
+    // record inherit it by spread. A record with no meta at all (hand-assembled
+    // input, and every pre-W7 caller) composes the review packet.
+    ...(record.meta && record.meta.intent === 'task' ? { intent: 'task' } : {}),
   }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
   fs.writeFileSync(path.join(runDir, 'chair-packet.md'), packet, { mode: 0o600 });
   return packet;

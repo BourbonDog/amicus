@@ -13,9 +13,12 @@
 // hazard above does not apply to it. Do NOT require ./briefings-stage2.
 const { displayName } = require('./seats');
 
-const CHAIR_NO_TOOLS_PREAMBLE =
+// v4.9 W7: the preamble's LAST WORD is the only fork ('verdict.' | 'answer.'), so
+// the shared sentence keeps ONE spelling. This constant's value is unchanged.
+const CHAIR_NO_TOOLS_LEAD =
   'Do NOT use any tools or read any files; everything is in this message; ' +
-  'begin immediately with the verdict.';
+  'begin immediately with the ';
+const CHAIR_NO_TOOLS_PREAMBLE = CHAIR_NO_TOOLS_LEAD + 'verdict.';
 
 const CHAIR_VERDICT_VALUES = ['Ship it', 'Fix these first', 'Fundamental rethink'];
 
@@ -153,8 +156,12 @@ function seatKeyedOrder(order, orderSeats) {
  *   `rankings` and `adjudications` may both be empty — an all-clean bench (LC-10)
  *   has nothing to adjudicate, and a Stage 2 whose judges all died has nothing to
  *   rank. Each empty section says WHICH of those it is rather than rendering blank.
+ *   `intent` (v4.9 W7): `'task'` composes the twins from ./briefings-chair-task;
+ *   absent — or anything else, fail-closed — composes this packet byte-identically.
+ *   The four seams it moves, and the V11 vocabulary it leaves shared, are listed
+ *   in briefings-chair-task.js's docblock.
  */
-function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, findings }) {
+function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, findings, intent }) {
   // ⚠️ v4.8 SI-25: all three rendering sites below are SEAT-KEYED with an ALIAS
   // FALLBACK. Alias-keyed, a twin bench handed the chair "tier counts:
   // {Confirmed: 1}" beside two identical `A1 — deepseek:` lines, with nothing in
@@ -203,9 +210,14 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, 
   const raisedCount = Object.values(tierCounts || {})
     .reduce((s, n) => s + (typeof n === 'number' ? n : 0), 0);
   const tiers = JSON.stringify(tierCounts);
-  const parts = [CHAIR_NO_TOOLS_PREAMBLE];
+  // Lazy, AT CALL TIME (the W6 dispatcher shape) — a top-level require would bind
+  // the two chair modules into a cycle the moment the twins need a fragment back.
+  const task = intent === 'task' ? require('./briefings-chair-task') : null;
+  const parts = [CHAIR_NO_TOOLS_LEAD + (task ? 'answer.' : 'verdict.')];
   if (date) { parts.push(dateLine(date)); }
-  parts.push(raisedCount === 0 ? CHAIR_TASK_NO_FINDINGS : CHAIR_TASK);
+  parts.push(task
+    ? (raisedCount === 0 ? task.TASK_CHAIR_SYNTHESIS_NO_CLAIMS : task.TASK_CHAIR_SYNTHESIS)
+    : (raisedCount === 0 ? CHAIR_TASK_NO_FINDINGS : CHAIR_TASK));
   parts.push(
     `Deterministic tier counts (peers-only cascade): ${tiers}`,
     '--- STAGE-1 REVIEWS (de-anonymized) ---',
@@ -228,7 +240,10 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, 
       + ' Weigh them accordingly.',
     );
   }
-  parts.push(VERDICT_SCALE_ADDENDUM);
+  // R8's placement rule, applied again: after the votes it qualifies, before the
+  // scale — read while the adjudications are still in view.
+  if (task) { parts.push(task.TASK_CONCURRENCE_CAVEAT); }
+  parts.push(task ? task.ANSWER_SCALE_ADDENDUM : VERDICT_SCALE_ADDENDUM);
   return parts.join('\n\n');
 }
 
@@ -260,9 +275,19 @@ function buildChairRepairPrompt({ synthesis } = {}) {
   ].join('\n\n');
 }
 
+/**
+ * Chair repair-prompt dispatcher (v4.9 W7, the W6 shape): `'task'` asks for the
+ * ANSWER line, anything else for the VERDICT line, byte-identically. Lazy require.
+ */
+function chairRepairPromptFor(intent, args) {
+  return intent === 'task'
+    ? require('./briefings-chair-task').buildTaskChairRepairPrompt(args)
+    : buildChairRepairPrompt(args);
+}
+
 module.exports = {
   dateLine,
-  CHAIR_NO_TOOLS_PREAMBLE,
+  CHAIR_NO_TOOLS_PREAMBLE, chairRepairPromptFor,
   CHAIR_VERDICT_VALUES,
   VERDICT_SCALE_ADDENDUM,
   CHAIR_TASK,

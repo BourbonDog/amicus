@@ -118,6 +118,10 @@ existing stage-2 suites for absence pins.
 - [ ] `run-stage2.js`: the bundle build threads intent + the briefing (available on ctx.o —
   measure which field carries the composed briefing text and thread THAT; never re-read
   disk). Judge repair prompt rides the shared contract — verify, don't fork.
+  *(OVERTURNED by measurement in the review-fix round, 2026-08-25: the repair prompt embeds
+  the ranking bullet, so once the contract forked (review F1) the repair had to fork with it
+  — `judgeRepairPromptFor(intent, …)` shipped; a task judge was otherwise re-prompted on the
+  review axis in up to 2 paid solos.)*
 - [ ] Pins: task bundle contains the briefing tail + rank/adjudicate task wordings; REVIEW
   bundle contains NO briefing (the anonymity-narrowing pin the spec says never existed —
   write it now); labels shared; parse path unchanged (parseJudgeOutput untouched); named

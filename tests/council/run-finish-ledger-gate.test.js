@@ -19,7 +19,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { runCouncil } = require('../../src/council/run');
-const { scriptedLaunchers, happyScript, baseOptions } = require('./helpers/fake-launchers');
+const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
+  require('./helpers/fake-launchers');
+
+// v4.9 W7: a TASK chair closes with an `ANSWER:` line, never a `VERDICT:` one
+// (src/council/briefings-chair-task.js :: ANSWER_SCALE_ADDENDUM), so the task
+// run below answers rather than leaving the terminal line unparseable.
+const taskChair = (script) => ({
+  ...script,
+  'abc123-ch1': () => okWave([mkLeg('deepseek', 'Synthesis.\n\nANSWER: Converged', 'complete', 0.03)]),
+});
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-ledger-gate-')); });
@@ -30,7 +39,7 @@ const noSignals = () => () => {};
 test("a task run (intent:'task') never calls appendRunFn — and is still a clean exit-0 run", async () => {
   const appendRunFn = jest.fn();
   const { exitCode } = await runCouncil(baseOptions(tmp, { intent: 'task' }), {
-    launchers: scriptedLaunchers(happyScript()), appendRunFn,
+    launchers: scriptedLaunchers(taskChair(happyScript())), appendRunFn,
     statsFn: () => [], installSignalAbortFn: noSignals,
   });
   expect(exitCode).toBe(0);

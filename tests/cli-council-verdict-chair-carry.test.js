@@ -83,6 +83,43 @@ describe("council verdict preserves the chair's verdict across the Stage-5 repla
     expect((await stage5(dir)).overallVerdict).toBeNull();
   });
 
+  // v4.9 W7 fix round (review MEDIUM F2). The fallback re-parsed chair-output.md
+  // with parseChairVerdict ALONE, so a task run — whose chair closes on an
+  // `ANSWER:` line, never a `VERDICT:` one — recovered null and the Stage-5
+  // rebuild destroyed the single most valuable output of the run, exactly the
+  // defect these pins exist to prevent, on the newer of the two scales. The two
+  // scales are DISJOINT by pinned construction (chair-scale-drift.test.js), so
+  // trying both parsers cannot make either read the other's phrase.
+  test("a TASK run's ANSWER line is recovered from chair-output.md, same as a VERDICT line", async () => {
+    const dir = runFolder({
+      'tally.json': tallyDoc(),
+      'chair-output.md': 'chair synthesis…\n\nANSWER: Converged\n',
+    });
+    expect((await stage5(dir)).overallVerdict).toBe('Converged');
+  });
+
+  test('every phrase of BOTH scales survives the rebuild off chair prose alone', async () => {
+    const { CHAIR_VERDICTS, CHAIR_ANSWERS } = require('../src/council/parse-stage2');
+    for (const [keyword, phrases] of [['VERDICT', CHAIR_VERDICTS], ['ANSWER', CHAIR_ANSWERS]]) {
+      for (const phrase of phrases) {
+        const dir = runFolder({
+          'tally.json': tallyDoc(),
+          'chair-output.md': `chair synthesis…\n\n${keyword}: ${phrase}\n`,
+        });
+        expect((await stage5(dir)).overallVerdict).toBe(phrase);
+      }
+    }
+  });
+
+  test('an ANSWER-shaped line that names no canonical phrase still yields null', async () => {
+    // Widening the fallback must not widen what counts as a terminal line.
+    const dir = runFolder({
+      'tally.json': tallyDoc(),
+      'chair-output.md': 'chair synthesis…\n\nANSWER: Mostly agreed\n',
+    });
+    expect((await stage5(dir)).overallVerdict).toBeNull();
+  });
+
   test('a foreign verdict.json (different runId) is NOT carried into this run', async () => {
     const dir = runFolder({
       'tally.json': tallyDoc('run-1'),

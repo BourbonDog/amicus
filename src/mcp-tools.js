@@ -511,10 +511,11 @@ function getTools() {
         tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
       })).optional().describe('Stage-4 per-finding decisions (default []).'),
       overallVerdict: z.string().nullable().optional().describe(
-        "The chair's VERDICT line, read from the engine-written <runDir>/verdict.json " +
-        '(or the closing VERDICT: line of chair-output.md). Pass it through whenever you ' +
-        'overwrite verdict.json — it is the only copy, tally.json has none. Omit when the ' +
-        'chair was skipped; never author one yourself.'),
+        "The chair's terminal line — VERDICT: on a review run, ANSWER: on a task run — read " +
+        'from the engine-written <runDir>/verdict.json (or the closing terminal line of ' +
+        'chair-output.md). Pass it through whenever you overwrite verdict.json — it is the ' +
+        'only copy, tally.json has none. Omit when the chair was skipped; never author one ' +
+        'yourself.'),
       seatLoss: z.record(z.any()).nullable().optional().describe(
         'The engine-written <runDir>/verdict.json seatLoss block (v4.5.2 — critic seating). ' +
         'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +

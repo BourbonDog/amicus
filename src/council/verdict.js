@@ -2,11 +2,12 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { parseChairVerdict } = require('./parse-stage2');
+const { parseChairVerdict, parseChairAnswer } = require('./parse-stage2');
 
 // v4.0 §7: council family v2 — verdict docs carry {schemaVersion, type} and a
-// nullable overallVerdict (the chair's Ship-it line; populated by the headless
-// engine in Plan B via opts.overallVerdict, null in every Stage-4 manual path).
+// nullable overallVerdict (the chair's terminal line — `VERDICT:` on a review
+// run, `ANSWER:` on a task one; populated by the headless engine in Plan B via
+// opts.overallVerdict, null in every Stage-4 manual path).
 const VERDICT_SCHEMA_VERSION = 2;
 
 /**
@@ -93,8 +94,9 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
  * @param {object} record  tally() output
  * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
  * @param {{overallVerdict?: (string|null), seatLoss?: object, degrades?: Array<object>}} [opts]
- *   `overallVerdict` is the engine hook (Plan B): the parsed chair `VERDICT:`
- *   line; omitted/undefined → null. `seatLoss` (v4.5.2) and `degrades` (v4.6
+ *   `overallVerdict` is the engine hook (Plan B): the parsed chair terminal line
+ *   (`VERDICT:` on a review run, `ANSWER:` on a task run — v4.9 W5/W7);
+ *   omitted/undefined → null. `seatLoss` (v4.5.2) and `degrades` (v4.6
  *   Plan 2) are additive and OPTIONAL — each lands on the verdict only when
  *   truthy/non-empty, absent otherwise (never fabricated).
  */
@@ -207,14 +209,26 @@ function buildVerdict(record, decisions = [], opts = {}) {
  *   1. `<runDir>/verdict.json` `overallVerdict` — the value the engine already
  *      parsed. Guarded by `runId`: a stale or foreign verdict.json sitting in
  *      the folder must never inject another run's chair line.
- *   2. `<runDir>/chair-output.md`, re-parsed with the engine's own
- *      `parseChairVerdict`, so there is no second parser to drift. This also
- *      recovers runs whose verdict.json was already nulled by the defect.
+ *   2. `<runDir>/chair-output.md`, re-parsed with the engine's OWN parsers, so
+ *      there is no second parser to drift. This also recovers runs whose
+ *      verdict.json was already nulled by the defect.
+ *
+ * ⚠️ BOTH scales (v4.9 W7 fix round, review MEDIUM F2). A task chair closes on
+ * an `ANSWER:` line and never emits a `VERDICT:` one, so a VERDICT-only fallback
+ * recovered null for every task run — this function's whole reason to exist,
+ * failing on the newer half of the runs it guards. Trying both is safe rather
+ * than merely convenient: the two scales are DISJOINT by pinned construction
+ * (tests/council/chair-scale-drift.test.js), and each parser matches only its
+ * own keyword line, so neither can read the other's phrase and the order of the
+ * two calls cannot change an outcome. `parseChairTerminal(text, intent)` is
+ * deliberately NOT used: a Stage-5 rebuild reads a tally record that carries no
+ * intent on the manual path, and guessing one would fail closed to review —
+ * i.e. straight back to this defect.
  *
  * Never invents: an absent, skipped, or unstructured chair yields null.
  * @param {string} runDir
  * @param {string} [runId] record.meta.runId — the run being rebuilt
- * @returns {string|null} a canonical chair verdict phrase, or null
+ * @returns {string|null} a canonical chair verdict OR answer phrase, or null
  */
 function readOverallVerdict(runDir, runId) {
   try {
@@ -225,7 +239,8 @@ function readOverallVerdict(runDir, runId) {
     }
   } catch { /* no prior verdict.json, or unreadable — try the chair prose */ }
   try {
-    return parseChairVerdict(fs.readFileSync(path.join(runDir, 'chair-output.md'), 'utf-8'));
+    const text = fs.readFileSync(path.join(runDir, 'chair-output.md'), 'utf-8');
+    return parseChairVerdict(text) || parseChairAnswer(text);
   } catch { /* no chair-output.md — the chair genuinely produced nothing */ }
   return null;
 }
