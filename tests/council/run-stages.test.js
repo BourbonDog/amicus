@@ -1558,8 +1558,17 @@ describe('v4.8 T-A5: a SKIPPED first leg is refused a superseded row', () => {
     // production reader, and the SAME record on a seat-loss channel DOES move it, so the equality
     // is a property of the channel and not of an inert consumer.
     const seatLoss = (ds) => deriveSeatLoss({ runId: 'r1', critic: 'gpt', degrades: ds });
-    expect(seatLoss([notes[0]])).toEqual(seatLoss([]));
-    expect(seatLoss([{ ...notes[0], channel: 'dead-leg' }]).deadBenchSeats).toEqual(['deepseek']);
+    // ⚠️ v4.9 W9: `deriveSeatLoss` now tests `kind === 'degrade'` positively, and the record
+    // this test's `degrade` spy captures is the RAW note — `pushDeadSeatRows` builds it without
+    // a `kind` key and the sink stamps one on the way out (`run-stage1-superseded.js ::
+    // STDERR_NOTICE` spreads `kind: 'degrade'`; the real sink goes through `makeDegrade`, whose
+    // default is the same). Stamping it here measures what production hands the consumer, and
+    // keeps this pin about the CHANNEL — without it the equality below would hold for the
+    // second reason (no kind) and stop proving anything about `internal`.
+    const asDegrade = (r) => ({ kind: 'degrade', ...r });
+    expect(seatLoss([asDegrade(notes[0])])).toEqual(seatLoss([]));
+    expect(seatLoss([asDegrade({ ...notes[0], channel: 'dead-leg' })]).deadBenchSeats)
+      .toEqual(['deepseek']);
   });
 
   test('the announcement cannot be defeated by omitting the sink', () => {

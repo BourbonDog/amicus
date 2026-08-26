@@ -152,6 +152,133 @@ describe('SL-2: heals never count as losses', () => {
   });
 });
 
+/**
+ * v4.9 W9 (SI-02) — `deriveSeatLoss` is the THIRD consumer that was blind to `seat-unbound`,
+ * and the one whose output reaches verdict.json. Two changes, one commit with the renderers:
+ *   1. the kind predicate is now the POSITIVE `kind === 'degrade'`, aligning all three
+ *      consumers and future-proofing v4.9's `info` kind;
+ *   2. the gated `seat-unbound` family joins `dead-leg` as a seat loss.
+ * `deadBenchSeats` stays a list of ALIAS strings — `live-dead-seats.js`'s derivative-absorb
+ * rule reads it that way, and `data.seat` compares against `o.critic`, an alias.
+ *
+ * Named mutant GATERAW-C (measured, applied and reverted): drop the retry-family conjunct from
+ * `gatedUnbound` — red set (4), all in this block: both ORPHAN-LEG controls, the Stage-2
+ * judge-side control, and R-W9a. The full mutant table for W9, including the two renderer
+ * twins, is in `tests/workspace/dead-seat-twins.test.js`'s W9 header.
+ */
+describe('W9: deriveSeatLoss admits the gated seat-unbound family', () => {
+  const unbound = (data) => mk('seat-unbound', data);
+
+  test('a partial-wave seat-unbound loss reaches deadBenchSeats, as an ALIAS', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s1', models: ['beta'], reason: 'x', retryWaveId: 'r1-s1r1',
+        seat: 'beta', seatId: 'beta#2' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual(['beta']);   // the alias, never the seat id
+    expect(s.criticSeated).toBe(true);
+  });
+
+  test('a missing-leg seat-unbound loss naming the CRITIC flips criticSeated', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ seat: 'critic-m', status: null, reason: null, retryWaveId: 'r1-c1r1',
+        firstFailure: { seat: 'critic-m', seatId: 'critic-m', class: 'missing',
+          waveId: 'r1-c1', reason: 'the wave returned 0 of 1 legs' } }),
+    ] });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe('the critic leg produced no usable output');
+    expect(s.deadBenchSeats).toEqual([]);         // the critic is never also a bench loss
+  });
+
+  test('CONTROL (mutant GATERAW): an ORPHAN-LEG note is NOT a lost seat', () => {
+    // Its review LANDED and was paid for — counting it would over-report the loss and
+    // double-count a rendered review. It carries data.legId and no retry-family field.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s1', legId: 'leg-7', seat: 'beta' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+    expect(s.criticSeated).toBe(true);
+  });
+
+  test('CONTROL (mutant GATERAW): an orphan note naming the CRITIC does not unseat it', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s1', legId: 'leg-7', seat: 'critic-m' }),
+    ] });
+    expect(s.criticSeated).toBe(true);
+  });
+
+  test('CONTROL (mutant GATERAW): a reVoteUnbound note is inert — it names a judge', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-rv', legId: 'leg-9', judge: 'beta', key: 'beta' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('CONTROL: a Stage-2 judge-side seat-unbound note is inert — that seat DID review', () => {
+    // run-stage2.js's note: {waveId, seat} for a seat that reviewed and failed only to judge.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s2', seat: 'beta' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test("CONTROL: the seat conjunct — a retry-family record naming NO seat is not a loss", () => {
+    // No shipped `seat-unbound` shape looks like this (every retry-family arm names its
+    // alias), so this is the guard's OWN pin, not a regression case. Without it the record
+    // reaches `deadBenchSeats` and pushes `undefined`, which every reader of that list —
+    // `live-dead-seats.js`'s derivative candidates included — treats as a seat. Measured:
+    // dropping the same conjunct from the two RENDERER twins reds nothing, because their
+    // `add()`/`if (key)` guards already refuse a nameless candidate. It is kept in all three
+    // so one rule keeps one spelling; this is the one place it can be measured.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s1', reason: 'x', retryWaveId: 'r1-s1r1' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('R-W9a (known-wrong): the SKIPPED-path partial note is excluded — no retry family', () => {
+    // Disclosed residual, mirroring the renderers' identical pin in dead-seat-twins.test.js.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      unbound({ waveId: 'r1-s1', models: ['beta'], reason: 'x', seat: 'beta' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+});
+
+describe('W9: the kind predicate is the positive `kind === degrade`', () => {
+  test("an `info` record on a loss channel is not a loss (kind !== 'heal' admitted it)", () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null }, { kind: 'info' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('heals stay excluded — the property the old spelling existed for', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null }, { kind: 'heal' }),
+    ] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('a real degrade is still a loss — the predicate did not close on everything', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades: [
+      mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null }),
+    ] });
+    expect(s.deadBenchSeats).toEqual(['beta']);
+  });
+
+  test('MEASURED CONSEQUENCE: a record with NO kind key is no longer a loss here', () => {
+    // Deliberate and NOT the same call report.js made. Every record `deriveSeatLoss` sees in
+    // production comes from `utils/degrade.js :: makeDegrade` via the run's own sink, which
+    // stamps kind:'degrade' by default — its only production caller is
+    // `run-verdict-files.js :: writeVerdictFiles`, fed in-process records from that sink.
+    // report.js reads verdict.json documents that may PREDATE kinds, which is why it keeps the
+    // negative spelling (see its LEGACYDROP note). Pinned so the asymmetry is intentional.
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m',
+      degrades: [{ channel: 'dead-leg', what: 'w', why: 'y', effect: 'e', data: { seat: 'beta' } }] });
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+});
+
 describe('readPriorVerdictSurfaces (#87)', () => {
   test('#87: readPriorVerdictSurfaces recovers seatLoss and degrades, runId-guarded', () => {
     const runDir = fs.mkdtempSync(path.join(tmp, 'prior-'));

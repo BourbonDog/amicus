@@ -2,6 +2,7 @@
 
 const { makeFakeDom } = require('./helpers/fake-workspace-page');
 const { buildMatrixModel } = require('../../src/workspace/matrix-model');
+const { computeStreetCred } = require('../../src/council/street-cred');
 
 /**
  * Headless painter proof for electron/workspace-ui/workspace-matrix.js, same harness
@@ -333,7 +334,7 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('chair stage failed');
     });
 
-    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html / verdict.js :: buildVerdict)', () => {
+    test('tierCounts renders AS-IS even when it disagrees with the visible rows — a PRE-override aggregate, never derived (matches report.html and the verdict.js :: buildVerdict tierCounts passthrough)', () => {
       const container = document.createElement('div');
       const vp = {
         present: true, overallVerdict: 'Fix these first',
@@ -360,6 +361,113 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       });
       expect(container.textContent).toContain('Review A');
       expect(container.textContent).not.toContain('gemini');
+    });
+
+    /**
+     * v4.9 W9 — SI-22.4 rider (2): the THIRD street-cred renderer.
+     *
+     * v4.8's R22.4-6 seat-keyed `report-md.js :: renderMd` and
+     * `report-html.js :: renderHtml` (tests/council/report-cred-seat.test.js) and left
+     * this one alias-labelled, so on a twin bench the report read `gemini#1`/`gemini#2`
+     * while the Workspace read `gemini` TWICE, with different numbers under one identical
+     * name. Same fixture as report-cred-seat.test.js, same real producer, so the third
+     * renderer is measurably printing the SAME rows the other two do.
+     *
+     * ONE TEST PER RENDERER (the R22.4-6 rule): a shared assertion would let any of the
+     * three regress silently, so these live here rather than joining that council suite.
+     *
+     * THE BLIND RULE, and why it is not `s.seat || s.model` unconditionally: a seat id
+     * CONTAINS its alias, so printing one with blind mode on defeats blind mode — the
+     * measured precedent at `src/workspace/seat-space.js :: isSeatTable` (council-2 C3)
+     * and again at `workspace-lazy.js :: roster`. `opts.labelOf` stays ALIAS-keyed
+     * (`state.labelByModel`, built from run.json's labelMap, which is label -> alias and
+     * unchanged by the seat work — `src/council/anonymize.js :: assignLabels`), so the
+     * lookup key stays `s.model` and the signature is untouched. Blind mode therefore
+     * renders exactly what it rendered before, seat field or not.
+     *
+     * Named mutant RIDERALIAS: render `s.model` unconditionally (the pre-rider line
+     * `var name = opts.isBlind() && label ? label : s.model;`).
+     * RED SET: 1 suite / 1 test — "a twin bench renders two DISTINGUISHABLE rows".
+     */
+    describe('street-cred seat labels (SI-22.4 rider 2)', () => {
+      // Same asymmetric fixture as tests/council/report-cred-seat.test.js: the third,
+      // unique-alias seat both breaks the twins' symmetry (so their numbers differ) and
+      // puts a SEAT-LESS row in the same table, exercising the `|| s.model` half.
+      const TWIN_MODELS = ['gemini', 'gemini', 'gpt'];
+      const TWIN_SEATS = [{ id: 'gemini#1', alias: 'gemini' }, { id: 'gemini#2', alias: 'gemini' },
+        { id: 'gpt', alias: 'gpt' }];
+      const TWIN_RANKINGS = [
+        { judge: 'gemini', seat: 'gemini#1', order: ['gemini', 'gemini', 'gpt'], orderSeats: ['gemini#2', 'gemini#1', 'gpt'] },
+        { judge: 'gemini', seat: 'gemini#2', order: ['gemini', 'gemini', 'gpt'], orderSeats: ['gemini#1', 'gemini#2', 'gpt'] },
+        { judge: 'gpt', order: ['gemini', 'gpt', 'gemini'], orderSeats: ['gemini#1', 'gpt', 'gemini#2'] },
+      ];
+      const UNIQ_RANKINGS = [
+        { judge: 'gemini', order: ['gpt', 'gemini'] },
+        { judge: 'gpt', order: ['gemini', 'gpt'] },
+      ];
+      const vpFor = (streetCred) => ({
+        present: true, overallVerdict: 'ok', tierCounts: null, streetCred, decisions: [], reason: null,
+      });
+      // Rows are [name, peers-only, with-self]; `decisions: []` keeps this the only table.
+      const cells = (container) => container.querySelectorAll('td').map(td => td.textContent);
+      const render = (streetCred, opts) => {
+        const container = document.createElement('div');
+        AmicusMatrix.renderVerdict(container, vpFor(streetCred), Object.assign({
+          reportPresent: true, onFold: () => {}, onOpenReport: () => {},
+        }, opts));
+        return container;
+      };
+
+      test('the real producer hands this renderer two same-alias rows with distinct seats', () => {
+        const rows = computeStreetCred(TWIN_RANKINGS, TWIN_MODELS, TWIN_SEATS);
+        expect(rows.map(r => r.model)).toEqual(['gemini', 'gemini', 'gpt']);
+        expect(rows.map(r => r.seat)).toEqual(['gemini#1', 'gemini#2', undefined]);
+        expect(rows[0].peersOnly).not.toBe(rows[1].peersOnly);
+      });
+
+      test('a twin bench renders two DISTINGUISHABLE street-cred rows', () => {
+        const c = render(computeStreetCred(TWIN_RANKINGS, TWIN_MODELS, TWIN_SEATS), {
+          labelOf: () => null, isBlind: () => false,
+        });
+        expect(cells(c)).toEqual([
+          'gemini#1', '1.00', '1.33',
+          'gemini#2', '2.00', '2.00',
+          'gpt', '3.00', '2.67',
+        ]);
+        // RIDERALIAS wrote `gemini` twice here, ambiguous about which seat is which.
+        expect(cells(c).filter(t => t === 'gemini')).toEqual([]);
+      });
+
+      test('a unique-alias bench renders IDENTICALLY to the pre-rider output', () => {
+        const c = render(computeStreetCred(UNIQ_RANKINGS, ['gemini', 'gpt'], null), {
+          labelOf: () => null, isBlind: () => false,
+        });
+        expect(cells(c)).toEqual(['gemini', '1.00', '1.50', 'gpt', '1.00', '1.50']);
+      });
+
+      test('BLIND renders the label — never the seat id, which contains its alias', () => {
+        const c = render(computeStreetCred(TWIN_RANKINGS, TWIN_MODELS, TWIN_SEATS), {
+          labelOf: (m) => (m === 'gemini' ? 'Review A' : 'Review B'), isBlind: () => true,
+        });
+        expect(cells(c)).toEqual([
+          'Review A', '1.00', '1.33', 'Review A', '2.00', '2.00', 'Review B', '3.00', '2.67',
+        ]);
+        expect(c.textContent).not.toContain('gemini');
+        expect(c.textContent).not.toContain('#');
+      });
+
+      test('BLIND with NO label resolvable falls back to the ALIAS, still never the seat id', () => {
+        // The degenerate case the plain `s.seat || s.model` spelling would have leaked:
+        // labelOf misses (a hand-edited or pre-labelMap run.json), and blind mode must
+        // still not print `gemini#1`. Byte-identical to what this branch rendered before.
+        const c = render(computeStreetCred(TWIN_RANKINGS, TWIN_MODELS, TWIN_SEATS), {
+          labelOf: () => null, isBlind: () => true,
+        });
+        expect(cells(c)).toEqual([
+          'gemini', '1.00', '1.33', 'gemini', '2.00', '2.00', 'gpt', '3.00', '2.67',
+        ]);
+        expect(c.textContent).not.toContain('#');
+      });
     });
 
     test('fold + open-report buttons wire opts.onFold/onOpenReport, and reportPresent:false disables open-report', () => {

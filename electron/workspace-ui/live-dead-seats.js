@@ -5,10 +5,51 @@
 // Self-contained: it reads only its four arguments and owns its own isReviewing.
 (function () {
   /**
+   * The kind/channel admission rule, v4.9 W9 (SI-02). ⚠️ MIRROR — this rule is spelled a
+   * second time at `workspace-seats.js :: retriedSeats`, and the two MUST move together
+   * (two spellings of one rule is PR5a council finding B1; the mirror is declared in that
+   * function's docblock). A renderer module cannot `require` src/ and this file cannot
+   * `require` its sibling, so the mirror is enforced behaviourally instead: the drift pin
+   * in `tests/workspace/workspace-seats.test.js` drives BOTH consumers with one fixture set.
+   *
+   * `dead-leg`/`dead-wave` are admitted unconditionally — the two skipped-path notes
+   * (`run-stages.js`, fired when the once-only retry never attempted the seat) carry no
+   * retry-family field and must still render, with the plain phrasing.
+   *
+   * `seat-unbound` is admitted GATED, never raw: it is a SHARED channel with SEVEN emit sites
+   * (counted 2026-08-25 — three arms of `run-retry-notes.js`, one in each of
+   * `stage1-bind.js`, `run-debate-revote.js`, `run-stage2.js` and `run-stages.js`) that do NOT
+   * mean the same thing. `stage1-bind.js :: orphanLegNote` and
+   * `run-debate-revote.js :: reVoteUnboundNote` mean "a leg LANDED but names no seat/judge"
+   * — a review that was paid for and rendered, not a lost seat; `run-stage2.js`'s judge-side
+   * note names a seat that DID review and merely failed to judge. None of the three carries
+   * `retryWaveId` or `firstFailure` (measured), so the retry-family test excludes all of them
+   * and the BACKLOG's proposed `data.legId` discriminator is subsumed rather than duplicated.
+   *
+   * ⚠️ The seat conjunct is HONESTLY belt-and-braces HERE and load-bearing in the third twin.
+   * Measured: dropping it from this function reds nothing, because `add()` already refuses a
+   * candidate with no alias; dropping it from `verdict-seat-loss.js :: deriveSeatLoss` puts an
+   * `undefined` into `deadBenchSeats`, which every reader of that list treats as a seat. It is
+   * kept in all three so one rule has one spelling — pinned on the verdict side.
+   *
+   * ⚠️ Disclosed residual (R-W9a): `run-stages.js`'s SKIPPED partial note is a real loss with
+   * no retry-family field, so this gate excludes it. Pinned known-wrong in dead-seat-twins.
+   */
+  function isSeatLoss(d) {
+    if (!d || d.kind !== 'degrade') { return false; }
+    if (d.channel === 'dead-leg' || d.channel === 'dead-wave') { return true; }
+    if (d.channel !== 'seat-unbound') { return false; }
+    var data = d.data || {};
+    return !!((data.retryWaveId || data.firstFailure) && (data.seatId || data.seat));
+  }
+
+  /**
    * D6 (v4.6.2 PR4 Task 2, "dead-seat rows"): announced-dead seats, unioned
-   * from the run's own `degrades[]` (dead-leg/dead-wave channels — the live
+   * from the run's own `degrades[]` (the loss channels `isSeatLoss` above admits — the live
    * announcement; shapes verified against src/council/run-retry-notes.js and
-   * the skipped-path notes at src/council/run-stages.js:155-174) and the
+   * the skipped-path notes in src/council/run-stages.js's `retry.skippedDeadWaves` and
+   * `retry.skippedDeadLegs` loops — re-anchored BY SYMBOL at v4.9 W9, the old `:155-174`
+   * having rotted onto the materialize/repair block) and the
    * verdict's derived `seatLoss` (verdict.js summarizeSeatLoss/deriveSeatLoss
    * — the critic-loss backstop, kept for verdicts written before `degrades[]`
    * existed, v4.5.2 precedent). De-duped by seat model: `degrades` is scanned
@@ -45,13 +86,16 @@
    * critic but whose chair-fallback walk happened to land on that same alias
    * (and succeeded, producing a live `role: 'chair'` cost row) silently
    * erased the dead-critic row it was never a replacement for (spec §5, the
-   * PR 102 rider). Candidates now carry a `role` (`'critic'` via alias equality
-   * with `runMeta.critic` — mirroring verdict-seat-loss.js :: deriveSeatLoss — or
-   * `null`), and only REVIEWING-role live legs (`seat`/`critic`/`lens:*`)
+   * PR 102 rider). Candidates now carry a `role` — `'critic'` or `null`, decided by
+   * `roleOf` below, which since v4.9 W9 (R4) keys on SEAT identity whenever the record
+   * and the run can both spell it and falls back to alias equality otherwise (so it no
+   * longer mirrors verdict-seat-loss.js :: deriveSeatLoss, which stays alias-keyed on
+   * purpose) — and only REVIEWING-role live legs (`seat`/`critic`/`lens:*`)
    * suppress at all; a `'critic'` candidate is cleared only by a live
-   * CRITIC-role leg for that alias, never by a chair/judge/rebuttal/revote
+   * CRITIC-role leg for that seat (alias where no seat id exists), never by a
+   * chair/judge/rebuttal/revote
    * row landing on the same model. Hidden dependency: the recovered-critic
-   * suppression below (`byRole[alias + '|critic']`) relies on `roleFor`'s
+   * suppression below (`byRole[key + '|critic']`) relies on `roleFor`'s
    * critic branch (src/council/run-stages.js), which only fires when lenses
    * are absent — safe today only because --critic and --lenses are mutually
    * exclusive (src/cli-handlers-council-run.js's `critic && lenses` check); if
@@ -75,7 +119,9 @@
    *                it on the alias is what collapsed two dead twins into one row.
    *   'legacy'     a pre-PR5c record with no seat id anywhere -> dedup on the alias,
    *                which still collapses twins. Disclosed residual R2.
-   *   'derivative' seatLoss-sourced. verdict-seat-loss.js :: deriveSeatLoss builds deadBenchSeats FROM the same
+   *   'derivative' seatLoss-sourced. `verdict-seat-loss.js :: deriveSeatLoss` (by SYMBOL — the
+   *                old `verdict.js:86` rotted in v4.9 W9, and the function has since left
+   *                verdict.js entirely) builds deadBenchSeats FROM the same
    *                dead legs that emit degrades[], so it is always a duplicate and is
    *                the ONLY flavour that may be absorbed by an alias already covered.
    *                Absorbing a real degrade instead would erase an unidentified twin.
@@ -86,8 +132,9 @@
    *   `deadBenchSeats` (string[] of aliases) feeds the bench candidates below
    * @param {Array<{model: string}>} liveSeats  seatsFromRunStats(...)'s output
    *   (or any seat list keyed the same way — the live seat map)
-   * @param {?{critic: ?string}} runMeta  run.critic (alias, or null/absent
-   *   when no critic was requested) — degrade records carry no role field, so
+   * @param {?{critic: ?string, criticSeat: ?string}} runMeta  run.critic (alias) and
+   *   run.criticSeat (the seat id `seats.js :: preflightSeats` resolved for it), each
+   *   null/absent when no critic was requested — degrade records carry no role field, so
    *   this is the ONLY way a degrade-sourced candidate is identified as critic
    * @returns {Array<{model: string, seat: ?string, statusText: string, role: ?string}>}
    *   `model` is the ALIAS (what the row displays, what labelOf keys on); `seat` is
@@ -95,6 +142,17 @@
    */
   function deadSeats(degrades, seatLoss, liveSeats, runMeta) {
     var critic = runMeta && runMeta.critic ? runMeta.critic : null;
+    var criticSeat = runMeta && runMeta.criticSeat ? runMeta.criticSeat : null;
+    // R4 (v4.9 W9). The old rule was `alias === critic`, which on a bench where one alias
+    // holds a critic seat AND a bench seat tagged the WRONG candidate 'critic' — and critic
+    // candidates suppress through `byRole`, a map PR5c's seat-keying never reached, so a dead
+    // bench twin beside a live critic twin rendered NOTHING. Seat identity decides whenever
+    // BOTH sides can spell it; a record with no seat id, or a run with no resolved critic
+    // seat (pre-`criticSeat` run.json), keeps the legacy alias rule rather than guessing.
+    function roleOf(key, alias) {
+      if (key && criticSeat) { return key === criticSeat ? 'critic' : null; }
+      return critic && alias === critic ? 'critic' : null;
+    }
     // ⚠️ Object.create(null) throughout this family (also workspace-render.js's
     // `existing`/`seen` and workspace-app.js's `labelByModel`): a model literally
     // named `toString` is truthy off a bare object, so it was dropped here and —
@@ -140,23 +198,23 @@
       order.push(row);
     }
     (degrades || []).forEach(function (d) {
-      if (!d || d.kind !== 'degrade') { return; }
-      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
+      if (!isSeatLoss(d)) { return; }
       var data = d.data || {};
       var retried = !!(data.retryWaveId || data.firstFailure);
-      // Critic identification mirrors deriveSeatLoss (verdict.js): alias
-      // equality with run.critic — degrade records carry no role field.
-      if (d.channel === 'dead-leg') {
+      // ONE shape, TWO channels: `dead-leg` and every admitted `seat-unbound` arm name a
+      // single seat through `data.seat` (alias) plus an optional seat id — the partial arm's
+      // `data.seatId` (v4.9 W9 P1) or the two missing-leg arms' `firstFailure.seatId`. Only
+      // `dead-wave` is a LIST, which is why the branch tests for it rather than for dead-leg.
+      if (d.channel !== 'dead-wave') {
         var lk = (data.firstFailure && data.firstFailure.seatId) || data.seatId || null;
-        add(lk, data.seat, retried, critic && data.seat === critic ? 'critic' : null,
-          lk ? 'keyed' : 'legacy');
+        add(lk, data.seat, retried, roleOf(lk, data.seat), lk ? 'keyed' : 'legacy');
       } else {
         // `seats[]` is index-parallel with `models[]` (PR5c Task 1). Its ABSENCE means a
         // legacy record; a null ELEMENT means an unidentified seat. Different statements.
         var hasSeats = Array.isArray(data.seats);
         (data.models || []).forEach(function (m, i) {
           var wk = hasSeats ? data.seats[i] : null;
-          add(wk, m, retried, critic && m === critic ? 'critic' : null,
+          add(wk, m, retried, roleOf(wk, m),
             wk ? 'keyed' : (hasSeats ? 'unid' : 'legacy'), { waveId: data.waveId, i: i });
         });
       }
@@ -208,9 +266,15 @@
       // producers cannot disagree. A bare insert would write a STRING key for every such seat.
       if (s.seat) { reviewing[s.seat] = true; }
       byRole[alias + '|' + s.role] = true;
+      // R4 (v4.9 W9): the seat arm, exactly mirroring `reviewing` two lines up. Without it a
+      // critic candidate carrying a seat id has no seat-keyed entry to match and the lookup
+      // below would fall through to a ghost row on every twin bench.
+      if (s.seat) { byRole[s.seat + '|' + s.role] = true; }
     });
     return order.filter(function (s) {
-      if (s.role === 'critic') { return !byRole[s.model + '|critic']; }
+      // Seat where the candidate has one, alias otherwise — the same key `reviewing` uses
+      // below, so the two suppression maps cannot disagree about what a candidate IS.
+      if (s.role === 'critic') { return !byRole[(s.seat || s.model) + '|critic']; }
       // An UNNAMED dead seat is never suppressed by alias evidence. The producer emitted
       // `null` rather than the alias precisely because "unidentified" and "the alias" are
       // different statements; falling back to the alias here would re-assert the equivalence

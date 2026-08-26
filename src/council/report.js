@@ -270,10 +270,11 @@ function toModel(verdict, wave) {
     // kinds, which `utils/degrade.js :: formatDegrade` still deliberately serves as
     // 'Notice' — is a loss at HEAD, and the positive spelling drops it from BOTH
     // lists. Pinned in report-intent.test.js (named mutant LEGACYDROP, measured).
-    // ⚠️ `verdict.js :: deriveSeatLoss` keeps `kind !== 'heal'` and is no longer the
-    // same predicate twice: it asks which announcements imply a LOST SEAT, and its
-    // `data` + dead-leg/dead-wave channel filters exclude 'ledger-skipped' anyway
-    // (W5.1 handoff — deliberately left alone).
+    // ⚠️ `verdict-seat-loss.js :: deriveSeatLoss` now spells it the OTHER way — v4.9 W9 moved
+    // it to the positive `kind === 'degrade'` — and the two are not the same predicate: that
+    // one asks which announcements imply a LOST SEAT, over in-process `makeDegrade` records
+    // only, so it can afford the positive test. This one reads verdict.json documents that
+    // may predate kinds, which is what LEGACYDROP measures. Do not "align" them.
     degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal' && d.kind !== 'info'),
     notes: (verdict.degrades || []).filter(d => d.kind === 'info'),
     cost: buildCostModel(verdict.runStats || [], wave),

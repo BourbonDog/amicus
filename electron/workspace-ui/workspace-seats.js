@@ -50,8 +50,9 @@
    * seat-keyed and deadSeats still dedup'd on the alias; PR5c seat-keyed the other side too,
    * so both now key on "seat id where the record supplies one, alias otherwise". The
    * kind/channel FILTER still mirrors window.AmicusLive.deadSeats — now at
-   * live-dead-seats.js, which PR5c split out of live-seats.js for the 300-line gate — and
-   * must keep doing so. Two spellings of one rule is PR5a council finding B1.
+   * live-dead-seats.js, where PR5c's size-gate split put it and v4.9 W9 named it `isSeatLoss` —
+   * and must keep doing so; the two moved together in W9's one commit. Two spellings of one rule
+   * is PR5a council finding B1; only the behavioural drift pin in workspace-seats.test.js holds it.
    *
    * ⚠️ The two sides are NOT identical, and the difference is deliberate: deadSeats decides
    * whether a seat is RENDERED, so it fails toward showing a row; this decides whether a
@@ -74,14 +75,20 @@
     var out = Object.create(null);
     (degrades || []).forEach(function (d) {
       if (!d || d.kind !== 'degrade') { return; }
-      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
       var data = d.data || {};
+      // Hoisted ABOVE the channel test (behaviour-preserving — the two loss channels already
+      // required it) because it is ALSO the `seat-unbound` gate v4.9 W9 admits that shared
+      // channel through: orphan-leg, re-vote and Stage-2 judge notes ride it, are not retried
+      // seats, and none of the three carries a retry-family field. One test excludes all.
       if (!(data.retryWaveId || data.firstFailure)) { return; }
-      if (d.channel === 'dead-leg') {
+      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave'
+        && !(d.channel === 'seat-unbound' && (data.seatId || data.seat))) { return; }
+      if (d.channel !== 'dead-wave') {
         // ⚠️ Prefer the SEAT ID when the record names one. TWO mechanisms now supply it, not
         // one: retryLegStillDeadNote and missingLegStillDeadNote via `firstFailure.seatId`
         // (pinned by tests/council/run-retry.test.js:628 on a twin bench), and — since
-        // v4.8 PR5c — srcLegStillDeadNote via its own `data.seatId`. Reading only the first
+        // v4.8 PR5c — srcLegStillDeadNote via its own `data.seatId`, joined on that same key
+        // by waveStillDeadNote's partial `seat-unbound` arm in v4.9 W9. Reading only the first
         // meant a srcLeg record keyed by ALIAS and badged the live twin "retried once" while
         // the seat that was actually retried showed nothing.
         // `data.seat` remains the last fallback for pre-PR5c records (residual R6).
@@ -117,7 +124,11 @@
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
     var seatLoss = d.verdict && d.verdict.seatLoss;
-    var runMeta = { critic: (d.run && d.run.critic) || null };
+    // `criticSeat` (v4.9 W9 / R4): run.json's resolved critic SEAT id (run-state.js ::
+    // initCouncilRun seeds it, seats.js :: preflightSeats supplies it) — what lets deadSeats
+    // tag the critic by seat identity. Null with no critic, and on pre-field run.json.
+    var runMeta = { critic: (d.run && d.run.critic) || null,
+      criticSeat: (d.run && d.run.criticSeat) || null };
     // Source-selection (v4.6.3 PR2, spec D4): run-degrade.js swallows checkpoint failures, so
     // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it
     // ONLY when run.degrades is empty/absent. A fallback, never a union: both docs can carry
@@ -160,7 +171,9 @@
       // `s.seat` is a SEAT ID (`alias#N`, from src/council/run-stats-entry.js :: buildRunStatsEntry
       // via the cost row). The degrade records keyed into `retried` above use `data.seat`,
       // which is an ALIAS and stays one
-      // deliberately (run-retry-notes.js:39-45 — verdict-seat-loss.js :: deriveSeatLoss compares it against `o.critic`).
+      // deliberately (run-retry-notes.js :: waveStillDeadNote's `data` comment;
+      // `verdict-seat-loss.js :: deriveSeatLoss`'s `criticLeg` compares it to `o.critic` —
+      // both by SYMBOL since W9).
       // Reading one as the other is precisely how an earlier revision of this fix paired an
       // alias-keyed map with a seat-id lookup and dropped every badge. When touching either
       // side, say which space you are in.
@@ -264,7 +277,8 @@
     var A = window.AmicusApp;
     var d = A.state.detail;
     var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
-    var runMeta = { critic: (d && d.run && d.run.critic) || null };
+    var runMeta = { critic: (d && d.run && d.run.critic) || null,
+      criticSeat: (d && d.run && d.run.criticSeat) || null };
     // Source-selection (v4.6.3 PR2, spec D4), live-path twin of renderSeatsPanel's fallback
     // above: the tick's own live.degrades wins when non-empty; state.detail.verdict.degrades is
     // usually absent mid-run (verdict.json doesn't exist until the run finishes) — fine, this

@@ -252,11 +252,18 @@ function getRunDetail(project, runId) {
       // of a copy of the question makes that divergence unrepresentable.
       seatSpace: isSeatTable(run.seats),
       // ⚠️ Fix-wave 3 (council-3 C2): seats[] is PRESENT but unusable, so the run silently
-      // lost per-seat behaviour — two seats on one model become indistinguishable in every
-      // panel. isSeatTable fails WHOLE (one malformed entry drops the entire table), which
-      // is the fail-safe direction but is exactly the correct-but-silent degrade the product
-      // principle rejects. Emitted here, beside the predicate that decides it, rather than
-      // re-derived renderer-side; workspace-app.js's renderBanners is its only consumer.
+      // lost per-seat ARTIFACT NAMING — two seats on one model become indistinguishable in
+      // the reviews/judges/re-vote panels, whose roster this flag sends back to `bench`
+      // (workspace-lazy.js :: roster). isSeatTable fails WHOLE (one malformed entry drops the
+      // entire table), which is the fail-safe direction but is exactly the correct-but-silent
+      // degrade the product principle rejects. Emitted here, beside the predicate that decides
+      // it, rather than re-derived renderer-side; workspace-banners.js is its only consumer.
+      // ⚠️ "in every panel" — what this comment said until v4.9 W9 — was already FALSE when
+      // written, and W9's PR5b-1 measured it: `costPanel` above maps `tally.runStats`, whose
+      // `seat` is stamped from the in-memory seat at assembly (run-stats-entry.js ::
+      // buildRunStatsEntry), so the seats panel keeps one row per seat no matter what
+      // run.seats looks like. Ruling V15 discloses that split in the banner rather than
+      // forcing the seats panel down to `seatSpace` for uniformity.
       // NOT the same as `!seatSpace`: a run with no seats[] at all is a legacy run, not a
       // broken one, and must not be bannered.
       seatTableRejected: Array.isArray(run.seats) && run.seats.length > 0 && !isSeatTable(run.seats),

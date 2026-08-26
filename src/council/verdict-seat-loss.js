@@ -6,9 +6,11 @@
  * The verdict's seat-loss surface: `summarizeSeatLoss` (v4.5.2) and
  * `deriveSeatLoss` (v4.6 Plan 2, spec D3) — lifted VERBATIM out of verdict.js
  * for the 300-line gate (v4.9 PR #200 fix round 3), on the W4 chair-fallback
- * precedent. Pure MOVE: same bodies, same docblocks, same exports, and
- * verdict.js re-exports both so no caller changes. Their behaviour stays pinned
- * where it already was (tests/council/verdict-seat-loss.test.js,
+ * precedent. The extraction itself was a pure MOVE: same bodies, same
+ * docblocks, same exports, and verdict.js re-exports both so no caller changes.
+ * (v4.9 W9 has since edited `deriveSeatLoss`'s body here — the identity pins
+ * below cover the MOVE, not a freeze.) Their behaviour stays pinned where it
+ * already was (tests/council/verdict-seat-loss.test.js,
  * tests/council/verdict-degrades.test.js), both of which still import through
  * verdict.js — if the move changed anything, those go red.
  *
@@ -63,7 +65,7 @@ function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
  * shape survived); this function rebuilds its wave input from `dead-wave`
  * records and then adds the losses waves can never show: `dead-leg` records —
  * a solo critic wave that STARTED but whose one leg died is invisible to
- * deadWaves, which is #84's second half.
+ * deadWaves (#84's second half) — plus v4.9 W9's gated `seat-unbound` family.
  *
  * Reads ONLY record.data (Task 1's machine surface) — never the prose fields.
  * @param {{runId: string, critic: ?string, degrades: Array<object>}} o
@@ -71,11 +73,29 @@ function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
  */
 function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
   if (!critic) { return null; }
-  const real = degrades.filter(d => d.kind !== 'heal' && d.data);
+  // v4.9 W9 (SI-02). ⚠️ THIRD spelling of one admission rule; its renderer twins are
+  // `live-dead-seats.js :: isSeatLoss` and `workspace-seats.js :: retriedSeats`, which cannot
+  // require src/ — all three move together, enforced only by workspace-seats.test.js's drift
+  // pin. `seat-unbound` is GATED: orphan-leg, re-vote and Stage-2 judge notes share it, are NOT
+  // seat losses, and carry no retry-family field (residual R-W9a — neither does run-stages.js's
+  // skipped-retry partial note, a real loss this drops). The POSITIVE kind test aligns the
+  // three consumers and future-proofs `info`; report.js keeps the negative spelling on purpose,
+  // for pre-kind verdict.json docs this never sees.
+  const gatedUnbound = d => d.channel === 'seat-unbound'
+    && (d.data.retryWaveId || d.data.firstFailure) && (d.data.seatId || d.data.seat);
+  const real = degrades.filter(d => d.kind === 'degrade' && d.data
+    && (d.channel === 'dead-leg' || d.channel === 'dead-wave' || gatedUnbound(d)));
   const waves = real.filter(d => d.channel === 'dead-wave')
     .map(d => ({ waveId: d.data.waveId, models: d.data.models || [], reason: d.data.reason }));
   const base = summarizeSeatLoss({ runId, critic, deadWaves: waves });
-  const legs = real.filter(d => d.channel === 'dead-leg');
+  const legs = real.filter(d => d.channel !== 'dead-wave');
+  // ⚠️ STAYS ALIAS-KEYED — decided and measured in v4.9 W9 (R4), not mirrored from the
+  // renderers' seat-key fix. `seats.js :: preflightSeats` REFUSES a critic alias occupying
+  // more than one bench seat, zero-spend, before any leg launches, so on every run this can see
+  // `data.seat === critic` names exactly one seat and alias equality IS seat equality; its only
+  // production caller, `run-verdict-files.js :: writeVerdictFiles`, is fed in-process records
+  // from that run's own sink. The renderers differ: they read run.json/verdict.json off DISK,
+  // any version or hand edit, where that refusal is not in force.
   const criticLeg = legs.find(l => l.data.seat === critic) || null;
   return {
     ...base,

@@ -2020,7 +2020,7 @@ sized and deferred rather than carried half-done.
 | R2 | Unidentified seat: **hybrid** — producer mints a distinguisher where it has one; where it has nothing, mark, attribute nothing, announce |
 | R3 | Orphaned Stage-2 judge vote: **render as unattributed, keep in basis** |
 | R4 | Chair-on-bench: **normalise before the ledger join**, inside the street-cred PR |
-| R5 | SI-02 + the R4 critic path: **defer to v4.9** |
+| R5 | SI-02 + the R4 critic path: **defer to v4.9** — ✅ **DONE in v4.9 W9 Task A (2026-08-25)**: all three consumers admit the gated `seat-unbound` family and the critic path is seat-keyed |
 | R6 | PR5b-1 two-document split: **defer** — Phase 2 closes the reachable half for free |
 | R7 | R5 live payload: **ship in v4.8**, measured independent |
 | R8 | `-rv` join: **refuse** an unknown-seat re-vote → SI-13 becomes a JSDoc edit |
@@ -3686,8 +3686,22 @@ lines. Whoever takes this on needs an extraction first, not an edit.
   ⚠️ Filed with an owner and a gate, deliberately NOT as an adjacency to whichever mutant work
   comes next. The gate is the registry, not "the next PR that touches mutants".
 
-- [ ] **SI-22.4 rider (2) → v4.9 — the THIRD street-cred renderer is still alias-labelled.
+- [x] **SI-22.4 rider (2) → v4.9 — the THIRD street-cred renderer is still alias-labelled.
   OWNER: Christian. GATE: `opts.labelOf` must accept a seat id before this can be written.**
+  — **DONE, v4.9 W9 Task B (2026-08-25).** `workspace-matrix.js :: renderVerdict`'s street-cred
+  loop now reads `opts.isBlind() ? (label || s.model) : (s.seat || s.model)`, joining
+  `report-md.js :: renderMd` and `report-html.js :: renderHtml`; a twin bench reads
+  `gemini#1`/`gemini#2` in all three; a unique-alias bench is unchanged (seat is
+  emit-when-DIFFERENT). Named mutant `RIDERALIAS`, RED 1 suite / 1 test.
+  ⚠️ **THE STATED GATE WAS FALSE — STRUCK, not satisfied:** `opts.labelOf` never needed to
+  accept a seat id. Blind mode must render the anonymised LABEL, so the alias stays the lookup
+  key and the signature is untouched; the blind fallback is the ALIAS, never the seat id — a
+  second mutant `BLINDSEATLEAK` pins that the literal spelling `&& label ? label :
+  (s.seat || s.model)` leaks a seat id (which contains its alias) into a blind render, RED
+  1 suite / 1 test. Second time this cycle a rider was scheduled behind a gate measurement
+  dissolved. ⚠️ The `:147-149` anchor below rotted (+21, W8's chip fork) — the site is the
+  street-cred loop in `workspace-matrix.js :: renderVerdict`; kept as the dated record.
+  Original filing:
   `electron/workspace-ui/workspace-matrix.js:147-149` builds each street-cred row as
   `var label = opts.labelOf(s.model);` → `var name = opts.isBlind() && label ? label : s.model;`
   — the same defect class the v4.8 R22.4-6 rider fixed in `report-md.js` and `report-html.js`,
@@ -4286,7 +4300,8 @@ table is *Size gate — re-measured*, below.
 
 ### Deferred to v4.9.0
 
-Task mode + #146 · the Workspace dead-seat surface (SI-02, R4, PR5b-1) · SI-16 splits · seatKey
+Task mode + #146 · ~~the Workspace dead-seat surface (SI-02, R4, PR5b-1)~~ — **SI-02 and R4
+DONE in v4.9 W9 Task A (2026-08-25); PR5b-1 rides W9 Task B** · SI-16 splits · seatKey
 cross-file consolidation · #133 Pieces 2–3 · #138 Piece 3 · #135 C4 · PR1F-2 *unification*, PR1F-3,
 the prune check, F-1, F-5, the CLI `list` merge, KNOWN_VARIABLES · **SI-22.4 rider (2) — the
 Workspace street-cred renderer (owner Christian; gated on `opts.labelOf` accepting a seat id)**.
@@ -4417,16 +4432,42 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
     `grep -rn uniqueModels src/` — no hits); `artifact-guard.js:101` now gates every artifact read
     through this same `artifactAllowlist`, imported at `artifact-guard.js:25`.
 
-- [ ] **PR4 · `verdict-seat-loss.js :: deriveSeatLoss` (extracted out of `verdict.js` by PR
-  #200's round-3 fix; the old `:68`/`:71` line citations went with it) and both Workspace dead-seat
+- [x] **DONE (v4.9 W9 Task A, 2026-08-25) · PR4 · `verdict-seat-loss.js :: deriveSeatLoss`
+  (extracted out of `verdict.js` by PR #200's round-3 fix; the old `:68`/`:71` line citations
+  went with it) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-dead-seats.js :: deadSeats` and
   `workspace-ui/workspace-seats.js :: retriedSeats` — gate on
-  `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** (⚠️ **Both citations were re-derived and
+  `dead-leg`/`dead-wave` and are blind to `seat-unbound`.**
+  ✅ All three now admit `seat-unbound` GATED on the retry-family fields
+  (`data.retryWaveId || data.firstFailure`, plus a `seatId`/`seat` presence conjunct), spelled
+  identically in `live-dead-seats.js :: isSeatLoss`, `retriedSeats` and `deriveSeatLoss`'s
+  `gatedUnbound`; the two renderer filters moved in ONE commit per the mirror constraint, and
+  the behavioural drift pin in `workspace-seats.test.js` gained four cases so a one-sided
+  revert reds. The producer half shipped too: `waveStillDeadNote`'s partial arm emits a scalar
+  `data.seatId` (v4.9 W9 P1), closing the fifth of five emitter arms. `deriveSeatLoss` also
+  moved to the POSITIVE `kind === 'degrade'`, aligning the three consumers — `report.js` keeps
+  its negative spelling on purpose and its comment now says why.
+  ⚠️ **The `data.legId` discriminator this entry prescribed was NOT added as a separate rule:
+  measured, both `legId`-carrying shapes (`orphanLegNote`, `reVoteUnboundNote`) carry no
+  retry-family field, so the one gate subsumes it — and the retry-family gate additionally
+  excludes `run-stage2.js`'s judge-side `seat-unbound` note, which a `legId`-only rule would
+  have admitted as a false "did not review" row.
+  ⚠️ **Disclosed residual R-W9a (new, measured):** `run-stages.js`'s SKIPPED-retry partial note
+  (`{waveId, models, reason, seat}` on `seat-unbound`, emitted when the once-only retry never
+  attempted the seat) is a genuine loss carrying no retry-family field, so the gate drops it.
+  Pinned known-wrong in `dead-seat-twins.test.js` and `verdict-degrades.test.js`. Closing it
+  needs either a producer field or an extra gate arm — a design call, deliberately not taken
+  inside W9. **Residual R-W9b:** with no `run.criticSeat` on the document the critic ROLE is
+  still alias-inferred (the row now survives regardless — see R4 below).
+  (⚠️ **Both citations were re-derived and
   re-opened at T-A8, 2026-08-17.** They read `live-seats.js:188` and `workspace-seats.js:61`: the
   first was OUT OF RANGE — `live-seats.js` is **125** lines, and the filter moved to
   `live-dead-seats.js` in the PR5c split, where it is `:144` today; the second landed on **docblock
   prose**, the filter itself being `:77`. Anchored by symbol per the anti-rot rule, which takes both
-  out of the line-citation class for good.) (`deriveSeatLoss`, not
+  out of the line-citation class for good. ⚠️ The two "today" numbers in this parenthetical are the
+  dated 2026-08-17 reading and BOTH moved again in v4.9 W9 — the rules are now
+  `live-dead-seats.js :: isSeatLoss` and the channel test inside `retriedSeats`, by SYMBOL. Do not
+  re-number them; the entry's own point is that these two citations rot every single pass.) (`deriveSeatLoss`, not
   `summarizeSeatLoss` — `writeVerdictFiles` at `run-assemble.js:217-219` takes the
   `deriveSeatLoss` branch whenever `degrades` is present, which it always is for a run that lost a
   seat; `summarizeSeatLoss` is a fallback reached only when a direct caller supplies `deadWaves`
@@ -5350,8 +5391,9 @@ own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, an
   ⚠️ **THIS ENTRY IS THE THIRD RE-DISCOVERY OF THE SAME DEFERRAL SHAPE, and it is why the
   successor is filed differently.** *"SI-25-adjacent"* named an association, never a schedule; the
   work sat here unowned until an unrelated PR happened to touch the same renderers. The follow-up it
-  spawned — the THIRD street-cred renderer, `electron/workspace-ui/workspace-matrix.js:147-149`,
-  still alias-labelled — is filed under *"SI-22.4 rider (2)"* above with a **named owner
+  spawned — the THIRD street-cred renderer, `electron/workspace-ui/workspace-matrix.js:147-149`
+  (anchor rotted; the site is `workspace-matrix.js :: renderVerdict`'s street-cred loop),
+  still alias-labelled — is ~~filed~~ **now DONE, v4.9 W9** under *"SI-22.4 rider (2)"* above with a **named owner
   (Christian)** and a **stated gate** (`opts.labelOf` must accept a seat id), explicitly NOT as an
   adjacency. Do not re-file it as "adjacent to" anything.
 - [x] **A `__proto__: null` fix does NOT survive a JSON round-trip — the Electron setup wizard
@@ -6337,7 +6379,13 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     left is the **seat-unbound partial arm**, whose omission is deliberate and commented
     (*"seat-unbound has no consumer"*) — and the seat OBJECT is already on the record it is
     built from (`stage1-bind.js :: missingSeatDeadWave` carries `seats: [m.seat]`), so the
-    producer half of the v4.9 work is ~one line. The line numbers in the rows above have also
+    producer half of the v4.9 work is ~one line.
+    ✅ **CLOSED 2026-08-25 (v4.9 W9 P1) — FIVE of five.** That partial arm now emits a SCALAR
+    `data.seatId` (`((w.seats || [])[0] && (w.seats || [])[0].id) || null`; an unidentified slot
+    emits `null`, never the alias — the dead-wave array's discipline, scalar because this arm
+    names exactly one seat). `data.seat` stayed the ALIAS. The "no consumer" rationale is
+    retired: it has three. Neither exact `toEqual` in `degrade-channels.test.js` moved, exactly
+    as the recon predicted. The line numbers in the rows above have also
     all moved — anchor by symbol. ⚠️ Two caveats that SURVIVE for any consumer change:
     `firstFailure.seatId` can be ALIAS-valued on the inexact twin branch
     (`run-retry-group.js :: recordFailure`), and `seat-unbound` is a SHARED channel (orphan-leg
@@ -6348,7 +6396,9 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
     `workspace-seats.js :: retriedSeats` — re-anchored BY SYMBOL at T-A8, 2026-08-17, having read
     the stale `live-seats.js:188` (out of range: that file is 125 lines) and `workspace-seats.js:61`
     (docblock prose; the filter is `:77`)), so **every `seat-unbound` record is invisible to this
-    surface**.
+    surface**. ⚠️ **NO LONGER TRUE as of v4.9 W9 (2026-08-25)**: both filters — plus
+    `deriveSeatLoss` — now admit the channel GATED on the retry-family fields. Read this
+    paragraph as the dated 2026-08-15/08-17 record of what was measured then.
     The `dead-leg` seatId evidence is real — `run-retry.test.js:628` shows
     `['deepseek#1','deepseek#2']` on a twin bench and `degrade-channels.test.js:126` shows a
     shipped degrade carrying `seatId` — but it covers one arm, not the family.
@@ -6435,8 +6485,30 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - ⚠️ Blocker counts across the code rounds went 1 → 1 → 2. They did not converge, which is the
     documented "wrong lever" signature: the instances were being fixed, not the cause.
 
-- [ ] **R4 · The dead-seat CRITIC path is still alias-keyed, and its role is inferred from the
-  ALIAS.** Measured (`scratchpad/probe-critic-twin.js`, and independently raised by two council
+- [x] **DONE (v4.9 W9 Task A, 2026-08-25) · R4 · The dead-seat CRITIC path is still alias-keyed, and its role is inferred from the
+  ALIAS.**
+  ✅ Closed in `live-dead-seats.js :: deadSeats`, in the same commit as SI-02. Two halves, each
+  with its own measured mutant: (a) a `roleOf(key, alias)` helper decides `'critic'` by SEAT
+  identity — `key === runMeta.criticSeat` — whenever the record names a seat AND the run names
+  a critic seat, keeping alias equality as the fallback (mutant ALIASROLE, red set 2); (b)
+  `byRole` is written in BOTH keyspaces and read as `byRole[(s.seat || s.model) + '|critic']`,
+  mirroring `reviewing` exactly (mutants BYROLEALIAS red 2, BYROLEUNSEATED red 1 — the write
+  and the read are load-bearing in opposite directions). The filed shape — a dead bench twin
+  beside a live critic twin — now renders ONE row labelled bench, where it rendered ZERO.
+  ⚠️ The entry's "no producer emission closes this" holds: nothing new was emitted. What
+  changed is that `run.criticSeat` — already on run.json since v4.8 (`run-state.js ::
+  initCouncilRun` seeds it, `seats.js :: preflightSeats` supplies it) — is now THREADED into
+  `runMeta` at both `workspace-seats.js` call sites. That was the missing wire, not a field.
+  ⚠️ **Residual R-W9b:** on a document with no `criticSeat` the ROLE tag is still alias-inferred
+  and can be wrong; the seat-keyed `byRole` lookup nonetheless keeps the row visible, so the
+  silent-erasure half is gone on both paths. Pinned known-wrong in `dead-seat-twins.test.js`.
+  ⚠️ **The verdict side was measured and deliberately NOT seat-keyed** (decision recorded in
+  `verdict-seat-loss.js :: deriveSeatLoss`): `seats.js :: preflightSeats` REFUSES a critic alias
+  occupying more than one bench seat, zero-spend, before any leg launches, so on every run
+  `deriveSeatLoss` can see, `data.seat === critic` names exactly one seat and alias equality IS
+  seat equality. Its only production caller is fed in-process records from that same run. The
+  renderers differ because they read documents off DISK, where that refusal is not in force.
+  Original analysis, retained: measured (`scratchpad/probe-critic-twin.js`, and independently raised by two council
   seats): on a bench where one alias holds both a critic seat and a bench seat, a dead BENCH twin
   beside a live CRITIC twin renders **0 rows** — the same silent erasure M4 was.
   - `deadSeats` tags a candidate `role: 'critic'` by **alias equality** with `run.critic`, so the
@@ -6461,16 +6533,27 @@ answered on the PR; these are the ones the owner ruled OUT of PR5a, with why.
   - **R4 and R5 are NOT one job.** R5's payload change neither fixes nor worsens R4, and R4's fix
     touches no file R5 touches. R5 ships in v4.8 (ruling R7); R4 does not.
 
-- [ ] **R5 · The live tick cannot suppress a seat-keyed dead record, because the live payload
-  carries no seat identity.** `live-normalize.js`'s `seatOf` emits `{id: leg.taskId, model,
-  modelInput, role, ...}` — `id` is a per-LEG task id, and there is no seat field at all.
-  - Consequence, measured: dead twins DO separate correctly on the live path (the candidates carry
-    seat ids from PR5c Task 1), but a **stale record naming a seat that is alive renders a dead row
-    for it** until the terminal refresh. ⚠️ An earlier draft claimed "M3 and M4 persist live"; that
-    is wrong, and the correction came from the council (gpt C3, kimi D5).
-  - Closing it needs a seat id on the live leg rows — a producer change to `council-legs.js` /
-    `live-normalize.js`, not a renderer fix.
-  - Pinned as known-wrong in `tests/workspace/dead-seat-twins.test.js` (T6).
+- [x] **DONE — and it was ALREADY DONE when this was re-read (v4.9 W9 Task A, 2026-08-25) ·
+  R5 · The live tick cannot suppress a seat-keyed dead record, because the live payload
+  carries no seat identity.**
+  ⚠️ **The headline sentence was FALSE at the time of ticking, and had been since v4.8 R5.**
+  `src/workspace/live-normalize.js :: seatOf` emits `seat: leg.seat || null` — its own comment
+  names `live-dead-seats.js`'s `if (s.seat)` arm as the reason that line exists. This entry
+  (and the T6 header in `dead-seat-twins.test.js` that quoted it) was describing work that had
+  already shipped, and both read as a LIVE defect for a release. Re-derived and re-worded in
+  W9; nothing in `deadSeats` or `appendDeadRows` had to change.
+  - **Measured, by test, both directions:** a MODERN payload (`{..., seat: 'd#1'}`) DOES
+    suppress a stale seat-keyed record live, and a genuinely dead twin beside a live one still
+    renders. Both are new pins in `dead-seat-twins.test.js`'s T6 block.
+  - **What survives as a residual:** a PRE-R5 payload — no `seat` key — still cannot be matched,
+    so the stale record renders until the terminal refresh. That pin is kept, re-framed as the
+    LEGACY-payload case it actually is rather than as the live path's behaviour.
+  - The original analysis, retained for the record: `seatOf` emitted `{id: leg.taskId, model,
+    modelInput, role, ...}` where `id` is a per-LEG task id; dead twins DO separate correctly on
+    the live path (the candidates carry seat ids from PR5c Task 1); an earlier draft claimed
+    "M3 and M4 persist live", which the council corrected (gpt C3, kimi D5); and closing it was
+    thought to need a producer change to `council-legs.js` / `live-normalize.js` — which is
+    exactly the change v4.8 R5 had already made.
 
 - [ ] **Unidentified dead rows share a DOM `dataset.key`.** ⚠️ Note the *suppression* half of this
   shape was fixed in PR5c (an unnamed dead seat is no longer hidden by a live same-alias twin);

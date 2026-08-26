@@ -151,8 +151,22 @@
 
     if (vp.streetCred && vp.streetCred.length) {
       var rows = vp.streetCred.map(function (s) {
+        // v4.9 W9 — SI-22.4 rider (2): the THIRD street-cred renderer, joining
+        // report-md.js :: renderMd and report-html.js :: renderHtml (v4.8 R22.4-6), which
+        // both label the row `s.seat || s.model`. Until now a twin bench read `gemini#1`/
+        // `gemini#2` in the report and `gemini` TWICE here, different numbers under one
+        // identical name. `seat` is emit-when-DIFFERENT (street-cred.js :: computeStreetCred),
+        // so a unique-alias bench has no seat key and this renders exactly what it did before.
+        // ⚠️ BLIND KEEPS THE ALIAS SPACE, both branches. `opts.labelOf` is ALIAS-keyed
+        // (workspace-app.js's state.labelByModel, from run.json's labelMap — label -> alias,
+        // which the seat work deliberately left alone: anonymize.js :: assignLabels puts seat
+        // identity in the separate seatMap), so the lookup key stays `s.model` and the
+        // signature is unchanged. The fallback stays `s.model` too: a seat id CONTAINS its
+        // alias, so printing one with blind mode on defeats blind mode — the same rule
+        // seat-space.js :: isSeatTable and workspace-lazy.js :: roster were both fixed to.
+        // Named mutant RIDERALIAS (workspace-matrix.test.js).
         var label = opts.labelOf(s.model);
-        var name = opts.isBlind() && label ? label : s.model;
+        var name = opts.isBlind() ? (label || s.model) : (s.seat || s.model);
         var fmt = function (v) { return (v === null || v === undefined) ? '—' : Number(v).toFixed(2); };
         return R.el('tr', {}, [
           R.el('td', {}, [name]),

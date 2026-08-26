@@ -60,15 +60,38 @@
         '. This run directory cannot distinguish those artifacts, so prose below may be misattributed.', '');
       return;
     }
-    // ⚠️ Fix-wave 3 (council-3 C2): seats[] was present but malformed, so the whole run fell
-    // back to alias space — two seats running one model are indistinguishable in every panel
-    // below. Fail-safe, but SILENT until now, which the product principle rejects as hard as
-    // a crash. Ranked AFTER the collision banner (that one says prose may be misattributed,
-    // strictly worse) and BEFORE run.error, since it qualifies how to read every panel.
+    // ⚠️ Fix-wave 3 (council-3 C2): seats[] was present but malformed, so the run's ARTIFACT
+    // NAMING fell back to alias space — two seats running one model are indistinguishable in
+    // the prose panels. Fail-safe, but SILENT until now, which the product principle rejects
+    // as hard as a crash. Ranked AFTER the collision banner (that one says prose may be
+    // misattributed, strictly worse) and BEFORE run.error, since it qualifies how to read
+    // those panels.
+    // ⚠️ This comment used to say "the WHOLE run fell back to alias space … in every panel
+    // BELOW", and W9 measured that as FALSE (it was already false when written, not falsified
+    // by this change — the same reading the banner string itself shipped). The correction and
+    // its evidence are below, where the sentence the user actually reads is built.
+    // ⚠️ v4.9 W9 PR5b-1 (ruling V15, disclosure over uniformity): this used to end "cannot be
+    // told apart BELOW" — a blanket claim over the whole detail view, and measurably too wide.
+    // `seatTableRejected` reaches exactly one surface: derived.seatSpace goes false, so
+    // workspace-lazy.js :: roster falls back to `bench` and the reviews/judges/re-vote panels
+    // name their artifacts by alias. Everything sourced from tally.json is untouched — the
+    // seats panel's rows are live-seats.js :: seatsFromRunStats over run-detail.js ::
+    // costPanel's `tally.runStats` projection, keyed on `r.seat || r.model`, and `r.seat` is
+    // stamped by run-stats-entry.js :: buildRunStatsEntry from the IN-MEMORY seat at assembly
+    // (run-assemble.js :: buildTallyInput), not from the run.json table that failed to parse.
+    // A twin bench therefore still gets two seat rows carrying their own numbers.
+    // V15's ruling is to DISCLOSE that split rather than force the seats panel down to
+    // derived.seatSpace for uniformity, which would throw away data that is truthful.
+    // ⚠️ The ROWS are per-seat; the NAMES are not. live-seats.js :: seatCells prints
+    // `seat.modelInput || seat.model` — the alias — so the sentence claims separate NUMBERS,
+    // never distinguishable names. Wording pinned full-string in workspace-app-boundary.test.js.
     if (d.derived.seatTableRejected) {
       R.renderBanner(el, 'This run\'s seat table could not be read (a malformed entry), so ' +
-        'artifacts are shown by model alias instead of per seat — two seats running the same ' +
-        'model cannot be told apart below. Artifacts: ' + d.runDir, 'warn');
+        'the reviews, judges and re-vote panels name their artifacts by model alias instead ' +
+        'of per seat — two seats running the same model cannot be told apart there. The seats ' +
+        'panel is NOT affected: its rows come from tally.json\'s runStats, one per seat, so ' +
+        'both seats\' numbers are still shown separately, sharing the alias as a name. ' +
+        'Artifacts: ' + d.runDir, 'warn');
       return;
     }
     // ⚠️ PRE-FLIGHT (P3), caught live by the CDP e2e (Task 18): gating on `d.run.error` ALONE

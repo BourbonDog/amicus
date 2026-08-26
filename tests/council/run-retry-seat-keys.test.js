@@ -77,11 +77,40 @@ describe('T1a — the dead-wave arm carries seat ids, and null for unidentified 
     expect(note.data.seats).toHaveLength(note.data.models.length);
   });
 
-  test('data.seat stays the ALIAS on the partial arm (verdict-seat-loss.js :: deriveSeatLoss compares it to o.critic)', () => {
+  test("data.seat stays the ALIAS on the partial arm (verdict-seat-loss.js :: deriveSeatLoss's criticLeg lookup compares it to o.critic)", () => {
     const note = waveStillDeadNote(
       { waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x', partial: true }, unit);
     expect(note.channel).toBe('seat-unbound');
     expect(note.data.seat).toBe('deepseek');
+  });
+
+  // v4.9 W9 P1 — the fifth arm. The seat OBJECT was already on the record
+  // (`stage1-bind.js :: missingSeatDeadWave` carries `seats: [m.seat]`); only the emission
+  // was missing, on the stated grounds that `seat-unbound` had no consumer. W9 gives it three.
+  test('P1: the partial arm emits seatId BESIDE the alias', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const note = waveStillDeadNote(
+      { waveId: 'r1-s1', models: ['deepseek'], seats: [seats[1]], reason: 'x', partial: true }, unit);
+    expect(note.channel).toBe('seat-unbound');
+    expect(note.data.seat).toBe('deepseek');       // the ALIAS — the pinned constraint, unmoved
+    expect(note.data.seatId).toBe('deepseek#2');   // seat identity, the new key
+    // The dead-wave arm's ARRAY stays dead-wave-only: this arm names exactly ONE seat, and a
+    // one-element `seats[]` here would be a second vocabulary for the same fact.
+    expect(note.data.seats).toBeUndefined();
+  });
+
+  test('P1: an unidentified partial slot emits seatId null, NEVER the alias', () => {
+    const note = waveStillDeadNote(
+      { waveId: 'r1-s1', models: ['deepseek'], seats: [null], reason: 'x', partial: true }, unit);
+    expect(note.data.seatId).toBeNull();
+    expect(note.data.seatId).not.toBe('deepseek');
+    expect(note.data.seat).toBe('deepseek');
+  });
+
+  test('P1: a record with no seats[] at all still emits seatId null', () => {
+    const note = waveStillDeadNote(
+      { waveId: 'r1-s1', models: ['deepseek'], reason: 'x', partial: true }, unit);
+    expect(note.data.seatId).toBeNull();
   });
 });
 

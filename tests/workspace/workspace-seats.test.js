@@ -569,6 +569,62 @@ describe('retriedSeats (workspace-seats.js) vs deadSeats retried-set (live-dead-
         data: { seat: 'delta', status: 'error', reason: 'timed out' },
       }],
     },
+    // ---- v4.9 W9 (SI-02): the `seat-unbound` family joins the mirror. Measured mutant red
+    // sets that land HERE: UNBOUNDBLIND-A (channel dropped from `live-dead-seats.js ::
+    // isSeatLoss`) and UNBOUNDBLIND-B (dropped from `retriedSeats` instead) each red the two
+    // `expected=true` cases below — and for B these two ARE the whole red set, so this pin is
+    // the only thing holding the mirror. GATERAW-B (retry-family conjunct dropped from
+    // `retriedSeats`) reds the ORPHAN-LEG case. Full table: dead-seat-twins.test.js's W9 header.
+    {
+      name: 'W9: seat-unbound PARTIAL-wave record (waveStillDeadNote, retryWaveId + seatId)',
+      alias: 'echo',
+      expected: true,
+      degrades: [{
+        kind: 'degrade', channel: 'seat-unbound', what: 'seat echo did not review',
+        why: 'the wave returned 1 of 2 legs; the once-only retry wave also produced no legs',
+        effect: '0 of 1 seats reviewed',
+        data: { waveId: 'r1-s1', models: ['echo'], reason: 'x', retryWaveId: 'r1-s1r1',
+          seat: 'echo', seatId: 'echo' },
+      }],
+    },
+    {
+      name: 'W9: seat-unbound MISSING-LEG record (missingLegStillDeadNote, firstFailure)',
+      alias: 'foxtrot',
+      expected: true,
+      degrades: [{
+        kind: 'degrade', channel: 'seat-unbound', what: 'seat foxtrot did not review',
+        why: 'no leg returned; its once-only retry produced no leg for this seat',
+        effect: '0 of 1 seats reviewed',
+        data: { seat: 'foxtrot', status: null, reason: null, retryWaveId: 'r1-s1r1',
+          firstFailure: { seat: 'foxtrot', seatId: 'foxtrot', class: 'missing',
+            waveId: 'r1-s1', reason: 'x' } },
+      }],
+    },
+    {
+      // Mutant GATERAW's control on BOTH consumers: admitting the channel raw badges — and
+      // renders a ghost for — a seat whose review actually LANDED and was paid for.
+      name: 'W9: ORPHAN-LEG seat-unbound note (data.legId, no retry family) — must NOT be retried',
+      alias: 'golf',
+      expected: false,
+      degrades: [{
+        kind: 'degrade', channel: 'seat-unbound',
+        what: 'leg leg-7 in wave r1-s1 matches no seat on that wave\'s roster',
+        why: 'its id names no roster slot of r1-s1', effect: 'kept under its model name',
+        data: { waveId: 'r1-s1', legId: 'leg-7', seat: 'golf' },
+      }],
+    },
+    {
+      name: 'W9: reVoteUnbound seat-unbound note (names a judge, not a lost seat) — must NOT be retried',
+      alias: 'hotel',
+      expected: false,
+      degrades: [{
+        kind: 'degrade', channel: 'seat-unbound',
+        what: 're-vote leg leg-9 in wave r1-rv could not be attributed to a judge on that wave',
+        why: "its join key 'hotel' names none of the judges this wave launched",
+        effect: 'the re-vote was NOT applied; the provisional verdict stands',
+        data: { waveId: 'r1-rv', legId: 'leg-9', judge: 'hotel', key: 'hotel' },
+      }],
+    },
   ];
 
   cases.forEach(({ name, alias, expected, degrades }) => {

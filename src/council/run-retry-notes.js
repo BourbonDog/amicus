@@ -36,23 +36,31 @@ function waveStillDeadNote(w, unit) {
     why: `${w.reason || 'no reason recorded'}; the once-only retry wave also produced no legs`,
     effect: 'Those seats are NOT in this council. The run continues with the bench that did '
       + 'launch and will exit degraded (2)',
-    // `seat` rides ONLY on the partial shape: adding it unconditionally breaks
-    // degrade-channels.test.js's exact toEqual on a real dead wave. It stays the
-    // ALIAS because verdict-seat-loss.js :: deriveSeatLoss compares data.seat against o.critic, an alias,
-    // and because it is the same key the dead-leg shape uses — one vocabulary
-    // for one field. ⚠️ It is NOT read by the Workspace today: the kind/channel filters in
-    // live-dead-seats.js (deadSeats) and workspace-seats.js (retriedSeats), and verdict.js's
-    // own two, all admit only dead-leg/dead-wave — so nothing consumes `seat-unbound` yet.
-    // Cited by SYMBOL, not line: these three references rotted twice during v4.8 PR5c alone.
+    // `seat`/`seatId` ride ONLY on the partial shape: adding either unconditionally breaks
+    // degrade-channels.test.js's exact toEqual on a real dead wave. `seat` stays the
+    // ALIAS because verdict-seat-loss.js :: deriveSeatLoss compares data.seat against o.critic,
+    // an alias, and because it is the same key the dead-leg shape uses — one vocabulary
+    // for one field. ⚠️ It IS read by the Workspace as of v4.9 W9: all three consumers
+    // (live-dead-seats.js :: deadSeats, workspace-seats.js :: retriedSeats,
+    // verdict-seat-loss.js :: deriveSeatLoss) now admit `seat-unbound` — GATED on the retry-family
+    // fields below, because orphan-leg and re-vote notes share this channel and are not
+    // seat losses. Cited by SYMBOL, not line: these three references rotted twice during
+    // v4.8 PR5c alone.
     data: { waveId: w.waveId, models: w.models, reason: w.reason, retryWaveId: unit.waveId,
       // v4.8 PR5c: seat identity, index-parallel with `models`, on the dead-wave arm only
-      // (the partial arm names ONE seat and rides `seat` above; `seat-unbound` has no
-      // consumer, so an array there would be unpinned surface for no gain).
+      // (the partial arm names ONE seat, so it carries the SCALAR `seatId` below instead —
+      // the reason given here for emitting nothing at all, that `seat-unbound` had no
+      // consumer, stopped being true in v4.9 W9, which gave it three).
       // ⚠️ An unidentified slot emits `null`, NEVER the alias. Collapsing it onto the alias
       // makes it indistinguishable from a second reference to that alias, and no consumer
       // can recover the difference — deadSeats has no per-alias seat count. That collapse
       // is what made two distinct dead twins render as a single row.
-      ...(partial ? { seat: (w.models || [])[0] } : {
+      // v4.9 W9 P1: the fifth arm's seat identity. A SCALAR `seatId`, matching the two leg
+      // arms' vocabulary — this arm names exactly ONE seat, so the dead-wave arm's parallel
+      // ARRAY would be a second spelling of the same fact. Same null discipline as that
+      // array: an unidentified slot emits `null`, never the alias.
+      ...(partial ? { seat: (w.models || [])[0],
+        seatId: ((w.seats || [])[0] && (w.seats || [])[0].id) || null } : {
         seats: (w.models || []).map((m, i) => {
           const so = (w.seats || [])[i];
           return so ? so.id : null;
@@ -64,9 +72,11 @@ function waveStillDeadNote(w, unit) {
  * Leg-origin, retry wave died wholesale (bench-batch case).
  *
  * v4.8 PR5c: `seatId` is the caller's Stage-1 leg->seat binding, or null when the leg was
- * never bound. It is a SEPARATE key from `seat`, which stays the ALIAS — verdict-seat-loss.js
- * :: deriveSeatLoss compares `data.seat` against `o.critic`, an alias, so re-pointing it breaks critic-loss
- * detection. Add a key; never repurpose that one.
+ * never bound. It is a SEPARATE key from `seat`, which stays the ALIAS —
+ * `verdict-seat-loss.js :: deriveSeatLoss`'s `criticLeg` lookup compares `data.seat` against
+ * `o.critic`, an alias, so re-pointing it breaks critic-loss detection. Cited by SYMBOL, not
+ * line: the old `verdict.js:72` had already slid one line off that comparison, and the
+ * function has since left verdict.js entirely. Add a key; never repurpose that one.
  */
 function srcLegStillDeadNote(leg, unit, counts, seatId = null) {
   const seat = leg.modelInput || leg.model;
