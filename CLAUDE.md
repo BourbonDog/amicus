@@ -320,6 +320,7 @@ src/
 │   ├── shared-server.js
 │   ├── spend-ledger.js
 │   ├── start-helpers.js  # Start Command Helpers
+│   ├── text-sanitize.js  # One third-party string, safe to render: no escapes, no bidi, one short line.
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
 │   ├── update-notice.js  # The MCP server is the one entry point that skips bin/amicus.js's update
@@ -727,6 +728,7 @@ evals/
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
+| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |

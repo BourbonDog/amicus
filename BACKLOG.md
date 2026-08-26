@@ -6578,6 +6578,15 @@ and top-level `docs/*.md`.
 
 ## v4.9 W1 record — dispositions of the 4.8.1-cycle open items (2026-08-25)
 
+- [ ] **`src/utils/engine-skew.js` sits at 300/300 lines after PR 201 round 3 (2026-08-26)** — the
+  known `run-retry.js` hazard shape: the gate passes, so nothing warns, and the NEXT editor pays
+  for a one-line change with an unplanned extraction under time pressure. Extract first, then
+  edit. The seam already exists as precedent: `./engine-skew-records.js` (identity + record store)
+  was split off in round 2, and round 3 split the sanitizer out to `./text-sanitize.js` — the
+  remaining file is comparison, announcement and remedy text, of which the remedy/announcement
+  strings are the natural next cut. (`engine-log-parse.js` was the other 300/300 file in that
+  round and is back to 260 after the sanitizer move; it needs nothing.)
+
 - [ ] **`auth-json.js` resolves with the same "first existing candidate wins" rule that
   PR 201's ROUND-1 A2 condemned in engine-log** (round 2 has an A2 of its own — the logfmt
   extractor firing on columnar lines — so the round is load-bearing in that reference)
@@ -6607,6 +6616,11 @@ and top-level `docs/*.md`.
   that matter come first, stop exporting internal constants — is not a fix for the other
   ~120 files. Needs a generator ruling: skip a directive prologue when locating the
   docblock, render constants without `()`, and either raise the cap or mark truncation.
+  **The workaround has a floor, found 2026-08-26 (PR 201 round 3):** `utils/text-sanitize.js`
+  exports exactly two names, so defect (2) renders `MAX_EXCERPT_CHARS()` with no way to hide
+  it — ordering only helps a module with more than five exports, where the cap does the
+  concealing. That row is a known-defect instance, not a fresh bug; it goes away with the
+  generator ruling above, and inventing exports to pad past the cap is not a fix.
 
 Filed past-tense in the same commit as the fixes, per the falsified-record rule.
 

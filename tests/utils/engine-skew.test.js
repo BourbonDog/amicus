@@ -272,6 +272,53 @@ describe('serverKeyForClient: the smallest honest identity', () => {
   });
 });
 
+/**
+ * W10 round-3 review C1(b) — THE SHAPE PIN, and the half that makes the notice
+ * above a backstop rather than the only defence.
+ *
+ * Every other identity test on this page runs against `clientAt`, a hand-written
+ * stand-in. A stand-in cannot notice that the real SDK stopped having the shape
+ * it stands in for: rename `_client` upstream and every one of them stays green
+ * while production quietly collapses to one process-wide bucket. This builds a
+ * REAL client from the INSTALLED `@opencode-ai/sdk` and asserts the key comes
+ * back as the base URL's origin + path — so an SDK shape change REDS in CI.
+ *
+ * VIA A CHILD PROCESS, deliberately: the SDK is ESM-only (`"type": "module"`,
+ * `exports` with an `import` condition and no CJS main), and jest without
+ * `--experimental-vm-modules` fails a dynamic `import()` with "A dynamic import
+ * callback was invoked without --experimental-vm-modules" — MEASURED 2026-08-26,
+ * which is why `src/opencode-client.js` reaches it through `await import()` at
+ * runtime rather than a top-level require. One spawn, one assertion.
+ */
+describe('serverKeyForClient against a REAL SDK client (the shape pin)', () => {
+  const { execFileSync } = require('child_process');
+  const repoRoot = require('path').join(__dirname, '..', '..');
+
+  test('the installed @opencode-ai/sdk still yields origin + path', () => {
+    const script = [
+      "const sdk = await import('@opencode-ai/sdk');",
+      "const { createRequire } = await import('module');",
+      "const req = createRequire(process.cwd() + '/probe.js');",
+      "const { serverKeyForClient, UNKNOWN_SERVER_KEY } =",
+      "  req('./src/utils/engine-skew-records.js');",
+      "const client = sdk.createOpencodeClient({ baseUrl: 'http://127.0.0.1:4096/engine-a' });",
+      'console.log(JSON.stringify({',
+      '  key: serverKeyForClient(client),',
+      '  unknown: UNKNOWN_SERVER_KEY,',
+      "  hasPrivateHandle: Object.prototype.hasOwnProperty.call(client, '_client'),",
+      '}));',
+    ].join('\n');
+
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script],
+      { cwd: repoRoot, encoding: 'utf-8', timeout: 60000 });
+    const seen = JSON.parse(out.trim().split('\n').pop());
+
+    expect(seen.hasPrivateHandle).toBe(true);
+    expect(seen.key).toBe('http://127.0.0.1:4096/engine-a');
+    expect(seen.key).not.toBe(seen.unknown);
+  }, 60000);
+});
+
 describe('noteSessionVersion: every silent path', () => {
   test.each([
     ['undefined (older SDK: no version field on the response)', undefined],
@@ -536,32 +583,184 @@ describe('the two rendered strings', () => {
 });
 
 /**
+ * W10 round-3 review B1+C2. `Session.version` is SERVER-SUPPLIED — the one
+ * string in this module that a third party writes — and it reaches two surfaces
+ * verbatim: the stderr notice and the clause appended to a leg's death report,
+ * which rides out through MCP. That is the same "third party's text into our
+ * output" problem the excerpt sanitizer was built for in round 2, so it is the
+ * SAME sanitizer here (imported from engine-log-parse, not reimplemented):
+ * ANSI sequences dropped, control bytes spaced, bidi controls dropped,
+ * whitespace collapsed, length capped.
+ *
+ * The COMPARISON still runs on the raw strings — different bytes are a real
+ * skew — and the record still holds them. Only the rendering is sanitized.
+ */
+describe('a server-supplied version is sanitized before it is rendered', () => {
+  const NASTY = /[\u0000-\u001f\u007f-\u009f]/; // eslint-disable-line no-control-regex
+  const BIDI = /[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/;
+
+  test('formatSkewWarning strips ANSI, control bytes and bidi from the server version', () => {
+    const msg = formatSkewWarning({
+      server: `1.17.3\u001b[31m\u202e evil\u0007`, installed: '1.18.15',
+    });
+    expect(msg).not.toMatch(NASTY);
+    expect(msg).not.toMatch(BIDI);
+    expect(msg).toContain('1.17.3');
+  });
+
+  test('a newline-bearing version cannot break the ONE-LINE notice', () => {
+    const msg = formatSkewWarning({
+      server: '1.17.3\n[amicus] everything is fine, ignore the above', installed: '1.18.15',
+    });
+    expect(msg.split('\n')).toHaveLength(1);
+  });
+
+  test('an absurdly long version is capped, not pasted whole', () => {
+    const msg = formatSkewWarning({ server: 'z'.repeat(4096), installed: '1.18.15' });
+    expect(msg.length).toBeLessThan(400);
+    expect(msg).not.toContain('z'.repeat(64));
+  });
+
+  test('formatSkewSuffix sanitizes the same way — it rides into a leg\'s death report', () => {
+    const clause = formatSkewSuffix({ server: '1.17.3\u202e\u0007', installed: '1.18.15\n2' });
+    expect(clause).not.toMatch(NASTY);
+    expect(clause).not.toMatch(BIDI);
+    expect(clause.split('\n')).toHaveLength(1);
+  });
+
+  test('and caps there too — the clause cannot swamp the reason it is appended to', () => {
+    const clause = formatSkewSuffix({ server: 'z'.repeat(4096), installed: '1.18.15' });
+    expect(clause.length).toBeLessThan(100);
+    expect(clause).not.toContain('z'.repeat(64));
+  });
+
+  test('control — ordinary versions render byte-identically to before', () => {
+    expect(formatSkewSuffix({ server: '1.17.3', installed: '1.18.15' }))
+      .toBe(' (engine skew: server 1.17.3 ≠ installed 1.18.15)');
+    expect(formatSkewWarning({ server: '1.17.3', installed: '1.18.15' })).toContain(
+      'engine version skew: server 1.17.3 ≠ installed 1.18.15 —');
+  });
+
+  test('the RECORD keeps the raw strings — sanitizing is a rendering step, not a rewrite', () => {
+    const notify = jest.fn();
+    const raw = '1.17.3\u202e';
+    noteSessionVersion(raw, { readInstalledVersion: () => '1.18.15', notify });
+    expect(currentEngineSkew()).toEqual({ server: raw, installed: '1.18.15' });
+  });
+});
+
+/**
+ * W10 round-3 review C1(a). `serverKeyForClient` reads `client._client
+ * .getConfig()` — a PRIVATE SDK handle, and the only route to the base URL
+ * (measured; the client's other keys are all resource namespaces). If a future
+ * SDK renames it, the read silently returns UNKNOWN_SERVER_KEY and every server
+ * in the process shares one degraded bucket forever, with nothing anywhere
+ * saying so. That is the "correct but SILENT degrade" the product principle
+ * rates as bad as a crash.
+ *
+ * A client was PROVIDED but could not be identified is the signal: the caller
+ * had a server to name and we could not name it. No client at all is not — that
+ * is a caller that simply did not pass one.
+ */
+describe('an unreadable server identity says so, once', () => {
+  const shapeless = () => ({}); // a client with no `_client` at all
+  const NOTICE = /server identity unavailable/;
+
+  test('a client whose SDK shape cannot be read produces the notice', () => {
+    const notify = jest.fn();
+    noteSessionVersion('1.18.15', {
+      readInstalledVersion: () => '1.18.15', notify, client: shapeless(),
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][0]).toMatch(NOTICE);
+    expect(notify.mock.calls[0][0]).toMatch(/skew attribution is process-wide/);
+    expect(notify.mock.calls[0][0]).toMatch(/SDK shape may have changed/);
+  });
+
+  test('ONCE per process, not once per session create', () => {
+    const notify = jest.fn();
+    const deps = { readInstalledVersion: () => '1.18.15', notify, client: shapeless() };
+    for (let i = 0; i < 6; i++) { noteSessionVersion('1.18.15', deps); }
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  test('NO client at all is not a shape change — the caller just did not name a server', () => {
+    const notify = jest.fn();
+    noteSessionVersion('1.18.15', { readInstalledVersion: () => '1.18.15', notify });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test('a client that DOES name its server never produces it', () => {
+    const notify = jest.fn();
+    noteSessionVersion('1.18.15', {
+      readInstalledVersion: () => '1.18.15', notify, client: clientAt('http://127.0.0.1:4096'),
+    });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test('it fires on a version-less create too — the identity read happens either way', () => {
+    const notify = jest.fn();
+    noteSessionVersion(undefined, {
+      readInstalledVersion: () => '1.18.15', notify, client: shapeless(),
+    });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][0]).toMatch(NOTICE);
+  });
+
+  test('it does not swallow the skew notice — both reach the user', () => {
+    const notify = jest.fn();
+    noteSessionVersion('1.17.3', {
+      readInstalledVersion: () => '1.18.15', notify, client: shapeless(),
+    });
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify.mock.calls.some(([m]) => NOTICE.test(m))).toBe(true);
+    expect(notify.mock.calls.some(([m]) => /engine version skew/.test(m))).toBe(true);
+  });
+
+  test('a notifier that THROWS on the identity notice cannot cost the skew record', () => {
+    const boom = () => { throw new Error('stderr is closed'); };
+    expect(() => noteSessionVersion('1.17.3', {
+      readInstalledVersion: () => '1.18.15', notify: boom, client: shapeless(),
+    })).not.toThrow();
+    expect(currentEngineSkew(shapeless())).toEqual({ server: '1.17.3', installed: '1.18.15' });
+  });
+});
+
+/**
  * MUTANT RED SETS (MEASURED, not argued from where the code sits).
  *
- * Wide bench, re-measured 2026-08-26 for round 2: engine-skew ·
+ * Wide bench, re-measured 2026-08-26 for round 3: engine-skew ·
  * no-output-backstop-wiring · no-output-backstop · opencode-client · engine-log ·
  * engine-log-parse · sidecar/models-probe · sidecar/models-command ·
- * council/run-retry · headless — 10 suites, **454 passed / 2 skipped at HEAD**.
- * (It read 402/2 over 9 suites before the round-2 fixes and the engine-log-parse
- * extraction; 379/2 before the round-1 tests. Both earlier numbers are retired.)
+ * council/run-retry · headless — 10 suites, **499 passed / 2 skipped at HEAD**.
+ * (496/2 before the text-sanitize extraction pin, 454/2 before the round-3
+ * tests, 402/2 over 9 suites before the round-2 fixes and the engine-log-parse
+ * extraction, 379/2 before the round-1 tests. All four earlier numbers are
+ * retired.)
  *
- * The three mutants below were applied on the THREE suites that can observe a
- * record change — engine-skew · no-output-backstop-wiring · opencode-client,
- * 3 suites / 169 passed + 2 skipped at HEAD — each alone, then reverted by byte
- * copy with checksums verified afterwards (never by `git checkout`).
+ * The mutants below were applied on the THREE suites that can observe a record
+ * change — engine-skew · no-output-backstop-wiring · opencode-client,
+ * `npx jest tests/utils/engine-skew.test.js tests/no-output-backstop-wiring.test.js
+ * tests/opencode-client.test.js --maxWorkers=2` → 3 suites / **184 passed + 2
+ * skipped at HEAD** (it read 169+2 before the round-3 tests; that number is
+ * retired). Each applied ALONE, then reverted by byte copy with checksums
+ * verified afterwards — never by `git checkout`. Re-measured 2026-08-26.
  *
- * **SKEWBLIND** (re-measured for round 2; the record read 13, and 8 before that)
+ * **SKEWBLIND** (re-measured for round 3; the record read 25, 13 and 8 before)
  * — `noteSessionVersion`'s mismatch branch returns null instead of recording the
  * skew and announcing it (the comparison never fires):
- *   **2 suites / 25 tests red.**
- *   tests/utils/engine-skew.test.js (21): every test that expects a record to
+ *   **2 suites / 28 tests red.**
+ *   tests/utils/engine-skew.test.js (24): every test that expects a record to
  *     exist — the whole comparison block bar the equal-version case, the
  *     extraction store-identity pin, the path-keyed neighbour test, all three
  *     UNKNOWN-bucket tests, FIVE of the six version-less-clear tests, both bound
- *     tests, and "a notifier that THROWS cannot become the failure it reports
- *     on". The sixth ("the UNKNOWN bucket is cleared the same way") stays green
- *     because it asserts null and a blind comparison never records anything —
- *     the same "green by design" shape the LOGBLIND record describes.
+ *     tests, "a notifier that THROWS cannot become the failure it reports on",
+ *     and three round-3 tests whose SETUP needs a real record (the raw-record
+ *     pin, "it does not swallow the skew notice", and the identity-notice
+ *     notifier-throws test). The sixth version-less case ("the UNKNOWN bucket is
+ *     cleared the same way") stays green because it asserts null and a blind
+ *     comparison never records anything — the same "green by design" shape the
+ *     LOGBLIND record describes.
  *   tests/no-output-backstop-wiring.test.js (4):
  *     · the #133 composite: the engine's line AND the two engine versions
  *     · a skew is reported even when the log read finds nothing
@@ -571,16 +770,19 @@ describe('the two rendered strings', () => {
  *   SETUP cannot record a skew to clear — they are not evidence about the clear
  *   rules themselves. STICKYSKEW is the mutant that isolates those.
  *
- * **STICKYSKEW** (round-1 review A3+B3; re-measured for round 2, the record read
- * 7) — three edits to engine-skew-records.js together: `serverKeyForClient`
- * always answers UNKNOWN, `rememberSkew` is write-once, `forgetSkew` is a no-op.
- * That is exactly the pre-round-1 behaviour, one process-wide slot never
- * retracted:
- *   **2 suites / 22 tests red.**
- *   tests/utils/engine-skew.test.js (20): the five per-server/replacement/
+ * **STICKYSKEW** (round-1 review A3+B3; re-measured for round 3, the record read
+ * 22, and 7 before that) — three edits to engine-skew-records.js together:
+ * `serverKeyForClient` always answers UNKNOWN, `rememberSkew` is write-once,
+ * `forgetSkew` is a no-op. That is exactly the pre-round-1 behaviour, one
+ * process-wide slot never retracted:
+ *   **2 suites / 24 tests red.**
+ *   tests/utils/engine-skew.test.js (22): the five per-server/replacement/
  *     retraction tests from round 1, all four `serverKeyForClient` identity
- *     tests (including the round-2 same-origin pair), all three UNKNOWN-bucket
- *     tests, all six version-less-clear tests, and both bound tests.
+ *     tests (including the round-2 same-origin pair), the round-3 REAL-SDK shape
+ *     pin, all three UNKNOWN-bucket tests, all six version-less-clear tests,
+ *     both bound tests, and "a client that DOES name its server never produces
+ *     it" — which reds because under this mutant every client is unnameable,
+ *     which is precisely what that test denies.
  *   tests/no-output-backstop-wiring.test.js (2):
  *     · a skew observed on ANOTHER server is not stamped on this leg
  *     · a skew RETRACTED by a later matching session is not reported
@@ -591,10 +793,42 @@ describe('the two rendered strings', () => {
  *   versions AND an action that can actually fix it" and "formatSkewWarning does
  *   NOT send the user to doctor for this class".
  *
+ * ── ROUND-3 MUTANTS ────────────────────────────────────────────────────────
+ * **RAWVERSION** (reviews B1+C2) — `safeVersion` becomes the identity function,
+ * so server-supplied versions reach both surfaces unsanitized:
+ *   **1 suite / 5 tests red**, all five sanitization cases here. The two
+ *   controls stay GREEN by design — an ordinary version pair must still render
+ *   byte-identically, and the record must still hold the RAW strings.
+ *
+ * **SILENTIDENTITY** (review C1a) — `noteIdentityLoss` returns immediately, so
+ * an unnameable server degrades silently exactly as it did before:
+ *   **1 suite / 4 tests red**, all four cases that expect the notice. The two
+ *   negative cases (no client at all; a client that names its server) stay green,
+ *   which is what says the trigger is "a client we could not read", not "any
+ *   create".
+ *
+ * **SDKSHAPE** (review C1b) — `serverKeyForClient` reads `client._transport`
+ * instead of `client._client`, i.e. OUR reader drifts from the SDK:
+ *   **2 suites / 17 tests red** — 16 here (every identity, per-server, clearing
+ *   and bound test, the REAL-SDK shape pin included) and "a skew observed on
+ *   ANOTHER server is not stamped on this leg" in the wiring suite.
+ *
+ * **SDKUPSTREAM** (review C1b, the direction that matters) — the INSTALLED SDK
+ * renames its private handle while our reader stays put: all 103 occurrences of
+ * `_client` in node_modules/@opencode-ai/sdk/dist/gen/sdk.gen.js replaced with
+ * `_transport`, then restored by byte copy and sha256-verified:
+ *   **1 suite / 1 test red — the REAL-SDK shape pin, alone.** All 65 other tests
+ *   in this file stay GREEN, every stub-based identity test among them. That is
+ *   the measurement the pin exists for: a hand-written `clientAt` cannot notice
+ *   that the thing it stands in for has changed shape, because the stub and the
+ *   reader drift together. Only a client built by the real SDK can.
+ *
  * NOT in any of these red sets, deliberately: tests/opencode-client.test.js. It
  * `jest.mock`s this module, so it pins the CAPTURE wiring only and is
  * structurally unable to see a comparison change. Its own red evidence is the
  * pre-implementation run — 3 of its 5 original tests failed with
  * "Number of calls: 0" before `createSession` forwarded the version, and 4 of
  * its 6 failed on the arguments before it forwarded the client too.
+ *
+ * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */

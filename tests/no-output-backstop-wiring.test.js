@@ -608,10 +608,15 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
  *    and never retracted (the pre-round-1 behaviour): reds the two attribution
  *    tests here — "a skew observed on ANOTHER server is not stamped on this
  *    leg" and "a skew RETRACTED by a later matching session is not reported" —
- *    plus 20 in tests/utils/engine-skew.test.js (re-measured 2026-08-26 after
- *    the round-2 identity, clearing and bound tests landed; the record read 5).
- * The two no-skew controls stay GREEN under both by design: that is what makes
- * them controls.
+ *    plus 22 in tests/utils/engine-skew.test.js (re-measured 2026-08-26 after
+ *    the round-3 tests landed; the record read 5, then 20).
+ *  · SDKSHAPE — round-3 review C1b: `serverKeyForClient` reads a renamed private
+ *    SDK handle, so no client can be named. Reds ONE test here — "a skew
+ *    observed on ANOTHER server is not stamped on this leg" — plus 16 in
+ *    tests/utils/engine-skew.test.js. The retraction test survives because a
+ *    retraction under one shared bucket still clears the record it reads.
+ * The two no-skew controls stay GREEN under all of these by design: that is what
+ * makes them controls.
  */
 describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version skew', () => {
   const realFs = jest.requireActual('fs');

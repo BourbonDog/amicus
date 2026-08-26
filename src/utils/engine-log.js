@@ -161,25 +161,38 @@ function readTail(file, fsImpl, budget) {
 }
 
 /**
- * The LAST ERROR line in this file that is ABOUT `needle`. Logs are append-
- * ordered, so scanning backwards finds the newest match first — and the newest
- * is the one that killed the leg (a session can log several errors while it
- * degrades).
+ * The NEWEST usable excerpt in this file for `needle`. Logs are append-ordered,
+ * so scanning backwards reaches the newest match first — and the newest is the
+ * one that killed the leg (a session can log several errors while it degrades).
  *
- * ABOUT, not merely mentioning (round-2 review A1): a line whose own session
- * field names someone else is skipped even when our id appears elsewhere on it,
- * and the walk continues to an older line that really is ours.
- * @returns {{line: string|null, bytes: number}} `bytes` is the budget spent.
+ * ABOUT, not merely mentioning (round-2 review A1, tightened in round 3): a line
+ * whose structural session field names someone else is skipped even when our id
+ * appears elsewhere on it, and the walk continues to an older line that is
+ * really ours.
+ *
+ * USABLE, not merely matching (round-3 review C4). A matching line whose message
+ * part is empty used to end the file's scan, so the fallthrough skipped to the
+ * next FILE and never reached the older line in THIS one that actually says what
+ * happened — and those two are typically neighbours, the real failure followed by
+ * a terse message-less line as the session tears down. The excerpt is therefore
+ * built here, inside the walk, and an empty one just keeps walking. It costs no
+ * extra I/O: the tail is already in memory, so the byte budget is unchanged.
+ *
+ * `isErrorLine` runs FIRST because it is the cheap test — ownership tokenizes
+ * the line, and only ERROR lines can ever answer.
+ * @returns {{excerpt: string|null, bytes: number}} `bytes` is the budget spent.
  */
-function newestMatchingErrorLine(file, needle, fsImpl, budget) {
+function newestExcerptInFile(file, needle, fsImpl, budget) {
   let read;
-  try { read = readTail(file, fsImpl, budget); } catch (_e) { return { line: null, bytes: 0 }; }
+  try { read = readTail(file, fsImpl, budget); } catch (_e) { return { excerpt: null, bytes: 0 }; }
   const lines = read.text.split(/\r?\n/);
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
-    if (lineIsAboutSession(line, needle) && isErrorLine(line)) { return { line, bytes: read.bytes }; }
+    if (!isErrorLine(line) || !lineIsAboutSession(line, needle)) { continue; }
+    const excerpt = collapseExcerpt(extractMessage(line));
+    if (excerpt) { return { excerpt, bytes: read.bytes }; }
   }
-  return { line: null, bytes: read.bytes };
+  return { excerpt: null, bytes: read.bytes };
 }
 
 /**
@@ -196,7 +209,8 @@ function newestMatchingErrorLine(file, needle, fsImpl, budget) {
  * @param {object} [options.fs] - fs seam (needs existsSync/readdirSync/
  *   statSync/openSync/readSync/closeSync); defaults to the real module.
  * @returns {string|null} excerpt, or null on EVERY miss path (no dir, no file,
- *   no `ses_` match, no ERROR line, unreadable file, hostile fs, budget spent).
+ *   no line whose own session field names us, no ERROR line, every match empty,
+ *   unreadable file, hostile fs, budget spent).
  */
 function engineErrorForSession(sessionId, options = {}) {
   try {
@@ -212,11 +226,9 @@ function engineErrorForSession(sessionId, options = {}) {
     let budget = MAX_SCAN_BYTES;
     for (const file of candidateLogFiles(dirs, fsImpl)) {
       if (budget <= 0) { break; }
-      const found = newestMatchingErrorLine(file, needle, fsImpl, budget);
+      const found = newestExcerptInFile(file, needle, fsImpl, budget);
       budget -= found.bytes;
-      if (!found.line) { continue; }
-      const excerpt = collapseExcerpt(extractMessage(found.line));
-      if (excerpt) { return excerpt; }
+      if (found.excerpt) { return found.excerpt; }
     }
     return null;
   } catch (_e) {

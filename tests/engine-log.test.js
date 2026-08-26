@@ -26,17 +26,18 @@
  * end (a leg dies, the engine's line is on disk, nothing quotes it).
  * Applied as the first statement of the function body in src/utils/engine-log.js.
  *
- * MEASURED red set (RE-MEASURED 2026-08-26 for round 2 — the record read 23
- * before the extraction and the round-2 tests; the two earlier numbers, 14 then
- * 23, are retired. Focused scope: this suite + the parse suite + the wiring
- * suite, `npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
- * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 91
- * tests): **2 suites / 25 tests red.**
- *   tests/engine-log.test.js — 20: every test that expects a NON-null excerpt
+ * MEASURED red set (RE-MEASURED 2026-08-26 for round 3 — the record read 25
+ * before the round-3 tests; the three earlier numbers, 14, 23 and 25, are
+ * retired. Focused scope: this suite + the parse suite + the wiring suite,
+ * `npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 121
+ * tests): **2 suites / 28 tests red.**
+ *   tests/engine-log.test.js — 23: every test that expects a NON-null excerpt
  *     (both format tests, the unquoted-value test, the interior-`key=value`
  *     test, newest-file, last-line, bare-id, exact-id-beats-longer-id,
- *     non-id-boundary, owned-by-another-session, empty-excerpt-fallthrough,
- *     in-tail match, legacy-candidate, mass-death-wave, CRLF, 200-char collapse,
+ *     non-id-boundary, owned-by-another-session, the empty-excerpt group — the
+ *     next-file fallthrough plus the three round-3 same-file cases — in-tail
+ *     match, legacy-candidate, mass-death-wave, CRLF, 200-char collapse,
  *     whitespace collapse, and all three union-of-candidate-dirs tests).
  *   tests/no-output-backstop-wiring.test.js — 5: the Task A poll-loop and
  *     pre-send firing sites, and the three Task B cases that carry an excerpt
@@ -68,16 +69,25 @@
  *   shadow…" and "a present-but-EMPTY XDG dir does not swallow…". The third
  *   union test stays green by design: it is the control that proves the fix did
  *   not invert precedence.
- * `CUTATLASTPAIR` — the structural run keeps scanning past the message, so the
- *   cut lands at the last `key=value` anywhere on the line: **2 suites / 3 tests
- *   red** (was 1) — "a key=value INSIDE a columnar message is text" here, plus
- *   both round-2 A2 cases in the parse suite.
+ * `CUTATLASTPAIR` — the structural run keeps scanning past the message, so it
+ *   ends at the last `key=value` anywhere on the line: **2 suites / 6 tests red**
+ *   (was 1, then 3) — "a key=value INSIDE a columnar message is text" here, plus
+ *   both round-2 A2 cases and three round-3 ownership cases in the parse suite.
+ *   The run is now shared by the message cut AND the ownership rule, which is
+ *   exactly why one mutation reds both.
  * `THREENEWEST` — `candidateLogFiles` truncates to the 3 newest by mtime, the
  *   pre-round-2 bound: **1 suite / 2 tests red**, both here — "a mass-death
  *   wave…" and "the legacy opencode.log is just another candidate". That second
  *   one is what says the retired reserved slot is genuinely unnecessary now.
- * `OWNEDBYOTHER`, `LOGFMTFIRST`, `RAWEXCERPT` — the three round-2 parse mutants;
- *   their red sets are recorded in tests/utils/engine-log-parse.test.js.
+ * `NEXTFILE` — round-3 review C4: an empty excerpt ends the FILE's scan instead
+ *   of continuing to older lines in it: **1 suite / 2 tests red**, both here —
+ *   "an empty excerpt keeps scanning OLDER lines in the SAME file" and "…
+ *   exhausts the file before moving on". "a file with ONLY empty excerpts still
+ *   yields to the next file" stays GREEN by design: it is the control that says
+ *   the fix did not cost the cross-file fallthrough it builds on.
+ * `OWNEDBYOTHER`, `BAREMENTION`, `WHOLELINEFIELDS`, `LOGFMTFIRST`,
+ *   `ERRORANYWHERE`, `RAWEXCERPT`, `NOBIDI` — the parse-layer mutants; their red
+ *   sets are recorded in tests/utils/engine-log-parse.test.js.
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -272,6 +282,47 @@ describe('engineErrorForSession: correlation and filtering', () => {
     const dataDir = makeDataDir();
     // Newest file: an ERROR line for this session whose message part is empty.
     writeLog(dataDir, '2026-08-25T185540.log', [`ERROR 2026-08-25T18:55:40 +0ms id=${SES}`], 3000);
+    writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR], 2000);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  /**
+   * W10 round-3 review C4. The empty-excerpt fallthrough used to skip to the
+   * next FILE, so an older line in the SAME file — the one that actually says
+   * what happened — was never reached. In the shape that matters the two lines
+   * are neighbours: the engine logs its real failure and then a terse, message-
+   * less line as the session tears down. The whole file is already in memory by
+   * then, so continuing costs nothing and the byte budget still bounds the scan.
+   */
+  test('an empty excerpt keeps scanning OLDER lines in the SAME file', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      LOGFMT_ERROR, // older, and the only line that carries a message
+      `ERROR 2026-08-25T18:55:40 +0ms id=${SES}`, // newest match: nothing to quote
+    ]);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('and it exhausts the file before moving on, rather than stopping at the first gap', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      LOGFMT_ERROR,
+      `ERROR 2026-08-25T18:55:38 +0ms id=${SES}`,
+      `ERROR 2026-08-25T18:55:39 +0ms service=default id=${SES}`,
+      `ERROR 2026-08-25T18:55:40 +0ms id=${SES}`,
+    ]);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('control — a file with ONLY empty excerpts still yields to the next file', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185540.log', [
+      `ERROR 2026-08-25T18:55:40 +0ms id=${SES}`,
+      `ERROR 2026-08-25T18:55:41 +0ms service=default id=${SES}`,
+    ], 3000);
     writeLog(dataDir, '2026-08-25T185532.log', [LOGFMT_ERROR], 2000);
     expect(engineErrorForSession(SES, { dataDir }))
       .toBe('SQLiteError: no such column: fixture_seq');
