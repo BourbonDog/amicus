@@ -6131,11 +6131,49 @@ minutes to get started"*).
 ### Quote the real engine error — #133 root fix
 
 v4.7.1 only softens the wording; this replaces the guess with the truth. When a leg dies, read the
-session's line from `~/.local/share/opencode/log/opencode.log` and surface it. In the #133 outage the
-actual cause — `SQLiteError: no such column: replacement_seq` — sat in that file the entire 30
+session's line from the engine's own log and surface it. In the #133 outage the
+actual cause — `SQLiteError: no such column: replacement_seq` — sat in that log the entire 30
 minutes, appearing at the exact timestamp of every failed MCP session and never for the CLI sessions
 succeeding in the same window. Needs log-path resolution, session correlation, and a clean fallback
 when no line exists.
+
+⚠️ **This item's original log path was stale and is corrected here** (measured 2026-08-25, v4.9 W10
+Task A): it read `~/.local/share/opencode/log/opencode.log`, but current engine builds write ONE
+TIMESTAMPED FILE PER PROCESS in that directory (`2026-08-25T185532.log`), and both schemes are live
+across machines — the reference machine keeps a 2.4 MB legacy `opencode.log`, this one holds 12
+timestamped files and no `opencode.log` at all. A resolver written to the original single-file
+premise would have returned nothing, silently, on a current install. See `src/utils/engine-log.js`.
+
+### The startup schema check — #133 fix 4, DISPOSITION (v4.9 W10 Task B, 2026-08-25)
+
+Issue #133's fourth suggested fix asks for *"a startup schema check — if the engine's expected
+schema doesn't match the on-disk DB, fail fast with that message instead of hanging for 120s."*
+
+**Disposition: the runtime version handshake shipped as W10 piece 3 IS that check's honest core,
+and no separate schema validation was built.** What actually diverged in #133 was not a schema
+amicus can inspect — it was the ENGINE: 1.17.3 serving MCP against a `~/.local/share/opencode`
+database written by 1.18.15. `SQLiteError: no such column: replacement_seq` is that divergence's
+symptom, not its identity. `src/utils/engine-skew.js` now takes the engine's own `Session.version`
+off every `createSession` response (the SDK returned it all along and `opencode-client.js` threw
+it away) and compares it against the `opencode-ai` version in the RUNNING install's
+`node_modules` — announced once per
+process on stderr and appended to every `NO_OUTPUT_BACKSTOP` death report as
+` (engine skew: server <a> ≠ installed <b>)`.
+
+A full engine-response / DB schema validation **was considered and not built** because the schema
+is the engine's private contract with its own SQLite file: amicus neither owns those migrations
+nor can enumerate the expected columns without vendoring opencode internals that move every
+release, so such a check would be a guess that rots on each engine bump — while the version pair
+is already published by both sides and is exactly the fact that was missing.
+
+⚠️ Measured 2026-08-25 while building this, and the reason piece 3 uses **no global baseline**:
+`doctor`'s existing skew check (`doctor-engine-check.js`, v4.7.1) compares npx-cache copies
+against the GLOBAL install and is structurally blind to the copy the running process loaded. On
+this machine it reports clean — global `1.18.15` vs npx `1.18.15` — while the running checkout
+loads engine **`1.2.20`**: a live instance of #133's own class, invisible to the check written
+for it. (Also measured against a real locally spawned engine, not read off the SDK types:
+`session.create` returns `data.version`, and it was byte-identical to the running install's
+`opencode-ai` version — so the two sides really are comparable.)
 
 ### Setup polish — #138
 

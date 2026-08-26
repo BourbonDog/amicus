@@ -137,7 +137,11 @@ function directoryQuery(directory) {
  * @param {string} [directory] - Optional project directory to scope the session
  *   to (threaded to the SDK as query.directory). Omitting it keeps the call
  *   byte-for-byte identical to before.
- * @returns {Promise<string>} Session ID
+ * @returns {Promise<string>} Session ID — deliberately still a plain string.
+ *   The response's `version` (#133 piece 3, below) rides out through
+ *   `utils/engine-skew` rather than widening this return type: measured, all
+ *   three production callers (`headless.js`, `mcp-server.js`,
+ *   `sidecar/interactive.js`) assign it straight to a `sessionId` string.
  * @throws {Error} If session creation fails
  */
 async function createSession(client, directory) {
@@ -153,6 +157,17 @@ async function createSession(client, directory) {
   if (!sessionId) {
     throw new Error('No session ID returned');
   }
+
+  // #133 piece 3: the server's own engine version arrives on every create and
+  // used to be dropped on the floor. MEASURED 2026-08-25 against a real engine:
+  // `data.version` is the opencode-ai version, so it can be compared with the
+  // engine in this install's node_modules. The detector decides silence (older
+  // servers omit the field); best-effort by construction — a diagnostic must
+  // never be able to fail a session create.
+  try {
+    require('./utils/engine-skew')
+      .noteSessionVersion(result.data?.version || result.data?.session?.version);
+  } catch (_e) { /* diagnosis only — never load-bearing */ }
 
   return sessionId;
 }

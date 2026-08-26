@@ -21,6 +21,10 @@ const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require(
 // that uses this helper. See src/utils/env-num.js for why the older `||` knobs are
 // deliberately left alone.
 const { envNumber } = require('./utils/env-num');
+// v4.9 W10 (#133 piece 2): the engine's own error line for a dead session.
+const { engineErrorForSession } = require('./utils/engine-log');
+// v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
+const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -158,14 +162,26 @@ function withTimeout(promise, ms, label) {
  * Task 6 (#129, #133): build the NO_OUTPUT_BACKSTOP reason string. Report
  * ONLY what the mechanism observed — a deadline passed with no substantive
  * activity (output/reasoning/tool calls) — never a cause. At the pre-send
- * firing site (runHeadless, ~:506-518) the backstop can win the race against
+ * firing site (runHeadless, where the backstop is armed just before
+ * `sendPromptAsync`) the backstop can win the race against
  * sendPromptAsync before the send ever resolves, so "the endpoint accepted
  * the request" is not even something that site observed. The previous text
  * asserted "likely a listed-but-not-serving model or a dead endpoint" — a
  * canned guess with no evidence gate — which sent 30 minutes of #133's
  * debugging at model ids and API keys while the real cause (an opencode
- * engine version skew) sat in ~/.local/share/opencode/log/opencode.log the
- * whole time.
+ * engine version skew) sat in the engine's own log the whole time.
+ *
+ * v4.9 W10 (#133 piece 2): that log is now READ. When
+ * src/utils/engine-log.js finds an ERROR line for this leg's session,
+ * `engineLogExcerpt` carries it and ` — engine log: <excerpt>` is appended
+ * AFTER the whole sentence below — so the `NO_OUTPUT_BACKSTOP:` prefix that
+ * src/sidecar/models-probe.js classifies on stays byte-stable, and on every
+ * miss path (no dir, no file, no session match, no ERROR line) the excerpt
+ * clause is absent — a standing skew still appends its own clause, see below. NOTE the path this comment used to
+ * name (a single `opencode/log/opencode.log`) was already stale when it was
+ * written: the engine now writes one timestamped file per process, and both
+ * schemes are live on real machines — engine-log.js's header records the
+ * measurement and reads both.
  *
  * `fromEnv` distinguishes two ways `ms` was decided, NOT whether
  * AMICUS_NO_OUTPUT_BACKSTOP_MS is relevant — it is relevant on both branches:
@@ -190,20 +206,53 @@ function withTimeout(promise, ms, label) {
  *     it governs (false on the probe) or omitting it (false/unhelpful on the
  *     retry) — true on both, and still points a user at the remedy.
  *
+ * v4.9 W10 (#133 piece 3): `engineSkew` adds a SECOND, independent clause —
+ * the two engine versions, when src/utils/engine-skew.js saw the serving
+ * engine disagree with the installed one at session-create time. It is
+ * deliberately NOT gated on `engineLogExcerpt`: gating it would make the
+ * reliable signal (two version strings both sides already publish) depend on
+ * the unreliable one (a log file that may be absent or rotated), and in #133
+ * the skew WAS the answer. Both clauses are append-only, so with neither the
+ * string is byte-for-byte what it was before either piece existed.
+ *
  * Kept module-scope and pure (not a closure over runHeadless locals) so it
  * can be asserted on directly in tests without driving the poll loop; the
  * `noOutputBackstopReason` closure inside runHeadless just forwards to this
- * with the per-run `noOutputBackstopMs`/`backstopFromEnv` values, so the two
- * firing sites there stay identical to what's tested here.
- * @param {{ms: number, fromEnv: boolean}} args
+ * with the per-run `noOutputBackstopMs`/`backstopFromEnv`/engine-log/skew
+ * values, so the two firing sites there stay identical to what's tested here.
+ * @param {{ms: number, fromEnv: boolean, engineLogExcerpt?: string|null,
+ *          engineSkew?: {server: string, installed: string}|null}} args
  * @returns {string}
  */
-function formatNoOutputBackstopReason({ ms, fromEnv }) {
-  return 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
+function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew }) {
+  const observed = 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
     + `${Math.round(ms / 1000)}s — `
     + (fromEnv
       ? 'the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)'
       : 'a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default');
+  // Append-only: absent/empty excerpt ⇒ the string above, unchanged byte for byte.
+  const quoted = engineLogExcerpt ? `${observed} — engine log: ${engineLogExcerpt}` : observed;
+  // Append-only for the same reason: no skew ⇒ formatSkewSuffix returns ''.
+  return `${quoted}${formatSkewSuffix(engineSkew)}`;
+}
+
+/**
+ * v4.9 W10 (#133 piece 2): the engine-log lookup, wrapped so it can never
+ * become the failure it reports on. The resolver is already best-effort
+ * internally; this second belt is at the CALL site because the caller is a
+ * leg's death report — the one place where an extra exception would replace a
+ * usable failure reason with a stack trace. Missing sessionId ⇒ skip entirely.
+ * @param {string|undefined} sessionId
+ * @param {object|undefined} engineLogOptions - test seam (options._engineLog)
+ * @returns {string|null}
+ */
+function engineErrorExcerptSafe(sessionId, engineLogOptions) {
+  if (!sessionId) { return null; }
+  try {
+    return engineErrorForSession(sessionId, engineLogOptions || {});
+  } catch (_e) {
+    return null;
+  }
 }
 
 /**
@@ -542,8 +591,24 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // can never drift apart. Forwards to the module-scope, pure
     // formatNoOutputBackstopReason (below/exported) so tests can assert on the
     // string shape directly without driving the whole poll loop.
+    //
+    // v4.9 W10 (#133 piece 2): the engine-log excerpt is resolved HERE, in the
+    // one shared closure, rather than separately at each firing site — the
+    // enrichment then reaches BOTH sites by construction, which is the same
+    // no-drift argument that put the reason string here in the first place.
+    // Resolved at CALL time (not once when this closure is defined) so the
+    // engine has already written the line by the time we read it, and so the
+    // read never happens on a leg that lives.
+    //
+    // v4.9 W10 (#133 piece 3): the skew record is read at call time for the
+    // same reason — `createSession` above is what puts it there, and on the
+    // shared-server path a sibling leg may have been the one to see it.
+    // `currentEngineSkew()` returns a module-level variable and does no I/O, so
+    // unlike the log read it has nothing to fail and needs no guard.
     const noOutputBackstopReason = () => formatNoOutputBackstopReason({
       ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+      engineLogExcerpt: engineErrorExcerptSafe(sessionId, options._engineLog),
+      engineSkew: currentEngineSkew(),
     });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —

@@ -20,6 +20,17 @@ jest.mock('@opencode-ai/sdk', () => ({
   }
 }), { virtual: true });
 
+// v4.9 W10 Task B (#133 piece 3): createSession pushes the server-reported
+// `Session.version` into the skew detector. Mocked here so THIS suite pins the
+// WIRING only (that the field is no longer discarded, and that the detector can
+// never break session creation); the comparison, the once-per-process
+// announcement and the rendered strings are pinned in
+// tests/utils/engine-skew.test.js against injected seams.
+const mockNoteSessionVersion = jest.fn();
+jest.mock('../src/utils/engine-skew', () => ({
+  noteSessionVersion: (...args) => mockNoteSessionVersion(...args),
+}));
+
 // Import after mock is set up
 const {
   parseModelString,
@@ -162,6 +173,88 @@ describe('OpenCode Client Wrapper', () => {
 
       const sessionId = await createSession(mockClient);
       expect(sessionId).toBe('nested-session-456');
+    });
+  });
+
+  /**
+   * v4.9 W10 Task B (#133 piece 3) — the response's `version` stops being
+   * discarded.
+   *
+   * MEASURED 2026-08-25 against a real locally spawned engine (not read off the
+   * SDK's .d.ts): `client.session.create({})` answers with
+   * `data = {directory,id,projectID,slug,time,title,version}` and `version` was
+   * `"1.2.20"`, exactly this checkout's `node_modules/opencode-ai` version — so
+   * `Session.version` is the ENGINE's version and comparing it against the
+   * installed engine is meaningful. Same run: `data.id` began with `ses_` and
+   * there was no nested `data.session`.
+   *
+   * The return type stays a plain string on purpose. Measured: all three
+   * production callers — `headless.js`, `mcp-server.js`,
+   * `sidecar/interactive.js` — do `sessionId = await createSession(client, …)`
+   * and use the result as a string, so an object return would have been a
+   * three-file breaking change to carry one diagnostic field. The version goes
+   * out through the module that owns the comparison instead.
+   */
+  describe('createSession captures the engine version (#133 piece 3)', () => {
+    it('forwards the server-reported version to the skew detector', async () => {
+      const mockClient = {
+        session: {
+          create: jest.fn().mockResolvedValue({ data: { id: 'ses_abc', version: '1.17.3' } })
+        }
+      };
+
+      const sessionId = await createSession(mockClient);
+
+      expect(sessionId).toBe('ses_abc');
+      expect(typeof sessionId).toBe('string'); // the return shape is unchanged
+      expect(mockNoteSessionVersion).toHaveBeenCalledTimes(1);
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith('1.17.3');
+    });
+
+    it('reads the version off a nested session object too', async () => {
+      const mockClient = {
+        session: {
+          create: jest.fn().mockResolvedValue({
+            data: { session: { id: 'ses_nested', version: '0.9.0' } }
+          })
+        }
+      };
+
+      await createSession(mockClient);
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith('0.9.0');
+    });
+
+    it('an older server that reports no version is forwarded as undefined, not skipped', async () => {
+      // The detector owns "no version means stay silent" — see
+      // tests/utils/engine-skew.test.js. Keeping the call unconditional means
+      // that rule lives in exactly one place.
+      const mockClient = {
+        session: { create: jest.fn().mockResolvedValue({ data: { id: 'ses_old' } }) }
+      };
+
+      const sessionId = await createSession(mockClient);
+      expect(sessionId).toBe('ses_old');
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith(undefined);
+    });
+
+    it('a detector that throws cannot break session creation', async () => {
+      mockNoteSessionVersion.mockImplementationOnce(() => { throw new Error('skew module is broken'); });
+      const mockClient = {
+        session: {
+          create: jest.fn().mockResolvedValue({ data: { id: 'ses_survives', version: '1.17.3' } })
+        }
+      };
+
+      await expect(createSession(mockClient)).resolves.toBe('ses_survives');
+    });
+
+    it('a failed create never reaches the detector', async () => {
+      const mockClient = {
+        session: { create: jest.fn().mockResolvedValue({ error: { message: 'nope' } }) }
+      };
+
+      await expect(createSession(mockClient)).rejects.toThrow('nope');
+      expect(mockNoteSessionVersion).not.toHaveBeenCalled();
     });
   });
 
