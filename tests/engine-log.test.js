@@ -19,15 +19,20 @@
  * end (a leg dies, the engine's line is on disk, nothing quotes it).
  * Applied as the first statement of the function body in src/utils/engine-log.js.
  *
- * MEASURED red set (2026-08-25, focused scope: this suite + the wiring suite,
- * `npx jest tests/engine-log.test.js tests/no-output-backstop-wiring.test.js
- * --maxWorkers=2` → 2 suites / 42 tests): 2 suites / 14 tests.
- *   tests/engine-log.test.js — 12: every test that expects a NON-null excerpt
- *     (both format tests, the unquoted-value test, newest-file, last-line,
- *     bare-id, empty-excerpt-fallthrough, in-tail match, legacy-candidate,
- *     CRLF, 200-char collapse, whitespace collapse).
- *   tests/no-output-backstop-wiring.test.js — 2: the poll-loop and pre-send
- *     firing sites (`… — engine log: <excerpt>`).
+ * MEASURED red set (RE-RUN 2026-08-26 after the round-1 review tests landed —
+ * the earlier record read 14 and was taken before Task B's cases existed in the
+ * wiring suite; focused scope: this suite + the wiring suite, `npx jest
+ * tests/engine-log.test.js tests/no-output-backstop-wiring.test.js
+ * --maxWorkers=2` → 2 suites / 58 tests): 2 suites / 23 tests.
+ *   tests/engine-log.test.js — 18: every test that expects a NON-null excerpt
+ *     (both format tests, the unquoted-value test, the interior-`key=value`
+ *     test, newest-file, last-line, bare-id, exact-id-beats-longer-id,
+ *     non-id-boundary, empty-excerpt-fallthrough, in-tail match,
+ *     legacy-candidate, CRLF, 200-char collapse, whitespace collapse, and all
+ *     three union-of-candidate-dirs tests).
+ *   tests/no-output-backstop-wiring.test.js — 5: the Task A poll-loop and
+ *     pre-send firing sites, and the three Task B cases that carry an excerpt
+ *     (the #133 composite, its pre-send twin, and the no-skew control).
  *
  * GREEN BY DESIGN under LOGBLIND — and this is the point, not a gap: every
  * miss-path test asserts null, and the four wiring controls assert the message
@@ -37,7 +42,23 @@
  * read") therefore cannot, alone, tell a respected bound from a dead resolver
  * — each is deliberately PAIRED with a positive twin in the red set ("a match
  * INSIDE the tail is found", "the legacy opencode.log stays a candidate"), and
- * it is the pair that pins the bound.
+ * it is the pair that pins the bound. The same pairing covers the round-1
+ * review's own null-asserting test ("a LONGER id is never borrowed"), whose
+ * twin is "the EXACT id still wins".
+ *
+ * ── THREE MORE NAMED MUTANTS, from the round-1 review (measured 2026-08-26,
+ *    same 2-suite scope; each applied alone and reverted) ───────────────────
+ * `UNANCHORED` — `mentionsSession` degrades to `line.includes(needle)`, the
+ *   pre-review behaviour: **2 tests red**, both in this suite — "a LONGER id is
+ *   never borrowed" and "the EXACT id still wins".
+ * `FIRSTDIRONLY` — `existingEngineLogDirs` returns after the first existing
+ *   dir: **2 tests red**, both in this suite — "a stale XDG dir does not
+ *   shadow…" and "a present-but-EMPTY XDG dir does not swallow…". The third
+ *   union test stays green by design: it is the control that proves the fix did
+ *   not invert precedence.
+ * `CUTATLASTPAIR` — `extractMessage` cuts at the last `key=value` anywhere on
+ *   the line: **1 test red** — "a key=value INSIDE a columnar message is text,
+ *   not a cut point".
  * ⚠️ RE-RUN, NEVER RENUMBER: a recorded red set asserts the set still fails.
  */
 
@@ -107,6 +128,22 @@ describe('engineErrorForSession: the two real line formats', () => {
     expect(engineErrorForSession(SES, { dataDir })).toBe('fixture boom: two words');
   });
 
+  /**
+   * W10 round-1 review B2: the columnar branch used to cut the message at the
+   * LAST `key=value` token anywhere on the line, so an engine error that quotes
+   * a setting mid-sentence lost everything before it. The structural prefix
+   * (`ERROR <iso> +Nms service=… id=…`) is what ends; a `key=value` INSIDE the
+   * human text is just text.
+   */
+  test('a key=value INSIDE a columnar message is text, not a cut point', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185536.log',
+      [`ERROR 2026-08-25T18:55:36 +3ms service=default id=${SES} `
+        + 'could not parse foo=bar in the fixture config']);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('could not parse foo=bar in the fixture config');
+  });
+
   test('both schemes in one dir: the NEWEST file\'s match wins', () => {
     const dataDir = makeDataDir();
     // The legacy single file is OLDER; a per-process timestamped file is newer.
@@ -140,6 +177,46 @@ describe('engineErrorForSession: correlation and filtering', () => {
     writeLog(dataDir, '2026-08-25T185532.log',
       ['time=2026-08-25T18:55:32Z level=ERROR session.id=ses_someoneelse error="not yours"']);
     expect(engineErrorForSession(SES, { dataDir })).toBeNull();
+  });
+
+  /**
+   * W10 round-1 review A1+B4: the correlation used to be a bare substring test,
+   * and a session id is a PREFIX of every longer id that starts with it —
+   * MEASURED on this machine's own engine logs (2026-08-25): 369 distinct ids,
+   * every one exactly 30 chars (`ses_` + 26) and every one PURE `[A-Za-z0-9]`
+   * after the prefix, so "the next character is not an id character" is a real
+   * boundary and not a guess about the charset.
+   */
+  test('a LONGER id is never borrowed: ses_<id>x9 does not answer for ses_<id>', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      `time=2026-08-25T18:55:32Z level=ERROR session.id=${SES}x9 error="a longer id's failure"`,
+    ]);
+    expect(engineErrorForSession(SES, { dataDir })).toBeNull();
+  });
+
+  test('the EXACT id still wins when a longer id\'s line sits after it in the same file', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      LOGFMT_ERROR,
+      `time=2026-08-25T18:55:33Z level=ERROR session.id=${SES}x9 error="a longer id's failure"`,
+    ]);
+    expect(engineErrorForSession(SES, { dataDir }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('any NON-id character ends the id — quoted, comma-separated, or end of line', () => {
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', [
+      `time=2026-08-25T18:55:32Z level=ERROR session.id="${SES}" error="quoted id fixture"`,
+    ]);
+    expect(engineErrorForSession(SES, { dataDir })).toBe('quoted id fixture');
+
+    const dataDir2 = makeDataDir();
+    writeLog(dataDir2, '2026-08-25T185533.log',
+      [`ERROR 2026-08-25T18:55:33 +1ms service=default id=${SES}`, // id at end of line
+        `ERROR 2026-08-25T18:55:34 +1ms service=default sessions=${SES},ses_other trailing fixture`]);
+    expect(engineErrorForSession(SES, { dataDir: dataDir2 })).toBe('trailing fixture');
   });
 
   test('non-ERROR lines mentioning the session are ignored (INFO/WARN are not failures)', () => {
@@ -249,6 +326,80 @@ describe('engineErrorForSession: the excerpt is one short line', () => {
     writeLog(dataDir, '2026-08-25T185532.log',
       [`time=2026-08-25T18:55:32Z level=ERROR session.id=${SES} error="a\t\tb   c"`]);
     expect(engineErrorForSession(SES, { dataDir })).toBe('a b c');
+  });
+});
+
+/**
+ * W10 round-1 review A2: the resolver used to stop at the FIRST candidate dir
+ * that exists, so a present-but-stale (or empty) XDG dir shadowed the dir the
+ * live engine is actually writing to — the silent, forever miss this module was
+ * built to end, reintroduced one layer up. The candidates are now a UNION.
+ *
+ * Driven through the REAL `env` path (not the `dataDir` override, which is a
+ * single dir by construction and cannot exercise this). The second candidate is
+ * `~/.local/share/opencode/log`, whose location no env var controls, so the fs
+ * seam redirects that one virtual prefix onto a temp tree — the test never
+ * reads or writes the developer's own engine logs, and the outcome does not
+ * depend on whether that machine happens to have any.
+ */
+describe('engineErrorForSession: EVERY existing candidate dir is searched', () => {
+  const HOME_DATA = path.join(os.homedir(), '.local', 'share');
+
+  /** Real fs, with the `~/.local/share` candidate rebased onto `toPrefix`. */
+  function redirectingFs(toPrefix) {
+    const at = (p) => {
+      const s = String(p);
+      return s.startsWith(HOME_DATA) ? path.join(toPrefix, s.slice(HOME_DATA.length)) : s;
+    };
+    return {
+      existsSync: (p) => fs.existsSync(at(p)),
+      readdirSync: (p) => fs.readdirSync(at(p)),
+      statSync: (p) => fs.statSync(at(p)),
+      openSync: (p, flags) => fs.openSync(at(p), flags),
+      readSync: (...args) => fs.readSync(...args),
+      closeSync: (fd) => fs.closeSync(fd),
+    };
+  }
+
+  /** XDG points at a real fixture dir; the win32 APPDATA candidate does not exist. */
+  const unionEnv = (xdg) => ({
+    XDG_DATA_HOME: xdg,
+    APPDATA: path.join(os.tmpdir(), `amicus-engine-log-no-appdata-${Date.now()}`),
+  });
+
+  const XDG_STALE = `time=2026-08-25T18:00:00Z level=ERROR session.id=${SES} `
+    + 'error="stale xdg failure"';
+
+  test('a stale XDG dir does not shadow the newest match in ~/.local/share', () => {
+    const xdg = makeDataDir();
+    const homeData = makeDataDir();
+    writeLog(xdg, '2026-08-25T180000.log', [XDG_STALE], 1000);
+    writeLog(homeData, '2026-08-25T185532.log', [LOGFMT_ERROR], 5000);
+
+    expect(engineErrorForSession(SES, { env: unionEnv(xdg), fs: redirectingFs(homeData) }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('a present-but-EMPTY XDG dir does not swallow the search', () => {
+    const xdg = makeDataDir(); // exists; holds no .log file at all
+    const homeData = makeDataDir();
+    writeLog(homeData, '2026-08-25T185532.log', [LOGFMT_ERROR], 5000);
+
+    expect(engineErrorForSession(SES, { env: unionEnv(xdg), fs: redirectingFs(homeData) }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+  });
+
+  test('control — the union did not invert precedence: a newest XDG file still wins', () => {
+    // Paired with the first test: that one proves the search no longer stops at
+    // the first existing dir, this one proves mtime — not dir order — is what
+    // decides, in the direction where the old behaviour was already right.
+    const xdg = makeDataDir();
+    const homeData = makeDataDir();
+    writeLog(xdg, '2026-08-25T185540.log', [LOGFMT_ERROR], 9000);
+    writeLog(homeData, '2026-08-25T180000.log', [XDG_STALE], 1000);
+
+    expect(engineErrorForSession(SES, { env: unionEnv(xdg), fs: redirectingFs(homeData) }))
+      .toBe('SQLiteError: no such column: fixture_seq');
   });
 });
 

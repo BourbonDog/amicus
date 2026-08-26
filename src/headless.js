@@ -207,8 +207,9 @@ function withTimeout(promise, ms, label) {
  *     retry) — true on both, and still points a user at the remedy.
  *
  * v4.9 W10 (#133 piece 3): `engineSkew` adds a SECOND, independent clause —
- * the two engine versions, when src/utils/engine-skew.js saw the serving
- * engine disagree with the installed one at session-create time. It is
+ * the two engine versions, when src/utils/engine-skew.js has a skew standing
+ * for THIS leg's own server (the caller reads the record by client; see the
+ * firing-site comment in runHeadless). It is
  * deliberately NOT gated on `engineLogExcerpt`: gating it would make the
  * reliable signal (two version strings both sides already publish) depend on
  * the unreliable one (a log file that may be absent or rotated), and in #133
@@ -602,13 +603,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // v4.9 W10 (#133 piece 3): the skew record is read at call time for the
     // same reason — `createSession` above is what puts it there, and on the
-    // shared-server path a sibling leg may have been the one to see it.
-    // `currentEngineSkew()` returns a module-level variable and does no I/O, so
-    // unlike the log read it has nothing to fail and needs no guard.
+    // shared-server path a sibling leg on THIS server may have been the one to
+    // see it. Asked for by `client`, so what comes back is THIS leg's own
+    // server's standing record and never a stranger's (W10 round-1 review A3):
+    // the record is per server and refreshed on every create, so a skew that
+    // was fixed mid-run, or one that belongs to another server this process
+    // also talks to, cannot ride out on this death report. The read is a Map
+    // lookup and does no I/O, so unlike the log read it needs no guard.
     const noOutputBackstopReason = () => formatNoOutputBackstopReason({
       ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
       engineLogExcerpt: engineErrorExcerptSafe(sessionId, options._engineLog),
-      engineSkew: currentEngineSkew(),
+      engineSkew: currentEngineSkew(client),
     });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —

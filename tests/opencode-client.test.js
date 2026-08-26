@@ -21,11 +21,11 @@ jest.mock('@opencode-ai/sdk', () => ({
 }), { virtual: true });
 
 // v4.9 W10 Task B (#133 piece 3): createSession pushes the server-reported
-// `Session.version` into the skew detector. Mocked here so THIS suite pins the
-// WIRING only (that the field is no longer discarded, and that the detector can
-// never break session creation); the comparison, the once-per-process
-// announcement and the rendered strings are pinned in
-// tests/utils/engine-skew.test.js against injected seams.
+// `Session.version` — and the client it came from — into the skew detector.
+// Mocked here so THIS suite pins the WIRING only (that neither is discarded any
+// more, and that the detector can never break session creation); the
+// comparison, the per-server record, the announcement and the rendered strings
+// are pinned in tests/utils/engine-skew.test.js against injected seams.
 const mockNoteSessionVersion = jest.fn();
 jest.mock('../src/utils/engine-skew', () => ({
   noteSessionVersion: (...args) => mockNoteSessionVersion(...args),
@@ -208,7 +208,29 @@ describe('OpenCode Client Wrapper', () => {
       expect(sessionId).toBe('ses_abc');
       expect(typeof sessionId).toBe('string'); // the return shape is unchanged
       expect(mockNoteSessionVersion).toHaveBeenCalledTimes(1);
-      expect(mockNoteSessionVersion).toHaveBeenCalledWith('1.17.3');
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith('1.17.3', { client: mockClient });
+    });
+
+    /**
+     * W10 round-1 review A3: the observation is only meaningful attached to the
+     * server that made it, so the CLIENT rides along and the detector derives
+     * the identity (its `serverKeyForClient`, pinned in
+     * tests/utils/engine-skew.test.js against the measured SDK shape). Deriving
+     * it here instead would put a second reader of the SDK's internals in the
+     * client wrapper, and a second place to keep true.
+     */
+    it('forwards the CLIENT too, so the record is attributable to one server', async () => {
+      const mockClient = {
+        _client: { getConfig: () => ({ baseUrl: 'http://127.0.0.1:4096' }) },
+        session: {
+          create: jest.fn().mockResolvedValue({ data: { id: 'ses_keyed', version: '1.17.3' } })
+        }
+      };
+
+      await createSession(mockClient);
+
+      const [, deps] = mockNoteSessionVersion.mock.calls[0];
+      expect(deps.client).toBe(mockClient); // the same object, not a copy or a derived string
     });
 
     it('reads the version off a nested session object too', async () => {
@@ -221,7 +243,7 @@ describe('OpenCode Client Wrapper', () => {
       };
 
       await createSession(mockClient);
-      expect(mockNoteSessionVersion).toHaveBeenCalledWith('0.9.0');
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith('0.9.0', { client: mockClient });
     });
 
     it('an older server that reports no version is forwarded as undefined, not skipped', async () => {
@@ -234,7 +256,7 @@ describe('OpenCode Client Wrapper', () => {
 
       const sessionId = await createSession(mockClient);
       expect(sessionId).toBe('ses_old');
-      expect(mockNoteSessionVersion).toHaveBeenCalledWith(undefined);
+      expect(mockNoteSessionVersion).toHaveBeenCalledWith(undefined, { client: mockClient });
     });
 
     it('a detector that throws cannot break session creation', async () => {

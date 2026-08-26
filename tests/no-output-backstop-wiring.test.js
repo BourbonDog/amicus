@@ -591,17 +591,25 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
  * to the rendered leg error, with no seam invented for the test. Reset before
  * AND after every case so no skew leaks into another suite's controls.
  *
- * THREE SHAPES, pinned as a set:
+ * SHAPES, pinned as a set:
  *  1. skew + excerpt  — the composite #133 message (both clauses, in order).
  *  2. skew, no excerpt — the skew clause is NOT gated on the log read
  *     succeeding (see the deviation note in the test).
  *  3. no skew         — byte-identical to Task A's output, enriched or not.
+ *  4. ATTRIBUTION (round-1 review A3+B3) — the clause belongs to THIS leg's own
+ *     server, now: another server's skew never rides along, a retracted one
+ *     stops appearing, and this leg's own still lands.
  *
- * Named mutant SKEWBLIND — in the engine-skew module, `noteSessionVersion`'s
- * mismatch branch returns null — reds 3 of these: the two enriched shapes and
- * the pre-send site, plus 5 more in tests/utils/engine-skew.test.js, where the
- * full measured red set is recorded. The two controls below stay GREEN under it
- * by design: that is what makes them controls.
+ * Named mutants, both measured against this suite:
+ *  · SKEWBLIND — `noteSessionVersion`'s mismatch branch returns null. The full
+ *    measured red set is recorded in tests/utils/engine-skew.test.js.
+ *  · STICKYSKEW — the record degrades to ONE process-wide slot, written once
+ *    and never retracted (the pre-review behaviour): reds the two attribution
+ *    tests here — "a skew observed on ANOTHER server is not stamped on this
+ *    leg" and "a skew RETRACTED by a later matching session is not reported" —
+ *    plus 5 in tests/utils/engine-skew.test.js.
+ * The two no-skew controls stay GREEN under both by design: that is what makes
+ * them controls.
  */
 describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version skew', () => {
   const realFs = jest.requireActual('fs');
@@ -627,13 +635,23 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
 
   const engineLogOpts = (dataDir) => ({ dataDir, fs: realFs });
 
-  /** Put a real skew on the record, exactly as a skewed create would. */
-  function armSkew() {
+  /**
+   * Put a real skew on the record, exactly as a skewed create would.
+   *
+   * `client` defaults to undefined — the same identity the leg's own client has
+   * here, since `mockStartServer` hands runHeadless a bare `{}` with no SDK
+   * transport on it. Pass a client to arm a DIFFERENT server's record.
+   */
+  function armSkew(client) {
     skewMod.noteSessionVersion('1.17.3', {
       readInstalledVersion: () => '1.18.15',
-      notify: () => {}, // the once-per-process notice is pinned in tests/utils/engine-skew.test.js
+      client,
+      notify: () => {}, // the notice itself is pinned in tests/utils/engine-skew.test.js
     });
   }
+
+  /** A client that names its server, matching the measured SDK shape. */
+  const clientAt = (baseUrl) => ({ _client: { getConfig: () => ({ baseUrl }) } });
 
   beforeEach(() => { skewMod._resetEngineSkew(); });
   afterEach(() => { skewMod._resetEngineSkew(); });
@@ -713,6 +731,58 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const absent = path.join(os.tmpdir(), `amicus-w10b-match-${Date.now()}`);
 
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewmatch1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+  }, 20000);
+
+  /**
+   * W10 round-1 review A3+B3 — the clause names THIS leg's server, now.
+   *
+   * The record used to be one process-wide slot written once, so the first skew
+   * anyone observed was stamped on every later death report: another server's
+   * legs wore it, and so did legs that died after the skew was fixed. A death
+   * report that names the wrong cause is the guess this whole piece replaced.
+   */
+  test('a skew observed on ANOTHER server is not stamped on this leg', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    armSkew(clientAt('http://127.0.0.1:9999')); // some other server, in this process
+    const absent = path.join(os.tmpdir(), `amicus-w10b-other-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewother1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).not.toMatch(/engine skew/);
+  }, 20000);
+
+  test('THIS leg\'s own server\'s skew still reaches the report', async () => {
+    // The positive twin of the test above: same mechanism, same run shape, only
+    // the server identity differs — so the pair pins attribution, not silence.
+    mockGetMessages.mockResolvedValue([]);
+    const client = clientAt('http://127.0.0.1:9999');
+    mockStartServer.mockResolvedValue({
+      client, server: { url: 'http://127.0.0.1:9999', close: jest.fn() },
+    });
+    armSkew(client);
+    const absent = path.join(os.tmpdir(), `amicus-w10b-own-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewown1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
+
+    expect(result.error).toBe(
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}`);
+  }, 20000);
+
+  test('a skew RETRACTED by a later matching session is not reported', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    armSkew();
+    skewMod.noteSessionVersion('1.18.15', { // the operator fixed it mid-process
+      readInstalledVersion: () => '1.18.15', notify: () => {},
+    });
+    const absent = path.join(os.tmpdir(), `amicus-w10b-fixed-${Date.now()}`);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'skewfixed1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
     expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));

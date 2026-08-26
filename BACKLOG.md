@@ -6156,9 +6156,12 @@ database written by 1.18.15. `SQLiteError: no such column: replacement_seq` is t
 symptom, not its identity. `src/utils/engine-skew.js` now takes the engine's own `Session.version`
 off every `createSession` response (the SDK returned it all along and `opencode-client.js` threw
 it away) and compares it against the `opencode-ai` version in the RUNNING install's
-`node_modules` — announced once per
-process on stderr and appended to every `NO_OUTPUT_BACKSTOP` death report as
-` (engine skew: server <a> ≠ installed <b>)`.
+`node_modules` — announced on stderr once per standing skew per server, and appended to the
+`NO_OUTPUT_BACKSTOP` death report of any leg whose OWN server has a skew standing at the time it
+dies, as ` (engine skew: server <a> ≠ installed <b>)`. (Round-1 review of the PR made the record
+per-server and refreshed on every create: the first cut kept one process-wide slot, written once,
+which stamped a skew onto unrelated servers' failures and kept reporting one that had been fixed
+mid-run.)
 
 A full engine-response / DB schema validation **was considered and not built** because the schema
 is the engine's private contract with its own SQLite file: amicus neither owns those migrations

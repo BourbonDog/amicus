@@ -659,7 +659,7 @@ evals/
 | `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `utils/engine-log.js` |  | `engineErrorForSession()`, `engineLogDirCandidates()`, `MAX_TAIL_BYTES()`, `MAX_TIMESTAMPED_FILES()`, `MAX_EXCERPT_CHARS()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
-| `utils/engine-skew.js` |  | `noteSessionVersion()`, `currentEngineSkew()`, `formatSkewWarning()`, `formatSkewSuffix()`, `installedEngineVersion()` |
+| `utils/engine-skew.js` |  | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `UNKNOWN_SERVER_KEY()`, `formatSkewWarning()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
 | `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |
