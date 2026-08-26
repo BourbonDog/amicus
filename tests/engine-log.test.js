@@ -20,27 +20,37 @@
  * through the resolver, which is where the correlation rules actually have to
  * hold. Both suites share the mutant bench below.
  *
+ * THE TAIL READER MOVED TOO (PR #206 fix round): `readTail` and
+ * `newestExcerptInFile` are now src/utils/engine-log-tail.js — src/utils/
+ * engine-log.js was at exactly 300/300 lines and the A1+B2 fix needed room the
+ * file did not have. Both were internal and stay internal, so nothing this
+ * suite imports changed; only the `NEXTFILE` mutant's SITE moved with them.
+ *
  * ── NAMED MUTANT `LOGBLIND`, with its MEASURED red set ────────────────────
  * MUTATION: `engineErrorForSession` returns null unconditionally — i.e. the
  * resolver ships but is blind, the exact silent degrade this module exists to
  * end (a leg dies, the engine's line is on disk, nothing quotes it).
  * Applied as the first statement of the function body in src/utils/engine-log.js.
  *
- * MEASURED red set (RE-MEASURED 2026-08-26 for v4.9 W12's #201 tails — the
- * record read 28 before them; the four earlier numbers, 14, 23, 25 and 28, are
- * retired. Focused scope: this suite + the parse suite + the wiring suite,
+ * MEASURED red set (RE-MEASURED 2026-08-26 for PR #206's round-1 A1+B2 fix,
+ * which added three tests to this suite — the record read 34 before them, and
+ * the five earlier numbers, 14, 23, 25, 28 and 34, are retired. Focused scope:
+ * this suite + the parse suite + the wiring suite,
  * `npx jest tests/engine-log.test.js tests/utils/engine-log-parse.test.js
- * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 133
- * tests): **2 suites / 34 tests red.**
- *   tests/engine-log.test.js — 29: every test that expects a NON-null excerpt
+ * tests/no-output-backstop-wiring.test.js --maxWorkers=2` → 3 suites / 136
+ * tests): **2 suites / 37 tests red.**
+ *   tests/engine-log.test.js — 32: every test that expects a NON-null excerpt
  *     (both format tests, the unquoted-value test, the interior-`key=value`
  *     test, newest-file, last-line, bare-id, exact-id-beats-longer-id,
  *     non-id-boundary, owned-by-another-session, the empty-excerpt group — the
  *     next-file fallthrough plus the three round-3 same-file cases — in-tail
  *     match, legacy-candidate, mass-death-wave, CRLF, 200-char collapse,
- *     whitespace collapse, all three union-of-candidate-dirs tests, and the six
- *     W12 additions: C1's "an older REAL error still answers…" plus all five
- *     C2 memo tests, each of which asserts a real excerpt somewhere).
+ *     whitespace collapse, all three union-of-candidate-dirs tests, the six
+ *     W12 additions — C1's "an older REAL error still answers…" plus all five
+ *     C2 memo tests, each of which asserts a real excerpt somewhere — and all
+ *     three PR #206 additions, the COLD-miss control included: it asserts null
+ *     but ALSO that the disk was touched exactly once, and a blind resolver
+ *     touches it not at all).
  *   tests/no-output-backstop-wiring.test.js — 5: the Task A poll-loop and
  *     pre-send firing sites, and the three Task B cases that carry an excerpt
  *     (the #133 composite, its pre-send twin, and the no-skew control).
@@ -48,9 +58,12 @@
  *     parse functions directly and never goes through the resolver.
  *
  * GREEN BY DESIGN under LOGBLIND — and this is the point, not a gap: every
- * miss-path test asserts null, and the four wiring controls assert the message
- * is BYTE-IDENTICAL to today's. A blind resolver satisfies all of them, which
- * is precisely what "clean fallback" means. The two bound tests that assert
+ * miss-path test asserts null and nothing more, and the four wiring controls
+ * assert the message is BYTE-IDENTICAL to today's. A blind resolver satisfies
+ * all of them, which is precisely what "clean fallback" means. (The one
+ * null-asserting test that does NOT stay green is PR #206's COLD-miss control,
+ * and only because it also counts the disk reads — the assertion a dead
+ * resolver cannot fake.) The two bound tests that assert
  * null ("older match beyond the tail is invisible", "the scan stops at 2 MiB
  * read") therefore cannot, alone, tell a respected bound from a dead resolver
  * — each is deliberately PAIRED with a positive twin in the red set ("a match
@@ -61,12 +74,15 @@
  * INFO line whose quoted value contains level=ERROR is never quoted" asserts
  * null and stays green; its twin "an older REAL error still answers" does not).
  *
- * ── THE OTHER NAMED MUTANTS (ALL of them RE-RUN 2026-08-26 against the W12
- *    tree — the bench grew by 12 tests, so every number below was re-measured
- *    rather than carried; two moved, LOGBLIND 28→34 and CUTATLASTPAIR 6→7, and
- *    both were predicted "unchanged" by reading the code, which is exactly why
- *    they were run. Same 3-suite scope; each applied alone and reverted, sources
- *    restored by byte copy and checksum-verified — never by `git checkout`)
+ * ── THE OTHER NAMED MUTANTS (ALL of them RE-RUN AGAIN 2026-08-26 against the
+ *    PR #206 fix tree — the bench grew by 3 more tests, so every number below
+ *    was re-measured rather than carried. This time only LOGBLIND moved,
+ *    34→37; the nine others held, including NEXTFILE, whose mutation SITE moved
+ *    to src/utils/engine-log-tail.js with the code. The round before that, on
+ *    the W12 tree, two had moved — LOGBLIND 28→34 and CUTATLASTPAIR 6→7 — both
+ *    predicted "unchanged" by reading the code, which is why they are run.
+ *    Same 3-suite scope; each applied alone and reverted, sources restored by
+ *    byte copy and checksum-verified — never by `git checkout`)
  *    ──────────────────────────────────────────────────────────────────────
  * `UNANCHORED` — `mentionsSession` degrades to `line.includes(needle)`, the
  *   pre-round-1 behaviour: **2 suites / 4 tests red** (was 2 before the round-2
@@ -89,7 +105,8 @@
  *   wave…" and "the legacy opencode.log is just another candidate". That second
  *   one is what says the retired reserved slot is genuinely unnecessary now.
  * `NEXTFILE` — round-3 review C4: an empty excerpt ends the FILE's scan instead
- *   of continuing to older lines in it: **1 suite / 2 tests red**, both here —
+ *   of continuing to older lines in it (applied in src/utils/engine-log-tail.js
+ *   since PR #206 moved the walk there): **1 suite / 2 tests red**, both here —
  *   "an empty excerpt keeps scanning OLDER lines in the SAME file" and "…
  *   exhausts the file before moving on". "a file with ONLY empty excerpts still
  *   yields to the next file" stays GREEN by design: it is the control that says
@@ -98,13 +115,25 @@
  *   re-lists the dir and re-reads every tail (the pre-W12 behaviour): **1 suite
  *   / 3 tests red**, all here — the three memo tests that COUNT I/O or depend on
  *   a warm slot ("a wave of dying seats…", "a DIFFERENT session…", "a cold call
- *   once the TTL has passed…"). The other 130 stay green, and that is the
+ *   once the TTL has passed…"). The other 133 stay green, and that is the
  *   absence-of-change proof this fix needed: turning the memo off changes no
- *   excerpt anywhere in the bench, only how often the disk is touched.
+ *   excerpt anywhere in the bench, only how often the disk is touched. The
+ *   PR #206 additions are among the green: a memo that never serves anything
+ *   cannot suppress anything either, which is precisely why they need WARMMISS.
  * `STALEMEMO` — the TTL alone: the slot is key-checked but never expires:
  *   **1 suite / 1 test red**, here — "a cold call once the TTL has passed
  *   re-reads — and sees a log written since". Precisely scoped, which is what
- *   says the TTL is pinned separately from the memo itself.
+ *   says the TTL is pinned separately from the memo itself — and, after PR #206,
+ *   what says the TTL still carries the one job the miss bypass left it: an
+ *   expiring window is now the ONLY thing that refreshes a repeated HIT.
+ * `WARMMISS` — PR #206 round-1 A1+B2: a MISS off a warm slot is believed, i.e.
+ *   the second pass in `engineErrorForSession` never runs (the pre-#206
+ *   behaviour): **1 suite / 2 tests red**, both here — "a leg whose error is
+ *   written AFTER an earlier leg's miss…" and "a log rotated into a NEW file…".
+ *   Its own control, "a COLD miss is not paid for twice", stays GREEN by design:
+ *   that one pins the bypass is scoped to warm slots, so a mutant that removes
+ *   the bypass entirely cannot red it — only a mutant that fired it always could,
+ *   and the I/O counts are what would catch that.
  * `LEVELANYWHERE` — v4.9 W12 tail C1: `isErrorLine`'s logfmt half reverts to the
  *   substring regex `/(^|\s)level=ERROR(\s|$)/` over the raw line: **2 suites /
  *   5 tests red** — here, "an INFO line whose quoted value contains level=ERROR
@@ -482,6 +511,27 @@ describe('engineErrorForSession: bounded reads', () => {
  * ABSENCE-OF-CHANGE pins: the excerpt a warm call returns must be the one a
  * cold call returns (the rest of this suite is that assertion, 30-odd times
  * over), and what changes is only the I/O — counted here through the fs seam.
+ *
+ * ── A MISS IS NEVER SERVED FROM THE MEMO (PR #206 round-1 A1+B2) ───────────
+ * The memo as first shipped could SUPPRESS a diagnostic that was on disk. A1:
+ * a leg whose error line lands AFTER the cached scan got null for up to the
+ * whole TTL — and in a dying wave that is every leg after the first. B2: the
+ * memo caches the candidate-file LISTING too, so a log the engine rotated into
+ * a new timestamped name inside the window was invisible no matter what it
+ * said. A MISS for the requested session therefore BYPASSES the cache: it
+ * re-lists and re-reads, then refreshes the slot. Only a HIT may be served
+ * warm, which keeps the wave-sharing win, and the byte budget (MAX_SCAN_BYTES)
+ * is what makes a miss-rescan affordable on the death path.
+ *
+ * THE RESIDUAL, stated rather than absorbed: a warm HIT can still serve an
+ * excerpt up to one TTL older than the newest line on disk for that session —
+ * "a cold call once the TTL has passed…" below pins exactly that, at 9,999 ms.
+ * That is accepted, not overlooked: what it serves is a genuine ERROR line for
+ * THIS session from within the last ten seconds, so the leg's death report
+ * quotes the engine truthfully; the only cost is that a still-newer line for
+ * the same session waits for the window to close. Suppression — reporting
+ * silence while the cause sits on disk unread — is the failure this module
+ * exists to end, and that is what the miss bypass removes.
  */
 describe('engineErrorForSession: the death-path scan is memoized (#201 C2)', () => {
   /** Real fs, counting the calls a repeated scan is supposed to stop making. */
@@ -567,6 +617,78 @@ describe('engineErrorForSession: the death-path scan is memoized (#201 C2)', () 
     now.mockReturnValue(t0 + 10_000);
     expect(engineErrorForSession(SES, { dataDir, fs: fsSeam })).toBe('the newer failure');
     expect(counts.readdir).toBeGreaterThan(cold.readdir);
+  });
+
+  /**
+   * PR #206 round-1 A1 — the sharp one, and the reason the bypass exists. Legs
+   * die in a WAVE, and the engine writes each leg's error line when that leg
+   * actually fails, not when the wave started. The first leg to reach the
+   * backstop scans, finds nothing for itself, and used to leave its tails in the
+   * slot; every leg that died in the next ten seconds then read THAT snapshot
+   * and got null — the module reporting silence about a line already on disk.
+   */
+  test('a leg whose error is written AFTER an earlier leg\'s miss still gets it inside the window', () => {
+    const other = 'ses_w10other';
+    const dataDir = makeDataDir();
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+    const t0 = 1_800_000_000_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    // The wave's log exists but carries nobody's failure yet.
+    writeLog(dataDir, '2026-08-25T185532.log', ['nothing for anyone yet'], 5000);
+
+    expect(engineErrorForSession(other, { dataDir, fs: fsSeam })).toBeNull();
+    const afterMiss = { ...counts };
+
+    // The engine writes THIS leg's error into the same file, still inside the TTL.
+    writeLog(dataDir, '2026-08-25T185532.log', ['nothing for anyone yet', LOGFMT_ERROR], 5000);
+    now.mockReturnValue(t0 + 1_000);
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    // …because the miss re-read the tail rather than trusting the cached one.
+    expect(counts.open).toBeGreaterThan(afterMiss.open);
+  });
+
+  /**
+   * PR #206 round-1 B2. The memo caches the candidate-file LISTING, and the
+   * engine writes one log PER PROCESS: a file rotated into a new timestamped
+   * name inside the window is a name the cached listing has never seen, so no
+   * re-read of the files it DOES know could ever reach it. The bypass re-lists,
+   * not just re-tails.
+   */
+  test('a log rotated into a NEW file after the cached listing is still found', () => {
+    const other = 'ses_w10other';
+    const dataDir = makeDataDir();
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+    const t0 = 1_800_000_000_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(t0);
+    writeLog(dataDir, '2026-08-25T185532.log', ['nothing for anyone yet'], 5000);
+
+    expect(engineErrorForSession(other, { dataDir, fs: fsSeam })).toBeNull();
+    const afterMiss = { ...counts };
+
+    writeLog(dataDir, '2026-08-25T185600.log', [LOGFMT_ERROR], 9000); // rolled over
+    now.mockReturnValue(t0 + 2_000);
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam }))
+      .toBe('SQLiteError: no such column: fixture_seq');
+    expect(counts.readdir).toBeGreaterThan(afterMiss.readdir);
+  });
+
+  test('control — a COLD miss is not paid for twice: the bypass fires only on a WARM slot', () => {
+    // Paired with the two tests above: they say a warm miss re-scans, this one
+    // says the re-scan is not a second scan bolted onto every genuine miss —
+    // a cold call already read the disk once and there is nothing staler to
+    // distrust. Without it the death path would double its I/O on the exact
+    // path (nothing on disk for this leg) that is most common.
+    const dataDir = makeDataDir();
+    writeLog(dataDir, '2026-08-25T185532.log', ['nothing for anyone here'], 5000);
+    const counts = zero();
+    const fsSeam = countingFs(counts);
+
+    expect(engineErrorForSession(SES, { dataDir, fs: fsSeam })).toBeNull();
+    expect(counts.readdir).toBe(1);
+    expect(counts.open).toBe(1);
   });
 
   test('the memo is keyed by the dirs scanned — another dir is never served from this one', () => {

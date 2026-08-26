@@ -472,7 +472,10 @@ filename fails the session-ID pattern every other row's directory name must matc
 exactly why the merge exists. Each merged row carries `type: 'council-run'`, a fixed
 `mode: 'headless'`, and its own 80-char sanitized `briefing` preview plus a `stage` field naming
 whichever stage is currently running; the CLI table renders `council(<stage>)` in its MODEL
-column and re-truncates that 80-char preview to its usual 30-char slice. The MCP tool
+column and re-truncates that 80-char preview to its usual 30-char slice. That merge is scoped
+to the CURRENT project on both surfaces — `--all` included, so under `--all` the session rows
+span every known project while the council rows do not: council runs are found through
+per-project pointer files and there is no cross-project council index to walk. The MCP tool
 also re-sanitizes every other row's `briefing` to that same 80-char cap and, for any row still
 `status: 'running'`, adds live-progress fields (`phase`, `messageCount`, `lastActivityAt`,
 `latestPreview`) — enrichments the CLI table doesn't apply, since it prints the raw 30-char slice

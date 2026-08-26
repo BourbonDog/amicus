@@ -260,6 +260,7 @@ src/
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
 │   ├── engine-lock.js  # Stale-aware single-flight lock for the engine self-heal (report #2).
 │   ├── engine-log-parse.js  # Line-shape parsing for the engine log: level, session, message.
+│   ├── engine-log-tail.js  # One engine-log FILE: read its tail, find the newest usable excerpt in it.
 │   ├── engine-log.js  # Resolve the OpenCode engine's own error line for one session.
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
 │   ├── engine-skew-records.js  # Server identity and the bounded store of standing engine-skew records.
@@ -675,6 +676,7 @@ evals/
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()`, `resolveNpmRootG()` |
 | `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `utils/engine-log-parse.js` | Line-shape parsing for the engine log: level, session, message. | `isErrorLine()`, `extractMessage()`, `collapseExcerpt()`, `mentionsSession()`, `lineIsAboutSession()` |
+| `utils/engine-log-tail.js` | One engine-log FILE: read its tail, find the newest usable excerpt in it. | `newestExcerptInFile()` |
 | `utils/engine-log.js` | Resolve the OpenCode engine's own error line for one session. | `engineErrorForSession()`, `engineLogDirCandidates()`, `isErrorLine()`, `extractMessage()`, `collapseExcerpt()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |

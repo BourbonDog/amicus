@@ -94,4 +94,15 @@ function defangOutboundFenceCloses(text) {
   return text.replace(OUTBOUND_FENCE_CLOSE_RE, '&lt;/$1&gt;');
 }
 
+// FUNCTIONS FIRST, constant last — the PR 201 round-2 workaround for
+// `scripts/generate-docs-helpers.js :: extractExports`, which renders EVERY
+// export as `name()` and keeps only the first five. Ordering conceals a
+// constant behind that cap; MEASURED here, it cannot, because this module
+// exports three names and the cap never fires. So CLAUDE.md's Key Exports cell
+// reads `OUTBOUND_FENCE_TAGS()` for what is an array — a known-defect instance
+// of the generator bug, not a claim this module makes, and the second one below
+// the workaround's floor after `utils/text-sanitize.js`. It goes away with the
+// generator ruling filed in BACKLOG.md; padding the export list to five to hide
+// it would not be a fix, and the list itself must stay exported —
+// tests/utils/outbound-fence-defang.test.js reads it as the LIVE vocabulary.
 module.exports = { fenceSidecarOutput, defangOutboundFenceCloses, OUTBOUND_FENCE_TAGS };

@@ -6,10 +6,11 @@
  * message begin.
  *
  * EXTRACTED from src/utils/engine-log.js (v4.9 W10 round 2). That module is the
- * I/O half — candidate dirs, mtime order, bounded tail reads; everything here is
- * a pure function of ONE line, which is where every correlation and truncation
- * finding has landed since. `engine-log.js` re-exports all of it, so a consumer
- * still has one import site.
+ * I/O half — candidate dirs, mtime order, the scan budget and its memo, with the
+ * bounded tail reads themselves in `./engine-log-tail.js` since PR #206;
+ * everything here is a pure function of ONE line, which is where every
+ * correlation and truncation finding has landed since. `engine-log.js`
+ * re-exports all of it, so a consumer still has one import site.
  *
  * TWO LINE FORMATS are in the wild and both are matched:
  *   logfmt   (1.17.x): `… level=ERROR … session.id=ses_<id> error=<msg>`
@@ -231,7 +232,7 @@ const FIELD_TOKEN = /^([\w.[\]-]+)=(.*)$/;
  * The substring is still the FIRST test, just no longer the LAST word: it is a
  * necessary condition, so a line without it rejects on one `indexOf` and never
  * tokenizes — which is what keeps this the cheap half of the pair in
- * `engine-log.js :: newestExcerptInFile`.
+ * `engine-log-tail.js :: newestExcerptInFile`.
  */
 function isErrorLine(line) {
   const text = String(line);

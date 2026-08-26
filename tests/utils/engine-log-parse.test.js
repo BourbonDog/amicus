@@ -100,10 +100,13 @@ describe('the extraction from engine-log.js is a move, not a copy', () => {
   });
 
   test('the read-bound constants are NOT part of the exported surface', () => {
-    // They were internal to the resolver and nothing consumed them; a constant
-    // in a `Key Exports` cell renders as a function it is not (round-2 B8).
+    // Nothing outside consumed them; a constant in a `Key Exports` cell renders
+    // as a function it is not (round-2 B8). `MAX_TAIL_BYTES` moved on to
+    // src/utils/engine-log-tail.js in PR #206's fix round and is unexported
+    // there for the same reason — this still pins the resolver's own surface.
     expect(engineLog.MAX_TAIL_BYTES).toBeUndefined();
     expect(engineLog.MAX_EXCERPT_CHARS).toBeUndefined();
+    expect(require('../../src/utils/engine-log-tail').MAX_TAIL_BYTES).toBeUndefined();
   });
 });
 

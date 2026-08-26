@@ -1719,7 +1719,11 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   v4.9 W12 (2026-08-26): `src/sidecar/list-council.js :: mergeCouncilRows` merges council rows
   into `listSidecars` on both surfaces; both real decisions below were ruled exactly as this
   filing anticipated (CLI re-truncates the 80-char preview to its own 30; MODEL renders
-  `council(<stage>)`, width-capped, bare `council` for terminal runs). Original filing kept
+  `council(<stage>)`, width-capped, bare `council` for terminal runs). **Parity is
+  current-project only, `--all` included** (stated in `mergeCouncilRows`'s docblock, and in
+  docs/usage.md since PR #206 round-1 B1): under `--all` the session rows enumerate every
+  project the sessions-index knows, while the council rows come from this project's pointer
+  files alone — there is no cross-project council index. Original filing kept
   below for the reasoning. — [S] The MCP
   `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
   `.concat(councilRows)` with `type: 'council-run'`); the CLI `listSidecars`
@@ -6632,6 +6636,16 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   it — ordering only helps a module with more than five exports, where the cap does the
   concealing. That row is a known-defect instance, not a fresh bug; it goes away with the
   generator ruling above, and inventing exports to pad past the cap is not a fix.
+  **Second instance below the floor, MEASURED 2026-08-26 (PR #206 round-1 A2/B3):**
+  `utils/untrusted-fence.js` exports three names, so `OUTBOUND_FENCE_TAGS()` renders the same
+  way. The measured PR 201 workaround was re-run against all four of its modules to be sure
+  what it actually is — `engine-log.js` (7 exports), `engine-log-parse.js` (6),
+  `engine-skew.js` (10) and `engine-skew-records.js` (8) each keep five FUNCTIONS in the
+  window and the cap hides the rest — and it does not reach a 3-export module. Dropping the
+  export is not available either: `tests/utils/outbound-fence-defang.test.js` reads
+  `OUTBOUND_FENCE_TAGS` as the LIVE close-tag vocabulary, which is the whole point of there
+  being one list. Recorded at the export site and in `sidecar/list-council.js`'s header, which
+  cited the no-constant rule as if the generator enforced it.
 
 - **W5 ruling — a spec self-contradiction resolved: `intent` is emit-when-`'task'`
   EVERYWHERE.** The v4.8 design spec's §5.3 declares verdict-`intent` "mandatory" while its

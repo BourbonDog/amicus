@@ -18,8 +18,14 @@
 'use strict';
 
 /** The MODEL column's width, shared by the header and every cell. Not exported
- *  — `padModel` is, so the width has exactly one home and a `Key Exports` cell
- *  never advertises a constant as a function (utils/engine-log.js's rule). */
+ *  — `padModel` is, so the width has exactly one home and THIS module's
+ *  `Key Exports` cell does not advertise a constant as a function
+ *  (utils/engine-log.js's rule). That rule is a per-module discipline, not
+ *  something the generator enforces: `scripts/generate-docs-helpers.js` renders
+ *  every export as `name()` repo-wide, and a module with five or fewer exports
+ *  cannot hide a constant behind the cap at all — see the floor recorded in
+ *  BACKLOG.md, and `utils/untrusted-fence.js :: OUTBOUND_FENCE_TAGS` living in
+ *  it. Not exporting one is what a module can still do for itself. */
 const MODEL_COL = 23;
 
 /** One MODEL column: the header word or a rendered cell, padded to the width. */
