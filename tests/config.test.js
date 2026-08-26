@@ -215,7 +215,7 @@ describe('Sidecar Config Module', () => {
     it('should map all qwen variants correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.7-max');
+      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.8-max');
       expect(aliases['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
       expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     });
@@ -231,10 +231,10 @@ describe('Sidecar Config Module', () => {
     it('should map remaining aliases correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.glm).toBe('openrouter/z-ai/glm-5.1');
+      expect(aliases.glm).toBe('openrouter/z-ai/glm-5.3');
       expect(aliases.minimax).toBe('openrouter/minimax/minimax-m2.7');
       expect(aliases.grok).toBe('openrouter/x-ai/grok-4.3');
-      expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+      expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k3');
       expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
       expect(aliases.inkling).toBe('openrouter/thinkingmachines/inkling');
     });

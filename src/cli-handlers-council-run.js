@@ -17,10 +17,14 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
 // file re-exports it below so every existing require() of this path still
 // resolves it unchanged.
 const { renderRunHuman } = require('./cli-council-run-render');
-const { parseList, sanitizeCouncilName, resolveBench } = require('./cli-council-run-bench');
+// v4.9 W13 (PR #203 round 1, A6): CHAIR_DEFAULT and the two seat resolvers moved
+// to cli-council-run-bench.js so the alias audit at the resolveBench seam and the
+// validation below read ONE definition of each. Re-exported at the bottom of this
+// file, so `require('./cli-handlers-council-run').CHAIR_DEFAULT` still resolves.
+const {
+  parseList, sanitizeCouncilName, resolveBench, resolveChair, resolveCritic, CHAIR_DEFAULT,
+} = require('./cli-council-run-bench');
 const { applyTemplateForArgs } = require('./cli-template-args');
-
-const CHAIR_DEFAULT = 'deepseek';
 
 /**
  * Default real helpers; tests override via depsOverride (mirrors
@@ -132,14 +136,13 @@ async function handleCouncilRun(args, depsOverride = {}) {
       message: 'Error: a council needs at least 2 seats (fanout semantics)' });
   }
 
-  const chair = (typeof args.chair === 'string' && args.chair.trim())
-    ? args.chair.trim() : CHAIR_DEFAULT;
+  const chair = resolveChair(args);
   if (bench.includes(chair)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: `Error: chair '${chair}' is a bench seat — the chair must not review${packSuffix('chair')}`,
       hint: `pick a chair outside --models (default: ${CHAIR_DEFAULT}), or remove '${chair}' from the bench` });
   }
-  const critic = (typeof args.critic === 'string' && args.critic.trim()) ? args.critic.trim() : null;
+  const critic = resolveCritic(args);
   if (critic && !bench.includes(critic)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: `Error: critic '${critic}' must be one of the bench seats${packSuffix('critic')}`,

@@ -25,6 +25,9 @@ const { envNumber } = require('./utils/env-num');
 const { engineErrorForSession } = require('./utils/engine-log');
 // v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
 const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
+// v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
+// emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
+const { isMeasuredTtft } = require('./utils/ttft');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -416,6 +419,29 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   const { IdleWatchdog } = require('./utils/idle-watchdog');
   let watchdog;
   let uninstallSignals;
+  // v4.9 W13 Task A — THE TTFT PROBE's storage. Milliseconds from the leg
+  // asking for output (`outputClockStartedAt` below — the backstop's OWN clock
+  // origin) to the first poll where `substantiveActivity` is true. `null` until
+  // then, and EMIT-WHEN-SET from there: a leg that never produced anything
+  // carries no ttftMs key on the result, on disk, or in any downstream
+  // document. `0` is a real measurement (first substantive tick inside the
+  // first poll), which is why the absence is a missing key rather than a falsy
+  // value.
+  //
+  // ⚠️ Declared HERE, beside `sessionId`/`watchdog`, and NOT inside the try
+  // below (PR #203 council round 1, finding A2). It used to live in the poll
+  // loop's scope, so it was not even in scope at the catch-all return: a leg
+  // that streamed real output and then threw discarded its own measurement.
+  // Same shape as `sessionId`, for the same reason — the outer handler is a
+  // return path like any other and must be able to report what was measured.
+  //
+  // ⚠️ PROBE ONLY — nothing derives from this number. No backstop change, no
+  // threshold, no per-model window. W13 ruling R12 is explicitly "probe first,
+  // derive later": the C2 derivation (per-model backstops from evidence) waits
+  // for real field observations, which cannot exist until this ships. Do not
+  // wire it into a decision without that evidence — and read the RESIDUAL
+  // CENSORING note on the stamp site in the poll loop before you do.
+  let ttftMs = null;
 
   try {
     if (!externalServer) {
@@ -585,7 +611,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const backstopFromEnv = !Number.isFinite(options.noOutputBackstopMs);
     const noOutputBackstopMs = backstopFromEnv
       ? resolveNoOutputBackstopMs(options._env) : options.noOutputBackstopMs;
-    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
+    // v4.9 W13 Task A: ONE clock origin, captured once and shared with the
+    // backstop instead of a second `Date.now()`. `startedAt` here already means
+    // "time since the leg asked for output" (see the block comment above), so
+    // the TTFT probe below measures from exactly the instant the backstop
+    // starts counting — the two can never disagree about when the wait began.
+    const outputClockStartedAt = Date.now();
+    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: outputClockStartedAt });
     let backstopFired = false;
     // Single source for the reason string so the pre-send firing site below and
     // the per-poll firing site further down (still ticking the SAME instance)
@@ -708,6 +740,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastMessageCount = 0;
     let lastReasoningLength = 0; // B53: track reasoning-output growth to detect thinking
     let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
+    // v4.9 W13 Task A: `ttftMs` itself is declared at function scope (see the
+    // block comment beside `sessionId`) so the catch-all return can carry it.
     let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
     let lastSettledToolCount = 0; // B4: tool calls observed reaching a terminal status
 
@@ -844,6 +878,133 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           elapsed: Date.now() - startTime
         });
 
+        // ---- per-poll activity, read ONCE, ABOVE every completion gate --------
+        // Activity-aware idle detection: ANY of text growth, a new tool call, a new
+        // tool result, a new message, a new assistant message id, or reasoning-output
+        // growth counts as progress. Only count toward completion when NOTHING changed
+        // (genuine idle).
+        //
+        // ⚠️ POSITION IS LOAD-BEARING (v4.9 W13, PR #203 council round 1, findings
+        // A1+B1). This block used to sit BELOW the four completion gates that
+        // follow — fold-marker, boundary-provider-error, error-with-no-output and
+        // sdk-idle — every one of which `break`s. A leg whose first substantive
+        // output and whose completion landed in the SAME poll therefore never
+        // reached the TTFT stamp, and those are exactly the FAST legs, so the
+        // censoring truncated the left tail rather than sampling at random.
+        // Hoisting is value-preserving, and the AUDIT that says so is below rather
+        // than an appeal to construction (PR #207 round 4, B2 — the earlier wording
+        // here claimed "every `last*` tracker is written only here" and "nothing
+        // reads them after the loop", and BOTH are false as written, because
+        // `lastAssistantMsgId` is a `last*` tracker this block never writes).
+        // MEASURED, every reader in this file:
+        //   · `mirror` changes only at the `mirrorMessages` call above, so every
+        //     delta below reads the same numbers it read at the old site.
+        //   · This block WRITES exactly seven trackers — output length, tool-call
+        //     count, tool-result count, message count, reasoning length, settled-
+        //     tool count and `lastProgressAt`. Outside this block those seven have
+        //     exactly ONE reader in the whole file: `lastProgressAt`, in the B53
+        //     tool-stall gate further down. That gate sat below the block's OLD
+        //     position too, so their order is unchanged. None of the seven is read
+        //     after the loop.
+        //   · `lastAssistantMsgId` is READ here (`newAssistant`) and written where
+        //     it always was, at the BOTTOM of the loop below every gate — so the
+        //     comparison still runs against the previous poll's id, and the one
+        //     post-loop `last*` reader (`hasAssistantMsg` on the timeout result)
+        //     reads a tracker this block does not touch.
+        // The only behaviour change is that a poll which BREAKS now advances those
+        // seven first, and nothing observes them afterwards.
+        // Hoisting the whole block (rather than adding a second stamp beside each
+        // gate) is what keeps ONE definition of the predicate and ONE stamp site.
+        const outputGrew = mirror.output.length > lastOutputLength;
+        lastOutputLength = mirror.output.length;
+        const toolActivity = mirror.toolCalls.length > lastToolCallCount;
+        lastToolCallCount = mirror.toolCalls.length;
+        const resultActivity = mirror.seenToolResultIds.size > lastToolResultCount;
+        lastToolResultCount = mirror.seenToolResultIds.size;
+        const messageActivity = messageCount > lastMessageCount;
+        lastMessageCount = messageCount;
+        const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
+        // B53: an interleaved-thinking model with a pending tool call can stream ONLY
+        // reasoning deltas for minutes with no text/tool/result/message growth — mirror
+        // the F6d treatment in conversation-mirror.js (reasoning growth = activity) so
+        // the stall clock resets instead of falsely firing "Tool call stalled".
+        const reasoningActivity = mirror.reasoningOutput.length > lastReasoningLength;
+        lastReasoningLength = mirror.reasoningOutput.length;
+        // v4.4 B4: a tool call REACHING a terminal status is real activity. Before
+        // the shape fix this could never be observed (pending never cleared), so a
+        // multi-tool leg's stall clock only reset on text growth.
+        const settleActivity = mirror.settledToolCallIds.size > lastSettledToolCount;
+        lastSettledToolCount = mirror.settledToolCallIds.size;
+
+        const progressed = outputGrew || toolActivity || resultActivity || messageActivity
+          || newAssistant || reasoningActivity || settleActivity;
+        if (progressed) { lastProgressAt = Date.now(); }
+
+        // v4.6.2 PR2 amendment 2 (controller live smoke + debug trace): the
+        // backstop disarms only on SUBSTANTIVE activity — output, reasoning,
+        // or tool motion (the spec's "first token/reasoning/tool_use").
+        // messageActivity/newAssistant are excluded: OpenCode creates an empty
+        // assistant placeholder on prompt ACCEPTANCE, which is precisely the
+        // accepted-but-not-serving bookkeeping the backstop must not trust.
+        // `progressed` itself (and every stall/idle consumer of it above) is
+        // deliberately untouched — this is the narrower signal.
+        //
+        // v4.9 W13 Task A: it now has TWO readers — the TTFT probe on the next
+        // line and the backstop tick further down — which is why it stopped
+        // being described as "backstop-only". They read the SAME const on
+        // purpose: "the time to first token" and "the moment the backstop
+        // disarms" are the same instant BY CONSTRUCTION, and a second definition
+        // of the predicate is exactly how those two would silently drift apart.
+        const substantiveActivity = outputGrew || toolActivity || resultActivity
+          || reasoningActivity || settleActivity;
+
+        // v4.9 W13 Task A — THE TTFT STAMP. One shot, never re-armed, reading
+        // the same `substantiveActivity` const the backstop is ticked with
+        // below. Keyed on `progressed` it would report a first-token time for
+        // OpenCode's empty acceptance placeholder — the exact lie the
+        // amendment-2 narrowing of `substantiveActivity` removed from the backstop.
+        //
+        // ⚠️ RESIDUAL CENSORING — READ THIS BEFORE DERIVING ANYTHING (the C2
+        // derivation must know the bias; PR #203 round 1, B1). With the hoist
+        // above, every leg whose activity is OBSERVED by a poll is measured.
+        // What is still unmeasurable, and therefore what an ABSENT ttftMs can
+        // mean besides "served nothing":
+        //   1. Externally aborted legs. The metadata `status: 'aborted'` check
+        //      runs at the TOP of the poll body, before `getMessages`, and
+        //      breaks — so anything served since the previous poll is never
+        //      mirrored.
+        //   2. Poll-failure bail. `getMessages` failing
+        //      `maxConsecutivePollFailures` times in a row ends the leg with
+        //      whatever the last SUCCESSFUL poll saw.
+        //   3. `--timeout` expiry between polls: the while-condition ends the
+        //      loop, so output that arrived during the final sleep is unseen.
+        //   4. The pre-send backstop path, which skips the poll loop entirely —
+        //      a model that began streaming while `sendPromptAsync` hung is
+        //      never polled at all.
+        //   5. A backward wall-clock jump before the first substantive poll
+        //      (PR #207 round 3, B3). The reading is taken but is not a
+        //      measurement, so the emit gates drop it — see the ruling below.
+        // And the value itself is QUANTIZED UPWARD: it is stamped at poll time,
+        // not at token time, so every measurement is an upper bound carrying up
+        // to one `pollIntervalMs` (plus the getMessages round-trip) of slack.
+        // Nothing extra is recorded for the censored cases on purpose — there is
+        // no honest number to record, and a sentinel would be read as data.
+        //
+        // ⚠️ CLOCK-SKEW RULING (PR #207 round 3, B3). This is a wall-clock
+        // delta, not a monotonic one, so a backward jump between
+        // `outputClockStartedAt` and this poll — NTP correction, a VM resuming
+        // from suspend, a manual clock set — measures NEGATIVE. Such a reading
+        // is DROPPED at the emit gates (`isMeasuredTtft`), never clamped:
+        // clamping to `0` would publish "first token inside the first poll",
+        // the most consequential value in the distribution the C2 derivation
+        // will read, for a leg that measured nothing of the kind.
+        //
+        // The stamp stays one-shot and unguarded ON PURPOSE. Re-arming after a
+        // skewed reading would let a LATER poll stamp a delta against the same
+        // displaced origin: a bigger number, equally wrong, and no longer even
+        // the first token. One decision point (the gate) beats two.
+        if (ttftMs === null && substantiveActivity) { ttftMs = Date.now() - outputClockStartedAt; }
+
         // Check for the completion marker as the FINAL non-empty line, carrying
         // THIS run's nonce (#BL-7 + 15b.3). Models may emit a bare or wrong-nonce
         // marker on its own line mid-output (echoing a prior sidecar, these
@@ -899,46 +1060,6 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             logger.debug('session.status unavailable; using activity heuristic', { error: statusErr.message });
           }
         }
-
-        // Activity-aware idle detection: ANY of text growth, a new tool call, a new
-        // tool result, a new message, a new assistant message id, or reasoning-output
-        // growth counts as progress. Only count toward completion when NOTHING changed
-        // (genuine idle).
-        const outputGrew = mirror.output.length > lastOutputLength;
-        lastOutputLength = mirror.output.length;
-        const toolActivity = mirror.toolCalls.length > lastToolCallCount;
-        lastToolCallCount = mirror.toolCalls.length;
-        const resultActivity = mirror.seenToolResultIds.size > lastToolResultCount;
-        lastToolResultCount = mirror.seenToolResultIds.size;
-        const messageActivity = messageCount > lastMessageCount;
-        lastMessageCount = messageCount;
-        const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
-        // B53: an interleaved-thinking model with a pending tool call can stream ONLY
-        // reasoning deltas for minutes with no text/tool/result/message growth — mirror
-        // the F6d treatment in conversation-mirror.js (reasoning growth = activity) so
-        // the stall clock resets instead of falsely firing "Tool call stalled".
-        const reasoningActivity = mirror.reasoningOutput.length > lastReasoningLength;
-        lastReasoningLength = mirror.reasoningOutput.length;
-        // v4.4 B4: a tool call REACHING a terminal status is real activity. Before
-        // the shape fix this could never be observed (pending never cleared), so a
-        // multi-tool leg's stall clock only reset on text growth.
-        const settleActivity = mirror.settledToolCallIds.size > lastSettledToolCount;
-        lastSettledToolCount = mirror.settledToolCallIds.size;
-
-        const progressed = outputGrew || toolActivity || resultActivity || messageActivity
-          || newAssistant || reasoningActivity || settleActivity;
-        if (progressed) { lastProgressAt = Date.now(); }
-
-        // v4.6.2 PR2 amendment 2 (controller live smoke + debug trace): the
-        // backstop disarms only on SUBSTANTIVE activity — output, reasoning,
-        // or tool motion (the spec's "first token/reasoning/tool_use").
-        // messageActivity/newAssistant are excluded: OpenCode creates an empty
-        // assistant placeholder on prompt ACCEPTANCE, which is precisely the
-        // accepted-but-not-serving bookkeeping the backstop must not trust.
-        // `progressed` itself (and every stall/idle consumer of it above) is
-        // deliberately untouched — this is a narrower, backstop-only signal.
-        const substantiveActivity = outputGrew || toolActivity || resultActivity
-          || reasoningActivity || settleActivity;
 
         // No-output backstop: one tick per poll. Fired is terminal — break the
         // loop; the post-loop block below mirrors the timeout path.
@@ -1379,6 +1500,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // #133 P1: sessionId was assigned at :413/:417, well before this
         // return — guaranteed set here, same as `taskId` above.
         opencodeSessionId: sessionId,
+        // v4.9 W13 Task A: emit-when-set. This return is reached by legs that
+        // failed with no USABLE output, which is not the same as no output at
+        // all — a leg that streamed reasoning and then errored has a real ttft
+        // and must keep it. (PR #207 round 3, B3: emit-when-VALID too — see the
+        // clock-skew ruling at the stamp site above.)
+        ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
         error: sessionError
       };
     }
@@ -1396,6 +1523,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ...subtreeResult,
       // #133 P1: see the comment on the sibling return above — guaranteed set.
       opencodeSessionId: sessionId,
+      // v4.9 W13 Task A: emit-when-set — see the sibling return above.
+      ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
       exitCode: 0
     };
 
@@ -1480,6 +1609,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // outcomes explicit and already schema-shaped (run.schema.json:23
       // wants string|null, never undefined).
       opencodeSessionId: sessionId || null,
+      // v4.9 W13 Task A (PR #203 round 1, A2): emit-when-set, the SAME rule as
+      // the two returns in the try body. An exception is not evidence that
+      // nothing was served — a leg can stream a first token and explode in the
+      // post-loop finalization (`server.close()` is the one unguarded await on
+      // that path), and throwing away a measurement it already made would be a
+      // second, silent loss on top of the first. Nothing is invented: a leg
+      // that exploded before any poll observed activity still carries no key.
+      ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
       error: error.message
     };
   }

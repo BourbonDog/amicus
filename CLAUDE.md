@@ -236,6 +236,8 @@ src/
 │   ├── agent-mapping.js  # Agent Mapping Module
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
 │   ├── alias-resolver.js  # Alias Resolver Utilities
+│   ├── alias-shadow-writer.js  # The alias-shadow notice's WRITE half: say it without ever sinking the run.
+│   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
@@ -330,6 +332,7 @@ src/
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── text-sanitize.js  # One third-party string, safe to render: no escapes, no bidi, one short line.
 │   ├── thinking-validators.js  # Thinking Level Validators
+│   ├── ttft.js  # The one honesty predicate for the time-to-first-token probe (v4.9 W13).
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
 │   ├── update-notice.js  # The MCP server is the one entry point that skips bin/amicus.js's update
 │   ├── update-notifier-loader.js  # update-notifier Loader
@@ -487,7 +490,7 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
-| `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `parseList()`, `sanitizeCouncilName()`, `resolveBench()` |
+| `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT()`, `parseList()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
@@ -516,7 +519,7 @@ evals/
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
-| `mcp-council-bench.js` |  | `resolveBenchInput()` |
+| `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
@@ -652,6 +655,8 @@ evals/
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
+| `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
+| `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
@@ -746,6 +751,7 @@ evals/
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |

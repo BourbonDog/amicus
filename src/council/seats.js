@@ -33,7 +33,7 @@ function sanitizeName(model) {
  * Roles follow run-stages.js roleFor's PRECEDENCE — under lenses every seat is
  * a lens seat and 'critic' is unreachable — and match it for every bench the
  * CLI can produce (no repeated alias; lenses.length === bench.length, enforced
- * at cli-handlers-council-run.js:161). They DELIBERATELY diverge where roleFor
+ * at cli-handlers-council-run.js:164). They DELIBERATELY diverge where roleFor
  * is wrong: roles here are POSITIONAL, so twins under lenses get their own
  * lens instead of both getting the first twin's (roleFor uses
  * o.models.indexOf). An empty lenses array counts as no lenses (roleFor treats

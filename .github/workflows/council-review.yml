@@ -426,6 +426,29 @@ jobs:
         if: steps.gate.outputs.available == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # ⚠️ EVIDENCE, not a guess (v4.9 W13; measured over the 4.8.1 cycle,
+          # 2026-08-24/25). FIVE councils ran in that window. kimi, qwen AND glm
+          # each hit `NO_OUTPUT_BACKSTOP` at the 300000 ms default on their FIRST
+          # attempt over OpenRouter — session opened, assistant message minted,
+          # ZERO tokens inside the window. kimi hard-failed twice (on two
+          # different pins, which is why this is NOT a bad-pin problem), qwen
+          # twice; glm stalled first-attempt in 3 of the 5 and survived only
+          # because its single Stage-1 retry happened to land. #196's verdict was
+          # published on a 2-of-4 bench for exactly this reason.
+          # The class is a provider-side cold start on a shared CI egress, so the
+          # honest lever here is WAIT, not a different model. 480000 ms is chosen
+          # to sit strictly above the 300 s that was measured failing and strictly
+          # below the per-leg `--timeout 10` (600000 ms) set below, so the
+          # backstop still fires FIRST and a genuinely silent seat is still
+          # reported and retried rather than burning the whole wall clock.
+          # SINGLE-SPELLED on purpose: no `workflow_call` input, no
+          # `${{ inputs.x || '...' }}` fallback. Adding either creates the
+          # two-spellings trap that cb7c90fd walked into with `models` — if you
+          # add an input, add its drift test in
+          # tests/scripts/council-review-workflow.test.js alongside models/fail_on.
+          # Retry POLICY (a second Stage-1 retry, staggered launch) is out of
+          # scope here and filed separately as issue #202.
+          AMICUS_NO_OUTPUT_BACKSTOP_MS: '480000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the

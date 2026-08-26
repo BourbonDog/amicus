@@ -446,6 +446,132 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[1].opencodeSessionId).toBeNull();
   });
 
+  // v4.9 W13 Task A — the TTFT probe's middle hops: runHeadless's `ttftMs` onto
+  // the on-disk leg patch (fanout-leg.js) and onto the emitted run document
+  // (result-schema.js :: buildRunResult). Modeled on the #133 P1 pin directly
+  // above, with ONE deliberate difference in the absence half: `ttftMs` is
+  // emit-when-set on BOTH ends — the leg with no measurement carries no key on
+  // disk AND no key in the wave doc, where `opencodeSessionId` coerces its
+  // absence to a schema-required null. That is the point: an absent ttft is not
+  // "zero milliseconds to first token", and it is not "null"; it is "this leg
+  // produced nothing substantive, so there is nothing to report". run.schema.json
+  // declares it optional-integer for exactly that reason.
+  //
+  // ⚠️ Like its #133 P1 sibling, this pin mocks runHeadless and therefore stays
+  // GREEN under the named mutant TTFTDROP (which deletes the measure inside
+  // runHeadless). It pins the threading, a different unit. Do not "fix" it.
+  it('threads a leg\'s ttftMs from runHeadless onto its on-disk leg patch and the wave doc (v4.9 W13 Task A)', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: 8123 }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // never produced output
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'ttft1234' });
+
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft1234-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.ttftMs).toBe(8123);
+    expect(wave.legs[0].ttftMs).toBe(8123);
+
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft1234-2', 'metadata.json'), 'utf-8'));
+    expect(legMeta2.status).toBe('complete');
+    expect('ttftMs' in legMeta2).toBe(false);
+    expect('ttftMs' in wave.legs[1]).toBe(false);
+  });
+
+  /**
+   * PR #203 council round 1, findings A3 + C1 — the null guard, pinned by SHAPE.
+   *
+   * MEASURED: the null path is NOT drivable from the outside. `result` is read
+   * bare three statements earlier (`legStatusFromResult(result)` →
+   * `statusFromResult`, which dereferences `result.aborted`), so a nullish
+   * `result` throws before this expression is ever evaluated — there is no
+   * fixture that reaches it. A behavioural pin here would therefore be a pin on
+   * the wrong line. What IS worth defending is the guard's presence: it makes
+   * `ttftMs` agree with its `toolSettleTimedOut`/`toolSettleAborted` siblings
+   * instead of relying on an invariant this file does not consistently assume.
+   * Named mutant NULLGUARD: delete the leading `result &&`. RED measured
+   * 2026-08-26 at the 7-suite/273-test focused scope — 1 test / 1 suite, this
+   * one. It is the whole red set, which is the honest cost of a shape pin.
+   * RE-MEASURED at PR #207 round 3 (8 suites / 323 tests) and again at round 4
+   * (same 8 suites, 330 tests): still 1 test / 1 suite, this one. The mutant
+   * survived the predicate swap below unchanged, which is exactly the point —
+   * the two properties are independent.
+   *
+   * ⚠️ PR #207 council round 2 (B2): this used to be
+   * `expect(src).toContain('<the exact source line>')`, which pinned the
+   * FORMATTING as tightly as the guard — a line wrap, a quote-style change or
+   * one added space broke the suite for a reason that had nothing to do with
+   * the null guard it exists to defend. Whitespace is collapsed first and the
+   * expression is matched as an ordered TOKEN sequence instead, so the pin
+   * survives any reformat and still dies to NULLGUARD (re-measured below).
+   */
+  it('the on-disk ttftMs hop keeps the `result &&` guard its siblings use (PR #203 A3/C1)', () => {
+    const src = fsReal.readFileSync(
+      pathReal.join(__dirname, '..', '..', 'src', 'sidecar', 'fanout-leg.js'), 'utf-8');
+    const norm = src.replace(/\s+/g, ' ');
+    // Tokens in order: the `result &&` null guard, THEN the shared honesty
+    // predicate, THEN the pass-through/undefined arms. Quote style is free.
+    // ⚠️ PR #207 round 3 (B3) replaced the middle token: the bare `typeof`
+    // number test admitted NaN/Infinity/negative/fractional, so all four gates
+    // now share `isMeasuredTtft` (see tests/council/run-stats-entry.test.js).
+    // The `result &&` half — the property THIS pin exists for — is unchanged.
+    expect(norm).toMatch(
+      /ttftMs:\s*result\s*&&\s*isMeasuredTtft\(result\.ttftMs\)\s*\?\s*result\.ttftMs\s*:\s*undefined/);
+    // …and the guard half survives alongside it: `result && result.ttftMs`
+    // alone would resurrect the 0-eating bug the shape exists to avoid.
+    expect(norm).not.toMatch(/ttftMs:\s*result\s*&&\s*result\.ttftMs\s*\|\|/);
+  });
+
+  /**
+   * PR #207 council round 3, B3 — the drift pin for BOTH hops this file owns.
+   *
+   * `run.schema.json` declares ttftMs `integer, minimum 0`. A `typeof` gate let
+   * four families through: NaN and ±Infinity (which `JSON.stringify` writes as
+   * `null` — MEASURED — so the on-disk document violates its own schema while
+   * looking like an honest absence), negatives (a backward wall-clock jump
+   * during the probe's `Date.now()` delta) and fractions (a hand-edited leg).
+   * Dropping rather than clamping is the ruling: emit-when-VALID is the same
+   * discipline as emit-when-set, and a clamped `0` would read as "instant first
+   * token", which is a measurement this leg never made.
+   */
+  it('a DISHONEST ttftMs (NaN / Infinity / negative / fractional) is dropped on BOTH hops (round 3, B3)', async () => {
+    const bad = [NaN, Infinity, -Infinity, -5, 1.5];
+    for (let i = 0; i < bad.length; i++) {
+      const waveId = `ttftbad${i}`;
+      mockRunHeadless
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: bad[i] }))
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+      const { wave } = await runFanout({ ...baseOpts(), waveId });
+
+      const legMeta = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', `${waveId}-1`, 'metadata.json'), 'utf-8'));
+      expect(`${bad[i]} on disk: ${'ttftMs' in legMeta}`).toBe(`${bad[i]} on disk: false`);
+      expect(`${bad[i]} in wave: ${'ttftMs' in wave.legs[0]}`).toBe(`${bad[i]} in wave: false`);
+    }
+  });
+
+  // A first substantive tick observed inside the first poll is a real 0, and 0
+  // is exactly the value a `|| undefined` omit-if-absent idiom would silently
+  // eat — which is why both hops guard on a VALUE TEST instead.
+  //
+  // PR #207 round 5 (B1): that test is no longer the local `typeof === 'number'`
+  // this comment used to name — round 3's B3 replaced it with the shared
+  // `utils/ttft.js :: isMeasuredTtft`, which the production line asserted just
+  // above now spells. What survives 0 is `Number.isInteger(0) && 0 >= 0`, both
+  // true; what the widening ADDED is the rejection of NaN, ±Infinity, negatives
+  // and fractions, none of which `typeof` excluded.
+  it('a ttftMs of 0 survives both hops (it is a measurement, not an absence)', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), ttftMs: 0 }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'ttft0000' });
+
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'ttft0000-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.ttftMs).toBe(0);
+    expect(wave.legs[0].ttftMs).toBe(0);
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))

@@ -92,8 +92,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // row's flat {model, seat} shape — model is the alias, seat is the seat
     // id, so on a unique-alias bench they are byte-equal and nothing is
     // emitted (same semantics as `seat.id !== seat.alias` one layer up,
-    // run-stats-entry.js:64). NOT a plain pass-through like the `raiserSeat`
-    // spread in the findings literal above — that field's upstream producer already holds a real
+    // run-stats-entry.js :: buildRunStatsEntry). NOT a plain pass-through like `raiserSeat`
+    // in the findings literal above — that field's upstream producer already holds a real
     // {id, alias} seat OBJECT at its own decision point (run.js:212:
     // `r.seat && r.seat.id !== r.seat.alias`), so passing its verdict
     // through here is safe. The street-cred producer never has such an object

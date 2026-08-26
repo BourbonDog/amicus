@@ -150,8 +150,10 @@ describe('--chair claude → pre-flight error', () => {
 // Finding 1 (v4.1 final whole-branch review): preflightClaudeReview guarded
 // o.chair and o.models but NOT o.critic — a library caller (MCP/GitHub
 // Action/direct require('./council/run'), none of which route through the
-// CLI's option whitelist at cli-handlers-council-run.js:101) could pass
-// critic:'claude' straight through pre-flight, and run-stages.js:71 would
+// CLI's option validation in cli-handlers-council-run.js :: handleCouncilRun —
+// a SYMBOL anchor because the old `:101` had already rotted to a `} else {`
+// before v4.9 W13, and PR #203's edits moved it again) could pass
+// critic:'claude' straight through pre-flight, and run-stages.js would
 // launch a REAL paid solo for the reserved seat — the exact invariant v4.1
 // promises never happens. Mirrors the sibling --chair claude test above.
 describe('--critic claude → pre-flight error (Finding 1)', () => {

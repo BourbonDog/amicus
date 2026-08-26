@@ -22,7 +22,7 @@ test('an AMBIGUOUS critic is rejected pre-spend, and the remedy is one the CLI a
   expect(r.error.code).toBe('COUNCIL_SEATS_INVALID');
   expect(r.error.message).toContain('occupies 2 bench seats');
   // The seat-id spelling is NOT advertised: every entry point requires
-  // bench.includes(critic) (cli-handlers-council-run.js:143), so suggesting
+  // bench.includes(critic) (cli-handlers-council-run.js:146), so suggesting
   // --critic 'deepseek#2' would be a dead end until PR2.
   expect(r.error.message).not.toContain('#2');
 });

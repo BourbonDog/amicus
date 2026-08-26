@@ -242,7 +242,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
     it('returns the stored openrouter/ id unchanged for providers without a direct key mapping', () => {
       const config = loadModule();
       const result = config.resolveModel('qwen');
-      expect(result).toBe('openrouter/qwen/qwen3.7-max');
+      expect(result).toBe('openrouter/qwen/qwen3.8-max');
     });
 
     it('returns the stored bare id unchanged via default alias resolution', () => {

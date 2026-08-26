@@ -138,7 +138,8 @@ function enumerateAllProjects(opts = {}) {
  */
 async function listSidecars(options) {
   const { status, all, json, search, limit, project = process.cwd() } = options;
-  // Mirrors models.js:279-281's valueless-flag shape.
+  // Mirrors the valueless-flag shape of `sidecar/models.js :: handleModels`'s
+  // first guard (was `:279-281`; re-anchored by symbol in v4.9 W13).
   if (search === true) { throw new Error('--search requires a value'); }
   const cap = normalizeLimit(limit); // throws on valueless/non-integer/negative
 

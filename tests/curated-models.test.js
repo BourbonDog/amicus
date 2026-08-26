@@ -34,8 +34,8 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.gemini).toBe('google/gemini-3.6-flash');
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
-    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
-    expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max');
+    expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k3');
   });
 
   test('toDefaultAliases: direct-capable vendors resolve to their AUTHORED direct form, gateway-only vendors keep openrouter/', () => {
@@ -63,16 +63,16 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.fable).toBe('anthropic/claude-fable-5');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
-    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
+    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max');
     expect(defaults['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
     expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
-    expect(defaults.glm).toBe('openrouter/z-ai/glm-5.1');
+    expect(defaults.glm).toBe('openrouter/z-ai/glm-5.3');
     expect(defaults.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
     // devstral: dropped 2026-08-04 (owner ruling) — OpenRouter delisted the
     // devstral family entirely, and the alias had no other route.
     expect(defaults.devstral).toBeUndefined();
     expect(defaults.minimax).toBe('openrouter/minimax/minimax-m2.7');
-    expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+    expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k3');
     expect(defaults.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
   });
 

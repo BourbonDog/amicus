@@ -51,9 +51,26 @@
  * neither tally.json/verdict.json nor the ledger (MEASURED). Passing nothing
  * leaves every row byte-for-byte unchanged (pins G4a/G4b/G4c,
  * tests/council/runstats-byte-order.test.js).
+ *
+ * `ttftMs` (v4.9 W13 Task A) is time-to-first-token for this row's leg, read off
+ * the leg document and emitted only when it is a NON-NEGATIVE INTEGER — the
+ * shape council-tally.schema.json declares, and (PR #207 round 3, B3) a stricter
+ * test than the bare type check this used to spell. PROBE ONLY — nothing
+ * derives a backstop, threshold, or routing decision from it yet (ruling R12:
+ * probe first, derive later). Absent means no substantive tick was observed —
+ * or that the only reading taken was not an honest measurement — which is
+ * neither `0` (a real measurement) nor `null`.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
   repairRefused, seat, summary }) {
+  // v4.9 W13 Task A: the TTFT probe's last hop, read off the LEG document the
+  // same way `waveId` and `resolvedModel` below are. DEVIATION from the plan's
+  // literal "thread from the leg at the callers": ten call sites across seven
+  // council modules hold a leg, and threading a parameter through each would
+  // (a) reach outside this task's file scope and (b) make a forgotten caller a
+  // SILENT gap. Sourcing it here covers every caller that holds a leg by
+  // construction, and a dead seat (`leg: null`) still carries no key.
+  const ttftMs = leg ? leg.ttftMs : undefined;
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
@@ -76,6 +93,22 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
+    // Emit-when-set, NOT `durationMs`'s null-coercion one line above: this row
+    // is the C2 derivation's future input, and a null there would be read as a
+    // measurement. Absent means "never observed" and must stay absent.
+    //
+    // PR #207 round 3 (B3): emit-when-VALID too. The shared predicate is
+    // `src/utils/ttft.js :: isMeasuredTtft`, and it is spelled out by HAND here
+    // for one reason only — the module invariant at the top of this file forbids
+    // importing anything, and the pin that enforces it fires on the character
+    // sequence anywhere in the file, comments included. The structural pins that
+    // keep this copy in step with the shared one are in this module's own test
+    // file. Do not "simplify" it back to a bare type test: that admits NaN and
+    // ±Infinity (both of which serialize to `null`), negatives from a backward
+    // wall-clock jump at the probe, and fractions from a hand-edited artifact —
+    // every one of them forbidden by council-tally.schema.json's
+    // `integer, minimum 0`.
+    ...(Number.isInteger(ttftMs) && ttftMs >= 0 ? { ttftMs } : {}),
     usage: (leg && leg.usage) || null,
   };
 }

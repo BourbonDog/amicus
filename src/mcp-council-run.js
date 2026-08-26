@@ -19,7 +19,7 @@ const { isPathInside } = require('./project-root-allowlist');
 const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 // v4.6 Plan 4 Task 4b: resolveBenchInput moved to its own leaf (size gate) —
 // see mcp-council-bench.js's module docblock for why.
-const { resolveBenchInput } = require('./mcp-council-bench');
+const { resolveBenchInput, auditBenchAliases } = require('./mcp-council-bench');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -58,7 +58,7 @@ async function handleCouncilRunTool(input, project, helpers) {
   // for any caller that bypasses schema validation).
   const oc = validateOnComplete(input.onComplete);
   if (!oc.ok) { return textResult(oc.error, true); }
-  const CHAIR_DEFAULT = 'deepseek';
+  const { CHAIR_DEFAULT } = require('./cli-council-run-bench'); // v4.9 W13 (PR #203 A6): one owner, not a second copy
   if (typeof input.briefingFile !== 'string' || !input.briefingFile.trim()) {
     return textResult("amicus_council_run requires 'briefingFile' (a path to the briefing).", true);
   }
@@ -222,6 +222,9 @@ async function handleCouncilRunTool(input, project, helpers) {
   // read-merge-write has no lock (see run-state.writeSpawnPid).
   try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
   catch { /* best-effort */ }
+  // PR #207 round 2 (A1) + round 5 (A1): the alias-shadow notice's MCP surface,
+  // sited past every return that discards `notices` — rationale on its own def.
+  auditBenchAliases(bench, chair, critic, notices);
   // Task 15 (spec §5.3): the run is now known-launched under runId — mark it
   // for a best-effort terminal notify. runWait's poll loop (mcp-wait.js) is
   // the only code that later sees this council run reach terminal state.
@@ -276,7 +279,8 @@ async function handleCouncilRunTool(input, project, helpers) {
   const content = [{ type: 'text', text: fenceSidecarOutput(body) }];
   // v4.5 Task 15: pack/template notices (e.g. a bench-override) are non-fatal —
   // surfaced as extra unfenced content blocks, same precedent as
-  // mcp-server.js's routeResult.notice (amicus_start).
+  // mcp-server.js's routeResult.notice (amicus_start). PR #207 round 2 (A1)
+  // added a third producer: the alias-shadow lines from auditBenchAliases.
   for (const n of notices) { content.push({ type: 'text', text: n }); }
   return { content };
 }

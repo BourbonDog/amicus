@@ -35,7 +35,8 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
  *   `seatMap` (label -> seat id) is sparse by construction: a label lands in
  *   it only when `seats[i]` is a real bound seat that differs from its own
  *   alias — the shared emit-when-DIFFERENT predicate every other seat-emit
- *   producer uses (run-stats-entry.js:64: `seat.id !== seat.alias`). On a
+ *   producer uses (run-stats-entry.js :: buildRunStatsEntry —
+ *   `seat.id !== seat.alias`). On a
  *   unique-alias bench, or when `seats` is omitted entirely, `seatMap` is
  *   `{}` — so no pre-T3.2 caller (or consumer of just `{entries, labelMap}`)
  *   can observe a change. T3.2 wired `seatMap` only as far as

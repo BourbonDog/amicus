@@ -100,7 +100,19 @@
         }
       }
     },
-    "runStats": { "type": "array", "items": { "type": "object" } },
+    "runStats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ttftMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "v4.9 W13, optional. Time-to-first-token for this row's leg: milliseconds from the leg asking OpenCode for output to the first poll carrying substantive activity (output, reasoning, a tool call, a tool result, or a tool call reaching a terminal status) — the very same predicate the no-output backstop disarms on, read at the one site in src/headless.js's poll loop, so the two can never drift. EMIT-WHEN-SET: absent means no substantive tick was ever OBSERVED, which is NOT the same as `0` (a first token inside the first poll, a real value that must survive) and NOT the same as `null`. KNOWN BIAS, stated so the C2 derivation reads the sample correctly: (a) the stamp is taken at poll time, not token time, so every value is an UPPER BOUND carrying up to one poll interval of slack; (b) absence is still not proof the model produced nothing — the activity block now runs ABOVE all four completion gates (so a leg that first produced output and finished inside one poll IS measured), but a leg ended by an external abort, by a consecutive-poll-failure bail, by --timeout expiry during the final sleep, or by the pre-send backstop ends without any poll observing what it may already have served; (c) PR #207 round 3 adds one more cause of absence — a reading taken across a BACKWARD wall-clock jump is negative (the probe is a Date.now() delta), and every producer DROPS such a reading rather than clamping it to 0, because a clamp would publish 'first token inside the first poll' — the single most consequential value in this distribution — for a leg that measured nothing of the kind. PROBE ONLY at v4.9 W13 (ruling R12, probe first / derive later): nothing in the engine derives a backstop, threshold, or routing decision from it. No `additionalProperties: false` on this row means additive fields were always accepted here — this documents the shape rather than changing what is accepted, exactly as streetCred[].seat above does."
+          }
+        }
+      }
+    },
     "tierCounts": {
       "type": "object",
       "required": ["Confirmed", "Contested", "Singleton", "Disputed"],

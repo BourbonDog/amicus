@@ -98,7 +98,8 @@ describe('rankingToOrder (de-anonymization for tally rankings)', () => {
 // "gemini", {'Review A':'gemini#1'})` -> `null`). `seatMap` (label -> seat id)
 // is the separate channel: sparse, present only for a label whose seat is a
 // real bound seat differing from its own alias — the shared emit-when-
-// DIFFERENT predicate (run-stats-entry.js:64: `seat.id !== seat.alias`).
+// DIFFERENT predicate (run-stats-entry.js :: buildRunStatsEntry —
+// `seat.id !== seat.alias`).
 describe('assignLabels seat channel (v4.8 T3.2)', () => {
   const twinSeats = [
     { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 },

@@ -8,6 +8,8 @@
  * split out so ./abort-result.js can depend on it without a circular require).
  */
 const { SCHEMA_VERSION } = require('./result-schema-version');
+// v4.9 W13 Task A (PR #207 round 3, B3): the shared ttftMs honesty predicate.
+const { isMeasuredTtft } = require('./ttft');
 
 /** Leg/run statuses that count as terminal for wave aggregation. */
 const TERMINAL_STATUSES = ['complete', 'error', 'timeout', 'aborted', 'crashed', 'idle-timeout'];
@@ -70,6 +72,14 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     durationMs,
     sessionDir,
     opencodeSessionId: metadata.opencodeSessionId || null,
+    // v4.9 W13 Task A (probe only, R12): time-to-first-token, sourced straight
+    // off `metadata` like `opencodeSessionId` above. ADDITIVE and emit-when-set
+    // (the pack/tag spread form below, not the `|| null` coercion above): an
+    // absent ttft means "no substantive tick was observed", which is neither
+    // zero nor null, so it must not be coerced into either. PR #207 round 3
+    // (B3): emit-when-VALID via the shared predicate — `metadata` is read off
+    // disk, so NaN/±Infinity/negatives/fractions all reach here. See ./ttft.js.
+    ...(isMeasuredTtft(metadata.ttftMs) ? { ttftMs: metadata.ttftMs } : {}),
     usage: usage !== null ? usage : (metadata.usage || null),
     ...(metadata.pack ? { pack: metadata.pack } : {}),
     ...(metadata.tag ? { tag: metadata.tag } : {}),
