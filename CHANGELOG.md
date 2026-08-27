@@ -3,6 +3,73 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.1] - 2026-08-27
+
+*A silent provider failure, and the unservable model ids it produced.*
+
+A session on `deepseek` failed with `you passed deepseek-v4-flash-0731`. Tracing that one error
+found a chain: a provider fetch failed silently, the empty namespace it left behind was
+indistinguishable from "never fetched", and that ambiguity licensed the wizard to synthesise and
+persist a direct model id nothing serves.
+
+### Fixed
+
+- **Per-provider catalog fetch failures are reported instead of collapsing to `[]` (#209).**
+  `fetchAllModels()` returned a flat row array, so a provider whose fetch was REJECTED could not be
+  told apart from one that legitimately serves no models — all four failure modes (non-200, timeout,
+  network error, parse error) resolved to a bare `[]`, and the existing reporting fired only when
+  *every* provider returned nothing. A 401ing key silently zeroed that vendor's namespace and every
+  picker then offered gateway-only routes with no indication why. `fetchAllModelsDetailed()` now
+  carries `{rows, failures}`, the cache persists `providerFailures` alongside the rows they
+  describe, and `amicus models --check` prints
+  `PROVIDER FETCH FAILED: <provider> (HTTP 401)` (`--json` carries the array).
+  `fetchAllModels()` keeps its signature as a rows-only wrapper.
+- **A rejected namespace no longer yields a fabricated direct model id (#208).**
+  `classifyModel` returns `'unknown'` for an empty namespace because it could not distinguish
+  "never fetched" from "fetch rejected", and that licensed `directFormIfSafe` to strip the
+  `openrouter/` prefix and produce an id the direct API does not serve. Optimism is now suppressed
+  when *that vendor's* namespace fetch was rejected, and preserved when it was simply never
+  attempted. Threaded through the picker, the shortlist, both Electron wizard entry points and the
+  CLI setup path — the picker rebuilds its own `catalogInfo`, so without threading the guard was
+  live in unit tests and dead in production.
+- **The persistence path requires catalog evidence (#214).**
+  `toStorableRoute` — whose result is written straight into `config.aliases` and used to seed fresh
+  configs — decided direct-vs-gateway with no catalog evidence at all. It now routes through
+  `directFormIfSafe`, and `toLiveSeedAliases` stops discarding evidence it was already handed.
+- **Alias drift is computed against the same evidence the writer uses.**
+  `findDriftedStoredAliases` resolved its "current" value without `providerFailures`, so a rejected
+  namespace produced false drift whose suggested repair would have written back the very id #208
+  removed.
+- **Guards no longer depend on an optional argument.** `directFormIfSafe`/`directFormIfProven`
+  keyed both the `DIVERGENT_VENDORS` and namespace-rejection checks on a caller-supplied `vendor`
+  that the API marks optional, while the catalog check derived its own — so a caller using the
+  documented shape silently lost two of three guards. The vendor is now derived from the id when
+  omitted.
+- **The setup wizard keeps direct-first routing when the catalog is unavailable.** With no catalog,
+  quick picks fell back to raw `openrouter/…` routes, which Amicus treats as an explicit
+  force-OpenRouter literal — an offline setup would have pinned the user to the gateway
+  permanently.
+- **`pre-commit` no longer fails on a clone that has never stashed.** The hook gated its
+  lint-staged workaround on being inside a worktree; the real trigger is a missing `refs/stash`,
+  which is true of any fresh clone whose first commit precedes its first `git stash`.
+
+### Changed
+
+- **`toCanonicalDefault` is renamed `stripGatewayPrefix`** (`src/utils/curated-models.js`). The old
+  name read as the correct answer and three separate callers took it at its word and persisted ids
+  the direct API may not serve. It cannot be made evidence-taking — it *produces* the candidate
+  `classifyModel` checks — so the name now says what it is. Callers deriving an id that will be
+  called or stored must use `directFormIfSafe`/`directFormIfProven`. Internal utility, not a
+  documented API surface, but importers reaching into `src/utils/` will need the new name.
+- **Route canonicalisation for the setup wizard is decided in the main process.** The renderer
+  carried a hand-copy of `toCanonicalDefault` that had neither of the real primitive's guards; it is
+  deleted, and the safe form now ships to the page as data. Routing policy no longer reaches the
+  renderer at all.
+- **`gatewayOf(id)`** replaces three verbatim copies of the gateway-classification one-liner.
+- An ESLint rule now bans hand-rolled `openrouter/` prefix stripping outside an audited allowlist.
+- CI council bench: `qwen` moves from `qwen3.8-max` to `qwen3.8-27b` — same 1M context, ~4.8x
+  cheaper input. Bench-only; the shipped alias table is unchanged.
+
 ## [4.9.0] - 2026-08-26
 
 *The council does new work.*
