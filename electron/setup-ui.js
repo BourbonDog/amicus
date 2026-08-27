@@ -11,7 +11,7 @@ const { buildLocalSectionHTML } = require('./setup-ui-local');
 const { buildLocalScript } = require('./setup-ui-local-script');
 const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
-const { resolveQuickPicks } = require('../src/utils/quick-picks');
+const { resolveQuickPicks, canonicalRoutesFor } = require('../src/utils/quick-picks');
 const { PROVIDER_FAMILY_NAMES } = require('../src/utils/model-fetcher');
 
 /**
@@ -29,13 +29,23 @@ function buildSetupHTML(options = {}) {
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
     shortlists = {},
   } = options;
+  // Council A1 (PR 215): a pick reaching the page WITHOUT canonicalRoutes makes
+  // pickRouteFor fall back to the raw openrouter/... route, which this codebase
+  // treats as an EXPLICIT force-OpenRouter literal that never reconsiders
+  // direct-first -- so an offline setup (pinned fallback above, catalog
+  // unavailable) would pin the user to the gateway permanently. Backfill from an
+  // EMPTY catalog: directFormIfSafe is optimistic when nothing disproves the bare
+  // form (restoring direct-first) while still refusing for DIVERGENT_VENDORS,
+  // which the deleted toBareIfDirect did not.
+  const picks = quickPicks.map(p =>
+    (p && p.canonicalRoutes) ? p : { ...p, canonicalRoutes: canonicalRoutesFor(p, { models: [] }) });
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
-  const modelHtml = buildModelStepHTML(quickPicks, undefined, undefined, shortlists);
+  const modelHtml = buildModelStepHTML(picks, undefined, undefined, shortlists);
   const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
-  const modelChoicesJson = JSON.stringify(quickPicks);
+  const modelChoicesJson = JSON.stringify(picks);
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
   const defaultAliasesJson = JSON.stringify(getDefaultAliases());
   const familyNamesJson = JSON.stringify(PROVIDER_FAMILY_NAMES);

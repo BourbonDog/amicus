@@ -269,11 +269,12 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  * @param {string} vendor e.g. 'anthropic'
  * @param {string} chosenId id from the picker (see above -- not always
  *   catalog-verbatim)
- * @param {{seedDefaultIfAbsent?: boolean, catalog?: Array<{id:string}>, providerFailures?: Array<{provider:string}>}} [options]
+ * @param {{seedDefaultIfAbsent?: boolean, catalog?: Array<{id:string}>}} [options]
  * @returns {{alias: string, setAsDefault: boolean}}
  */
-function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog, providerFailures } = {}) {
-  const catalogInfo = { models: Array.isArray(catalog) ? catalog : [], providerFailures: providerFailures || [] };
+function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog } = {}) {
+  // Council C4 (PR 215): NO providerFailures -- directFormIfProven strips only on POSITIVE evidence, so a failed/empty namespace ('unknown') already returns chosenId untouched.
+  const catalogInfo = { models: Array.isArray(catalog) ? catalog : [] };
   const storedId = directFormIfProven(vendor, chosenId, catalogInfo);
 
   const config = loadConfig() || {};

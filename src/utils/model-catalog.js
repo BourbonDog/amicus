@@ -88,9 +88,17 @@ function writeCache(models, providerFailures) {
  * carries only the outcome fields (no models/fetchedAt to report).
  * @param {string} reason short error-class string
  */
-function writeRefreshFailure(reason) {
+function writeRefreshFailure(reason, providerFailures) {
   const existing = readCache() || { schemaVersion: CATALOG_SCHEMA_VERSION };
-  writeCacheDoc({ ...existing, lastRefreshAttempt: Date.now(), lastRefreshError: reason });
+  const doc = { ...existing, lastRefreshAttempt: Date.now(), lastRefreshError: reason };
+  // Council C1 (PR 215): a TOTAL outage is exactly when the per-provider
+  // breakdown matters most, and this path used to discard the failures the
+  // refresh had just computed. Only overwrite when this attempt produced some --
+  // an attempt that learned nothing must not erase a previous attempt's detail.
+  if (Array.isArray(providerFailures) && providerFailures.length > 0) {
+    doc.providerFailures = providerFailures;
+  }
+  writeCacheDoc(doc);
 }
 
 /**
@@ -113,7 +121,7 @@ async function refreshCatalog() {
     const reason = (models || []).length > 0
       ? 'floor-only: all providers returned no network rows'
       : 'network-error: all providers unreachable';
-    writeRefreshFailure(reason);
+    writeRefreshFailure(reason, providerFailures);
     return [];
   }
   writeCache(models, providerFailures);
@@ -158,7 +166,7 @@ async function getCatalogInfo(opts = {}) {
     lastRefreshAttempt: (doc && doc.lastRefreshAttempt) || null,
     lastRefreshError: (doc && doc.lastRefreshError) || null,
     // #209: namespace-level fetch outcomes for the CACHED rows above.
-    providerFailures: (cache && Array.isArray(cache.providerFailures)) ? cache.providerFailures : [],
+    providerFailures: (doc && Array.isArray(doc.providerFailures)) ? doc.providerFailures : [],
   };
 }
 

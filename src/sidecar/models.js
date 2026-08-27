@@ -135,9 +135,12 @@ async function runCheck(args) {
     const probeSkipped = args.live ? 'catalog-unavailable' : null;
     if (args.json) {
       process.stdout.write(JSON.stringify(buildAuditDoc({
-        stale: [], catalogAvailable: false, probeSkipped
+        stale: [], catalogAvailable: false, probeSkipped, providerFailures
       }), null, 2) + '\n');
     } else {
+      // Council C2 (PR 215): "catalog unavailable" is precisely when the user
+      // needs to know WHICH provider refused them.
+      for (const f of providerFailures) { process.stdout.write(fmtProviderFailure(f) + '\n'); }
       process.stdout.write('Catalog unavailable (offline or no providers reachable); cannot check.\n');
       if (probeSkipped) { process.stdout.write(fmtLiveSkipped(probeSkipped) + '\n'); }
     }

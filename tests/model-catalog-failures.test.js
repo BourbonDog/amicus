@@ -56,4 +56,18 @@ describe('model-catalog: provider failure reporting', () => {
     const info = await getCatalogInfo();
     expect(info.providerFailures).toEqual([]);
   });
+
+  // Council C1 (PR 215): the TOTAL-outage path computed providerFailures and
+  // then threw them away -- the one case where a per-provider breakdown matters
+  // most had none, which is the exact blind spot issue 209 exists to close.
+  test('a total network failure still records WHY each provider failed', async () => {
+    mockFetcher([], [
+      { provider: 'openrouter', reason: 'network-error', detail: 'ECONNREFUSED' },
+      { provider: 'deepseek', reason: 'http-status', status: 401 },
+    ]);
+    const { getCatalogInfo } = require('../src/utils/model-catalog');
+    const info = await getCatalogInfo();
+    const names = (info.providerFailures || []).map(f => f.provider).sort();
+    expect(names).toEqual(['deepseek', 'openrouter']);
+  });
 });

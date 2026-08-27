@@ -58,4 +58,32 @@ describe('amicus models: provider fetch failures (#209)', () => {
     const { out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
     expect(JSON.parse(out).providerFailures).toEqual(FAILURES);
   });
+
+  // Council C2 (PR 215): the empty-catalog early return dropped providerFailures
+  // from BOTH surfaces. "Catalog unavailable" is precisely when the user needs to
+  // be told which provider refused them.
+  it('names the failing provider even when the catalog came back empty', async () => {
+    jest.resetModules();
+    jest.doMock('../../src/utils/model-catalog', () => ({
+      getCatalogInfo: jest.fn(async () => ({ models: [], fetchedAt: null, providerFailures: FAILURES })),
+      refreshCatalog: jest.fn(async () => []),
+      catalogPath: () => 'C:/fake/model-catalog.json',
+    }));
+    const { handleModels } = require('../../src/sidecar/models');
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+    expect(out).toContain('deepseek');
+    expect(out).toContain('401');
+  });
+
+  it('--check --json carries providerFailures on the empty-catalog path too', async () => {
+    jest.resetModules();
+    jest.doMock('../../src/utils/model-catalog', () => ({
+      getCatalogInfo: jest.fn(async () => ({ models: [], fetchedAt: null, providerFailures: FAILURES })),
+      refreshCatalog: jest.fn(async () => []),
+      catalogPath: () => 'C:/fake/model-catalog.json',
+    }));
+    const { handleModels } = require('../../src/sidecar/models');
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
+    expect(JSON.parse(out).providerFailures).toEqual(FAILURES);
+  });
 });
