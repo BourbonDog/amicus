@@ -13,7 +13,6 @@ const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
 const { resolveQuickPicks } = require('../src/utils/quick-picks');
 const { PROVIDER_FAMILY_NAMES } = require('../src/utils/model-fetcher');
-const { listDirectProviders } = require('../src/utils/provider-registry');
 
 /**
  * @param {object} [options={}]
@@ -40,7 +39,6 @@ function buildSetupHTML(options = {}) {
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
   const defaultAliasesJson = JSON.stringify(getDefaultAliases());
   const familyNamesJson = JSON.stringify(PROVIDER_FAMILY_NAMES);
-  const directProvidersJson = JSON.stringify(listDirectProviders());
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
@@ -62,11 +60,11 @@ function buildSetupHTML(options = {}) {
     </div>
   </div>
   <div class="footer"><div class="footer-brand"><svg width="15" height="15" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg> ${brandName}</div><div class="footer-nav"><button class="nav-btn" id="back-btn" style="display:none">Back</button><button class="nav-btn primary" id="next-btn" disabled>Next</button><button class="nav-btn primary" id="finish-btn" style="display:none">Finish</button></div></div>
-${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson, directProvidersJson)}
+${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson)}
 </body></html>`;
 }
 
-function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson, directProvidersJson) {
+function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson) {
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
   const councilJs = buildCouncilScript();
@@ -83,7 +81,6 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var providerNamesData = ${providerNamesJson};
   var defaultAliases = Object.assign(Object.create(null), ${defaultAliasesJson});
   var PROVIDER_FAMILY_NAMES = ${familyNamesJson};
-  var directProviders = ${directProvidersJson};
   var routingChoices = {};
   var explicitRouteChoices = {};
   // issue 138: alias -> a SPECIFIC model id the user drilled down to. Empty
@@ -288,20 +285,6 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     } else { nextBtn.disabled = false; }
   }
 
-  // #61: an auto-selected (non-explicit) openrouter/<vendor>/<model> route
-  // whose vendor also has a direct integration must be stored bare
-  // (<vendor>/<model>) so the gateway router can policy-route it direct-first;
-  // a stored openrouter/... string is treated as an explicit force-OpenRouter
-  // literal and never reconsiders direct-first. Mirrors
-  // src/utils/curated-models.js's toCanonicalDefault exactly. Gateway-only
-  // vendors (not in directProviders, e.g. qwen/grok/glm/...) pass through
-  // unchanged since OpenRouter is their only route anyway.
-  function toBareIfDirect(route) {
-    if (typeof route !== 'string' || route.indexOf('openrouter/') !== 0) { return route; }
-    var rest = route.slice('openrouter/'.length);
-    var vendor = rest.split('/')[0];
-    return directProviders.indexOf(vendor) !== -1 ? rest : route;
-  }
 
   // Single source of the route choice for a quick-pick row: explicit pill
   // choice if its key still exists, else first provider with a key, else
@@ -311,12 +294,12 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     // issue 138: an explicit per-model choice overrides the family flagship.
     var picked = modelChoiceIds[mc.alias];
     if (picked) {
-      // Deliberately NEVER toBareIfDirect(picked) here (unlike the auto-pick
-      // canonicalization below): picked/modelOpenrouterIds come straight
-      // from the shortlist's own id/data-or, and for a DIVERGENT_VENDOR
-      // (e.g. anthropic) that id can already BE its only-callable
-      // openrouter/<vendor>/... form -- stripping the prefix would
-      // fabricate a direct id nothing serves.
+      // A drilled-down pick is returned VERBATIM -- never canonicalised (unlike
+      // the auto-pick below): picked/modelOpenrouterIds come straight from the
+      // shortlist's own id/data-or, which the picker already built through
+      // directFormIfSafe. For a DIVERGENT_VENDOR (e.g. anthropic) that id can
+      // already BE its only-callable openrouter/<vendor>/... form, so touching
+      // the prefix here would fabricate a direct id nothing serves.
       if (routingChoices[mc.alias] === 'openrouter' && explicitRouteChoices[mc.alias]) {
         return modelOpenrouterIds[mc.alias] || picked;
       }
@@ -332,9 +315,13 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       if (!prov) { prov = provs[0]; }
     }
     var route = mc.routes[prov] || null;
-    // Only canonicalize auto-picks; an explicit "via OpenRouter" pill click
-    // is a deliberate choice and is returned unchanged.
-    if (route && !explicitRouteChoices[mc.alias]) { route = toBareIfDirect(route); }
+    // issue 214: the SAFE storable form is decided server-side (quick-picks.js
+    // canonicalRoutesFor) and shipped with the pick. The page must not re-derive
+    // it: its old hand-copy of toCanonicalDefault dropped both of that
+    // primitive's guards. An explicit "via OpenRouter" pill stays unchanged.
+    if (route && !explicitRouteChoices[mc.alias]) {
+      route = (mc.canonicalRoutes && mc.canonicalRoutes[prov]) || route;
+    }
     return route;
   }
 
