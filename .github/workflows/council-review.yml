@@ -435,12 +435,21 @@ jobs:
           # twice; glm stalled first-attempt in 3 of the 5 and survived only
           # because its single Stage-1 retry happened to land. #196's verdict was
           # published on a 2-of-4 bench for exactly this reason.
-          # The class is a provider-side cold start on a shared CI egress, so the
-          # honest lever here is WAIT, not a different model. 480000 ms is chosen
-          # to sit strictly above the 300 s that was measured failing and strictly
-          # below the per-leg `--timeout 10` (600000 ms) set below, so the
-          # backstop still fires FIRST and a genuinely silent seat is still
+          # ⚠️ CORRECTED (#202, 2026-08-27). This block used to call the class "a
+          # provider-side cold start" whose only lever was WAIT. The TTFT probe
+          # refutes that: on this egress first tokens are a CONTINUOUS heavy tail
+          # — 8.0, 18.2, 64.5, 80.4, 132.8, 155.0, 156.7, 259.5, 275.0, 384.2 s
+          # (runs 33030485388 / 33071695196) — with no gap between "fast" and
+          # "never". A leg measured at 384.2 s would have been logged as a
+          # zero-token black hole under the 300 s default, and a judge that
+          # COMPLETED first spoke at 275.0 s. So the window is not waiting out a
+          # cold start; it is a cut point placed inside a real distribution.
+          # 480000 ms still sits strictly above the 300 s measured failing and
+          # strictly below the per-leg `--timeout 10` (600000 ms) set below, so
+          # the backstop still fires FIRST and a genuinely silent seat is still
           # reported and retried rather than burning the whole wall clock.
+          # A truly silent population does remain (2 legs of 21 produced nothing
+          # at all), which is why the backstop stays.
           # SINGLE-SPELLED on purpose: no `workflow_call` input, no
           # `${{ inputs.x || '...' }}` fallback. Adding either creates the
           # two-spellings trap that cb7c90fd walked into with `models` — if you
@@ -449,6 +458,19 @@ jobs:
           # Retry POLICY (a second Stage-1 retry, staggered launch) is out of
           # scope here and filed separately as issue #202.
           AMICUS_NO_OUTPUT_BACKSTOP_MS: '480000'
+          # #202: B53's shipped 180 s default is INSIDE the distribution above —
+          # it killed a glm leg that was streaming and billing ($0.0526 REPORTED,
+          # 9,750 in + 8,373 reasoning + 55 out) after `read pending 181s`.
+          # src/headless.js already records a measured 190.6 s `task` call as
+          # "already longer than B53's 180 s"; that measurement widened the
+          # neighbouring settle deferral and left B53 itself alone.
+          # Matched to the backstop so a mid-turn gap gets the same patience a
+          # first-token gap gets — both are the one egress-latency phenomenon.
+          # ⚠️ ACCEPTED COST (owner's call): against the 600 s leg cap this means
+          # B53 can only fire for a tool call starting in the first ~120 s. The
+          # detector is traded down in REACH to stop it killing healthy legs; if
+          # a mid-leg wedge later needs catching, widen `--timeout`, not this.
+          AMICUS_TOOL_CALL_STALL_MS: '480000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the

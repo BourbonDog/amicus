@@ -32,6 +32,49 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).toContain('cancel-in-progress: true');
   });
 
+  /**
+   * #202 — the two stall detectors and the leg cap are ONE budget, so they are
+   * pinned as a relationship rather than as three magic numbers.
+   *
+   * WHY the tool-call window moved off its 180 s default here: B53 killed a glm
+   * leg that was streaming AND billing (9,750 in + 8,373 reasoning + 55 out,
+   * $0.0526 REPORTED) after `read pending 181s`. src/headless.js's own comment
+   * already records a measured 190.6 s `task` call as "already longer than B53's
+   * 180 s" — that measurement widened the neighbouring settle deferral to 300 s
+   * and left B53 itself untouched. On this egress the measured first-token times
+   * reach 384.2 s (CI run 33030485388), so a 180 s mid-turn gap is inside the
+   * ordinary distribution, not evidence of a wedge.
+   *
+   * ⚠️ KNOWN COST of matching the backstop rather than undercutting it (owner's
+   * call, recorded so nobody reads it as an oversight): with a 600 s leg cap a
+   * 480 s window means B53 can only fire for a tool call that starts inside the
+   * first ~120 s of a leg. The detector is deliberately traded down in reach to
+   * stop it killing healthy legs. If a wedged tool call later needs catching
+   * mid-leg, the lever is `--timeout`, not a tighter window.
+   */
+  test('the stall detectors and the leg cap form one coherent budget', () => {
+    const y = yml();
+    const ms = (name, re) => {
+      const m = re.exec(y);
+      expect(`${name} set in the workflow: ${m !== null}`).toBe(`${name} set in the workflow: true`);
+      return Number(m[1]);
+    };
+    const noOutput = ms('AMICUS_NO_OUTPUT_BACKSTOP_MS', /AMICUS_NO_OUTPUT_BACKSTOP_MS:\s*'(\d+)'/);
+    const toolStall = ms('AMICUS_TOOL_CALL_STALL_MS', /AMICUS_TOOL_CALL_STALL_MS:\s*'(\d+)'/);
+    const legCap = Number(/--timeout (\d+)/.exec(y)[1]) * 60 * 1000;
+
+    // Both detectors must be able to fire BEFORE the leg cap, or the leg dies an
+    // uninformative `timeout` instead of a named, diagnosable stall.
+    expect(noOutput).toBeLessThan(legCap);
+    expect(toolStall).toBeLessThan(legCap);
+    // A mid-turn gap gets AT LEAST the patience a first-token gap gets: both are
+    // the same egress-latency phenomenon, and a tighter tool window would kill
+    // legs the backstop deliberately spared.
+    expect(toolStall).toBeGreaterThanOrEqual(noOutput);
+    // And neither may silently fall back to a shipped default.
+    expect(toolStall).toBeGreaterThan(180000); // src/headless.js's default
+  });
+
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
     // 2026-08-26 owner ruling: kimi off the bench (cost vs contribution — the
@@ -467,7 +510,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // `bash -eo pipefail` went exit 1 / no briefing -> exit 0 / briefing written.
       expect(step).toContain('> wf-raw.txt || true');
       // grep must not sit in a pipeline whose status can propagate.
-      expect(step).not.toContain("capped.diff \\");
+      expect(step).not.toContain('capped.diff \\');
       // Only workflows whose diff survived the cap — annotating an elided file
       // would describe code the bench was explicitly told it cannot see.
       expect(step).toContain('capped.diff');
