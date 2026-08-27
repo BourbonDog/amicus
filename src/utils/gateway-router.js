@@ -12,6 +12,16 @@ const { classifyModel } = require('./model-classification');
 const { isDirectProvider } = require('./provider-registry');
 const HINTS = require('./remediation-hints');
 
+/**
+ * Which gateway an executable id routes through (issue 214). The inverse of
+ * `executableFor`. Non-string input reads as 'direct' rather than throwing --
+ * callers pass raw values off run metadata.
+ * @param {*} id @returns {'openrouter'|'direct'}
+ */
+function gatewayOf(id) {
+  return typeof id === 'string' && id.startsWith('openrouter/') ? 'openrouter' : 'direct';
+}
+
 /** Build the executable id for a gateway. */
 function executableFor(gateway, vendor, model) {
   return gateway === 'openrouter' ? `openrouter/${vendor}/${model}` : `${vendor}/${model}`;
@@ -199,4 +209,4 @@ function resolveRoute(req) {
   return routeError({ requested: d.raw, reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [] });
 }
 
-module.exports = { resolveRoute };
+module.exports = { gatewayOf, resolveRoute };

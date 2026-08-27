@@ -219,6 +219,7 @@ async function startSidecar(options) {
     try {
       const { appendSpend } = require('../utils/spend-ledger');
       const { statusFromResult } = require('../utils/result-schema');
+      const { gatewayOf } = require('../utils/gateway-router');
       appendSpend({
         taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
         op: 'start', status: statusFromResult(result), project: effectiveProject,
@@ -227,7 +228,7 @@ async function startSidecar(options) {
         // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the
         // best-effort catch swallows → EVERY start-mode spend row silently dropped + start-json.test.js
         // goes red. Use an in-scope value (spec-complete for direct/openrouter):
-        gateway: String(model).startsWith('openrouter/') ? 'openrouter' : 'direct',
+        gateway: gatewayOf(model),
         // (To also attribute v4.2 'local': thread the resolved route gateway — dropped today at
         // cli-handlers-run.js:47 — into createSessionMetadata and read `meta.gateway`, as continue.js:111 does.)
         // v4.7 F8 D16: same in-scope-value rule as gateway above — `m` is the

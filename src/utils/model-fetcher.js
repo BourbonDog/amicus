@@ -136,46 +136,83 @@ function fetchModelsFromProvider(provider, key) {
 }
 
 /**
- * Perform the HTTPS fetch + normalize for a single configured provider.
- * Resolves to `[]` on any non-200 response, network error, timeout, or parse error.
+ * Perform the HTTPS fetch + normalize for a single configured provider,
+ * REPORTING why it failed (issue #209). The four failure modes used to
+ * collapse to a bare `[]`, which made a rejected fetch indistinguishable from
+ * a provider that legitimately serves no models -- and that ambiguity is what
+ * lets `classifyModel` return 'unknown' for a namespace whose fetch was
+ * actually refused (see #208).
  * @param {string} provider - Key into PROVIDER_FETCH_CONFIG
  * @param {string} key - API key
- * @returns {Promise<Array>} Normalized model rows, or [] on any failure
+ * @returns {Promise<{rows: Array, failure: {reason: string, status?: number, detail?: string}|null}>}
  */
-function fetchViaConfig(provider, key) {
+function fetchViaConfigDetailed(provider, key) {
   const config = PROVIDER_FETCH_CONFIG[provider];
   const url = config.buildUrl ? config.buildUrl(key) : config.url;
   const headers = config.authHeader(key);
 
   return new Promise((resolve) => {
     let chunks = '';
+    const ok = (rows) => resolve({ rows, failure: null });
+    const fail = (failure) => resolve({ rows: [], failure });
+
     const timer = setTimeout(() => {
       req.destroy();
-      resolve([]);
+      fail({ reason: 'timeout', detail: `no response within ${FETCH_TIMEOUT_MS}ms` });
     }, FETCH_TIMEOUT_MS);
 
     const req = https.get(url, { headers }, (res) => {
       if (res.statusCode !== 200) {
         clearTimeout(timer);
         res.on('data', () => {});
-        res.on('end', () => resolve([]));
+        res.on('end', () => fail({ reason: 'http-status', status: res.statusCode }));
         return;
       }
       res.on('data', (chunk) => { chunks += chunk; });
       res.on('end', () => {
         clearTimeout(timer);
         try {
-          resolve(config.normalize(chunks));
-        } catch (_err) {
-          resolve([]);
+          ok(config.normalize(chunks));
+        } catch (err) {
+          fail({ reason: 'parse-error', detail: err.message });
         }
       });
     });
-    req.on('error', () => {
+    req.on('error', (err) => {
       clearTimeout(timer);
-      resolve([]);
+      fail({ reason: 'network-error', detail: err.message });
     });
   });
+}
+
+/**
+ * Rows-only view of `fetchViaConfigDetailed`, preserving the historical
+ * contract (`[]` on any failure) for existing callers.
+ * @param {string} provider @param {string} key @returns {Promise<Array>}
+ */
+function fetchViaConfig(provider, key) {
+  return fetchViaConfigDetailed(provider, key).then(r => r.rows);
+}
+
+/**
+ * Per-provider fetch WITH failure reporting. Mirrors
+ * `fetchModelsFromProvider`'s special cases exactly:
+ *  - anthropic without a key: the hardcoded floor, no network, NOT a failure.
+ *  - anthropic with a key that yields nothing: floor rows, failure reported.
+ *  - unknown provider: no rows, not a failure (nothing was attempted).
+ * @param {string} provider @param {string} key
+ * @returns {Promise<{rows: Array, failure: object|null}>}
+ */
+function fetchModelsFromProviderDetailed(provider, key) {
+  const floor = () => ANTHROPIC_MODELS.map(r => ({ ...r, authoritative: false }));
+  if (provider === 'anthropic') {
+    if (!key) { return Promise.resolve({ rows: floor(), failure: null }); }
+    return fetchViaConfigDetailed('anthropic', key).then(({ rows, failure }) =>
+      (rows.length > 0 ? { rows, failure: null } : { rows: floor(), failure }));
+  }
+  const config = PROVIDER_FETCH_CONFIG[provider];
+  if (!config) { return Promise.resolve({ rows: [], failure: null }); }
+  return fetchViaConfigDetailed(provider, key);
 }
 
 /** Providers to fetch: every keyed provider + openrouter (keyless-capable) + anthropic. */
@@ -190,12 +227,16 @@ function providersToFetch(keys) {
  * Fetch models from all providers that have keys configured; openrouter is
  * always included (keyless public endpoint) as is anthropic (hardcoded list).
  * @param {Object<string, string>} keys - Map of provider → API key string
- * @returns {Promise<Array<{id: string, name: string, contextLength: number|null, pricing: object|null}>>} Combined model list
+ * @returns {Promise<{rows: Array, failures: Array<{provider: string, reason: string, status?: number, detail?: string}>}>}
  */
-async function fetchAllModels(keys) {
+async function fetchAllModelsDetailed(keys) {
   const providers = providersToFetch(keys);
-  const results = await Promise.all(providers.map(p => fetchModelsFromProvider(p, keys[p] || '')));
-  const rows = results.flat();
+  const results = await Promise.all(providers.map(p =>
+    fetchModelsFromProviderDetailed(p, keys[p] || '').then(r => ({ provider: p, ...r }))));
+  const rows = results.flatMap(r => r.rows);
+  const failures = results
+    .filter(r => r.failure)
+    .map(r => ({ provider: r.provider, ...r.failure }));
   // v4.2 §4.4: append local-provider rows via the scheme-aware probe (5s, [] on failure).
   try {
     const { getLocalProviders } = require('./local-providers');
@@ -205,7 +246,17 @@ async function fetchAllModels(keys) {
       listLocalModels(e, { timeoutMs: 5000, bearer: e.apiKeyEnv ? process.env[e.apiKeyEnv] : undefined })));
     for (const r of localResults) { rows.push(...r); }
   } catch (_err) { /* local rows are best-effort — never break the cloud catalog */ }
-  return rows;
+  return { rows, failures };
+}
+
+/**
+ * Rows-only view of `fetchAllModelsDetailed` — the historical signature, kept
+ * so existing callers and their tests are unaffected.
+ * @param {Object<string, string>} keys
+ * @returns {Promise<Array>} Combined model list
+ */
+async function fetchAllModels(keys) {
+  return (await fetchAllModelsDetailed(keys)).rows;
 }
 
 /**
@@ -236,6 +287,8 @@ function groupModelsByFamily(models) {
 module.exports = {
   fetchModelsFromProvider,
   fetchAllModels,
+  fetchAllModelsDetailed,
+  fetchModelsFromProviderDetailed,
   providersToFetch,
   groupModelsByFamily,
   ANTHROPIC_MODELS,

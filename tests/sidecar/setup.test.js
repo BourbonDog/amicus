@@ -31,6 +31,7 @@ jest.mock('../../src/sidecar/setup-window', () => ({
 // guarded try/catch swallows, silently skipping the config write.
 jest.mock('../../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => []),
+  getCatalogInfo: jest.fn(async () => ({ models: [], providerFailures: [] })),
   refreshCatalog: jest.fn(async () => []),
   readCache: jest.fn(() => null),
 }));
@@ -367,13 +368,13 @@ describe('Setup Wizard', () => {
       process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key';
       process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
 
-      const { getCatalog } = require('../../src/utils/model-catalog');
-      getCatalog.mockResolvedValueOnce([
+      const { getCatalogInfo } = require('../../src/utils/model-catalog');
+      getCatalogInfo.mockResolvedValueOnce({ models: [
         { id: 'anthropic/claude-cheap', name: 'Claude Cheap', contextLength: 100000, pricing: null },
         { id: 'openrouter/anthropic/claude-cheap', name: 'Claude Cheap', contextLength: 100000, pricing: { prompt: '0.000001' } },
         { id: 'deepseek/deepseek-cheap', name: 'DeepSeek Cheap', contextLength: 32000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-cheap', name: 'DeepSeek Cheap', contextLength: 32000, pricing: { prompt: '0.0000005' } },
-      ]);
+      ], providerFailures: [] });
 
       // Snapshotted the instant the mode prompt fires -- by construction this is
       // AFTER runProviderDefaultPickers has fully completed (both providers'
@@ -456,8 +457,8 @@ describe('Setup Wizard', () => {
     it('Fix 2: standard step selecting the quick-pick family that collides with a just-written vendor alias (deepseek) keeps the tier-chosen id -- does not clobber it with the curated flagship', async () => {
       process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
 
-      const { getCatalog } = require('../../src/utils/model-catalog');
-      getCatalog.mockResolvedValueOnce([
+      const { getCatalogInfo } = require('../../src/utils/model-catalog');
+      getCatalogInfo.mockResolvedValueOnce({ models: [
         // 'balanced' tier (default cost tier) match for deepseek -- the
         // per-provider phase's tier-chosen pick.
         { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
@@ -467,7 +468,7 @@ describe('Setup Wizard', () => {
         // flagship for the 'deepseek' family alias.
         { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
-      ]);
+      ], providerFailures: [] });
 
       const readline = require('readline');
       const mockInterface = { question: jest.fn(), close: jest.fn() };
@@ -498,13 +499,13 @@ describe('Setup Wizard', () => {
     it('R4a (fix round 2): does NOT ask the vendor drill-down again when the per-provider phase already wrote this alias (numbered pick, no noUpgrade) -- would otherwise ask the same question twice in one run', async () => {
       process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
 
-      const { getCatalog } = require('../../src/utils/model-catalog');
-      getCatalog.mockResolvedValueOnce([
+      const { getCatalogInfo } = require('../../src/utils/model-catalog');
+      getCatalogInfo.mockResolvedValueOnce({ models: [
         { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
         { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
-      ]);
+      ], providerFailures: [] });
 
       const readline = require('readline');
       const mockInterface = { question: jest.fn(), close: jest.fn() };
@@ -548,13 +549,13 @@ describe('Setup Wizard', () => {
       // ('deepseek')` is true regardless of noUpgrade -- this pins that the
       // R4a guard still fires on the ordinary (never-asked-before) case,
       // including via the typed-alias-name route, not just the numbered one.
-      const { getCatalog } = require('../../src/utils/model-catalog');
-      getCatalog.mockResolvedValueOnce([
+      const { getCatalogInfo } = require('../../src/utils/model-catalog');
+      getCatalogInfo.mockResolvedValueOnce({ models: [
         { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
         { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
-      ]);
+      ], providerFailures: [] });
 
       const readline = require('readline');
       const mockInterface = { question: jest.fn(), close: jest.fn() };
@@ -595,13 +596,13 @@ describe('Setup Wizard', () => {
       // was already asked about this run regardless of how the pick was typed.
       process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
 
-      const { getCatalog } = require('../../src/utils/model-catalog');
-      getCatalog.mockResolvedValueOnce([
+      const { getCatalogInfo } = require('../../src/utils/model-catalog');
+      getCatalogInfo.mockResolvedValueOnce({ models: [
         { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
         { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
         { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
-      ]);
+      ], providerFailures: [] });
 
       const readline = require('readline');
       const mockInterface = { question: jest.fn(), close: jest.fn() };

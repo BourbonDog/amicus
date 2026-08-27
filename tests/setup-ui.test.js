@@ -11,7 +11,7 @@ const { buildSetupHTML, PROVIDERS } = require('../electron/setup-ui');
 const PICKS = [
   { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
     source: 'live',
-    routes: { openrouter: 'openrouter/google/gemini-9.9-flash' } },
+    routes: { openrouter: 'openrouter/google/gemini-9.9-flash' }, canonicalRoutes: { openrouter: 'google/gemini-9.9-flash' } },
 ];
 
 describe('setup-ui wizard', () => {
@@ -209,22 +209,17 @@ describe('setup-ui wizard', () => {
   });
 
   describe('#61: direct-first canonicalization for auto-selected routes', () => {
-    it('injects directProviders with the 4 direct-capable vendors', () => {
-      expect(html).toContain('var directProviders =');
-      const m = html.match(/var directProviders = (\[[^\]]*\]);/);
-      expect(m).toBeTruthy();
-      const directProviders = JSON.parse(m[1].replace(/'/g, '"'));
-      expect(directProviders.sort()).toEqual(['anthropic', 'deepseek', 'google', 'openai'].sort());
-      expect(directProviders).not.toContain('openrouter');
+    // issue 214: the page used to carry the direct-provider list purely to feed
+    // its own hand-copy of toCanonicalDefault. Both are gone -- the safe form is
+    // decided server-side (quick-picks.js canonicalRoutesFor) and shipped as data.
+    it('ships no routing policy to the page: no directProviders list, no prefix derivation', () => {
+      expect(html).not.toContain('var directProviders');
+      expect(html).not.toContain('function toBareIfDirect');
+      expect(html).not.toContain("slice('openrouter/'.length)");
     });
 
     it('tracks genuine pill clicks via explicitRouteChoices', () => {
       expect(html).toContain('var explicitRouteChoices = {};');
-    });
-
-    it('defines the toBareIfDirect canonicalization helper', () => {
-      expect(html).toContain('function toBareIfDirect(route)');
-      expect(html).toContain("route.indexOf('openrouter/') !== 0");
     });
 
     it('route-pill click handler marks the alias as an explicit choice', () => {
@@ -241,7 +236,7 @@ describe('setup-ui wizard', () => {
       const bodyEnd = script.indexOf('\n  }', pickIdx);
       const pickRouteForSrc = script.slice(pickIdx, bodyEnd + 4);
       expect(pickRouteForSrc).toContain('!explicitRouteChoices[mc.alias]');
-      expect(pickRouteForSrc).toContain('toBareIfDirect(route)');
+      expect(pickRouteForSrc).toContain('mc.canonicalRoutes[prov]');
       // Auto-switch (updateRoutingPills) and the alias-route fallback
       // (updateAliasRoutes) must NOT flag a choice as explicit — only a
       // genuine pill click should.
@@ -255,41 +250,53 @@ describe('setup-ui wizard', () => {
       expect(fallbackBlock).not.toContain('explicitRouteChoices');
     });
 
-    it('logic: auto-picked openrouter/<direct-vendor>/<model> canonicalizes to bare, gateway-only vendor and explicit choices pass through unchanged', () => {
+    it('logic: an auto-pick takes the server-decided canonicalRoutes form; explicit pill choices pass through unchanged', () => {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n  \}/);
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n  \}/);
-      expect(directProvidersMatch).toBeTruthy();
-      expect(toBareMatch).toBeTruthy();
       expect(pickRouteForMatch).toBeTruthy();
 
       // eslint-disable-next-line no-new-func
       const build = new Function(
-        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds',
-        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\nreturn pickRouteFor;`
+        `${pickRouteForMatch[0]}\nreturn pickRouteFor;`
       );
 
-      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
-
-      // Case 1: no explicit pill click, no configured keys (falls back to
-      // provs[0] === 'openrouter') — openrouter/google/x must canonicalize.
-      const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } };
-      let pickRouteFor = build(directProviders, {}, {}, {}, {}, {});
+      // Case 1: no explicit pill, no keys (falls back to provs[0] === 'openrouter').
+      // The server decided this vendor's namespace is served direct, so the pick
+      // takes the bare form it shipped.
+      const mcDirect = {
+        alias: 'gemini',
+        routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' },
+        canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' },
+      };
+      let pickRouteFor = build({}, {}, {}, {}, {});
       expect(pickRouteFor(mcDirect)).toBe('google/gemini-x');
 
-      // Case 2: gateway-only vendor (qwen not in directProviders) stays unchanged.
-      const mcGatewayOnly = { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen-x' } };
-      pickRouteFor = build(directProviders, {}, {}, {}, {}, {});
+      // Case 2: gateway-only vendor -- the server shipped the route unchanged.
+      const mcGatewayOnly = {
+        alias: 'qwen',
+        routes: { openrouter: 'openrouter/qwen/qwen-x' }, canonicalRoutes: { openrouter: 'openrouter/qwen/qwen-x' },
+        canonicalRoutes: { openrouter: 'openrouter/qwen/qwen-x' },
+      };
+      pickRouteFor = build({}, {}, {}, {}, {});
       expect(pickRouteFor(mcGatewayOnly)).toBe('openrouter/qwen/qwen-x');
 
-      // Case 3: explicit pill choice for a direct-capable vendor's OpenRouter
-      // route is honored unchanged (user deliberately chose "via OpenRouter").
-      const routingChoices = { gemini: 'openrouter' };
-      const explicitRouteChoices = { gemini: true };
-      pickRouteFor = build(directProviders, routingChoices, {}, explicitRouteChoices, {}, {});
+      // Case 3: an explicit "via OpenRouter" pill is honoured verbatim, and must
+      // NOT consult canonicalRoutes -- the user chose the gateway deliberately.
+      pickRouteFor = build({ gemini: 'openrouter' }, {}, { gemini: true }, {}, {});
       expect(pickRouteFor(mcDirect)).toBe('openrouter/google/gemini-x');
+
+      // Case 4 (issue 214 regression): a vendor the server refused to canonicalise
+      // -- DIVERGENT, or a namespace whose fetch was rejected -- keeps the gateway
+      // form on an AUTO pick. The deleted hand-copy stripped both.
+      const mcRefused = {
+        alias: 'opus',
+        routes: { openrouter: 'openrouter/anthropic/claude-opus-4.8' }, canonicalRoutes: { openrouter: 'openrouter/anthropic/claude-opus-4.8' },
+        canonicalRoutes: { openrouter: 'openrouter/anthropic/claude-opus-4.8' },
+      };
+      pickRouteFor = build({}, {}, {}, {}, {});
+      expect(pickRouteFor(mcRefused)).toBe('openrouter/anthropic/claude-opus-4.8');
     });
   });
 
@@ -299,21 +306,15 @@ describe('setup-ui wizard', () => {
     // suite above uses. Brittle to reindenting pickRouteFor's source.
     function extractPickRouteFor() {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
-      expect(directProvidersMatch).toBeTruthy();
-      expect(toBareMatch).toBeTruthy();
       expect(pickRouteForMatch).toBeTruthy();
-      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
       // eslint-disable-next-line no-new-func
       const build = new Function(
-        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds',
-        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\nreturn pickRouteFor;`
+        `${pickRouteForMatch[0]}\nreturn pickRouteFor;`
       );
       return (opts = {}) => build(
-        directProviders,
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {}
       );
@@ -323,6 +324,11 @@ describe('setup-ui wizard', () => {
       alias: 'deepseek',
       routes: {
         openrouter: 'openrouter/deepseek/deepseek-v4-pro',
+        deepseek: 'deepseek/deepseek-v4-pro'
+      },
+      // issue 214: the server always ships the decided form alongside the routes.
+      canonicalRoutes: {
+        openrouter: 'deepseek/deepseek-v4-pro',
         deepseek: 'deepseek/deepseek-v4-pro'
       }
     };
@@ -355,7 +361,7 @@ describe('setup-ui wizard', () => {
     });
 
     it('the primary path (no drill-down pick) is unchanged', () => {
-      const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } };
+      const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } };
       const pickRouteFor = extractPickRouteFor()();
       expect(pickRouteFor(mcDirect)).toBe('google/gemini-x');
     });
@@ -388,7 +394,7 @@ describe('setup-ui wizard', () => {
     it('a picked id for a DIVERGENT_VENDOR (anthropic) is returned verbatim, never canonicalized', () => {
       const mcAnthropic = {
         alias: 'opus',
-        routes: { openrouter: 'openrouter/anthropic/claude-opus-5', anthropic: 'anthropic/claude-opus-5' }
+        routes: { openrouter: 'openrouter/anthropic/claude-opus-5', anthropic: 'anthropic/claude-opus-5' }, canonicalRoutes: { openrouter: 'openrouter/anthropic/claude-opus-5', anthropic: 'anthropic/claude-opus-5' }
       };
       const pickRouteFor = extractPickRouteFor()({
         // Real directProviders (extracted from the built HTML) includes
@@ -427,23 +433,17 @@ describe('setup-ui wizard', () => {
     // the three extracted functions.
     function extractCollectAliasWrites() {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
       const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
-      expect(directProvidersMatch).toBeTruthy();
-      expect(toBareMatch).toBeTruthy();
       expect(pickRouteForMatch).toBeTruthy();
       expect(collectMatch).toBeTruthy();
-      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
       // eslint-disable-next-line no-new-func
       const build = new Function(
-        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
-        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
+        `${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
       );
       return (opts = {}) => build(
-        directProviders,
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
         opts.aliasEdits || {}, opts.modelChoicesData || []
@@ -451,8 +451,8 @@ describe('setup-ui wizard', () => {
     }
 
     const twoCardData = [
-      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
-      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } },
+      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
     ];
 
     it('writes a drilled-down alias even when a DIFFERENT card is the checked default', () => {
@@ -511,7 +511,7 @@ describe('setup-ui wizard', () => {
       // though nothing was ever set. hasOwnProperty correctly says false,
       // so the drilled-down write for a same-named alias must proceed.
       const protoCardData = [
-        { alias: 'toString', routes: { openrouter: 'openrouter/acme/toString-model', acme: 'acme/toString-model' } }
+        { alias: 'toString', routes: { openrouter: 'openrouter/acme/toString-model', acme: 'acme/toString-model' }, canonicalRoutes: { openrouter: 'openrouter/acme/toString-model', acme: 'acme/toString-model' } }
       ];
       expect(({}).toString !== undefined).toBe(true); // sanity: the footgun is real
       expect(Object.prototype.hasOwnProperty.call({}, 'toString')).toBe(false); // sanity: hasOwnProperty is not fooled
@@ -587,23 +587,17 @@ describe('setup-ui wizard', () => {
     // both the '#61' and 'issue 138: Finish honours...' describes).
     function extractCollectAliasWrites() {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
       const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
-      expect(directProvidersMatch).toBeTruthy();
-      expect(toBareMatch).toBeTruthy();
       expect(pickRouteForMatch).toBeTruthy();
       expect(collectMatch).toBeTruthy();
-      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
       // eslint-disable-next-line no-new-func
       const build = new Function(
-        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
-        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
+        `${pickRouteForMatch[0]}\n${collectMatch[0]}\nreturn collectAliasWrites;`
       );
       return (opts = {}) => build(
-        directProviders,
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
         opts.aliasEdits || {}, opts.modelChoicesData || []
@@ -616,7 +610,7 @@ describe('setup-ui wizard', () => {
 
     it('seeds modelChoiceIds and the <select>.value when the saved alias names a shortlist row', () => {
       const twoCardData = [
-        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
+        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } }
       ];
       const cfg = { aliases: { gemini: 'google/gemini-2.5-flash' } };
       const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
@@ -646,7 +640,7 @@ describe('setup-ui wizard', () => {
 
     it('leaves modelChoiceIds untouched when the saved alias value names no shortlist row (no card for it, or value predates the catalog)', () => {
       const twoCardData = [
-        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } }
+        { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } }
       ];
       const cfg = { aliases: { gemini: 'google/some-retired-model' } };
       const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
@@ -668,7 +662,7 @@ describe('setup-ui wizard', () => {
     // and Finish silently rewrote the saved pick away.
     it('F3-OR: seeds the whole explicit-OpenRouter state when the saved value matches an option data-or, not its value', () => {
       const twoCardData = [
-        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
       ];
       const cfg = { aliases: { deepseek: 'openrouter/deepseek/deepseek-r1' } }; // explicit-OR form, matches no option.value
       const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
@@ -691,7 +685,7 @@ describe('setup-ui wizard', () => {
 
     it('F3-OR: a saved value matching neither an option value nor a data-or is left untouched (no false-positive OR match)', () => {
       const twoCardData = [
-        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
       ];
       const cfg = { aliases: { deepseek: 'openrouter/deepseek/some-retired-model' } };
       const routingChoices = {}, modelChoiceIds = {}, modelOpenrouterIds = {}, explicitRouteChoices = {};
@@ -713,7 +707,7 @@ describe('setup-ui wizard', () => {
     // bare/direct pick, per the council's verification requirement.
     describe('round-trip: reopen-init followed by collectAliasWrites reproduces the saved value byte-for-byte', () => {
       const deepseekCard = [
-        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
+        { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-r1', deepseek: 'deepseek/deepseek-r1' } }
       ];
 
       it('an explicit-OpenRouter drilled pick round-trips unchanged', () => {
@@ -785,26 +779,20 @@ describe('setup-ui wizard', () => {
     // four extracted functions.
     function extractBuildReview() {
       const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
-      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
       const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
       const buildReviewMatch = script.match(/function buildReview\(\) \{[\s\S]*?\n {2}\}/);
-      expect(directProvidersMatch).toBeTruthy();
-      expect(toBareMatch).toBeTruthy();
       expect(pickRouteForMatch).toBeTruthy();
       expect(collectMatch).toBeTruthy();
       expect(buildReviewMatch).toBeTruthy();
-      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
       // eslint-disable-next-line no-new-func
       const build = new Function(
-        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
         'savedAliases', 'document', 'window',
-        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${collectMatch[0]}\n${buildReviewMatch[0]}\nreturn buildReview;`
+        `${pickRouteForMatch[0]}\n${collectMatch[0]}\n${buildReviewMatch[0]}\nreturn buildReview;`
       );
       return (opts = {}) => build(
-        directProviders,
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
         opts.aliasEdits || {}, opts.modelChoicesData || [],
@@ -815,8 +803,8 @@ describe('setup-ui wizard', () => {
     function fakeEl() { return { textContent: '' }; }
 
     const twoCardData = [
-      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
-      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+      { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } },
+      { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
     ];
 
     it('lists a drilled-down pick on a NON-selected card, not just the checked radio (the F4 trigger)', () => {
@@ -1056,23 +1044,17 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
 
   function extractUpdateWritePreviews() {
     const script = localHtml.match(/<script>([\s\S]*)<\/script>/)[1];
-    const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
-    const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n {2}\}/);
     const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
     const updateMatch = script.match(/function updateWritePreviews\(\) \{[\s\S]*?\n {2}\}/);
-    expect(directProvidersMatch).toBeTruthy();
-    expect(toBareMatch).toBeTruthy();
     expect(pickRouteForMatch).toBeTruthy();
     expect(updateMatch).toBeTruthy();
-    const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
     // eslint-disable-next-line no-new-func
     const build = new Function(
-      'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+      'routingChoices', 'configuredKeys', 'explicitRouteChoices',
       'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window',
-      `${toBareMatch[0]}\n${pickRouteForMatch[0]}\n${updateMatch[0]}\nreturn updateWritePreviews;`
+      `${pickRouteForMatch[0]}\n${updateMatch[0]}\nreturn updateWritePreviews;`
     );
     return (opts = {}) => build(
-      directProviders,
       opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
       opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
       opts.modelChoicesData || [], opts.document, opts.window
@@ -1080,8 +1062,8 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
   }
 
   const twoCardData = [
-    { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } },
-    { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
+    { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' }, canonicalRoutes: { openrouter: 'google/gemini-x', google: 'google/gemini-x' } },
+    { alias: 'deepseek', routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' }, canonicalRoutes: { openrouter: 'deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } }
   ];
 
   function fakeModelResolvedEl(alias) {

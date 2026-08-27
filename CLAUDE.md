@@ -207,6 +207,7 @@ src/
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
 │   ├── models-probe.js
+│   ├── models-render.js  # Presentation helpers for `amicus models` -- pure string formatting, no I/O.
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
 │   ├── progress-fields.js  # Derived, agent-facing progress fields shared by the MCP status/list
 │   ├── progress.js  # Sidecar Progress Reader
@@ -628,6 +629,7 @@ evals/
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
+| `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS()`, `fmtProbeCost()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
@@ -696,7 +698,7 @@ evals/
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/gateway-route-audit.js` | Per-gateway-form audit for curated DEFAULT aliases (Task 6, #gwid). | `auditGatewayRoutes()` |
 | `utils/gateway-route-catalog.js` | Conservative cross-gateway catalog pairing helper (Task 5, #gwid). | `pairAcrossGateways()` |
-| `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `resolveRoute()` |
+| `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `gatewayOf()`, `resolveRoute()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
@@ -708,11 +710,11 @@ evals/
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
 | `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
-| `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()` |
+| `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
-| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
+| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
@@ -729,7 +731,7 @@ evals/
 | `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
-| `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()`, `toStorableRoute()` |
+| `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |

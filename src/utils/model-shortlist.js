@@ -60,7 +60,8 @@ function compareShortlistRows(a, b) {
 
 /**
  * @param {string} vendor e.g. 'deepseek'
- * @param {{catalog?: Array<object>, recommendedId?: string, limit?: number}} [options]
+ * @param {{catalog?: Array<object>, recommendedId?: string, limit?: number,
+ *   providerFailures?: Array<{provider:string}>}} [options]
  * @returns {{recommendedId: (string|null), suggested: Array<object>,
  *   rest: Array<object>, total: number}}
  */
@@ -69,7 +70,9 @@ function buildModelShortlist(vendor, options = {}) {
   const limit = Number.isInteger(options.limit) && options.limit > 0
     ? options.limit : SHORTLIST_LIMIT;
 
-  const { preselectedId, rows } = buildProviderDefaultChoices(vendor, { catalog });
+  const { preselectedId, rows } = buildProviderDefaultChoices(vendor, {
+    catalog, providerFailures: options.providerFailures,
+  });
   if (!rows || rows.length === 0) {
     return { recommendedId: null, suggested: [], rest: [], total: 0 };
   }

@@ -11,6 +11,7 @@
 'use strict';
 
 const { getFamilies, toDefaultAliases, toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
+const { directFormIfSafe } = require('./model-canonicalization');
 
 const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
 
@@ -109,4 +110,28 @@ function toLiveSeedAliases(catalog) {
   return seeds;
 }
 
-module.exports = { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute };
+
+/**
+ * Per-provider SAFE storable form for a resolved quick pick (issue 214).
+ *
+ * The wizard renderer used to derive this itself, via a hand-copy of
+ * `toCanonicalDefault` (`toBareIfDirect`) that dropped both of the real
+ * primitive's guards: it stripped `openrouter/` for DIVERGENT_VENDORS
+ * (fabricating anthropic's dot id, which the direct API rejects) and stripped
+ * for a namespace whose fetch had failed. The renderer cannot `require()`, so
+ * the decision is made here -- once, with the catalog in hand -- and shipped
+ * to the page as data.
+ * @param {{vendorPath: string, routes: Object<string,string>}} pick
+ * @param {{models: Array<{id:string}>, providerFailures?: Array<{provider:string}>}} catalogInfo
+ * @returns {Object<string,string>} provider -> safe storable id
+ */
+function canonicalRoutesFor(pick, catalogInfo) {
+  const out = {};
+  const routes = (pick && pick.routes) || {};
+  for (const [provider, route] of Object.entries(routes)) {
+    out[provider] = directFormIfSafe(pick.vendorPath, route, catalogInfo || { models: [] });
+  }
+  return out;
+}
+
+module.exports = { compareIdsDesc, canonicalRoutesFor, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute };

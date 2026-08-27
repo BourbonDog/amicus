@@ -21,25 +21,11 @@ const { getFamilies } = require('../utils/curated-models');
 const { pickCurrent } = require('../utils/quick-picks');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
+const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
 
 const CHECK_EXIT_CAP = 100;
 
-/** '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1) */
-function perMtok(perToken) {
-  if (perToken === null || perToken === undefined) { return '—'; }
-  const n = Number(perToken);
-  if (Number.isNaN(n) || n < 0) { return '—'; }
-  return (n * 1e6).toFixed(2);
-}
 
-function fmtRow(m, aliasesById) {
-  const alias = aliasesById.get(m.id);
-  const aliasCol = alias ? `[${alias}] ` : '';
-  const ctx = m.contextLength ?? '—';
-  const pIn = perMtok(m.pricing && m.pricing.prompt);
-  const pOut = perMtok(m.pricing && m.pricing.completion);
-  return `${aliasCol}${m.id}\n    ${m.name}  ctx ${ctx}  $/Mtok in ${pIn} out ${pOut}`;
-}
 
 /** alias marks: id → comma-joined alias names (effective user aliases) */
 function aliasMarks() {
@@ -130,36 +116,9 @@ async function runRefresh(args) {
   return 0;
 }
 
-/** One readable line per gateway-route finding (Task 6, #gwid). @param {object} f @returns {string} */
-function fmtGatewayFinding(f) {
-  if (f.kind === 'stale') {
-    return `  GATEWAY STALE (${f.gateway}): ${f.alias} -> ${f.model}`;
-  }
-  if (f.kind === 'divergent-missing') {
-    return `  GATEWAY DIVERGENT: ${f.alias} has no direct form; catalog confirms ${f.model}`;
-  }
-  return `  GATEWAY DIVERGENT: ${f.alias} direct form ${f.model} no longer matches catalog (now ${f.expected})`;
-}
 
-const PROBE_LABELS = { served: 'SERVED', 'accepted-but-silent': 'SILENT', error: 'ERROR' };
 
-/** '$0.0004' | '$1.23' | '—' (unknown). Deliberately NOT formatCost (pricing.js):
- * a probe result's `cost` is a bare number (models-probe.js doesn't carry the
- * reported/estimated source tag), so this never claims a precision it can't back. */
-function fmtProbeCost(cost) {
-  if (cost === null || cost === undefined || Number.isNaN(cost)) { return '—'; }
-  return cost < 1 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`;
-}
 
-/** One readable line per probed alias (`--check --live`, v4.6.2 PR3): uppercase
- * class prefix padded to a fixed column, two-space indent — mirrors the STALE/
- * DRIFTED/GATEWAY line style above. @param {object} r probeStoredAliases() row */
-function fmtProbeLine(r) {
-  const head = `  ${(PROBE_LABELS[r.outcome] + ':').padEnd(8)}${r.alias} -> ${r.target}`;
-  if (r.outcome === 'served') { return `${head} (${fmtProbeCost(r.cost)})`; }
-  if (r.outcome === 'accepted-but-silent') { return `${head} — ${r.detail} (no output within the probe window)`; }
-  return `${head} — ${r.detail}`;
-}
 
 async function runCheck(args) {
   // v4.9 W13 Task B (BACKLOG C5). FIRST — ahead of the catalog-unavailable return
@@ -171,13 +130,17 @@ async function runCheck(args) {
   require('../utils/alias-shadow').auditAliasShadows();
   const catalogInfo = await getCatalogInfo();
   const catalog = catalogInfo.models;
+  const providerFailures = Array.isArray(catalogInfo.providerFailures) ? catalogInfo.providerFailures : [];
   if (!catalog || catalog.length === 0) {
     const probeSkipped = args.live ? 'catalog-unavailable' : null;
     if (args.json) {
       process.stdout.write(JSON.stringify(buildAuditDoc({
-        stale: [], catalogAvailable: false, probeSkipped
+        stale: [], catalogAvailable: false, probeSkipped, providerFailures
       }), null, 2) + '\n');
     } else {
+      // Council C2 (PR 215): "catalog unavailable" is precisely when the user
+      // needs to know WHICH provider refused them.
+      for (const f of providerFailures) { process.stdout.write(fmtProviderFailure(f) + '\n'); }
       process.stdout.write('Catalog unavailable (offline or no providers reachable); cannot check.\n');
       if (probeSkipped) { process.stdout.write(fmtLiveSkipped(probeSkipped) + '\n'); }
     }
@@ -221,10 +184,14 @@ async function runCheck(args) {
 
   if (args.json) {
     process.stdout.write(JSON.stringify(buildAuditDoc({
-      stale, catalogAvailable: true, gatewayFindings, drifted, probe: probeResults
+      stale, catalogAvailable: true, gatewayFindings, drifted, probe: probeResults, providerFailures
     }), null, 2) + '\n');
     return exitCode;
   }
+  // issue 209: report REJECTED provider fetches before the alias findings -- an
+  // empty namespace explains stale/absent aliases downstream, and staying
+  // silent about it is the original defect.
+  for (const f of providerFailures) { process.stdout.write(fmtProviderFailure(f) + '\n'); }
   const driftLines = buildFallbackDriftReport(catalog);
   if (stale.length === 0 && drifted.length === 0) {
     process.stdout.write(`All aliases resolve to catalog models (${sources.length} checked).\n`);

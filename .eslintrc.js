@@ -19,7 +19,18 @@ module.exports = {
     'eqeqeq': ['error', 'always'],
     'curly': ['error', 'all'],
     'semi': ['error', 'always'],
-    'quotes': ['error', 'single', { avoidEscape: true }]
+    'quotes': ['error', 'single', { avoidEscape: true }],
+    // issue 214: hand-rolled `openrouter/` prefix stripping is how a direct
+    // model id gets FABRICATED for a namespace that does not serve it. The
+    // wizard renderer carried a hand-copy of toCanonicalDefault that dropped
+    // both of the real primitive's guards and would have been caught here.
+    // Derive direct forms through src/utils/model-canonicalization.js
+    // (directFormIfSafe / directFormIfProven), and classify a gateway with
+    // gatewayOf() from src/utils/gateway-router.js.
+    'no-restricted-syntax': ['error', {
+      selector: "MemberExpression[object.value='openrouter/'][property.name='length']",
+      message: "Don't hand-roll `openrouter/` prefix stripping - it fabricates direct ids for namespaces that may not serve them (issue 214). Use directFormIfSafe/directFormIfProven (model-canonicalization.js) or gatewayOf (gateway-router.js). If this file legitimately owns that policy, add it to the allowlist override in .eslintrc.js."
+    }]
   },
   overrides: [
     {
@@ -92,6 +103,35 @@ module.exports = {
       files: ['electron/main.js', 'electron/ipc-guard.js'],
       rules: {
         'no-console': 'off'
+      }
+    },
+    {
+      // issue 214 allowlist for the `openrouter/` prefix-stripping ban above.
+      // Each entry was READ before being listed, not grandfathered wholesale:
+      //
+      //  - curated-models.js: OWNS the operation. :159 is toCanonicalDefault
+      //    itself (the primitive the ban points callers away from); :201 is
+      //    vendorOf. This is the one file that legitimately derives an
+      //    executable id by stripping.
+      //  - fallback-chains.js :36 (vendorOf), model-tiers.js :83
+      //    (buildGatewayOnlyAliasMap), route-launch.js :100
+      //    (normalizeForModelIndex) and :131 (splitVendorAndModel): all four
+      //    strip in order to PARSE -- they return a vendor segment, an index
+      //    key, or a {vendor, bareModel} pair. None emits a model id that is
+      //    ever sent to a provider, which is the failure the ban exists to
+      //    prevent.
+      //
+      // A NEW file reaching for this idiom should not be added here without the
+      // same check: if it produces an id that gets CALLED, it belongs behind
+      // directFormIfSafe/directFormIfProven instead.
+      files: [
+        'src/utils/curated-models.js',
+        'src/sidecar/fallback-chains.js',
+        'src/utils/model-tiers.js',
+        'src/utils/route-launch.js',
+      ],
+      rules: {
+        'no-restricted-syntax': 'off'
       }
     },
     {

@@ -19,7 +19,7 @@ const path = require('path');
 // this module is first required (the test pattern re-mocks mid-test).
 function _getConfigDir() { return require('./config').getConfigDir(); }
 function _readApiKeyValues() { return require('./api-key-store').readApiKeyValues(); }
-async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModels(keys); }
+async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModelsDetailed(keys); }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 const CATALOG_SCHEMA_VERSION = 2;
@@ -69,8 +69,16 @@ function writeCacheDoc(doc) {
 }
 
 /** Write a successful fetch: fresh models/fetchedAt, outcome fields cleared. @param {Array} models */
-function writeCache(models) {
-  writeCacheDoc({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models });
+function writeCache(models, providerFailures) {
+  writeCacheDoc({
+    schemaVersion: CATALOG_SCHEMA_VERSION,
+    fetchedAt: Date.now(),
+    models,
+    // #209: which providers were ATTEMPTED and REJECTED for this fetch. Persisted
+    // alongside the rows because it describes THESE rows -- a cache served later
+    // is still a catalog whose deepseek namespace is empty for a reason.
+    providerFailures: Array.isArray(providerFailures) ? providerFailures : [],
+  });
 }
 
 /**
@@ -80,9 +88,17 @@ function writeCache(models) {
  * carries only the outcome fields (no models/fetchedAt to report).
  * @param {string} reason short error-class string
  */
-function writeRefreshFailure(reason) {
+function writeRefreshFailure(reason, providerFailures) {
   const existing = readCache() || { schemaVersion: CATALOG_SCHEMA_VERSION };
-  writeCacheDoc({ ...existing, lastRefreshAttempt: Date.now(), lastRefreshError: reason });
+  const doc = { ...existing, lastRefreshAttempt: Date.now(), lastRefreshError: reason };
+  // Council C1 (PR 215): a TOTAL outage is exactly when the per-provider
+  // breakdown matters most, and this path used to discard the failures the
+  // refresh had just computed. Only overwrite when this attempt produced some --
+  // an attempt that learned nothing must not erase a previous attempt's detail.
+  if (Array.isArray(providerFailures) && providerFailures.length > 0) {
+    doc.providerFailures = providerFailures;
+  }
+  writeCacheDoc(doc);
 }
 
 /**
@@ -91,7 +107,7 @@ function writeRefreshFailure(reason) {
  */
 async function refreshCatalog() {
   const keys = _readApiKeyValues();
-  const models = await _fetchAllModels(keys);
+  const { rows: models, failures: providerFailures } = await _fetchAllModels(keys);
   // The anthropic rows are a hardcoded zero-network floor: a result containing
   // ONLY them means every network provider failed. Treat that as a failed
   // refresh — never clobber a previously-good cache with the floor (the
@@ -105,10 +121,10 @@ async function refreshCatalog() {
     const reason = (models || []).length > 0
       ? 'floor-only: all providers returned no network rows'
       : 'network-error: all providers unreachable';
-    writeRefreshFailure(reason);
+    writeRefreshFailure(reason, providerFailures);
     return [];
   }
-  writeCache(models);
+  writeCache(models, providerFailures);
   return models;
 }
 
@@ -149,6 +165,8 @@ async function getCatalogInfo(opts = {}) {
     fetchedAt: cache ? cache.fetchedAt : null,
     lastRefreshAttempt: (doc && doc.lastRefreshAttempt) || null,
     lastRefreshError: (doc && doc.lastRefreshError) || null,
+    // #209: namespace-level fetch outcomes for the CACHED rows above.
+    providerFailures: (doc && Array.isArray(doc.providerFailures)) ? doc.providerFailures : [],
   };
 }
 

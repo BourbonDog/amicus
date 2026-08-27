@@ -327,12 +327,20 @@ function createAmicusWindow() {
 async function createSetupWindow() {
   // Lazy-load setup UI to avoid loading it for sidecar mode
   const { buildSetupHTML } = require('./setup-ui');
-  const { resolveQuickPicks, toStorableRoute } = require('../src/utils/quick-picks');
+  const { resolveQuickPicks, canonicalRoutesFor, toStorableRoute } = require('../src/utils/quick-picks');
   let quickPicks;
   const shortlists = {};
   try {
-    const catalog = await require('../src/utils/model-catalog').getCatalog();
+    // issue 208: getCatalogInfo (not getCatalog) -- the shortlist needs the
+    // per-provider fetch outcomes, or directFormIfSafe's namespace-failure
+    // gate cannot fire and a rejected namespace still yields bare direct ids.
+    const catalogInfo = await require('../src/utils/model-catalog').getCatalogInfo();
+    const catalog = catalogInfo.models;
     quickPicks = resolveQuickPicks(catalog);
+    // issue 214: decide each pick's safe storable form HERE, with the catalog in
+    // hand, and ship it as data. The page cannot require() the canonicalisation
+    // primitives, and its hand-copy of them dropped their guards.
+    for (const p of quickPicks) { p.canonicalRoutes = canonicalRoutesFor(p, catalogInfo); }
 
     // issue 138: one vendor shortlist per family card, resolved server-side from
     // the same catalog the quick picks came from (no extra IPC round-trip).
@@ -341,6 +349,7 @@ async function createSetupWindow() {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
+          providerFailures: catalogInfo.providerFailures,
           recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
@@ -520,20 +529,25 @@ function createSettingsChildWindow() {
   // createSetupWindow awaits. A missing or corrupt cache reads back as null
   // and degrades to the same pinned fallback buildSetupHTML already applies
   // when no quickPicks are given.
-  const { resolveQuickPicks, toStorableRoute } = require('../src/utils/quick-picks');
+  const { resolveQuickPicks, canonicalRoutesFor, toStorableRoute } = require('../src/utils/quick-picks');
   const { readCache } = require('../src/utils/model-catalog');
   let quickPicks;
   const shortlists = {};
   try {
     const cacheDoc = readCache();
     const catalog = cacheDoc ? cacheDoc.models : [];
+    // issue 208: the cache doc carries the fetch outcomes for THESE rows.
+    const providerFailures = (cacheDoc && cacheDoc.providerFailures) || [];
     quickPicks = resolveQuickPicks(catalog);
+    // issue 214: see the note at the other resolveQuickPicks site.
+    for (const p of quickPicks) { p.canonicalRoutes = canonicalRoutesFor(p, { models: catalog, providerFailures }); }
 
     const { buildModelShortlist } = require('../src/utils/model-shortlist');
     for (const p of quickPicks) {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
+          providerFailures,
           recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
