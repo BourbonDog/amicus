@@ -68,26 +68,34 @@ function setupWindowBlock() {
 // preselect instead of the family flagship the card itself displays. See
 // tests/model-shortlist.test.js's "F13" describe block for the underlying
 // mechanism, reproduced end-to-end against a first-run-shaped catalog.
-describe('F1: recommendedId must be toStorableRoute(p), not the divergent-vendor expression applied to every vendor', () => {
-  test('createSetupWindow passes recommendedId: toStorableRoute(p)', () => {
+describe('F1: recommendedId must be toStorableRoute (with evidence), not the divergent-vendor expression applied to every vendor', () => {
+  test('createSetupWindow passes recommendedId via toStorableRoute WITH catalog evidence', () => {
     const block = setupWindowBlock();
     expect(block).toContain("require('../src/utils/quick-picks')");
     expect(block).toMatch(/\btoStorableRoute\b/);
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    expect(line).toContain('toStorableRoute(p)');
+    // issue 214: toStorableRoute now takes catalog evidence as a 2nd argument, so
+    // match the CALL rather than the exact arity, and pin that evidence IS passed --
+    // an evidence-free call here would revive the persistence gap #208 closed.
+    expect(line).toMatch(/toStorableRoute\(p\b/);
+    expect(line).not.toMatch(/toStorableRoute\(p\)/); // evidence-free call
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 
-  test('createSettingsChildWindow passes recommendedId: toStorableRoute(p)', () => {
+  test('createSettingsChildWindow passes recommendedId via toStorableRoute WITH catalog evidence', () => {
     const block = settingsWindowBlock();
     expect(block).toContain("require('../src/utils/quick-picks')");
     expect(block).toMatch(/\btoStorableRoute\b/);
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    expect(line).toContain('toStorableRoute(p)');
+    // issue 214: toStorableRoute now takes catalog evidence as a 2nd argument, so
+    // match the CALL rather than the exact arity, and pin that evidence IS passed --
+    // an evidence-free call here would revive the persistence gap #208 closed.
+    expect(line).toMatch(/toStorableRoute\(p\b/);
+    expect(line).not.toMatch(/toStorableRoute\(p\)/); // evidence-free call
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 });

@@ -32,7 +32,19 @@
 
 'use strict';
 
-const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
+/*
+ * Why `stripGatewayPrefix` (curated-models.js) is not the function to reach for:
+ * under its old name `toCanonicalDefault` it read as the CORRECT answer, and three
+ * callers took it at its word and persisted ids the direct API may not serve — the
+ * wizard's hand-copy `toBareIfDirect`, `toStorableRoute`, and `toDefaultAliases`
+ * before it was rewritten. Issue 214 renamed it rather than giving it a
+ * `catalogInfo` parameter, because that is circular: it PRODUCES the candidate id
+ * that `classifyModel` then checks against the catalog. The evidence check belongs
+ * one level up, here. Direct use of the primitive is correct only when normalising
+ * two strings before COMPARING them (alias-shadow.js).
+ */
+
+const { stripGatewayPrefix, DIVERGENT_VENDORS } = require('./curated-models');
 const { classifyModel } = require('./model-classification');
 
 /**
@@ -61,7 +73,7 @@ function namespaceFetchFailed(vendor, catalogInfo) {
 
 function directFormIfSafe(vendor, orId, catalogInfo) {
   if (DIVERGENT_VENDORS.has(vendor)) { return orId; }
-  const bare = toCanonicalDefault(orId);
+  const bare = stripGatewayPrefix(orId);
   if (bare === orId) { return orId; } // gateway-only vendor -- no direct integration at all
   // Optimism is only justified when the namespace was never attempted.
   if (namespaceFetchFailed(vendor, catalogInfo)) { return orId; }
@@ -76,7 +88,7 @@ function directFormIfSafe(vendor, orId, catalogInfo) {
  */
 function directFormIfProven(vendor, orId, catalogInfo) {
   if (DIVERGENT_VENDORS.has(vendor)) { return orId; }
-  const bare = toCanonicalDefault(orId);
+  const bare = stripGatewayPrefix(orId);
   if (bare === orId) { return orId; }
   return classifyModel(bare, 'direct', catalogInfo) === 'valid' ? bare : orId;
 }

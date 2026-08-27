@@ -669,7 +669,7 @@ evals/
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
-| `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
+| `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |

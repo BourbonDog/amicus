@@ -300,9 +300,9 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
         path.join(__dirname, '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
       writeConfig(map.aliases);
       const shadows = load().findAliasShadows(Object.keys(map.aliases));
-      const { toCanonicalDefault } = require('../src/utils/curated-models');
+      const { stripGatewayPrefix } = require('../src/utils/curated-models');
       for (const s of shadows) {
-        expect(toCanonicalDefault(s.local)).not.toBe(toCanonicalDefault(s.curated));
+        expect(stripGatewayPrefix(s.local)).not.toBe(stripGatewayPrefix(s.curated));
       }
       expect(shadows.map(s => s.alias)).not.toContain('gpt');
       expect(shadows.map(s => s.alias)).not.toContain('deepseek');

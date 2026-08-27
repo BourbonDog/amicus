@@ -16,6 +16,9 @@ jest.mock('../src/utils/quick-picks', () => ({
 }));
 jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => []),
+  // issue 214: the seeding path reads getCatalogInfo now -- it PERSISTS routes, so
+  // it must see which namespaces were rejected, not just the surviving rows.
+  getCatalogInfo: jest.fn(async () => ({ models: [], providerFailures: [] })),
 }));
 
 const { loadConfig, saveConfig } = require('../src/utils/config');
@@ -68,12 +71,15 @@ describe('sidecar:save-config (read-modify-write)', () => {
   });
 
   test('first run with getCatalog rejection still seeds (pinned via empty catalog)', async () => {
-    const { getCatalog } = require('../src/utils/model-catalog');
-    getCatalog.mockRejectedValueOnce(new Error('offline'));
+    const { getCatalogInfo } = require('../src/utils/model-catalog');
+    getCatalogInfo.mockRejectedValueOnce(new Error('offline'));
     loadConfig.mockReturnValue(null);
     await save('gemini', {});
     const { toLiveSeedAliases } = require('../src/utils/quick-picks');
-    expect(toLiveSeedAliases).toHaveBeenCalledWith([]);
+    // issue 214: the seed now receives catalogInfo, not a bare models array --
+    // it PERSISTS these routes, so it must see rejected namespaces. getCatalogInfo
+    // rejected here, so ipc-setup falls back to its empty-evidence shape.
+    expect(toLiveSeedAliases).toHaveBeenCalledWith({ models: [] });
     expect(saveConfig).toHaveBeenCalled();
   });
 });

@@ -545,7 +545,7 @@ async function runReadlineSetup() {
     }
 
     // Read-modify-write — never rebuild the alias table (no-clobber rule).
-    const cfg = loadConfig() || { aliases: toLiveSeedAliases(catalog) };
+    const cfg = loadConfig() || { aliases: toLiveSeedAliases({ models: catalog, providerFailures }) };
     if (!cfg.aliases) { cfg.aliases = {}; }
     if (chosen.alias) {
       cfg.default = chosen.alias;
@@ -556,7 +556,7 @@ async function runReadlineSetup() {
       // choice), but the alias's VALUE must stay the vendor phase's tier choice --
       // skip the curated-flagship upgrade so it isn't discarded.
       if (pick && !chosen.noUpgrade && !vendorAliasesWritten.has(chosen.alias)) {
-        cfg.aliases[chosen.alias] = toStorableRoute(pick);
+        cfg.aliases[chosen.alias] = toStorableRoute(pick, { models: catalog, providerFailures });
       } else if (cfg.aliases[chosen.alias] === undefined) {
         const fallback = getDefaultAliases()[chosen.alias];
         if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }

@@ -184,11 +184,13 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
       let cfg = loadConfig();
       if (!cfg) {
         const { toLiveSeedAliases } = require('../src/utils/quick-picks');
-        let catalog = [];
+        // issue 214: getCatalogInfo, not getCatalog -- toLiveSeedAliases PERSISTS
+        // these routes, so it must see which namespaces were rejected.
+        let catalogInfo = { models: [] };
         try {
-          catalog = await require('../src/utils/model-catalog').getCatalog();
+          catalogInfo = await require('../src/utils/model-catalog').getCatalogInfo();
         } catch (_err) { /* offline: pinned seeds */ }
-        cfg = { aliases: toLiveSeedAliases(catalog) };
+        cfg = { aliases: toLiveSeedAliases(catalogInfo) };
       }
       if (!cfg.aliases) { cfg.aliases = {}; }
       if (defaultModel) { cfg.default = defaultModel; }

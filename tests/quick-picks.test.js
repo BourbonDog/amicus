@@ -117,7 +117,7 @@ describe('toLiveSeedAliases', () => {
     ]);
     expect(seeds.gemini).toBe('google/gemini-9.9-flash');
     // gateway-only vendor (qwen): cardless, never overlaid by resolveQuickPicks,
-    // and even if it were, toCanonicalDefault leaves non-direct vendors
+    // and even if it were, stripGatewayPrefix leaves non-direct vendors
     // openrouter/-prefixed — stays pinned + openrouter/-prefixed regardless
     // of the live catalog containing a qwen row.
     expect(seeds.qwen).toBe('openrouter/qwen/qwen3.8-max');

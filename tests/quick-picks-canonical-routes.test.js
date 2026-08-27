@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Issue #214: the wizard renderer hand-copied `toCanonicalDefault` as
+ * Issue #214: the wizard renderer hand-copied `stripGatewayPrefix` as
  * `toBareIfDirect` (electron/setup-ui.js), dropping BOTH guards the real
  * primitive has -- DIVERGENT_VENDORS and the classifyModel/namespace check.
  * The renderer cannot `require()`, so the decision moves server-side and ships

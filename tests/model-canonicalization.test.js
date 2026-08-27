@@ -119,7 +119,7 @@ describe('directFormIfProven — persistence (conservative: strip only on positi
   });
 
   // A4 (council review of PR 198): a bare `chosenId` that is ALREADY bare
-  // (no `openrouter/` prefix -- toCanonicalDefault is a no-op on it) short-
+  // (no `openrouter/` prefix -- stripGatewayPrefix is a no-op on it) short-
   // circuits BEFORE classifyModel ever runs, so a bare id the catalog proves
   // `invalid` is persisted VERBATIM even when an unambiguous OpenRouter twin
   // sits right there in the same catalog. This is a DELIBERATE, pinned

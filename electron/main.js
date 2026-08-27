@@ -350,7 +350,7 @@ async function createSetupWindow() {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
           providerFailures: catalogInfo.providerFailures,
-          recommendedId: toStorableRoute(p),
+          recommendedId: toStorableRoute(p, catalogInfo),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
     }
@@ -548,7 +548,7 @@ function createSettingsChildWindow() {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
           providerFailures,
-          recommendedId: toStorableRoute(p),
+          recommendedId: toStorableRoute(p, { models: catalog, providerFailures }),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
     }

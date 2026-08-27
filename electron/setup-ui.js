@@ -327,7 +327,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     var route = mc.routes[prov] || null;
     // issue 214: the SAFE storable form is decided server-side (quick-picks.js
     // canonicalRoutesFor) and shipped with the pick. The page must not re-derive
-    // it: its old hand-copy of toCanonicalDefault dropped both of that
+    // it: its old hand-copy of stripGatewayPrefix dropped both of that
     // primitive's guards. An explicit "via OpenRouter" pill stays unchanged.
     if (route && !explicitRouteChoices[mc.alias]) {
       route = (mc.canonicalRoutes && mc.canonicalRoutes[prov]) || route;

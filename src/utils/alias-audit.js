@@ -178,7 +178,7 @@ function findDriftedStoredAliases(sources, catalog) {
   const current = new Map();
   for (const r of resolveQuickPicks(catalog)) {
     if (r.source !== 'live') { continue; }
-    const stored = toStorableRoute(r);
+    const stored = toStorableRoute(r, { models: catalog });
     if (stored) { current.set(r.alias, { display: stored, routeValues: new Set(Object.values(r.routes)) }); }
   }
   const byProvider = idsByProvider(catalog);
