@@ -1784,6 +1784,98 @@ describe('runStage2', () => {
     expect(g.adjudications).toEqual([{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]);
   });
 
+  /**
+   * #202 — the stage-2 judge-death gap. MEASURED on CI run 32956900910 (wave
+   * `9d8029c8-s2`): glm and qwen judge legs died at +300 s with zero tokens, and
+   * `run.json.degrades` recorded NOTHING for either. The verdict shipped a
+   * four-column adjudication matrix that two of the four judges never voted in.
+   *
+   * The hole is structural rather than an oversight: a dead judge leg still
+   * COMES BACK as a leg object, so `bindPaddedWave` binds it happily. It is
+   * therefore neither `orphan` nor `unbound`, and stage 2 had no third case — it
+   * fell through into `judgeResults` with `ok:false` and vanished. The one net
+   * that could have caught it, `thin-cross-review`, fires only at
+   * `usableJudges < 2`, and W11 had exactly 2 of 4.
+   */
+  test('#202: a DEAD judge leg is announced, and it DEGRADES the run', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        deadLeg('gpt', 'error',
+          'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in 300s', opts.waveId, 2),
+      ]),
+      // The repair loop is gated on `leg.status === 'complete'`, which excludes
+      // exactly the dead legs — so a death must never be "repaired".
+      onSolo: () => { throw new Error('a dead judge leg must not be repaired') },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const note = ctx._notes.find(n => n.channel === 'stage2-judge');
+    expect(note).toBeDefined();
+    // kind 'degrade' is what run-degrade.js's sink turns into degraded.value,
+    // i.e. exit 2. A 'heal'/'info' here would announce the loss and still let a
+    // half-adjudicated verdict exit 0 — which is what W11 actually did.
+    expect(note.kind || 'degrade').toBe('degrade');
+    expect(note.what).toContain('gpt');
+    expect(note.why).toContain('NO_OUTPUT_BACKSTOP');
+    expect(note.data).toMatchObject({ judge: 'gpt', status: 'error' });
+  });
+
+  /**
+   * The BEHAVIOURAL half of #202's stage-2 fix, driven through the REAL sink.
+   *
+   * ⚠️ This test exists because the sibling above is a FALSE GREEN on its own:
+   * `makeCtx`'s default degrade is a raw collector (`notes.push(n)`) that never
+   * calls `makeDegrade`, so it accepts any channel string — including an
+   * unregistered one, which in production is caught by run-degrade.js and
+   * rewritten as `internal`. Only the real sink proves the note survives intact
+   * AND flips `degraded`, which is what makes the run exit 2.
+   */
+  test('#202: a dead judge flips `degraded` through the real sink (exit 2)', async () => {
+    const { createDegradeSink } = require('../../src/council/run-degrade');
+    const sinkDir = fs.mkdtempSync(path.join(tmp, 'stage2-degrade-'));
+    const degraded = { value: false };
+    const sink = createDegradeSink({ runDir: sinkDir, degraded, write: () => {} });
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      degrade: sink,
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        deadLeg('gpt', 'error', 'NO_OUTPUT_BACKSTOP: no output in 300s', opts.waveId, 2),
+      ]),
+      onSolo: () => { throw new Error('a dead judge leg must not be repaired') },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+
+    const rec = sink.all().find(r => r.channel === 'stage2-judge');
+    expect(rec).toBeDefined();                 // NOT rewritten to 'internal'
+    expect(rec.kind).toBe('degrade');
+    expect(degraded.value).toBe(true);         // => exit 2
+  });
+
+  test('#202 CONTROL: a judge that ANSWERS unparseably is not called dead', async () => {
+    // A different fact with a different remedy — it already darkens the seat's
+    // row through `conformance: 'unstructured'`, and it is repairable. Calling
+    // it a death would double-count it and misdirect the reader.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        mkLeg('gpt', 'not a stage-2 block at all', 'complete', opts.waveId, 2),
+      ]),
+      onSolo: (opts) => {
+        const leg = mkLeg('gpt', 'still not a stage-2 block', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg };
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(ctx._notes.find(n => n.channel === 'stage2-judge')).toBeUndefined();
+  });
+
   test('#83: each judgeResult carries its leg for cost attribution', async () => {
     // Same ctx-construction pattern as the happy-path test above (no repairs;
     // both judges parse clean on the first pass) — driven the same way.

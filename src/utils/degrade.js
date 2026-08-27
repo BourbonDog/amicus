@@ -24,6 +24,14 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   // a leg that DID match a slot but whose join key names no judge the wave launched.
   // Never a guess — silent mis-attribution is the failure seat identity exists to kill (§4.4).
   'seat-unbound',
+  // #202: a Stage-2 JUDGE leg that came back dead — bound to its seat, so
+  // neither `seat-unbound` nor an orphan, and until now it had no channel at all
+  // and no case in run-stage2.js. Deliberately its own channel rather than
+  // `dead-leg`: that one is the Stage-1 BENCH roster's, feeds the retry pass and
+  // the seat-loss surface, and a judge death reused on it would be counted as a
+  // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js
+  // already gates the Stage-2 notes out of `seat-unbound` for the same reason).
+  'stage2-judge',
   'internal',
   // doctor channels
   'doctor-check-failed', 'doctor-fix',
