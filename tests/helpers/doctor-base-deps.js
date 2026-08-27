@@ -4,7 +4,7 @@
 /**
  * makeBaseDeps({ omit = [], ...overrides } = {})
  *
- * Factory for the canonical 29-key `runDoctorChecks` deps fixture, formerly
+ * Factory for the canonical 30-key `runDoctorChecks` deps fixture, formerly
  * duplicated byte-identically across 11 doctor-family suites (~360 lines).
  * Builds a FRESH object on every call and returns it — no shared/module-level
  * state — so each consumer file owns its own instance.
@@ -55,6 +55,15 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
     readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
     checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+    // #210: the key-auth check re-validates every key readApiKeyValues() reports
+    // — and this fixture deliberately reports one (openrouter, above). Without
+    // this pin every doctor-family suite would fall through to realDeps() and
+    // fire a REAL authenticated https request against openrouter.ai using the
+    // literal string 'sk-or-good'. Same M14 hazard as getLocalProviders/
+    // probeLocalProvider below, one provider further out; it is also what
+    // doctor-local-providers.test.js's https.get/https.request "never called"
+    // assertions would catch first if this pin were ever dropped.
+    validateApiKey: () => Promise.resolve({ valid: true }),
     getCwd: () => 'C:\\Users\\me\\code\\amicus',
     readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
     getConfigDir: () => '/cfg',

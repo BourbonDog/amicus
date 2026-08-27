@@ -17,6 +17,7 @@ const baseUrlCheck = require('./utils/doctor-base-url-check');
 // B3 (council review of PR 198, issue 195) — the 'aliases' check body,
 // including its --fix repair of fabricated bare ids. Same split rationale.
 const aliasCheck = require('./utils/doctor-alias-check');
+const keyAuthCheck = require('./utils/doctor-key-auth-check'); // #210 — 'keys' tests presence only; this re-validates.
 
 const { DEFAULT_MAX_AGE_MS: MAX_CATALOG_AGE_MS } = require('./utils/model-catalog'); // 24h — single source
 
@@ -33,6 +34,7 @@ function realDeps() {
     readApiKeys: () => require('./utils/api-key-store').readApiKeys(),
     readApiKeyValues: () => require('./utils/api-key-store').readApiKeyValues(),
     checkOpenRouterCredit: (key) => require('./utils/api-key-validation').checkOpenRouterCredit(key),
+    validateApiKey: (p, k) => require('./utils/api-key-validation').validateApiKey(p, k), // #210
     getCwd: () => process.cwd(),
     readProjectMarkers: (dir) => {
       const exists = (name) => { try { return fs.existsSync(path.join(dir, name)); } catch (_e) { return false; } };
@@ -141,6 +143,7 @@ async function runDoctorChecks(depsOverride = {}) {
       : { id: 'keys', name: 'API keys', status: 'error', message: 'no provider keys configured', hint: 'amicus key <provider> <key>  (or run: amicus setup)' };
   }));
 
+  checks.push(await guardAsync('key-auth', 'API key auth', () => keyAuthCheck.evaluateKeyAuth(d))); // #210
   checks.push((() => {
     try {
       const model = d.resolveModel();

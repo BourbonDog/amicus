@@ -593,6 +593,7 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 | `node` | Node.js ≥ 22.12 | error |
 | `config-dir` | The resolved config directory | *(always ok)* |
 | `keys` | At least one cloud-vendor key configured | error |
+| `key-auth` **(#210)** | Every stored key is still accepted by its provider (skipped — reports `ok` — when no keys are stored) | error on a 401/403, warn when the probe can't reach the provider |
 | `default-model` | Your default model alias resolves | error |
 | `catalog` | Model-catalog cache present and within the 24h TTL | warn |
 | `aliases` | Your configured aliases still resolve against the catalog | warn |
@@ -608,6 +609,8 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 | `openrouter-credit` | Remaining OpenRouter credit (skipped — reports `ok` — when no OpenRouter key is set) | warn |
 | `local-providers` **(v4.2)** | Every provider in `config.providers` is reachable | warn |
 | `project-root` | Your cwd looks like a real project, not an app/install dir | warn |
+
+**`key-auth`** re-validates stored keys against each provider's own endpoint, because `keys` above tests **presence** only — a key that rots *after* it was entered was previously never re-checked, so `doctor` could report ✓ while a provider returned 401 and the catalog silently served zero rows for it. All stored keys are probed in parallel (sequential 10s timeouts would add up to ~50s to every run). Only a **401/403** is treated as a definitive rejection and fails the check; a timeout, DNS/socket failure, 5xx or unexpected status is reported as `warn` — being offline is not a rotted key, and a false error would send you to re-enter a perfectly good one. Only provider names and a sanitized reason are ever printed; no key material or request URL reaches the output or the `--json` artifact.
 
 **`local-providers`** probes every configured local provider (2s timeout each) the same way `amicus provider test` does, and reports per-id reachability in one line, e.g. `ollama: 3 models @ http://127.0.0.1:11434/v1; my-vllm: unreachable @ http://127.0.0.1:8000/v1`. No providers configured at all is a plain `ok` ("none configured") — this check can never fail your doctor run outright, only warn: a napping `ollama serve` isn't treated as broken setup.
 
