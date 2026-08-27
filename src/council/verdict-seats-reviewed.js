@@ -23,6 +23,24 @@
  * @param {Array<object>|undefined} runStats
  * @returns {{seatsReviewed?: {reviewed: number, of: number}}}
  */
+/**
+ * Is this runStats row a BENCH seat — something that was asked to review?
+ *
+ * ⚠️ These are exactly the three roles `seats.js :: buildSeats` mints, and that
+ * is the point: it is the producer, so this mirrors it rather than guessing.
+ * `role === 'seat'` alone (#219) counted ZERO on a `--lenses` run, where every
+ * seat carries `lens:<slug>` — so emit-when-set silently omitted the census from
+ * the runs using the richest bench. A critic counts too: it is an adversarial
+ * seat, but it reviews.
+ *
+ * An ALLOWLIST, not a denylist of judge/chair/repair/superseded: a new
+ * non-bench role added later must not silently inflate the denominator.
+ */
+function isBenchRole(role) {
+  return role === 'seat' || role === 'critic'
+    || (typeof role === 'string' && role.startsWith('lens:'));
+}
+
 function seatsReviewedOf(runStats) {
   // ⚠️ `Array.isArray`, NOT `runStats || []`. buildVerdict is reachable on
   // externally-supplied records that never touched tally() in-process — the MCP
@@ -31,7 +49,7 @@ function seatsReviewedOf(runStats) {
   // truthy non-array sails past `||` and throws on `.filter`, turning a missing
   // census into a crashed verdict build. The closed-literal comment further down
   // makes the same argument about the same caller.
-  const seats = (Array.isArray(runStats) ? runStats : []).filter(r => r && r.role === 'seat');
+  const seats = (Array.isArray(runStats) ? runStats : []).filter(r => r && isBenchRole(r.role));
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
     reviewed: seats.filter(r => r.status === 'complete').length,

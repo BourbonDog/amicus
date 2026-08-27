@@ -87,7 +87,14 @@ const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) |
 const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
-const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 180000; // B53: wedged tool call w/ no progress
+// B53: wedged tool call w/ no progress.
+// ⚠️ 180000 -> 300000 (#219, council glm minor). 180 s was condemned by this
+// file's OWN measurement — the 190.6 s `task` call recorded below, taken on a
+// developer machine, not on CI. #202 widened only the CI override and left every
+// local and library consumer on the number the evidence had already disproved.
+// 300000 matches the sibling constant that same measurement set (USAGE/settle
+// deferral below), so one measurement now governs both windows it bears on.
+const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 300000;
 // #202: budget for the ONE session-status read on a death report. Short on
 // purpose — this runs on a leg already known to be dying, so the report must not
 // wait on the same engine that just failed to produce anything.
@@ -126,9 +133,11 @@ const USAGE_SETTLE_CALL_TIMEOUT_MS = envNumber('AMICUS_USAGE_SETTLE_CALL_TIMEOUT
  * unbounded wait is not an option.
  *
  * WHY 5 MINUTES. The measured duration of the real subagent call that exposed
- * this is **190.6 s** (`task`, 04:35:08.427 → 04:38:19.061) — already longer
- * than B53's 180 s TOOL_CALL_STALL_MS, so anything at that scale would kill a
- * healthy `task` leg 10 s short of its answer. 300 s clears the measured case
+ * this is **190.6 s** (`task`, 04:35:08.427 → 04:38:19.061) — which was longer
+ * than B53's THEN-180 s TOOL_CALL_STALL_MS, so anything at that scale would kill
+ * a healthy `task` leg 10 s short of its answer. (#219 finally moved B53 itself
+ * to 300 s for this exact reason; for four releases this measurement corrected
+ * the neighbour and left its own subject alone.) 300 s clears the measured case
  * with margin and still lands far inside the 15-minute default `--timeout`.
  * Set to 0 to disable the deferral entirely (pre-v4.4 behaviour).
  *
@@ -292,7 +301,16 @@ async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
   try {
     return await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
-  } catch (_e) {
+  } catch (err) {
+    // #219 (council, deepseek minor): returning null is right for the REPORT —
+    // absence keeps its one meaning — but it made a probe that timed out on a
+    // loaded engine indistinguishable from a leg whose engine reported nothing,
+    // i.e. a silent revert to pre-#202 behaviour. The engine log is where that
+    // belongs: the death report stays byte-identical, and the degradation
+    // becomes diagnosable instead of invisible.
+    logger.debug('session-status probe failed; the death report will carry no session clause', {
+      sessionId, error: err && err.message,
+    });
     return null;
   }
 }

@@ -300,6 +300,36 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
     }
   });
 
+  test('V7 a LENSED bench is counted — every seat carries role `lens:<slug>`', () => {
+    // Found while checking #219's A4 nit (which was itself refuted: a critic gets
+    // role 'critic', so the census already excluded it correctly). buildSeats
+    // mints THREE bench roles — 'seat', 'critic', and `lens:<slug>` when
+    // --lenses is used (src/council/seats.js). A filter of role === 'seat' alone
+    // counts ZERO on a lensed run, so emit-when-set silently omits the census
+    // from exactly the runs that use the richest bench.
+    const lens = (model, slug, status) => ({ model, role: `lens:${slug}`, wasChair: false,
+      conformance: 'clean', status, durationMs: 1, usage: null });
+    const v = build([lens('glm', 'citation-auditor', 'complete'),
+      lens('qwen', 'test-skeptic', 'error'), lens('gpt', 'scope-adversary', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 3 });
+  });
+
+  test('V8 a critic IS a bench seat — it reviews', () => {
+    const v = build([seatRow('glm', 'complete'),
+      { model: 'qwen', role: 'critic', wasChair: false, conformance: 'clean',
+        status: 'complete', durationMs: 1, usage: null }]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 2 });
+  });
+
+  test('V9 CONTROL: judge / chair / repair / superseded are still excluded', () => {
+    const other = (model, role, status) => ({ model, role, wasChair: false,
+      conformance: 'clean', status, durationMs: 1, usage: null });
+    const v = build([seatRow('glm', 'complete'),
+      other('glm', 'superseded', 'error'), other('gpt', 'judge', 'complete'),
+      other('deepseek', 'chair', 'complete'), other('qwen', 'repair', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, of: 1 });
+  });
+
   test('V5 a run with no bench rows at all emits nothing rather than 0 of 0', () => {
     // `0 of 0` would read as a measurement of an empty bench. Absence keeps its
     // one meaning, matching every other emit-when-set field on this document.

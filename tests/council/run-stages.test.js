@@ -1856,6 +1856,37 @@ describe('runStage2', () => {
     expect(degraded.value).toBe(true);         // => exit 2
   });
 
+  test('#219: an UNTRUSTED provider error is sanitized in the rendered `why`', async () => {
+    // glm (minor) on PR #219: the stage-2 degrade embedded `leg.error` verbatim
+    // while this same PR institutes sanitization for untrusted provider text one
+    // hop upstream (utils/session-status.js). `why` is PROSE — it renders into
+    // run.json, the report and the sticky comment — so an unbounded multi-line
+    // provider error would wreck the line it lands in.
+    const nasty = `Provider exploded
+SECOND LINE
+	TABS   ${'x'.repeat(400)}`;
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: (opts) => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+        deadLeg('gpt', 'error', nasty, opts.waveId, 2),
+      ]),
+      onSolo: () => { throw new Error('a dead judge leg must not be repaired') },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const note = ctx._notes.find(n => n.channel === 'stage2-judge');
+    // Escape-free on purpose: a regex literal carrying real control chars is
+    // how this assertion got written wrong the first time.
+    const CTRL = [10, 13, 9].map((c) => String.fromCharCode(c));
+    expect(CTRL.some((c) => note.why.includes(c))).toBe(false); // one line
+    expect(note.why.length).toBeLessThan(300);        // bounded
+    // ⚠️ `data` is the MACHINE surface and stays verbatim on purpose: it is JSON,
+    // where there is nothing to inject, and truncating it would cost the exact
+    // fidelity a reader opens run.json for. Only the rendered prose is collapsed.
+    expect(note.data.reason).toBe(nasty);
+  });
+
   test('#202 CONTROL: a judge that ANSWERS unparseably is not called dead', async () => {
     // A different fact with a different remedy — it already darkens the seat's
     // row through `conformance: 'unstructured'`, and it is repairable. Calling

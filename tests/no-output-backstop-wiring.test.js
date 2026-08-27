@@ -1231,6 +1231,22 @@ describe('#202 — a zero-output death names the engine session status', () => {
     expect(result.error).toBe(base());          // bounded, then dropped
   }, 20000);
 
+  test('S-W8 a probe that fails LEAVES A TRACE — silence is not the same as no status', async () => {
+    // deepseek (minor) on PR #219: a probe that times out or errors returns null,
+    // which renders '' — byte-identical to a leg whose engine reported nothing.
+    // That is correct for the death REPORT (absence keeps its one meaning) but it
+    // means the probe can silently revert to pre-#202 behaviour on a loaded
+    // engine with nothing anywhere saying so. The engine log is where that
+    // belongs: it costs the report nothing and makes the degradation diagnosable.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockRejectedValue(new Error('connection refused'));
+    const result = await run('sstatus8');
+    expect(result.error).toBe(base());                 // report unchanged
+    const logged = [...mockLogger.debug.mock.calls, ...mockLogger.warn.mock.calls]
+      .some((c) => JSON.stringify(c).includes('connection refused'));
+    expect(logged).toBe(true);
+  }, 20000);
+
   test('S-W6 the PRE-SEND firing site gets the clause too (it dies upstream of the poll loop)', async () => {
     mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
     mockGetMessages.mockResolvedValue([]);

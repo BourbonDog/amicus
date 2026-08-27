@@ -130,6 +130,7 @@ src/
 │   ├── run-retry-keys.js
 │   ├── run-retry-launch.js
 │   ├── run-retry-notes.js
+│   ├── run-retry-window.js  # The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay
 │   ├── run-retry.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
@@ -570,6 +571,7 @@ evals/
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
+| `council/run-retry-window.js` | The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay | `retryBackstopMs()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |

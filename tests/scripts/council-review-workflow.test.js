@@ -28,7 +28,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     for (const flag of ['--no-validate-model', '--max-cost', '--timeout 16', '--json', '--prompt-file', '--out-dir']) {
       expect(y).toContain(flag);
     }
-    expect(y).toContain('timeout-minutes: 60');
+    expect(y).toContain('timeout-minutes: 75');
     expect(y).toContain('cancel-in-progress: true');
   });
 
@@ -90,7 +90,17 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // `min(2 * backstop, legCap)` (src/council/run-retry.js), so it stops
     // growing once legCap passes twice the backstop.
     const jobCapMs = Number(/timeout-minutes:\s*(\d+)/.exec(y)[1]) * 60 * 1000;
-    const worstCaseMs = noOutput + Math.min(2 * noOutput, legCap) + 2 * legCap;
+    // ⚠️ CORRECTED (council #219, raised independently by glm/gpt/deepseek). The
+    // first term used to be `noOutput`, which UNDERCOUNTS stage 1 by up to a full
+    // leg: the backstop only kills a leg that produces NOTHING. A leg that streams
+    // is bounded by the leg cap, not the backstop — and that is the common case,
+    // not a corner. MEASURED on the very run that raised the finding (33093722538):
+    // `qwen seat` ran 688,723 ms, far past the 480 s the old term assumed.
+    //
+    // ⚠️ Still a FLOOR, not a ceiling: Stage-2 repairs are serial, up to 2 per
+    // judge, each bounded by the leg cap (run-stage2.js). A run that repairs every
+    // judge exceeds this. `--max-cost` is what bounds that in practice, not time.
+    const worstCaseMs = legCap + Math.min(2 * noOutput, legCap) + 2 * legCap;
 
     // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
     // the evidence-artifact step is `if: !cancelled()` — so busting the cap does

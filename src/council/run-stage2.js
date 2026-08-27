@@ -23,6 +23,9 @@ const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
 const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
+// #219 (council, glm minor): `leg.error` is UNTRUSTED provider text. The house
+// sanitizer — one sanitizer, one dialect (utils/text-sanitize.js).
+const { collapseExcerpt } = require('../utils/text-sanitize');
 const { buildRunStatsEntry } = require('./run-assemble');
 // v4.8 PR3 Task 4: seat binding. artifactName is NOT re-exported from
 // run-launch.js (its exports stop at sanitizeName/isAbortExit), so it comes
@@ -244,7 +247,13 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         ctx.degrade.note({
           channel: 'stage2-judge',
           what: `judge ${judge} did not adjudicate`,
-          why: `its Stage-2 leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''}`,
+          // #219: `why` is PROSE — it renders into run.json, the report and the
+          // sticky PR comment — so the provider's text is collapsed to one
+          // bounded line. `data.reason` below stays VERBATIM on purpose: it is
+          // the machine surface, it is JSON (nothing to inject), and truncating
+          // it would cost exactly the fidelity a reader opens run.json for.
+          why: `its Stage-2 leg ended '${leg.status}'`
+            + (leg.error ? `: ${collapseExcerpt(leg.error, 200)}` : ''),
           effect: `the cross-review was adjudicated by fewer than the ${judges.length} judges the `
             + 'bench implies; the run continues and will exit degraded (2)',
           data: { judge, seat: seat ? seat.id : null, waveId: `${o.runId}-s2`,

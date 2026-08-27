@@ -824,6 +824,34 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
     else { process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = ORIGINAL_ENV; }
   });
 
+  /**
+   * #219 (gpt, major): the retry backstop must fire BEFORE the leg timeout, or a
+   * retry death is recorded as a generic `timeout` instead of a named
+   * NO_OUTPUT_BACKSTOP — which is the diagnostic the whole clamp exists to
+   * preserve. The old `Math.min(2 * backstop, legTimeoutMs)` made them EQUAL
+   * whenever `2 * backstop >= legTimeoutMs`, which is exactly today's CI
+   * (2 x 480000 == 960000 == `--timeout 16`). It happened to win by epsilon
+   * because the poll loop tests its deadline before sleeping — undocumented,
+   * unpinned, and not a property anyone should rely on.
+   */
+  test('#219: the retry window is STRICTLY below the leg timeout, never equal', async () => {
+    process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = '480000';
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 16 }); // 960000 ms
+    expect(launched.noOutputBackstopMs).toBeLessThan(960000);
+    expect(launched.noOutputBackstopMs).toBeGreaterThan(0);
+  });
+
+  test('#219: it holds across leg caps, and never collapses to 0 (which DISABLES it)', async () => {
+    for (const [timeout, backstop] of [[16, 480000], [10, 480000], [1, 480000], [15, 300000]]) {
+      process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = String(backstop);
+      const legCap = timeout * 60 * 1000;
+      const got = (await runRetryCapturingLaunchOpts({ timeout })).noOutputBackstopMs;
+      expect(`t=${timeout} b=${backstop}: 0 < ${got} < ${legCap}`)
+        .toBe(`t=${timeout} b=${backstop}: 0 < ${got} < ${legCap}`.replace(
+          /0 < (\d+) < (\d+)/, (m, g, c) => (Number(g) > 0 && Number(g) < Number(c)) ? m : `FAILED ${m}`));
+    }
+  });
+
   test('retries with double the resolved backstop window', async () => {
     // Council never sets the field, so there is nothing on `o` to double —
     // the retry resolves it itself. Must be COMPUTED: hardcoding 600000 would
@@ -846,13 +874,21 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
     expect(launched.noOutputBackstopMs).toBe(0);
   });
 
-  test('clamps the doubled window to the leg timeout', async () => {
+  test('clamps the doubled window BELOW the leg timeout', async () => {
     // At --timeout 3 (180_000ms) an unclamped 600_000 can never fire, so the
     // retry would silently reclassify from NO_OUTPUT_BACKSTOP to an ordinary
     // timeout — a different diagnosis, arrived at silently.
+    //
+    // ⚠️ 180000 -> 171000 (#219). The property this guards is UNCHANGED and in
+    // fact strengthened: the clamp used to land the backstop exactly ON the leg
+    // deadline, where it won the race only by the poll loop's ordering. 95% of
+    // the cap fires it clearly first, so the diagnosis is deterministic rather
+    // than incidental. The name moved with the value — it no longer clamps TO
+    // the timeout.
     delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
     const launched = await runRetryCapturingLaunchOpts({ timeout: 3 });
-    expect(launched.noOutputBackstopMs).toBe(180000);
+    expect(launched.noOutputBackstopMs).toBe(171000);
+    expect(launched.noOutputBackstopMs).toBeLessThan(180000);
   });
 
   // Fix-wave regression guard: legTimeoutMs = (o.timeout || 15) * 60 * 1000 —

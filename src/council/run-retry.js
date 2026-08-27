@@ -17,6 +17,7 @@
 const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
 const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
+const { retryBackstopMs } = require('./run-retry-window');
 const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
   = require('./run-retry-notes');
 // briefingFor + bindRetryWave live in ./run-retry-launch (v4.8 T-A2 split); the pad/bind core it wraps is stage1-bind.js :: bindPaddedWave (SI-27).
@@ -54,17 +55,13 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [], twins,
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
     stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [], attemptedSeats: new Set() };
-  // Task 5 (#129): SL-2 retries the SAME model under the SAME conditions, so a
-  // latency failure is structurally unhealable. Double the window, clamped to
-  // the leg timeout so the failure CLASS stays NO_OUTPUT_BACKSTOP rather than
-  // silently becoming an ordinary timeout at a low --timeout. 2*0 === 0 keeps
-  // the disable hatch. (o.timeout || 15) * 60 * 1000 mirrors fanout.js:254.
-  // ⚠️ #135 C0 took this 240s -> 600s; deliberate, see CHANGELOG (council A1, PR #182).
+  // The retry window: doubled and clamped strictly below the leg timeout.
+  // Reasoning (and #219's correction) lives in ./run-retry-window — extracted
+  // for the 300-line gate. (o.timeout || 15) * 60 * 1000 mirrors fanout.js:254.
   const legTimeoutMs = (o.timeout || 15) * 60 * 1000;
-  const escalatedBackstopMs = Math.min(
-    2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs : resolveNoOutputBackstopMs()),
-    legTimeoutMs,
-  );
+  const escalatedBackstopMs = retryBackstopMs(
+    Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs : resolveNoOutputBackstopMs(),
+    legTimeoutMs);
 
   for (const unit of groupStage1Losses(o, deadWaves, deadLegs, seatOf, twins)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
