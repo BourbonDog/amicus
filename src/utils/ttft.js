@@ -9,12 +9,23 @@
  * blank the way `utils/result-schema.js`'s already is.
  *
  * `ttftMs` is produced once — in `src/headless.js`'s poll loop, as a
- * `Date.now()` delta — and then passes four EMIT GATES on its way to a
+ * `Date.now()` delta — and then passes five EMIT GATES on its way to a
  * document: `headless.js`'s three returns, `sidecar/fanout-leg.js`'s leg patch,
- * `utils/result-schema.js :: buildRunResult`, and
- * `council/run-stats-entry.js :: buildRunStatsEntry`. Every gate used to spell
- * its own `typeof x === 'number'` test, which is four chances to disagree and
- * four ways to publish a value both schemas forbid.
+ * `utils/result-schema.js :: buildRunResult`,
+ * `council/run-stats-entry.js :: buildRunStatsEntry`, and
+ * `council/tally.js :: tally`'s runStats re-projection. Every gate used to spell
+ * its own `typeof x === 'number'` test, which is five chances to disagree and
+ * five ways to publish a value both schemas forbid.
+ *
+ * ⚠️ The fifth gate is different in KIND from the four above it, which is why it
+ * was missed for a release (#202). Those four are PRODUCERS — each writes the
+ * field onto a document it is building. `tally.js` is a RE-PROJECTION: it copies
+ * an already-built row through a hand-maintained allowlist, so omitting the field
+ * there does not fail to produce it, it DESTROYS one already produced. Between
+ * v4.9.0 and v4.9.1 that is exactly what happened — the probe wrote real values
+ * into tally-input.json and every one was stripped before tally.json and
+ * verdict.json, the only run artifacts CI uploads (MEASURED, run 33030485388:
+ * 11 of 12 rows carried it going in, 0 of 12 coming out).
  *
  * ⚠️ `typeof` is not the schema's contract. `schemas/run.schema.json` and
  * `schemas/council-tally.schema.json` both declare this field
@@ -35,7 +46,7 @@
  * already means "no honest measurement was made", and a dishonest number is
  * exactly that. `0` itself stays a real, emittable measurement.
  *
- * ⚠️ Three of the four gates import this. The fourth,
+ * ⚠️ Four of the five gates import this. The one that does not,
  * `council/run-stats-entry.js`, is pinned REQUIRE-FREE (P3,
  * tests/council/run-stats-entry.test.js — the pin fires on the character
  * sequence anywhere in that file, comments included) so require-free consumers

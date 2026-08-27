@@ -23,6 +23,9 @@ const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
 const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
+// #219 (council, glm minor): `leg.error` is UNTRUSTED provider text. The house
+// sanitizer — one sanitizer, one dialect (utils/text-sanitize.js).
+const { collapseExcerpt } = require('../utils/text-sanitize');
 const { buildRunStatsEntry } = require('./run-assemble');
 // v4.8 PR3 Task 4: seat binding. artifactName is NOT re-exported from
 // run-launch.js (its exports stop at sanitizeName/isAbortExit), so it comes
@@ -169,9 +172,16 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       fs.writeFileSync(path.join(o.runDir, name), leg.summary, { mode: 0o600 });
     }
     let conformance = 'clean';
-    let parsed = (leg.status === 'complete' && leg.summary)
-      ? parseJudgeOutput(leg.summary, parseCtx)
-      : { ok: false, errors: [{ code: 'DEAD_LEG', detail: leg.error || leg.status }] };
+    // #202: ONE predicate for "this judge never answered at all", shared by the
+    // DEAD_LEG classification below and by the degrade it now raises. Spelling it
+    // twice is how the two would drift into disagreeing about which judges died —
+    // and note it is NOT `leg.status !== 'complete'`: a leg that completes with an
+    // EMPTY summary produced nothing either, and the DEAD_LEG arm has always
+    // treated it that way.
+    const legDied = !(leg.status === 'complete' && leg.summary);
+    let parsed = legDied
+      ? { ok: false, errors: [{ code: 'DEAD_LEG', detail: leg.error || leg.status }] }
+      : parseJudgeOutput(leg.summary, parseCtx);
     let attempts = 0;
     // ⚠️ LC-12: the judging text the repair prompt must carry, tracked exactly like
     // Stage-1's `repairing` so `judging` and `parsed.errors` always describe the SAME
@@ -216,6 +226,40 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       if (parsed.ok) { conformance = 'repaired'; }
     }
     if (!parsed.ok) {
+      // #202: THE MISSING THIRD CASE. A dead judge leg still comes back as a leg
+      // object, so bindPaddedWave binds it — it is neither `orphan` nor
+      // `unbound`, and stage 2 had no case for it. It fell through into
+      // judgeResults with `ok:false` and vanished: MEASURED on CI run
+      // 32956900910 (wave 9d8029c8-s2), where glm and qwen judges died at +300s
+      // with zero tokens and run.json recorded no degrade at all, while the
+      // verdict shipped a four-column adjudication matrix two of them never
+      // voted in. The one net that might have caught it, `thin-cross-review`,
+      // fires only at `usableJudges < 2`; that run had exactly 2 of 4.
+      //
+      // ⚠️ Emitted with the default kind ('degrade'), so run-degrade.js's sink
+      // sets `degraded.value` and the run exits 2. That is a deliberate
+      // behaviour change (owner's call): before it, a half-adjudicated verdict
+      // could exit 0, and W11 only exited 2 because of an unrelated
+      // cost-accounting degrade. An unparseable-but-ANSWERED judge is a
+      // different fact and is deliberately excluded — it already darkens the
+      // seat's row via `conformance: 'unstructured'`, and it is repairable.
+      if (legDied) {
+        ctx.degrade.note({
+          channel: 'stage2-judge',
+          what: `judge ${judge} did not adjudicate`,
+          // #219: `why` is PROSE — it renders into run.json, the report and the
+          // sticky PR comment — so the provider's text is collapsed to one
+          // bounded line. `data.reason` below stays VERBATIM on purpose: it is
+          // the machine surface, it is JSON (nothing to inject), and truncating
+          // it would cost exactly the fidelity a reader opens run.json for.
+          why: `its Stage-2 leg ended '${leg.status}'`
+            + (leg.error ? `: ${collapseExcerpt(leg.error, 200)}` : ''),
+          effect: `the cross-review was adjudicated by fewer than the ${judges.length} judges the `
+            + 'bench implies; the run continues and will exit degraded (2)',
+          data: { judge, seat: seat ? seat.id : null, waveId: `${o.runId}-s2`,
+            status: leg.status, reason: leg.error || null },
+        });
+      }
       judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
         // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring

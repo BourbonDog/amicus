@@ -92,6 +92,12 @@ beforeEach(() => {
 
 // Poll fast (real wall-clock, no fake timers — same style as the rest of the
 // headless family) so every test here finishes in well under a second.
+// #202: every runHeadless death in this file now also carries the session clause,
+// because the suite-level default mock answers `{type:'busy'}`. These pins keep
+// asserting the WHOLE composed string, so they also guard the clause ORDER:
+// engine log -> engine skew -> session.
+const BUSY_SUFFIX = ' (session: busy)';
+
 const OPTS = {
   pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2,
   toolCallStallMs: 100000, usageSettlePolls: 1, usageSettleIntervalMs: 1,
@@ -516,7 +522,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
     // The prefix models-probe.js classifies on is still the first bytes.
     expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
     expect(statusFromResult(result)).toBe('error');
@@ -533,7 +539,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
 
     expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
   }, 20000);
 
   test('control — no engine log dir: the message is byte-identical to today\'s', async () => {
@@ -543,7 +549,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
     const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
     expect(result.error).not.toMatch(/engine log/);
   }, 20000);
 
@@ -557,7 +563,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
     const result = await runHeadless(MODEL, 'sys', 'user', 'englogmiss2', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
   }, 20000);
 
   test('a resolver that throws cannot break the death report — the leg still dies with today\'s message', async () => {
@@ -569,7 +575,7 @@ describe('v4.9 W10 Task A: the NO_OUTPUT_BACKSTOP reason carries the engine\'s o
         noOutputBackstopMs: 200,
         _engineLog: { dataDir: '/nope', fs: { existsSync: boom, readdirSync: boom, statSync: boom } } });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
     expect(result.completed).toBe(false);
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
   }, 20000);
@@ -687,7 +693,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
 
     expect(result.error).toBe(
       `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
-      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}`);
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
     expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/); // models-probe.js's prefix is still first
     expect(statusFromResult(result)).toBe('error');
   }, 20000);
@@ -707,7 +713,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
     expect(result.error).not.toMatch(/engine log:/);
   }, 20000);
 
@@ -723,7 +729,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     expect(mockGetMessages).not.toHaveBeenCalled(); // proves it was the pre-send site
     expect(result.error).toBe(
       `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}`
-      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}`);
+      + ` — engine log: ${EXPECTED_EXCERPT}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
   }, 20000);
 
   test('control — no skew on the record: the enriched message is byte-identical to Task A\'s', async () => {
@@ -734,7 +740,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(dataDir) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })} — engine log: ${EXPECTED_EXCERPT}${BUSY_SUFFIX}`);
     expect(result.error).not.toMatch(/engine skew/);
   }, 20000);
 
@@ -748,7 +754,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewmatch1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
   }, 20000);
 
   /**
@@ -767,7 +773,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewother1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
     expect(result.error).not.toMatch(/engine skew/);
   }, 20000);
 
@@ -786,7 +792,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
     expect(result.error).toBe(
-      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}`);
+      `${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${SKEW_SUFFIX}${BUSY_SUFFIX}`);
   }, 20000);
 
   test('a skew RETRACTED by a later matching session is not reported', async () => {
@@ -800,7 +806,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
     const result = await runHeadless(MODEL, 'sys', 'user', 'skewfixed1', '/proj', 60000, 'build',
       { ...OPTS, noOutputBackstopMs: 200, _engineLog: engineLogOpts(absent) });
 
-    expect(result.error).toBe(formatNoOutputBackstopReason({ ms: 200, fromEnv: false }));
+    expect(result.error).toBe(`${formatNoOutputBackstopReason({ ms: 200, fromEnv: false })}${BUSY_SUFFIX}`);
   }, 20000);
 
   test('formatNoOutputBackstopReason composes the two clauses independently', () => {
@@ -926,7 +932,7 @@ describe('v4.9 W10 Task B: the NO_OUTPUT_BACKSTOP reason names an engine version
  * GATESPLIT:headless (PR #207 round 3, B3) — revert all three of runHeadless's
  *   emit gates from the shared `isMeasuredTtft` to a bare type test. RED: 2
  *   tests / 2 suites — "CLOCK SKEW: a backward jump measures a negative delta,
- *   which is DROPPED, not clamped" (this file) and "the three importable gates
+ *   which is DROPPED, not clamped" (this file) and "the four importable gates
  *   import it" (tests/council/run-stats-entry.test.js, which owns the
  *   cross-surface roster). The other three GATESPLIT variants, one per remaining
  *   gate, are recorded in that same file.
@@ -1172,5 +1178,100 @@ describe('v4.9 W13 Task A: the TTFT probe survives a terminal first poll (PR #20
 
     expect(String(result.error)).toContain('402');
     expect('ttftMs' in result).toBe(false);
+  }, 20000);
+});
+
+/**
+ * #202 — the SESSION-STATUS clause. `headless.js` asks the engine for status only
+ * inside `if (mirror.output.length > 0)`, so the leg that most needs diagnosing —
+ * the one that produced nothing — is the only one that never asks. These pins
+ * drive the real poll loop with `getMessages` returning `[]` forever, which is
+ * exactly that leg.
+ */
+describe('#202 — a zero-output death names the engine session status', () => {
+  const base = (ms = 200) => formatNoOutputBackstopReason({ ms, fromEnv: false });
+  const run = (taskId, opts = {}) => runHeadless(
+    MODEL, 'sys', 'user', taskId, '/proj', 60000, 'build',
+    { ...OPTS, noOutputBackstopMs: 200, statusProbeMs: 50, ...opts });
+
+  test('S-W1 the leg that never satisfies the output gate STILL asks', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const result = await run('sstatus1');
+    expect(mockGetSessionStatus).toHaveBeenCalled();
+    expect(result.error).toBe(`${base()} (session: busy)`);
+  }, 20000);
+
+  test('S-W2 a retry status carries the upstream cause into the death report', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({
+      type: 'retry', attempt: 2, message: 'Provider returned error 429' });
+    const result = await run('sstatus2');
+    expect(result.error).toBe(`${base()} (session: retry attempt 2 — Provider returned error 429)`);
+  }, 20000);
+
+  test('S-W3 idle-with-nothing-produced is reported — the engine-side signature', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
+    const result = await run('sstatus3');
+    expect(result.error).toBe(`${base()} (session: idle)`);
+  }, 20000);
+
+  test('S-W4 a REJECTING status probe cannot replace the failure reason with a stack', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockRejectedValue(new Error('connection refused'));
+    const result = await run('sstatus4');
+    expect(result.error).toBe(base());          // byte-identical to pre-#202
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+  }, 20000);
+
+  test('S-W5 a HANGING status probe cannot hang the death report', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockImplementation(() => new Promise(() => {}));
+    const result = await run('sstatus5');
+    expect(result.error).toBe(base());          // bounded, then dropped
+  }, 20000);
+
+  test('S-W9 statusProbeMs 0 DISABLES the probe (#219 r2, deepseek)', async () => {
+    // `options.statusProbeMs || STATUS_PROBE_MS` meant a caller could not pass 0,
+    // inconsistent with this codebase's documented 0-disables convention
+    // (usageSettlePolls, AMICUS_NO_OUTPUT_BACKSTOP_MS). And 0 could not simply be
+    // forwarded: withTimeout treats `ms <= 0` as NO timeout, so an honest-looking
+    // 0 would have made the probe UNBOUNDED on a leg already known to be dying —
+    // the opposite of disabling it. 0 therefore skips the probe outright.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockClear();
+    const result = await run('sstatus9', { statusProbeMs: 0 });
+    expect(mockGetSessionStatus).not.toHaveBeenCalled();
+    expect(result.error).toBe(base());   // byte-identical to pre-#202
+  }, 20000);
+
+  test('S-W8 a probe that fails LEAVES A TRACE — silence is not the same as no status', async () => {
+    // deepseek (minor) on PR #219: a probe that times out or errors returns null,
+    // which renders '' — byte-identical to a leg whose engine reported nothing.
+    // That is correct for the death REPORT (absence keeps its one meaning) but it
+    // means the probe can silently revert to pre-#202 behaviour on a loaded
+    // engine with nothing anywhere saying so. The engine log is where that
+    // belongs: it costs the report nothing and makes the degradation diagnosable.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockRejectedValue(new Error('connection refused'));
+    const result = await run('sstatus8');
+    expect(result.error).toBe(base());                 // report unchanged
+    const logged = [...mockLogger.debug.mock.calls, ...mockLogger.warn.mock.calls]
+      .some((c) => JSON.stringify(c).includes('connection refused'));
+    expect(logged).toBe(true);
+  }, 20000);
+
+  test('S-W6 the PRE-SEND firing site gets the clause too (it dies upstream of the poll loop)', async () => {
+    mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 1, message: 'upstream 503' });
+    const result = await run('sstatus6');
+    expect(result.error).toBe(`${base()} (session: retry attempt 1 — upstream 503)`);
+  }, 20000);
+
+  test('S-W7 models-probe\'s classification prefix survives the new clause', async () => {
+    mockGetMessages.mockResolvedValue([]);
+    const result = await run('sstatus7');
+    expect(/^NO_OUTPUT_BACKSTOP:/.test(result.error)).toBe(true);
   }, 20000);
 });

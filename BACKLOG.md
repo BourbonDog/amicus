@@ -7153,6 +7153,41 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   runaway mode — retries/backstops don't treat it. NOT candidates (verified working): CI auth
   provisioning, the alias map. Evidence: spend-ledger.jsonl + run.json per run, scratchpad
   council-recon/<runId>; verbatim signature quoted in issue #202's thread context.
+  ⚠️ **CORRECTED 2026-08-27 — this entry was written with NO instrument, and three of its
+  claims are refuted by one.** The W13 TTFT probe never reported: `tally.js`'s hand-maintained
+  runStats allowlist stripped `ttftMs` before tally.json/verdict.json, the only artifacts CI
+  uploads (MEASURED, run 33030485388: 11/12 rows carried it into tally-input.json, 0/12 came
+  out). Every run cited above ran amicus 4.8.1, before the probe existed at all. With it read
+  from tally-input.json: (a) **"the stall is indefinite, not slow" is FALSE** — first tokens on
+  this egress are a CONTINUOUS heavy tail, 8.0/18.2/64.5/80.4/132.8/155.0/156.7/259.5/275.0/
+  **384.2** s with no gap; glm's retry spoke at 384.2 s (a 300 s backstop would have logged it a
+  zero-token black hole) and a qwen judge that COMPLETED first spoke at 275.0 s. A truly silent
+  population is real but small — 2 legs of 21. (b) **"gpt/deepseek never missed" is FALSE** —
+  deepseek lost a leg (`superseded·error·ttft 64.5s`) and healed on retry; gpt is simply the
+  only FAST seat (8-18 s), everything else is 34-384 s. (c) **"retries landed 6/10" is 6/15**,
+  and was carried by kimi (3/3), which #217 dropped — on today's seats glm+qwen it is 3/14.
+  Remedy status: (1) second retry **STILL REFUTED** — a timeout CANCELS the job while the
+  artifact step is `if: !cancelled()`, so busting the cap DELETES the evidence every #202
+  decision rests on. ⚠️ RE-DERIVED after the caps moved (2026-08-27, B53 reach follow-up:
+  `--timeout` 10 -> 16, `timeout-minutes` 45 -> **75**). ⚠️ CORRECTED AGAIN by council #219,
+  which caught BOTH the arithmetic and this entry's stale copy of it. Worst case is
+  `legCap + min(2*backstop, floor(legCap*0.95)) + 2*legCap` — the FIRST term is a leg cap,
+  not a backstop, because the backstop only kills a leg producing NOTHING and a leg that
+  STREAMS runs to the cap (MEASURED: `qwen seat` at 688.7 s in run 33093722538). That is
+  4 x 960 s = 64 min, which busts 60 — hence 75. A SECOND retry would add ~912 s, taking it
+  to ~79 min. ⚠️ 64 min is a FLOOR: stage-2 repairs are serial, up to 2 per judge, each
+  bounded by the leg cap; (3) the doubling is clamped to `floor(legCap*0.95)` = **912 s**,
+  STRICTLY below the leg cap so a retry death is a NAMED backstop rather than a generic
+  timeout (it used to clamp exactly ONTO the cap and won only by poll-loop ordering); (4) stagger **REFUTED** — gpt completed first-attempt
+  7/7 inside the same concurrent wave, same key, same server; (5) output cap **REFUTED** — the
+  "runaways" emitted 758 and 251 OUTPUT tokens, the 781,287 burn is `cacheRead`+`input`, a tool
+  loop. ✅ **Shipped instead 2026-08-27 (branch `fix/202-observability-remedies`):** the
+  allowlist fix; `AMICUS_TOOL_CALL_STALL_MS: '480000'` in CI (B53's 180 s default killed a glm
+  leg that was streaming AND billing $0.0526 reported — headless.js already recorded a measured
+  190.6 s call as "already longer than B53's 180 s" and widened only the neighbouring
+  constant); a bounded `getSessionStatus` read on the two backstop firing sites, so a
+  zero-output leg finally names its cause (it was gated on `mirror.output.length > 0`, which
+  that leg never satisfies); and `verdict.json :: seatsReviewed`.
 
 - [ ] **Dead stage-2 JUDGE legs produce no degrade entry and no notice — a run can present a
   full-bench street-cred table actually adjudicated by half the judges (found in the same
@@ -7160,11 +7195,19 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   identical silent death at +300s of stage 2 (0 tokens), yet run.json records NO degrade for
   them and the verdict shipped a 4-model street-cred table adjudicated by gpt+kimi only. This
   is the product principle's exact target (a correct-but-silent degrade) one stage later than
-  the W9 dead-seat work: stage-1 deaths are now loudly surfaced, stage-2 judge deaths are not.
-  Fix shape: a stage-2 twin of the seat-loss note (which judges actually returned rankings /
-  adjudications, recorded as a degrade + disclosed in the verdict footer beside the existing
-  `stage1:partial` marker — the footer already knows stages were partial; the WHO is what's
-  missing).
+  the W9 dead-seat work. ✅ **The DEGRADE half CLOSED 2026-08-27 (#202 remedies, branch
+  `fix/202-observability-remedies`):** `run-stage2.js` gained the missing third case — a dead
+  judge leg BINDS, so it was neither `orphan` nor `unbound` and fell through into
+  `judgeResults` unremarked — and now notes channel `stage2-judge` with the default kind, so
+  `run-degrade.js`'s sink flips `degraded` and the run exits 2 (it could previously exit 0 with
+  half its judges dead; W11 exited 2 only on an unrelated cost degrade). Registered in
+  `DEGRADE_CHANNELS`, with a new DRIFT PIN in degrade-contract.test.js that fails for ANY
+  `channel:` literal in src/ missing from the registry — `run-stages.test.js :: makeCtx` hands
+  runStage2 a RAW collector that never calls `makeDegrade`, so an unregistered channel was a
+  false green that only production would have caught. ⚠️ **The WHO half is still open:** the
+  disclosure names no judges. `verdict.json` gained `seatsReviewed {reviewed, of}`, but that
+  counts BENCH seats, not judges — a stage-2 twin listing which judges actually returned
+  rankings/adjudications remains unbuilt.
 
 ### Filed at the W14 truth pass (2026-08-26) — PR #205 tails
 

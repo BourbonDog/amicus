@@ -121,7 +121,7 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
  * PR #207 council round 3, B3 — ONE predicate, spelled once, at every gate.
  *
  * There are five `ttftMs` sites in src/: the probe that computes it
- * (src/headless.js's poll loop) and four EMIT GATES that decide whether the key
+ * (src/headless.js's poll loop) and five EMIT GATES that decide whether the key
  * rides a document. Every gate used to spell its own `typeof … === 'number'`,
  * which is four chances to disagree and, as the pin above records, four ways to
  * ship a value the schema forbids.
@@ -160,7 +160,12 @@ describe('run-stats-entry — the TTFT probe rides the row (v4.9 W13 Task A)', (
  */
 describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
   const ROOT = path.join(__dirname, '..', '..');
-  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/result-schema.js'];
+  // #202: `council/tally.js` joined as the FIFTH gate and the FOURTH importer. It is a
+  // RE-PROJECTION, not a producer — see utils/ttft.js. Its own pins live in tally.test.js
+  // ('the TTFT probe reaches the published artifacts'), including the drift pin that fires
+  // for ANY future buildRunStatsEntry key that allowlist is not taught to carry.
+  const IMPORTERS = ['src/headless.js', 'src/sidecar/fanout-leg.js', 'src/utils/result-schema.js',
+    'src/council/tally.js'];
   const INLINE = 'src/council/run-stats-entry.js';
 
   /**
@@ -176,7 +181,7 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
    * is pinned as G1e in tests/council/runstats-byte-order.test.js, so this is a
    * documented non-gate, not an unexamined sixth site. ⚠️ Do NOT move an entry
    * from here into IMPORTERS to silence a failure: that list also drives "the
-   * three importable gates import it", which requires a real `isMeasuredTtft`
+   * four importable gates import it", which requires a real `isMeasuredTtft`
    * call. A file that gates belongs there; a file that talks belongs here.
    */
   const MENTIONS_ONLY = ['src/council/debate.js'];
@@ -222,7 +227,7 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
     }
   });
 
-  test('the three importable gates import it', () => {
+  test('the four importable gates import it', () => {
     for (const f of IMPORTERS) {
       const src = fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\s+/g, ' ');
       expect(src).toMatch(/require\(['"][^'"]*ttft['"]\)/);

@@ -25,11 +25,128 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // NOTE: --no-context is deliberately NOT passed and NOT pinned here — the
     // engine pins no-context internally on every council leg (spec §5,
     // run-launch), unlike the v1 raw-fanout pipeline which had to pass it.
-    for (const flag of ['--no-validate-model', '--max-cost', '--timeout 10', '--json', '--prompt-file', '--out-dir']) {
+    for (const flag of ['--no-validate-model', '--max-cost', '--timeout 16', '--json', '--prompt-file', '--out-dir']) {
       expect(y).toContain(flag);
     }
-    expect(y).toContain('timeout-minutes: 45');
+    // Parsed, not substring-matched (#219 r2, deepseek): `toContain` would also
+    // pass on a commented-out line or a different job's cap.
+    expect(Number(/^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(y)[1])).toBe(75);
     expect(y).toContain('cancel-in-progress: true');
+  });
+
+  /**
+   * #202 — the two stall detectors and the leg cap are ONE budget, so they are
+   * pinned as a relationship rather than as three magic numbers.
+   *
+   * WHY the tool-call window moved off its 180 s default here: B53 killed a glm
+   * leg that was streaming AND billing (9,750 in + 8,373 reasoning + 55 out,
+   * $0.0526 REPORTED) after `read pending 181s`. src/headless.js's own comment
+   * already records a measured 190.6 s `task` call as "already longer than B53's
+   * 180 s" — that measurement widened the neighbouring settle deferral to 300 s
+   * and left B53 itself untouched. On this egress the measured first-token times
+   * reach 384.2 s (CI run 33030485388), so a 180 s mid-turn gap is inside the
+   * ordinary distribution, not evidence of a wedge.
+   *
+   * ⚠️ KNOWN COST of matching the backstop rather than undercutting it (owner's
+   * call, recorded so nobody reads it as an oversight): with a 600 s leg cap a
+   * 480 s window means B53 can only fire for a tool call that starts inside the
+   * first ~120 s of a leg. The detector is deliberately traded down in reach to
+   * stop it killing healthy legs. If a wedged tool call later needs catching
+   * mid-leg, the lever is `--timeout`, not a tighter window.
+   */
+  test('the stall detectors and the leg cap form one coherent budget', () => {
+    const y = yml();
+    const ms = (name, re) => {
+      const m = re.exec(y);
+      expect(`${name} set in the workflow: ${m !== null}`).toBe(`${name} set in the workflow: true`);
+      return Number(m[1]);
+    };
+    const noOutput = ms('AMICUS_NO_OUTPUT_BACKSTOP_MS', /AMICUS_NO_OUTPUT_BACKSTOP_MS:\s*'(\d+)'/);
+    const toolStall = ms('AMICUS_TOOL_CALL_STALL_MS', /AMICUS_TOOL_CALL_STALL_MS:\s*'(\d+)'/);
+    const legCap = Number(/--timeout (\d+)/.exec(y)[1]) * 60 * 1000;
+
+    // Both detectors must be able to fire BEFORE the leg cap, or the leg dies an
+    // uninformative `timeout` instead of a named, diagnosable stall.
+    expect(noOutput).toBeLessThan(legCap);
+    expect(toolStall).toBeLessThan(legCap);
+    // A mid-turn gap gets AT LEAST the patience a first-token gap gets: both are
+    // the same egress-latency phenomenon, and a tighter tool window would kill
+    // legs the backstop deliberately spared.
+    expect(toolStall).toBeGreaterThanOrEqual(noOutput);
+    // And neither may silently fall back to a shipped default.
+    expect(toolStall).toBeGreaterThan(180000); // src/headless.js's default
+
+    // #202 follow-up — B53's REACH, and the job cap that pays for it.
+    //
+    // B53 can only fire for a tool call that starts before `legCap - toolStall`;
+    // after that the leg times out first and dies an uninformative `timeout`.
+    // At the shipped 600 s cap that reach was 120 s of a 600 s leg — the
+    // detector was effectively early-leg only.
+    const reachMs = legCap - toolStall;
+    expect(reachMs).toBeGreaterThanOrEqual(480000);
+
+    // What that reach COSTS, from the workflow's own numbers rather than a
+    // remembered total. `--timeout` is per-leg for EVERY stage, so raising it
+    // for stage-1's sake also inflates stage 2 and the chair — the `2 * legCap`
+    // term below is those two, and it is what dominates. The retry window is
+    // `min(2 * backstop, legCap)` (src/council/run-retry.js), so it stops
+    // growing once legCap passes twice the backstop.
+    const jobCapMs = Number(/timeout-minutes:\s*(\d+)/.exec(y)[1]) * 60 * 1000;
+    // ⚠️ CORRECTED (council #219, raised independently by glm/gpt/deepseek). The
+    // first term used to be `noOutput`, which UNDERCOUNTS stage 1 by up to a full
+    // leg: the backstop only kills a leg that produces NOTHING. A leg that streams
+    // is bounded by the leg cap, not the backstop — and that is the common case,
+    // not a corner. MEASURED on the very run that raised the finding (33093722538):
+    // `qwen seat` ran 688,723 ms, far past the 480 s the old term assumed.
+    //
+    // ⚠️ Still a FLOOR, not a ceiling: Stage-2 repairs are serial, up to 2 per
+    // judge, each bounded by the leg cap (run-stage2.js). A run that repairs every
+    // judge exceeds this. `--max-cost` is what bounds that in practice, not time.
+    // ⚠️ mirrors run-retry-window.js EXACTLY (#219 r2, deepseek): the retry clamp
+    // is `floor(legCap * 0.95)`, not `legCap`. A model that drifts from the code
+    // it pins is the round-1 defect all over again.
+    const worstCaseMs = legCap + Math.min(2 * noOutput, Math.floor(legCap * 0.95)) + 2 * legCap;
+
+    // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
+    // the evidence-artifact step is `if: !cancelled()` — so busting the cap does
+    // not merely fail the run, it DELETES the forensic record every #202
+    // decision has been made from. 3 minutes of slack is the floor.
+    expect(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
+      + `${Math.round(jobCapMs / 60000)}m: ${worstCaseMs + 180000 <= jobCapMs}`)
+      .toBe(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
+        + `${Math.round(jobCapMs / 60000)}m: true`);
+  });
+
+  /**
+   * #202 — the honest seat census on both published surfaces.
+   *
+   * The footer prints `models: ${MODELS}`, which is the bench that was ASKED
+   * FOR, and `deriveSeatLoss` returns null with no `--critic` (CI runs
+   * `CRITIC: ''`), so `seatLoss` is structurally absent from every CI verdict.
+   * MEASURED, run 4424218c: a TWO-seat bench published a four-model street-cred
+   * table whose dead seats rendered `n/a` — indistinguishable from the legend's
+   * "neutral". Nothing said the verdict rested on half a bench.
+   */
+  test('#202: the seat census reaches BOTH the check title and the comment footer', () => {
+    const y = yml();
+    const checkIdx = y.indexOf('Publish the Council Review check run');
+    const commentIdx = y.indexOf('Post sticky PR comment');
+    expect(checkIdx).toBeGreaterThan(-1);
+    expect(commentIdx).toBeGreaterThan(checkIdx);
+    expect(y.slice(checkIdx, commentIdx)).toContain('seatsReviewed');
+    expect(y.slice(commentIdx)).toContain('seatsReviewed');
+  });
+
+  test('#202: the census read tolerates the key being ABSENT (emit-when-set)', () => {
+    const y = yml();
+    // verdict.json omits seatsReviewed when the record carried no bench rows, so
+    // every read must have an else-branch. A bare `\(.seatsReviewed.reviewed)`
+    // would render "null" into a published title on exactly the degraded runs
+    // this exists to describe.
+    for (const line of y.split('\n').filter(l => l.includes('seatsReviewed'))) {
+      expect(`${line.trim().slice(0, 60)} :: guarded=${/if \.seatsReviewed|\/\/ *""|\/\/ *empty/.test(line)}`)
+        .toBe(`${line.trim().slice(0, 60)} :: guarded=true`);
+    }
   });
 
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
@@ -467,7 +584,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // `bash -eo pipefail` went exit 1 / no briefing -> exit 0 / briefing written.
       expect(step).toContain('> wf-raw.txt || true');
       // grep must not sit in a pipeline whose status can propagate.
-      expect(step).not.toContain("capped.diff \\");
+      expect(step).not.toContain('capped.diff \\');
       // Only workflows whose diff survived the cap — annotating an elided file
       // would describe code the bench was explicitly told it cannot see.
       expect(step).toContain('capped.diff');

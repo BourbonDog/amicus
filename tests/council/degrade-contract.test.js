@@ -163,3 +163,52 @@ describe('seat-unbound channel (v4.8)', () => {
     expect(DEGRADE_CHANNELS.has('seat-unbound')).toBe(true);
   });
 });
+
+/**
+ * #202 — the stage-2 judge-death channel, plus the drift pin that would have
+ * caught its absence.
+ *
+ * WHY THE DRIFT PIN EXISTS. `run-stages.test.js :: makeCtx` hands runStage2 a
+ * RAW collector (`{ note: (n) => notes.push(n) }`) that never calls
+ * `makeDegrade`, so a note on an UNREGISTERED channel passes every test in that
+ * file while failing in production — where run-degrade.js's sink catches the
+ * throw and rewrites the note as `internal` ("a degrade on channel 'x' could not
+ * be recorded"). The run still degrades; the reason is destroyed. That is a
+ * false green of exactly the shape #202 was filed about, so the fix is a pin
+ * that reads the SOURCE rather than any test's stub.
+ */
+describe('#202 — every channel the runtime emits is registered', () => {
+  test('DEGRADE_CHANNELS has stage2-judge', () => {
+    expect(DEGRADE_CHANNELS.has('stage2-judge')).toBe(true);
+  });
+
+  test('makeDegrade accepts a stage2-judge note rather than rewriting it as internal', () => {
+    const rec = makeDegrade({
+      channel: 'stage2-judge',
+      what: 'judge gpt did not adjudicate',
+      why: "its Stage-2 leg ended 'error': NO_OUTPUT_BACKSTOP",
+      effect: 'the run will exit degraded (2)',
+    });
+    expect(rec.channel).toBe('stage2-judge');
+    expect(rec.kind).toBe('degrade');           // what flips degraded.value
+  });
+
+  test('DRIFT PIN — no `channel:` literal in src/ escapes the registry', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const ROOT = path.join(__dirname, '..', '..');
+    const walk = (dir) => fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })
+      .flatMap(e => (e.isDirectory() ? walk(`${dir}/${e.name}`)
+        : (e.name.endsWith('.js') ? [`${dir}/${e.name}`] : [])));
+    const unregistered = [];
+    for (const f of walk('src')) {
+      const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+      // #219 r2 (deepseek): matching single quotes ONLY meant a double-quoted
+      // literal walked straight past the guard written to stop exactly that.
+      for (const m of src.matchAll(/\bchannel:\s*['"]([a-z0-9-]+)['"]/g)) {
+        if (!DEGRADE_CHANNELS.has(m[1])) { unregistered.push(`${f}: '${m[1]}'`); }
+      }
+    }
+    expect(unregistered).toEqual([]);
+  });
+});

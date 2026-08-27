@@ -353,3 +353,31 @@ describe('per-tool-call stall detector (B53)', () => {
     expect(mockAbortSession).not.toHaveBeenCalled();
   }, 15000);
 });
+
+/**
+ * #219 (council, glm minor): B53's SHIPPED default, not just the CI override.
+ *
+ * The PR that widened this in CI argued from a measurement — src/headless.js's
+ * own comment records a real `task` subagent call at 190.6 s and calls it
+ * "already longer than B53's 180 s". That measurement was taken on the OWNER'S
+ * MACHINE ("9 of the 1,307 tool parts persisted in this machine's OpenCode
+ * database"), not on CI. So the value that kills healthy, billing legs was
+ * demonstrated locally, and overriding only the CI environment left every local
+ * and library consumer on the number the evidence condemns.
+ *
+ * Pinned by reading the source rather than by driving a 190-second leg: the
+ * property is "the shipped constant clears the measured case", and a behavioural
+ * test of it would cost three minutes of wall clock per run.
+ */
+describe('#219 — B53 shipped default', () => {
+  test('clears the 190.6s task call the repo itself measured', () => {
+    // ⚠️ requireActual: this suite MOCKS fs, so a plain require('fs') here reads
+    // the mock and the pin silently inspects nothing.
+    const fs = jest.requireActual('fs');
+    const path = jest.requireActual('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'headless.js'), 'utf8');
+    const m = /AMICUS_TOOL_CALL_STALL_MS\)\s*\|\|\s*(\d+)/.exec(src);
+    expect(m).not.toBeNull();
+    expect(Number(m[1])).toBeGreaterThan(190600);
+  });
+});

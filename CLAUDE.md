@@ -130,6 +130,7 @@ src/
 │   ├── run-retry-keys.js
 │   ├── run-retry-launch.js
 │   ├── run-retry-notes.js
+│   ├── run-retry-window.js  # The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay
 │   ├── run-retry.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
@@ -146,6 +147,7 @@ src/
 │   ├── street-cred.js
 │   ├── tally.js
 │   ├── verdict-seat-loss.js
+│   ├── verdict-seats-reviewed.js  # #202: the bench-seat census for verdict.json, as a spreadable fragment.
 │   └── verdict.js
 ├── design/
 │   ├── fonts/
@@ -328,6 +330,7 @@ src/
 │   ├── session-lock.js
 │   ├── session-metadata-tmp-sweep.js
 │   ├── session-path.js  # Session path resolution.
+│   ├── session-status.js  # #202: render the engine's SESSION STATUS as a clause on a leg's death report.
 │   ├── shared-server.js
 │   ├── spend-ledger.js
 │   ├── start-helpers.js  # Start Command Helpers
@@ -568,6 +571,7 @@ evals/
 | `council/run-retry-keys.js` |  | `seatKey()`, `twinAliases()`, `legLossKey()`, `srcLegClaimer()` |
 | `council/run-retry-launch.js` |  | `briefingFor()`, `bindRetryWave()` |
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
+| `council/run-retry-window.js` | The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay | `retryBackstopMs()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
@@ -584,6 +588,7 @@ evals/
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict-seat-loss.js` |  | `summarizeSeatLoss()`, `deriveSeatLoss()` |
+| `council/verdict-seats-reviewed.js` | #202: the bench-seat census for verdict.json, as a spreadable fragment. | `seatsReviewedOf()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/council-legs.js` |  | `buildLegRows()` |
@@ -748,6 +753,7 @@ evals/
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/session-metadata-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionMetadataTmpFiles()`, `unlinkSessionMetadataTmp()`, `evaluateSessionMetadataTmpSweep()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
+| `utils/session-status.js` | #202: render the engine's SESSION STATUS as a clause on a leg's death report. | `formatSessionStatusSuffix()`, `MAX_STATUS_MESSAGE_CHARS()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |

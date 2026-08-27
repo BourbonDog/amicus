@@ -78,7 +78,20 @@ jobs:
       (format('{0}', inputs.require_label) == 'false' ||
        contains(github.event.pull_request.labels.*.name, 'council-review'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # #202 follow-up: 45 -> 75, to buy B53 its reach at `--timeout 16` below.
+    # ⚠️ 60 was WRONG and the council caught it (#219, raised independently by
+    # glm, gpt and deepseek). The worst case is FOUR leg caps, not three-and-a-
+    # backstop: the backstop only kills a leg that produces NOTHING, so a stage-1
+    # first attempt that STREAMS is bounded by the leg cap like every other stage.
+    # MEASURED on the run that raised it (33093722538): `qwen seat` ran 688.7 s,
+    # far past the 480 s the old arithmetic assumed. 4 x 960 s = 64 min, which
+    # busts a 60 min cap and CANCELS the job — and the evidence-artifact step is
+    # `if: !cancelled()`, so a bust deletes the forensic record (see issue #220).
+    # ⚠️ 64 min is a FLOOR: Stage-2 repairs are serial, up to 2 per judge, each
+    # bounded by the leg cap. `--max-cost` is what bounds that, not time.
+    # Raising this costs NOTHING unless hit — GitHub bills actual wall clock.
+    # Pinned as arithmetic in tests/scripts/council-review-workflow.test.js.
+    timeout-minutes: 75
     permissions:
       contents: read
       pull-requests: write
@@ -435,12 +448,21 @@ jobs:
           # twice; glm stalled first-attempt in 3 of the 5 and survived only
           # because its single Stage-1 retry happened to land. #196's verdict was
           # published on a 2-of-4 bench for exactly this reason.
-          # The class is a provider-side cold start on a shared CI egress, so the
-          # honest lever here is WAIT, not a different model. 480000 ms is chosen
-          # to sit strictly above the 300 s that was measured failing and strictly
-          # below the per-leg `--timeout 10` (600000 ms) set below, so the
-          # backstop still fires FIRST and a genuinely silent seat is still
+          # ⚠️ CORRECTED (#202, 2026-08-27). This block used to call the class "a
+          # provider-side cold start" whose only lever was WAIT. The TTFT probe
+          # refutes that: on this egress first tokens are a CONTINUOUS heavy tail
+          # — 8.0, 18.2, 64.5, 80.4, 132.8, 155.0, 156.7, 259.5, 275.0, 384.2 s
+          # (runs 33030485388 / 33071695196) — with no gap between "fast" and
+          # "never". A leg measured at 384.2 s would have been logged as a
+          # zero-token black hole under the 300 s default, and a judge that
+          # COMPLETED first spoke at 275.0 s. So the window is not waiting out a
+          # cold start; it is a cut point placed inside a real distribution.
+          # 480000 ms still sits strictly above the 300 s measured failing and
+          # strictly below the per-leg `--timeout 16` (960000 ms) set below, so
+          # the backstop still fires FIRST and a genuinely silent seat is still
           # reported and retried rather than burning the whole wall clock.
+          # A truly silent population does remain (2 legs of 21 produced nothing
+          # at all), which is why the backstop stays.
           # SINGLE-SPELLED on purpose: no `workflow_call` input, no
           # `${{ inputs.x || '...' }}` fallback. Adding either creates the
           # two-spellings trap that cb7c90fd walked into with `models` — if you
@@ -449,6 +471,28 @@ jobs:
           # Retry POLICY (a second Stage-1 retry, staggered launch) is out of
           # scope here and filed separately as issue #202.
           AMICUS_NO_OUTPUT_BACKSTOP_MS: '480000'
+          # #202: B53's shipped 180 s default is INSIDE the distribution above —
+          # it killed a glm leg that was streaming and billing ($0.0526 REPORTED,
+          # 9,750 in + 8,373 reasoning + 55 out) after `read pending 181s`.
+          # src/headless.js already records a measured 190.6 s `task` call as
+          # "already longer than B53's 180 s"; that measurement widened the
+          # neighbouring settle deferral and left B53 itself alone.
+          # Matched to the backstop so a mid-turn gap gets the same patience a
+          # first-token gap gets — both are the one egress-latency phenomenon.
+          # ⚠️ REACH (this used to record a 120 s reach as an accepted cost; the
+          # leg cap was raised to retire it). B53 can only fire for a tool call
+          # starting before `legCap - window`, so at the old 600 s cap it covered
+          # the first 120 s of a leg and was effectively early-leg only. At 960 s
+          # it covers the first 480 s — 4x the reach, and past the point where
+          # both observed wedges (`read pending 181s`, `grep pending 180s`) sat.
+          # ⚠️ LITERAL full reach is unreachable and the arithmetic says so: reach
+          # is `legCap - 480 s` while the worst case carries `2 x legCap` for
+          # stage-2 and the chair, which need none of it. Reach grows sublinearly,
+          # cost linearly: raising the cap to `--timeout 20` (a 1200 s leg, up from
+          # 960 s) would buy 60% reach for an 80 min worst case. The only lever that
+          # would give true full reach is a SMALLER
+          # window, and that is the one that was killing healthy legs.
+          AMICUS_TOOL_CALL_STALL_MS: '480000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the
@@ -466,7 +510,7 @@ jobs:
           fi
           ARGS=(--models "$BENCH" --chair "$CHAIR" --prompt-file briefing.md
                 --out-dir "$RUN_DIR" --no-validate-model
-                --json --max-cost "$MAX_COST" --timeout 10)
+                --json --max-cost "$MAX_COST" --timeout 16)
           if [ -n "$CRITIC" ]; then ARGS+=(--critic "$CRITIC"); fi
           if [ "$DEBATE" = "true" ]; then ARGS+=(--debate); fi
           set +e
@@ -616,7 +660,11 @@ jobs:
                 | select($fl == null and $fo == null)
                 | ("- **" + .id + "** [" + .severity + "] " + .claim + " _(location: " + (if .location == "" then "none given" else .location end) + ")_") ] }
           ' confirmed-safe.json > check-data.json
-          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)"' "$RUN_DIR/verdict.json")
+          # #202: the seat census rides the TITLE, which is the one line a reader
+          # sees without opening anything. `if .seatsReviewed then … else "" end`
+          # because the key is emit-when-set — a bare interpolation would publish
+          # "seats null/null" on exactly the degraded runs it exists to describe.
+          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)" + (if .seatsReviewed then " · seats \(.seatsReviewed.reviewed)/\(.seatsReviewed.of)" else "" end)' "$RUN_DIR/verdict.json")
           {
             echo "**Chair verdict:** VERDICT: ${OVERALL}"
             echo
@@ -720,6 +768,13 @@ jobs:
             COST_LINE="run cost: \$$(printf '%.4f' "$COST_AMOUNT") (${COST_SOURCE})"
           fi
           STATUS=$(jq -r '"run \(.status) · " + ((.stages // []) | map("\(.name):\(.status)") | join(" → "))' "$RUN_DIR/run.json")
+          # #202: `models:` above is the bench that was ASKED FOR. This is how much
+          # of it actually reviewed — the fact a reader could not previously get
+          # from this comment at all, because `seatLoss` is structurally absent
+          # whenever no --critic was requested, and CI never requests one. Carries
+          # its own trailing separator so an absent census leaves the footer
+          # byte-identical rather than stranding a " · ".
+          SEATS_LINE=$(jq -r 'if .seatsReviewed then "seats reviewed: \(.seatsReviewed.reviewed) of \(.seatsReviewed.of) · " else "" end' "$RUN_DIR/verdict.json")
           {
             echo "$MARKER"
             echo "## Council Review (adjudicated — engine v2)"
@@ -761,7 +816,7 @@ jobs:
             echo "$STREET"
             echo
             echo "---"
-            echo "_${STATUS} · ${COST_LINE} · models: ${MODELS} · chair: ${CHAIR} · fail_on: ${FAIL_ON} · [evidence artifact](${RUN_URL}) · adjudicated council verdict_"
+            echo "_${STATUS} · ${COST_LINE} · models: ${MODELS} · ${SEATS_LINE}chair: ${CHAIR} · fail_on: ${FAIL_ON} · [evidence artifact](${RUN_URL}) · adjudicated council verdict_"
           } > comment.md
           EXISTING=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
             --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)

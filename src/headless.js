@@ -25,6 +25,8 @@ const { envNumber } = require('./utils/env-num');
 const { engineErrorForSession } = require('./utils/engine-log');
 // v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
 const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
+// #202: the session-status clause on a death report (see utils/session-status.js).
+const { formatSessionStatusSuffix } = require('./utils/session-status');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -85,7 +87,18 @@ const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) |
 const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
-const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 180000; // B53: wedged tool call w/ no progress
+// B53: wedged tool call w/ no progress.
+// ⚠️ 180000 -> 300000 (#219, council glm minor). 180 s was condemned by this
+// file's OWN measurement — the 190.6 s `task` call recorded below, taken on a
+// developer machine, not on CI. #202 widened only the CI override and left every
+// local and library consumer on the number the evidence had already disproved.
+// 300000 matches the sibling constant that same measurement set (USAGE/settle
+// deferral below), so one measurement now governs both windows it bears on.
+const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 300000;
+// #202: budget for the ONE session-status read on a death report. Short on
+// purpose — this runs on a leg already known to be dying, so the report must not
+// wait on the same engine that just failed to produce anything.
+const STATUS_PROBE_MS = 5000;
 /**
  * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker (:~540) and
  * SDK-idle (:~568) fast paths break WITHOUT requiring `info.time.completed`, but
@@ -120,9 +133,11 @@ const USAGE_SETTLE_CALL_TIMEOUT_MS = envNumber('AMICUS_USAGE_SETTLE_CALL_TIMEOUT
  * unbounded wait is not an option.
  *
  * WHY 5 MINUTES. The measured duration of the real subagent call that exposed
- * this is **190.6 s** (`task`, 04:35:08.427 → 04:38:19.061) — already longer
- * than B53's 180 s TOOL_CALL_STALL_MS, so anything at that scale would kill a
- * healthy `task` leg 10 s short of its answer. 300 s clears the measured case
+ * this is **190.6 s** (`task`, 04:35:08.427 → 04:38:19.061) — which was longer
+ * than B53's THEN-180 s TOOL_CALL_STALL_MS, so anything at that scale would kill
+ * a healthy `task` leg 10 s short of its answer. (#219 finally moved B53 itself
+ * to 300 s for this exact reason; for four releases this measurement corrected
+ * the neighbour and left its own subject alone.) 300 s clears the measured case
  * with margin and still lands far inside the 15-minute default `--timeout`.
  * Set to 0 to disable the deferral entirely (pre-v4.4 behaviour).
  *
@@ -228,7 +243,7 @@ function withTimeout(promise, ms, label) {
  *          engineSkew?: {server: string, installed: string}|null}} args
  * @returns {string}
  */
-function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew }) {
+function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSkew, sessionStatus }) {
   const observed = 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
     + `${Math.round(ms / 1000)}s — `
     + (fromEnv
@@ -237,7 +252,11 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
   // Append-only: absent/empty excerpt ⇒ the string above, unchanged byte for byte.
   const quoted = engineLogExcerpt ? `${observed} — engine log: ${engineLogExcerpt}` : observed;
   // Append-only for the same reason: no skew ⇒ formatSkewSuffix returns ''.
-  return `${quoted}${formatSkewSuffix(engineSkew)}`;
+  // #202 adds a THIRD clause on the same terms, and LAST so both clauses above
+  // stay byte-stable: no status (or an unreadable one) ⇒ '' — see
+  // utils/session-status.js. With none of the three the string is byte-for-byte
+  // what it was before any of them existed.
+  return `${quoted}${formatSkewSuffix(engineSkew)}${formatSessionStatusSuffix(sessionStatus)}`;
 }
 
 /**
@@ -255,6 +274,45 @@ function engineErrorExcerptSafe(sessionId, engineLogOptions) {
   try {
     return engineErrorForSession(sessionId, engineLogOptions || {});
   } catch (_e) {
+    return null;
+  }
+}
+
+/**
+ * #202: read the engine's session status FOR A DEATH REPORT — best-effort and
+ * bounded, with the same "never become the failure it reports on" discipline as
+ * `engineErrorExcerptSafe` above, and one more constraint that read does not
+ * have: this one does I/O against the very engine that just failed to produce
+ * anything, so it must also be unable to HANG. Both belts are load-bearing and
+ * both are pinned (S-W4 rejects, S-W5 hangs).
+ *
+ * A failed probe returns `null`, which `formatSessionStatusSuffix` renders as
+ * '' — so a leg whose status could not be read carries the byte-for-byte reason
+ * string it carried before #202, rather than a clause claiming nothing was
+ * happening. Absence keeps its one meaning.
+ *
+ * `readStatus` is a parameter rather than a module import because
+ * `getSessionStatus` is destructured inside runHeadless from the injectable
+ * client module — taking it here keeps this helper pure and directly testable.
+ * @returns {Promise<object|null>}
+ */
+async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
+  // `!(ms > 0)` covers 0 (the documented disable), negatives and NaN — and it is
+  // why 0 is never handed to withTimeout, which would read it as UNBOUNDED.
+  if (typeof readStatus !== 'function' || !sessionId || !(ms > 0)) { return null; }
+  try {
+    return await withTimeout(
+      readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
+  } catch (err) {
+    // #219 (council, deepseek minor): returning null is right for the REPORT —
+    // absence keeps its one meaning — but it made a probe that timed out on a
+    // loaded engine indistinguishable from a leg whose engine reported nothing,
+    // i.e. a silent revert to pre-#202 behaviour. The engine log is where that
+    // belongs: the death report stays byte-identical, and the degradation
+    // becomes diagnosable instead of invisible.
+    logger.debug('session-status probe failed; the death report will carry no session clause', {
+      sessionId, error: err && err.message,
+    });
     return null;
   }
 }
@@ -616,6 +674,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // "time since the leg asked for output" (see the block comment above), so
     // the TTFT probe below measures from exactly the instant the backstop
     // starts counting — the two can never disagree about when the wait began.
+    // #202: resolved HERE, not with the poll-loop options below. The pre-send
+    // firing site calls noOutputBackstopReason() upstream of that block, so a
+    // later `const` put this in its TDZ and the death report became
+    // "Cannot access 'statusProbeMs' before initialization" — the exact class of
+    // silent-diagnosis loss #202 exists to remove. Pinned by S-W6.
+    // ⚠️ `=== undefined`, not `||` (#219 round 2, deepseek): 0 is a meaningful
+    // value in this codebase's convention (usageSettlePolls,
+    // AMICUS_NO_OUTPUT_BACKSTOP_MS) and must survive injection. It cannot be
+    // FORWARDED as 0 though — withTimeout reads `ms <= 0` as NO timeout, so an
+    // honest-looking 0 would make this probe unbounded on a leg already known to
+    // be dying. sessionStatusSafe therefore SKIPS on a non-positive window.
+    const statusProbeMs = options.statusProbeMs === undefined
+      ? STATUS_PROBE_MS : options.statusProbeMs;
     const outputClockStartedAt = Date.now();
     const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: outputClockStartedAt });
     let backstopFired = false;
@@ -642,10 +713,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // was fixed mid-run, or one that belongs to another server this process
     // also talks to, cannot ride out on this death report. The read is a Map
     // lookup and does no I/O, so unlike the log read it needs no guard.
-    const noOutputBackstopReason = () => formatNoOutputBackstopReason({
+    //
+    // #202 (piece 4): the closure is now ASYNC, because the third clause costs
+    // one bounded HTTP call. The engine's session status is asked for at
+    // :~1045 only when `mirror.output.length > 0` — a gate a zero-output leg
+    // never satisfies — so the leg that most needs diagnosing was the only one
+    // that never asked, and every silent death reported a window with no cause.
+    // Asked for HERE instead, at the two firing sites and nowhere else, so a
+    // living leg still makes no extra call. The read is best-effort and
+    // bounded: `sessionStatusSafe` can neither throw nor hang (S-W4/S-W5).
+    const noOutputBackstopReason = async () => formatNoOutputBackstopReason({
       ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
       engineLogExcerpt: engineErrorExcerptSafe(sessionId, options._engineLog),
       engineSkew: currentEngineSkew(client),
+      sessionStatus: await sessionStatusSafe(getSessionStatus, client, sessionId, dirArgs, statusProbeMs),
     });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —
@@ -696,7 +777,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // skipped entirely on this path — see the while-condition and the
     // backstop-abort block further down).
     if (backstopFired) {
-      sessionError = noOutputBackstopReason();
+      sessionError = await noOutputBackstopReason();
     }
 
     // Hard provider failure detected at the client boundary (#37): a non-2xx /
@@ -1065,7 +1146,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // loop; the post-loop block below mirrors the timeout path.
         if (noOutputBackstop.tick(substantiveActivity, Date.now()) === 'fired') {
           backstopFired = true;
-          sessionError = noOutputBackstopReason();
+          sessionError = await noOutputBackstopReason();
           logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstopMs });
           break;
         }
