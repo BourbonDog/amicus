@@ -638,7 +638,11 @@ jobs:
                 | select($fl == null and $fo == null)
                 | ("- **" + .id + "** [" + .severity + "] " + .claim + " _(location: " + (if .location == "" then "none given" else .location end) + ")_") ] }
           ' confirmed-safe.json > check-data.json
-          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)"' "$RUN_DIR/verdict.json")
+          # #202: the seat census rides the TITLE, which is the one line a reader
+          # sees without opening anything. `if .seatsReviewed then … else "" end`
+          # because the key is emit-when-set — a bare interpolation would publish
+          # "seats null/null" on exactly the degraded runs it exists to describe.
+          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)" + (if .seatsReviewed then " · seats \(.seatsReviewed.reviewed)/\(.seatsReviewed.of)" else "" end)' "$RUN_DIR/verdict.json")
           {
             echo "**Chair verdict:** VERDICT: ${OVERALL}"
             echo
@@ -742,6 +746,13 @@ jobs:
             COST_LINE="run cost: \$$(printf '%.4f' "$COST_AMOUNT") (${COST_SOURCE})"
           fi
           STATUS=$(jq -r '"run \(.status) · " + ((.stages // []) | map("\(.name):\(.status)") | join(" → "))' "$RUN_DIR/run.json")
+          # #202: `models:` above is the bench that was ASKED FOR. This is how much
+          # of it actually reviewed — the fact a reader could not previously get
+          # from this comment at all, because `seatLoss` is structurally absent
+          # whenever no --critic was requested, and CI never requests one. Carries
+          # its own trailing separator so an absent census leaves the footer
+          # byte-identical rather than stranding a " · ".
+          SEATS_LINE=$(jq -r 'if .seatsReviewed then "seats reviewed: \(.seatsReviewed.reviewed) of \(.seatsReviewed.of) · " else "" end' "$RUN_DIR/verdict.json")
           {
             echo "$MARKER"
             echo "## Council Review (adjudicated — engine v2)"
@@ -783,7 +794,7 @@ jobs:
             echo "$STREET"
             echo
             echo "---"
-            echo "_${STATUS} · ${COST_LINE} · models: ${MODELS} · chair: ${CHAIR} · fail_on: ${FAIL_ON} · [evidence artifact](${RUN_URL}) · adjudicated council verdict_"
+            echo "_${STATUS} · ${COST_LINE} · models: ${MODELS} · ${SEATS_LINE}chair: ${CHAIR} · fail_on: ${FAIL_ON} · [evidence artifact](${RUN_URL}) · adjudicated council verdict_"
           } > comment.md
           EXISTING=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
             --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)

@@ -75,6 +75,38 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(toolStall).toBeGreaterThan(180000); // src/headless.js's default
   });
 
+  /**
+   * #202 — the honest seat census on both published surfaces.
+   *
+   * The footer prints `models: ${MODELS}`, which is the bench that was ASKED
+   * FOR, and `deriveSeatLoss` returns null with no `--critic` (CI runs
+   * `CRITIC: ''`), so `seatLoss` is structurally absent from every CI verdict.
+   * MEASURED, run 4424218c: a TWO-seat bench published a four-model street-cred
+   * table whose dead seats rendered `n/a` — indistinguishable from the legend's
+   * "neutral". Nothing said the verdict rested on half a bench.
+   */
+  test('#202: the seat census reaches BOTH the check title and the comment footer', () => {
+    const y = yml();
+    const checkIdx = y.indexOf('Publish the Council Review check run');
+    const commentIdx = y.indexOf('Post sticky PR comment');
+    expect(checkIdx).toBeGreaterThan(-1);
+    expect(commentIdx).toBeGreaterThan(checkIdx);
+    expect(y.slice(checkIdx, commentIdx)).toContain('seatsReviewed');
+    expect(y.slice(commentIdx)).toContain('seatsReviewed');
+  });
+
+  test('#202: the census read tolerates the key being ABSENT (emit-when-set)', () => {
+    const y = yml();
+    // verdict.json omits seatsReviewed when the record carried no bench rows, so
+    // every read must have an else-branch. A bare `\(.seatsReviewed.reviewed)`
+    // would render "null" into a published title on exactly the degraded runs
+    // this exists to describe.
+    for (const line of y.split('\n').filter(l => l.includes('seatsReviewed'))) {
+      expect(`${line.trim().slice(0, 60)} :: guarded=${/if \.seatsReviewed|\/\/ *""|\/\/ *empty/.test(line)}`)
+        .toBe(`${line.trim().slice(0, 60)} :: guarded=true`);
+    }
+  });
+
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
     // 2026-08-26 owner ruling: kimi off the bench (cost vs contribution — the

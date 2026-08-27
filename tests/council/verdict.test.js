@@ -230,3 +230,80 @@ describe("v4.9 W5.3: verdict.intent — emit-when-'task', forwarded from meta", 
     expect('intent' in buildVerdict(withIntent('review'), [])).toBe(false);
   });
 });
+
+/**
+ * #202 — the honest seat count on the published verdict.
+ *
+ * MEASURED, CI run 4424218c: a TWO-seat bench published `streetCred` for all
+ * four requested models, with the two dead seats rendered as `n/a` — visually
+ * indistinguishable from the legend's "neutral". The sticky comment's footer
+ * prints `models: ${MODELS}`, which is the bench that was ASKED FOR, and
+ * `deriveSeatLoss` returns null whenever no `--critic` was requested
+ * (verdict-seat-loss.js), which is every CI run — so `seatLoss` is structurally
+ * absent there. Nothing in the artifact said the verdict rested on half a bench.
+ *
+ * The count is DERIVED, never passed in: `runStats` already carries one
+ * `role:'seat'` row per bench seat, post-retry, with the leg's own status. A
+ * first attempt that was retried is `role:'superseded'` and must not be counted
+ * twice; judges, chair and repairs are not bench seats at all.
+ */
+describe('#202 — verdict.json publishes seats reviewed of seats benched', () => {
+  const meta = { runId: 'r', runType: 'review', date: 'd', models: ['glm', 'qwen', 'gpt'],
+    chair: 'deepseek', claudeInCouncil: false };
+  const seatRow = (model, status) => ({ model, role: 'seat', wasChair: false,
+    conformance: 'clean', status, durationMs: 1, usage: null });
+  const build = (runStats) => buildVerdict(tally({
+    meta, findings: [], rankings: [], adjudications: [], runStats }));
+
+  test('V1 a full bench reports every seat reviewed', () => {
+    const v = build([seatRow('glm', 'complete'), seatRow('qwen', 'complete'),
+      seatRow('gpt', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 3, of: 3 });
+  });
+
+  test('V2 a dead seat is subtracted — this is the number W11 never published', () => {
+    const v = build([seatRow('glm', 'error'), seatRow('qwen', 'complete'),
+      seatRow('gpt', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 3 });
+  });
+
+  test('V3 only BENCH seats count — superseded, judge, chair and repair rows do not', () => {
+    const other = (model, role, status) => ({ model, role, wasChair: false,
+      conformance: 'clean', status, durationMs: 1, usage: null });
+    const v = build([
+      seatRow('glm', 'complete'), seatRow('qwen', 'complete'),
+      other('glm', 'superseded', 'error'),   // glm's FIRST attempt, retried and healed
+      other('gpt', 'judge', 'complete'),
+      other('deepseek', 'chair', 'complete'),
+      other('qwen', 'repair', 'complete'),
+    ]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 2 });
+  });
+
+  test('V4 a timeout counts as not-reviewed, same as an error', () => {
+    const v = build([seatRow('glm', 'timeout'), seatRow('gpt', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, of: 2 });
+  });
+
+  test('V6 a NON-ARRAY runStats is tolerated — buildVerdict takes permissive records', () => {
+    // Regression pin. buildVerdict is reachable on externally-supplied records
+    // that never touched tally() in-process: mcp-tools.js :: amicus_verdict
+    // types `record` as `z.record(z.any())`, and verdict-seat-loss.test.js's own
+    // fixture hands it `runStats: {}`. A `runStats || []` guard passes a truthy
+    // non-array straight through to `.filter` and throws, so a missing census
+    // became a CRASHED verdict build — four reds in that file, none of them
+    // about seats.
+    for (const bad of [{}, 'runStats', 42, true]) {
+      const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {}, runStats: bad });
+      expect(`${JSON.stringify(bad)} -> ${'seatsReviewed' in v}`)
+        .toBe(`${JSON.stringify(bad)} -> false`);
+    }
+  });
+
+  test('V5 a run with no bench rows at all emits nothing rather than 0 of 0', () => {
+    // `0 of 0` would read as a measurement of an empty bench. Absence keeps its
+    // one meaning, matching every other emit-when-set field on this document.
+    const v = build([]);
+    expect('seatsReviewed' in v).toBe(false);
+  });
+});

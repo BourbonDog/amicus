@@ -229,6 +229,16 @@
         "criticSeated"
       ]
     },
+    "seatsReviewed": {
+      "type": "object",
+      "description": "#202, optional. How much of the BENCH actually reviewed, derived from runStats: `of` counts every `role:'seat'` row (one per bench seat POST-retry, so a healed seat is counted once and its first attempt is `role:'superseded'`), and `reviewed` counts those whose leg completed. Judges, chair and repair rows are not bench seats and are excluded. EMIT-WHEN-SET: a record with no bench rows carries no key at all, because `0 of 0` would read as a measurement of an empty bench rather than as the absence it is. WHY IT EXISTS: the sibling `seatLoss` above is present only when --critic was requested, and CI runs none — so seat loss was structurally absent from every CI verdict while a two-seat bench published a four-model street-cred table whose dead seats rendered `n/a`, indistinguishable from the legend's neutral (MEASURED, run 4424218c). No `additionalProperties: false` at the top level of this schema means an additive field was always accepted here; this documents the shape rather than changing what is accepted.",
+      "properties": {
+        "reviewed": { "type": "integer", "minimum": 0, "description": "Bench seats whose leg completed." },
+        "of": { "type": "integer", "minimum": 1, "description": "Bench seats benched, post-retry." }
+      },
+      "required": ["reviewed", "of"],
+      "additionalProperties": false
+    },
     "degrades": {
       "description": "v4.6 Plan 2: what this run lost — copied verbatim from the sink at verdict assembly. Additive; absent when the sink recorded nothing. v4.9 widened kind with 'info': an announcement that is neither a loss nor a recovery (e.g. a task run's ledger-skipped note) — carried here without degrading the run.",
       "type": "array",

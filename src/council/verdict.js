@@ -13,6 +13,10 @@ const { summarizeSeatLoss, deriveSeatLoss } = require('./verdict-seat-loss');
 // opts.overallVerdict, null in every Stage-4 manual path).
 const VERDICT_SCHEMA_VERSION = 2;
 
+// #202: the bench-seat census leaf (the 300-line gate — same reason
+// verdict-seat-loss.js is its own module).
+const { seatsReviewedOf } = require('./verdict-seats-reviewed');
+
 /**
  * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
  * @param {object} record  tally() output
@@ -123,6 +127,23 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic
     // was requested, so its absence never has to be interpreted.
     ...(opts.seatLoss ? { seatLoss: opts.seatLoss } : {}),
+    // #202: how much of the bench actually reviewed. DERIVED here rather than
+    // passed in, because every caller that could pass it already has the same
+    // `runStats` this reads — and a parameter is one more thing a rebuild path
+    // can forget (the `intent` key needed a SECOND carrier for exactly that).
+    //
+    // Its sibling `seatLoss` cannot serve: `deriveSeatLoss` returns null when no
+    // `--critic` was requested, and CI runs `CRITIC: ''` — so seat loss is
+    // STRUCTURALLY absent from every CI verdict. MEASURED on run 4424218c, a
+    // two-seat bench that published a four-model street-cred table with the dead
+    // seats rendered `n/a`, indistinguishable from the legend's "neutral".
+    //
+    // Counts `role:'seat'` ONLY: that is one row per bench seat POST-retry, so a
+    // healed seat is counted once (its first attempt is `role:'superseded'`), and
+    // judges/chair/repairs are not bench seats. Emit-when-set — a record with no
+    // bench rows carries no key, because `0 of 0` would read as a measurement of
+    // an empty bench rather than as the absence it is.
+    ...seatsReviewedOf(record.runStats),
     // v4.6 Plan 2 (spec §4): the canonical what-was-lost surface. Additive and
     // OPTIONAL — present only when the run actually degraded, so a clean run's
     // verdict is byte-for-byte unchanged. schemaVersion stays 2 (the v4.5.2
