@@ -129,6 +129,14 @@ module.exports = {
         'src/sidecar/fallback-chains.js',
         'src/utils/model-tiers.js',
         'src/utils/route-launch.js',
+        // Added for council #216 A2/B1's fix: `vendorOfId` parses the vendor
+        // segment so both guards stop trusting a caller-supplied vendor that
+        // the JSDoc marks optional. Same PARSE-not-derive test as the four
+        // above -- it returns a vendor segment, never an id that is called.
+        // NOTE: vendor-from-id parsing now exists here, in fallback-chains,
+        // route-launch and model-classification. That duplication deserves one
+        // low-level home; deliberately not done in a review-fix commit.
+        'src/utils/model-canonicalization.js',
       ],
       rules: {
         'no-restricted-syntax': 'off'

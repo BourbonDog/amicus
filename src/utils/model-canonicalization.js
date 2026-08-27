@@ -71,12 +71,29 @@ function namespaceFetchFailed(vendor, catalogInfo) {
   return Array.isArray(failures) && failures.some(f => f && f.provider === vendor);
 }
 
+/**
+ * Vendor segment of an executable id: `openrouter/<vendor>/<rest>` or
+ * `<vendor>/<rest>`. Council #216 (A2/B1): both guards below used to key on the
+ * CALLER's `vendor` argument while classifyModel derived its own from the id, so
+ * a caller passing none -- which toStorableRoute's JSDoc permits
+ * (`vendorPath?:string`) -- silently lost the DIVERGENT and namespace-rejection
+ * checks while the catalog check kept working. Deriving closes that asymmetry.
+ * @param {*} id @returns {string} '' when the id carries no vendor segment
+ */
+function vendorOfId(id) {
+  if (typeof id !== 'string') { return ''; }
+  const rest = id.startsWith('openrouter/') ? id.slice('openrouter/'.length) : id;
+  const idx = rest.indexOf('/');
+  return idx > 0 ? rest.slice(0, idx) : '';
+}
+
 function directFormIfSafe(vendor, orId, catalogInfo) {
-  if (DIVERGENT_VENDORS.has(vendor)) { return orId; }
+  const v = vendor || vendorOfId(orId);
+  if (DIVERGENT_VENDORS.has(v)) { return orId; }
   const bare = stripGatewayPrefix(orId);
   if (bare === orId) { return orId; } // gateway-only vendor -- no direct integration at all
   // Optimism is only justified when the namespace was never attempted.
-  if (namespaceFetchFailed(vendor, catalogInfo)) { return orId; }
+  if (namespaceFetchFailed(v, catalogInfo)) { return orId; }
   return classifyModel(bare, 'direct', catalogInfo) === 'invalid' ? orId : bare;
 }
 
@@ -87,10 +104,10 @@ function directFormIfSafe(vendor, orId, catalogInfo) {
  * @returns {string} the bare direct id only when PROVEN valid, else `orId` unchanged
  */
 function directFormIfProven(vendor, orId, catalogInfo) {
-  if (DIVERGENT_VENDORS.has(vendor)) { return orId; }
+  if (DIVERGENT_VENDORS.has(vendor || vendorOfId(orId))) { return orId; }
   const bare = stripGatewayPrefix(orId);
   if (bare === orId) { return orId; }
   return classifyModel(bare, 'direct', catalogInfo) === 'valid' ? bare : orId;
 }
 
-module.exports = { directFormIfSafe, directFormIfProven, namespaceFetchFailed };
+module.exports = { directFormIfSafe, directFormIfProven, namespaceFetchFailed, vendorOfId };

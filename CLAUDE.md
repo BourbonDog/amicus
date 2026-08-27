@@ -710,7 +710,7 @@ evals/
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
 | `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
-| `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()` |
+| `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()`, `vendorOfId()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |

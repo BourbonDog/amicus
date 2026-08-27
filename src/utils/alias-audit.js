@@ -172,13 +172,20 @@ function suggestReplacements(staleModel, catalog, n = 3) {
  * @param {Array<{id:string}>} catalog
  * @returns {Array<{alias:string,stored:string,current:string}>}
  */
-function findDriftedStoredAliases(sources, catalog) {
-  if (!catalog || catalog.length === 0) { return []; }
+function findDriftedStoredAliases(sources, catalogOrInfo) {
+  // Council #216 A1/B2/C1: accepts catalogInfo (or a bare array, for existing
+  // callers). Passing models WITHOUT providerFailures made this compute the bare
+  // direct form for a REJECTED namespace while sidecar/setup.js persists the
+  // gateway form -- reporting drift that does not exist, and suggesting a repair
+  // that writes back the unservable direct id issue 208 removed.
+  const info = Array.isArray(catalogOrInfo) ? { models: catalogOrInfo } : (catalogOrInfo || { models: [] });
+  const catalog = info.models || [];
+  if (catalog.length === 0) { return []; }
   const { resolveQuickPicks, toStorableRoute } = require('./quick-picks');
   const current = new Map();
   for (const r of resolveQuickPicks(catalog)) {
     if (r.source !== 'live') { continue; }
-    const stored = toStorableRoute(r, { models: catalog });
+    const stored = toStorableRoute(r, info);
     if (stored) { current.set(r.alias, { display: stored, routeValues: new Set(Object.values(r.routes)) }); }
   }
   const byProvider = idsByProvider(catalog);

@@ -76,11 +76,12 @@ describe('F1: recommendedId must be toStorableRoute (with evidence), not the div
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    // issue 214: toStorableRoute now takes catalog evidence as a 2nd argument, so
-    // match the CALL rather than the exact arity, and pin that evidence IS passed --
-    // an evidence-free call here would revive the persistence gap #208 closed.
+    // issue 214 + council #216 A3: match the CALL rather than the exact arity, and
+    // pin that real EVIDENCE is passed. The earlier form only rejected the literal
+    // `toStorableRoute(p)`, so `toStorableRoute(p, undefined)` sailed through -- it
+    // asserted an argument existed, not that it carried the catalog.
     expect(line).toMatch(/toStorableRoute\(p\b/);
-    expect(line).not.toMatch(/toStorableRoute\(p\)/); // evidence-free call
+    expect(line).toMatch(/toStorableRoute\(p,\s*(catalogInfo|\{[^)]*providerFailures)/);
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 
@@ -91,11 +92,12 @@ describe('F1: recommendedId must be toStorableRoute (with evidence), not the div
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    // issue 214: toStorableRoute now takes catalog evidence as a 2nd argument, so
-    // match the CALL rather than the exact arity, and pin that evidence IS passed --
-    // an evidence-free call here would revive the persistence gap #208 closed.
+    // issue 214 + council #216 A3: match the CALL rather than the exact arity, and
+    // pin that real EVIDENCE is passed. The earlier form only rejected the literal
+    // `toStorableRoute(p)`, so `toStorableRoute(p, undefined)` sailed through -- it
+    // asserted an argument existed, not that it carried the catalog.
     expect(line).toMatch(/toStorableRoute\(p\b/);
-    expect(line).not.toMatch(/toStorableRoute\(p\)/); // evidence-free call
+    expect(line).toMatch(/toStorableRoute\(p,\s*(catalogInfo|\{[^)]*providerFailures)/);
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 });

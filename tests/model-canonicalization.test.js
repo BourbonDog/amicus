@@ -197,3 +197,47 @@ describe('directFormIfSafe — namespace fetch failure suppresses optimism (#208
     })).toBe('deepseek/deepseek-v3.2');
   });
 });
+
+/**
+ * Council #216 A2/B1: both guards inside directFormIfSafe key on the CALLER's
+ * `vendor` argument, while classifyModel derives its own from the id. That
+ * asymmetry means a caller passing no vendor -- which `toStorableRoute`'s
+ * JSDoc explicitly permits (`vendorPath?:string`) -- silently loses BOTH the
+ * DIVERGENT_VENDORS check and the namespace-rejection check, while the
+ * catalog check keeps working. The vendor must be derived from the id when it
+ * is not supplied.
+ */
+describe('directFormIfSafe derives the vendor when the caller omits it (#216 A2/B1)', () => {
+  test('namespace-rejection gate still fires with no vendor argument', () => {
+    const info = {
+      models: [{ id: 'openrouter/deepseek/deepseek-v4-pro' }],
+      providerFailures: [{ provider: 'deepseek', reason: 'http-status', status: 401 }],
+    };
+    expect(directFormIfSafe(undefined, 'openrouter/deepseek/deepseek-v4-pro', info))
+      .toBe('openrouter/deepseek/deepseek-v4-pro');
+  });
+
+  test('DIVERGENT_VENDORS gate still fires with no vendor argument', () => {
+    const catalog = [
+      { id: 'anthropic/claude-opus-4-8' },
+      { id: 'anthropic/claude-opus-4.8' }, // coincidental dot row -- would classify 'valid'
+      { id: 'openrouter/anthropic/claude-opus-4.8' },
+    ];
+    expect(directFormIfSafe(undefined, 'openrouter/anthropic/claude-opus-4.8', { models: catalog }))
+      .toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  test('directFormIfProven keeps its DIVERGENT gate with no vendor argument', () => {
+    const catalog = [
+      { id: 'anthropic/claude-opus-4.8' },
+      { id: 'openrouter/anthropic/claude-opus-4.8' },
+    ];
+    expect(directFormIfProven(undefined, 'openrouter/anthropic/claude-opus-4.8', { models: catalog }))
+      .toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  test('an explicit vendor argument still wins (unchanged behaviour)', () => {
+    expect(directFormIfSafe('deepseek', 'openrouter/deepseek/deepseek-v3.2', { models: [] }))
+      .toBe('deepseek/deepseek-v3.2');
+  });
+});
