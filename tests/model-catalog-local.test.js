@@ -29,12 +29,12 @@ describe('refreshCatalog: localhost-only refresh never clobbers a good OR cache'
     // getConfigDir() is the only config export refreshCatalog touches.
     jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({}) }));
-    // The network is offline except loopback: fetchAllModels yields ONLY local rows.
+    // The network is offline except loopback: fetchAllModelsDetailed yields ONLY local rows.
     jest.doMock('../src/utils/model-fetcher', () => ({
-      fetchAllModels: jest.fn().mockResolvedValue([
+      fetchAllModelsDetailed: jest.fn().mockResolvedValue({ rows: [
         { id: 'ollama/llama3.3', name: 'llama3.3', local: true },
         { id: 'lmstudio/qwen3-14b', name: 'qwen3-14b', local: true },
-      ]),
+      ], failures: [] }),
     }));
     const catalog = require('../src/utils/model-catalog');
 

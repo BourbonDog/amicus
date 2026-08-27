@@ -231,7 +231,8 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
  *   probeSkipped?: string|null}} opts
  */
 function buildAuditDoc({
-  stale, catalogAvailable, gatewayFindings = [], drifted = [], probe = [], probeSkipped = null
+  stale, catalogAvailable, gatewayFindings = [], drifted = [], probe = [], probeSkipped = null,
+  providerFailures = []
 }) {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -246,6 +247,11 @@ function buildAuditDoc({
     probeCount: probe.length,
     probe,
     probeSkipped,
+    // issue 209: providers ATTEMPTED and REJECTED for the catalog in hand. An
+    // empty namespace is otherwise indistinguishable from a provider that
+    // genuinely serves nothing.
+    providerFailuresCount: providerFailures.length,
+    providerFailures,
   };
 }
 

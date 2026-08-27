@@ -19,7 +19,7 @@ describe('model-catalog schema v2', () => {
   });
 
   function mockFetch(rows) {
-    jest.doMock('../../src/utils/model-fetcher', () => ({ fetchAllModels: jest.fn(async () => rows) }));
+    jest.doMock('../../src/utils/model-fetcher', () => ({ fetchAllModelsDetailed: jest.fn(async () => ({ rows, failures: [] })) }));
     jest.doMock('../../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({}) }));
   }
 
@@ -52,7 +52,7 @@ describe('model-catalog schema v2', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     fs.writeFileSync(catalogPath(), JSON.stringify({ schemaVersion: 2, fetchedAt: Date.now(), models: ROWS }));
     expect(await getCatalog()).toEqual(ROWS);
-    expect(require('../../src/utils/model-fetcher').fetchAllModels).not.toHaveBeenCalled();
+    expect(require('../../src/utils/model-fetcher').fetchAllModelsDetailed).not.toHaveBeenCalled();
   });
 
   it('v1 cache still serves as stale fallback when the refresh comes back empty', async () => {

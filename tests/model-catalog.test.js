@@ -15,7 +15,7 @@ describe('model-catalog', () => {
 
   test('fetches and writes the cache on a cold miss', async () => {
     jest.doMock('../src/utils/model-fetcher', () => ({
-      fetchAllModels: jest.fn().mockResolvedValue([{ id: 'openrouter/openai/gpt-5.4', name: 'GPT-5.4' }]),
+      fetchAllModelsDetailed: jest.fn().mockResolvedValue({ rows: [{ id: 'openrouter/openai/gpt-5.4', name: 'GPT-5.4' }], failures: [] }),
     }));
     const { getCatalog, catalogPath } = require('../src/utils/model-catalog');
     const models = await getCatalog();
@@ -24,31 +24,31 @@ describe('model-catalog', () => {
   });
 
   test('serves fresh cache without re-fetching', async () => {
-    const fetchAllModels = jest.fn().mockResolvedValue([{ id: 'openrouter/x', name: 'x' }]);
-    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModels }));
+    const fetchAllModelsDetailed = jest.fn().mockResolvedValue({ rows: [{ id: 'openrouter/x', name: 'x' }], failures: [] });
+    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModelsDetailed }));
     const { getCatalog } = require('../src/utils/model-catalog');
     await getCatalog();
     await getCatalog();
-    expect(fetchAllModels).toHaveBeenCalledTimes(1);
+    expect(fetchAllModelsDetailed).toHaveBeenCalledTimes(1);
   });
 
   test('falls back to stale cache when a refresh returns nothing', async () => {
     const { catalogPath } = require('../src/utils/model-catalog');
     fs.writeFileSync(catalogPath(),
       JSON.stringify({ fetchedAt: 0, models: [{ id: 'openrouter/stale', name: 'stale' }] }));
-    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModels: jest.fn().mockResolvedValue([]) }));
+    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModelsDetailed: jest.fn().mockResolvedValue({ rows: [], failures: [] }) }));
     const { getCatalog } = require('../src/utils/model-catalog');
     const models = await getCatalog({ maxAgeMs: -1 }); // force-expire → refresh → empty → stale
     expect(models.some(m => m.id === 'openrouter/stale')).toBe(true);
   });
 
   test('refetches when the cache file is corrupt JSON', async () => {
-    const fetchAllModels = jest.fn().mockResolvedValue([{ id: 'openrouter/fresh', name: 'fresh' }]);
-    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModels }));
+    const fetchAllModelsDetailed = jest.fn().mockResolvedValue({ rows: [{ id: 'openrouter/fresh', name: 'fresh' }], failures: [] });
+    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModelsDetailed }));
     const { getCatalog, catalogPath } = require('../src/utils/model-catalog');
     fs.writeFileSync(catalogPath(), 'not json at all');
     const models = await getCatalog();
-    expect(fetchAllModels).toHaveBeenCalledTimes(1);
+    expect(fetchAllModelsDetailed).toHaveBeenCalledTimes(1);
     expect(models.some(m => m.id === 'openrouter/fresh')).toBe(true);
   });
 });
