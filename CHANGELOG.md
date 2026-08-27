@@ -3,6 +3,63 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.2] - 2026-08-27
+
+*The instrument existed; nothing could read it.*
+
+Issue #202 deferred its retry-policy decision to evidence: "v4.9 W13 records per-leg
+time-to-first-token in `runStats`, so the next rev can derive this from observation instead of
+argument." That probe had never reported a value into any artifact CI uploads — `tally.js`'s
+hand-maintained allowlist stripped it one hop before `tally.json`. Reading it changed the
+diagnosis: first tokens on the CI egress are a continuous heavy tail (8.0 s to 384.2 s, no gap),
+not an upstream that accepts and never serves. This release fixes the instrument, then the
+kill switches that were set inside that tail.
+
+### Fixed
+
+- **`ttftMs` survives the runStats re-projection (#202).** `tally.js :: tally` re-projects every
+  row through a hand-maintained allowlist that never named the field, and `verdict.js` copies that
+  array verbatim — so the W13 probe emitted correctly into `tally-input.json` and was destroyed
+  before `tally.json` and `verdict.json`, the only artifacts CI uploads. MEASURED, run
+  33030485388: 11 of 12 rows carried it going in, 0 of 12 coming out. `tally.js` becomes the fifth
+  emit gate and the fourth importer of the shared `isMeasuredTtft` predicate. A drift pin now fails
+  for ANY future `buildRunStatsEntry` key the allowlist is not taught to carry.
+- **A zero-output leg now names its cause (#202).** `getSessionStatus` was called only inside
+  `if (mirror.output.length > 0)` — a gate a leg that produced nothing never satisfies — so the one
+  leg needing diagnosis was the only one that never asked. A bounded, non-throwing read now runs at
+  the two backstop firing sites (a living leg makes no extra call) and appends `busy` /`idle`/
+  `retry` with the upstream message. `busy` means provider-side, `idle` means engine-side, `retry`
+  names the cause; none is suppressed. Untrusted provider text is sanitized.
+- **Dead Stage-2 judge legs are announced (#202).** A dead judge leg still binds to its seat, so it
+  was neither `orphan` nor `unbound` and Stage 2 had no third case: it fell through into
+  `judgeResults` unremarked. Run 32956900910 shipped a four-column adjudication matrix that two of
+  its four judges never voted in, with no degrade recorded. New `stage2-judge` channel.
+- **B53 no longer kills healthy, billing legs.** `TOOL_CALL_STALL_MS` was 180 s, condemned by this
+  repo's own measurement — a real 190.6 s `task` call recorded in `headless.js`, taken on a
+  developer machine. That measurement had corrected its neighbour (the settle deferral) and left
+  its own subject alone. Now 300 s, with CI overriding to 480 s.
+- **The Stage-1 retry backstop no longer ties with the leg timeout.** `min(2 * backstop, legCap)`
+  made the deadlines equal whenever `2 * backstop >= legCap`; the backstop won only by the poll
+  loop's ordering. It now clamps strictly below, so a retry death keeps its named diagnosis
+  instead of degrading to a generic `timeout`.
+
+### Added
+
+- **`verdict.json` publishes `seatsReviewed {reviewed, of}`.** `deriveSeatLoss` returns null when
+  no `--critic` was requested, and CI requests none, so seat loss was structurally absent from
+  every CI verdict while a two-seat bench published a four-model street-cred table. Derived from
+  `runStats`, counting the bench roles `buildSeats` mints (`seat`, `critic`, `lens:<slug>`).
+  Surfaced in the check-run title and the sticky comment footer.
+
+### Changed
+
+- **A dead Stage-2 judge now degrades the run, so it exits 2.** Previously a half-adjudicated
+  verdict could exit 0. This changes CI signal: runs that passed before will now report degraded
+  when a judge dies.
+- **CI council caps.** Per-leg `--timeout` 10 -> 16 min and `timeout-minutes` 45 -> 75, to give the
+  tool-stall detector real reach (120 s -> 480 s of a leg). The job cap covers a worst case of
+  four leg caps; that figure is a floor, since Stage-2 repairs are serial.
+
 ## [4.9.1] - 2026-08-27
 
 *A silent provider failure, and the unservable model ids it produced.*
