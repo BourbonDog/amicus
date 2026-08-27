@@ -25,10 +25,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // NOTE: --no-context is deliberately NOT passed and NOT pinned here — the
     // engine pins no-context internally on every council leg (spec §5,
     // run-launch), unlike the v1 raw-fanout pipeline which had to pass it.
-    for (const flag of ['--no-validate-model', '--max-cost', '--timeout 10', '--json', '--prompt-file', '--out-dir']) {
+    for (const flag of ['--no-validate-model', '--max-cost', '--timeout 16', '--json', '--prompt-file', '--out-dir']) {
       expect(y).toContain(flag);
     }
-    expect(y).toContain('timeout-minutes: 45');
+    expect(y).toContain('timeout-minutes: 60');
     expect(y).toContain('cancel-in-progress: true');
   });
 
@@ -73,6 +73,33 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(toolStall).toBeGreaterThanOrEqual(noOutput);
     // And neither may silently fall back to a shipped default.
     expect(toolStall).toBeGreaterThan(180000); // src/headless.js's default
+
+    // #202 follow-up — B53's REACH, and the job cap that pays for it.
+    //
+    // B53 can only fire for a tool call that starts before `legCap - toolStall`;
+    // after that the leg times out first and dies an uninformative `timeout`.
+    // At the shipped 600 s cap that reach was 120 s of a 600 s leg — the
+    // detector was effectively early-leg only.
+    const reachMs = legCap - toolStall;
+    expect(reachMs).toBeGreaterThanOrEqual(480000);
+
+    // What that reach COSTS, from the workflow's own numbers rather than a
+    // remembered total. `--timeout` is per-leg for EVERY stage, so raising it
+    // for stage-1's sake also inflates stage 2 and the chair — the `2 * legCap`
+    // term below is those two, and it is what dominates. The retry window is
+    // `min(2 * backstop, legCap)` (src/council/run-retry.js), so it stops
+    // growing once legCap passes twice the backstop.
+    const jobCapMs = Number(/timeout-minutes:\s*(\d+)/.exec(y)[1]) * 60 * 1000;
+    const worstCaseMs = noOutput + Math.min(2 * noOutput, legCap) + 2 * legCap;
+
+    // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
+    // the evidence-artifact step is `if: !cancelled()` — so busting the cap does
+    // not merely fail the run, it DELETES the forensic record every #202
+    // decision has been made from. 3 minutes of slack is the floor.
+    expect(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
+      + `${Math.round(jobCapMs / 60000)}m: ${worstCaseMs + 180000 <= jobCapMs}`)
+      .toBe(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
+        + `${Math.round(jobCapMs / 60000)}m: true`);
   });
 
   /**

@@ -7166,10 +7166,15 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   deepseek lost a leg (`superseded·error·ttft 64.5s`) and healed on retry; gpt is simply the
   only FAST seat (8-18 s), everything else is 34-384 s. (c) **"retries landed 6/10" is 6/15**,
   and was carried by kimi (3/3), which #217 dropped — on today's seats glm+qwen it is 3/14.
-  Remedy status: (1) second retry **REFUTED at a 600 s window** — worst case 48 min against
-  `timeout-minutes: 45`, and a timeout CANCELS the job while the artifact step is
-  `if: !cancelled()`, so busting the cap DELETES the evidence; (3) the doubling ALREADY isn't
-  happening (`min(2x480s, 600s) = 600s`); (4) stagger **REFUTED** — gpt completed first-attempt
+  Remedy status: (1) second retry **STILL REFUTED** — a timeout CANCELS the job while the
+  artifact step is `if: !cancelled()`, so busting the cap DELETES the evidence every #202
+  decision rests on. ⚠️ RE-DERIVED after the caps moved (2026-08-27, B53 reach follow-up:
+  `--timeout` 10 -> 16, `timeout-minutes` 45 -> 60). Worst case is
+  `backstop + min(2*backstop, legCap) + 2*legCap` — the `2*legCap` term is stage-2 and the
+  chair. At 960 s that is 56 min of a 60 min cap; a SECOND retry adds another 960 s, taking
+  it to 72 min. The margin is 4 min, not the 45-vs-48 it was when this was first written;
+  (3) the doubling is now UNCLAMPED — `min(2x480s, 960s) = 960s` is the full double, where
+  at the old 600 s cap it was pinned to 600 s; (4) stagger **REFUTED** — gpt completed first-attempt
   7/7 inside the same concurrent wave, same key, same server; (5) output cap **REFUTED** — the
   "runaways" emitted 758 and 251 OUTPUT tokens, the 781,287 burn is `cacheRead`+`input`, a tool
   loop. ✅ **Shipped instead 2026-08-27 (branch `fix/202-observability-remedies`):** the

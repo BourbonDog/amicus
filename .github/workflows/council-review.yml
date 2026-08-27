@@ -78,7 +78,14 @@ jobs:
       (format('{0}', inputs.require_label) == 'false' ||
        contains(github.event.pull_request.labels.*.name, 'council-review'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # #202 follow-up: 45 -> 60 to BUY B53 its reach. `--timeout 16` below takes
+    # the worst case to ~56m (backstop 480s + retry min(960s,legCap) + stage-2
+    # + chair, each bounded by the leg cap). Raising this costs NOTHING unless
+    # it is hit — GitHub bills actual wall clock — while busting it is
+    # expensive: a timeout-minutes kill CANCELS the job, and the evidence
+    # artifact step is `if: !cancelled()`, so it deletes the forensic record.
+    # Pinned as arithmetic in tests/scripts/council-review-workflow.test.js.
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: write
@@ -445,7 +452,7 @@ jobs:
           # COMPLETED first spoke at 275.0 s. So the window is not waiting out a
           # cold start; it is a cut point placed inside a real distribution.
           # 480000 ms still sits strictly above the 300 s measured failing and
-          # strictly below the per-leg `--timeout 10` (600000 ms) set below, so
+          # strictly below the per-leg `--timeout 16` (960000 ms) set below, so
           # the backstop still fires FIRST and a genuinely silent seat is still
           # reported and retried rather than burning the whole wall clock.
           # A truly silent population does remain (2 legs of 21 produced nothing
@@ -466,10 +473,18 @@ jobs:
           # neighbouring settle deferral and left B53 itself alone.
           # Matched to the backstop so a mid-turn gap gets the same patience a
           # first-token gap gets — both are the one egress-latency phenomenon.
-          # ⚠️ ACCEPTED COST (owner's call): against the 600 s leg cap this means
-          # B53 can only fire for a tool call starting in the first ~120 s. The
-          # detector is traded down in REACH to stop it killing healthy legs; if
-          # a mid-leg wedge later needs catching, widen `--timeout`, not this.
+          # ⚠️ REACH (this used to record a 120 s reach as an accepted cost; the
+          # leg cap was raised to retire it). B53 can only fire for a tool call
+          # starting before `legCap - window`, so at the old 600 s cap it covered
+          # the first 120 s of a leg and was effectively early-leg only. At 960 s
+          # it covers the first 480 s — 4x the reach, and past the point where
+          # both observed wedges (`read pending 181s`, `grep pending 180s`) sat.
+          # ⚠️ LITERAL full reach is unreachable and the arithmetic says so: reach
+          # is `legCap - 480 s` while the worst case carries `2 x legCap` for
+          # stage-2 and the chair, which need none of it. Reach grows sublinearly,
+          # cost linearly — 20 min of leg cap buys 60% reach for a 64 min worst
+          # case. The only lever that would give true full reach is a SMALLER
+          # window, and that is the one that was killing healthy legs.
           AMICUS_TOOL_CALL_STALL_MS: '480000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
@@ -488,7 +503,7 @@ jobs:
           fi
           ARGS=(--models "$BENCH" --chair "$CHAIR" --prompt-file briefing.md
                 --out-dir "$RUN_DIR" --no-validate-model
-                --json --max-cost "$MAX_COST" --timeout 10)
+                --json --max-cost "$MAX_COST" --timeout 16)
           if [ -n "$CRITIC" ]; then ARGS+=(--critic "$CRITIC"); fi
           if [ "$DEBATE" = "true" ]; then ARGS+=(--debate); fi
           set +e
