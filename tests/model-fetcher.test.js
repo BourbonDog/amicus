@@ -74,8 +74,9 @@ describe('model-fetcher', () => {
 
       const result = await fetchModelsFromProvider('openrouter', 'sk-or-test');
       expect(result).toEqual([
-        { id: 'openrouter/google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null },
-        { id: 'openrouter/openai/gpt-5', name: 'GPT-5', contextLength: null, pricing: null }
+        // #218 added maxOutputTokens; these fixtures carry no top_provider, so null.
+        { id: 'openrouter/google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null, maxOutputTokens: null },
+        { id: 'openrouter/openai/gpt-5', name: 'GPT-5', contextLength: null, pricing: null, maxOutputTokens: null }
       ]);
     });
 

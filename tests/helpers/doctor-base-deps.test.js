@@ -5,8 +5,9 @@ const { makeBaseDeps } = require('./doctor-base-deps');
 
 describe('helpers/doctor-base-deps: makeBaseDeps() contract', () => {
   // B3 (council review of PR 198): +2 keys (findFabricatedAliasRepairs, repairAlias).
-  test('a bare call has exactly 29 keys', () => {
-    expect(Object.keys(makeBaseDeps())).toHaveLength(29);
+  // #210: +1 key (validateApiKey) — the key-auth check's injectable probe.
+  test('a bare call has exactly 30 keys', () => {
+    expect(Object.keys(makeBaseDeps())).toHaveLength(30);
   });
 
   test('omit produces true key ABSENCE, not key: undefined', () => {

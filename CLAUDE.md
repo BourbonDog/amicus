@@ -258,6 +258,7 @@ src/
 │   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
+│   ├── doctor-key-auth-check.js  # The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js
 │   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
 │   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
 │   ├── doctor-summary.js  # Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the
@@ -298,6 +299,7 @@ src/
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
 │   ├── model-input-default.js
+│   ├── model-output-limit.js  # Issue #218 — the per-model `limit` descriptor amicus hands opencode.
 │   ├── model-shortlist.js  # Vendor model shortlist (#138) -- the family -> model second level.
 │   ├── model-tiers.js  # Per-vendor cost tiers (economy/balanced/frontier) + resolution against the
 │   ├── model-validator.js  # Model Validator
@@ -429,6 +431,7 @@ electron/
 ├── preload-workspace.js  # Council Workspace Preload — minimal typed IPC bridge (v4.4 §4.2/§4.5).
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
+├── setup-ui-alias-groups.js  # Setup UI - Alias grouping rule (issue 213)
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
 ├── setup-ui-aliases.js  # Setup UI - Alias Editor
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
@@ -681,6 +684,7 @@ evals/
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
+| `utils/doctor-key-auth-check.js` | The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js | `evaluateKeyAuth()`, `classifyProbeFailure()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
 | `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |
@@ -721,6 +725,7 @@ evals/
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
+| `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |

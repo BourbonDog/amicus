@@ -6,12 +6,21 @@
  * Extracted from setup-ui.js to keep file sizes under 300 lines.
  */
 
+const { NEW_ROUTES_GROUP_LABEL } = require('./setup-ui-alias-groups');
+
 /**
  * Build the alias editor JS for inline inclusion in the wizard script
  * @returns {string} JavaScript source (no <script> tags)
  */
 function buildAliasScript() {
+  // This script runs in the wizard PAGE and cannot require(), so anything it
+  // shares with the Node builders is either serialised in as DATA (the group
+  // heading below) or not shared at all. The vendor grouping rule is the
+  // latter, on purpose: see the SHARED-WITH-THE-BROWSER note in
+  // setup-ui-alias-groups.js and the issue 214 guard in tests/setup-ui.test.js.
   return `
+  var NEW_ROUTES_GROUP_LABEL = ${JSON.stringify(NEW_ROUTES_GROUP_LABEL)};
+
   // Alias editor: search
   var aliasSearchInput = $('alias-search');
   if (aliasSearchInput) {
@@ -86,13 +95,66 @@ function buildAliasScript() {
         }
       });
     }
-    // If current value not in options, add it
+    // issue 211: the current value is echoed back only because NOTHING in the
+    // catalog matched it -- it is not an offer. Rendered bare it read as the
+    // one first-class option Amicus recommends (a delisted id outranking 13
+    // real ones). Same string, honest framing: its own labelled optgroup.
     if (currentValue && !select.querySelector('option[value="' + CSS.escape(currentValue) + '"]')) {
+      var customGroup = document.createElement('optgroup');
+      customGroup.label = 'Current \\u2014 not found in catalog';
       var custom = document.createElement('option');
       custom.value = currentValue; custom.textContent = currentValue; custom.selected = true;
-      select.insertBefore(custom, select.firstChild);
+      customGroup.appendChild(custom);
+      select.insertBefore(customGroup, select.firstChild);
     }
     return select;
+  }
+
+  // issue 213: a new custom route used to be appended as an ungrouped sibling
+  // of every <details>, so it rendered below the last group with no heading at
+  // all. It now goes into its own clearly-labelled group. Vendor filing is the
+  // SERVER's job (setup-ui-alias-groups.js) -- deriving a vendor here would
+  // mean shipping gateway-prefix stripping back into the page, which is what
+  // issue 214 removed.
+  function placeRowInNewRoutesGroup(row) {
+    var editor = document.querySelector('.alias-editor');
+    if (!editor) { return; }
+    var group = editor.querySelector('.alias-group[data-new-routes]');
+    if (!group) {
+      group = document.createElement('details');
+      group.className = 'alias-group';
+      group.setAttribute('data-new-routes', '1');
+      var summary = document.createElement('summary');
+      var labelEl = document.createElement('span');
+      labelEl.textContent = NEW_ROUTES_GROUP_LABEL + ' ';
+      var countEl = document.createElement('span');
+      countEl.className = 'alias-count';
+      summary.appendChild(labelEl); summary.appendChild(countEl);
+      group.appendChild(summary);
+      editor.insertBefore(group, $('alias-add-btn'));
+    }
+    group.appendChild(row);
+    group.open = true;
+    refreshAliasCounts();
+  }
+
+  // Server-rendered counts are static; keep them true after add/remove/delete.
+  //
+  // Counts EXCLUDE .alias-deleted (council finding A3, PR 221). Deleting a
+  // server-rendered row marks it rather than removing it, so counting every
+  // .alias-row left the heading claiming rows the user had just struck out.
+  // groupAliases can never EMIT an empty group, but a server group can still be
+  // emptied here by deleting its last row -- it then honestly reads "(0)"
+  // rather than vanishing, because a struck-out row is still on screen and its
+  // deletion is not committed until Finish. Only the client-created new-routes
+  // group is dropped at zero: its rows are removed outright, so zero means gone.
+  function refreshAliasCounts() {
+    document.querySelectorAll('.alias-group').forEach(function(g) {
+      var rows = g.querySelectorAll('.alias-row:not(.alias-deleted)').length;
+      if (rows === 0 && g.hasAttribute('data-new-routes')) { g.remove(); return; }
+      var countEl = g.querySelector('.alias-count');
+      if (countEl) { countEl.textContent = '(' + rows + ')'; }
+    });
   }
 
   // Alias editor: inline edit
@@ -164,6 +226,10 @@ function buildAliasScript() {
     } else {
       delete aliasEdits[alias];
     }
+    // A3: this handler owns SERVER-rendered rows, whose group heading carries a
+    // count baked in at render time. Without this the heading kept counting a
+    // row the user had just struck out.
+    refreshAliasCounts();
   });
 
   // Alias editor: add custom shortcut
@@ -186,8 +252,7 @@ function buildAliasScript() {
       row.appendChild(arrow);
       row.appendChild(modelSelect);
       row.appendChild(delBtn);
-      var editor = document.querySelector('.alias-editor');
-      if (editor) { editor.insertBefore(row, addBtn); }
+      placeRowInNewRoutesGroup(row);
       nameInput.focus();
       function commitNew() {
         var n = nameInput.value.trim();
@@ -210,6 +275,7 @@ function buildAliasScript() {
         var a = row.getAttribute('data-alias');
         if (a) { delete aliasEdits[a]; }
         row.remove();
+        refreshAliasCounts();
       });
     });
   }`;

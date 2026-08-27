@@ -49,6 +49,58 @@ for the pre-normalization failure mode and the manual fix if you've disabled the
 
 ---
 
+## Output budget (`outputBudget`)
+
+Each council leg reserves a `max_tokens` allowance before the model runs. Amicus previously handed
+OpenCode no per-model limit at all, so OpenCode's own fixed default — **32,000** — governed every
+leg regardless of the model's real ceiling.
+
+That reservation is not free. OpenRouter validates it against your remaining credit *before* serving,
+so a leg that would have emitted 800 tokens gets refused outright for asking to reserve 32,000:
+
+```
+This request requires more credits, or fewer max_tokens.
+You requested up to 32000 tokens, but can only afford 354
+```
+
+`outputBudget` lowers the reservation. Each model reserves `min(outputBudget, that model's real
+ceiling)`, so a small model keeps its own lower limit rather than being handed an over-ceiling value.
+
+| Setting | Values | Default | Effect |
+|---------|--------|---------|--------|
+| `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling. Unset means no limit is sent — OpenCode's 32,000 default applies, exactly as before. |
+
+Set it by hand-editing `~/.config/amicus/config.json`:
+
+```json
+{ "outputBudget": 8000 }
+```
+
+Two limits worth knowing before you set it:
+
+- **It can only lower the reservation, never raise it.** OpenCode computes
+  `Math.min(limit.output, 32000)`, so any value at or above 32,000 leaves the reservation itself
+  unchanged. Raising the ceiling past 32,000 needs OpenCode's own
+  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` environment variable — a different lever that Amicus does
+  not set.
+
+  Setting a value ≥ 32,000 is **not** a complete no-op, though. Amicus still emits the `limit`
+  descriptor, which carries the model's context length alongside the output figure — and OpenCode
+  disables prompt compaction for any model whose context reads as `0`, which is what a model it does
+  not recognise otherwise gets. So a high budget leaves `max_tokens` alone while still restoring
+  compaction for those models. If you want neither effect, leave `outputBudget` unset.
+- **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
+  it. Models whose ceiling is unknown — anything fetched before this field existed, and the direct
+  `openai` / `anthropic` / `google` / `deepseek` lists, which don't publish one — keep the old
+  behaviour rather than receiving a guessed limit.
+
+This addresses reservation *rejections*. It does **not** stop a reasoning-heavy model from spending
+its whole allowance on reasoning and emitting nothing — that is governed by reasoning effort
+(`--thinking`), not by `max_tokens`. Lowering the budget makes such a leg fail faster and cheaper; it
+does not make it produce output.
+
+---
+
 ## Routing
 
 `routing.prefer` in `config.json` sets the global default gateway policy; `--gateway` (CLI) or the

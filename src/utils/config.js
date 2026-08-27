@@ -345,6 +345,23 @@ function buildProviderModels(resolvedRoutes = []) {
   const aliases = getEffectiveAliases();
   const providers = {};
 
+  // #218: opt-in per-model output budget. `budget === null` (the default) makes
+  // computeModelLimit return null for every model, so each descriptor stays `{}`
+  // exactly as before. The catalog read is lazy and failure-tolerant: no cache,
+  // a corrupt one, or rows predating the maxOutputTokens field all degrade to
+  // `{}` rather than to a PARTIAL limit -- a limit missing `context` is a fatal
+  // ConfigInvalidError that poisons the whole config, not a per-model degrade.
+  const { normalizeOutputBudget, buildLimitLookup, computeModelLimit } =
+    require('./model-output-limit');
+  const budget = normalizeOutputBudget(getOutputBudget());
+  let limits = new Map();
+  if (budget !== null) {
+    try {
+      const cache = require('./model-catalog').readCache();
+      limits = buildLimitLookup(cache && cache.models);
+    } catch (_e) { /* no catalog -> no limits -> unchanged behaviour */ }
+  }
+
   const addRoute = (fullModel) => {
     if (!fullModel || typeof fullModel !== 'string') { return; }
     const parts = fullModel.split('/');
@@ -365,7 +382,9 @@ function buildProviderModels(resolvedRoutes = []) {
     if (!Object.prototype.hasOwnProperty.call(providers, providerID)) {
       providers[providerID] = { models: {} };
     }
-    providers[providerID].models[modelID] = {};
+    // #218: `{}` unless a budget is set AND the catalog knows both numbers.
+    const limit = computeModelLimit(limits.get(fullModel), budget);
+    providers[providerID].models[modelID] = limit ? { limit } : {};
   };
 
   for (const [alias, fullModel] of Object.entries(aliases)) {
@@ -593,6 +612,28 @@ function resolveCouncilMembers(name, catalog = []) {
   return { models, dropped, droppedMembers };
 }
 
+/**
+ * #218: the configured per-leg output budget, or null when unset.
+ *
+ * OPT-IN BY DESIGN — unset means "register every model as `{}`", which is
+ * pre-#218 behaviour exactly. Set it and each leg reserves min(budget, the
+ * model's real ceiling) instead of opencode's fixed 32000 default.
+ *
+ * ⚠️ Values >= 32000 are ACCEPTED but INERT: opencode computes
+ * `Math.min(limit.output, 32000)` (measured in the 1.18.15 binary), so the
+ * reservation can only be lowered here, never raised. Raising it at all
+ * requires OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, a different lever.
+ *
+ * ⚠️ Requires a catalog refreshed since #218 added `maxOutputTokens`
+ * (`amicus models --refresh`); older rows have no ceiling and stay `{}`.
+ *
+ * @returns {number|null} positive integer, or null when unset/malformed
+ */
+function getOutputBudget() {
+  const config = loadConfig() || {};
+  return require('./model-output-limit').normalizeOutputBudget(config.outputBudget);
+}
+
 /** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
 function getRoutingConfig() {
   const config = loadConfig() || {};
@@ -716,6 +757,7 @@ module.exports = {
   classifyCouncilMembers,
   resolveCouncilMembers,
   getRoutingConfig,
+  getOutputBudget,
   resolveGatewayMode,
   markMigrationNotified,
   COST_TIERS,
