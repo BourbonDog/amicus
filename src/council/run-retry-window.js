@@ -38,6 +38,24 @@
  * @returns {number} the retry's window: doubled, clamped strictly below the cap
  */
 function retryBackstopMs(baseBackstopMs, legTimeoutMs) {
+  // ⚠️ NOT floored at the first attempt's window, and #219 round 2 (glm) asked
+  // for exactly that — correctly observing that when `legTimeoutMs <= 2 * base`
+  // the retry window comes out slightly SHORTER than the attempt it exists to
+  // give room to (480000/480000 -> 456000). The observation is right; the remedy
+  // is worse than what it fixes, MEASURED across all three regimes:
+  //
+  //   regime            first(effective)   unfloored   floored   unfloored gives
+  //   cap = 2x base           480000        912000     912000    NAMED backstop
+  //   cap = base              480000        456000     480000    NAMED backstop
+  //   cap < base (t=3)        180000        171000     180000    NAMED backstop
+  //
+  // Flooring pins the window ONTO the leg cap in both degenerate regimes, which
+  // is the tie the headroom exists to break — so the leg dies a generic
+  // `timeout` and the named diagnosis is lost. That diagnosis is this module's
+  // entire purpose. The unfloored cost is bounded at 5% of the window (24 s at
+  // CI scale, 9 s at `--timeout 3`), and it is paid only where the leg cap
+  // already dominates the backstop. Trading ≤5% of one retry's patience for a
+  // named cause on every retry death is the right side of that trade.
   return Math.min(2 * baseBackstopMs, Math.floor(legTimeoutMs * 0.95));
 }
 

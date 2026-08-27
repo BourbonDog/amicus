@@ -55,11 +55,16 @@ function formatSessionStatusSuffix(status) {
   // '[object Object]', which would read as an observation rather than as the
   // absence it actually is.
   if (typeof status.type !== 'string') { return ''; }
+  // ⚠️ CLASSIFY on the RAW value, RENDER the sanitized one (#219 round 2,
+  // deepseek). Branching on the sanitized type let the sanitizer's own
+  // normalisation decide the arm — anything collapsing to 'retry' took the retry
+  // path — so a future SDK identifier could be misclassified by a function whose
+  // job is display, not semantics. Only the exact published identifier routes.
   const type = collapseExcerpt(status.type, 40);
   if (!type) { return ''; }
   // An unrecognised type is still reported. A future SDK arm must not read as
   // "no status was observed" — that silence is what this clause removes.
-  if (type !== 'retry') { return ` (session: ${type})`; }
+  if (status.type !== 'retry') { return ` (session: ${type})`; }
   const attempt = Number.isFinite(status.attempt) ? ` attempt ${status.attempt}` : '';
   const raw = collapseExcerpt(status.message, MAX_STATUS_MESSAGE_CHARS);
   return ` (session: retry${attempt}${raw ? ` — ${raw}` : ''})`;

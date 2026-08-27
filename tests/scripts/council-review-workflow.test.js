@@ -28,7 +28,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     for (const flag of ['--no-validate-model', '--max-cost', '--timeout 16', '--json', '--prompt-file', '--out-dir']) {
       expect(y).toContain(flag);
     }
-    expect(y).toContain('timeout-minutes: 75');
+    // Parsed, not substring-matched (#219 r2, deepseek): `toContain` would also
+    // pass on a commented-out line or a different job's cap.
+    expect(Number(/^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(y)[1])).toBe(75);
     expect(y).toContain('cancel-in-progress: true');
   });
 
@@ -100,7 +102,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // ⚠️ Still a FLOOR, not a ceiling: Stage-2 repairs are serial, up to 2 per
     // judge, each bounded by the leg cap (run-stage2.js). A run that repairs every
     // judge exceeds this. `--max-cost` is what bounds that in practice, not time.
-    const worstCaseMs = legCap + Math.min(2 * noOutput, legCap) + 2 * legCap;
+    // ⚠️ mirrors run-retry-window.js EXACTLY (#219 r2, deepseek): the retry clamp
+    // is `floor(legCap * 0.95)`, not `legCap`. A model that drifts from the code
+    // it pins is the round-1 defect all over again.
+    const worstCaseMs = legCap + Math.min(2 * noOutput, Math.floor(legCap * 0.95)) + 2 * legCap;
 
     // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
     // the evidence-artifact step is `if: !cancelled()` — so busting the cap does

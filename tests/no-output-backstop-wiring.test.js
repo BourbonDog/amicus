@@ -1231,6 +1231,20 @@ describe('#202 — a zero-output death names the engine session status', () => {
     expect(result.error).toBe(base());          // bounded, then dropped
   }, 20000);
 
+  test('S-W9 statusProbeMs 0 DISABLES the probe (#219 r2, deepseek)', async () => {
+    // `options.statusProbeMs || STATUS_PROBE_MS` meant a caller could not pass 0,
+    // inconsistent with this codebase's documented 0-disables convention
+    // (usageSettlePolls, AMICUS_NO_OUTPUT_BACKSTOP_MS). And 0 could not simply be
+    // forwarded: withTimeout treats `ms <= 0` as NO timeout, so an honest-looking
+    // 0 would have made the probe UNBOUNDED on a leg already known to be dying —
+    // the opposite of disabling it. 0 therefore skips the probe outright.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockClear();
+    const result = await run('sstatus9', { statusProbeMs: 0 });
+    expect(mockGetSessionStatus).not.toHaveBeenCalled();
+    expect(result.error).toBe(base());   // byte-identical to pre-#202
+  }, 20000);
+
   test('S-W8 a probe that fails LEAVES A TRACE — silence is not the same as no status', async () => {
     // deepseek (minor) on PR #219: a probe that times out or errors returns null,
     // which renders '' — byte-identical to a leg whose engine reported nothing.

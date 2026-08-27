@@ -7169,12 +7169,16 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   Remedy status: (1) second retry **STILL REFUTED** — a timeout CANCELS the job while the
   artifact step is `if: !cancelled()`, so busting the cap DELETES the evidence every #202
   decision rests on. ⚠️ RE-DERIVED after the caps moved (2026-08-27, B53 reach follow-up:
-  `--timeout` 10 -> 16, `timeout-minutes` 45 -> 60). Worst case is
-  `backstop + min(2*backstop, legCap) + 2*legCap` — the `2*legCap` term is stage-2 and the
-  chair. At 960 s that is 56 min of a 60 min cap; a SECOND retry adds another 960 s, taking
-  it to 72 min. The margin is 4 min, not the 45-vs-48 it was when this was first written;
-  (3) the doubling is now UNCLAMPED — `min(2x480s, 960s) = 960s` is the full double, where
-  at the old 600 s cap it was pinned to 600 s; (4) stagger **REFUTED** — gpt completed first-attempt
+  `--timeout` 10 -> 16, `timeout-minutes` 45 -> **75**). ⚠️ CORRECTED AGAIN by council #219,
+  which caught BOTH the arithmetic and this entry's stale copy of it. Worst case is
+  `legCap + min(2*backstop, floor(legCap*0.95)) + 2*legCap` — the FIRST term is a leg cap,
+  not a backstop, because the backstop only kills a leg producing NOTHING and a leg that
+  STREAMS runs to the cap (MEASURED: `qwen seat` at 688.7 s in run 33093722538). That is
+  4 x 960 s = 64 min, which busts 60 — hence 75. A SECOND retry would add ~912 s, taking it
+  to ~79 min. ⚠️ 64 min is a FLOOR: stage-2 repairs are serial, up to 2 per judge, each
+  bounded by the leg cap; (3) the doubling is clamped to `floor(legCap*0.95)` = **912 s**,
+  STRICTLY below the leg cap so a retry death is a NAMED backstop rather than a generic
+  timeout (it used to clamp exactly ONTO the cap and won only by poll-loop ordering); (4) stagger **REFUTED** — gpt completed first-attempt
   7/7 inside the same concurrent wave, same key, same server; (5) output cap **REFUTED** — the
   "runaways" emitted 758 and 251 OUTPUT tokens, the 781,287 burn is `cacheRead`+`input`, a tool
   loop. ✅ **Shipped instead 2026-08-27 (branch `fix/202-observability-remedies`):** the

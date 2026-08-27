@@ -203,7 +203,9 @@ describe('#202 — every channel the runtime emits is registered', () => {
     const unregistered = [];
     for (const f of walk('src')) {
       const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-      for (const m of src.matchAll(/\bchannel:\s*'([a-z0-9-]+)'/g)) {
+      // #219 r2 (deepseek): matching single quotes ONLY meant a double-quoted
+      // literal walked straight past the guard written to stop exactly that.
+      for (const m of src.matchAll(/\bchannel:\s*['"]([a-z0-9-]+)['"]/g)) {
         if (!DEGRADE_CHANNELS.has(m[1])) { unregistered.push(`${f}: '${m[1]}'`); }
       }
     }

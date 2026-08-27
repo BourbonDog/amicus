@@ -64,6 +64,17 @@ describe('formatSessionStatusSuffix', () => {
     expect(out.length).toBeLessThanOrEqual(MAX_STATUS_MESSAGE_CHARS + 40);
   });
 
+  test('S9 only the EXACT SDK identifier gets the retry treatment (#219 r2, deepseek)', () => {
+    // The branch used to test the SANITIZED type, so anything collapsing to
+    // 'retry' was routed through the retry arm. Classification now reads the raw
+    // value and sanitization is display-only — a future SDK identifier cannot be
+    // misclassified by the sanitizer's normalisation.
+    expect(formatSessionStatusSuffix({ type: ' retry ', attempt: 2, message: 'no' }))
+      .toBe(' (session: retry)');
+    expect(formatSessionStatusSuffix({ type: 'retry', attempt: 2, message: 'yes' }))
+      .toBe(' (session: retry attempt 2 — yes)');
+  });
+
   test('S7 an unrecognised type is still reported rather than swallowed', () => {
     // A future SDK type must not read as "no status was observed" — that is the
     // exact silence this clause exists to remove.

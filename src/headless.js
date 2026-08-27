@@ -297,7 +297,9 @@ function engineErrorExcerptSafe(sessionId, engineLogOptions) {
  * @returns {Promise<object|null>}
  */
 async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
-  if (typeof readStatus !== 'function' || !sessionId) { return null; }
+  // `!(ms > 0)` covers 0 (the documented disable), negatives and NaN — and it is
+  // why 0 is never handed to withTimeout, which would read it as UNBOUNDED.
+  if (typeof readStatus !== 'function' || !sessionId || !(ms > 0)) { return null; }
   try {
     return await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
@@ -677,7 +679,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // later `const` put this in its TDZ and the death report became
     // "Cannot access 'statusProbeMs' before initialization" — the exact class of
     // silent-diagnosis loss #202 exists to remove. Pinned by S-W6.
-    const statusProbeMs = options.statusProbeMs || STATUS_PROBE_MS;
+    // ⚠️ `=== undefined`, not `||` (#219 round 2, deepseek): 0 is a meaningful
+    // value in this codebase's convention (usageSettlePolls,
+    // AMICUS_NO_OUTPUT_BACKSTOP_MS) and must survive injection. It cannot be
+    // FORWARDED as 0 though — withTimeout reads `ms <= 0` as NO timeout, so an
+    // honest-looking 0 would make this probe unbounded on a leg already known to
+    // be dying. sessionStatusSafe therefore SKIPS on a non-positive window.
+    const statusProbeMs = options.statusProbeMs === undefined
+      ? STATUS_PROBE_MS : options.statusProbeMs;
     const outputClockStartedAt = Date.now();
     const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: outputClockStartedAt });
     let backstopFired = false;

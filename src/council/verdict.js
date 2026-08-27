@@ -138,7 +138,9 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // two-seat bench that published a four-model street-cred table with the dead
     // seats rendered `n/a`, indistinguishable from the legend's "neutral".
     //
-    // Counts `role:'seat'` ONLY: that is one row per bench seat POST-retry, so a
+    // Counts the BENCH roles buildSeats mints — `seat`, `critic` and `lens:<slug>`
+    // (#219 r2: this said "`role:'seat'` ONLY" after the filter was widened, and
+    // two seats caught the stale sentence). One row per bench seat POST-retry, so a
     // healed seat is counted once (its first attempt is `role:'superseded'`), and
     // judges/chair/repairs are not bench seats. Emit-when-set — a record with no
     // bench rows carries no key, because `0 of 0` would read as a measurement of

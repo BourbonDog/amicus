@@ -834,6 +834,24 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
    * because the poll loop tests its deadline before sleeping — undocumented,
    * unpinned, and not a property anyone should rely on.
    */
+  test('#219 r2 (glm): the retry window may dip BELOW the first attempt — bounded at 5%', () => {
+    // glm asked for a floor at the first attempt's window. Declined, with the
+    // measurement in run-retry-window.js: flooring pins the window ONTO the leg
+    // cap in both degenerate regimes, which is the very tie the headroom exists
+    // to break — the leg then dies a generic `timeout` and the NAMED diagnosis,
+    // this module's whole purpose, is lost. This pin records the trade instead
+    // of the wish: the dip is real, it is bounded, and the window always stays
+    // strictly under the cap so the diagnosis is always named.
+    const { retryBackstopMs } = require('../../src/council/run-retry-window');
+    for (const [base, legCap] of [[480000, 960000], [480000, 480000], [300000, 180000],
+      [300000, 900000], [480000, 600000]]) {
+      const got = retryBackstopMs(base, legCap);
+      const effectiveFirst = Math.min(base, legCap);
+      expect(got).toBeLessThan(legCap);                       // diagnosis stays NAMED
+      expect(got).toBeGreaterThanOrEqual(effectiveFirst * 0.95); // dip is bounded
+    }
+  });
+
   test('#219: the retry window is STRICTLY below the leg timeout, never equal', async () => {
     process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = '480000';
     const launched = await runRetryCapturingLaunchOpts({ timeout: 16 }); // 960000 ms
