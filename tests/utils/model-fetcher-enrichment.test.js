@@ -35,12 +35,27 @@ describe('enriched normalizers', () => {
     const rows = PROVIDER_FETCH_CONFIG.openrouter.normalize(body);
     expect(rows[0]).toEqual({
       id: 'openrouter/x-ai/grok-4.3', name: 'Grok 4.3', contextLength: 256000,
-      pricing: { prompt: '0.000003', completion: '0.000015' }
+      pricing: { prompt: '0.000003', completion: '0.000015' },
+      maxOutputTokens: null   // #218: absent top_provider -> null, never a guess
     });
     expect(rows[1]).toEqual({
       id: 'openrouter/tiny/no-meta', name: 'tiny/no-meta',
-      contextLength: null, pricing: null
+      contextLength: null, pricing: null, maxOutputTokens: null
     });
+  });
+
+  it('#218: openrouter normalize lifts top_provider.max_completion_tokens', () => {
+    const body = JSON.stringify({ data: [
+      { id: 'moonshotai/kimi-k3', name: 'Kimi K3', context_length: 1048576,
+        top_provider: { context_length: 1048576, max_completion_tokens: 943718 } },
+      // top_provider present but WITHOUT the field (6 of 417 live rows look
+      // like this) -> null, so computeModelLimit refuses to emit a limit
+      // rather than clamping against a guessed ceiling.
+      { id: 'odd/no-ceiling', top_provider: { context_length: 8192 } }
+    ] });
+    const rows = PROVIDER_FETCH_CONFIG.openrouter.normalize(body);
+    expect(rows[0].maxOutputTokens).toBe(943718);
+    expect(rows[1].maxOutputTokens).toBeNull();
   });
 
   it('google normalize maps inputTokenLimit to contextLength, pricing null', () => {

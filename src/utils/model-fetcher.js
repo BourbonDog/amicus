@@ -45,6 +45,8 @@ const PROVIDER_FETCH_CONFIG = {
         id: `openrouter/${m.id}`,
         name: m.name || m.id,
         contextLength: m.context_length ?? null,
+        // #218: real output ceiling (411/417 rows); clamps outputBudget -- see utils/model-output-limit.js.
+        maxOutputTokens: (m.top_provider && m.top_provider.max_completion_tokens) ?? null,
         pricing: m.pricing
           ? { prompt: m.pricing.prompt ?? null,
               completion: m.pricing.completion ?? null }
