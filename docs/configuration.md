@@ -79,9 +79,16 @@ Set it by hand-editing `~/.config/amicus/config.json`:
 Two limits worth knowing before you set it:
 
 - **It can only lower the reservation, never raise it.** OpenCode computes
-  `Math.min(limit.output, 32000)`, so any value at or above 32,000 has no effect. Raising the ceiling
-  past 32,000 needs OpenCode's own `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` environment variable —
-  a different lever that Amicus does not set.
+  `Math.min(limit.output, 32000)`, so any value at or above 32,000 leaves the reservation itself
+  unchanged. Raising the ceiling past 32,000 needs OpenCode's own
+  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` environment variable — a different lever that Amicus does
+  not set.
+
+  Setting a value ≥ 32,000 is **not** a complete no-op, though. Amicus still emits the `limit`
+  descriptor, which carries the model's context length alongside the output figure — and OpenCode
+  disables prompt compaction for any model whose context reads as `0`, which is what a model it does
+  not recognise otherwise gets. So a high budget leaves `max_tokens` alone while still restoring
+  compaction for those models. If you want neither effect, leave `outputBudget` unset.
 - **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
   it. Models whose ceiling is unknown — anything fetched before this field existed, and the direct
   `openai` / `anthropic` / `google` / `deepseek` lists, which don't publish one — keep the old

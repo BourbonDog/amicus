@@ -123,3 +123,36 @@ describe('#218 buildLimitLookup', () => {
     expect(m.get('constructor')).toEqual({ contextLength: 10, maxOutputTokens: 10 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Council review of PR #221, finding C2 (raised by `gpt`, Confirmed).
+// ---------------------------------------------------------------------------
+describe('#218 C2: a fractional budget below 1 must be rejected, not floored to 0', () => {
+  // normalizeOutputBudget floored BEFORE testing positivity, so 0.5 became 0 —
+  // violating its own "positive integer, or null" contract. Worse downstream:
+  // computeModelLimit's `Math.max(1, ...)` guard — added to stop `output: 0`
+  // reaching opencode — laundered that bogus 0 into a bogus `output: 1`, i.e. a
+  // ONE-TOKEN reservation on every leg. A hardening masking the very input it
+  // was supposed to reject. Floor first, then test positivity.
+  it.each([0.5, 0.9, 0.001])('normalizeOutputBudget(%p) -> null', (v) => {
+    expect(normalizeOutputBudget(v)).toBeNull();
+  });
+
+  it('still floors a fraction that survives flooring', () => {
+    expect(normalizeOutputBudget(1.4)).toBe(1);
+    expect(normalizeOutputBudget(8000.7)).toBe(8000);
+  });
+
+  it('computeModelLimit emits NOTHING for a sub-1 budget — never a 1-token reservation', () => {
+    expect(computeModelLimit({ contextLength: 10, maxOutputTokens: 10 }, 0.5)).toBeNull();
+  });
+
+  it('the Math.max(1) guard is no longer load-bearing: both inputs are >= 1 by then', () => {
+    // Pins the property directly rather than trusting the guard: for every
+    // budget that survives normalization, output is the honest clamp.
+    for (const b of [1, 2, 4096, 8000, 40000]) {
+      const r = computeModelLimit({ contextLength: 8192, maxOutputTokens: 4096 }, b);
+      expect(r.output).toBe(Math.min(4096, b));
+    }
+  });
+});

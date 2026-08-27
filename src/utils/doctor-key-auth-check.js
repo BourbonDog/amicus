@@ -58,6 +58,11 @@ const DEFINITIVE_STATUSES = new Set([401, 403]);
 const REENTER_HINT = (providers) =>
   `amicus key <provider> <key>  (re-enter the rejected key for: ${providers.join(', ')})`;
 
+const UNPROBEABLE_HINT =
+  'Not a rejection — amicus has no validation endpoint for this provider, so the '
+  + 'key could not be checked either way. Add one in utils/api-key-validation.js '
+  + '(VALIDATION_ENDPOINTS) to bring it under this check.';
+
 const UNVERIFIED_HINT =
   'Not a rejection — the probe could not reach the provider (offline, DNS failure, '
   + '5xx or timeout). Re-run `amicus doctor` when connectivity is restored.';
@@ -128,10 +133,18 @@ async function evaluateKeyAuth(d) {
     return { id: ID, name: NAME, status: 'ok', message: 'no keys stored — skipped', hint: null };
   }
 
-  // A stored key for a provider with no validation endpoint cannot be probed
-  // at all. Reported, never warned about: adding a provider to
-  // provider-registry.js before api-key-validation.js has an endpoint for it
-  // must not turn every doctor run yellow.
+  // A stored key for a provider with no validation endpoint cannot be probed at
+  // all — so this check cannot vouch for it, and must not imply that it can.
+  //
+  // ⚠️ This originally reported such a key but still returned `ok`, on the
+  // reasoning that adding a provider to provider-registry.js ahead of an
+  // endpoint in api-key-validation.js should not turn every doctor run yellow.
+  // Council finding C1 on PR #221 (raised by `gpt`) is right that this is the
+  // EXACT false-green class #210 exists to close: a row that says "ok" while a
+  // stored credential was never checked. It warns now. The cost is zero today —
+  // PROVIDER_ENV_MAP and VALIDATION_ENDPOINTS carry identical key sets, so
+  // `unprobeable` is always empty and this can only fire once someone actually
+  // creates the gap. Silence is not health.
   const probeable = stored.filter((p) => VALIDATION_ENDPOINTS[p]);
   const unprobeable = stored.filter((p) => !VALIDATION_ENDPOINTS[p]);
 
@@ -146,8 +159,12 @@ async function evaluateKeyAuth(d) {
   if (rejected.length > 0) {
     return { id: ID, name: NAME, status: 'error', message, hint: REENTER_HINT(rejected) };
   }
-  if (results.some((r) => r.unverified)) {
-    return { id: ID, name: NAME, status: 'warn', message, hint: UNVERIFIED_HINT };
+  // Unprobeable counts as unverified (C1): 'ok' here would vouch for a key
+  // nothing checked. A definitive rejection still outranks it above.
+  if (results.some((r) => r.unverified) || unprobeable.length > 0) {
+    const hint = unprobeable.length > 0 && !results.some((r) => r.unverified)
+      ? UNPROBEABLE_HINT : UNVERIFIED_HINT;
+    return { id: ID, name: NAME, status: 'warn', message, hint };
   }
   return { id: ID, name: NAME, status: 'ok', message, hint: null };
 }

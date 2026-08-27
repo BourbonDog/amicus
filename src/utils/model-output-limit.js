@@ -43,9 +43,23 @@
 
 'use strict';
 
-/** A usable positive, finite count. Rejects strings, booleans, NaN, Infinity. */
+/**
+ * A usable positive, finite INTEGER count. Rejects strings, booleans, NaN,
+ * Infinity, and anything that floors to zero.
+ *
+ * ⚠️ Order matters, and getting it wrong was council finding C2 on PR #221.
+ * Testing `v > 0` BEFORE flooring let 0.5 through and returned `Math.floor(0.5)`
+ * === 0 — breaking this function's own "positive integer, or null" contract.
+ * Downstream that was worse than a bad number: computeModelLimit's
+ * `Math.max(1, ...)` guard, which exists to stop `output: 0` reaching opencode,
+ * laundered the bogus 0 into a bogus `output: 1` — a ONE-TOKEN reservation on
+ * every leg. A hardening masking the very input it was meant to reject. Floor
+ * first, then test positivity, so a sub-1 value is rejected outright.
+ */
 function positiveCount(v) {
-  return (typeof v === 'number' && Number.isFinite(v) && v > 0) ? Math.floor(v) : null;
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) { return null; }
+  const n = Math.floor(v);
+  return n > 0 ? n : null;
 }
 
 /**

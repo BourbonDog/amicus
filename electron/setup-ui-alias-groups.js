@@ -137,10 +137,18 @@ function groupAliases(aliases) {
 /**
  * Heading for the client-side group that holds routes added during THIS
  * wizard session. Exported so the inline script and the tests name the same
- * string. Wording is deliberately non-committal about filing: the wizard's
- * Step 3 HTML is built from getDefaultAliases(), not from the saved config
- * (electron/setup-ui.js:45), so a custom alias is NOT vendor-filed on reopen
- * today — promising that in the label would be a falsehood.
+ * string.
+ *
+ * Wording is deliberately non-committal about filing, but the reason is
+ * narrower than it once was. It used to be that Step 3 was built from
+ * getDefaultAliases(), so a custom alias had no row at all on reopen; that is
+ * fixed — electron/setup-ui.js now renders from the effective aliases, and a
+ * SAVED custom route is vendor-filed on the next open like any other.
+ *
+ * What the label still cannot promise is filing WITHIN this session: the page
+ * derives no vendors (issue 214 keeps routing policy server-side), so a route
+ * added here cannot move into its vendor group until the config round-trips.
+ * "this session" is exactly that scope.
  */
 const NEW_ROUTES_GROUP_LABEL = 'New routes (this session)';
 

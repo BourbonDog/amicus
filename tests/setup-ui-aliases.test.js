@@ -371,3 +371,33 @@ describe('setup-ui-aliases', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Council review of PR #221, finding A3 (raised by `glm`, Confirmed).
+// ---------------------------------------------------------------------------
+describe('buildAliasScript - group counts stay true after a delete (A3)', () => {
+  const script = buildAliasScript();
+
+  // The delete handler for SERVER-rendered rows only added the .alias-deleted
+  // class; it never refreshed the headings, whose counts are baked in at render
+  // time. Deleting a row left the group claiming it.
+  it('the server-rendered delete handler refreshes the counts', () => {
+    const i = script.indexOf("row.classList.add('alias-deleted')");
+    expect(i).toBeGreaterThan(-1);
+    // Bounded to this handler, so a refresh call elsewhere cannot satisfy it.
+    expect(script.slice(i, i + 400)).toContain('refreshAliasCounts()');
+  });
+
+  it('counts exclude struck-out rows rather than counting every .alias-row', () => {
+    expect(script).toContain(".alias-row:not(.alias-deleted)");
+    // The naive selector must not survive inside refreshAliasCounts.
+    const f = script.indexOf('function refreshAliasCounts');
+    expect(script.slice(f, f + 400)).not.toMatch(/querySelectorAll\('\.alias-row'\)/);
+  });
+
+  it('only the client-created new-routes group is dropped at zero', () => {
+    const f = script.indexOf('function refreshAliasCounts');
+    const body = script.slice(f, f + 400);
+    expect(body).toMatch(/rows === 0 && g\.hasAttribute\('data-new-routes'\)/);
+  });
+});

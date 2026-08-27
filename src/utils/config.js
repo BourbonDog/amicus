@@ -612,7 +612,6 @@ function resolveCouncilMembers(name, catalog = []) {
   return { models, dropped, droppedMembers };
 }
 
-/** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
 /**
  * #218: the configured per-leg output budget, or null when unset.
  *
@@ -635,6 +634,7 @@ function getOutputBudget() {
   return require('./model-output-limit').normalizeOutputBudget(config.outputBudget);
 }
 
+/** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
 function getRoutingConfig() {
   const config = loadConfig() || {};
   const r = (config.routing && typeof config.routing === 'object') ? config.routing : {};

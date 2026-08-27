@@ -138,12 +138,19 @@ function buildAliasScript() {
     refreshAliasCounts();
   }
 
-  // Server-rendered counts are static; keep them true after add/remove. The
-  // new-routes group is client-created, so drop it once its last row is gone
-  // (server-rendered groups are never empty -- groupAliases cannot emit one).
+  // Server-rendered counts are static; keep them true after add/remove/delete.
+  //
+  // Counts EXCLUDE .alias-deleted (council finding A3, PR 221). Deleting a
+  // server-rendered row marks it rather than removing it, so counting every
+  // .alias-row left the heading claiming rows the user had just struck out.
+  // groupAliases can never EMIT an empty group, but a server group can still be
+  // emptied here by deleting its last row -- it then honestly reads "(0)"
+  // rather than vanishing, because a struck-out row is still on screen and its
+  // deletion is not committed until Finish. Only the client-created new-routes
+  // group is dropped at zero: its rows are removed outright, so zero means gone.
   function refreshAliasCounts() {
     document.querySelectorAll('.alias-group').forEach(function(g) {
-      var rows = g.querySelectorAll('.alias-row').length;
+      var rows = g.querySelectorAll('.alias-row:not(.alias-deleted)').length;
       if (rows === 0 && g.hasAttribute('data-new-routes')) { g.remove(); return; }
       var countEl = g.querySelector('.alias-count');
       if (countEl) { countEl.textContent = '(' + rows + ')'; }
@@ -219,6 +226,10 @@ function buildAliasScript() {
     } else {
       delete aliasEdits[alias];
     }
+    // A3: this handler owns SERVER-rendered rows, whose group heading carries a
+    // count baked in at render time. Without this the heading kept counting a
+    // row the user had just struck out.
+    refreshAliasCounts();
   });
 
   // Alias editor: add custom shortcut

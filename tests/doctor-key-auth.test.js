@@ -250,12 +250,17 @@ describe('doctor: key-auth check (#210)', () => {
       expect(validate).toHaveBeenCalledTimes(5);
     });
 
-    test('a provider with no validation endpoint is not probed and does not warn', async () => {
+    // SUPERSEDED by council finding C1 on PR #221. This test originally
+    // asserted `status: 'ok'` here — i.e. a stored key nothing could check
+    // still reported healthy. That is the same false-green shape #210 exists
+    // to close, so the behaviour changed and this pin changed with it. The
+    // "not probed" half is unchanged and still pinned: no endpoint, no call.
+    test('a provider with no validation endpoint is not probed, and warns', async () => {
       const validate = jest.fn().mockResolvedValue({ valid: true });
       const c = await keyAuth({ keys: { openrouter: 'a', mystery: 'b' }, validate });
       expect(validate).toHaveBeenCalledTimes(1);
       expect(validate).toHaveBeenCalledWith('openrouter', 'a');
-      expect(c.status).toBe('ok');
+      expect(c.status).toBe('warn');
       expect(c.message).toMatch(/mystery/);
     });
 
@@ -317,5 +322,47 @@ describe('doctor: key-auth check (#210)', () => {
         readApiKeyValues: () => { throw new Error('boom'); },
       }))).resolves.toBeDefined();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Council review of PR #221, finding C1 (raised by `gpt`, Confirmed).
+// ---------------------------------------------------------------------------
+describe('#210 C1: a stored key with no validation endpoint must not read as healthy', () => {
+  const { evaluateKeyAuth } = require('../src/utils/doctor-key-auth-check');
+
+  // LATENT, not live: PROVIDER_ENV_MAP and VALIDATION_ENDPOINTS carry identical
+  // key sets today, so `unprobeable` is always empty. It becomes reachable the
+  // moment a provider is added to provider-registry.js ahead of an endpoint in
+  // api-key-validation.js — and reporting `ok` there would be the exact
+  // false-green this whole check exists to close. Silence is not health.
+  const deps = (values, valid = true) => ({
+    readApiKeyValues: () => values,
+    validateApiKey: () => Promise.resolve({ valid }),
+  });
+
+  it('warns when a stored key cannot be probed at all', async () => {
+    const r = await evaluateKeyAuth(deps({ openrouter: 'k', mystery: 'k2' }));
+    expect(r.status).toBe('warn');
+    expect(r.message).toContain('mystery');
+    expect(r.message).toContain('not probeable');
+  });
+
+  it('still reports the probeable ones alongside it', async () => {
+    const r = await evaluateKeyAuth(deps({ openrouter: 'k', mystery: 'k2' }));
+    expect(r.message).toContain('openrouter: valid');
+  });
+
+  it('a definitive rejection still outranks an unprobeable key (error beats warn)', async () => {
+    const r = await evaluateKeyAuth({
+      readApiKeyValues: () => ({ openrouter: 'k', mystery: 'k2' }),
+      validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+    });
+    expect(r.status).toBe('error');
+  });
+
+  it('all-probeable-and-valid is still a clean ok (no gratuitous yellow)', async () => {
+    const r = await evaluateKeyAuth(deps({ openrouter: 'k', deepseek: 'k2' }));
+    expect(r.status).toBe('ok');
   });
 });
