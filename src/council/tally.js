@@ -6,6 +6,11 @@ const { peersOf, unattributedPeerDrops } = require('./peer-split');
 // the seat-keying in it — release Constraint 6 is EXTRACT, never shave).
 // computeStreetCred is re-exported below, so no existing import path moved.
 const { computeStreetCred } = require('./street-cred');
+// #202: the TTFT probe's LAST emit gate — a RE-PROJECTION, so omitting the field
+// here destroyed one already produced rather than failing to produce it. Through
+// v4.9.1 utils/ttft.js's docblock enumerated only the four PRODUCER gates and
+// stopped one short of this one; it now names all five.
+const { isMeasuredTtft } = require('../utils/ttft');
 
 /**
  * Peers-only tier cascade. a/d are agree/dispute counts among PEER judges
@@ -181,6 +186,13 @@ function tally(input) {
       ...(r.seat ? { seat: r.seat } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
+      // #202: emit-when-VALID, in buildRunStatsEntry's own slot (between
+      // durationMs and usage) so G7b's key-order invariant holds for a row that
+      // carries it. NOT `durationMs`'s null-coercion above: a null here would be
+      // read as a measurement, and absence must keep its one meaning — "no
+      // substantive tick was ever observed". The shared predicate is imported
+      // rather than hand-spelled; this file has no require-free pin.
+      ...(isMeasuredTtft(r.ttftMs) ? { ttftMs: r.ttftMs } : {}),
       usage: r.usage || null,
     })),
     tierCounts: countTiers(outFindings),

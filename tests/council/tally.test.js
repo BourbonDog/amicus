@@ -765,3 +765,88 @@ describe('tally() — an unnamed raiser does not corroborate itself (v4.8 T-B4, 
     expect('unattributedPeerDrops' in f).toBe(false);
   });
 });
+
+/**
+ * #202 / v4.9 W13 — the TTFT probe's LAST hop.
+ *
+ * Through v4.9.1 `utils/ttft.js`'s docblock enumerated four emit gates on this
+ * field's journey "on its way to a document" and stopped one short (it now names
+ * all five, this one included): `tally.js :: tally` re-projects
+ * every runStats row through a hand-maintained allowlist that never named
+ * `ttftMs`, and `verdict.js :: buildVerdict` copies that array verbatim. So the
+ * probe emitted correctly into tally-input.json and was destroyed before
+ * tally.json / verdict.json — the ONLY run artifacts CI uploads.
+ *
+ * MEASURED on the real evidence, CI run 33030485388 (amicus 4.9.0):
+ * tally-input.json carried ttftMs on 11 of 12 rows; tally.json and verdict.json
+ * carried it on 0 of 12. Same run, same array.
+ *
+ * T-TTFT-5 is the DRIFT pin and the reason this block exists in this shape: it
+ * fails for ANY future key that buildRunStatsEntry learns to emit and this
+ * allowlist is not taught to carry, which is the defect class itself rather than
+ * this one instance of it.
+ */
+describe('tally() — the TTFT probe reaches the published artifacts (#202)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['glm'], chair: 'gpt', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+  };
+  const seatRow = extra => ({ model: 'glm', role: 'seat', wasChair: false, conformance: 'clean',
+    status: 'complete', durationMs: 342229, usage: null, ...extra });
+
+  test('T-TTFT-1 a measured ttftMs survives the runStats allowlist', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow({ ttftMs: 156746 })] });
+    expect(record.runStats[0].ttftMs).toBe(156746);
+  });
+
+  test('T-TTFT-2 `0` is a real measurement and is not eaten as falsy', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow({ ttftMs: 0 })] });
+    expect(record.runStats[0].ttftMs).toBe(0);
+  });
+
+  test('T-TTFT-3 a dishonest reading is DROPPED, never clamped or forwarded', () => {
+    // The exact families utils/ttft.js says `typeof` wrongly admits. NaN and
+    // ±Infinity serialize to `null`, which breaks council-tally.schema.json's
+    // `integer, minimum 0` while LOOKING like an honest absence.
+    for (const bad of [-5, NaN, Infinity, -Infinity, 1.5, null, '12', undefined]) {
+      const record = tally({ ...baseInput, runStats: [seatRow({ ttftMs: bad })] });
+      expect(`ttftMs=${String(bad)} -> ${'ttftMs' in record.runStats[0]}`)
+        .toBe(`ttftMs=${String(bad)} -> false`);
+    }
+  });
+
+  test('T-TTFT-4 key ORDER matches buildRunStatsEntry (G7b\'s invariant, for a row that carries it)', () => {
+    const row = buildRunStatsEntry({
+      leg: { model: 'openrouter/z-ai/glm-5.3', status: 'complete', durationMs: 342229,
+        usage: null, waveId: 'r-s1', ttftMs: 156746 },
+      model: 'glm', role: 'seat', conformance: 'clean' });
+    const record = tally({ ...baseInput, runStats: [row] });
+    expect(Object.keys(record.runStats[0])).toEqual(Object.keys(row));
+  });
+
+  test('T-TTFT-5 DRIFT PIN — every key buildRunStatsEntry emits reaches tally, bar the deliberate drops', () => {
+    const row = buildRunStatsEntry({
+      leg: { model: 'openrouter/z-ai/glm-5.3', status: 'complete', durationMs: 5,
+        usage: null, waveId: 'r-s1', ttftMs: 12 },
+      model: 'glm', role: 'seat', conformance: 'unstructured',
+      findingsUnverified: true, repairRefused: { code: 'X', detail: 'd' },
+      seat: { id: 'glm#1', alias: 'glm' }, summary: 'REVIEW PROSE' });
+    const projected = tally({ ...baseInput, runStats: [row] }).runStats[0];
+    // `summary` is dropped ON PURPOSE (G5c: review prose must never reach
+    // tally.json/verdict.json or the ledger). Anything else going missing is drift.
+    const DELIBERATE_DROPS = new Set(['summary']);
+    expect(Object.keys(row).filter(k => !(k in projected) && !DELIBERATE_DROPS.has(k)))
+      .toEqual([]);
+  });
+
+  test('T-TTFT-6 it reaches verdict.json, which copies the array verbatim', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow({ ttftMs: 384213 })] });
+    expect(buildVerdict(record).runStats[0].ttftMs).toBe(384213);
+  });
+
+  test('T-TTFT-7 a row with no ttftMs is byte-identical — the key is never invented', () => {
+    const record = tally({ ...baseInput, runStats: [seatRow()] });
+    expect(Object.keys(record.runStats[0]))
+      .toEqual(['model', 'role', 'wasChair', 'conformance', 'status', 'durationMs', 'usage']);
+  });
+});

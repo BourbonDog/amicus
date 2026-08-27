@@ -512,7 +512,7 @@ describe('runFanout orchestrator', () => {
     // Tokens in order: the `result &&` null guard, THEN the shared honesty
     // predicate, THEN the pass-through/undefined arms. Quote style is free.
     // ⚠️ PR #207 round 3 (B3) replaced the middle token: the bare `typeof`
-    // number test admitted NaN/Infinity/negative/fractional, so all four gates
+    // number test admitted NaN/Infinity/negative/fractional, so all five gates
     // now share `isMeasuredTtft` (see tests/council/run-stats-entry.test.js).
     // The `result &&` half — the property THIS pin exists for — is unchanged.
     expect(norm).toMatch(
