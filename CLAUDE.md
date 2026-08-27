@@ -698,7 +698,7 @@ evals/
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/gateway-route-audit.js` | Per-gateway-form audit for curated DEFAULT aliases (Task 6, #gwid). | `auditGatewayRoutes()` |
 | `utils/gateway-route-catalog.js` | Conservative cross-gateway catalog pairing helper (Task 5, #gwid). | `pairAcrossGateways()` |
-| `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `resolveRoute()` |
+| `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `gatewayOf()`, `resolveRoute()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |

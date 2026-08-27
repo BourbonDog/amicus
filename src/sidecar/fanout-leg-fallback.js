@@ -15,6 +15,7 @@ const fs = require('fs');
 const { logger } = require('../utils/logger');
 const { classifyLegError, isRetryable } = require('../utils/error-classify');
 const { deriveChain } = require('./fallback-chains');
+const { gatewayOf } = require('../utils/gateway-router');
 
 /**
  * Append ONE attributed ledger row for a single attempt (spec 6.2/7.1). At
@@ -38,7 +39,7 @@ function recordAttemptSpend({ doc, leg, currentModel, legId, waveId, project, at
     // a substitution carries the substitute's resolved gateway on
     // `routeGateway` (threaded in by the loop, incl. v4.2 'local').
     const gateway = routeGateway || (leg && leg.gateway) ||
-      (String(currentModel).startsWith('openrouter/') ? 'openrouter' : 'direct');
+      gatewayOf(currentModel);
     const row = {
       taskId: legId, waveId, model: currentModel, mode: 'leg', usage,
       op: 'leg', status: doc.status, gateway,
