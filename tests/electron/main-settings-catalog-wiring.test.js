@@ -68,26 +68,36 @@ function setupWindowBlock() {
 // preselect instead of the family flagship the card itself displays. See
 // tests/model-shortlist.test.js's "F13" describe block for the underlying
 // mechanism, reproduced end-to-end against a first-run-shaped catalog.
-describe('F1: recommendedId must be toStorableRoute(p), not the divergent-vendor expression applied to every vendor', () => {
-  test('createSetupWindow passes recommendedId: toStorableRoute(p)', () => {
+describe('F1: recommendedId must be toStorableRoute (with evidence), not the divergent-vendor expression applied to every vendor', () => {
+  test('createSetupWindow passes recommendedId via toStorableRoute WITH catalog evidence', () => {
     const block = setupWindowBlock();
     expect(block).toContain("require('../src/utils/quick-picks')");
     expect(block).toMatch(/\btoStorableRoute\b/);
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    expect(line).toContain('toStorableRoute(p)');
+    // issue 214 + council #216 A3: match the CALL rather than the exact arity, and
+    // pin that real EVIDENCE is passed. The earlier form only rejected the literal
+    // `toStorableRoute(p)`, so `toStorableRoute(p, undefined)` sailed through -- it
+    // asserted an argument existed, not that it carried the catalog.
+    expect(line).toMatch(/toStorableRoute\(p\b/);
+    expect(line).toMatch(/toStorableRoute\(p,\s*(catalogInfo|\{[^)]*providerFailures)/);
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 
-  test('createSettingsChildWindow passes recommendedId: toStorableRoute(p)', () => {
+  test('createSettingsChildWindow passes recommendedId via toStorableRoute WITH catalog evidence', () => {
     const block = settingsWindowBlock();
     expect(block).toContain("require('../src/utils/quick-picks')");
     expect(block).toMatch(/\btoStorableRoute\b/);
     const idx = block.indexOf('recommendedId:');
     expect(idx).toBeGreaterThan(-1);
     const line = block.slice(idx, block.indexOf('\n', idx));
-    expect(line).toContain('toStorableRoute(p)');
+    // issue 214 + council #216 A3: match the CALL rather than the exact arity, and
+    // pin that real EVIDENCE is passed. The earlier form only rejected the literal
+    // `toStorableRoute(p)`, so `toStorableRoute(p, undefined)` sailed through -- it
+    // asserted an argument existed, not that it carried the catalog.
+    expect(line).toMatch(/toStorableRoute\(p\b/);
+    expect(line).toMatch(/toStorableRoute\(p,\s*(catalogInfo|\{[^)]*providerFailures)/);
     expect(line).not.toContain('p.vendorPath'); // the reverted divergent-only expression
   });
 });

@@ -210,7 +210,7 @@ describe('setup-ui wizard', () => {
 
   describe('#61: direct-first canonicalization for auto-selected routes', () => {
     // issue 214: the page used to carry the direct-provider list purely to feed
-    // its own hand-copy of toCanonicalDefault. Both are gone -- the safe form is
+    // its own hand-copy of stripGatewayPrefix. Both are gone -- the safe form is
     // decided server-side (quick-picks.js canonicalRoutesFor) and shipped as data.
     it('ships no routing policy to the page: no directProviders list, no prefix derivation', () => {
       expect(html).not.toContain('var directProviders');

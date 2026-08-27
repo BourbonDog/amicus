@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { getFamilies, toDefaultAliases, toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
+const { getFamilies, toDefaultAliases, DIVERGENT_VENDORS } = require('./curated-models');
 const { directFormIfSafe } = require('./model-canonicalization');
 
 const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
@@ -85,12 +85,20 @@ function resolveQuickPicks(catalog) {
  * @param {{vendorPath?:string, routes?:Object<string,string>}} pick
  * @returns {string|undefined}
  */
-function toStorableRoute(pick) {
+function toStorableRoute(pick, catalogInfo) {
   const routes = (pick && pick.routes) || {};
   if (pick && DIVERGENT_VENDORS.has(pick.vendorPath)) {
     return routes[pick.vendorPath] || routes.openrouter;
   }
-  return toCanonicalDefault(routes.openrouter || Object.values(routes)[0]);
+  const route = routes.openrouter || Object.values(routes)[0];
+  if (!route) { return undefined; }
+  // issue 214 remedy 1: this value is PERSISTED (sidecar/setup.js writes it into
+  // config.aliases; toLiveSeedAliases seeds a fresh config with it), so it must
+  // not be a blind prefix strip. directFormIfSafe keeps the optimism for a
+  // namespace that was never fetched while refusing for one the catalog
+  // disproves OR whose fetch was rejected -- the gap #208 closed on the picker
+  // path and left open here.
+  return directFormIfSafe(pick.vendorPath, route, catalogInfo || { models: [] });
 }
 
 /**
@@ -99,11 +107,16 @@ function toStorableRoute(pick) {
  * overlaid value is not a raw prefix strip.
  * @returns {Object<string,string>}
  */
-function toLiveSeedAliases(catalog) {
+function toLiveSeedAliases(catalogOrInfo) {
+  // Accepts the bare models array (historical callers) or a full catalogInfo.
+  // issue 214: the evidence was always handed in and then discarded.
+  const info = Array.isArray(catalogOrInfo)
+    ? { models: catalogOrInfo }
+    : (catalogOrInfo || { models: [] });
   const seeds = toDefaultAliases();
-  for (const r of resolveQuickPicks(catalog || [])) {
+  for (const r of resolveQuickPicks(info.models || [])) {
     if (r.source === 'live' && r.routes.openrouter) {
-      const stored = toStorableRoute(r);
+      const stored = toStorableRoute(r, info);
       if (stored) { seeds[r.alias] = stored; }
     }
   }
@@ -115,7 +128,7 @@ function toLiveSeedAliases(catalog) {
  * Per-provider SAFE storable form for a resolved quick pick (issue 214).
  *
  * The wizard renderer used to derive this itself, via a hand-copy of
- * `toCanonicalDefault` (`toBareIfDirect`) that dropped both of the real
+ * `stripGatewayPrefix` (`toBareIfDirect`) that dropped both of the real
  * primitive's guards: it stripped `openrouter/` for DIVERGENT_VENDORS
  * (fabricating anthropic's dot id, which the direct API rejects) and stripped
  * for a namespace whose fetch had failed. The renderer cannot `require()`, so

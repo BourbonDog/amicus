@@ -149,7 +149,7 @@ async function runCheck(args) {
   const sources = collectAliasSources();
   const stale = findStaleAliases(sources, catalog)
     .map(s => ({ ...s, suggestions: suggestReplacements(s.model, catalog) }));
-  const drifted = findDriftedStoredAliases(sources, catalog);
+  const drifted = findDriftedStoredAliases(sources, catalogInfo);
   // Task 6 (#gwid): per-gateway-form audit of the curated DEFAULTS
   // (toGatewayRoutes()) — additive to the flat audit above. Informational by
   // default; --strict promotes it to a build-breaking exit code (CI gate).

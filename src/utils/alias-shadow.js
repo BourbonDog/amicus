@@ -103,7 +103,7 @@ const { collapseExcerpt } = require('./text-sanitize');
  */
 function findAliasShadows(names) {
   const { loadConfig } = require('./config');
-  const { toDefaultAliases, toCanonicalDefault } = require('./curated-models');
+  const { toDefaultAliases, stripGatewayPrefix } = require('./curated-models');
   const cfg = loadConfig();
   const userAliases = (cfg && cfg.aliases && typeof cfg.aliases === 'object') ? cfg.aliases : {};
   // Own keys only: a user config.json can carry a literal `__proto__`/`toString`
@@ -131,7 +131,7 @@ function findAliasShadows(names) {
     // ROUTING has its own audit (`models --check`'s per-gateway section); this
     // notice speaks only when the alias names a different MODEL. The rows still
     // report both sides RAW, so the user can grep their own config.
-    if (toCanonicalDefault(local) === toCanonicalDefault(shipped)) { continue; }
+    if (stripGatewayPrefix(local) === stripGatewayPrefix(shipped)) { continue; }
     out.push({ alias, local, curated: shipped });
   }
   return out;

@@ -142,9 +142,11 @@ function getFamilies() {
 }
 
 /**
- * Direct-first canonicalization for a pinned `openrouter/<vendor>/<rest>`
- * route: when `<vendor>` has a direct integration (provider-registry
- * `isDirectProvider`), strip the `openrouter/` prefix so the resulting bare
+ * ⚠️ MECHANICAL primitive, NOT a routing decision (renamed from `toCanonicalDefault`,
+ * issue 214 — model-canonicalization.js explains why that name was a trap). An id that
+ * will be CALLED or STORED must come from directFormIfSafe/directFormIfProven. Strips
+ * the `openrouter/` prefix off a pinned route when `<vendor>` has a direct integration
+ * (provider-registry `isDirectProvider`), so the resulting bare
  * `<vendor>/<rest>` id is policy-routed by the gateway router (direct when a
  * direct key exists, OpenRouter otherwise). Gateway-only vendors (no direct
  * integration — e.g. qwen, x-ai, z-ai, mistralai, minimax, moonshotai,
@@ -154,7 +156,7 @@ function getFamilies() {
  * @param {string} route
  * @returns {string}
  */
-function toCanonicalDefault(route) {
+function stripGatewayPrefix(route) {
   if (typeof route === 'string' && route.startsWith('openrouter/')) {
     const rest = route.slice('openrouter/'.length); // '<vendor>/<rest...>'
     const slashIdx = rest.indexOf('/');
@@ -211,7 +213,7 @@ function vendorOf(orRoute) {
 function directFormFor(vendorPath, obj) {
   if (obj[vendorPath]) { return obj[vendorPath]; } // explicit, authored, current direct id
   if (DIVERGENT_VENDORS.has(vendorPath)) { return undefined; } // no explicit form + divergent → omit
-  const bare = toCanonicalDefault(obj.openrouter); // safe only when ids are identical across gateways
+  const bare = stripGatewayPrefix(obj.openrouter); // safe only when ids are identical across gateways
   return bare !== obj.openrouter ? bare : undefined; // gateway-only vendor → undefined
 }
 
@@ -293,6 +295,6 @@ function toDefaultAliases() {
 }
 
 module.exports = {
-  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes,
+  getFamilies, toDefaultAliases, stripGatewayPrefix, listCuratedRoutes, toGatewayRoutes,
   directFormProvenance, DIVERGENT_VENDORS
 };

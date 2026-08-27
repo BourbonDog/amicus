@@ -104,7 +104,7 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     const { runReadlineSetup } = require('../src/sidecar/setup');
     await runReadlineSetup();
     const written = saveConfig.mock.calls[0][0];
-    // Chosen-alias write always runs through toCanonicalDefault (Task 8.1a
+    // Chosen-alias write always runs through stripGatewayPrefix (Task 8.1a
     // setup-seeding fix), regardless of whether toLiveSeedAliases (mocked
     // here) seeded the fresh config — bare canonical for direct-capable 'google'.
     expect(written.aliases.gemini).toBe('google/gemini-9.9-flash');
