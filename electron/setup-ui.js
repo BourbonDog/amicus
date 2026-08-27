@@ -22,12 +22,22 @@ const { PROVIDER_FAMILY_NAMES } = require('../src/utils/model-fetcher');
  * @param {Object<string,object>} [options.shortlists] - issue 138: per-alias vendor
  *   shortlist from buildModelShortlist(), passed through to buildModelStepHTML
  *   for the model-level <select>. Defaults to {} (no drill-down rendered).
+ * @param {Object<string,string>} [options.aliases] - issue 213: the alias map Step 3
+ *   renders. Callers pass getEffectiveAliases() (defaults MERGED with the user's
+ *   config); the default here stays getDefaultAliases() so an omitted option is
+ *   the old behaviour exactly. This is the second half of issue 213: fixing
+ *   buildAliasEditorHTML's grouping guarantees "every alias passed in renders
+ *   exactly once", but the app was only ever passing the 21 built-in defaults,
+ *   so a user's custom aliases had no row at all. The config that arrives later
+ *   over IPC cannot repair that -- applyAliasEditsToUI only rewrites the model
+ *   text of rows that ALREADY exist (`if (!row) { return; }`).
  */
 function buildSetupHTML(options = {}) {
   const {
     client = 'code-local',
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
     shortlists = {},
+    aliases = getDefaultAliases(),               // issue 213
   } = options;
   // Council A1 (PR 215): a pick reaching the page WITHOUT canonicalRoutes makes
   // pickRouteFor fall back to the raw openrouter/... route, which this codebase
@@ -42,7 +52,7 @@ function buildSetupHTML(options = {}) {
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
   const modelHtml = buildModelStepHTML(picks, undefined, undefined, shortlists);
-  const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
+  const aliasHtml = buildAliasEditorHTML(aliases);
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
   const modelChoicesJson = JSON.stringify(picks);

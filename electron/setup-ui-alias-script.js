@@ -6,12 +6,21 @@
  * Extracted from setup-ui.js to keep file sizes under 300 lines.
  */
 
+const { NEW_ROUTES_GROUP_LABEL } = require('./setup-ui-alias-groups');
+
 /**
  * Build the alias editor JS for inline inclusion in the wizard script
  * @returns {string} JavaScript source (no <script> tags)
  */
 function buildAliasScript() {
+  // This script runs in the wizard PAGE and cannot require(), so anything it
+  // shares with the Node builders is either serialised in as DATA (the group
+  // heading below) or not shared at all. The vendor grouping rule is the
+  // latter, on purpose: see the SHARED-WITH-THE-BROWSER note in
+  // setup-ui-alias-groups.js and the issue 214 guard in tests/setup-ui.test.js.
   return `
+  var NEW_ROUTES_GROUP_LABEL = ${JSON.stringify(NEW_ROUTES_GROUP_LABEL)};
+
   // Alias editor: search
   var aliasSearchInput = $('alias-search');
   if (aliasSearchInput) {
@@ -92,13 +101,53 @@ function buildAliasScript() {
     // real ones). Same string, honest framing: its own labelled optgroup.
     if (currentValue && !select.querySelector('option[value="' + CSS.escape(currentValue) + '"]')) {
       var customGroup = document.createElement('optgroup');
-      customGroup.label = 'Current \u2014 not found in catalog';
+      customGroup.label = 'Current \\u2014 not found in catalog';
       var custom = document.createElement('option');
       custom.value = currentValue; custom.textContent = currentValue; custom.selected = true;
       customGroup.appendChild(custom);
       select.insertBefore(customGroup, select.firstChild);
     }
     return select;
+  }
+
+  // issue 213: a new custom route used to be appended as an ungrouped sibling
+  // of every <details>, so it rendered below the last group with no heading at
+  // all. It now goes into its own clearly-labelled group. Vendor filing is the
+  // SERVER's job (setup-ui-alias-groups.js) -- deriving a vendor here would
+  // mean shipping gateway-prefix stripping back into the page, which is what
+  // issue 214 removed.
+  function placeRowInNewRoutesGroup(row) {
+    var editor = document.querySelector('.alias-editor');
+    if (!editor) { return; }
+    var group = editor.querySelector('.alias-group[data-new-routes]');
+    if (!group) {
+      group = document.createElement('details');
+      group.className = 'alias-group';
+      group.setAttribute('data-new-routes', '1');
+      var summary = document.createElement('summary');
+      var labelEl = document.createElement('span');
+      labelEl.textContent = NEW_ROUTES_GROUP_LABEL + ' ';
+      var countEl = document.createElement('span');
+      countEl.className = 'alias-count';
+      summary.appendChild(labelEl); summary.appendChild(countEl);
+      group.appendChild(summary);
+      editor.insertBefore(group, $('alias-add-btn'));
+    }
+    group.appendChild(row);
+    group.open = true;
+    refreshAliasCounts();
+  }
+
+  // Server-rendered counts are static; keep them true after add/remove. The
+  // new-routes group is client-created, so drop it once its last row is gone
+  // (server-rendered groups are never empty -- groupAliases cannot emit one).
+  function refreshAliasCounts() {
+    document.querySelectorAll('.alias-group').forEach(function(g) {
+      var rows = g.querySelectorAll('.alias-row').length;
+      if (rows === 0 && g.hasAttribute('data-new-routes')) { g.remove(); return; }
+      var countEl = g.querySelector('.alias-count');
+      if (countEl) { countEl.textContent = '(' + rows + ')'; }
+    });
   }
 
   // Alias editor: inline edit
@@ -192,8 +241,7 @@ function buildAliasScript() {
       row.appendChild(arrow);
       row.appendChild(modelSelect);
       row.appendChild(delBtn);
-      var editor = document.querySelector('.alias-editor');
-      if (editor) { editor.insertBefore(row, addBtn); }
+      placeRowInNewRoutesGroup(row);
       nameInput.focus();
       function commitNew() {
         var n = nameInput.value.trim();
@@ -216,6 +264,7 @@ function buildAliasScript() {
         var a = row.getAttribute('data-alias');
         if (a) { delete aliasEdits[a]; }
         row.remove();
+        refreshAliasCounts();
       });
     });
   }`;

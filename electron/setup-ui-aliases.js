@@ -5,42 +5,46 @@
  * delete, and add functionality for the setup wizard Step 3.
  */
 
-/** Grouping metadata for the 21 default aliases */
-const ALIAS_GROUPS = [
-  { name: 'Gemini', keys: ['gemini', 'gemini-pro'] },
-  { name: 'GPT', keys: ['gpt', 'gpt-pro', 'codex'] },
-  { name: 'Claude', keys: ['claude', 'sonnet', 'opus', 'haiku', 'fable'] },
-  { name: 'DeepSeek', keys: ['deepseek'] },
-  { name: 'Qwen', keys: ['qwen', 'qwen-coder', 'qwen-flash'] },
-  { name: 'Mistral', keys: ['mistral'] },
-  { name: 'Other', keys: ['glm', 'minimax', 'grok', 'kimi', 'seed', 'inkling'] },
-];
+const { groupAliases } = require('./setup-ui-alias-groups');
+
+/** Attribute/text-safe rendering of user-controlled alias names and routes. */
+function esc(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 /**
  * Build the HTML fragment for the alias editor section
+ *
+ * Issue 213: groups are derived from each alias's ROUTE VENDOR
+ * (setup-ui-alias-groups.js), not from a hardcoded list of alias names, so
+ * EVERY alias in `aliases` renders exactly once -- the old whitelist silently
+ * dropped any name it did not list (12 of 25 in a real config).
+ *
  * @param {Object<string,string>} aliases - Map of alias name to model string
  * @returns {string} HTML fragment with search, groups, rows, and add button
  */
 function buildAliasEditorHTML(aliases) {
   const searchInput = '<input type="text" id="alias-search" class="alias-search" placeholder="Search aliases..." autocomplete="off" spellcheck="false">';
 
-  const groups = ALIAS_GROUPS.map(group => {
+  const groups = groupAliases(aliases).map(group => {
     const rows = group.keys
-      .filter(key => aliases[key] !== undefined)
       .map(key => {
         const model = aliases[key];
-        return `<div class="alias-row" data-alias="${key}">` +
-          `<span class="alias-name">${key}</span>` +
+        return `<div class="alias-row" data-alias="${esc(key)}">` +
+          `<span class="alias-name">${esc(key)}</span>` +
           '<span class="alias-arrow">\u2192</span>' +
-          `<span class="alias-model">${model}</span>` +
-          `<button class="alias-delete" data-alias="${key}">\u00d7</button>` +
+          `<span class="alias-model">${esc(model)}</span>` +
+          `<button class="alias-delete" data-alias="${esc(key)}">\u00d7</button>` +
           '</div>';
       }).join('\n        ');
 
-    const count = group.keys.filter(key => aliases[key] !== undefined).length;
-
-    return `<details class="alias-group">
-        <summary>${group.name} <span class="alias-count">(${count})</span></summary>
+    // data-vendor records WHICH vendor a group holds, for tests and for anyone
+    // inspecting the page. The client does not read it to place rows -- see the
+    // SHARED-WITH-THE-BROWSER note in setup-ui-alias-groups.js.
+    return `<details class="alias-group" data-vendor="${esc(group.vendor)}">
+        <summary>${esc(group.label)} <span class="alias-count">(${group.keys.length})</span></summary>
         ${rows}
       </details>`;
   }).join('\n      ');
@@ -82,4 +86,4 @@ function buildAliasEditorHTML(aliases) {
     </div>`;
 }
 
-module.exports = { ALIAS_GROUPS, buildAliasEditorHTML };
+module.exports = { buildAliasEditorHTML };

@@ -370,7 +370,19 @@ async function createSetupWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists });
+  // issue 213: render Step 3 from the user's EFFECTIVE aliases (defaults merged
+  // with config), not the 21 built-in defaults. Custom aliases used to get no
+  // row at all -- and the config arriving later over IPC could not add one,
+  // since applyAliasEditsToUI only rewrites rows that already exist. Its own
+  // try/catch: an unreadable config must cost the alias list, not the window.
+  let aliases;
+  try {
+    aliases = require('../src/utils/config').getEffectiveAliases();
+  } catch (_err) {
+    aliases = undefined;  // buildSetupHTML falls back to the defaults
+  }
+
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists, aliases });
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 
@@ -569,7 +581,18 @@ function createSettingsChildWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists });
+  // issue 213: mirror createSetupWindow -- Step 3 renders the user's EFFECTIVE
+  // aliases, not just the built-in defaults. getEffectiveAliases() reads the
+  // config file synchronously (loadConfig), so this keeps the "Settings must
+  // never trigger a network fetch / stay synchronous" property intact.
+  let aliases;
+  try {
+    aliases = require('../src/utils/config').getEffectiveAliases();
+  } catch (_err) {
+    aliases = undefined;  // buildSetupHTML falls back to the defaults
+  }
+
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists, aliases });
   settingsWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   settingsWin.webContents.on('page-title-updated', (e) => e.preventDefault());
 }

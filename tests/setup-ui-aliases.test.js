@@ -1,35 +1,175 @@
 /**
  * Tests for electron/setup-ui-aliases.js (Alias Editor)
  *
- * Verifies ALIAS_GROUPS coverage and buildAliasEditorHTML output.
+ * Verifies vendor-derived grouping (issue #213) and buildAliasEditorHTML output.
  */
 
 const { getDefaultAliases } = require('../src/utils/config');
-const { ALIAS_GROUPS, buildAliasEditorHTML } = require('../electron/setup-ui-aliases');
+const { buildAliasEditorHTML } = require('../electron/setup-ui-aliases');
+const {
+  groupAliases, aliasVendorOf, vendorLabel, NEW_ROUTES_GROUP_LABEL,
+} = require('../electron/setup-ui-alias-groups');
 const { buildAliasScript } = require('../electron/setup-ui-alias-script');
+const { ALIASES_25, DROPPED_BY_WHITELIST } = require('./setup-ui-alias-fixture');
+
+/** Every data-alias="..." value rendered, in document order. */
+function renderedAliases(html) {
+  return [...html.matchAll(/<div class="alias-row" data-alias="([^"]*)"/g)].map(m => m[1]);
+}
 
 describe('setup-ui-aliases', () => {
-  describe('ALIAS_GROUPS', () => {
-    it('should cover all 21 DEFAULT_ALIASES keys', () => {
-      const defaultKeys = Object.keys(getDefaultAliases());
-      const groupedKeys = ALIAS_GROUPS.flatMap(g => g.keys);
-      expect(groupedKeys.sort()).toEqual(defaultKeys.sort());
+  // Issue #213: groups came from a hardcoded name whitelist, so any alias
+  // whose NAME was not listed rendered nowhere at all. Grouping is now derived
+  // from the route's vendor segment, which every alias has.
+  describe('groupAliases (issue #213)', () => {
+    it('derives the group from the route vendor, not the alias name', () => {
+      const groups = groupAliases({ 'my-weird-name': 'openrouter/z-ai/glm-5.3' });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].vendor).toBe('z-ai');
+      expect(groups[0].keys).toEqual(['my-weird-name']);
     });
 
-    it('should have no duplicate keys across groups', () => {
-      const allKeys = ALIAS_GROUPS.flatMap(g => g.keys);
-      expect(new Set(allKeys).size).toBe(allKeys.length);
+    it('places every alias in the 25-alias config in exactly one group', () => {
+      const groups = groupAliases(ALIASES_25);
+      const placed = groups.flatMap(g => g.keys);
+      expect(placed.sort()).toEqual(Object.keys(ALIASES_25).sort());
+      expect(new Set(placed).size).toBe(placed.length); // no duplicates
+      expect(placed).toHaveLength(25);
     });
 
-    it('should have 7 groups', () => {
-      expect(ALIAS_GROUPS).toHaveLength(7);
+    it('groups the 21 default aliases with none dropped or duplicated', () => {
+      const defaults = getDefaultAliases();
+      const placed = groupAliases(defaults).flatMap(g => g.keys);
+      expect(placed.sort()).toEqual(Object.keys(defaults).sort());
+      expect(new Set(placed).size).toBe(placed.length);
     });
 
-    it('should have named groups with non-empty keys arrays', () => {
-      ALIAS_GROUPS.forEach(g => {
-        expect(g.name).toBeTruthy();
+    it('never emits an empty group', () => {
+      groupAliases(ALIASES_25).forEach(g => {
         expect(g.keys.length).toBeGreaterThan(0);
+        expect(g.label).toBeTruthy();
       });
+    });
+
+    it('reproduces issue #213s expected vendor counts', () => {
+      const byLabel = Object.fromEntries(groupAliases(ALIASES_25).map(g => [g.label, g.keys]));
+      expect(byLabel.Google).toEqual(
+        expect.arrayContaining(['gemini', 'gemini-pro', 'google', 'free-google-gemma-4-31b-it']));
+      expect(byLabel.Google).toHaveLength(4);
+      expect(byLabel.OpenAI.sort()).toEqual(['gpt', 'gpt-pro', 'openai']);
+      expect(byLabel.Anthropic.sort()).toEqual(['anthropic', 'claude', 'fable']);
+      expect(byLabel.DeepSeek).toEqual(['deepseek']);
+      expect(byLabel.Qwen.sort()).toEqual(['qwen', 'qwen-flash']);
+    });
+
+    it('puts direct-provider groups first, then the rest alphabetically by label', () => {
+      const labels = groupAliases(ALIASES_25).map(g => g.label);
+      expect(labels.slice(0, 4)).toEqual(['Google', 'OpenAI', 'Anthropic', 'DeepSeek']);
+      const rest = labels.slice(4);
+      const sorted = [...rest].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+      expect(rest).toEqual(sorted);
+    });
+
+    it('is not case-sensitive about alias names (GLM groups with glm)', () => {
+      const groups = groupAliases({ GLM: 'openrouter/z-ai/glm-5.2', glm: 'openrouter/z-ai/glm-5.3' });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].keys.sort()).toEqual(['GLM', 'glm']);
+    });
+
+    it('normalises a floating ~vendor into the same group as the pinned vendor', () => {
+      const groups = groupAliases({
+        glm: 'openrouter/z-ai/glm-5.3',
+        'glm-latest': 'openrouter/~z-ai/glm-latest',
+      });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].vendor).toBe('z-ai');
+      expect(groups[0].keys.sort()).toEqual(['glm', 'glm-latest']);
+    });
+
+    it('groups a local-provider route that has no gateway prefix', () => {
+      const groups = groupAliases({ lmstudio: 'lmstudio/qwen2.5-coder-7b-instruct' });
+      expect(groups[0].vendor).toBe('lmstudio');
+      expect(groups[0].label).toBe('LM Studio');
+    });
+
+    it('groups a bare route with no slash at all under its own vendor', () => {
+      const groups = groupAliases({ solo: 'some-local-model' });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].keys).toEqual(['solo']);
+    });
+
+    it('files an alias with an empty/missing route under Other rather than dropping it', () => {
+      const groups = groupAliases({ broken: '', alsoBroken: undefined, ok: 'google/gemini-3.6-flash' });
+      const placed = groups.flatMap(g => g.keys);
+      expect(placed.sort()).toEqual(['alsoBroken', 'broken', 'ok']);
+      expect(groups.find(g => g.keys.includes('broken')).label).toBe('Other');
+    });
+
+    it('returns [] for an empty alias map', () => {
+      expect(groupAliases({})).toEqual([]);
+    });
+  });
+
+  describe('aliasVendorOf / vendorLabel', () => {
+    it.each([
+      ['openrouter/z-ai/glm-5.3', 'z-ai'],
+      ['openrouter/~z-ai/glm-latest', 'z-ai'],
+      ['google/gemini-3.6-flash', 'google'],
+      ['lmstudio/qwen2.5-coder-7b-instruct', 'lmstudio'],
+      ['openrouter/cohere/north-mini-code:free', 'cohere'],
+      ['bare-model', 'bare-model'],
+      ['', ''],
+    ])('aliasVendorOf(%s) -> %s', (route, expected) => {
+      expect(aliasVendorOf(route)).toBe(expected);
+    });
+
+    it('title-cases an unknown vendor slug instead of showing the raw slug', () => {
+      expect(vendorLabel('some-new-vendor')).toBe('Some New Vendor');
+    });
+
+    it('uses PROVIDER_FAMILY_NAMES for the five registered providers', () => {
+      expect(vendorLabel('anthropic')).toBe('Anthropic');
+      expect(vendorLabel('openrouter')).toBe('OpenRouter');
+    });
+
+    it('labels the empty vendor Other', () => {
+      expect(vendorLabel('')).toBe('Other');
+    });
+  });
+
+  describe('buildAliasEditorHTML - every alias renders exactly once (issue #213)', () => {
+    it('renders all 25 aliases, including the 12 the whitelist dropped', () => {
+      const rendered = renderedAliases(buildAliasEditorHTML(ALIASES_25));
+      expect(rendered).toHaveLength(25);
+      expect(new Set(rendered).size).toBe(25);
+      DROPPED_BY_WHITELIST.forEach(key => expect(rendered).toContain(key));
+    });
+
+    it('renders every default alias exactly once', () => {
+      const rendered = renderedAliases(buildAliasEditorHTML(getDefaultAliases()));
+      expect(rendered.sort()).toEqual(Object.keys(getDefaultAliases()).sort());
+    });
+
+    it('tags each group with a data-vendor key the client can match on', () => {
+      const html = buildAliasEditorHTML(ALIASES_25);
+      expect(html).toContain('data-vendor="z-ai"');
+      expect(html).toContain('data-vendor="lmstudio"');
+    });
+
+    it('shows a per-group count equal to the rows it holds', () => {
+      const html = buildAliasEditorHTML(ALIASES_25);
+      const blocks = html.split('<details class="alias-group"').slice(1);
+      expect(blocks.length).toBeGreaterThan(0);
+      blocks.forEach(block => {
+        const count = Number(block.match(/class="alias-count">\((\d+)\)/)[1]);
+        expect(block.match(/class="alias-row"/g) || []).toHaveLength(count);
+      });
+    });
+
+    it('escapes HTML-special characters in alias names and routes', () => {
+      const html = buildAliasEditorHTML({ 'a"b<c': 'openrouter/z-ai/x&y' });
+      expect(html).toContain('data-alias="a&quot;b&lt;c"');
+      expect(html).toContain('x&amp;y');
     });
   });
 
@@ -48,9 +188,9 @@ describe('setup-ui-aliases', () => {
       expect(html).toContain('id="alias-search"');
     });
 
-    it('should render 7 details groups', () => {
+    it('should render one details group per distinct route vendor', () => {
       const matches = html.match(/<details class="alias-group"/g);
-      expect(matches).toHaveLength(7);
+      expect(matches).toHaveLength(groupAliases(getDefaultAliases()).length);
     });
 
     it('should render all 21 alias rows with data-alias attributes', () => {
@@ -91,14 +231,14 @@ describe('setup-ui-aliases', () => {
     });
 
     it('should contain group summary elements with counts', () => {
-      // Each group summary shows name and count
-      expect(html).toContain('Gemini');
-      expect(html).toContain('GPT');
-      expect(html).toContain('Claude');
-      expect(html).toContain('DeepSeek');
-      expect(html).toContain('Qwen');
-      expect(html).toContain('Mistral');
-      expect(html).toContain('Other');
+      // Group headings are vendor display names now, not alias-name buckets.
+      expect(html).toContain('class="alias-count"');
+      expect(html).toContain('>Google <');
+      expect(html).toContain('>OpenAI <');
+      expect(html).toContain('>Anthropic <');
+      expect(html).toContain('>DeepSeek <');
+      expect(html).toContain('>Qwen <');
+      expect(html).toContain('>Mistral AI <');
     });
 
     it('should have a step-content wrapper', () => {
@@ -180,6 +320,54 @@ describe('setup-ui-aliases', () => {
     it('should fall back to all models when no matches found', () => {
       // If filtered list is empty, return the original unfiltered groups
       expect(script).toContain('filtered.length === 0');
+    });
+  });
+
+  describe('buildAliasScript - injected current value is labelled (issue #211)', () => {
+    let script;
+
+    beforeAll(() => {
+      script = buildAliasScript();
+    });
+
+    it('keeps the CSS.escape guard on the catalog-membership check', () => {
+      expect(script).toContain('CSS.escape(currentValue)');
+    });
+
+    it('wraps the injected value in a labelled optgroup, not a bare option', () => {
+      expect(script).toContain('Current \\u2014 not found in catalog');
+      expect(script).toMatch(/createElement\('optgroup'\)/);
+    });
+  });
+
+  describe('buildAliasScript - custom routes land in a labelled group (issue #213)', () => {
+    let script;
+
+    beforeAll(() => {
+      script = buildAliasScript();
+    });
+
+    it('no longer appends the new row as an ungrouped sibling of the groups', () => {
+      expect(script).not.toContain('editor.insertBefore(row, addBtn)');
+      expect(script).toContain('placeRowInNewRoutesGroup');
+    });
+
+    it('puts the new row inside a real .alias-group details with a heading', () => {
+      expect(script).toContain('data-new-routes');
+      expect(script).toContain(JSON.stringify(NEW_ROUTES_GROUP_LABEL));
+    });
+
+    it('keeps group counts truthful after add and remove', () => {
+      expect(script).toContain('refreshAliasCounts');
+    });
+
+    // The page must carry NO grouping rule of its own: deriving a vendor
+    // client-side means shipping gateway-prefix stripping back into the
+    // wizard, which issue #214 removed and tests/setup-ui.test.js guards.
+    it('ships no vendor-derivation rule to the page', () => {
+      expect(script).not.toContain('aliasVendorOf');
+      expect(script).not.toContain("slice('openrouter/'.length)");
+      expect(script).not.toContain('openrouter/');
     });
   });
 });
