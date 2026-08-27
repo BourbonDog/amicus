@@ -86,11 +86,17 @@ function buildAliasScript() {
         }
       });
     }
-    // If current value not in options, add it
+    // issue 211: the current value is echoed back only because NOTHING in the
+    // catalog matched it -- it is not an offer. Rendered bare it read as the
+    // one first-class option Amicus recommends (a delisted id outranking 13
+    // real ones). Same string, honest framing: its own labelled optgroup.
     if (currentValue && !select.querySelector('option[value="' + CSS.escape(currentValue) + '"]')) {
+      var customGroup = document.createElement('optgroup');
+      customGroup.label = 'Current \u2014 not found in catalog';
       var custom = document.createElement('option');
       custom.value = currentValue; custom.textContent = currentValue; custom.selected = true;
-      select.insertBefore(custom, select.firstChild);
+      customGroup.appendChild(custom);
+      select.insertBefore(customGroup, select.firstChild);
     }
     return select;
   }
