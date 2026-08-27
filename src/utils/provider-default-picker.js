@@ -118,9 +118,11 @@ function chooseRowId(vendor, isDirect, row, paired, catalogInfo) {
  * @param {string} vendor
  * @returns {Array<{id:string,name:string,contextLength:(number|null),pricePerMInput:(number|null),isPreselected:boolean}>}
  */
-function buildRows(catalog, vendor) {
+function buildRows(catalog, vendor, providerFailures) {
   const byId = new Map(catalog.filter(r => r && typeof r.id === 'string').map(r => [r.id, r]));
-  const catalogInfo = { models: catalog };
+  // issue 208: providerFailures MUST ride along -- this rebuilds catalogInfo from a bare
+  // array, so dropping it leaves directFormIfSafe's namespace gate dead in production.
+  const catalogInfo = { models: catalog, providerFailures: providerFailures || [] };
   const directPrefix = `${vendor}/`;
   const orPrefix = `openrouter/${vendor}/`;
   // Hoisted: `vendor` is fixed for the whole call, so this is decided once
@@ -229,7 +231,7 @@ function buildProviderDefaultChoices(vendor, options = {}) {
   if (typeof vendor !== 'string' || !vendor) { return { preselectedId: null, rows: [] }; }
 
   const catalog = Array.isArray(options.catalog) ? options.catalog : [];
-  const rows = buildRows(catalog, vendor);
+  const rows = buildRows(catalog, vendor, options.providerFailures);
   if (rows.length === 0) { return { preselectedId: null, rows: [] }; }
 
   const preselectedId = computePreselectedId(vendor, options.tier, catalog, rows);
@@ -267,11 +269,11 @@ function buildProviderDefaultChoices(vendor, options = {}) {
  * @param {string} vendor e.g. 'anthropic'
  * @param {string} chosenId id from the picker (see above -- not always
  *   catalog-verbatim)
- * @param {{seedDefaultIfAbsent?: boolean, catalog?: Array<{id:string}>}} [options]
+ * @param {{seedDefaultIfAbsent?: boolean, catalog?: Array<{id:string}>, providerFailures?: Array<{provider:string}>}} [options]
  * @returns {{alias: string, setAsDefault: boolean}}
  */
-function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog } = {}) {
-  const catalogInfo = { models: Array.isArray(catalog) ? catalog : [] };
+function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true, catalog, providerFailures } = {}) {
+  const catalogInfo = { models: Array.isArray(catalog) ? catalog : [], providerFailures: providerFailures || [] };
   const storedId = directFormIfProven(vendor, chosenId, catalogInfo);
 
   const config = loadConfig() || {};

@@ -41,10 +41,30 @@ const { classifyModel } = require('./model-classification');
  * @param {{models: Array<{id:string, authoritative?: boolean}>}} catalogInfo
  * @returns {string} the bare direct id when not proven invalid, else `orId` unchanged
  */
+/**
+ * #208: did THIS vendor's direct namespace get ATTEMPTED and REJECTED for the
+ * catalog in hand? An empty namespace has two causes and `classifyModel`
+ * cannot tell them apart -- it returns 'unknown' for both. "Never fetched"
+ * (offline, no key) leaves optimism reasonable; "fetched and refused" means we
+ * know nothing about the namespace, and synthesising a direct id out of no
+ * knowledge is exactly how `deepseek/deepseek-v4-flash-0731` -- an id no
+ * gateway serves -- reached a real user config. Keyed on the VENDOR, never on
+ * "any failure": one provider's 401 says nothing about another's namespace.
+ * @param {string} vendor
+ * @param {{providerFailures?: Array<{provider: string}>}} catalogInfo
+ * @returns {boolean}
+ */
+function namespaceFetchFailed(vendor, catalogInfo) {
+  const failures = catalogInfo && catalogInfo.providerFailures;
+  return Array.isArray(failures) && failures.some(f => f && f.provider === vendor);
+}
+
 function directFormIfSafe(vendor, orId, catalogInfo) {
   if (DIVERGENT_VENDORS.has(vendor)) { return orId; }
   const bare = toCanonicalDefault(orId);
   if (bare === orId) { return orId; } // gateway-only vendor -- no direct integration at all
+  // Optimism is only justified when the namespace was never attempted.
+  if (namespaceFetchFailed(vendor, catalogInfo)) { return orId; }
   return classifyModel(bare, 'direct', catalogInfo) === 'invalid' ? orId : bare;
 }
 
@@ -61,4 +81,4 @@ function directFormIfProven(vendor, orId, catalogInfo) {
   return classifyModel(bare, 'direct', catalogInfo) === 'valid' ? bare : orId;
 }
 
-module.exports = { directFormIfSafe, directFormIfProven };
+module.exports = { directFormIfSafe, directFormIfProven, namespaceFetchFailed };

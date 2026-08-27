@@ -475,9 +475,17 @@ async function runReadlineSetup() {
       await warnOnLowOpenRouterCredit();
     }
 
-    const { getCatalog } = require('../utils/model-catalog');
+    const { getCatalogInfo } = require('../utils/model-catalog');
     let catalog = [];
-    try { catalog = await getCatalog(); } catch (_err) { /* offline: pinned */ }
+    // #208: carry the per-provider fetch outcomes alongside the rows, so the
+    // vendor shortlist below cannot synthesise a bare direct id for a
+    // namespace whose fetch was rejected rather than never attempted.
+    let providerFailures = [];
+    try {
+      const info = await getCatalogInfo();
+      catalog = info.models;
+      providerFailures = info.providerFailures || [];
+    } catch (_err) { /* offline: pinned */ }
 
     // Task 7 (cost-aware defaults P2): per-provider picker, once per keyed
     // provider, BEFORE the mode prompt -- orthogonal to standard-vs-free-council.
@@ -599,6 +607,7 @@ async function runReadlineSetup() {
           const { buildModelShortlist } = require('../utils/model-shortlist');
           const shortlist = buildModelShortlist(pick.vendorPath, {
             catalog,
+            providerFailures,
             recommendedId: cfg.aliases[chosen.alias],
           });
           const specific = await promptForVendorModel(

@@ -162,3 +162,38 @@ describe('extraction identity (pure move, not a duplicate)', () => {
     expect(picker.directFormIfProven).toBe(directFormIfProven);
   });
 });
+
+/**
+ * Issue #208: an empty direct namespace has TWO causes, and only one of them
+ * justifies optimism. "Never fetched" (offline, no key) cannot disprove the
+ * bare form, so stripping is reasonable. "Fetched and REJECTED" is not
+ * evidence of absence either -- but it is evidence that we know nothing, and
+ * synthesising a direct id from no knowledge is how an unservable id
+ * (`deepseek/deepseek-v4-flash-0731`) reached a real config.
+ */
+describe('directFormIfSafe — namespace fetch failure suppresses optimism (#208)', () => {
+  test('vendor whose namespace fetch was REJECTED: passed through, not stripped', () => {
+    expect(directFormIfSafe('deepseek', 'openrouter/deepseek/deepseek-v4-flash-0731', {
+      models: [{ id: 'openrouter/deepseek/deepseek-v4-flash-0731' }],
+      providerFailures: [{ provider: 'deepseek', reason: 'http-status', status: 401 }],
+    })).toBe('openrouter/deepseek/deepseek-v4-flash-0731');
+  });
+
+  // Named mutant: implementing the gate as "any recorded failure suppresses
+  // stripping" passes the test above and fails this one. The gate must be
+  // keyed on THIS vendor's namespace.
+  test('a failure recorded for a DIFFERENT provider does not suppress stripping', () => {
+    expect(directFormIfSafe('deepseek', 'openrouter/deepseek/deepseek-v3.2', {
+      models: [],
+      providerFailures: [{ provider: 'openai', reason: 'http-status', status: 401 }],
+    })).toBe('deepseek/deepseek-v3.2');
+  });
+
+  // Preserves the legitimate optimism the module was designed around: a
+  // catalog that is empty because nothing was ever fetched still strips.
+  test('empty catalog with NO recorded failures still strips (never-attempted stays optimistic)', () => {
+    expect(directFormIfSafe('deepseek', 'openrouter/deepseek/deepseek-v3.2', {
+      models: [], providerFailures: [],
+    })).toBe('deepseek/deepseek-v3.2');
+  });
+});

@@ -331,7 +331,11 @@ async function createSetupWindow() {
   let quickPicks;
   const shortlists = {};
   try {
-    const catalog = await require('../src/utils/model-catalog').getCatalog();
+    // issue 208: getCatalogInfo (not getCatalog) -- the shortlist needs the
+    // per-provider fetch outcomes, or directFormIfSafe's namespace-failure
+    // gate cannot fire and a rejected namespace still yields bare direct ids.
+    const catalogInfo = await require('../src/utils/model-catalog').getCatalogInfo();
+    const catalog = catalogInfo.models;
     quickPicks = resolveQuickPicks(catalog);
 
     // issue 138: one vendor shortlist per family card, resolved server-side from
@@ -341,6 +345,7 @@ async function createSetupWindow() {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
+          providerFailures: catalogInfo.providerFailures,
           recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
@@ -527,6 +532,8 @@ function createSettingsChildWindow() {
   try {
     const cacheDoc = readCache();
     const catalog = cacheDoc ? cacheDoc.models : [];
+    // issue 208: the cache doc carries the fetch outcomes for THESE rows.
+    const providerFailures = (cacheDoc && cacheDoc.providerFailures) || [];
     quickPicks = resolveQuickPicks(catalog);
 
     const { buildModelShortlist } = require('../src/utils/model-shortlist');
@@ -534,6 +541,7 @@ function createSettingsChildWindow() {
       try {
         shortlists[p.alias] = buildModelShortlist(p.vendorPath, {
           catalog,
+          providerFailures,
           recommendedId: toStorableRoute(p),
         });
       } catch (_e) { /* a shortlist failure must never block the wizard */ }
