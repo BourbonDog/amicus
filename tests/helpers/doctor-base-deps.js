@@ -54,7 +54,10 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     nodeVersion: 'v22.12.0',
     readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
     readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
-    checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+    // `checked: true` is REQUIRED for a healthy row: the credit check refuses to
+    // report "credit ok" from `warning: null` alone, because that is also what a
+    // failed or skipped probe resolves (fourth council pass on PR 222).
+    checkOpenRouterCredit: () => Promise.resolve({ checked: true, warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
     // #210: the key-auth check re-validates every key readApiKeyValues() reports
     // — and this fixture deliberately reports one (openrouter, above). Without
     // this pin every doctor-family suite would fall through to realDeps() and

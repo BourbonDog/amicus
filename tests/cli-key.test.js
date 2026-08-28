@@ -91,11 +91,35 @@ describe('handleKey — save', () => {
   });
 
   test('prints error and exits for invalid key', async () => {
-    validateApiKey.mockResolvedValue({ valid: false, error: 'Invalid API key (401)' });
+    // `status: 401` is what makes this definitive now. The double used to carry
+    // the prose alone, and prose no longer drives control flow here — a result
+    // with no status is treated as "no verdict" and saves with a warning.
+    validateApiKey.mockResolvedValue({ valid: false, status: 401, error: 'Invalid API key (401)' });
 
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     await expect(handleKey({ _: ['key', 'deepseek', 'bad-key'] })).rejects.toThrow('exit');
     expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid API key'));
+    exitSpy.mockRestore();
+  });
+
+  // Fourth council pass on PR 222: the blocking set is an ALLOWLIST of one.
+  // Everything else says something about the REQUEST, not the key, so refusing
+  // to save would be a false alarm — the failure mode this whole line of work
+  // treats as more costly than a warning.
+  test.each([
+    [403, 'a disabled API / quota / region block'],
+    [429, 'a rate limit'],
+    [503, 'a provider outage'],
+    [404, 'a moved endpoint'],
+    [520, "Cloudflare's origin-error series"],
+    [null, 'an offline machine — no verdict at all'],
+  ])('a %p (%s) warns and saves rather than blocking', async (status, _why) => {
+    validateApiKey.mockResolvedValue({ valid: false, status, error: 'nope' });
+    saveApiKey.mockReturnValue({ success: true });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await handleKey({ _: ['key', 'deepseek', 'sk-maybe-fine'] });
+    expect(saveApiKey).toHaveBeenCalledWith('deepseek', 'sk-maybe-fine');
+    expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
   });
 

@@ -215,7 +215,7 @@ describe('runDoctorChecks', () => {
       let called = false;
       const checks = await runDoctorChecks({ ...allGood,
         readApiKeyValues: () => ({}),
-        checkOpenRouterCredit: () => { called = true; return Promise.resolve({ warning: null }); } });
+        checkOpenRouterCredit: () => { called = true; return Promise.resolve({ checked: true, warning: null }); } });
       const c = byId(checks)['openrouter-credit'];
       expect(c.status).toBe('ok');
       expect(c.message).toMatch(/no openrouter key|skip/i);
@@ -224,7 +224,7 @@ describe('runDoctorChecks', () => {
 
     test('free-tier key → warn', async () => {
       const checks = await runDoctorChecks({ ...allGood,
-        checkOpenRouterCredit: () => Promise.resolve({ warning: 'OpenRouter key is free tier — only :free models will route', isFreeTier: true, limitRemaining: 1 }) });
+        checkOpenRouterCredit: () => Promise.resolve({ checked: true, warning: 'OpenRouter key is free tier — only :free models will route', isFreeTier: true, limitRemaining: 1 }) });
       const c = byId(checks)['openrouter-credit'];
       expect(c.status).toBe('warn');
       expect(c.message).toMatch(/free tier/i);
@@ -232,7 +232,7 @@ describe('runDoctorChecks', () => {
 
     test('zero-remaining credit → warn', async () => {
       const checks = await runDoctorChecks({ ...allGood,
-        checkOpenRouterCredit: () => Promise.resolve({ warning: 'OpenRouter key has no remaining credit — paid models will fail (402).', isFreeTier: false, limitRemaining: 0 }) });
+        checkOpenRouterCredit: () => Promise.resolve({ checked: true, warning: 'OpenRouter key has no remaining credit — paid models will fail (402).', isFreeTier: false, limitRemaining: 0 }) });
       const c = byId(checks)['openrouter-credit'];
       expect(c.status).toBe('warn');
       expect(c.message).toMatch(/no remaining credit|402/i);

@@ -11,7 +11,7 @@
  *
  * The new 'key-auth' row probes every stored key. Its whole design problem is
  * FALSE ALARMS: being offline must never look like a rotted key, so only a
- * definitive auth rejection (401/403) is an `error` — every ambiguous outcome
+ * definitive auth rejection (401 only) is an `error` — every ambiguous outcome
  * (timeout, DNS/network, 5xx, unexpected status) is a `warn`.
  */
 
@@ -88,7 +88,7 @@ describe('doctor: key-auth check (#210)', () => {
     test('a definitive 401 → ERROR naming the provider, with the amicus key hint', async () => {
       const c = await keyAuth({
         keys: { deepseek: 'sk-ds-rotted' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (401)' }),
+        validate: jest.fn().mockResolvedValue({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       });
       expect(c.status).toBe('error');
       expect(c.message).toMatch(/deepseek/);
@@ -97,13 +97,20 @@ describe('doctor: key-auth check (#210)', () => {
       expect(c.hint).toMatch(/deepseek/);
     });
 
-    test('a definitive 403 → ERROR (same authoritative-rejection class as 401)', async () => {
+    test('a 403 → WARN, not error (council finding 1, PR 221)', async () => {
+      // Google returns 403 for "API not enabled" and for quota; a WAF returns
+      // it for bot protection. This used to be an error, which meant telling
+      // someone to re-enter a key that works.
       const c = await keyAuth({
-        keys: { openai: 'sk-oa-banned' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (403)' }),
+        keys: { openrouter: 'a' },
+        validate: jest.fn().mockResolvedValue({
+          valid: false, status: 403,
+          error: 'Forbidden (403) — the request was rejected, but this may be a disabled API',
+        }),
       });
-      expect(c.status).toBe('error');
-      expect(c.message).toMatch(/openai/);
+      expect(c.status).toBe('warn');
+      expect(c.message).toMatch(/403/);
+      expect(c.hint).not.toMatch(/re-enter/);
     });
 
     test.each([
@@ -128,7 +135,7 @@ describe('doctor: key-auth check (#210)', () => {
         keys: { openrouter: 'sk-or-good', deepseek: 'sk-ds-rotted' },
         validate: jest.fn((provider) => Promise.resolve(
           provider === 'deepseek'
-            ? { valid: false, error: 'Invalid API key (401)' }
+            ? { valid: false, status: 401, error: 'Invalid API key (401)' }
             : { valid: true },
         )),
       });
@@ -145,7 +152,7 @@ describe('doctor: key-auth check (#210)', () => {
         keys: { deepseek: 'sk-ds-rotted', openai: 'sk-oa-x' },
         validate: jest.fn((provider) => Promise.resolve(
           provider === 'deepseek'
-            ? { valid: false, error: 'Invalid API key (401)' }
+            ? { valid: false, status: 401, error: 'Invalid API key (401)' }
             : { valid: false, error: 'Request timed out' },
         )),
       });
@@ -159,7 +166,7 @@ describe('doctor: key-auth check (#210)', () => {
     test('two rejected providers are BOTH named', async () => {
       const c = await keyAuth({
         keys: { deepseek: 'a', openai: 'b' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (401)' }),
+        validate: jest.fn().mockResolvedValue({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       });
       expect(c.status).toBe('error');
       expect(c.hint).toMatch(/deepseek/);
@@ -168,25 +175,50 @@ describe('doctor: key-auth check (#210)', () => {
   });
 
   describe('classifyProbeFailure: the definitive-vs-ambiguous rule', () => {
-    test.each(['Invalid API key (401)', 'Invalid API key (403)', 'Unexpected response (403)'])(
-      '%s is DEFINITIVE (the HTTP status is the evidence, not the prose)', (error) => {
-        expect(classifyProbeFailure(error).definitive).toBe(true);
-      });
-
-    test.each([
-      'Request timed out',
-      'Server error (500)',
-      'Server error (429)',
-      'Unexpected response (404)',
-      'socket hang up',
-      '',
-      undefined,
-    ])('%s is AMBIGUOUS', (error) => {
-      expect(classifyProbeFailure(error).definitive).toBe(false);
+    // Reads the STRUCTURED `status` field. It used to regex "(401)" out of the
+    // error prose, which tied control flow to message wording (council finding
+    // 2, PR 221). These now pass results, not strings.
+    it('401 is DEFINITIVE — the one status that means "credential not accepted"', () => {
+      expect(classifyProbeFailure({ status: 401, error: 'Invalid API key (401)' }).definitive)
+        .toBe(true);
     });
 
-    test('an unrecognised error degrades toward AMBIGUOUS (fail-safe: never a false alarm)', () => {
-      expect(classifyProbeFailure('something nobody has seen before').definitive).toBe(false);
+    it('403 is AMBIGUOUS — council finding 1 moved it off the definitive side', () => {
+      // Google returns 403 for "API not enabled" and for quota; a WAF returns
+      // it for bot protection. Sending someone to re-enter a working key is
+      // the false-ALARM twin of the false-GREEN this check exists to kill.
+      const c = classifyProbeFailure({ status: 403, error: 'Forbidden (403) — ...' });
+      expect(c.definitive).toBe(false);
+      expect(c.reason).toMatch(/403/);
+      expect(c.reason).toMatch(/forbidden/i);
+    });
+
+    test.each([500, 429, 404, 400, 502])('%p is AMBIGUOUS', (status) => {
+      expect(classifyProbeFailure({ status }).definitive).toBe(false);
+    });
+
+    test.each([
+      { status: null, error: 'Request timed out' },
+      { status: null, error: 'socket hang up' },
+      { status: null },
+      {},
+      undefined,
+      null,
+    ])('a result with no status is AMBIGUOUS: %p', (res) => {
+      expect(classifyProbeFailure(res).definitive).toBe(false);
+    });
+
+    it('a timeout is named as such, an unreachable host is not', () => {
+      expect(classifyProbeFailure({ status: null, error: 'Request timed out' }).reason)
+        .toMatch(/timed out/);
+      expect(classifyProbeFailure({ status: null, error: 'socket hang up' }).reason)
+        .toMatch(/unreachable/);
+    });
+
+    it('prose alone can no longer make a finding definitive', () => {
+      // The whole point of finding 2: an error that SAYS 401 but carries no
+      // status must not be treated as a verdict.
+      expect(classifyProbeFailure({ error: 'Invalid API key (401)' }).definitive).toBe(false);
     });
   });
 
@@ -290,7 +322,7 @@ describe('doctor: key-auth check (#210)', () => {
       const checks = await runDoctorChecks(makeBaseDeps({
         readApiKeys: () => ({ openrouter: false, google: false, openai: false, anthropic: false, deepseek: true }),
         readApiKeyValues: () => ({ deepseek: 'sk-ds-rotted' }),
-        validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+        validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       }));
       const c = byId(checks)['key-auth'];
       expect(c.status).toBe('error');
@@ -311,7 +343,7 @@ describe('doctor: key-auth check (#210)', () => {
 
     test('a rejected key DOES flip doctor\'s exit code to 1', async () => {
       const checks = await runDoctorChecks(makeBaseDeps({
-        validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+        validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       }));
       const { code } = await capture(() => handleDoctor({ _: [] }, async () => checks));
       expect(code).toBe(1);
@@ -356,7 +388,7 @@ describe('#210 C1: a stored key with no validation endpoint must not read as hea
   it('a definitive rejection still outranks an unprobeable key (error beats warn)', async () => {
     const r = await evaluateKeyAuth({
       readApiKeyValues: () => ({ openrouter: 'k', mystery: 'k2' }),
-      validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+      validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
     });
     expect(r.status).toBe('error');
   });
@@ -364,5 +396,191 @@ describe('#210 C1: a stored key with no validation endpoint must not read as hea
   it('all-probeable-and-valid is still a clean ok (no gratuitous yellow)', async () => {
     const r = await evaluateKeyAuth(deps({ openrouter: 'k', deepseek: 'k2' }));
     expect(r.status).toBe('ok');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Council finding 7 (second review of PR 221).
+// ---------------------------------------------------------------------------
+describe('#210 F7 / PR 222: live probes are OPT-IN, and a skip is never healthy', () => {
+  const {
+    probeApiKey, probeOpenRouterCredit, SKIPPED_REASON,
+  } = require('../src/utils/doctor-key-auth-check');
+  const live = require('../src/utils/live-probes');
+  const https = require('https');
+
+  afterEach(() => { live._resetLiveProbes(); delete process.env.AMICUS_NO_NETWORK_PROBES; });
+
+  // The gate used to DETECT TEST RUNNERS (JEST_WORKER_ID, VITEST, ...). A
+  // blocklist is only as good as its enumeration: a bespoke runner or a plain
+  // `node script.js` walked past it and spent real credentials. Council review
+  // of PR 222. "Am I in a test?" is unbounded; "am I the CLI?" is one fact.
+  it('probes are DISABLED by default — nothing but the CLI turns them on', () => {
+    expect(live.liveProbesAllowed()).toBe(false);
+  });
+
+  it('enableLiveProbes() turns them on, and the env escape hatch still wins', () => {
+    live.enableLiveProbes();
+    expect(live.liveProbesAllowed()).toBe(true);
+    process.env.AMICUS_NO_NETWORK_PROBES = '1';
+    expect(live.liveProbesAllowed()).toBe(false);
+  });
+
+  it('bin/amicus.js is the one caller of enableLiveProbes', () => {
+    const read = (f) => require('fs').readFileSync(require('path').join(__dirname, '..', f), 'utf-8');
+    expect(read('bin/amicus.js')).toMatch(/enableLiveProbes\(\)/);
+  });
+
+  it('a disabled key probe opens no socket and is marked skipped', async () => {
+    const spy = jest.spyOn(https, 'get');
+    const r = await probeApiKey('openrouter', 'sk-real-looking-key');
+    expect(spy).not.toHaveBeenCalled();
+    expect(r).toEqual({ valid: false, status: null, skipped: true, error: SKIPPED_REASON });
+    spy.mockRestore();
+  });
+
+  it('a skip reads as a SKIP, not as "unreachable"', async () => {
+    const c = classifyProbeFailure(await probeApiKey('openrouter', 'k'));
+    expect(c.definitive).toBe(false);
+    expect(c.reason).toMatch(/skipped/);
+  });
+
+  it('the OpenRouter CREDIT probe is behind the same gate', async () => {
+    const spy = jest.spyOn(https, 'get');
+    const r = await probeOpenRouterCredit('sk-or-real-looking');
+    expect(spy).not.toHaveBeenCalled();
+    expect(r.skipped).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('a full runDoctorChecks with NO network deps injected opens no socket', async () => {
+    // The sharpest pin, and the one that actually fails when a probe is
+    // unguarded. Asserting on the ROW cannot: an unguarded credit probe that
+    // fails or times out resolves the same no-warning shape the gate returns.
+    const spy = jest.spyOn(https, 'get');
+    const { runDoctorChecks } = require('../src/cli-handlers-doctor');
+    await runDoctorChecks({
+      readApiKeyValues: () => ({ openrouter: 'sk-or-x', deepseek: 'sk-d' }),
+      readApiKeys: () => ({ openrouter: true, deepseek: true }),
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  // Executes the wiring rather than regexing the source: a missing
+  // keyAuthCheck/creditCheck import throws ReferenceError here, where the old
+  // source-text assertion would have passed straight over it.
+  it('realDeps() EXECUTES its probes, and a skipped credit probe is NOT "credit ok"', async () => {
+    const { runDoctorChecks } = require('../src/cli-handlers-doctor');
+    const checks = await runDoctorChecks({
+      readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
+      readApiKeys: () => ({ openrouter: true }),
+    });
+    expect(checks.find((c) => c.id === 'key-auth').status).toBe('warn');
+    // ⚠️ THE A2 PIN. This returned 'ok' with the message "credit ok" — a funded
+    // account reported for one nobody checked, in the same commit that removed
+    // the identical false green from the anthropic branch.
+    const credit = checks.find((c) => c.id === 'openrouter-credit');
+    expect(credit.status).toBe('warn');
+    expect(credit.message).not.toMatch(/credit ok/);
+    expect(credit.message).toMatch(/not checked/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fourth council pass on PR 222 — majors A1 and A2.
+// ---------------------------------------------------------------------------
+describe('A1: "credit ok" must mean CHECKED, not merely "no warning"', () => {
+  const live = require('../src/utils/live-probes');
+  const https = require('https');
+  const { EventEmitter } = require('events');
+
+  afterEach(() => { live._resetLiveProbes(); jest.restoreAllMocks(); });
+
+  // The previous fix only covered the gate-CLOSED path (`skipped: true`).
+  // checkOpenRouterCredit resolves the same bare `warning: null` object on
+  // EVERY failure — non-200, parse error, timeout, socket error — so with the
+  // gate OPEN and the probe genuinely failing, the row still rendered
+  // "credit ok" for an account nobody reached.
+  //
+  // And the pin that was supposed to prevent this could not: it ran with the
+  // gate CLOSED, so it never entered the path it claimed to protect. These
+  // tests open the gate and break the network on purpose.
+  function mockCreditTransport(kind) {
+    return jest.spyOn(https, 'get').mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.setTimeout = () => {}; req.destroy = () => {};
+      if (kind === 'socket') {
+        process.nextTick(() => req.emit('error', new Error('ECONNRESET')));
+      } else {
+        const res = new EventEmitter();
+        res.statusCode = kind === 'http500' ? 500 : 200;
+        process.nextTick(() => {
+          cb(res);
+          if (kind === 'garbage') { res.emit('data', 'not json'); }
+          res.emit('end');
+        });
+      }
+      return req;
+    });
+  }
+
+  it.each(['socket', 'http500', 'garbage'])(
+    'a FAILED probe (%s) with the gate OPEN never reports credit ok', async (kind) => {
+      live.enableLiveProbes();
+      mockCreditTransport(kind);
+      const { runDoctorChecks } = require('../src/cli-handlers-doctor');
+      const checks = await runDoctorChecks({
+        readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
+        readApiKeys: () => ({ openrouter: true }),
+        validateApiKey: () => Promise.resolve({ valid: true, status: 200 }),
+      });
+      const credit = checks.find((c) => c.id === 'openrouter-credit');
+      expect(credit.message).not.toMatch(/credit ok/);
+      expect(credit.status).toBe('warn');
+    });
+
+  it('a genuinely healthy account still reports ok', async () => {
+    live.enableLiveProbes();
+    const checks = await require('../src/cli-handlers-doctor').runDoctorChecks({
+      readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
+      readApiKeys: () => ({ openrouter: true }),
+      validateApiKey: () => Promise.resolve({ valid: true, status: 200 }),
+      checkOpenRouterCredit: () => Promise.resolve({
+        checked: true, warning: null, isFreeTier: false, limitRemaining: 12, limit: 20, usage: 8 }),
+    });
+    const credit = checks.find((c) => c.id === 'openrouter-credit');
+    expect(credit.status).toBe('ok');
+    expect(credit.message).toMatch(/credit ok/);
+  });
+
+  it('checkOpenRouterCredit itself distinguishes checked from failed', async () => {
+    const { checkOpenRouterCredit } = require('../src/utils/api-key-validation');
+    mockCreditTransport('socket');
+    await expect(checkOpenRouterCredit('sk-or-x')).resolves.toMatchObject({ checked: false });
+  });
+});
+
+describe('A2: only a definitive 401 blocks a save (allowlist, not blocklist)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'cli-handlers.js'), 'utf-8');
+
+  // The comment said "Only a definitive 401 ... blocks" while the code was a
+  // BLOCKLIST of non-verdicts, so every unlisted status — 400, 404, 451,
+  // Cloudflare's 52x — still hit process.exit(1). The narrative outpaced the
+  // implementation for the third time in this PR.
+  it('the blocking set is an allowlist containing only 401', () => {
+    const m = SRC.match(/const BLOCKS_SAVE = new Set\(\[([^\]]*)\]\)/);
+    expect(m).not.toBeNull();
+    expect(m[1].replace(/\s/g, '')).toBe('401');
+  });
+
+  it('the old NOT_A_VERDICT blocklist is gone', () => {
+    expect(SRC).not.toMatch(/NOT_A_VERDICT/);
+  });
+
+  it('the branch tests membership of the blocking set, not its complement', () => {
+    expect(SRC).toMatch(/BLOCKS_SAVE\.has\(validation\.status\)/);
   });
 });

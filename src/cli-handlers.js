@@ -176,7 +176,23 @@ async function handleKey(args) {
 
   console.log(`Validating ${provider} key...`);
   const validation = await validateApiKey(provider, keyArg);
-  if (!validation.valid) {
+  // 401 is the only status that means "this credential is not accepted".
+  // Everything else — 403 (disabled API, quota, region/bot block), 429, any
+  // 5xx, a 404 from a moved endpoint, a Cloudflare 52x during an origin
+  // outage, or no status at all because the machine is offline — says
+  // something about the REQUEST, not the key. Refusing to save on those is
+  // the false ALARM the doctor classifier stopped raising.
+  //
+  // ⚠️ An ALLOWLIST of what blocks, deliberately. This was a blocklist of
+  // what does NOT block, which left every unenumerated status falling through
+  // to process.exit(1) while the comment above it claimed only 401 blocked —
+  // the code and the narrative disagreed, and the narrative was the nicer of
+  // the two. An allowlist cannot rot as new status codes appear.
+  const BLOCKS_SAVE = new Set([401]);
+  if (!validation.valid && !BLOCKS_SAVE.has(validation.status)) {
+    console.warn(`Warning: ${validation.error}`);
+    console.warn('Saving the key anyway — run `amicus doctor` to re-check it later.');
+  } else if (!validation.valid) {
     console.error(`Error: ${validation.error}`);
     process.exit(1);
   }
