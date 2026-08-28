@@ -31,6 +31,12 @@ const VALIDATION_ENDPOINTS = {
   }
 };
 
+/** A printable message from any throwable — Error, string, or object (#224). */
+function messageOf(err) {
+  if (err && typeof err.message === 'string' && err.message.length > 0) { return err.message; }
+  return (err === null || err === undefined) ? '' : String(err);
+}
+
 const FORBIDDEN_MESSAGE =
   'Forbidden (403) — the request was rejected, but this may be a disabled API, '
   + 'a quota, or a region/bot block rather than the key';
@@ -56,14 +62,20 @@ const FORBIDDEN_MESSAGE =
  *      while protecting nothing real. Council review of PR 222.
  */
 function redactSecret(text, key) {
-  if (typeof text !== 'string' || text.length === 0) { return ''; }
-  if (!key) { return text; }
+  // Coerce, don't discard. This returned '' for anything that was not a
+  // string, so a thrown string or a non-Error object (`throw 'boom'`) turned
+  // a diagnostic into a blank message — the caller then reported a failure it
+  // could not describe. Issue #224.
+  const raw = (typeof text === 'string') ? text : ((text === null || text === undefined) ? '' : String(text));
+  if (raw.length === 0) { return ''; }
+  if (!key) { return raw; }
+  const text_ = raw;
 
   // 1. Mask the query parameter STRUCTURALLY, before touching the key at all.
   //    This is what actually protects the Google probe (`?key=...`) and it
   //    works for a key of any length, including ones too short to substring-
   //    match safely.
-  let out = text.replace(/([?&](?:key|api_key|access_token)=)[^&\s"')]+/gi, '$1***');
+  let out = text_.replace(/([?&](?:key|api_key|access_token)=)[^&\s"')]+/gi, '$1***');
 
   // 2. Then remove the key itself — but only when it is long enough that a
   //    substring match means something. Blind replacement of a 1-2 character
@@ -124,6 +136,16 @@ function validateApiKey(provider, key) {
     try {
       req = https.get(url, { headers }, (res) => {
         const code = res.statusCode;
+        // ⚠️ req.on('error') below covers the CONNECTION phase only. An error
+        // once `res` exists — a socket reset mid-body, a TLS failure after
+        // headers — is an 'error' event on this emitter, and an unhandled one
+        // is a THROW, not a rejection: the promise never settles and the
+        // process dies. Two of the three callers have no protection against
+        // that (src/cli-handlers.js has no try/catch; electron/ipc-setup.js
+        // has one, but the throw lands on a later tick outside it). Issue #224.
+        res.on('error', (err) => {
+          resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
+        });
         res.on('data', () => {});
         res.on('end', () => {
           // Anthropic: the probe is a GET against /v1/messages, so in practice
@@ -173,7 +195,7 @@ function validateApiKey(provider, key) {
     } catch (err) {
       // Synchronous throw (ERR_INVALID_URL and friends). Its message quotes the
       // request URL — key included for Google. Redact, resolve, never reject.
-      resolve({ valid: false, status: null, error: redactSecret(err.message, trimmedKey) });
+      resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
       return;
     }
     req.setTimeout(10000, () => {
@@ -181,90 +203,17 @@ function validateApiKey(provider, key) {
       resolve({ valid: false, status: null, error: 'Request timed out' });
     });
     req.on('error', (err) => {
-      resolve({ valid: false, status: null, error: redactSecret(err.message, trimmedKey) });
+      resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });
     });
   });
 }
 
-/** Warning string for a zero-credit OpenRouter key (paid models will 402). */
-const OPENROUTER_NO_CREDIT_WARNING =
-  'OpenRouter key has no remaining credit — paid models will fail (402). ' +
-  'Add credit at openrouter.ai/credits, or build a free council (amicus setup → option 2).';
-
-/** Warning string for a free-tier OpenRouter key. */
-const OPENROUTER_FREE_TIER_WARNING =
-  'OpenRouter key is free tier — only :free models will route; paid models will fail (402). ' +
-  'Add credit at openrouter.ai/credits to use paid models.';
-
-/**
- * Non-blocking credit/limit check for an OpenRouter key.
- *
- * Hits GET https://openrouter.ai/api/v1/key (returns limit, usage,
- * is_free_tier, limit_remaining) and produces a WARNING — never an error —
- * when is_free_tier is true or limit_remaining <= 0. Any failure (non-200,
- * network error, malformed body) resolves with warning:null so setup is
- * never blocked. Free-tier councils against free models are legitimate.
- *
- * @param {string} key OpenRouter API key
- * @returns {Promise<{checked: boolean, warning: string|null, isFreeTier: boolean,
- *   limitRemaining: number|null, limit: number|null, usage: number|null}>}
- *   `checked` is false whenever no answer was obtained. Never infer health
- *   from `warning: null` alone — see the note on `none` below.
- */
-function checkOpenRouterCredit(key) {
-  // ⚠️ `checked: false` is the whole point. Every failure path below resolves
-  // THIS object, and `warning: null` is also what a perfectly healthy account
-  // resolves — so a caller branching on `warning` alone cannot tell "the
-  // account is fine" from "the probe never got an answer", and renders the
-  // first for the second. That is the false green the fourth council pass
-  // found still alive on the network-failure path after it had been fixed only
-  // for the gate-disabled one. Intent-to-probe and result-of-probe are
-  // different facts and now have different fields.
-  const none = {
-    checked: false,
-    warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null
-  };
-  if (!key || key.trim().length === 0) {
-    return Promise.resolve(none);
-  }
-
-  const headers = { 'Authorization': `Bearer ${key.trim()}` };
-
-  return new Promise((resolve) => {
-    const req = https.get('https://openrouter.ai/api/v1/key', { headers }, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => {
-        if (res.statusCode !== 200) { resolve(none); return; }
-        let data;
-        try {
-          data = (JSON.parse(body) || {}).data || {};
-        } catch (_e) {
-          resolve(none);
-          return;
-        }
-        const isFreeTier = data.is_free_tier === true;
-        const limitRemaining = (typeof data.limit_remaining === 'number')
-          ? data.limit_remaining : null;
-        const limit = (typeof data.limit === 'number') ? data.limit : null;
-        const usage = (typeof data.usage === 'number') ? data.usage : null;
-
-        let warning = null;
-        if (limitRemaining !== null && limitRemaining <= 0) {
-          warning = OPENROUTER_NO_CREDIT_WARNING;
-        } else if (isFreeTier) {
-          warning = OPENROUTER_FREE_TIER_WARNING;
-        }
-        resolve({ checked: true, warning, isFreeTier, limitRemaining, limit, usage });
-      });
-    });
-    req.setTimeout(10000, () => {
-      req.destroy();
-      resolve(none);
-    });
-    req.on('error', () => { resolve(none); });
-  });
-}
+// The OpenRouter credit probe lives in utils/openrouter-credit.js (same
+// size-gate split rationale as this file's own header). Re-exported below so
+// existing call sites are unaffected.
+const {
+  checkOpenRouterCredit, OPENROUTER_NO_CREDIT_WARNING, OPENROUTER_FREE_TIER_WARNING,
+} = require('./openrouter-credit');
 
 // Backwards compat alias
 const validateOpenRouterKey = validateApiKey;

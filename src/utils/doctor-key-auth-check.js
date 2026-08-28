@@ -34,7 +34,7 @@
  * the parentheses would have degraded every row to a permanent "unverified"
  * with nothing failing to announce it (council finding 2, PR 221).
  *
- * NO KEY MATERIAL, NO URLs, EVER. Three layers, each structural:
+ * NO KEY MATERIAL, NO URLs, EVER. Four layers, each structural:
  *   1. Only provider IDS and a reason built here reach the row — the raw error
  *      string is never echoed.
  *   2. Every live authenticated request realDeps() can make goes through the
