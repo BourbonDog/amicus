@@ -13,11 +13,12 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.9.0** (2026-08-26). Each 4.x rev below leads with the benefit, not the
-plumbing.
+Amicus is at **v4.9.3** (2026-08-28). Each 4.x rev below leads with the benefit, not the
+plumbing; the patch releases since v4.9.0 carry no section of their own, because they fixed
+defects rather than adding scope — see `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.9.0** have **shipped** — everything on this page is a record of what
-landed, not a plan. Composition — the scope that
+**Status:** v4.0 through **v4.9.0** have **shipped**, plus the v4.9.1–v4.9.3 patch releases —
+everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
 below (dropped from v4.7, 2026-08-05); its contents are decided at kickoff per the anti-rot rule,

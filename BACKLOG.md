@@ -6931,6 +6931,72 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
+
+**✅ v4.9.3 RELEASED 2026-08-28** — tag `v4.9.3` → `f8a178cd`, main `e91d3ac5` (`--no-ff`),
+npm `amicus@4.9.3`, MCP Registry `4.9.3`/`active`, GH Release live. Cut gates: 596 suites /
+9202 tests green; lint, size, secret, citation and tarball gates clean; eight-site version pin
+re-grepped, not recalled. Issues #210/#211/#213/#224 closed. **#218 stays open** — only its
+Mode 1 (credit rejection) shipped; the reasoning-truncation mode is not reachable through
+`max_tokens` and is not claimed to be fixed.
+
+All three channels were verified independently. "The workflow is green" was not accepted as
+evidence for any of them, and one of the three probes was wrong (see the registry note below).
+
+Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- [ ] **`cli-handlers-spend.js:126` calls `checkOpenRouterCredit` through its own unguarded
+  `require`, outside the live-probes gate (found 2026-08-28, PR 222 follow-up)** — the gate in
+  `utils/live-probes.js` exists so no diagnostic can make a live authenticated request with the
+  user's stored keys unless `bin/amicus.js` enabled it. `doctor` routes both its probes through
+  it; `spend` does not. Reachable in practice by any harness that requires the module directly,
+  which is precisely the case the gate was written for. Not a defect in `spend`'s own behaviour
+  — it runs from the CLI, where probes are enabled — so it was deliberately left out of PR 222
+  rather than smuggled in. The fix is one line plus a pin extending
+  `tests/api-key-validation-structured.test.js`'s caller scan to the credit probe.
+
+- [ ] **The MCP Registry response shape moved `version` under `server`, and the release
+  recipe's probe still reads it at the top level (found 2026-08-28, v4.9.3 verification)** —
+  the documented probe reads `s.version`, which now returns `undefined`. The first verification
+  run therefore reported `isLatest: true, status: active` with **no version at all**, which
+  reads as success at a glance while proving nothing about WHICH version is live. Correct path
+  is `s.server.version`; `_meta['io.modelcontextprotocol.registry/official']` still carries
+  `isLatest`/`status`/`publishedAt`. This is a new way to mis-verify a publish and belongs in
+  the recipe before the next cut. The pagination gotcha itself held exactly as documented — the
+  `isLatest` entry was on page 2 of 38 versions, and a page-1-only check finds nothing.
+
+- [ ] **`tests/e2e.test.js` "should pass model to SDK sendPromptAsync call" exceeded its 5000 ms
+  default timeout on windows-latest / node 22 (first hit, 2026-08-28, run 33180625912)** — a
+  jest TIMEOUT, not an assertion: 9200 passed, 1 failed, suite wall-clock 41.6 s on that runner.
+  The rerun was green with no code change, and the PR's diff (`api-key-validation.js` + its own
+  test) has no reference to anything `e2e.test.js` exercises. ⚠️ **This is a DIFFERENT class
+  from the macOS/node-24 `SIGSEGV`** recorded in `.github/workflows/ci.yml`: that one is a
+  native worker crash with ZERO assertion failures, and its remedy is `--maxWorkers`. Reaching
+  for that lever here would be treating a slow test as a memory problem. If this recurs, the
+  remedy is a per-test timeout on that case. First hit recorded so a second has something to
+  count against.
+
+### Council findings declined this cycle, with reasons
+
+Recorded because a declined finding that leaves no trace gets re-raised every review.
+
+- **PR 222 F5 — `VALIDATION_ENDPOINTS[p]` bare lookup.** Agreed as a style inconsistency,
+  verified unreachable: `p` derives from the fixed `PROVIDER_ENV_MAP`, so `constructor`/
+  `toString` cannot occur. Fixing an unreachable path adds code without removing risk.
+- **PR 222 F6 — `refreshAliasCounts` removing the new-routes group at zero rows.** The row is
+  appended before the refresh runs, so the coupling is implicit but not live.
+- **PR 225 B1 — a "potentially fatal missing `keyAuthCheck` import".** Contested by the bench
+  itself and already covered: the behavioural wiring test throws `ReferenceError` when the
+  import is deleted, which is why it replaced the source-regex version.
+- **PR 225 B3 — `classifyProbeFailure`'s exported signature changing from string to object.**
+  Singleton, internal module, one in-tree consumer.
+- **PR 225 legacy-Node backstop** (pre-16 runtimes emit `'aborted'`/`'close'` rather than
+  `'error'` on premature close). Not applicable: `package.json` pins `engines.node >=22.12.0`.
+- **PR 225's Symbol claim was WRONG and is pinned as such.** The bench asserted `String(sym)`
+  throws; it does not — only `'' + sym` does, and nothing in the module does that. The real
+  hazards were a null-prototype object and a throwing `toString`, both of which now resolve.
+  A test asserts the Symbol case so the claim is not re-litigated from the finding text.
+
 ## v4.9 records — dispositions and rulings made in-cycle (2026-08-25)
 
 **✅ v4.9.0 RELEASED 2026-08-26** — tag `v4.9.0` → `68465b39`, npm `amicus@4.9.0` (OIDC publish),
