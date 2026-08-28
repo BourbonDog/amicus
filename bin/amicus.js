@@ -16,6 +16,12 @@ if (!_nv.ok) { process.stderr.write(_nv.message + '\n'); process.exit(1); }
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
 
+// Diagnostics probe live provider endpoints with those keys. That is allowed
+// HERE and nowhere else: utils/live-probes.js defaults to off, so a module
+// required outside this CLI (a test, a script) can never spend them. A skipped
+// probe is reported as unverified, never as healthy — see live-probes.js.
+require('../src/utils/live-probes').enableLiveProbes();
+
 const { parseArgs, getUsage, getCommandNames } = require('../src/cli');
 const { handleSetup, handleAbort, handleUpdate, handleMcp, handleKey } = require('../src/cli-handlers');
 const { handleStart, handleFanout, handleRead } = require('../src/cli-handlers-run');

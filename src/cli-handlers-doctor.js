@@ -17,6 +17,7 @@ const baseUrlCheck = require('./utils/doctor-base-url-check');
 // B3 (council review of PR 198, issue 195) — the 'aliases' check body,
 // including its --fix repair of fabricated bare ids. Same split rationale.
 const aliasCheck = require('./utils/doctor-alias-check');
+const creditCheck = require('./utils/doctor-credit-check');
 const keyAuthCheck = require('./utils/doctor-key-auth-check'); // #210 — 'keys' tests presence only; this re-validates.
 
 const { DEFAULT_MAX_AGE_MS: MAX_CATALOG_AGE_MS } = require('./utils/model-catalog'); // 24h — single source
@@ -214,21 +215,10 @@ async function runDoctorChecks(depsOverride = {}) {
 
   checks.push(guard('session-metadata-tmp', 'Session metadata tmp files', () => metaSweep.evaluateSessionMetadataTmpSweep(d)));
 
-  // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.
-  checks.push(await guardAsync('openrouter-credit', 'OpenRouter credit', async () => {
-    const values = d.readApiKeyValues() || {};
-    const key = values.openrouter;
-    if (!key) {
-      return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'ok', message: 'no OpenRouter key — skipped', hint: null };
-    }
-    // Reuses the #38 non-blocking probe; resolves warning:null on any failure.
-    const res = (await d.checkOpenRouterCredit(key)) || {};
-    if (res.warning) {
-      return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'warn', message: res.warning, hint: 'Add credit at openrouter.ai/credits, or build a free council (amicus setup → option 2).' };
-    }
-    const remaining = (typeof res.limitRemaining === 'number') ? ` ($${res.limitRemaining} remaining)` : '';
-    return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'ok', message: `credit ok${remaining}`, hint: null };
-  }));
+  // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no
+  // key. Body in utils/doctor-credit-check.js (same split as the others).
+  checks.push(await guardAsync('openrouter-credit', 'OpenRouter credit',
+    () => creditCheck.evaluateOpenRouterCredit(d)));
 
   // v4.2 §4.7 C8: configured local / OpenAI-compatible providers (Ollama, LM
   // Studio, vLLM, generic) — reachability only; warn, never error (a napping

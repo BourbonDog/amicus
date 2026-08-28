@@ -126,8 +126,12 @@ function validateApiKey(provider, key) {
         const code = res.statusCode;
         res.on('data', () => {});
         res.on('end', () => {
-          // Anthropic: the probe is a GET against /v1/messages, so a WORKING
-          // key answers with a method/shape complaint (400/404/405), never 200.
+          // Anthropic: the probe is a GET against /v1/messages, so in practice
+          // a WORKING key answers with a method/shape complaint (400/404/405).
+          // 200 is allowed too — defensively, in case the endpoint ever answers
+          // one — which is why it appears in the allowlist below. The earlier
+          // wording said "never 200" while listing 200 as success; the comment
+          // and the code disagreed (council review of PR 222).
           //
           // ⚠️ This used to be `else { valid: true }` — every code that was not
           // 401/429/5xx passed, INCLUDING 403. A region block or WAF therefore

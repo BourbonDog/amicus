@@ -96,20 +96,14 @@ const UNVERIFIED_HINT =
  * @returns {boolean}
  */
 function liveProbesDisabled() {
-  // ⚠️ NODE_ENV is deliberately NOT consulted. It was, and that put an
-  // environment sniff on a PRODUCTION path: a user with NODE_ENV=test exported
-  // (a CI smoke job, a stray shell profile) would have had every probe degrade
-  // to "unverified" on a real `amicus doctor` — recreating the silent
-  // degradation this check exists to remove. Council review of PR 222.
-  // These markers are set by test RUNNERS, not by ambient config.
-  return process.env.JEST_WORKER_ID !== undefined
-    || process.env.VITEST !== undefined
-    || process.env.NODE_TEST_CONTEXT !== undefined
-    || process.env.AMICUS_NO_NETWORK_PROBES === '1';
+  return !require('./live-probes').liveProbesAllowed();
 }
 
+/** Marker string the classifier recognises, so a skip reads as a skip. */
+const SKIPPED_REASON = 'probe skipped (live probes disabled)';
+
 const SKIPPED = () => Promise.resolve({
-  valid: false, status: null, error: 'probe skipped (test harness detected)',
+  valid: false, status: null, skipped: true, error: SKIPPED_REASON,
 });
 
 /**
@@ -138,7 +132,14 @@ function probeApiKey(provider, key) {
  */
 function probeOpenRouterCredit(key) {
   if (liveProbesDisabled()) {
+    // ⚠️ `warning: null` alone is what checkOpenRouterCredit resolves when the
+    // account is FINE, so returning it here made a skipped probe render as
+    // "credit ok" — a false green reporting a funded account nobody checked.
+    // Introduced in the same commit that removed the identical shape from the
+    // anthropic branch, one function over, with a test blessing it. Council
+    // review of PR 222. `skipped` is what the row branches on now.
     return Promise.resolve({
+      skipped: true,
       warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null,
     });
   }
@@ -180,6 +181,11 @@ function classifyProbeFailure(res) {
   }
   if (status !== null) {
     return { definitive: false, reason: `unverified (HTTP ${status})` };
+  }
+  if (r.skipped) {
+    // Named, not folded into "unreachable" — the two have different fixes and
+    // conflating them is the kind of small dishonesty this row exists to avoid.
+    return { definitive: false, reason: 'unverified (probe skipped)' };
   }
   if (/timed?\s*out|timeout/i.test(typeof r.error === 'string' ? r.error : '')) {
     return { definitive: false, reason: 'unverified (timed out)' };
@@ -261,5 +267,5 @@ async function evaluateKeyAuth(d) {
 
 module.exports = {
   evaluateKeyAuth, classifyProbeFailure,
-  probeApiKey, probeOpenRouterCredit, liveProbesDisabled,
+  probeApiKey, probeOpenRouterCredit, liveProbesDisabled, SKIPPED_REASON,
 };

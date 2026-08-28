@@ -402,62 +402,61 @@ describe('#210 C1: a stored key with no validation endpoint must not read as hea
 // ---------------------------------------------------------------------------
 // Council finding 7 (second review of PR 221).
 // ---------------------------------------------------------------------------
-describe('#210 F7: live probes are gated, and the gate is the ONLY door', () => {
+describe('#210 F7 / PR 222: live probes are OPT-IN, and a skip is never healthy', () => {
   const {
-    probeApiKey, probeOpenRouterCredit, liveProbesDisabled,
+    probeApiKey, probeOpenRouterCredit, SKIPPED_REASON,
   } = require('../src/utils/doctor-key-auth-check');
+  const live = require('../src/utils/live-probes');
   const https = require('https');
 
-  it('makes NO network call under a test runner', async () => {
+  afterEach(() => { live._resetLiveProbes(); delete process.env.AMICUS_NO_NETWORK_PROBES; });
+
+  // The gate used to DETECT TEST RUNNERS (JEST_WORKER_ID, VITEST, ...). A
+  // blocklist is only as good as its enumeration: a bespoke runner or a plain
+  // `node script.js` walked past it and spent real credentials. Council review
+  // of PR 222. "Am I in a test?" is unbounded; "am I the CLI?" is one fact.
+  it('probes are DISABLED by default — nothing but the CLI turns them on', () => {
+    expect(live.liveProbesAllowed()).toBe(false);
+  });
+
+  it('enableLiveProbes() turns them on, and the env escape hatch still wins', () => {
+    live.enableLiveProbes();
+    expect(live.liveProbesAllowed()).toBe(true);
+    process.env.AMICUS_NO_NETWORK_PROBES = '1';
+    expect(live.liveProbesAllowed()).toBe(false);
+  });
+
+  it('bin/amicus.js is the one caller of enableLiveProbes', () => {
+    const read = (f) => require('fs').readFileSync(require('path').join(__dirname, '..', f), 'utf-8');
+    expect(read('bin/amicus.js')).toMatch(/enableLiveProbes\(\)/);
+  });
+
+  it('a disabled key probe opens no socket and is marked skipped', async () => {
     const spy = jest.spyOn(https, 'get');
     const r = await probeApiKey('openrouter', 'sk-real-looking-key');
     expect(spy).not.toHaveBeenCalled();
-    expect(r).toEqual({
-      valid: false, status: null, error: 'probe skipped (test harness detected)' });
+    expect(r).toEqual({ valid: false, status: null, skipped: true, error: SKIPPED_REASON });
     spy.mockRestore();
   });
 
-  it('the skip classifies as UNVERIFIED, never as a rejection', async () => {
-    expect(classifyProbeFailure(await probeApiKey('openrouter', 'k')).definitive).toBe(false);
+  it('a skip reads as a SKIP, not as "unreachable"', async () => {
+    const c = classifyProbeFailure(await probeApiKey('openrouter', 'k'));
+    expect(c.definitive).toBe(false);
+    expect(c.reason).toMatch(/skipped/);
   });
 
-  // Council review of PR 222: the header claimed probeApiKey was "the one
-  // place" a live authenticated request is decided, while realDeps() still
-  // injected checkOpenRouterCredit as an unguarded raw require — an
-  // authenticated call to openrouter.ai reachable by exactly the hand-built
-  // dep suites the guard exists for.
   it('the OpenRouter CREDIT probe is behind the same gate', async () => {
     const spy = jest.spyOn(https, 'get');
     const r = await probeOpenRouterCredit('sk-or-real-looking');
     expect(spy).not.toHaveBeenCalled();
-    expect(r.warning).toBeNull();
+    expect(r.skipped).toBe(true);
     spy.mockRestore();
   });
 
-  it('NODE_ENV=test alone does NOT disable probes — that was a production hazard', () => {
-    const prev = process.env.NODE_ENV;
-    const prevJest = process.env.JEST_WORKER_ID;
-    try {
-      delete process.env.JEST_WORKER_ID;
-      process.env.NODE_ENV = 'test';
-      // A user with NODE_ENV=test exported would otherwise have had every
-      // probe silently degrade on a real `amicus doctor` run.
-      expect(liveProbesDisabled()).toBe(false);
-      process.env.AMICUS_NO_NETWORK_PROBES = '1';
-      expect(liveProbesDisabled()).toBe(true);   // explicit opt-out still works
-    } finally {
-      delete process.env.AMICUS_NO_NETWORK_PROBES;
-      if (prev === undefined) { delete process.env.NODE_ENV; } else { process.env.NODE_ENV = prev; }
-      if (prevJest !== undefined) { process.env.JEST_WORKER_ID = prevJest; }
-    }
-  });
-
   it('a full runDoctorChecks with NO network deps injected opens no socket', async () => {
-    // The sharpest pin for layer 2, and the one that actually fails when a
-    // probe is unguarded. Asserting on the RESULT cannot: an unguarded
-    // checkOpenRouterCredit that fails or times out resolves the same
-    // no-warning shape the gate returns, so the row reads 'ok' either way.
-    // Assert the socket instead — that is the thing being prevented.
+    // The sharpest pin, and the one that actually fails when a probe is
+    // unguarded. Asserting on the ROW cannot: an unguarded credit probe that
+    // fails or times out resolves the same no-warning shape the gate returns.
     const spy = jest.spyOn(https, 'get');
     const { runDoctorChecks } = require('../src/cli-handlers-doctor');
     await runDoctorChecks({
@@ -468,24 +467,22 @@ describe('#210 F7: live probes are gated, and the gate is the ONLY door', () => 
     spy.mockRestore();
   });
 
-  // The previous version of this asserted a REGEX against the source text of
-  // cli-handlers-doctor.js. That could not catch a missing `keyAuthCheck`
-  // import: the regex would still match and the suite would pass while the
-  // real call threw ReferenceError. Execute the wiring instead.
-  it('realDeps() actually EXECUTES its probes — not a source-text match', async () => {
-    jest.isolateModules(async () => {});
+  // Executes the wiring rather than regexing the source: a missing
+  // keyAuthCheck/creditCheck import throws ReferenceError here, where the old
+  // source-text assertion would have passed straight over it.
+  it('realDeps() EXECUTES its probes, and a skipped credit probe is NOT "credit ok"', async () => {
     const { runDoctorChecks } = require('../src/cli-handlers-doctor');
-    // No validateApiKey / checkOpenRouterCredit injected: realDeps() supplies
-    // them, so a broken import here throws instead of silently passing.
     const checks = await runDoctorChecks({
       readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
       readApiKeys: () => ({ openrouter: true }),
     });
-    const row = checks.find((c) => c.id === 'key-auth');
-    expect(row).toBeDefined();
-    expect(row.status).toBe('warn');            // the gate fired, nothing hit the network
-    expect(row.message).toMatch(/openrouter/);
+    expect(checks.find((c) => c.id === 'key-auth').status).toBe('warn');
+    // ⚠️ THE A2 PIN. This returned 'ok' with the message "credit ok" — a funded
+    // account reported for one nobody checked, in the same commit that removed
+    // the identical false green from the anthropic branch.
     const credit = checks.find((c) => c.id === 'openrouter-credit');
-    expect(credit.status).toBe('ok');           // gated probe returns the no-warning shape
+    expect(credit.status).toBe('warn');
+    expect(credit.message).not.toMatch(/credit ok/);
+    expect(credit.message).toMatch(/not checked/);
   });
 });

@@ -177,12 +177,16 @@ async function handleKey(args) {
   console.log(`Validating ${provider} key...`);
   const validation = await validateApiKey(provider, keyArg);
   // A 403 is NOT evidence the key is wrong — it is a disabled API, a quota, or
-  // a region/bot block just as often. Refusing to save on one is the same false
-  // ALARM the doctor classifier stopped raising, and this site branched on the
-  // bare `valid` boolean, so the structured status added for that fix never
-  // reached it: the alarm was reworded, not removed (council review of PR 222).
-  // Warn, save anyway, and let `amicus doctor` re-check later.
-  if (!validation.valid && validation.status === 403) {
+  // a region/bot block just as often; nor is a 429 or a 5xx, which say only
+  // that the provider was busy or broken. Refusing to save on any of them is
+  // the same false ALARM the doctor classifier stopped raising. This site
+  // branched on the bare `valid` boolean, so the structured status added for
+  // that fix never reached it and the alarm was merely reworded; the second
+  // review then asked why the doctrine stopped at 403. It no longer does.
+  // Only a definitive 401 — or a probe that reached no verdict at all — blocks.
+  // Everything else warns, saves, and defers to `amicus doctor`.
+  const NOT_A_VERDICT = new Set([403, 408, 429, 500, 502, 503, 504]);
+  if (!validation.valid && NOT_A_VERDICT.has(validation.status)) {
     console.warn(`Warning: ${validation.error}`);
     console.warn('Saving the key anyway — run `amicus doctor` to re-check it later.');
   } else if (!validation.valid) {

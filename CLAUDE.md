@@ -255,6 +255,7 @@ src/
 │   ├── degrade.js
 │   ├── doctor-alias-check.js
 │   ├── doctor-base-url-check.js  # v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row.
+│   ├── doctor-credit-check.js  # The `openrouter-credit` doctor row (#43), split out of
 │   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
@@ -287,6 +288,7 @@ src/
 │   ├── known-flags.js
 │   ├── legacy-mcp-migration.js
 │   ├── lifecycle.js
+│   ├── live-probes.js  # The single gate on outbound AUTHENTICATED network probes made by diagnostics
 │   ├── local-probe.js
 │   ├── local-providers.js
 │   ├── logger.js  # Structured Logger Module
@@ -681,6 +683,7 @@ evals/
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
+| `utils/doctor-credit-check.js` | The `openrouter-credit` doctor row (#43), split out of | `evaluateOpenRouterCredit()` |
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
@@ -713,6 +716,7 @@ evals/
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS()` |
+| `utils/live-probes.js` | The single gate on outbound AUTHENTICATED network probes made by diagnostics | `enableLiveProbes()`, `liveProbesAllowed()`, `_resetLiveProbes()` |
 | `utils/local-probe.js` |  | `probeLocalProvider()`, `listLocalModels()` |
 | `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `resolveLocalRouteInputs()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
