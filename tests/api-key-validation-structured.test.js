@@ -218,3 +218,99 @@ describe('redactSecret: targeted, not brute-force', () => {
     expect(redactSecret(`boom ${key} boom`, key)).not.toContain(key);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #224 — the "ALWAYS RESOLVES" contract vs a RESPONSE-STREAM error.
+// ---------------------------------------------------------------------------
+describe('#224: an error AFTER the response object exists must not escape', () => {
+  const { checkOpenRouterCredit, redactSecret } = require('../src/utils/api-key-validation');
+
+  // `req.on('error')` covers the connection phase only. Nothing covered a
+  // failure once `res` existed — a socket reset mid-body, a TLS failure after
+  // headers — so the 'error' event had no listener. Node turns that into a
+  // THROW: the promise never settles and the process dies. Measured, not
+  // argued: the reproduction in #224 printed "UNCAUGHT EXCEPTION", never
+  // 'resolved' and never 'REJECTED'.
+  function mockStreamError(err = new Error('ECONNRESET mid-response')) {
+    return jest.spyOn(https, 'get').mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.setTimeout = () => {}; req.destroy = () => {};
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      process.nextTick(() => { cb(res); res.emit('error', err); });
+      return req;
+    });
+  }
+
+  it('validateApiKey RESOLVES instead of throwing', async () => {
+    mockStreamError();
+    await expect(validateApiKey('openrouter', 'sk-test'))
+      .resolves.toMatchObject({ valid: false, status: null });
+  });
+
+  it('the resolved error names the failure rather than going blank', async () => {
+    mockStreamError();
+    const r = await validateApiKey('openrouter', 'sk-test');
+    expect(r.error).toMatch(/ECONNRESET/);
+  });
+
+  it('a stream error cannot leak the key either — google embeds it in the URL', async () => {
+    const KEY = 'AIzaSy-SECRET-STREAM-0123456789';
+    mockStreamError(new Error(`socket hang up for https://x/v1/models?key=${KEY}`));
+    const r = await validateApiKey('google', KEY);
+    expect(JSON.stringify(r)).not.toContain(KEY);
+  });
+
+  it('checkOpenRouterCredit has the SAME gap and must also resolve', async () => {
+    mockStreamError();
+    // Not merely "does not throw": it must report checked:false, or the row
+    // renders "credit ok" for an account whose response died mid-flight.
+    await expect(checkOpenRouterCredit('sk-or-x'))
+      .resolves.toMatchObject({ checked: false, warning: null });
+  });
+
+  it('a non-Error throwable still produces a usable message, not a blank', async () => {
+    // redactSecret returned '' for anything that was not a string, so a thrown
+    // string or object degraded the diagnostic to nothing at all.
+    expect(redactSecret('boom', 'k')).toBe('boom');
+    expect(redactSecret(undefined, 'k')).toBe('');
+    // Direct pin on redactSecret's OWN contract — it is exported, so it must
+    // hold independently of messageOf() upstream coercing for the call sites.
+    // Without this the coercion went green against its own mutant: every
+    // caller already handed it a string, so nothing exercised the branch.
+    expect(redactSecret(42, 'k')).toBe('42');
+    expect(redactSecret({ toString: () => 'objful' }, 'k')).toBe('objful');
+    expect(redactSecret(null, 'k')).toBe('');
+    jest.spyOn(https, 'get').mockImplementation(() => { throw 'a bare string throw'; });
+    const r = await validateApiKey('openrouter', 'sk-test');
+    expect(r.valid).toBe(false);
+    expect(r.error).toMatch(/bare string throw/);
+  });
+});
+
+describe('#224: enableLiveProbes has exactly ONE caller', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  // The old pin asserted bin/amicus.js CALLS it. That cannot notice a SECOND
+  // caller appearing — and a second caller is precisely what would quietly
+  // re-open live probes to a context that should not have them.
+  it('bin/amicus.js is the only place that enables live probes', () => {
+    const root = path.join(__dirname, '..');
+    const hits = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name.startsWith('.')) { continue; }
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { walk(full); continue; }
+        if (!e.name.endsWith('.js')) { continue; }
+        const src = fs.readFileSync(full, 'utf-8');
+        // The definition and the tests are not callers.
+        if (full.includes('live-probes.js') || full.includes(`${path.sep}tests${path.sep}`)) { continue; }
+        if (/\benableLiveProbes\s*\(/.test(src)) { hits.push(path.relative(root, full)); }
+      }
+    };
+    for (const d of ['src', 'bin', 'electron', 'scripts']) { walk(path.join(root, d)); }
+    expect(hits).toEqual(['bin' + path.sep + 'amicus.js']);
+  });
+});
