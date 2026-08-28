@@ -668,7 +668,7 @@ evals/
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
-| `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
+| `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/base-url-classify.js` | v4.6.2 PR1 (spec §4, D1/D2): ANTHROPIC_BASE_URL classification, the | `classifyBaseUrl()`, `resolveBaseUrlOverride()`, `announceBaseUrlNormalizationOnce()`, `_resetBaseUrlNotice()` |
@@ -684,7 +684,7 @@ evals/
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
-| `utils/doctor-key-auth-check.js` | The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js | `evaluateKeyAuth()`, `classifyProbeFailure()`, `probeApiKey()` |
+| `utils/doctor-key-auth-check.js` | The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js | `evaluateKeyAuth()`, `classifyProbeFailure()`, `probeApiKey()`, `probeOpenRouterCredit()`, `liveProbesDisabled()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
 | `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |

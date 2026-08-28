@@ -143,3 +143,78 @@ describe('F3: a key can never escape in an error message — fixed at the ROOT',
     expect(r.error).toMatch(/ENOTFOUND/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Council review of PR 222 — the PR failed to apply its own doctrine.
+// ---------------------------------------------------------------------------
+describe('anthropic: no status may produce a FALSE GREEN', () => {
+  // The anthropic branch resolved `valid: true` for anything that was not
+  // 401/429/5xx — including 403. So a region block or WAF reported the key as
+  // GOOD. That is the false-green class this whole line of work exists to kill,
+  // sitting inside the function rewritten to fix 403 handling.
+  //
+  // The probe is a GET against /v1/messages, so a working key answers with a
+  // method/shape complaint (400/404/405), not 200. Those are the only codes
+  // that evidence a key reaching auth and passing.
+  it.each([400, 404, 405])('%p means the key reached auth and passed', async (code) => {
+    mockResponse(code);
+    await expect(validateApiKey('anthropic', 'sk-ant-x'))
+      .resolves.toMatchObject({ valid: true, status: code });
+  });
+
+  it('403 is NOT valid and NOT a credential verdict', async () => {
+    mockResponse(403);
+    const r = await validateApiKey('anthropic', 'sk-ant-x');
+    expect(r.valid).toBe(false);
+    expect(r.status).toBe(403);
+    expect(r.error).toMatch(/forbidden/i);
+    expect(r.error).not.toMatch(/invalid api key/i);
+  });
+
+  it('401 is still the definitive rejection', async () => {
+    mockResponse(401);
+    await expect(validateApiKey('anthropic', 'sk-ant-x'))
+      .resolves.toMatchObject({ valid: false, status: 401 });
+  });
+
+  it.each([429, 500, 503])('%p is a server error, not a verdict', async (code) => {
+    mockResponse(code);
+    await expect(validateApiKey('anthropic', 'sk-ant-x'))
+      .resolves.toMatchObject({ valid: false, status: code });
+  });
+
+  it.each([301, 418, 451])('an UNEXPECTED %p is not silently green', async (code) => {
+    // The old `else` swallowed every unlisted code as success.
+    mockResponse(code);
+    await expect(validateApiKey('anthropic', 'sk-ant-x'))
+      .resolves.toMatchObject({ valid: false, status: code });
+  });
+});
+
+describe('redactSecret: targeted, not brute-force', () => {
+  const { redactSecret } = require('../src/utils/api-key-validation');
+
+  it('masks a key= query param regardless of key length', () => {
+    const out = redactSecret('Invalid URL: https://x/v1/models?key=ab&z=1', 'ab');
+    expect(out).not.toMatch(/key=ab/);
+    expect(out).toMatch(/key=\*\*\*/);
+  });
+
+  it('does NOT mangle unrelated text for a pathologically short key', () => {
+    // Blind substring replacement turned every "a" in the message into ***.
+    const msg = 'getaddrinfo ENOTFOUND api.anthropic.com';
+    expect(redactSecret(msg, 'a')).toBe(msg);
+  });
+
+  it('redacts the form-encoded (+ for space) spelling too', () => {
+    const key = 'my key';
+    const formed = `Invalid URL: https://x/v1?key=${encodeURIComponent(key).replace(/%20/g, '+')}`;
+    const out = redactSecret(formed, key);
+    expect(out).not.toContain('my+key');
+  });
+
+  it('still redacts a normal-length key appearing bare in the text', () => {
+    const key = 'sk-ant-0123456789abcdef';
+    expect(redactSecret(`boom ${key} boom`, key)).not.toContain(key);
+  });
+});

@@ -37,14 +37,19 @@
  * NO KEY MATERIAL, NO URLs, EVER. Three layers, each structural:
  *   1. Only provider IDS and a reason built here reach the row — the raw error
  *      string is never echoed.
- *   2. api-key-validation.js redacts the key from any message before it
+ *   2. Every live authenticated request realDeps() can make goes through the
+ *      probe wrappers below (probeApiKey, probeOpenRouterCredit), which share
+ *      one gate. An earlier version of this note claimed probeApiKey alone was
+ *      that gate while checkOpenRouterCredit sat beside it unguarded — the
+ *      claim is now true rather than merely written down.
+ *   3. api-key-validation.js redacts the key from any message before it
  *      escapes, and resolves rather than rejecting on a synchronous throw from
  *      https.get. That is the ROOT fix (council finding 3, PR 221): the Google
  *      probe embeds the key as `?key=...`, and the two save-time call sites
  *      have no protection of their own — electron/ipc-setup.js hands
  *      `err.message` to the renderer and logs it, and src/cli-handlers.js has
  *      no try/catch at all.
- *   3. Each probe here is STILL individually caught, because this module must
+ *   4. Each probe here is STILL individually caught, because this module must
  *      not depend on an injected validator honouring that contract.
  *
  * Probes run in PARALLEL: validateApiKey's own timeout is 10s, so five stored
@@ -77,27 +82,67 @@ const UNVERIFIED_HINT =
   + '5xx or timeout). Re-run `amicus doctor` when connectivity is restored.';
 
 /**
- * The real network probe `realDeps()` injects — and the one place that decides
- * a live authenticated request is allowed to happen.
+ * Whether a live authenticated request is allowed right now. The shared gate
+ * for BOTH probes below — that sharing is the point, see layer 2 in the header.
  *
- * Under a test runner it refuses and reports "unverified" instead. Council
- * finding 7 (PR 221): `runDoctorChecks` merges a caller's deps over
- * `realDeps()`, so ANY suite that builds deps by hand and forgets
- * `validateApiKey` — i.e. bypasses tests/helpers/doctor-base-deps.js — would
- * silently fire five authenticated HTTPS requests using the developer's REAL
+ * Council finding 7 (PR 221): `runDoctorChecks` merges a caller's deps over
+ * `realDeps()`, so ANY suite that builds deps by hand and forgets to inject a
+ * double — i.e. bypasses tests/helpers/doctor-base-deps.js — would fire live
+ * authenticated HTTPS requests using the developer's REAL
  * ~/.config/amicus/.env keys. Nothing would fail; the suite would just be
  * slower and quietly spending someone's credentials. Suites that DO inject a
- * double are unaffected: theirs wins the merge and this is never called.
+ * double are unaffected: theirs wins the merge and these are never called.
  *
+ * @returns {boolean}
+ */
+function liveProbesDisabled() {
+  // ⚠️ NODE_ENV is deliberately NOT consulted. It was, and that put an
+  // environment sniff on a PRODUCTION path: a user with NODE_ENV=test exported
+  // (a CI smoke job, a stray shell profile) would have had every probe degrade
+  // to "unverified" on a real `amicus doctor` — recreating the silent
+  // degradation this check exists to remove. Council review of PR 222.
+  // These markers are set by test RUNNERS, not by ambient config.
+  return process.env.JEST_WORKER_ID !== undefined
+    || process.env.VITEST !== undefined
+    || process.env.NODE_TEST_CONTEXT !== undefined
+    || process.env.AMICUS_NO_NETWORK_PROBES === '1';
+}
+
+const SKIPPED = () => Promise.resolve({
+  valid: false, status: null, error: 'probe skipped (test harness detected)',
+});
+
+/**
+ * The key-validation probe `realDeps()` injects, behind the shared gate.
+ * A skip resolves as an ordinary unverified result, so the row warns rather
+ * than claiming health it did not establish.
  * @returns {Promise<{valid: boolean, status: number|null, error?: string}>}
  */
 function probeApiKey(provider, key) {
-  if (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test') {
+  if (liveProbesDisabled()) { return SKIPPED(); }
+  return require('./api-key-validation').validateApiKey(provider, key);
+}
+
+/**
+ * The OpenRouter credit probe, behind the SAME guard.
+ *
+ * ⚠️ This exists because the claim above was FALSE when first written. The
+ * header said probeApiKey was "the one place" a live authenticated request is
+ * decided, while realDeps() still injected `checkOpenRouterCredit` as an
+ * unguarded raw require — an authenticated call to openrouter.ai/api/v1/key
+ * with the developer's stored key, reachable by exactly the hand-built dep
+ * suites the guard was written for. Council review of PR 222 falsified the
+ * claim; routing both probes through one gate makes it true instead of
+ * deleting it. Resolves the same shape checkOpenRouterCredit does, so the
+ * caller's `res.warning` branch is unaffected.
+ */
+function probeOpenRouterCredit(key) {
+  if (liveProbesDisabled()) {
     return Promise.resolve({
-      valid: false, status: null, error: 'probe skipped (test environment)',
+      warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null,
     });
   }
-  return require('./api-key-validation').validateApiKey(provider, key);
+  return require('./api-key-validation').checkOpenRouterCredit(key);
 }
 
 /**
@@ -214,4 +259,7 @@ async function evaluateKeyAuth(d) {
   return { id: ID, name: NAME, status: 'ok', message, hint: null };
 }
 
-module.exports = { evaluateKeyAuth, classifyProbeFailure, probeApiKey };
+module.exports = {
+  evaluateKeyAuth, classifyProbeFailure,
+  probeApiKey, probeOpenRouterCredit, liveProbesDisabled,
+};

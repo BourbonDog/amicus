@@ -176,7 +176,16 @@ async function handleKey(args) {
 
   console.log(`Validating ${provider} key...`);
   const validation = await validateApiKey(provider, keyArg);
-  if (!validation.valid) {
+  // A 403 is NOT evidence the key is wrong — it is a disabled API, a quota, or
+  // a region/bot block just as often. Refusing to save on one is the same false
+  // ALARM the doctor classifier stopped raising, and this site branched on the
+  // bare `valid` boolean, so the structured status added for that fix never
+  // reached it: the alarm was reworded, not removed (council review of PR 222).
+  // Warn, save anyway, and let `amicus doctor` re-check later.
+  if (!validation.valid && validation.status === 403) {
+    console.warn(`Warning: ${validation.error}`);
+    console.warn('Saving the key anyway — run `amicus doctor` to re-check it later.');
+  } else if (!validation.valid) {
     console.error(`Error: ${validation.error}`);
     process.exit(1);
   }

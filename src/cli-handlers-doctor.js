@@ -33,7 +33,7 @@ function realDeps() {
     nodeVersion: process.version,
     readApiKeys: () => require('./utils/api-key-store').readApiKeys(),
     readApiKeyValues: () => require('./utils/api-key-store').readApiKeyValues(),
-    checkOpenRouterCredit: (key) => require('./utils/api-key-validation').checkOpenRouterCredit(key),
+    checkOpenRouterCredit: (key) => keyAuthCheck.probeOpenRouterCredit(key), // #210 — same gate as validateApiKey
     validateApiKey: (p, k) => keyAuthCheck.probeApiKey(p, k), // #210
     getCwd: () => process.cwd(),
     readProjectMarkers: (dir) => {
