@@ -486,3 +486,101 @@ describe('#210 F7 / PR 222: live probes are OPT-IN, and a skip is never healthy'
     expect(credit.message).toMatch(/not checked/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fourth council pass on PR 222 — majors A1 and A2.
+// ---------------------------------------------------------------------------
+describe('A1: "credit ok" must mean CHECKED, not merely "no warning"', () => {
+  const live = require('../src/utils/live-probes');
+  const https = require('https');
+  const { EventEmitter } = require('events');
+
+  afterEach(() => { live._resetLiveProbes(); jest.restoreAllMocks(); });
+
+  // The previous fix only covered the gate-CLOSED path (`skipped: true`).
+  // checkOpenRouterCredit resolves the same bare `warning: null` object on
+  // EVERY failure — non-200, parse error, timeout, socket error — so with the
+  // gate OPEN and the probe genuinely failing, the row still rendered
+  // "credit ok" for an account nobody reached.
+  //
+  // And the pin that was supposed to prevent this could not: it ran with the
+  // gate CLOSED, so it never entered the path it claimed to protect. These
+  // tests open the gate and break the network on purpose.
+  function mockCreditTransport(kind) {
+    return jest.spyOn(https, 'get').mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.setTimeout = () => {}; req.destroy = () => {};
+      if (kind === 'socket') {
+        process.nextTick(() => req.emit('error', new Error('ECONNRESET')));
+      } else {
+        const res = new EventEmitter();
+        res.statusCode = kind === 'http500' ? 500 : 200;
+        process.nextTick(() => {
+          cb(res);
+          if (kind === 'garbage') { res.emit('data', 'not json'); }
+          res.emit('end');
+        });
+      }
+      return req;
+    });
+  }
+
+  it.each(['socket', 'http500', 'garbage'])(
+    'a FAILED probe (%s) with the gate OPEN never reports credit ok', async (kind) => {
+      live.enableLiveProbes();
+      mockCreditTransport(kind);
+      const { runDoctorChecks } = require('../src/cli-handlers-doctor');
+      const checks = await runDoctorChecks({
+        readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
+        readApiKeys: () => ({ openrouter: true }),
+        validateApiKey: () => Promise.resolve({ valid: true, status: 200 }),
+      });
+      const credit = checks.find((c) => c.id === 'openrouter-credit');
+      expect(credit.message).not.toMatch(/credit ok/);
+      expect(credit.status).toBe('warn');
+    });
+
+  it('a genuinely healthy account still reports ok', async () => {
+    live.enableLiveProbes();
+    const checks = await require('../src/cli-handlers-doctor').runDoctorChecks({
+      readApiKeyValues: () => ({ openrouter: 'sk-or-x' }),
+      readApiKeys: () => ({ openrouter: true }),
+      validateApiKey: () => Promise.resolve({ valid: true, status: 200 }),
+      checkOpenRouterCredit: () => Promise.resolve({
+        checked: true, warning: null, isFreeTier: false, limitRemaining: 12, limit: 20, usage: 8 }),
+    });
+    const credit = checks.find((c) => c.id === 'openrouter-credit');
+    expect(credit.status).toBe('ok');
+    expect(credit.message).toMatch(/credit ok/);
+  });
+
+  it('checkOpenRouterCredit itself distinguishes checked from failed', async () => {
+    const { checkOpenRouterCredit } = require('../src/utils/api-key-validation');
+    mockCreditTransport('socket');
+    await expect(checkOpenRouterCredit('sk-or-x')).resolves.toMatchObject({ checked: false });
+  });
+});
+
+describe('A2: only a definitive 401 blocks a save (allowlist, not blocklist)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'cli-handlers.js'), 'utf-8');
+
+  // The comment said "Only a definitive 401 ... blocks" while the code was a
+  // BLOCKLIST of non-verdicts, so every unlisted status — 400, 404, 451,
+  // Cloudflare's 52x — still hit process.exit(1). The narrative outpaced the
+  // implementation for the third time in this PR.
+  it('the blocking set is an allowlist containing only 401', () => {
+    const m = SRC.match(/const BLOCKS_SAVE = new Set\(\[([^\]]*)\]\)/);
+    expect(m).not.toBeNull();
+    expect(m[1].replace(/\s/g, '')).toBe('401');
+  });
+
+  it('the old NOT_A_VERDICT blocklist is gone', () => {
+    expect(SRC).not.toMatch(/NOT_A_VERDICT/);
+  });
+
+  it('the branch tests membership of the blocking set, not its complement', () => {
+    expect(SRC).toMatch(/BLOCKS_SAVE\.has\(validation\.status\)/);
+  });
+});

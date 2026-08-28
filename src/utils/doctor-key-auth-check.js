@@ -139,7 +139,7 @@ function probeOpenRouterCredit(key) {
     // anthropic branch, one function over, with a test blessing it. Council
     // review of PR 222. `skipped` is what the row branches on now.
     return Promise.resolve({
-      skipped: true,
+      skipped: true, checked: false,
       warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null,
     });
   }

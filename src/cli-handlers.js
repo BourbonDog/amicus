@@ -176,17 +176,20 @@ async function handleKey(args) {
 
   console.log(`Validating ${provider} key...`);
   const validation = await validateApiKey(provider, keyArg);
-  // A 403 is NOT evidence the key is wrong — it is a disabled API, a quota, or
-  // a region/bot block just as often; nor is a 429 or a 5xx, which say only
-  // that the provider was busy or broken. Refusing to save on any of them is
-  // the same false ALARM the doctor classifier stopped raising. This site
-  // branched on the bare `valid` boolean, so the structured status added for
-  // that fix never reached it and the alarm was merely reworded; the second
-  // review then asked why the doctrine stopped at 403. It no longer does.
-  // Only a definitive 401 — or a probe that reached no verdict at all — blocks.
-  // Everything else warns, saves, and defers to `amicus doctor`.
-  const NOT_A_VERDICT = new Set([403, 408, 429, 500, 502, 503, 504]);
-  if (!validation.valid && NOT_A_VERDICT.has(validation.status)) {
+  // 401 is the only status that means "this credential is not accepted".
+  // Everything else — 403 (disabled API, quota, region/bot block), 429, any
+  // 5xx, a 404 from a moved endpoint, a Cloudflare 52x during an origin
+  // outage, or no status at all because the machine is offline — says
+  // something about the REQUEST, not the key. Refusing to save on those is
+  // the false ALARM the doctor classifier stopped raising.
+  //
+  // ⚠️ An ALLOWLIST of what blocks, deliberately. This was a blocklist of
+  // what does NOT block, which left every unenumerated status falling through
+  // to process.exit(1) while the comment above it claimed only 401 blocked —
+  // the code and the narrative disagreed, and the narrative was the nicer of
+  // the two. An allowlist cannot rot as new status codes appear.
+  const BLOCKS_SAVE = new Set([401]);
+  if (!validation.valid && !BLOCKS_SAVE.has(validation.status)) {
     console.warn(`Warning: ${validation.error}`);
     console.warn('Saving the key anyway — run `amicus doctor` to re-check it later.');
   } else if (!validation.valid) {

@@ -7,11 +7,17 @@
  * Warns, never errors: a zero-credit or free-tier key is a real constraint but
  * not a broken install, and free councils against :free models are legitimate.
  *
- * ⚠️ A SKIPPED probe is a WARN, not an ok. checkOpenRouterCredit resolves
- * `warning: null` both when the account is fine AND when the probe never ran,
- * so branching on `warning` alone reported "credit ok" for an account nobody
- * checked — concealing quota exhaustion behind a green row. Council review of
- * PR 222. The `skipped` flag is what distinguishes them.
+ * ⚠️ "credit ok" MEANS CHECKED. checkOpenRouterCredit resolves `warning: null`
+ * for a healthy account, for a skipped probe, AND for every failure — so
+ * branching on `warning` alone reported a funded account for one nobody
+ * reached, concealing quota exhaustion behind a green row.
+ *
+ * Two flags separate the three cases, and both are required: `skipped` (we
+ * chose not to look) and `checked` (we looked and got an answer). Fixing only
+ * `skipped` left the false green alive on the network-failure path — which is
+ * exactly what the fourth council pass on PR 222 found, because the test
+ * pinning the fix ran with the gate CLOSED and could never enter the path it
+ * claimed to protect.
  */
 
 'use strict';
@@ -37,6 +43,13 @@ async function evaluateOpenRouterCredit(d) {
       // Never 'ok': nothing was checked, so quota exhaustion or a free-tier cap
       // would be concealed behind a green row (council review of PR 222).
       return { id: ID, name: NAME, status: 'warn', message: 'credit not checked — live probes disabled', hint: 'Unset AMICUS_NO_NETWORK_PROBES, or run `amicus doctor` from the CLI.' };
+    }
+    // A probe that ran but got no answer (timeout, 5xx, socket reset, garbage
+    // body) is NOT evidence of a funded account. Distinct message from the
+    // skip above: one means "we chose not to look", this means "we looked and
+    // could not see".
+    if (res.checked !== true) {
+      return { id: ID, name: NAME, status: 'warn', message: 'credit could not be checked — the probe did not complete', hint: 'Transient: re-run `amicus doctor` when the network settles.' };
     }
     if (res.warning) {
       return { id: ID, name: NAME, status: 'warn', message: res.warning, hint: 'Add credit at openrouter.ai/credits, or build a free council (amicus setup → option 2).' };

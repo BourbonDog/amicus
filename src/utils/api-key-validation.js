@@ -206,11 +206,22 @@ const OPENROUTER_FREE_TIER_WARNING =
  * never blocked. Free-tier councils against free models are legitimate.
  *
  * @param {string} key OpenRouter API key
- * @returns {Promise<{warning: string|null, isFreeTier: boolean,
+ * @returns {Promise<{checked: boolean, warning: string|null, isFreeTier: boolean,
  *   limitRemaining: number|null, limit: number|null, usage: number|null}>}
+ *   `checked` is false whenever no answer was obtained. Never infer health
+ *   from `warning: null` alone — see the note on `none` below.
  */
 function checkOpenRouterCredit(key) {
+  // ⚠️ `checked: false` is the whole point. Every failure path below resolves
+  // THIS object, and `warning: null` is also what a perfectly healthy account
+  // resolves — so a caller branching on `warning` alone cannot tell "the
+  // account is fine" from "the probe never got an answer", and renders the
+  // first for the second. That is the false green the fourth council pass
+  // found still alive on the network-failure path after it had been fixed only
+  // for the gate-disabled one. Intent-to-probe and result-of-probe are
+  // different facts and now have different fields.
   const none = {
+    checked: false,
     warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null
   };
   if (!key || key.trim().length === 0) {
@@ -244,7 +255,7 @@ function checkOpenRouterCredit(key) {
         } else if (isFreeTier) {
           warning = OPENROUTER_FREE_TIER_WARNING;
         }
-        resolve({ warning, isFreeTier, limitRemaining, limit, usage });
+        resolve({ checked: true, warning, isFreeTier, limitRemaining, limit, usage });
       });
     });
     req.setTimeout(10000, () => {
