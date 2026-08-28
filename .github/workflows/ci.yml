@@ -49,17 +49,29 @@ jobs:
         # SHRINKING it, not remove it, and recycling a fat worker is still
         # worth having.
         #
-        # Why 1 and not 2: GitHub's macos-latest runners are small (3 vCPU when
-        # this was written), and jest's default maxWorkers is cpus-1 — so on a
-        # 3-core runner `--maxWorkers=2` would be the default spelled out
-        # loud, i.e. no change at all. 1 is the only value guaranteed to reduce
-        # concurrent heaps without asserting a core count this file cannot see.
-        # The "Runner capacity" step below prints cpus/mem so a SIXTH hit is
-        # argued from data instead of from this paragraph's assumption; if it
-        # shows more cores than expected, 2 is the gentler setting to try.
-        # Cost is real and accepted: this leg serializes, so expect it to run
-        # meaningfully longer than the ~3m59s above. A slow green leg beats a
-        # fast one that fails a suite at random.
+        # Why 1 and not 2 — MEASURED by the "Runner capacity" step below, which
+        # was added for exactly this decision (run 33133132477):
+        #
+        #   macos-latest    cpus=3  mem=8GB   jest-default-workers=2
+        #   ubuntu-latest   cpus=4  mem=17GB  jest-default-workers=3
+        #   windows-latest  cpus=4  mem=17GB  jest-default-workers=3
+        #
+        # jest defaults maxWorkers to cpus-1, so on this 3-core runner
+        # `--maxWorkers=2` IS the default — it would have been a no-op that
+        # looked like a fix and bought a sixth hit. 1 is the only value that
+        # reduces anything here. Do not "relax" it to 2 without a new capacity
+        # reading showing more cores.
+        #
+        # The memory column is the other half of the story, and no hit record
+        # before this one had it: the afflicted leg has LESS THAN HALF the RAM
+        # of the two that have never segfaulted. That is consistent with the
+        # unbounded-worker-heap theory and explains why this is macOS-only —
+        # though note macos/node-22 shares the same 3 vCPU / 8GB and has never
+        # been hit, so memory alone is not sufficient; it takes node 24 too.
+        #
+        # Cost, also measured on that run: this leg goes ~4m -> 6.5m, making it
+        # the slowest in the matrix (next is windows/node-24 at 4.7m). Accepted:
+        # a slow green leg beats a fast one that fails a suite at random.
         include:
           - os: macos-latest
             node: 24
