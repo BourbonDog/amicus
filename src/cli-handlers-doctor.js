@@ -34,7 +34,7 @@ function realDeps() {
     readApiKeys: () => require('./utils/api-key-store').readApiKeys(),
     readApiKeyValues: () => require('./utils/api-key-store').readApiKeyValues(),
     checkOpenRouterCredit: (key) => require('./utils/api-key-validation').checkOpenRouterCredit(key),
-    validateApiKey: (p, k) => require('./utils/api-key-validation').validateApiKey(p, k), // #210
+    validateApiKey: (p, k) => keyAuthCheck.probeApiKey(p, k), // #210
     getCwd: () => process.cwd(),
     readProjectMarkers: (dir) => {
       const exists = (name) => { try { return fs.existsSync(path.join(dir, name)); } catch (_e) { return false; } };

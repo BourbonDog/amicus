@@ -56,7 +56,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-valid');
-      expect(result).toEqual({ valid: true });
+      expect(result).toMatchObject({ valid: true });
     });
 
     it('should resolve invalid for 401 response', async () => {
@@ -74,7 +74,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-bad');
-      expect(result).toEqual({ valid: false, error: 'Invalid API key (401)' });
+      expect(result).toEqual({ valid: false, status: 401, error: 'Invalid API key (401)' });
     });
 
     it('should resolve invalid for network error', async () => {
@@ -88,22 +88,22 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-err');
-      expect(result).toEqual({ valid: false, error: 'Network error' });
+      expect(result).toEqual({ valid: false, status: null, error: 'Network error' });
     });
 
     it('should reject empty key', async () => {
       const result = await validateApiKey('openrouter', '');
-      expect(result).toEqual({ valid: false, error: 'API key is required' });
+      expect(result).toEqual({ valid: false, status: null, error: 'API key is required' });
     });
 
     it('should reject whitespace-only key', async () => {
       const result = await validateApiKey('openrouter', '   ');
-      expect(result).toEqual({ valid: false, error: 'API key is required' });
+      expect(result).toEqual({ valid: false, status: null, error: 'API key is required' });
     });
 
     it('should reject unknown provider', async () => {
       const result = await validateApiKey('unknown-provider', 'some-key');
-      expect(result).toEqual({ valid: false, error: 'Unknown provider: unknown-provider' });
+      expect(result).toEqual({ valid: false, status: null, error: 'Unknown provider: unknown-provider' });
     });
 
     it('should be aliased as validateOpenRouterKey for backwards compat', () => {
@@ -111,7 +111,9 @@ describe('api-key-store validation', () => {
       expect(store.validateOpenRouterKey).toBe(store.validateApiKey);
     });
 
-    it('should handle 403 response as invalid', async () => {
+    // Council finding 1 (PR 221): 403 is NOT reported as a bad credential.
+    // Google returns it for API-not-enabled and quota; a WAF for bot blocks.
+    it('should report a 403 as forbidden, NOT as an invalid key', async () => {
       const mockResponse = {
         statusCode: 403,
         on: jest.fn((event, cb) => {
@@ -126,7 +128,10 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-forbidden');
-      expect(result).toEqual({ valid: false, error: 'Invalid API key (403)' });
+      expect(result.valid).toBe(false);
+      expect(result.status).toBe(403);
+      expect(result.error).toMatch(/forbidden/i);
+      expect(result.error).not.toMatch(/invalid api key/i);
     });
 
     it('should handle unexpected status code', async () => {
@@ -144,7 +149,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('openrouter', 'sk-or-500');
-      expect(result).toEqual({ valid: false, error: 'Unexpected response (500)' });
+      expect(result).toEqual({ valid: false, status: 500, error: 'Unexpected response (500)' });
     });
 
     it('should treat anthropic non-401 response as valid', async () => {
@@ -163,7 +168,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('anthropic', 'sk-ant-valid');
-      expect(result).toEqual({ valid: true });
+      expect(result).toMatchObject({ valid: true });
     });
 
     it('should treat anthropic 401 response as invalid', async () => {
@@ -181,7 +186,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('anthropic', 'sk-ant-bad');
-      expect(result).toEqual({ valid: false, error: 'Invalid API key (401)' });
+      expect(result).toEqual({ valid: false, status: 401, error: 'Invalid API key (401)' });
     });
 
     it('should treat anthropic 429 as invalid (rate limited)', async () => {
@@ -199,7 +204,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('anthropic', 'sk-ant-ratelimited');
-      expect(result).toEqual({ valid: false, error: 'Server error (429)' });
+      expect(result).toEqual({ valid: false, status: 429, error: 'Server error (429)' });
     });
 
     it('should treat anthropic 500 as invalid (server error)', async () => {
@@ -217,7 +222,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('anthropic', 'sk-ant-servererror');
-      expect(result).toEqual({ valid: false, error: 'Server error (500)' });
+      expect(result).toEqual({ valid: false, status: 500, error: 'Server error (500)' });
     });
 
     it('should validate deepseek key using correct endpoint', async () => {
@@ -239,7 +244,7 @@ describe('api-key-store validation', () => {
       });
 
       const result = await validateApiKey('deepseek', 'sk-deepseek-valid');
-      expect(result).toEqual({ valid: true });
+      expect(result).toMatchObject({ valid: true });
       expect(capturedUrl).toBe('https://api.deepseek.com/models');
       expect(capturedHeaders.Authorization).toBe('Bearer sk-deepseek-valid');
     });

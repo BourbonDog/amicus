@@ -31,15 +31,51 @@ const VALIDATION_ENDPOINTS = {
   }
 };
 
-/** Validate an API key by making a test request to the provider's API */
+/**
+ * Strip every spelling of a secret out of a message before it can escape.
+ *
+ * The Google probe embeds the key in the URL as `?key=...`, so ANY error text
+ * that quotes the request URL quotes the key with it — Node's ERR_INVALID_URL
+ * and several socket errors do exactly that. Redacting here, at the source,
+ * is what protects the callers that never look: electron/ipc-setup.js returns
+ * `err.message` straight to the renderer AND logs it, and src/cli-handlers.js
+ * awaits this function with no try/catch at all. (Council finding 3, PR 221.)
+ *
+ * Both the raw and percent-encoded forms are removed: the key reaches the URL
+ * encoded, so redacting only the raw spelling would miss the one that matters.
+ */
+function redactSecret(text, key) {
+  if (typeof text !== 'string' || text.length === 0) { return ''; }
+  if (!key) { return text; }
+  let out = text.split(key).join('***');
+  try {
+    const encoded = encodeURIComponent(key);
+    if (encoded !== key) { out = out.split(encoded).join('***'); }
+  } catch (_e) { /* un-encodable key: the raw pass above already ran */ }
+  return out;
+}
+
+/**
+ * Validate an API key by making a test request to the provider's API.
+ *
+ * ALWAYS RESOLVES — never rejects, even on a synchronous throw from https.get
+ * (see redactSecret). Two of the three call sites have no catch.
+ *
+ * @returns {Promise<{valid: boolean, status: number|null, error?: string}>}
+ *   `status` is the HTTP status, or null when no response was received. It is
+ *   returned as DATA so callers never have to recover it by parsing `error`
+ *   (council finding 2): that coupled control flow to message wording, and a
+ *   reword that dropped the parentheses would have silently degraded detection
+ *   to a permanent "unverified" with nothing failing to announce it.
+ */
 function validateApiKey(provider, key) {
   if (!key || key.trim().length === 0) {
-    return Promise.resolve({ valid: false, error: 'API key is required' });
+    return Promise.resolve({ valid: false, status: null, error: 'API key is required' });
   }
 
   const endpoint = VALIDATION_ENDPOINTS[provider];
   if (!endpoint) {
-    return Promise.resolve({ valid: false, error: `Unknown provider: ${provider}` });
+    return Promise.resolve({ valid: false, status: null, error: `Unknown provider: ${provider}` });
   }
 
   const trimmedKey = key.trim();
@@ -53,36 +89,56 @@ function validateApiKey(provider, key) {
   const headers = endpoint.authHeader(trimmedKey);
 
   return new Promise((resolve) => {
-    const req = https.get(url, { headers }, (res) => {
-      res.on('data', () => {});
-      res.on('end', () => {
-        // Anthropic returns 401 for invalid key, 400/405 for valid key with no body
-        if (provider === 'anthropic') {
-          if (res.statusCode === 401) {
-            resolve({ valid: false, error: 'Invalid API key (401)' });
-          } else if (res.statusCode >= 500 || res.statusCode === 429) {
-            resolve({ valid: false, error: `Server error (${res.statusCode})` });
-          } else {
-            resolve({ valid: true });
+    let req;
+    try {
+      req = https.get(url, { headers }, (res) => {
+        const code = res.statusCode;
+        res.on('data', () => {});
+        res.on('end', () => {
+          // Anthropic returns 401 for invalid key, 400/405 for valid key with no body
+          if (provider === 'anthropic') {
+            if (code === 401) {
+              resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+            } else if (code >= 500 || code === 429) {
+              resolve({ valid: false, status: code, error: `Server error (${code})` });
+            } else {
+              resolve({ valid: true, status: code });
+            }
+            return;
           }
-          return;
-        }
 
-        if (res.statusCode === 200) {
-          resolve({ valid: true });
-        } else if (res.statusCode === 401 || res.statusCode === 403) {
-          resolve({ valid: false, error: `Invalid API key (${res.statusCode})` });
-        } else {
-          resolve({ valid: false, error: `Unexpected response (${res.statusCode})` });
-        }
+          if (code === 200) {
+            resolve({ valid: true, status: code });
+          } else if (code === 401) {
+            resolve({ valid: false, status: code, error: 'Invalid API key (401)' });
+          } else if (code === 403) {
+            // NOT stated as a bad key (council finding 1). Google returns 403
+            // for "API not enabled" and for quota; a WAF returns it for bot
+            // protection. Calling that an invalid credential sends someone off
+            // to re-enter a key that works — the false-ALARM twin of the
+            // false-GREEN this endpoint exists to catch. Callers decide.
+            resolve({
+              valid: false, status: code,
+              error: 'Forbidden (403) — the request was rejected, but this may be '
+                + 'a disabled API, a quota, or a region/bot block rather than the key',
+            });
+          } else {
+            resolve({ valid: false, status: code, error: `Unexpected response (${code})` });
+          }
+        });
       });
-    });
+    } catch (err) {
+      // Synchronous throw (ERR_INVALID_URL and friends). Its message quotes the
+      // request URL — key included for Google. Redact, resolve, never reject.
+      resolve({ valid: false, status: null, error: redactSecret(err.message, trimmedKey) });
+      return;
+    }
     req.setTimeout(10000, () => {
       req.destroy();
-      resolve({ valid: false, error: 'Request timed out' });
+      resolve({ valid: false, status: null, error: 'Request timed out' });
     });
     req.on('error', (err) => {
-      resolve({ valid: false, error: err.message });
+      resolve({ valid: false, status: null, error: redactSecret(err.message, trimmedKey) });
     });
   });
 }

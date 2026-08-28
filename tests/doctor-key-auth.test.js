@@ -11,7 +11,7 @@
  *
  * The new 'key-auth' row probes every stored key. Its whole design problem is
  * FALSE ALARMS: being offline must never look like a rotted key, so only a
- * definitive auth rejection (401/403) is an `error` — every ambiguous outcome
+ * definitive auth rejection (401 only) is an `error` — every ambiguous outcome
  * (timeout, DNS/network, 5xx, unexpected status) is a `warn`.
  */
 
@@ -88,7 +88,7 @@ describe('doctor: key-auth check (#210)', () => {
     test('a definitive 401 → ERROR naming the provider, with the amicus key hint', async () => {
       const c = await keyAuth({
         keys: { deepseek: 'sk-ds-rotted' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (401)' }),
+        validate: jest.fn().mockResolvedValue({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       });
       expect(c.status).toBe('error');
       expect(c.message).toMatch(/deepseek/);
@@ -97,13 +97,20 @@ describe('doctor: key-auth check (#210)', () => {
       expect(c.hint).toMatch(/deepseek/);
     });
 
-    test('a definitive 403 → ERROR (same authoritative-rejection class as 401)', async () => {
+    test('a 403 → WARN, not error (council finding 1, PR 221)', async () => {
+      // Google returns 403 for "API not enabled" and for quota; a WAF returns
+      // it for bot protection. This used to be an error, which meant telling
+      // someone to re-enter a key that works.
       const c = await keyAuth({
-        keys: { openai: 'sk-oa-banned' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (403)' }),
+        keys: { openrouter: 'a' },
+        validate: jest.fn().mockResolvedValue({
+          valid: false, status: 403,
+          error: 'Forbidden (403) — the request was rejected, but this may be a disabled API',
+        }),
       });
-      expect(c.status).toBe('error');
-      expect(c.message).toMatch(/openai/);
+      expect(c.status).toBe('warn');
+      expect(c.message).toMatch(/403/);
+      expect(c.hint).not.toMatch(/re-enter/);
     });
 
     test.each([
@@ -128,7 +135,7 @@ describe('doctor: key-auth check (#210)', () => {
         keys: { openrouter: 'sk-or-good', deepseek: 'sk-ds-rotted' },
         validate: jest.fn((provider) => Promise.resolve(
           provider === 'deepseek'
-            ? { valid: false, error: 'Invalid API key (401)' }
+            ? { valid: false, status: 401, error: 'Invalid API key (401)' }
             : { valid: true },
         )),
       });
@@ -145,7 +152,7 @@ describe('doctor: key-auth check (#210)', () => {
         keys: { deepseek: 'sk-ds-rotted', openai: 'sk-oa-x' },
         validate: jest.fn((provider) => Promise.resolve(
           provider === 'deepseek'
-            ? { valid: false, error: 'Invalid API key (401)' }
+            ? { valid: false, status: 401, error: 'Invalid API key (401)' }
             : { valid: false, error: 'Request timed out' },
         )),
       });
@@ -159,7 +166,7 @@ describe('doctor: key-auth check (#210)', () => {
     test('two rejected providers are BOTH named', async () => {
       const c = await keyAuth({
         keys: { deepseek: 'a', openai: 'b' },
-        validate: jest.fn().mockResolvedValue({ valid: false, error: 'Invalid API key (401)' }),
+        validate: jest.fn().mockResolvedValue({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       });
       expect(c.status).toBe('error');
       expect(c.hint).toMatch(/deepseek/);
@@ -168,25 +175,50 @@ describe('doctor: key-auth check (#210)', () => {
   });
 
   describe('classifyProbeFailure: the definitive-vs-ambiguous rule', () => {
-    test.each(['Invalid API key (401)', 'Invalid API key (403)', 'Unexpected response (403)'])(
-      '%s is DEFINITIVE (the HTTP status is the evidence, not the prose)', (error) => {
-        expect(classifyProbeFailure(error).definitive).toBe(true);
-      });
-
-    test.each([
-      'Request timed out',
-      'Server error (500)',
-      'Server error (429)',
-      'Unexpected response (404)',
-      'socket hang up',
-      '',
-      undefined,
-    ])('%s is AMBIGUOUS', (error) => {
-      expect(classifyProbeFailure(error).definitive).toBe(false);
+    // Reads the STRUCTURED `status` field. It used to regex "(401)" out of the
+    // error prose, which tied control flow to message wording (council finding
+    // 2, PR 221). These now pass results, not strings.
+    it('401 is DEFINITIVE — the one status that means "credential not accepted"', () => {
+      expect(classifyProbeFailure({ status: 401, error: 'Invalid API key (401)' }).definitive)
+        .toBe(true);
     });
 
-    test('an unrecognised error degrades toward AMBIGUOUS (fail-safe: never a false alarm)', () => {
-      expect(classifyProbeFailure('something nobody has seen before').definitive).toBe(false);
+    it('403 is AMBIGUOUS — council finding 1 moved it off the definitive side', () => {
+      // Google returns 403 for "API not enabled" and for quota; a WAF returns
+      // it for bot protection. Sending someone to re-enter a working key is
+      // the false-ALARM twin of the false-GREEN this check exists to kill.
+      const c = classifyProbeFailure({ status: 403, error: 'Forbidden (403) — ...' });
+      expect(c.definitive).toBe(false);
+      expect(c.reason).toMatch(/403/);
+      expect(c.reason).toMatch(/forbidden/i);
+    });
+
+    test.each([500, 429, 404, 400, 502])('%p is AMBIGUOUS', (status) => {
+      expect(classifyProbeFailure({ status }).definitive).toBe(false);
+    });
+
+    test.each([
+      { status: null, error: 'Request timed out' },
+      { status: null, error: 'socket hang up' },
+      { status: null },
+      {},
+      undefined,
+      null,
+    ])('a result with no status is AMBIGUOUS: %p', (res) => {
+      expect(classifyProbeFailure(res).definitive).toBe(false);
+    });
+
+    it('a timeout is named as such, an unreachable host is not', () => {
+      expect(classifyProbeFailure({ status: null, error: 'Request timed out' }).reason)
+        .toMatch(/timed out/);
+      expect(classifyProbeFailure({ status: null, error: 'socket hang up' }).reason)
+        .toMatch(/unreachable/);
+    });
+
+    it('prose alone can no longer make a finding definitive', () => {
+      // The whole point of finding 2: an error that SAYS 401 but carries no
+      // status must not be treated as a verdict.
+      expect(classifyProbeFailure({ error: 'Invalid API key (401)' }).definitive).toBe(false);
     });
   });
 
@@ -290,7 +322,7 @@ describe('doctor: key-auth check (#210)', () => {
       const checks = await runDoctorChecks(makeBaseDeps({
         readApiKeys: () => ({ openrouter: false, google: false, openai: false, anthropic: false, deepseek: true }),
         readApiKeyValues: () => ({ deepseek: 'sk-ds-rotted' }),
-        validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+        validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       }));
       const c = byId(checks)['key-auth'];
       expect(c.status).toBe('error');
@@ -311,7 +343,7 @@ describe('doctor: key-auth check (#210)', () => {
 
     test('a rejected key DOES flip doctor\'s exit code to 1', async () => {
       const checks = await runDoctorChecks(makeBaseDeps({
-        validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+        validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
       }));
       const { code } = await capture(() => handleDoctor({ _: [] }, async () => checks));
       expect(code).toBe(1);
@@ -356,7 +388,7 @@ describe('#210 C1: a stored key with no validation endpoint must not read as hea
   it('a definitive rejection still outranks an unprobeable key (error beats warn)', async () => {
     const r = await evaluateKeyAuth({
       readApiKeyValues: () => ({ openrouter: 'k', mystery: 'k2' }),
-      validateApiKey: () => Promise.resolve({ valid: false, error: 'Invalid API key (401)' }),
+      validateApiKey: () => Promise.resolve({ valid: false, status: 401, error: 'Invalid API key (401)' }),
     });
     expect(r.status).toBe('error');
   });
@@ -364,5 +396,40 @@ describe('#210 C1: a stored key with no validation endpoint must not read as hea
   it('all-probeable-and-valid is still a clean ok (no gratuitous yellow)', async () => {
     const r = await evaluateKeyAuth(deps({ openrouter: 'k', deepseek: 'k2' }));
     expect(r.status).toBe('ok');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Council finding 7 (second review of PR 221).
+// ---------------------------------------------------------------------------
+describe('#210 F7: the real probe refuses to run under a test harness', () => {
+  const { probeApiKey } = require('../src/utils/doctor-key-auth-check');
+  const https = require('https');
+
+  // runDoctorChecks merges a caller's deps OVER realDeps(), so a suite that
+  // builds deps by hand and forgets validateApiKey (i.e. bypasses
+  // tests/helpers/doctor-base-deps.js) would fire five authenticated requests
+  // with the developer's real ~/.config/amicus/.env keys — and nothing would
+  // fail to say so. The guard lives in the probe itself, not in the helper,
+  // because the helper is exactly what such a suite skips.
+  it('makes NO network call when JEST_WORKER_ID is set', async () => {
+    const spy = jest.spyOn(https, 'get');
+    const r = await probeApiKey('openrouter', 'sk-real-looking-key');
+    expect(spy).not.toHaveBeenCalled();
+    expect(r).toEqual({ valid: false, status: null, error: 'probe skipped (test environment)' });
+    spy.mockRestore();
+  });
+
+  it('the skip classifies as UNVERIFIED, never as a rejection', async () => {
+    const r = await probeApiKey('openrouter', 'k');
+    expect(classifyProbeFailure(r).definitive).toBe(false);
+  });
+
+  it('realDeps wires the guarded probe, not validateApiKey directly', () => {
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'src', 'cli-handlers-doctor.js'), 'utf-8');
+    expect(src).toMatch(/validateApiKey:\s*\(p, k\)\s*=>\s*keyAuthCheck\.probeApiKey\(p, k\)/);
+    // A direct require here would reopen the hole.
+    expect(src).not.toMatch(/validateApiKey:\s*\(p, k\)\s*=>\s*require\(/);
   });
 });

@@ -12,33 +12,40 @@
  * the stored DeepSeek key returned 401 and the catalog served 0 deepseek rows.
  *
  * THE STATUS RULE (the whole design problem is FALSE ALARMS):
- *   - definitive auth rejection → 'error'. The evidence is the HTTP STATUS,
- *     not the prose: `classifyProbeFailure` pulls the last parenthesised
- *     3-digit status out of validateApiKey's error string and treats 401/403
- *     — and only those — as authoritative. 401/403 is the server saying "this
- *     credential is not accepted"; nothing else in the space says that.
- *     Anchoring on the status rather than on the literal
- *     "Invalid API key (401)" wording keeps the rule correct if
- *     api-key-validation.js ever rewords, and correctly catches an
- *     "Unexpected response (403)" too.
+ *   - HTTP 401 → 'error'. That is the server saying "this credential is not
+ *     accepted", and nothing else in the space says it that plainly.
  *   - EVERYTHING else → 'warn'. Timeout, DNS/socket error, 5xx, 429, an
- *     unexpected 4xx, an unparseable message: none of these distinguish a
- *     rotted key from a laptop on a plane. Unrecognised input falls to the
- *     ambiguous side ON PURPOSE — the failure mode of a false 'error' here is
- *     a user re-entering a perfectly good key, which is worse than a warn.
+ *     unexpected 4xx, a result with no status at all: none of these
+ *     distinguish a rotted key from a laptop on a plane. Unrecognised input
+ *     falls to the ambiguous side ON PURPOSE — the failure mode of a false
+ *     'error' here is a user re-entering a perfectly good key.
+ *   - HTTP 403 is explicitly on the WARN side (council finding 1, PR 221). It
+ *     read as definitive at first, which was wrong: Google returns 403 for
+ *     "API not enabled" and for quota, and a WAF returns it for bot
+ *     protection. Treating it as a verdict traded the false-GREEN this check
+ *     was built to kill for a false-ALARM of the same shape.
+ *   - a stored key with NO validation endpoint → 'warn'. It cannot be probed,
+ *     so this check cannot vouch for it (council finding C1, first review).
  *   - no keys stored → 'ok' + "skipped" (mirrors the openrouter-credit skip).
  *
- * NO KEY MATERIAL, NO URLs, EVER. Two hard rules, both structural rather than
- * best-effort:
- *   1. Only provider IDS and a sanitized reason reach the row — the raw error
- *      string is never echoed. validateApiKey builds the Google probe as
- *      `${url}?key=${key}`, so any message that quotes its request URL quotes
- *      the key with it.
- *   2. Each probe is individually caught. validateApiKey is documented to
- *      resolve-never-reject, but https.get() can throw SYNCHRONOUSLY inside its
- *      promise executor (ERR_INVALID_URL), which rejects — and that message
- *      echoes the full URL. Uncaught, guardAsync in cli-handlers-doctor.js
- *      would print it as the row message.
+ * The evidence is the STRUCTURED `status` field, not the prose.
+ * classifyProbeFailure used to regex "(401)" out of the error string, which
+ * made control flow depend on message wording — a reword upstream that dropped
+ * the parentheses would have degraded every row to a permanent "unverified"
+ * with nothing failing to announce it (council finding 2, PR 221).
+ *
+ * NO KEY MATERIAL, NO URLs, EVER. Three layers, each structural:
+ *   1. Only provider IDS and a reason built here reach the row — the raw error
+ *      string is never echoed.
+ *   2. api-key-validation.js redacts the key from any message before it
+ *      escapes, and resolves rather than rejecting on a synchronous throw from
+ *      https.get. That is the ROOT fix (council finding 3, PR 221): the Google
+ *      probe embeds the key as `?key=...`, and the two save-time call sites
+ *      have no protection of their own — electron/ipc-setup.js hands
+ *      `err.message` to the renderer and logs it, and src/cli-handlers.js has
+ *      no try/catch at all.
+ *   3. Each probe here is STILL individually caught, because this module must
+ *      not depend on an injected validator honouring that contract.
  *
  * Probes run in PARALLEL: validateApiKey's own timeout is 10s, so five stored
  * keys probed sequentially would add up to 50s to a `doctor` run. Fan-out is
@@ -53,7 +60,9 @@ const ID = 'key-auth';
 const NAME = 'API key auth';
 
 /** Statuses that are an authoritative "this credential is not accepted". */
-const DEFINITIVE_STATUSES = new Set([401, 403]);
+// 401 only. 403 was here and is not a credential verdict — see
+// classifyProbeFailure (council finding 1, PR 221).
+const DEFINITIVE_STATUSES = new Set([401]);
 
 const REENTER_HINT = (providers) =>
   `amicus key <provider> <key>  (re-enter the rejected key for: ${providers.join(', ')})`;
@@ -68,31 +77,66 @@ const UNVERIFIED_HINT =
   + '5xx or timeout). Re-run `amicus doctor` when connectivity is restored.';
 
 /**
+ * The real network probe `realDeps()` injects — and the one place that decides
+ * a live authenticated request is allowed to happen.
+ *
+ * Under a test runner it refuses and reports "unverified" instead. Council
+ * finding 7 (PR 221): `runDoctorChecks` merges a caller's deps over
+ * `realDeps()`, so ANY suite that builds deps by hand and forgets
+ * `validateApiKey` — i.e. bypasses tests/helpers/doctor-base-deps.js — would
+ * silently fire five authenticated HTTPS requests using the developer's REAL
+ * ~/.config/amicus/.env keys. Nothing would fail; the suite would just be
+ * slower and quietly spending someone's credentials. Suites that DO inject a
+ * double are unaffected: theirs wins the merge and this is never called.
+ *
+ * @returns {Promise<{valid: boolean, status: number|null, error?: string}>}
+ */
+function probeApiKey(provider, key) {
+  if (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test') {
+    return Promise.resolve({
+      valid: false, status: null, error: 'probe skipped (test environment)',
+    });
+  }
+  return require('./api-key-validation').validateApiKey(provider, key);
+}
+
+/**
  * Classify one validateApiKey failure as a definitive auth rejection or an
  * ambiguous one, and produce the SANITIZED reason that may be printed.
  *
+ * Reads the STRUCTURED `status` field. This used to regex the status out of
+ * `error` — which made a control-flow decision depend on message wording, so a
+ * reword upstream that dropped the parentheses would have silently degraded
+ * every row to a permanent "unverified" with no test failing to say so
+ * (council finding 2, PR 221). api-key-validation.js returns the status as
+ * data now. A result with no status is ambiguous, which is the fail-safe side.
+ *
  * The returned `reason` is built here from scratch — it never contains any
  * substring of `error`, which is what makes the no-URL/no-key guarantee
- * structural instead of a hope about provider prose.
+ * structural rather than a hope about provider prose.
  *
- * @param {string} [error] validateApiKey's `error` field
+ * @param {{status: number|null, error?: string}} [res] validateApiKey's result
  * @returns {{definitive: boolean, reason: string}}
  */
-function classifyProbeFailure(error) {
-  const text = typeof error === 'string' ? error : '';
-  // Last parenthesised 3-digit group: "Invalid API key (401)",
-  // "Server error (503)", "Unexpected response (404)".
-  const matches = text.match(/\((\d{3})\)/g) || [];
-  const last = matches.length ? matches[matches.length - 1] : null;
-  const status = last ? parseInt(last.slice(1, -1), 10) : null;
+function classifyProbeFailure(res) {
+  const r = (res && typeof res === 'object') ? res : {};
+  const status = (typeof r.status === 'number' && Number.isFinite(r.status)) ? r.status : null;
 
   if (status !== null && DEFINITIVE_STATUSES.has(status)) {
     return { definitive: true, reason: `rejected (HTTP ${status})` };
   }
+  if (status === 403) {
+    // Deliberately NOT definitive (council finding 1). Google returns 403 for
+    // "API not enabled" and for quota; a WAF returns it for bot protection.
+    // Telling someone to re-enter a working key is the false-ALARM twin of the
+    // false-GREEN this check exists to kill, and this check's whole design
+    // premise is that a false error costs more than a warn.
+    return { definitive: false, reason: 'unverified (HTTP 403 — forbidden, may not be the key)' };
+  }
   if (status !== null) {
     return { definitive: false, reason: `unverified (HTTP ${status})` };
   }
-  if (/timed?\s*out|timeout/i.test(text)) {
+  if (/timed?\s*out|timeout/i.test(typeof r.error === 'string' ? r.error : '')) {
     return { definitive: false, reason: 'unverified (timed out)' };
   }
   return { definitive: false, reason: 'unverified (unreachable)' };
@@ -114,13 +158,14 @@ async function probeOne(d, provider, key) {
   if (res && res.valid) {
     return { provider, part: `${provider}: valid`, rejected: false, unverified: false };
   }
-  const { definitive, reason } = classifyProbeFailure(res && res.error);
+  const { definitive, reason } = classifyProbeFailure(res);
   return { provider, part: `${provider}: ${reason}`, rejected: definitive, unverified: !definitive };
 }
 
 /**
  * @param {{readApiKeyValues: () => Object<string,string>,
- *          validateApiKey: (provider:string, key:string) => Promise<{valid:boolean, error?:string}>}} d
+ *          validateApiKey: (provider:string, key:string)
+ *            => Promise<{valid:boolean, status:number|null, error?:string}>}} d
  * @returns {Promise<{id:string, name:string, status:string, message:string, hint:?string}>}
  */
 async function evaluateKeyAuth(d) {
@@ -169,4 +214,4 @@ async function evaluateKeyAuth(d) {
   return { id: ID, name: NAME, status: 'ok', message, hint: null };
 }
 
-module.exports = { evaluateKeyAuth, classifyProbeFailure };
+module.exports = { evaluateKeyAuth, classifyProbeFailure, probeApiKey };
