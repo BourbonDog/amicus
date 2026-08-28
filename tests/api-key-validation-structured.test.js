@@ -296,21 +296,77 @@ describe('#224: enableLiveProbes has exactly ONE caller', () => {
   // caller appearing — and a second caller is precisely what would quietly
   // re-open live probes to a context that should not have them.
   it('bin/amicus.js is the only place that enables live probes', () => {
+    // Scans the REPO ROOT, not a hardcoded directory list. The first version
+    // named src/bin/electron/scripts and so could not see a caller added under
+    // evals/ (which exists) or any future top-level dir — a pin that cannot
+    // observe the thing it guards. Council review of PR 225. It also covers
+    // .cjs/.mjs, and matches the NAME rather than a call shape, since
+    // `const f = enableLiveProbes; f()` would evade a /...\s*\(/ regex while
+    // re-opening probes.
     const root = path.join(__dirname, '..');
-    const hits = [];
-    const walk = (dir) => {
+    const SKIP = new Set(['node_modules', 'tests', 'site-src', 'output', 'coverage']);
+    const files = [];
+    const collect = (dir) => {
       for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (e.name === 'node_modules' || e.name.startsWith('.')) { continue; }
+        if (e.name.startsWith('.') || SKIP.has(e.name)) { continue; }
         const full = path.join(dir, e.name);
-        if (e.isDirectory()) { walk(full); continue; }
-        if (!e.name.endsWith('.js')) { continue; }
-        const src = fs.readFileSync(full, 'utf-8');
-        // The definition and the tests are not callers.
-        if (full.includes('live-probes.js') || full.includes(`${path.sep}tests${path.sep}`)) { continue; }
-        if (/\benableLiveProbes\s*\(/.test(src)) { hits.push(path.relative(root, full)); }
+        if (e.isDirectory()) { collect(full); } else if (/\.(js|cjs|mjs)$/.test(e.name)) { files.push(full); }
       }
     };
-    for (const d of ['src', 'bin', 'electron', 'scripts']) { walk(path.join(root, d)); }
-    expect(hits).toEqual(['bin' + path.sep + 'amicus.js']);
+    collect(root);
+    expect(files.length).toBeGreaterThan(100);   // the scan actually ran
+
+    const rel = (f) => path.relative(root, f).split(path.sep).join('/');
+    const callers = files
+      .filter((f) => rel(f) !== 'src/utils/live-probes.js')       // the definition itself
+      .filter((f) => /enableLiveProbes/.test(fs.readFileSync(f, 'utf-8')))
+      .map(rel)
+      .sort();
+
+    expect(callers).toEqual(['bin/amicus.js']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Council review of PR 225 — the fix for #224 introduced a NEW uncaught throw.
+// ---------------------------------------------------------------------------
+describe('#224 follow-up: the coercion itself must not be able to throw', () => {
+  const { redactSecret } = require('../src/utils/api-key-validation');
+
+  // String(x) throws for a null-prototype object and for one whose toString
+  // throws. That coercion runs SYNCHRONOUSLY inside the res.on('error')
+  // listener, so the TypeError escapes the promise entirely — an uncaught
+  // async exception, which is the exact failure #224 existed to remove.
+  // Measured: "UNCAUGHT -> TypeError: Cannot convert object to primitive value".
+  const HOSTILE = [
+    ['null-prototype object', () => Object.create(null)],
+    ['toString that throws', () => ({ toString() { throw new Error('nope'); } })],
+    ['message getter that throws', () => ({ get message() { throw new Error('nope'); } })],
+  ];
+
+  it.each(HOSTILE)('redactSecret survives a %s', (_label, make) => {
+    expect(() => redactSecret(make(), 'sk-key')).not.toThrow();
+    expect(typeof redactSecret(make(), 'sk-key')).toBe('string');
+  });
+
+  it.each(HOSTILE)('a %s thrown SYNCHRONOUSLY still resolves', async (_label, make) => {
+    jest.spyOn(https, 'get').mockImplementation(() => { throw make(); });
+    await expect(validateApiKey('openrouter', 'sk-test'))
+      .resolves.toMatchObject({ valid: false, status: null });
+  });
+
+  it.each(HOSTILE)('a %s on the RESPONSE STREAM still resolves', async (_label, make) => {
+    jest.spyOn(https, 'get').mockImplementation((_u, _o, cb) => {
+      const req = new EventEmitter(); req.setTimeout = () => {}; req.destroy = () => {};
+      const res = new EventEmitter(); res.statusCode = 200;
+      process.nextTick(() => { cb(res); res.emit('error', make()); });
+      return req;
+    });
+    await expect(validateApiKey('openrouter', 'sk-test'))
+      .resolves.toMatchObject({ valid: false, status: null });
+  });
+
+  it('a Symbol coerces fine — String(sym) works, so it was never the risk', () => {
+    expect(redactSecret(Symbol('s'), 'k')).toBe('Symbol(s)');
   });
 });
