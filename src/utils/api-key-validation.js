@@ -31,10 +31,29 @@ const VALIDATION_ENDPOINTS = {
   }
 };
 
-/** A printable message from any throwable — Error, string, or object (#224). */
+/**
+ * A printable message from any throwable — Error, string, or object (#224).
+ *
+ * ⚠️ EVERY step is inside the try, including reading `.message`. `String(x)`
+ * THROWS for a null-prototype object ("Cannot convert object to primitive
+ * value") and for one whose toString throws, and a `message` getter can throw
+ * too. This runs synchronously inside the res.on('error') listener added for
+ * #224, so a throw here escapes the promise as an uncaught async exception —
+ * trading the crash that issue removed for a narrower one. Caught in the
+ * council review of PR 225; measured, not hypothesised.
+ *
+ * (A Symbol is NOT among the hazards: String(Symbol()) is well-defined. Only
+ * `'' + sym` throws, and this never does that.)
+ */
 function messageOf(err) {
-  if (err && typeof err.message === 'string' && err.message.length > 0) { return err.message; }
-  return (err === null || err === undefined) ? '' : String(err);
+  try {
+    if (err === null || err === undefined) { return ''; }
+    const m = err.message;
+    if (typeof m === 'string' && m.length > 0) { return m; }
+    return String(err);
+  } catch (_e) {
+    return '(unprintable error)';
+  }
 }
 
 const FORBIDDEN_MESSAGE =
@@ -66,7 +85,17 @@ function redactSecret(text, key) {
   // string, so a thrown string or a non-Error object (`throw 'boom'`) turned
   // a diagnostic into a blank message — the caller then reported a failure it
   // could not describe. Issue #224.
-  const raw = (typeof text === 'string') ? text : ((text === null || text === undefined) ? '' : String(text));
+  // Same hazard as messageOf: this is exported and callers may hand it
+  // anything, so the coercion cannot be allowed to throw (council review of
+  // PR 225).
+  let raw;
+  if (typeof text === 'string') {
+    raw = text;
+  } else if (text === null || text === undefined) {
+    raw = '';
+  } else {
+    try { raw = String(text); } catch (_e) { raw = '(unprintable error)'; }
+  }
   if (raw.length === 0) { return ''; }
   if (!key) { return raw; }
   const text_ = raw;
