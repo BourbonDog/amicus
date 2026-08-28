@@ -162,6 +162,52 @@ describe('ci workflow — the macOS/node-24 SIGSEGV mitigation', () => {
     expect(mb).toBeLessThanOrEqual(512);
   });
 
+  // FIFTH hit (2026-08-27, PR 221) escalated the LEVER, not the number. This
+  // pin exists for the same reason as the ones above: --maxWorkers produces no
+  // assertion failure when it works and none when it is deleted, so without a
+  // pin the next person to tidy this matrix reopens a flake that has now cost
+  // five runs.
+  test('the macos/node-24 leg caps concurrent worker heaps with --maxWorkers', () => {
+    const y = yml();
+    const include = y.slice(y.indexOf('include:'), y.indexOf('steps:'));
+    expect(include).toMatch(/jest-flags:.*--maxWorkers=\d+/);
+  });
+
+  test('--maxWorkers is low enough to actually reduce heaps', () => {
+    const y = yml();
+    // ANCHORED TO THE ASSIGNMENT, not a bare file-wide match. A bare
+    // /--maxWorkers=(\d+)/ reads the FIRST occurrence in the file -- which is
+    // the matrix comment's own "`--maxWorkers=2` would be the default spelled
+    // out loud". That made this pin read 2 out of prose and pass while the
+    // real flag said 8, i.e. it went green against its own mutant. Same trap
+    // main-settings-catalog-wiring.test.js documents, and the same
+    // prose-vs-data defect the council raised as finding 2 on PR 221.
+    const flags = (y.match(/jest-flags:[ 	]*(.+)/) || [])[1] || '';
+    const m = flags.match(/--maxWorkers=(\d+)/);
+    expect(m).not.toBeNull();
+    // jest defaults to cpus-1. GitHub's macos runners were 3 vCPU when this
+    // was written, so anything above 2 is the default spelled out loud and
+    // changes nothing. Raising it needs a new hit record in the matrix
+    // comment AND a "Runner capacity" reading that justifies the number.
+    expect(Number(m[1])).toBeLessThanOrEqual(2);
+  });
+
+  test('the idle ceiling SURVIVES alongside it — the rule said stop shrinking, not remove', () => {
+    const y = yml();
+    const include = y.slice(y.indexOf('include:'), y.indexOf('steps:'));
+    expect(include).toMatch(/--workerIdleMemoryLimit=\d+(MB|GB)/);
+    expect(include).toMatch(/--maxWorkers=\d+/);
+  });
+
+  test('the Runner capacity diagnostic is still emitted', () => {
+    const y = yml();
+    // It is the data source for the SIXTH escalation decision. Deleting it
+    // sends the next person back to guessing a core count, which is exactly
+    // how this mitigation spent five hits tuning the wrong knob.
+    expect(y).toMatch(/name: Runner capacity/);
+    expect(y).toMatch(/o\.cpus\(\)\.length/);
+  });
+
   test('the flag reaches jest, and only that leg gets it', () => {
     const y = yml();
     // The test step forwards matrix.jest-flags; every other leg leaves it unset,

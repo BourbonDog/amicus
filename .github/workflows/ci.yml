@@ -38,16 +38,45 @@ jobs:
         # segfault actually occurs at. If a FIFTH hit lands at 512MB, stop
         # halving — the next lever is --maxWorkers on this leg (fewer
         # concurrent heaps), not a smaller idle ceiling.
+        #
+        # FIFTH hit — 2026-08-27 (PR #221), at 512MB: killed
+        # tests/design-tokens-css.test.js while 9110 tests passed and 0 failed;
+        # the rerun was green, and the killed suite reads exactly one file
+        # (src/design/tokens.css) that the PR never touched. 512MB does not
+        # bound the growth either, so per the rule above the lever CHANGES
+        # rather than the number: --maxWorkers now caps how many worker heaps
+        # exist at once. The idle ceiling stays at 512MB — the rule said stop
+        # SHRINKING it, not remove it, and recycling a fat worker is still
+        # worth having.
+        #
+        # Why 1 and not 2: GitHub's macos-latest runners are small (3 vCPU when
+        # this was written), and jest's default maxWorkers is cpus-1 — so on a
+        # 3-core runner `--maxWorkers=2` would be the default spelled out
+        # loud, i.e. no change at all. 1 is the only value guaranteed to reduce
+        # concurrent heaps without asserting a core count this file cannot see.
+        # The "Runner capacity" step below prints cpus/mem so a SIXTH hit is
+        # argued from data instead of from this paragraph's assumption; if it
+        # shows more cores than expected, 2 is the gentler setting to try.
+        # Cost is real and accepted: this leg serializes, so expect it to run
+        # meaningfully longer than the ~3m59s above. A slow green leg beats a
+        # fast one that fails a suite at random.
         include:
           - os: macos-latest
             node: 24
-            jest-flags: --workerIdleMemoryLimit=512MB
+            jest-flags: --workerIdleMemoryLimit=512MB --maxWorkers=1
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
+      # Diagnostic for the macOS/node-24 SIGSEGV escalation above. Jest's
+      # default maxWorkers is cpus-1, so whether --maxWorkers actually reduces
+      # anything depends on a number no one had measured across five hits.
+      # Printing it on every leg costs nothing and means the next escalation
+      # decision is made from data.
+      - name: Runner capacity
+        run: node -e "const o=require('os');console.log('cpus='+o.cpus().length+' mem='+Math.round(o.totalmem()/1e9)+'GB jest-default-workers='+Math.max(1,o.cpus().length-1))"
       - run: npm test -- ${{ matrix.jest-flags }}
 
   quality:
