@@ -3,6 +3,88 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.3] - 2026-08-28
+
+*Doctor stops vouching for things it never checked.*
+
+`doctor`'s `keys` row tested PRESENCE only, and `validateApiKey` was called at exactly two
+save-time sites — so a key that rotted after it was entered was never re-checked. On the
+reporting machine `doctor` printed a green row while the stored DeepSeek key returned 401 and
+the catalog served zero deepseek rows. Closing that gap surfaced a family of the same shape:
+several places reported health they had not established, and two of them were introduced by
+the fixes for the others. Every one is now the same rule — a check that did not complete says
+so, and only a definitive 401 is a verdict about a credential.
+
+### Added
+
+- **`outputBudget` (#218), opt-in, no default change.** Each council leg reserved
+  `max_tokens: 32000` regardless of the model's real ceiling, and OpenRouter validates that
+  RESERVATION against remaining credit *before* serving — so legs died in 2.2 s with zero
+  tokens and "You requested up to 32000 tokens, but can only afford 354". Set `outputBudget`
+  in `config.json` and each leg reserves `min(budget, that model's real ceiling)`; leave it
+  unset and every model is registered exactly as before. A new `maxOutputTokens` catalog field
+  (OpenRouter's `top_provider.max_completion_tokens`, present on 411 of 417 rows) supplies the
+  ceiling, and a model without one keeps the old behaviour rather than receiving a guess.
+  MEASURED in the pinned engine binary: `maxOutputTokens = Math.min(limit.output, 32000)`, so
+  this can only LOWER a reservation — a value at or above 32000 leaves it unchanged. It does
+  not address a reasoning-heavy leg spending its whole allowance and emitting nothing; that is
+  governed by reasoning effort, not by `max_tokens`, and no claim is made otherwise.
+
+### Fixed
+
+- **`doctor` re-validates stored API keys (#210).** New `key-auth` row probes every stored key
+  against its provider's own endpoint, in parallel — sequential 10 s timeouts would have added
+  ~50 s to every run. Only HTTP 401 fails the check; a timeout, DNS failure, 5xx or 429 warns,
+  because being offline is not a rotted key and a false error sends someone to re-enter a
+  working one. A stored key for a provider with no validation endpoint warns rather than
+  reporting ok — it cannot be probed, so the check cannot vouch for it.
+- **403 is no longer treated as a credential verdict.** Google returns 403 for "API not
+  enabled" and for quota; a WAF returns it for bot protection. It warns now, and `amicus key`
+  saves on it rather than refusing — as it does for 429 and 5xx. Only a definitive 401 blocks
+  a save, expressed as an allowlist so it cannot rot as new status codes appear.
+- **The OpenRouter credit row means CHECKED.** `checkOpenRouterCredit` resolves `warning: null`
+  for a healthy account, for a skipped probe, and for every failure alike — so the row rendered
+  "credit ok" for an account nobody had reached, concealing quota exhaustion behind a green
+  line. It now distinguishes all three.
+- **A key can no longer escape in an error message.** `https.get` can throw synchronously, and
+  the Google probe embeds the key in the URL as `?key=…` — so an error quoting that URL quoted
+  the key. Redaction happens at the source now, covering the raw, percent-encoded and
+  form-encoded spellings, which protects the two save-time call sites that have no handling of
+  their own: `electron/ipc-setup.js` returns the message to the renderer *and* logs it, and
+  `src/cli-handlers.js` awaits with no try/catch at all.
+- **`validateApiKey` honours its "always resolves" contract (#224).** `req.on('error')` covered
+  the connection phase only; an error once the response existed — a socket reset mid-body — was
+  an unhandled `'error'` event, which Node turns into a THROW rather than a rejection: the
+  promise never settled and the process died. Both functions in the module handle it now, and
+  the message coercion itself can no longer throw for a null-prototype object or one whose
+  `toString` throws.
+- **Diagnostics no longer make live authenticated requests outside the CLI.** Probes are opt-in,
+  enabled once by `bin/amicus.js`; a skipped probe is reported as unverified, never as healthy.
+  `AMICUS_NO_NETWORK_PROBES=1` forces them off.
+- **The setup wizard renders the aliases you actually have (#213).** The alias editor grouped
+  rows from a hardcoded list of alias NAMES and iterated that whitelist rather than your
+  aliases, so any alias whose name missed the list rendered nowhere — including the `lmstudio`
+  local-provider alias and every `free-*` alias the `councils.free` preset references. Grouping
+  derives from the alias's route vendor now. Measured against a real 33-alias config: 21
+  rendered before, 33 after, none dropped, none duplicated.
+- **A stale pin no longer looks like a recommendation (#211).** When nothing in the catalog
+  matched an alias's current value, the dropdown echoed that value back as a bare ungrouped
+  option — indistinguishable from a real offer, and observed presenting an id that exists on no
+  gateway above 13 genuine ones. It now sits in a labelled "Current — not found in catalog"
+  group. What gets saved is unchanged.
+- **Alias names and routes are HTML-escaped** in the wizard; a quote in an alias name broke the
+  row's `data-alias` attribute.
+
+### Changed
+
+- **CI: the macOS/node-24 jest-worker `SIGSEGV` mitigation switches levers.** A fifth
+  occurrence landed with the 512 MB idle ceiling in force, so per the rule recorded beside it
+  the lever changes rather than the number: `--maxWorkers=1` now caps concurrent worker heaps.
+  A "Runner capacity" step reports cpus/mem on every leg, which established what five previous
+  hit records had assumed — macOS runners have 3 vCPU and 8 GB against 4 vCPU and 17 GB
+  elsewhere, so `--maxWorkers=2` would have been the default spelled out and changed nothing.
+  That leg runs ~4m → 6.5m as a result.
+
 ## [4.9.2] - 2026-08-27
 
 *The instrument existed; nothing could read it.*
