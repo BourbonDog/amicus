@@ -2,9 +2,12 @@
  * Marker-freshness gate (F-3).
  *
  * Promotes `node scripts/generate-docs.js --check` to a jest assertion so a
- * stale CLAUDE.md fails CI, not just a manually-run script. The pre-commit
+ * stale generated doc fails CI, not just a manually-run script. The pre-commit
  * hook runs generate-docs in WRITE mode and self-heals, so --check never runs
- * automatically anywhere else — a stale CLAUDE.md can only be caught here.
+ * automatically anywhere else — a stale map can only be caught here.
+ *
+ * The tree/modules markers live in docs/architecture-map.md (not CLAUDE.md);
+ * scripts/generate-docs.js MARKER_TARGETS is the routing table.
  *
  * Calls the exported helpers in-process. Never call `main()` or
  * `runCheckMode()` from generate-docs.js — both call `process.exit`, which
@@ -27,8 +30,8 @@ const read = file => fs.readFileSync(path.join(ROOT, file), 'utf-8');
 
 const FIX_COMMAND = 'node scripts/generate-docs.js';
 
-describe('CLAUDE.md marker freshness (F-3)', () => {
-  it('CLAUDE.md AUTO markers are current', () => {
+describe('generated-doc marker freshness (F-3)', () => {
+  it('docs/architecture-map.md AUTO markers are current', () => {
     // ⚠️ Cross-platform hazard (do NOT fix here, do not change the sort): both
     // buildDirectoryTree and buildModuleIndex sort their entries via
     // scripts/generate-docs-helpers.js:157-158 (buildTreeRecursive) and :217-220
@@ -38,14 +41,14 @@ describe('CLAUDE.md marker freshness (F-3)', () => {
     // matrix (ubuntu/windows/macos) while the others stay green, that sort is
     // almost certainly why. Fix: swap both call sites to a plain code-unit sort
     // (e.g. `(a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)`) and
-    // run `node scripts/generate-docs.js` once to regenerate CLAUDE.md. Do not
+    // run `node scripts/generate-docs.js` once to regenerate the map. Do not
     // chase this locally — it only manifests as a cross-OS divergence.
     const tree = buildDirectoryTree(ROOT, TREE_DIRS);
     const modules = buildModuleIndex(ROOT);
-    const stale = checkMarkersAreCurrent(read('CLAUDE.md'), { tree, modules });
+    const stale = checkMarkersAreCurrent(read('docs/architecture-map.md'), { tree, modules });
     if (stale.length > 0) {
       throw new Error(
-        `Stale CLAUDE.md AUTO marker(s): ${stale.join(', ')}. Run \`${FIX_COMMAND}\` to regenerate, then commit CLAUDE.md.`,
+        `Stale docs/architecture-map.md AUTO marker(s): ${stale.join(', ')}. Run \`${FIX_COMMAND}\` to regenerate, then commit docs/architecture-map.md.`,
       );
     }
   });

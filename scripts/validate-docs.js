@@ -17,16 +17,18 @@ const { resolve, basename } = require('node:path');
 
 const CONFIG = {
   trackedDirs: ['src/', 'bin/', 'scripts/'],
+  // Docs that generate-docs.js regenerates and stages; either satisfies the gate.
+  docFiles: ['CLAUDE.md', 'architecture-map.md'],
 };
 
 /**
- * Check if staged files include tracked directories but not CLAUDE.md.
+ * Check if staged files include tracked directories but no generated doc.
  * @param {string[]} stagedFiles - List of staged file paths
  * @returns {{warn: boolean, changedFiles: string[]}}
  */
 function checkStagedFilesDrift(stagedFiles) {
   const claudeMdStaged = stagedFiles.some(
-    f => basename(f) === 'CLAUDE.md'
+    f => CONFIG.docFiles.includes(basename(f))
   );
   const trackedChanges = stagedFiles.filter(f =>
     CONFIG.trackedDirs.some(dir => f.startsWith(dir))
