@@ -16,6 +16,9 @@ const {
   validateCrossLinks,
   buildPlansIndex,
   checkMarkersAreCurrent,
+  groupMarkersByTarget,
+  MARKER_TARGETS,
+  applyGeneratedMarkers,
   extractJSDocDescription,
   extractExports,
 } = require('../../scripts/generate-docs');
@@ -515,5 +518,83 @@ describe('checkMarkersAreCurrent', () => {
     const generated = { tree: 'some content' };
     const stale = checkMarkersAreCurrent(doc, generated);
     expect(stale).toContain('tree');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// groupMarkersByTarget
+// ---------------------------------------------------------------------------
+describe('groupMarkersByTarget', () => {
+  it('routes tree and modules to the architecture map, not CLAUDE.md', () => {
+    const grouped = groupMarkersByTarget({ tree: 'T', modules: 'M' }, MARKER_TARGETS);
+    expect(grouped).toEqual({
+      'docs/architecture-map.md': { tree: 'T', modules: 'M' },
+    });
+  });
+
+  it('splits markers whose targets differ into separate files', () => {
+    const grouped = groupMarkersByTarget(
+      { tree: 'T', other: 'O' },
+      { tree: 'docs/a.md', other: 'docs/b.md' }
+    );
+    expect(grouped).toEqual({
+      'docs/a.md': { tree: 'T' },
+      'docs/b.md': { other: 'O' },
+    });
+  });
+
+  it('falls back to CLAUDE.md for a marker with no configured target', () => {
+    const grouped = groupMarkersByTarget({ mystery: 'X' }, {});
+    expect(grouped).toEqual({ 'CLAUDE.md': { mystery: 'X' } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyGeneratedMarkers
+// ---------------------------------------------------------------------------
+describe('applyGeneratedMarkers', () => {
+  /** Build a temp repo: prose-only CLAUDE.md + docs/architecture-map.md with markers. */
+  function makeRepo() {
+    fs.mkdirSync(path.join(tmpDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# CLAUDE.md\n\nProse only.\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'architecture-map.md'),
+      '# Map\n\n<!-- AUTO:tree -->\nold\n<!-- /AUTO:tree -->\n\n'
+        + '<!-- AUTO:modules -->\nold\n<!-- /AUTO:modules -->\n'
+    );
+  }
+
+  it('writes tree and modules into the architecture map', () => {
+    makeRepo();
+    applyGeneratedMarkers(tmpDir, { tree: 'NEW TREE', modules: 'NEW MODULES' }, MARKER_TARGETS);
+    const map = fs.readFileSync(path.join(tmpDir, 'docs', 'architecture-map.md'), 'utf-8');
+    expect(map).toContain('NEW TREE');
+    expect(map).toContain('NEW MODULES');
+  });
+
+  it('leaves CLAUDE.md byte-for-byte unchanged', () => {
+    makeRepo();
+    const before = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+    applyGeneratedMarkers(tmpDir, { tree: 'NEW TREE', modules: 'NEW MODULES' }, MARKER_TARGETS);
+    expect(fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8')).toBe(before);
+  });
+
+  it('returns the repo-relative paths it wrote', () => {
+    makeRepo();
+    const written = applyGeneratedMarkers(tmpDir, { tree: 'T', modules: 'M' }, MARKER_TARGETS);
+    expect(written).toEqual(['docs/architecture-map.md']);
+  });
+
+  it('skips a target file that does not exist rather than throwing', () => {
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# CLAUDE.md\n');
+    const written = applyGeneratedMarkers(tmpDir, { tree: 'T' }, { tree: 'docs/missing.md' });
+    expect(written).toEqual([]);
+  });
+
+  it('writes LF line endings, never CRLF', () => {
+    makeRepo();
+    applyGeneratedMarkers(tmpDir, { tree: 'T', modules: 'M' }, MARKER_TARGETS);
+    const raw = fs.readFileSync(path.join(tmpDir, 'docs', 'architecture-map.md'), 'utf-8');
+    expect(raw).not.toContain('\r\n');
   });
 });

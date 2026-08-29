@@ -24,6 +24,12 @@ describe('validate-docs', () => {
       expect(result.warn).toBe(false);
     });
 
+    it('does not warn when the generated architecture map is staged', () => {
+      const stagedFiles = ['src/new-module.js', 'docs/architecture-map.md'];
+      const result = checkStagedFilesDrift(stagedFiles);
+      expect(result.warn).toBe(false);
+    });
+
     it('does not warn for non-tracked directories', () => {
       const stagedFiles = ['tests/new-test.js', 'docs/readme.md'];
       const result = checkStagedFilesDrift(stagedFiles);

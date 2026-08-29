@@ -101,7 +101,7 @@ for (const file of docFiles) {
 
 describe('docs in-page anchors resolve (F-6, generalized from docs-council-toc-anchors.test.js)', () => {
   it('the corpus is the expected size', () => {
-    expect(docFiles.length).toBe(17); // 16 top-level docs/*.md + README.md
+    expect(docFiles.length).toBe(18); // 17 top-level docs/*.md + README.md
     expect(pairs.length).toBeGreaterThan(20);
   });
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Auto-generate CLAUDE.md sections from source code.
+ * Auto-generate documentation sections from source code.
  *
  * Two modes:
- * - Default (write): Regenerates AUTO markers in CLAUDE.md, writes plans index, auto-stages.
+ * - Default (write): Regenerates AUTO markers in their target docs (see MARKER_TARGETS),
+ *   writes plans index, auto-stages every file it wrote.
  * - --check: Compares generated vs current, validates cross-links, exits 1 if stale.
  *
  * Usage:
@@ -24,6 +25,15 @@ const {
 } = require('./generate-docs-helpers');
 
 const TREE_DIRS = ['bin/', 'src/', 'electron/', 'scripts/', 'evals/'];
+
+/**
+ * Which document owns each AUTO marker, as a repo-relative path.
+ * Markers with no entry here default to CLAUDE.md.
+ */
+const MARKER_TARGETS = {
+  tree: 'docs/architecture-map.md',
+  modules: 'docs/architecture-map.md',
+};
 
 // ---------------------------------------------------------------------------
 // Marker Replacement
@@ -168,10 +178,9 @@ function checkMarkersAreCurrent(docContent, generated) {
 // Main Entry Point
 // ---------------------------------------------------------------------------
 
-/** Main: regenerate or check CLAUDE.md auto-generated sections. */
+/** Main: regenerate or check the auto-generated sections in their target docs. */
 function main() {
   const rootDir = path.resolve(__dirname, '..');
-  const docPath = path.join(rootDir, 'CLAUDE.md');
   const checkMode = process.argv.includes('--check');
 
   const tree = buildDirectoryTree(rootDir, TREE_DIRS);
@@ -180,25 +189,39 @@ function main() {
   const generated = { tree, modules };
 
   if (checkMode) {
-    runCheckMode(docPath, rootDir, generated);
+    runCheckMode(rootDir, generated);
     return;
   }
 
-  runWriteMode(docPath, rootDir, generated, plans);
+  runWriteMode(rootDir, generated, plans);
 }
 
-/** Check mode: validate markers and cross-links, exit 1 if stale. */
-function runCheckMode(docPath, rootDir, generated) {
-  let doc;
+/** Check mode: validate markers in every target doc and cross-links, exit 1 if stale. */
+function runCheckMode(rootDir, generated) {
+  const grouped = groupMarkersByTarget(generated, MARKER_TARGETS);
+  const stale = [];
+
+  for (const [rel, markers] of Object.entries(grouped)) {
+    let doc;
+    try {
+      doc = fs.readFileSync(path.join(rootDir, rel), 'utf-8');
+    } catch {
+      console.error(`Cannot read ${rel}`);
+      process.exit(1);
+    }
+    for (const name of checkMarkersAreCurrent(doc, markers)) {
+      stale.push(`${rel}:${name}`);
+    }
+  }
+
+  let claudeMd;
   try {
-    doc = fs.readFileSync(docPath, 'utf-8');
+    claudeMd = fs.readFileSync(path.join(rootDir, 'CLAUDE.md'), 'utf-8');
   } catch {
     console.error('Cannot read CLAUDE.md');
     process.exit(1);
   }
-
-  const stale = checkMarkersAreCurrent(doc, generated);
-  const linkErrors = validateCrossLinks(doc, rootDir);
+  const linkErrors = validateCrossLinks(claudeMd, rootDir);
 
   if (stale.length > 0) {
     console.error(`Stale markers: ${stale.join(', ')}`);
@@ -213,19 +236,13 @@ function runCheckMode(docPath, rootDir, generated) {
   console.log('All markers are current.');
 }
 
-/** Write mode: regenerate markers, write plans index, auto-stage. */
-function runWriteMode(docPath, rootDir, generated, plans) {
-  let doc;
-  try {
-    doc = fs.readFileSync(docPath, 'utf-8');
-  } catch {
-    console.error('Cannot read CLAUDE.md');
+/** Write mode: regenerate markers in their target docs, write plans index, auto-stage. */
+function runWriteMode(rootDir, generated, plans) {
+  const written = applyGeneratedMarkers(rootDir, generated, MARKER_TARGETS);
+  if (written.length === 0) {
+    console.error('No marker target documents found.');
     process.exit(1);
   }
-
-  doc = replaceMarkers(doc, 'tree', generated.tree);
-  doc = replaceMarkers(doc, 'modules', generated.modules);
-  fs.writeFileSync(docPath, doc);
 
   const plansIndexPath = path.join(rootDir, 'docs', 'plans', 'index.md');
   if (fs.existsSync(path.dirname(plansIndexPath))) {
@@ -233,7 +250,9 @@ function runWriteMode(docPath, rootDir, generated, plans) {
   }
 
   try {
-    execFileSync('git', ['add', docPath], { stdio: 'ignore' });
+    for (const rel of written) {
+      execFileSync('git', ['add', path.join(rootDir, rel)], { stdio: 'ignore' });
+    }
     if (fs.existsSync(plansIndexPath)) {
       execFileSync('git', ['add', plansIndexPath], { stdio: 'ignore' });
     }
@@ -241,11 +260,54 @@ function runWriteMode(docPath, rootDir, generated, plans) {
     // Not in a git repo - that's fine
   }
 
-  console.log('CLAUDE.md markers regenerated.');
+  console.log(`Markers regenerated: ${written.join(', ')}`);
 }
 
 if (require.main === module) {
   main();
+}
+
+/**
+ * Group generated marker content by the document that owns it.
+ * @param {Object<string, string>} generated - Map of markerName -> content
+ * @param {Object<string, string>} targets - Map of markerName -> repo-relative path
+ * @returns {Object<string, Object<string, string>>} relPath -> { markerName: content }
+ */
+function groupMarkersByTarget(generated, targets) {
+  const grouped = {};
+  for (const [name, content] of Object.entries(generated)) {
+    const rel = targets[name] || 'CLAUDE.md';
+    if (!grouped[rel]) {grouped[rel] = {};}
+    grouped[rel][name] = content;
+  }
+  return grouped;
+}
+
+/**
+ * Apply generated marker content to whichever documents own those markers.
+ * A target file that does not exist is skipped, not created.
+ * @param {string} rootDir - Project root
+ * @param {Object<string, string>} generated - Map of markerName -> content
+ * @param {Object<string, string>} targets - Map of markerName -> repo-relative path
+ * @returns {string[]} Repo-relative paths actually written
+ */
+function applyGeneratedMarkers(rootDir, generated, targets) {
+  const written = [];
+  for (const [rel, markers] of Object.entries(groupMarkersByTarget(generated, targets))) {
+    const abs = path.join(rootDir, rel);
+    let doc;
+    try {
+      doc = fs.readFileSync(abs, 'utf-8');
+    } catch {
+      continue;
+    }
+    for (const [name, content] of Object.entries(markers)) {
+      doc = replaceMarkers(doc, name, content);
+    }
+    fs.writeFileSync(abs, doc);
+    written.push(rel);
+  }
+  return written;
 }
 
 module.exports = {
@@ -255,6 +317,9 @@ module.exports = {
   validateCrossLinks,
   buildPlansIndex,
   checkMarkersAreCurrent,
+  groupMarkersByTarget,
+  applyGeneratedMarkers,
+  MARKER_TARGETS,
   extractJSDocDescription,
   extractExports,
   TREE_DIRS,
