@@ -340,7 +340,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
   test('#220: the spend receipt runs on cancellation; the artifact upload does not have to', () => {
     const y = yml();
     const receipt = y.slice(y.indexOf('Collect the spend receipt'), y.indexOf('Upload evidence artifact'));
-    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Upload the spend ledger alone'));
+    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Publish the Council Review check run'));
     // The receipt is a fast file copy + step-summary write — best odds of
     // landing inside the post-cancellation grace (best-effort, not a
     // guarantee: #229 council B1/D1). The gate guard must stay alongside it:
@@ -349,6 +349,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // The if: LINE, not the whole slice — the step's own comment names
     // !cancelled() while explaining why it was wrong.
     expect(receipt).not.toContain('if: ${{ !cancelled()');
+    // #229 round-2 A2: the non-cancelled path's ledger durability is a CHAIN —
+    // the receipt cp lands inside RUN_DIR, and RUN_DIR is what the full
+    // artifact uploads. Pin every link, not just the file name.
+    expect(receipt).toContain('cp "$LEDGER" "$RUN_DIR/spend-ledger.jsonl"');
+    expect(y).toContain('RUN_DIR: council-run');
     // upload-artifact of the FULL run dir on a cancelled job may not finish,
     // and a truncated artifact is worse than none — this one deliberately
     // stays !cancelled().
@@ -362,10 +367,19 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
    * finishing inside the post-cancellation grace, and it cannot upload a
    * truncated half-directory. It fires ONLY on cancellation — every other
    * outcome already carries the ledger inside the council-run artifact.
+   *
+   * #229 round-2 A1/D1: it must also come FIRST among the post-run steps —
+   * every step that runs after a cancellation shares one bounded grace
+   * window, so the machine-readable artifact takes the first claim on it
+   * rather than queueing behind the receipt's shell block.
    */
-  test('#229: a ledger-only artifact upload fires on the cancelled path only', () => {
+  test('#229: a ledger-only artifact upload fires on the cancelled path only, ahead of the receipt', () => {
     const y = yml();
-    const step = y.slice(y.indexOf('Upload the spend ledger alone'), y.indexOf('Publish the Council Review check run'));
+    const ledgerIdx = y.indexOf('Upload the spend ledger alone');
+    const receiptIdx = y.indexOf('Collect the spend receipt');
+    expect(ledgerIdx).toBeGreaterThan(y.indexOf('Run the adjudicated council'));
+    expect(ledgerIdx).toBeLessThan(receiptIdx);
+    const step = y.slice(ledgerIdx, receiptIdx);
     expect(step).toContain("if: ${{ cancelled() && steps.gate.outputs.available == 'true' }}");
     expect(step).toContain('name: spend-ledger');
     expect(step).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/spend-ledger.jsonl');
