@@ -110,9 +110,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
     // the evidence-artifact step is `if: !cancelled()` — so busting the cap does
     // not merely fail the run, it DELETES the run-dir artifact every #202
-    // decision has been made from. (The spend receipt now survives cancellation
-    // via `always()` — #220 — but reviews/judge outputs/tally still die with
-    // the runner.) 3 minutes of slack is the floor.
+    // decision has been made from. (The spend receipt and ledger-only upload
+    // now run on cancellation — best-effort, #220 — but reviews/judge
+    // outputs/tally still die with the runner.) 3 minutes of slack is the floor.
     expect(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
       + `${Math.round(jobCapMs / 60000)}m: ${worstCaseMs + 180000 <= jobCapMs}`)
       .toBe(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
@@ -340,17 +340,35 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
   test('#220: the spend receipt runs on cancellation; the artifact upload does not have to', () => {
     const y = yml();
     const receipt = y.slice(y.indexOf('Collect the spend receipt'), y.indexOf('Upload evidence artifact'));
-    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Publish the Council Review check run'));
-    // The receipt is a fast file copy + step-summary write, so it lands inside
-    // the post-cancellation grace. The gate guard must stay alongside it:
+    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Upload the spend ledger alone'));
+    // The receipt is a fast file copy + step-summary write — best odds of
+    // landing inside the post-cancellation grace (best-effort, not a
+    // guarantee: #229 council B1/D1). The gate guard must stay alongside it:
     // bare always() would run the receipt on fork PRs where nothing was spent.
     expect(receipt).toContain("if: ${{ always() && steps.gate.outputs.available == 'true' }}");
     // The if: LINE, not the whole slice — the step's own comment names
     // !cancelled() while explaining why it was wrong.
     expect(receipt).not.toContain('if: ${{ !cancelled()');
-    // upload-artifact on a cancelled job may not finish, and a truncated
-    // artifact is worse than none — this one deliberately stays !cancelled().
+    // upload-artifact of the FULL run dir on a cancelled job may not finish,
+    // and a truncated artifact is worse than none — this one deliberately
+    // stays !cancelled().
     expect(upload).toContain("if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}");
+  });
+
+  /**
+   * #229 council B1/D3 — the cancelled path also gets a machine-readable
+   * record, not just the rendered step summary. A ledger-only artifact is a
+   * single small file: unlike the full run directory it has a real chance of
+   * finishing inside the post-cancellation grace, and it cannot upload a
+   * truncated half-directory. It fires ONLY on cancellation — every other
+   * outcome already carries the ledger inside the council-run artifact.
+   */
+  test('#229: a ledger-only artifact upload fires on the cancelled path only', () => {
+    const y = yml();
+    const step = y.slice(y.indexOf('Upload the spend ledger alone'), y.indexOf('Publish the Council Review check run'));
+    expect(step).toContain("if: ${{ cancelled() && steps.gate.outputs.available == 'true' }}");
+    expect(step).toContain('name: spend-ledger');
+    expect(step).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/spend-ledger.jsonl');
   });
 
   test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {

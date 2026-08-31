@@ -87,8 +87,8 @@ jobs:
     # far past the 480 s the old arithmetic assumed. 4 x 960 s = 64 min, which
     # busts a 60 min cap and CANCELS the job — and the evidence-artifact step is
     # `if: !cancelled()`, so a bust deletes the run-dir artifact. (The spend
-    # receipt itself now survives cancellation via `always()` — issue #220 —
-    # but the full forensic record still dies with the runner.)
+    # receipt and the ledger-only upload now run on cancellation — best-effort,
+    # issue #220 — but the full forensic record still dies with the runner.)
     # ⚠️ 64 min is a FLOOR: Stage-2 repairs are serial, up to 2 per judge, each
     # bounded by the leg cap. `--max-cost` is what bounds that, not time.
     # Raising this costs NOTHING unless hit — GitHub bills actual wall clock.
@@ -541,10 +541,15 @@ jobs:
         # those runs, making cancellation the one terminal state where a run
         # that spent money left no record of having spent it (a timeout-minutes
         # bust is the same mechanism — a timeout kill is a cancellation).
-        # This step is a fast file copy + summary write, well inside the grace
-        # the runner gives always()-gated steps after a cancellation. On a
-        # cancelled run the step summary IS the surviving record: the artifact
-        # upload below stays !cancelled() because a truncated artifact is worse
+        # BEST-EFFORT, not guaranteed (#229 council B1/D1): the grace the
+        # runner gives always()-gated steps after a cancellation is bounded,
+        # and a force-kill skips them. A fast file copy + summary write has
+        # the best odds any step can have, which is the most this workflow
+        # can do — a guaranteed record needs the engine to write the ledger
+        # somewhere durable or emit spend incrementally (issue #220's stated
+        # fallback). On a cancelled run the surviving records are the step
+        # summary plus the ledger-only artifact below; the full evidence
+        # upload stays !cancelled() because a truncated artifact is worse
         # than none. The gate guard stays so fork PRs (nothing provisioned,
         # nothing spent) still skip.
         if: ${{ always() && steps.gate.outputs.available == 'true' }}
@@ -598,6 +603,23 @@ jobs:
         with:
           name: council-run
           path: council-run/
+          if-no-files-found: warn
+
+      - name: Upload the spend ledger alone (cancelled runs only)
+        # #229 council B1/D3: on a cancelled run the full evidence upload
+        # above never fires, leaving the rendered step summary as the only
+        # spend record — human-readable, but not a machine-readable artifact.
+        # This ledger-only upload fires ONLY on cancellation (any other
+        # outcome already carries the ledger inside the council-run artifact)
+        # and ships a single small file, so unlike the full run directory it
+        # has a real chance of finishing inside the post-cancellation grace
+        # and cannot upload a truncated half-directory. Still best-effort:
+        # nothing after a cancellation is guaranteed to run.
+        if: ${{ cancelled() && steps.gate.outputs.available == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: spend-ledger
+          path: ${{ env.AMICUS_CONFIG_DIR }}/spend-ledger.jsonl
           if-no-files-found: warn
 
       - name: Publish the Council Review check run
