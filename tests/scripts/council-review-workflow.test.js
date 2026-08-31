@@ -109,8 +109,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
     // the evidence-artifact step is `if: !cancelled()` — so busting the cap does
-    // not merely fail the run, it DELETES the forensic record every #202
-    // decision has been made from. 3 minutes of slack is the floor.
+    // not merely fail the run, it DELETES the run-dir artifact every #202
+    // decision has been made from. (The spend receipt and ledger-only upload
+    // now run on cancellation — best-effort, #220 — but reviews/judge
+    // outputs/tally still die with the runner.) 3 minutes of slack is the floor.
     expect(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
       + `${Math.round(jobCapMs / 60000)}m: ${worstCaseMs + 180000 <= jobCapMs}`)
       .toBe(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
@@ -322,6 +324,84 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).toContain('name: council-run');
     expect(y).toContain('path: council-run/');
     expect(y).toContain('!cancelled()');
+  });
+
+  /**
+   * #220 — a cancelled run must still leave its spend receipt.
+   *
+   * Cancellation is ROUTINE (concurrency cancel-in-progress on every re-push;
+   * the opened+labeled double-event on a labelled PR; a timeout-minutes bust),
+   * and it lands after the paid step has launched legs. Under a shared
+   * `!cancelled()` gate, cancellation was the ONE terminal state where a run
+   * that spent money left no record of having spent it — observed live on
+   * PR #219, where two cancelled runs reached the paid step and every
+   * downstream evidence step read `skipped`.
+   */
+  test('#220: the spend receipt runs on cancellation; the artifact upload does not have to', () => {
+    const y = yml();
+    const receipt = y.slice(y.indexOf('Collect the spend receipt'), y.indexOf('Upload evidence artifact'));
+    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Publish the Council Review check run'));
+    // The receipt is a fast file copy + step-summary write — best odds of
+    // landing inside the post-cancellation grace (best-effort, not a
+    // guarantee: #229 council B1/D1). The gate guard must stay alongside it:
+    // bare always() would run the receipt on fork PRs where nothing was spent.
+    expect(receipt).toContain("if: ${{ always() && steps.gate.outputs.available == 'true' }}");
+    // The if: LINE, not the whole slice — the step's own comment names
+    // !cancelled() while explaining why it was wrong.
+    expect(receipt).not.toContain('if: ${{ !cancelled()');
+    // #229 round-2 A2: the non-cancelled path's ledger durability is a CHAIN —
+    // the receipt cp lands inside RUN_DIR, and RUN_DIR is what the full
+    // artifact uploads. Pin every link, not just the file name.
+    expect(receipt).toContain('cp "$LEDGER" "$RUN_DIR/spend-ledger.jsonl"');
+    expect(y).toContain('RUN_DIR: council-run');
+    // upload-artifact of the FULL run dir on a cancelled job may not finish,
+    // and a truncated artifact is worse than none — this one deliberately
+    // stays !cancelled().
+    expect(upload).toContain("if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}");
+  });
+
+  /**
+   * #229 council B1/D3 — the cancelled path also gets a machine-readable
+   * record, not just the rendered step summary. A ledger-only artifact is a
+   * single small file: unlike the full run directory it has a real chance of
+   * finishing inside the post-cancellation grace, and it cannot upload a
+   * truncated half-directory. It fires ONLY on cancellation — every other
+   * outcome already carries the ledger inside the council-run artifact.
+   *
+   * #229 round-2 A1/D1: it must also come FIRST among the post-run steps —
+   * every step that runs after a cancellation shares one bounded grace
+   * window, so the machine-readable artifact takes the first claim on it
+   * rather than queueing behind the receipt's shell block.
+   */
+  test('#229: a ledger-only artifact upload fires on the cancelled path only, ahead of the receipt', () => {
+    const y = yml();
+    const ledgerIdx = y.indexOf('Upload the spend ledger alone');
+    const receiptIdx = y.indexOf('Collect the spend receipt');
+    expect(ledgerIdx).toBeGreaterThan(y.indexOf('Run the adjudicated council'));
+    expect(ledgerIdx).toBeLessThan(receiptIdx);
+    const step = y.slice(ledgerIdx, receiptIdx);
+    expect(step).toContain("if: ${{ cancelled() && steps.gate.outputs.available == 'true' }}");
+    expect(step).toContain('name: spend-ledger');
+    expect(step).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/spend-ledger.jsonl');
+  });
+
+  /**
+   * #229 round-3 C1 — the workflow's two ledger-path spellings must point at
+   * the file the ENGINE actually writes, and this repo ships that engine, so
+   * the equivalence is enforced against the exported constant rather than
+   * asserted in prose: spend-ledger.js appends SPEND_LEDGER_FILE inside
+   * getConfigDir(), and the workflow points getConfigDir() at
+   * AMICUS_CONFIG_DIR via the job-level env (pinned elsewhere in this suite).
+   * If the engine ever renames the file, this fails before the workflow
+   * silently uploads nothing.
+   */
+  test('#229: both workflow ledger paths name the exact file the engine writes', () => {
+    const { SPEND_LEDGER_FILE } = require('../../src/utils/spend-ledger');
+    const y = yml();
+    // The receipt step's shell spelling…
+    expect(y).toContain('LEDGER="${AMICUS_CONFIG_DIR}/' + SPEND_LEDGER_FILE + '"');
+    // …and the ledger-only upload's expression spelling.
+    expect(y).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/' + SPEND_LEDGER_FILE);
   });
 
   test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {
