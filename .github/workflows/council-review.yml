@@ -86,7 +86,9 @@ jobs:
     # MEASURED on the run that raised it (33093722538): `qwen seat` ran 688.7 s,
     # far past the 480 s the old arithmetic assumed. 4 x 960 s = 64 min, which
     # busts a 60 min cap and CANCELS the job — and the evidence-artifact step is
-    # `if: !cancelled()`, so a bust deletes the forensic record (see issue #220).
+    # `if: !cancelled()`, so a bust deletes the run-dir artifact. (The spend
+    # receipt itself now survives cancellation via `always()` — issue #220 —
+    # but the full forensic record still dies with the runner.)
     # ⚠️ 64 min is a FLOOR: Stage-2 repairs are serial, up to 2 per judge, each
     # bounded by the leg cap. `--max-cost` is what bounds that, not time.
     # Raising this costs NOTHING unless hit — GitHub bills actual wall clock.
@@ -531,7 +533,21 @@ jobs:
           cp council-cli.json "$RUN_DIR/cli-stdout.json"
 
       - name: Collect the spend receipt (the only record of concrete model ids)
-        if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}
+        # always(), NOT !cancelled() (#220): cancellation is ROUTINE here — the
+        # concurrency group cancels on every re-push to a labelled PR, and
+        # opening one double-fires (opened + labeled) so the first run is
+        # cancelled ~immediately — and it lands AFTER the paid step has
+        # launched legs. Under !cancelled() this step was skipped on exactly
+        # those runs, making cancellation the one terminal state where a run
+        # that spent money left no record of having spent it (a timeout-minutes
+        # bust is the same mechanism — a timeout kill is a cancellation).
+        # This step is a fast file copy + summary write, well inside the grace
+        # the runner gives always()-gated steps after a cancellation. On a
+        # cancelled run the step summary IS the surviving record: the artifact
+        # upload below stays !cancelled() because a truncated artifact is worse
+        # than none. The gate guard stays so fork PRs (nothing provisioned,
+        # nothing spent) still skip.
+        if: ${{ always() && steps.gate.outputs.available == 'true' }}
         run: |
           # run.json / events.jsonl / verdict.json record ALIAS NAMES only, so they
           # are byte-identical whichever model an alias bound to. The spend ledger

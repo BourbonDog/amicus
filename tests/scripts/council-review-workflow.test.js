@@ -109,8 +109,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     // ⚠️ This must FIT, with room. A `timeout-minutes` kill CANCELS the job, and
     // the evidence-artifact step is `if: !cancelled()` — so busting the cap does
-    // not merely fail the run, it DELETES the forensic record every #202
-    // decision has been made from. 3 minutes of slack is the floor.
+    // not merely fail the run, it DELETES the run-dir artifact every #202
+    // decision has been made from. (The spend receipt now survives cancellation
+    // via `always()` — #220 — but reviews/judge outputs/tally still die with
+    // the runner.) 3 minutes of slack is the floor.
     expect(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
       + `${Math.round(jobCapMs / 60000)}m: ${worstCaseMs + 180000 <= jobCapMs}`)
       .toBe(`worst ${Math.round(worstCaseMs / 60000)}m fits job cap `
@@ -322,6 +324,33 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(y).toContain('name: council-run');
     expect(y).toContain('path: council-run/');
     expect(y).toContain('!cancelled()');
+  });
+
+  /**
+   * #220 — a cancelled run must still leave its spend receipt.
+   *
+   * Cancellation is ROUTINE (concurrency cancel-in-progress on every re-push;
+   * the opened+labeled double-event on a labelled PR; a timeout-minutes bust),
+   * and it lands after the paid step has launched legs. Under a shared
+   * `!cancelled()` gate, cancellation was the ONE terminal state where a run
+   * that spent money left no record of having spent it — observed live on
+   * PR #219, where two cancelled runs reached the paid step and every
+   * downstream evidence step read `skipped`.
+   */
+  test('#220: the spend receipt runs on cancellation; the artifact upload does not have to', () => {
+    const y = yml();
+    const receipt = y.slice(y.indexOf('Collect the spend receipt'), y.indexOf('Upload evidence artifact'));
+    const upload = y.slice(y.indexOf('Upload evidence artifact'), y.indexOf('Publish the Council Review check run'));
+    // The receipt is a fast file copy + step-summary write, so it lands inside
+    // the post-cancellation grace. The gate guard must stay alongside it:
+    // bare always() would run the receipt on fork PRs where nothing was spent.
+    expect(receipt).toContain("if: ${{ always() && steps.gate.outputs.available == 'true' }}");
+    // The if: LINE, not the whole slice — the step's own comment names
+    // !cancelled() while explaining why it was wrong.
+    expect(receipt).not.toContain('if: ${{ !cancelled()');
+    // upload-artifact on a cancelled job may not finish, and a truncated
+    // artifact is worse than none — this one deliberately stays !cancelled().
+    expect(upload).toContain("if: ${{ !cancelled() && steps.gate.outputs.available == 'true' }}");
   });
 
   test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {
