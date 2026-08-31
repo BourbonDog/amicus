@@ -385,6 +385,25 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     expect(step).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/spend-ledger.jsonl');
   });
 
+  /**
+   * #229 round-3 C1 — the workflow's two ledger-path spellings must point at
+   * the file the ENGINE actually writes, and this repo ships that engine, so
+   * the equivalence is enforced against the exported constant rather than
+   * asserted in prose: spend-ledger.js appends SPEND_LEDGER_FILE inside
+   * getConfigDir(), and the workflow points getConfigDir() at
+   * AMICUS_CONFIG_DIR via the job-level env (pinned elsewhere in this suite).
+   * If the engine ever renames the file, this fails before the workflow
+   * silently uploads nothing.
+   */
+  test('#229: both workflow ledger paths name the exact file the engine writes', () => {
+    const { SPEND_LEDGER_FILE } = require('../../src/utils/spend-ledger');
+    const y = yml();
+    // The receipt step's shell spelling…
+    expect(y).toContain('LEDGER="${AMICUS_CONFIG_DIR}/' + SPEND_LEDGER_FILE + '"');
+    // …and the ledger-only upload's expression spelling.
+    expect(y).toContain('path: ${{ env.AMICUS_CONFIG_DIR }}/' + SPEND_LEDGER_FILE);
+  });
+
   test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {
     const y = yml();
     // Untrusted model text must not be able to forge the sticky marker
