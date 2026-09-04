@@ -417,12 +417,12 @@ async function main() {
   await cap.close();
 
   process.stdout.write(`\nengine: opencode-ai ${engine.packageVersion} (sdk ${engine.sdkVersion}), server reports ${engine.version || '?'}\nbinary: ${engine.binary}\n\n`);
-  process.stdout.write('| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant error |\n|---|---|---|---|---|---|---|---|---|---|---|\n');
+  process.stdout.write('| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n');
   for (const r of results) {
     const w = wireSummary(r.wire);
     const a = r.assistant || {};
     const status = `${cell(r.status)}${r.error ? ' ' + cell(r.error.slice(0, 60)) : ''}`;
-    process.stdout.write(`| ${cell(r.id)} | ${cell(r.title)} | ${cell(r.expect)} | ${cell(r.env)} | ${cell(w.path)} | ${cell(w.maxTokens)} | ${cell(w.reasoning ?? w.reasoningEffort)} | ${cell(w.thinking)} | ${status} | ${cell(a.finish)} | ${cell(a.error)} |\n`);
+    process.stdout.write(`| ${cell(r.id)} | ${cell(r.title)} | ${cell(r.expect)} | ${cell(r.env)} | ${cell(w.path)} | ${cell(w.maxTokens)} | ${cell(w.reasoning ?? w.reasoningEffort)} | ${cell(w.thinking)} | ${status} | ${cell(a.finish)} | ${cell(a.variant)} | ${cell(a.error)} |\n`);
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }

@@ -7009,34 +7009,35 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   `reasoning {"effort":"low"}` there (F2) — `variant` is the working lever and today's `reasoning`
   field is a silent no-op.** F3 is the failure mode of that working lever: `variant: 'medium'` against
   kimi, which declares no `medium`, was accepted (prompt status 204, `finish: 'length'`, no error) and
-  put no reasoning on the wire at all — silent, not an error. The raw capture adds the observability
-  trap the table cannot show: F3's assistant message still records `variant: 'medium'` while its
-  captured request body carries no `reasoning` field at all, so a run's own artifact can claim an
-  effort level the wire never saw. E2 shows the descriptor-side route still works
+  put no reasoning on the wire at all — silent, not an error. The table itself now shows the
+  observability trap: F3's `assistant variant` column reads `medium` while its `reasoning` column
+  is empty — the engine recorded the requested variant on the assistant message and sent no
+  effort to the provider, so a run's own artifact can claim an effort level the wire never saw.
+  E2 shows the descriptor-side route still works
   (`options.reasoning {effort:'low'}` → `reasoning {"effort":"low"}`), and F4 shows a variant the
   model does declare landing (`reasoning {"effort":"medium"}` on qwen).
 
-| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant error |
-|---|---|---|---|---|---|---|---|---|---|---|
-| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — |
-| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — |
-| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — |
-| C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — |
-| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| E1 | options.max_tokens 4096 | 32000 (dropped) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — |
-| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
-| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
-| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | — |
-| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | APIError |
-| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | — | APIError |
-| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | APIError |
-| H4 | direct anthropic haiku variant 'max' | thinking budget_tokens 31999; max_tokens 63999 if additive | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | APIError |
-| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — |
-| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — |
+| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — | — |
+| C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| E1 | options.max_tokens 4096 | 32000 (dropped) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — | — |
+| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | low | — |
+| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | medium | — |
+| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | medium | — |
+| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | — | APIError |
+| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | — | — | APIError |
+| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
+| H4 | direct anthropic haiku variant 'max' | thinking budget_tokens 31999; max_tokens 63999 if additive | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — | — |
 
 /config/providers per model:
 - openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":1048576},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
