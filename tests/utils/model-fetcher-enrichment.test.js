@@ -58,14 +58,19 @@ describe('enriched normalizers', () => {
     expect(rows[1].maxOutputTokens).toBeNull();
   });
 
-  it('google normalize maps inputTokenLimit to contextLength, pricing null', () => {
+  it('google normalize maps inputTokenLimit and outputTokenLimit, pricing null', () => {
     const body = JSON.stringify({ models: [
-      { name: 'models/gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro', inputTokenLimit: 2000000 }
+      { name: 'models/gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro', inputTokenLimit: 2000000, outputTokenLimit: 65536 },
+      // #218 P3: a row without outputTokenLimit stays null — models.dev fills it at refresh, never a guess here.
+      { name: 'models/gemini-old', displayName: 'Old', inputTokenLimit: 32768 }
     ] });
     const rows = PROVIDER_FETCH_CONFIG.google.normalize(body);
     expect(rows[0]).toEqual({
       id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro',
-      contextLength: 2000000, pricing: null
+      contextLength: 2000000, pricing: null, maxOutputTokens: 65536
+    });
+    expect(rows[1]).toEqual({
+      id: 'google/gemini-old', name: 'Old', contextLength: 32768, pricing: null, maxOutputTokens: null
     });
   });
 

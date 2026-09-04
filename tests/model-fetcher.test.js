@@ -90,8 +90,8 @@ describe('model-fetcher', () => {
 
       const result = await fetchModelsFromProvider('google', 'AIza-test');
       expect(result).toEqual([
-        { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null },
-        { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro', contextLength: null, pricing: null }
+        { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null, maxOutputTokens: null },
+        { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro', contextLength: null, pricing: null, maxOutputTokens: null }
       ]);
     });
 
