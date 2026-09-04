@@ -5,7 +5,7 @@
  * Uses the same HTTPS pattern as api-key-store.js validateApiKey().
  */
 
-const https = require('https');
+const { httpGetText } = require('./http-get');
 
 /**
  * Hardcoded Anthropic floor: the anthropic/ rows a KEYLESS user (or a
@@ -148,43 +148,16 @@ function fetchModelsFromProvider(provider, key) {
  * @param {string} key - API key
  * @returns {Promise<{rows: Array, failure: {reason: string, status?: number, detail?: string}|null}>}
  */
-function fetchViaConfigDetailed(provider, key) {
+async function fetchViaConfigDetailed(provider, key) {
   const config = PROVIDER_FETCH_CONFIG[provider];
   const url = config.buildUrl ? config.buildUrl(key) : config.url;
-  const headers = config.authHeader(key);
-
-  return new Promise((resolve) => {
-    let chunks = '';
-    const ok = (rows) => resolve({ rows, failure: null });
-    const fail = (failure) => resolve({ rows: [], failure });
-
-    const timer = setTimeout(() => {
-      req.destroy();
-      fail({ reason: 'timeout', detail: `no response within ${FETCH_TIMEOUT_MS}ms` });
-    }, FETCH_TIMEOUT_MS);
-
-    const req = https.get(url, { headers }, (res) => {
-      if (res.statusCode !== 200) {
-        clearTimeout(timer);
-        res.on('data', () => {});
-        res.on('end', () => fail({ reason: 'http-status', status: res.statusCode }));
-        return;
-      }
-      res.on('data', (chunk) => { chunks += chunk; });
-      res.on('end', () => {
-        clearTimeout(timer);
-        try {
-          ok(config.normalize(chunks));
-        } catch (err) {
-          fail({ reason: 'parse-error', detail: err.message });
-        }
-      });
-    });
-    req.on('error', (err) => {
-      clearTimeout(timer);
-      fail({ reason: 'network-error', detail: err.message });
-    });
-  });
+  const res = await httpGetText(url, { headers: config.authHeader(key), timeoutMs: FETCH_TIMEOUT_MS });
+  if (!res.ok) { return { rows: [], failure: res.failure }; }
+  try {
+    return { rows: config.normalize(res.body), failure: null };
+  } catch (err) {
+    return { rows: [], failure: { reason: 'parse-error', detail: err.message } };
+  }
 }
 
 /**

@@ -1,0 +1,86 @@
+'use strict';
+/**
+ * src/utils/http-get.js — the always-resolves HTTPS GET shared by the
+ * provider model fetch (#209 failure vocabulary) and the models.dev ceiling
+ * fetch (#218 P3). Same mock shape as tests/model-fetcher.test.js:
+ * https.get(url, { headers }, cb) returning an object with on()/destroy().
+ */
+const { EventEmitter } = require('events');
+const https = require('https');
+
+jest.mock('https');
+
+const { httpGetText, getJson, DEFAULT_TIMEOUT_MS } = require('../../src/utils/http-get');
+
+/** @param {{status?: number, body?: string, error?: Error, hang?: boolean}} o */
+function mockGet(o = {}) {
+  const req = new EventEmitter();
+  req.destroy = jest.fn();
+  https.get.mockImplementation((_url, _opts, cb) => {
+    if (o.error) { process.nextTick(() => req.emit('error', o.error)); return req; }
+    if (o.hang) { return req; }
+    const res = new EventEmitter();
+    res.statusCode = o.status === undefined ? 200 : o.status;
+    cb(res);
+    process.nextTick(() => { if (o.body) { res.emit('data', o.body); } res.emit('end'); });
+    return req;
+  });
+  return req;
+}
+
+describe('httpGetText', () => {
+  afterEach(() => { jest.useRealTimers(); https.get.mockReset(); });
+
+  it('resolves {ok:true, body} on a 200', async () => {
+    mockGet({ body: '{"a":1}' });
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({ ok: true, body: '{"a":1}' });
+  });
+
+  it('passes headers through and defaults the timeout', async () => {
+    mockGet({ body: 'ok' });
+    await httpGetText('https://x.test/y', { headers: { 'User-Agent': 'amicus/test' } });
+    expect(https.get).toHaveBeenCalledWith('https://x.test/y', { headers: { 'User-Agent': 'amicus/test' } }, expect.any(Function));
+    expect(DEFAULT_TIMEOUT_MS).toBe(5000);
+  });
+
+  it('reports a non-200 as http-status with the code', async () => {
+    mockGet({ status: 401, body: 'nope' });
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({ ok: false, failure: { reason: 'http-status', status: 401 } });
+  });
+
+  it('reports a socket error as network-error', async () => {
+    mockGet({ error: new Error('ECONNRESET') });
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({ ok: false, failure: { reason: 'network-error', detail: 'ECONNRESET' } });
+  });
+
+  it('destroys the request and reports timeout when nothing answers', async () => {
+    jest.useFakeTimers();
+    const req = mockGet({ hang: true });
+    const p = httpGetText('https://x.test/y', { timeoutMs: 250 });
+    jest.advanceTimersByTime(251);
+    await expect(p).resolves.toEqual({ ok: false, failure: { reason: 'timeout', detail: 'no response within 250ms' } });
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getJson', () => {
+  afterEach(() => { https.get.mockReset(); });
+
+  it('parses a JSON body', async () => {
+    mockGet({ body: '{"models":[]}' });
+    await expect(getJson('https://x.test/api.json')).resolves.toEqual({ ok: true, json: { models: [] } });
+  });
+
+  it('reports a non-JSON body as parse-error', async () => {
+    mockGet({ body: '<html>' });
+    const r = await getJson('https://x.test/api.json');
+    expect(r.ok).toBe(false);
+    expect(r.failure.reason).toBe('parse-error');
+    expect(typeof r.failure.detail).toBe('string');
+  });
+
+  it('forwards a transport failure unchanged', async () => {
+    mockGet({ status: 503 });
+    await expect(getJson('https://x.test/api.json')).resolves.toEqual({ ok: false, failure: { reason: 'http-status', status: 503 } });
+  });
+});
