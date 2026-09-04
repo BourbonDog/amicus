@@ -10,6 +10,10 @@ describe('model-catalog', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-cat-'));
     jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({ openrouter: 'k' }) }));
+    // #218 P3: refreshCatalog enriches ceilings from models.dev; keep the unit suite offline.
+    jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({
+      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 })),
+    }));
   });
   afterEach(() => { jest.dontMock('../src/utils/config'); fs.rmSync(dir, { recursive: true, force: true }); });
 

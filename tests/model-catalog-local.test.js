@@ -29,6 +29,10 @@ describe('refreshCatalog: localhost-only refresh never clobbers a good OR cache'
     // getConfigDir() is the only config export refreshCatalog touches.
     jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({}) }));
+    // #218 P3: refreshCatalog enriches ceilings from models.dev; keep the unit suite offline.
+    jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({
+      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 })),
+    }));
     // The network is offline except loopback: fetchAllModelsDetailed yields ONLY local rows.
     jest.doMock('../src/utils/model-fetcher', () => ({
       fetchAllModelsDetailed: jest.fn().mockResolvedValue({ rows: [
