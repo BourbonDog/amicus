@@ -6956,6 +6956,57 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   thinking-budget selection (1.18.15 selects by the models.dev row's `reasoning_options`), and the
   flag parser (an Effect `Config.number` in the pin). `npm ci` aligned the copy; 1.18.15 ships no
   source map, so engine claims are now measured by `scripts/probe-max-tokens.js`, not read.
+- [x] **#218 P1 — the wire probe, run against the pin (2026-09-04).** `scripts/probe-max-tokens.js`
+  ran its 18-case matrix against `opencode-ai 1.18.15` (sdk 1.18.15; the server reported 1.18.15),
+  binary `C:\Users\sendt\code\amicus\node_modules\opencode-windows-x64\bin\opencode.exe`, every case
+  under a throwaway keyless sandbox home built with `run-integration-keyless.js`'s `buildKeylessEnv()`
+  so no real credential could reach the engine. Seventeen of the eighteen rows landed on their
+  `expected` value. The one that did not is E1: `options.max_tokens: 4096` is NOT dropped — it reached
+  the wire as `max_tokens 4096`, the same number B's `limit.output` produced, so a descriptor's
+  `options` block is a live lever on the ceiling rather than inert. One row measured something its
+  `expected` column never named: H3 (`variant: 'high'` on direct anthropic) sent `max_tokens 48000`
+  where the identical descriptor without a variant (H1) sent `32000` — the engine adds the thinking
+  budget on top of the default output budget, and `thinking {"type":"enabled","budget_tokens":16000}`
+  rode along exactly as predicted. Everything else held. A bare `{}` descriptor sends `32000` (A, F1,
+  J1); `limit.output` wins under it (B, `4096`); `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` raises the
+  budget to its value (C1, C3, H2 and J2 all `64000`) and is then clamped by a smaller `limit.output`
+  (C2, `50000`); and a malformed or zero flag falls back to `32000` with no error on the row (D1
+  `64000abc`, D2 `0`). `/config/providers` DOES expose `variants` for every model the matrix touched —
+  kimi `low|high|max`, qwen `minimal|low|medium|high|xhigh`, haiku `high|max` carrying
+  `thinking.budgetTokens` 16000/31999 — and an empty `{}` for the custom openai-compatible unknown
+  model, whose `limit` is `{context:0, output:0}`. The assistant message carried `finish: 'length'` on
+  all 15 rows the capture server answered with an SSE stream; the three direct-anthropic rows (H1, H2,
+  H3) show `finish: —` with `error: APIError` because the probe answers `/v1/messages` with a 400 by
+  design, after the body has already been captured. **F1 versus F2 is the headline: amicus's
+  `sendPrompt` `body.reasoning {effort:'low'}` put NOTHING on the wire (F1), while `variant: 'low'` in
+  the same prompt body put `reasoning {"effort":"low"}` there (F2) — `variant` is the working lever
+  and today's `reasoning` field is a silent no-op.** F3 is the failure mode of that working lever:
+  `variant: 'medium'` against kimi, which declares no `medium`, was accepted (prompt status 204,
+  `finish: 'length'`, no error) and put no reasoning on the wire at all — silent, not an error. E2
+  shows the descriptor-side route still works (`options.reasoning {effort:'low'}` →
+  `reasoning {"effort":"low"}`), and F4 shows a variant the model does declare landing
+  (`reasoning {"effort":"medium"}` on qwen).
+
+| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant error |
+|---|---|---|---|---|---|---|---|---|---|---|
+| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
+| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — |
+| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — |
+| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — |
+| C3 | env 64000 + bare {} (engine ceiling 943718) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — |
+| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
+| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
+| E1 | options.max_tokens 4096 | 32000 (dropped) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — |
+| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
+| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
+| F2 | prompt variant 'low' (kimi: low|high|max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
+| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
+| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | — |
+| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | APIError |
+| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | — | APIError |
+| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | APIError |
+| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — |
+| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — |
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
