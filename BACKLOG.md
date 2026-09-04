@@ -6931,6 +6931,32 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.4 records — dispositions and rulings made in-cycle (2026-09-04)
+
+Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- [x] **#218 P3 — direct-provider ceilings from models.dev (2026-09-04).** The 4.9.3 docs said the
+  direct `openai` / `anthropic` / `google` / `deepseek` lists "don't publish one"; Google's
+  ListModels does (`outputTokenLimit`, one key from the `inputTokenLimit` already lifted) and
+  models.dev publishes all of them keyless (anthropic 14/14, openai 42/47, google 39/39,
+  deepseek 3/3, every `ANTHROPIC_MODELS` id). Measured before writing the fill rule: OpenRouter's
+  `top_provider.max_completion_tokens` disagrees with models.dev on 24 of 344 openrouter rows, so
+  the provider's own value wins and models.dev fills nulls only; the 6 ceiling-less openrouter
+  rows are all `openrouter/openrouter/*` meta-routers (models.dev says 2,000,000 for `auto`) and
+  are skipped; models.dev carries `{context:0, output:0}` for openai image rows, never written.
+  Hooked at `model-catalog.js :: refreshCatalog` — the one seam the CLI, `setup` and the Electron
+  refresh button share — after the floor-only check, in place on the written rows. The engine
+  already merges models.dev limits into every `{}` descriptor, so this changes what AMICUS can
+  clamp and name, not what the engine knows.
+- [x] **The repo's engine copy was stale, and its source map misled #218's research (2026-09-04).**
+  `node_modules` held opencode 1.2.20 (`package-lock` pins 1.18.15) because `npm ci` had not run
+  since the pin. Three engine-behaviour claims in the #218 research comment were read from the
+  1.2.20 source map and are wrong for the pin: the OpenRouter effort table (1.2.20 sent effort only
+  for gpt/gemini-3/claude ids; 1.18.15 maps every OpenRouter model's effort), the Anthropic
+  thinking-budget selection (1.18.15 selects by the models.dev row's `reasoning_options`), and the
+  flag parser (an Effect `Config.number` in the pin). `npm ci` aligned the copy; 1.18.15 ships no
+  source map, so engine claims are now measured by `scripts/probe-max-tokens.js`, not read.
+
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
 **✅ v4.9.3 RELEASED 2026-08-28** — tag `v4.9.3` → `f8a178cd`, main `e91d3ac5` (`--no-ff`),

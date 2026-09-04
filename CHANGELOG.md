@@ -3,6 +3,28 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
+  `contextLength` / `maxOutputTokens` for `anthropic`, `openai` and `deepseek` rows from the keyless
+  [models.dev](https://models.dev) index, and lifts Google's own `outputTokenLimit` first-party. The
+  provider's own number always wins; models.dev fills only what is null, never a zero, and never
+  the `openrouter/openrouter/*` meta-routers. The refresh prints the outcome (`Ceilings: …`) and
+  `--json` carries it as `ceilingEnrichment`. Effect: `outputBudget` can now clamp direct routes
+  too, which 4.9.3 documented as impossible because those lists "don't publish one".
+- **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
+  provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
+  read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
+  engine bump.
+
+### Changed
+
+- `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
+  inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) is
+  unchanged.
+
 ## [4.9.3] - 2026-08-28
 
 *Doctor stops vouching for things it never checked.*

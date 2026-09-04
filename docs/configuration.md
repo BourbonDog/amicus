@@ -90,9 +90,11 @@ Two limits worth knowing before you set it:
   not recognise otherwise gets. So a high budget leaves `max_tokens` alone while still restoring
   compaction for those models. If you want neither effect, leave `outputBudget` unset.
 - **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
-  it. Models whose ceiling is unknown — anything fetched before this field existed, and the direct
-  `openai` / `anthropic` / `google` / `deepseek` lists, which don't publish one — keep the old
-  behaviour rather than receiving a guessed limit.
+  it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's; the direct
+  `openai` / `anthropic` / `deepseek` rows (and any row still missing a number) are filled from
+  [models.dev](https://models.dev) at refresh, and the refresh output says how many were filled or why
+  none could be. A model neither source knows keeps the old behaviour rather than receiving a guessed
+  limit.
 
 This addresses reservation *rejections*. It does **not** stop a reasoning-heavy model from spending
 its whole allowance on reasoning and emitting nothing — that is governed by reasoning effort
