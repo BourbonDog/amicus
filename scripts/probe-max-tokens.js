@@ -16,13 +16,18 @@
  * SAFETY: the probe spawns a REAL engine, so it never runs in the ambient
  * environment. Invoked without `--inner` it is only an OUTER wrapper: it makes a
  * fresh temp sandbox home, builds a credential-free env with the same
- * `buildKeylessEnv()` the keyless integration rail uses (every PROVIDER_ENV_MAP
- * and legacy key deleted, AMICUS_ENV_DIR/AMICUS_CONFIG_DIR deleted,
+ * `buildKeylessEnv()` the keyless integration rail uses, and re-execs itself
+ * with `--inner` under that env. What that scrub actually covers, named rather
+ * than implied: every PROVIDER_ENV_MAP and legacy key deleted;
+ * AMICUS_ENV_DIR/AMICUS_CONFIG_DIR deleted; the engine's own credential/config
+ * channels deleted (OPENCODE_AUTH_CONTENT, OPENCODE_API_KEY, OPENCODE_CONFIG,
+ * OPENCODE_CONFIG_DIR -- see ENGINE_CREDENTIAL_ENV); and
  * HOME/USERPROFILE/XDG_DATA_HOME/XDG_CONFIG_HOME/APPDATA repointed inside the
- * sandbox), and re-execs itself with `--inner` under that env. The INNER run
- * re-asserts that every provider key name is undefined and exits 1 BEFORE
- * starting an engine if any survived. The `apiKey: 'probe-key'` in every
- * provider block is defence in depth; the scrubbed env is the safety property.
+ * sandbox. The INNER run re-asserts that every one of those variable names is
+ * undefined and exits 1 BEFORE starting an engine if any survived. The
+ * `apiKey: 'probe-key'` in every provider block is defence in depth. This is a
+ * scrub of the credential channels enumerated above, not a proof that no other
+ * channel exists: an engine bump that adds one has to be added to that list.
  *
  * Usage:
  *   node scripts/probe-max-tokens.js [--out output/218-probe.json] [--only A,B,F1]
@@ -108,9 +113,16 @@ function runOuter(args) {
  */
 function assertSandboxed() {
   const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-store');
+  const { ENGINE_CREDENTIAL_ENV } = require('./run-integration-keyless');
   // buildKeylessEnv() deletes the legacy names too (GEMINI_API_KEY -> the current
-  // GOOGLE_GENERATIVE_AI_API_KEY), so the gate asserts exactly what it scrubs.
-  const names = [...new Set([...Object.values(PROVIDER_ENV_MAP), ...Object.keys(LEGACY_KEY_NAMES)])];
+  // GOOGLE_GENERATIVE_AI_API_KEY) and the engine's own credential/config channels
+  // (ENGINE_CREDENTIAL_ENV, imported from the scrubber itself so the gate asserts
+  // exactly what it scrubs and the two cannot drift apart).
+  const names = [...new Set([
+    ...Object.values(PROVIDER_ENV_MAP),
+    ...Object.keys(LEGACY_KEY_NAMES),
+    ...ENGINE_CREDENTIAL_ENV,
+  ])];
   const present = names.filter((n) => process.env[n] !== undefined);
   if (present.length > 0) {
     process.stderr.write(`probe: REFUSING to start an engine — still defined: ${present.join(',')}\n`);

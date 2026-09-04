@@ -12,7 +12,7 @@ jest.mock('https');
 
 const { httpGetText, getJson, DEFAULT_TIMEOUT_MS } = require('../../src/utils/http-get');
 
-/** @param {{status?: number, body?: string, error?: Error, hang?: boolean}} o */
+/** @param {{status?: number, body?: string, error?: Error, hang?: boolean, hangBody?: boolean}} o */
 function mockGet(o = {}) {
   const req = new EventEmitter();
   req.destroy = jest.fn();
@@ -21,7 +21,10 @@ function mockGet(o = {}) {
     if (o.hang) { return req; }
     const res = new EventEmitter();
     res.statusCode = o.status === undefined ? 200 : o.status;
+    res.setEncoding = jest.fn();
     cb(res);
+    // hangBody: headers arrived, the body never ends — the timer must still fire.
+    if (o.hangBody) { return req; }
     process.nextTick(() => { if (o.body) { res.emit('data', o.body); } res.emit('end'); });
     return req;
   });
@@ -60,6 +63,31 @@ describe('httpGetText', () => {
     jest.advanceTimersByTime(251);
     await expect(p).resolves.toEqual({ ok: false, failure: { reason: 'timeout', detail: 'no response within 250ms' } });
     expect(req.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out a non-200 whose body never ends (the timer stays armed until end)', async () => {
+    jest.useFakeTimers();
+    const req = mockGet({ status: 500, hangBody: true });
+    const p = httpGetText('https://x.test/y', { timeoutMs: 250 });
+    jest.advanceTimersByTime(251);
+    await expect(p).resolves.toEqual({ ok: false, failure: { reason: 'timeout', detail: 'no response within 250ms' } });
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('decodes the body once at the stream rather than per chunk', async () => {
+    let captured = null;
+    https.get.mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.destroy = jest.fn();
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      res.setEncoding = jest.fn((enc) => { captured = enc; });
+      cb(res);
+      process.nextTick(() => { res.emit('data', 'ok'); res.emit('end'); });
+      return req;
+    });
+    await httpGetText('https://x.test/y');
+    expect(captured).toBe('utf8');
   });
 });
 

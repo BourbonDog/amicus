@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * @module http-get
  * One HTTPS GET, always resolved, never rejected — the timer/destroy/failure
@@ -13,6 +11,8 @@
  * tests/model-fetcher.test.js mocks — so that suite keeps intercepting after
  * the extraction.
  */
+
+'use strict';
 
 const https = require('https');
 
@@ -35,10 +35,14 @@ function httpGetText(url, opts = {}) {
       fail({ reason: 'timeout', detail: `no response within ${timeoutMs}ms` });
     }, timeoutMs);
     const req = https.get(url, { headers }, (res) => {
+      // Decode once, at the stream: `chunks += chunk` decodes each Buffer on its
+      // own and mangles any multi-byte character split across a chunk boundary.
+      res.setEncoding('utf8');
       if (res.statusCode !== 200) {
-        clearTimeout(timer);
+        // The timer stays armed until `end`: a non-200 whose body never ends
+        // must still time out rather than leave the promise pending for ever.
         res.on('data', () => {});
-        res.on('end', () => fail({ reason: 'http-status', status: res.statusCode }));
+        res.on('end', () => { clearTimeout(timer); fail({ reason: 'http-status', status: res.statusCode }); });
         return;
       }
       res.on('data', (chunk) => { chunks += chunk; });

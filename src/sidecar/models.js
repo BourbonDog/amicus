@@ -87,6 +87,8 @@ function fmtLiveSkipped(reason) {
 
 /** #218 P3: one honest line about where the direct-provider ceilings came from. */
 function fmtCeilingLine(e) {
+  // Unreachable in production after #218 P3 (every successful refresh persists a
+  // ceilingEnrichment object); kept for a hand-built or pre-field cache doc.
   if (!e) { return 'Ceilings: not attempted'; }
   if (e.failure) {
     const f = e.failure;

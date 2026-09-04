@@ -26,6 +26,7 @@ describe('model-fetcher: per-provider failure reporting', () => {
   function mockHttpsGet(statusCode, body) {
     const mockResponse = {
       statusCode,
+      setEncoding: jest.fn(),
       on: jest.fn((event, cb) => {
         if (event === 'data') { cb(typeof body === 'string' ? body : JSON.stringify(body)); }
         if (event === 'end') { cb(); }

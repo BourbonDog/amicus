@@ -6,7 +6,7 @@
  * descriptor unless the catalog knows BOTH a model's context and its output
  * ceiling — a blanket budget against an unknown ceiling would send an
  * over-ceiling max_tokens. OpenRouter publishes its ceiling on /models; the
- * direct openai/anthropic/google/deepseek lists do not (google's does, lifted
+ * direct openai/anthropic/deepseek lists do not (google's does, lifted
  * first-party in model-fetcher.js). models.dev publishes all of them, keyless.
  *
  * WHAT THIS DOES NOT CHANGE: the engine already resolves every `{}` descriptor's
