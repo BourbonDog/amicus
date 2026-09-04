@@ -222,6 +222,7 @@ src/
 │   ├── mcp-validators.js  # MCP Validators
 │   ├── model-canonicalization.js  # Direct-first id canonicalization, guarded by `classifyModel`
 │   ├── model-catalog.js  # OpenRouter model catalog cache (F3 #18 / F5 foundation).
+│   ├── model-ceilings-modelsdev.js  # #218 P3 — output ceilings for the direct-provider catalog rows.
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
@@ -652,11 +653,12 @@ evals/
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
 | `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()`, `vendorOfId()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
+| `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `MODELS_DEV_URL()`, `MODELS_DEV_TIMEOUT_MS()`, `limitsFromModelsDev()`, `fillCeilings()`, `enrichCeilings()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
-| `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()` |
+| `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
