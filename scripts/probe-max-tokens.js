@@ -52,6 +52,7 @@ const CUSTOM = { providerID: 'probe', modelID: 'unknown-model' };
 
 const FLAG = 'OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX';
 const INNER = '--inner';
+const SANDBOX_PREFIX = 'amicus-probe-home-';
 
 // ---------------------------------------------------------------- credential sandbox
 /**
@@ -62,7 +63,7 @@ const INNER = '--inner';
  */
 function runOuter(args) {
   const { buildKeylessEnv } = require('./run-integration-keyless');
-  const sandboxHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-probe-home-'));
+  const sandboxHome = fs.mkdtempSync(path.join(os.tmpdir(), SANDBOX_PREFIX));
   try {
     const env = buildKeylessEnv(process.env, sandboxHome);
     // The three sandbox-rooted dirs are read back OUT of the env buildKeylessEnv
@@ -94,6 +95,11 @@ function runOuter(args) {
 /**
  * INNER half's gate: every provider key name must be undefined before an engine
  * is allowed to start. Prints the sandbox line the run is judged on.
+ *
+ * HOME is checked too, not only the env-var names: a hand-typed `--inner` in a
+ * real home has no provider variables set on plenty of machines and would still
+ * hand the engine `~/.config/amicus/.env` and OpenCode's `auth.json`. Only the
+ * OUTER half can produce a HOME with this prefix.
  * @returns {boolean} true when it is safe to proceed
  */
 function assertSandboxed() {
@@ -104,7 +110,12 @@ function assertSandboxed() {
     process.stderr.write(`probe: REFUSING to start an engine — still defined: ${present.join(',')}\n`);
     return false;
   }
-  process.stdout.write(`sandbox: HOME=${process.env.HOME} keys-absent=${names.join(',')}\n`);
+  const home = process.env.HOME || '';
+  if (!path.basename(home).startsWith(SANDBOX_PREFIX)) {
+    process.stderr.write(`probe: REFUSING to start an engine — HOME is not a probe sandbox (${home || '(unset)'}); run without --inner\n`);
+    return false;
+  }
+  process.stdout.write(`sandbox: HOME=${home} keys-absent=${names.join(',')}\n`);
   return true;
 }
 
