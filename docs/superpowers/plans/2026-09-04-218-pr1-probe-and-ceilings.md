@@ -25,6 +25,8 @@
 
 ---
 
+> **Superseded in part (2026-09-04):** the P1 probe refuted fact 4 (a per-model `options.max_tokens` DOES reach the wire, case E1) and the engine reports kimi-k3's ceiling as 1048576, not fact 6's live-models.dev 943718. The BACKLOG "v4.9.4 records" P1 entry is the measured record; read it before this section.
+
 ## Design (approved 2026-09-04)
 
 **Measured facts this PR builds on** (pinned 1.18.15 binary and SDK, live APIs):
@@ -945,13 +947,9 @@ Expected: all pass; `model-catalog.js` under 200 lines.
 cd /c/Users/sendt/code/amicus && grep -rn "model-ceilings-modelsdev" tests/ | grep -c doMock
 ```
 
-Expected: a count equal to the number of files from Step 1 plus the new ceilings test. Then temporarily break the network path to prove no test reaches it: run the catalog suites with `https` unreachable —
+Expected: a count equal to the number of files from Step 1 plus the new ceilings test.
 
-```bash
-cd /c/Users/sendt/code/amicus && HTTPS_PROXY=http://127.0.0.1:9 npx jest tests/model-catalog.test.js tests/model-catalog-failures.test.js tests/model-catalog-local.test.js tests/utils/model-catalog-v2.test.js tests/model-catalog-ceilings.test.js 2>&1 | tail -4
-```
-
-Expected: identical pass counts and no suite slower than a few seconds.
+⚠️ Superseded (final review 2026-09-04): Node's https.get ignores HTTPS_PROXY, so this run could not fail. The control is the doMock stanza in every catalog suite; a future offline proof must patch https.get to throw (e.g. a --setupFiles shim) rather than set a proxy.
 
 - [ ] **Step 8: Commit**
 

@@ -6959,8 +6959,12 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
 - [x] **#218 P1 — the wire probe, run against the pin (2026-09-04).** `scripts/probe-max-tokens.js`
   ran its 19-case matrix against `opencode-ai 1.18.15` (sdk 1.18.15; the server reported 1.18.15),
   binary `C:\Users\sendt\code\amicus\node_modules\opencode-windows-x64\bin\opencode.exe`, every case
-  under a throwaway keyless sandbox home built with `run-integration-keyless.js`'s `buildKeylessEnv()`
-  so no real credential could reach the engine. Eighteen of the nineteen rows carry a falsifiable
+  under a throwaway keyless sandbox home built with `run-integration-keyless.js`'s `buildKeylessEnv()`,
+  which deletes every provider key name (current and legacy) and `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`,
+  and repoints `HOME`/`USERPROFILE`/`XDG_DATA_HOME`/`XDG_CONFIG_HOME`/`APPDATA` inside the sandbox —
+  those named channels, not "no credential of any kind". The final review found the engine's own
+  `OPENCODE_AUTH_CONTENT`/`OPENCODE_API_KEY`/`OPENCODE_CONFIG`/`OPENCODE_CONFIG_DIR` uncovered and
+  added them to the scrub; this run predates that, and the measurements are unaffected. Eighteen of the nineteen rows carry a falsifiable
   `expected` value, and seventeen of those eighteen matched. The nineteenth row, F3, is excluded from
   that count because its expectation — `record: silent no-op or error` — is satisfied by either
   outcome and so cannot fail; what it actually observed is reported below. The one falsified row is

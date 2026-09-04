@@ -91,7 +91,8 @@ Two limits worth knowing before you set it:
   compaction for those models. If you want neither effect, leave `outputBudget` unset.
 - **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
   it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's; the direct
-  `openai` / `anthropic` / `deepseek` rows (and any row still missing a number) are filled from
+  `openai` / `anthropic` / `deepseek` rows (and any other row still missing a number, except the
+  `openrouter/openrouter/*` meta-routers and local-provider rows, which are never filled) are filled from
   [models.dev](https://models.dev) at refresh, and the refresh output says how many were filled or why
   none could be. A model neither source knows keeps the old behaviour rather than receiving a guessed
   limit.
