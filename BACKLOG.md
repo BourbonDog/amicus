@@ -6999,7 +6999,7 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
 | E1 | options.max_tokens 4096 | 32000 (dropped) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — |
 | E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
 | F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
-| F2 | prompt variant 'low' (kimi: low|high|max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
+| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — |
 | F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — |
 | F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | — |
 | H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | APIError |
