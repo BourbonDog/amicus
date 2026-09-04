@@ -85,9 +85,20 @@ function fmtLiveSkipped(reason) {
   return `--live skipped: ${reason} — nothing was probed`;
 }
 
+/** #218 P3: one honest line about where the direct-provider ceilings came from. */
+function fmtCeilingLine(e) {
+  if (!e) { return 'Ceilings: not attempted'; }
+  if (e.failure) {
+    const f = e.failure;
+    const why = f.reason + (f.status ? ` ${f.status}` : '') + (f.detail ? `: ${f.detail}` : '');
+    return `Ceilings: models.dev unreachable (${why}); rows without a ceiling keep the engine default and outputBudget cannot clamp them`;
+  }
+  return `Ceilings: ${e.filled} rows filled from models.dev (${e.alreadyKnown} already known, ${e.unknown} unknown to models.dev)`;
+}
+
 async function runRefresh(args) {
   const models = await refreshCatalog();
-  const { fetchedAt, lastRefreshAttempt, lastRefreshError } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
+  const { fetchedAt, lastRefreshAttempt, lastRefreshError, ceilingEnrichment } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
   // --refresh short-circuits --check below (args.check is guaranteed true here) — must announce, not silently skip.
   if (args.live) {
     const line = fmtLiveSkipped('refresh-precedes-check');
@@ -95,7 +106,7 @@ async function runRefresh(args) {
   }
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
-      models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError
+      models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError, ceilingEnrichment
     }), null, 2) + '\n');
     return models.length === 0 && !fetchedAt ? 1 : 0;
   }
@@ -112,6 +123,7 @@ async function runRefresh(args) {
     return 1; // no cache at all: a real failure
   }
   process.stdout.write(`Refreshed catalog: ${models.length} models.\n`);
+  process.stdout.write(fmtCeilingLine(ceilingEnrichment) + '\n');
   process.stdout.write(`Cache: ${catalogPath()}\n`);
   return 0;
 }

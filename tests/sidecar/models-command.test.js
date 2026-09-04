@@ -11,10 +11,11 @@ const CATALOG = [
     contextLength: 1048576, pricing: null },
 ];
 
-function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings, probeStoredAliases } = {}) {
+function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings, probeStoredAliases,
+  ceilingEnrichment = null } = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/model-catalog', () => ({
-    getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000 })),
+    getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000, ceilingEnrichment })),
     refreshCatalog: jest.fn(async () => catalog),
     catalogPath: () => 'C:/fake/model-catalog.json',
   }));
@@ -95,6 +96,26 @@ describe('amicus models', () => {
     const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(code).toBe(0);
     expect(out).toContain('Refreshed catalog: 2 models');
+  });
+
+  it('--refresh prints the ceilings line when models.dev filled rows', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, filled: 12, alreadyKnown: 380, unknown: 5, skippedRouters: 6, skippedLocal: 0 } });
+    const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(code).toBe(0);
+    expect(out).toContain('Ceilings: 12 rows filled from models.dev (380 already known, 5 unknown to models.dev)');
+  });
+
+  it('--refresh says so when models.dev was unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'timeout', detail: 'no response within 10000ms' }, filled: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev unreachable (timeout: no response within 10000ms); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+  });
+
+  it('--refresh --json carries ceilingEnrichment', async () => {
+    const enrichment = { source: 'models.dev', failure: null, filled: 1, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 };
+    const { handleModels } = loadHandler({ ceilingEnrichment: enrichment });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true, json: true }));
+    expect(JSON.parse(out).ceilingEnrichment).toEqual(enrichment);
   });
 
   it('--check clean → exit 0', async () => {
