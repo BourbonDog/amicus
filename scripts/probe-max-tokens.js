@@ -43,7 +43,11 @@ const { spawnSync } = require('child_process');
 const { ensureNodeModulesBinInPath } = require('../src/utils/path-setup');
 ensureNodeModulesBinInPath();
 
-const KIMI = 'moonshotai/kimi-k3';   // models.dev: effort low|high|max, ceiling 943718
+// The brief's figures for these three came from LIVE models.dev, which is not
+// necessarily what the pinned engine's own bundled catalogue reports. Where the
+// two differ the run's `/config/providers` dump is the authority -- for kimi it
+// reports `output: 1048576`, not models.dev's 943718.
+const KIMI = 'moonshotai/kimi-k3';   // live models.dev: effort low|high|max, ceiling 943718
 const QWEN = 'qwen/qwen3.8-max';      // models.dev: effort minimal..xhigh, ceiling 131072
 const HAIKU = 'claude-haiku-4-5';     // models.dev: budget_tokens (min 1024), ceiling 64000
 const OR = (id) => ({ providerID: 'openrouter', modelID: id });
@@ -103,8 +107,10 @@ function runOuter(args) {
  * @returns {boolean} true when it is safe to proceed
  */
 function assertSandboxed() {
-  const { PROVIDER_ENV_MAP } = require('../src/utils/api-key-store');
-  const names = Object.values(PROVIDER_ENV_MAP);
+  const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-store');
+  // buildKeylessEnv() deletes the legacy names too (GEMINI_API_KEY -> the current
+  // GOOGLE_GENERATIVE_AI_API_KEY), so the gate asserts exactly what it scrubs.
+  const names = [...new Set([...Object.values(PROVIDER_ENV_MAP), ...Object.keys(LEGACY_KEY_NAMES)])];
   const present = names.filter((n) => process.env[n] !== undefined);
   if (present.length > 0) {
     process.stderr.write(`probe: REFUSING to start an engine — still defined: ${present.join(',')}\n`);
@@ -135,9 +141,12 @@ function sseLength(res, model) {
 function startCapture() {
   const captures = [];
   const server = http.createServer((req, res) => {
-    let raw = '';
-    req.on('data', (c) => { raw += c; });
+    // Concat the buffers and decode once: `raw += chunk` decodes each chunk on
+    // its own and mangles any multi-byte character split across a boundary.
+    const chunks = [];
+    req.on('data', (c) => { chunks.push(c); });
     req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
       let body = raw;
       try { body = JSON.parse(raw); } catch { /* keep raw text */ }
       const headers = { ...req.headers };
@@ -226,12 +235,42 @@ async function startEngine(sdk, config, env) {
   return { server, client };
 }
 
-async function providersDump(client, providerID, modelID) {
+async function providersDump(client, providerID, modelID, fromCase) {
   const r = await client.config.providers();
   const list = (r.data && r.data.providers) || [];
   const p = list.find((x) => x.id === providerID);
   const m = p && p.models && p.models[modelID];
-  return m ? { keys: Object.keys(m), limit: m.limit ?? null, variants: m.variants ?? '(not exposed)', options: m.options ?? null } : { missing: true, providerIds: list.map((x) => x.id) };
+  return m
+    ? { fromCase, keys: Object.keys(m), limit: m.limit ?? null, variants: m.variants ?? '(not exposed)', options: m.options ?? null }
+    : { fromCase, missing: true, providerIds: list.map((x) => x.id) };
+}
+
+/**
+ * The descriptor this case puts in `provider.<id>.models.<modelID>`.
+ * @param {object} c a CASES entry
+ * @returns {object|null}
+ */
+function descriptorFor(c) {
+  if (c.or) { return c.or[c.model.modelID] ?? null; }
+  if (c.anthropic) { return c.anthropic[c.model.modelID] ?? null; }
+  if (c.custom) { return { name: 'unknown-model' }; }  // buildConfig() writes this one
+  return null;
+}
+
+/**
+ * True when this case adds NOTHING to the model's descriptor that the engine
+ * would fold back into `/config/providers` -- no `limit`, no `options`.
+ *
+ * This is what makes the dump engine-native. `/config/providers` reports the
+ * MERGED descriptor, so a case that sets `limit.output: 50000` reads its own
+ * input back as if it were the engine's ceiling. Only a bare-descriptor case
+ * may seed a model's dump entry: A (kimi), F4 (qwen), H1 (haiku), J1 (custom).
+ * @param {object} c a CASES entry
+ * @returns {boolean}
+ */
+function isBareDescriptor(c) {
+  const d = descriptorFor(c);
+  return !!d && d.limit === undefined && d.options === undefined;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -279,7 +318,7 @@ const CASES = [
   { id: 'B',  title: 'limit.output 4096', or: { [KIMI]: { limit: { context: CTX, output: 4096 } } }, model: OR(KIMI), expect: '4096' },
   { id: 'C1', title: 'env 64000 + limit.output 100000', env: '64000', or: { [KIMI]: { limit: { context: CTX, output: 100000 } } }, model: OR(KIMI), expect: '64000' },
   { id: 'C2', title: 'env 64000 + limit.output 50000', env: '64000', or: { [QWEN]: { limit: { context: 1000000, output: 50000 } } }, model: OR(QWEN), expect: '50000' },
-  { id: 'C3', title: 'env 64000 + bare {} (engine ceiling 943718)', env: '64000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '64000' },
+  { id: 'C3', title: 'env 64000 + bare {} (engine reports ceiling 1048576)', env: '64000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '64000' },
   { id: 'D1', title: 'env 64000abc (malformed)', env: '64000abc', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000 silently' },
   { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000' },
   { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '32000 (dropped)' },
@@ -291,6 +330,11 @@ const CASES = [
   { id: 'H1', title: 'direct anthropic haiku {}', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '32000' },
   { id: 'H2', title: 'direct anthropic haiku {} + env 64000', env: '64000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '64000 (engine ceiling 64000)' },
   { id: 'H3', title: "direct anthropic haiku variant 'high'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, expect: 'thinking budget_tokens 16000' },
+  // H4 is the SECOND data point H3 needs. H3 alone (32000 default + 16000 budget
+  // = 48000 on the wire) cannot separate "the budget is added to the default"
+  // from "variant 'high' just sets 48000 for this model". The dump says haiku's
+  // 'max' variant is budgetTokens 31999, so the additive rule predicts 63999.
+  { id: 'H4', title: "direct anthropic haiku variant 'max'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'max' }, expect: 'thinking budget_tokens 31999; max_tokens 63999 if additive' },
   { id: 'J1', title: 'custom openai-compatible unknown model {}', custom: true, model: CUSTOM, expect: '32000' },
   { id: 'J2', title: 'custom unknown model + env 64000', env: '64000', custom: true, model: CUSTOM, expect: '64000 (raw budget, nothing to clamp)' },
 ];
@@ -307,7 +351,21 @@ function wireSummary(wire) {
   };
 }
 
-function fmt(v) { return v === null || v === undefined ? '—' : (typeof v === 'object' ? JSON.stringify(v) : String(v)); }
+/**
+ * Format ONE markdown table cell. Objects are JSON, null/undefined is an em
+ * dash, and the two characters that break a table -- a literal `|` (splits the
+ * row into extra columns) and a newline (ends the row) -- are neutralised.
+ * Every cell goes through here, including case titles and truncated errors,
+ * so the probe cannot emit a broken table no matter what a case is named or
+ * what an engine error happens to contain.
+ * @param {*} v
+ * @returns {string}
+ */
+function cell(v) {
+  if (v === null || v === undefined) { return '—'; }
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  return s.replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+}
 
 /**
  * Run one case end to end against its own engine. Never throws: a failure
@@ -321,8 +379,8 @@ async function runCase(sdk, cap, c, engines, providers) {
     handle = await startEngine(sdk, buildConfig(cap.origin, c), c.env);
     engines.started += 1;
     const key = `${c.model.providerID}/${c.model.modelID}`;
-    if (!providers[key]) {
-      try { providers[key] = await providersDump(handle.client, c.model.providerID, c.model.modelID); } catch (err) { providers[key] = { error: err.message }; }
+    if (!providers[key] && isBareDescriptor(c)) {
+      try { providers[key] = await providersDump(handle.client, c.model.providerID, c.model.modelID, c.id); } catch (err) { providers[key] = { fromCase: c.id, error: err.message }; }
     }
     const r = await send(handle.client, cap.captures, c);
     return { ...base, config: buildConfig('<capture>', c).provider, prompt: c.viaAmicus ? { viaAmicus: true, reasoning: c.reasoning } : (c.extra || {}), ...r };
@@ -363,7 +421,8 @@ async function main() {
   for (const r of results) {
     const w = wireSummary(r.wire);
     const a = r.assistant || {};
-    process.stdout.write(`| ${r.id} | ${r.title} | ${r.expect} | ${fmt(r.env)} | ${fmt(w.path)} | ${fmt(w.maxTokens)} | ${fmt(w.reasoning ?? w.reasoningEffort)} | ${fmt(w.thinking)} | ${fmt(r.status)}${r.error ? ' ' + r.error.slice(0, 60) : ''} | ${fmt(a.finish)} | ${fmt(a.error)} |\n`);
+    const status = `${cell(r.status)}${r.error ? ' ' + cell(r.error.slice(0, 60)) : ''}`;
+    process.stdout.write(`| ${cell(r.id)} | ${cell(r.title)} | ${cell(r.expect)} | ${cell(r.env)} | ${cell(w.path)} | ${cell(w.maxTokens)} | ${cell(w.reasoning ?? w.reasoningEffort)} | ${cell(w.thinking)} | ${status} | ${cell(a.finish)} | ${cell(a.error)} |\n`);
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
