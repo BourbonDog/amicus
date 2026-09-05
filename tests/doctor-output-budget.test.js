@@ -114,11 +114,23 @@ describe('evaluateOutputBudget — a budget is configured', () => {
       expect(row.hint).toContain('/cfg/config.json');
     });
 
-  test('malformed budget with a VALID ambient flag -> WARN that names the ambient value as what governs', () => {
+  const MALFORMED_PLUS_AMBIENT_LEAD = "0 is not a positive integer — ignored; OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX 64000: each leg reserves min(64000, the ceiling the engine's catalog knows for it))";
+
+  test('malformed budget with a VALID ambient flag -> WARN that names the ambient value as what governs, with the same route analysis a budget gets (r4 B1)', () => {
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 0, env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' } }));
-    // A malformed budget sets no flag, so the ambient 64000 reaches the spawn.
+    // Named mutant "MALFORMEDNOANALYSIS": drop the analyseRoutes call on this
+    // branch — the clause and the second hint below disappear.
     expect(row.status).toBe('warn');
-    expect(row.message).toBe("0 is not a positive integer — ignored; OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX 64000: each leg reserves min(64000, the ceiling the engine's catalog knows for it))");
+    expect(row.message.startsWith(MALFORMED_PLUS_AMBIENT_LEAD + '; 3 of 5 alias routes have a known catalog ceiling; 2 without one (')).toBe(true);
+    expect(row.hint).toBe('set outputBudget to a positive integer in /cfg/config.json, or remove it; lower the value if one of those routes is a model neither catalog knows (it receives it unclamped); amicus models --refresh if the catalog is just stale');
+  });
+
+  test('malformed budget with a VALID ambient flag that starves a route -> WARN naming the route and the ambient knob (r4 B1)', () => {
+    const only = ALIASES.filter((a) => ['kimi', 'glm'].includes(a.alias));
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 'lots', env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '100000' }, collectAliasSources: () => only }));
+    expect(row.status).toBe('warn');
+    expect(row.message).toContain('reserves at least half the context window of openrouter/z-ai/glm-5.3 (100000 of 131072)');
+    expect(row.hint).toBe('set outputBudget to a positive integer in /cfg/config.json, or remove it; lower OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX — input plus the reservation must fit the context window');
   });
 
   test('malformed budget with a MALFORMED ambient flag -> WARN naming both, default applies', () => {
@@ -237,6 +249,12 @@ describe('evaluateOutputBudget — a budget is configured', () => {
       env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' },
     }));
     expect(row.message).toContain('OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment is overridden by outputBudget for engines amicus starts');
+  });
+
+  test('a MALFORMED ambient flag alongside a configured budget -> ok, but the row says it is malformed and what an outside engine would do (r4 D1)', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000, env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000abc' } }));
+    expect(row.status).toBe('ok');
+    expect(row.message).toContain('; OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc in this environment is not a plain positive integer and is overridden by outputBudget for engines amicus starts (an engine started outside amicus would read it and fall back to 32000 silently)');
   });
 
   test('falls through to process.env only when no env is injected', () => {

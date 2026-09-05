@@ -20,7 +20,8 @@
  *     reservation from the window before compaction (read in the binary), so
  *     such a value starves the prompt.
  * A configured budget and a valid ambient flag get the SAME analysis: they
- * govern the same spawns (council #231 r2 D2).
+ * govern the same spawns (council #231 r2 D2). So does a valid ambient flag
+ * beside a malformed budget (r4 B1).
  */
 'use strict';
 
@@ -138,18 +139,30 @@ function evaluateOutputBudget(d) {
   const budget = normalizeOutputBudget(raw);
   if (budget === null) {
     // A malformed budget sets no flag (engine-output-flag.js), so whatever is
-    // ambient governs the spawn — the row has to say which value that leaves.
-    const then = ambient === undefined ? dflt
-      : (ambientBad ? `${dflt} (${ambientBadText})`
-        : `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX ${outputTokenFlagValue(ambientOk)}: each leg reserves min(${outputTokenFlagValue(ambientOk)}, the ceiling the engine's catalog knows for it))`);
+    // ambient governs the spawn — the row has to say which value that leaves,
+    // and a VALID ambient value gets the same route analysis a budget would
+    // (council #231 r4 B1). Named mutant "MALFORMEDNOANALYSIS": drop the
+    // analyseRoutes call below.
     // `getConfigDir` is always in the doctor deps; the fallback keeps a hand-built
     // deps object from printing "undefined/config.json" (council #231 r2 C2).
     const cfgDir = typeof d.getConfigDir === 'function' ? d.getConfigDir() : '~/.config/amicus';
-    return row('warn', `${JSON.stringify(raw)} is not a positive integer — ignored; ${then}`,
-      `set outputBudget to a positive integer in ${cfgDir}/config.json, or remove it`);
+    const fixHint = `set outputBudget to a positive integer in ${cfgDir}/config.json, or remove it`;
+    const lead = `${JSON.stringify(raw)} is not a positive integer — ignored; `;
+    if (ambient === undefined) { return row('warn', lead + dflt, fixHint); }
+    if (ambientBad) { return row('warn', `${lead}${dflt} (${ambientBadText})`, fixHint); }
+    const shownA = outputTokenFlagValue(ambientOk);
+    const a = analyseRoutes(d, d.readCache(), ambientOk, `lower ${OUTPUT_TOKEN_FLAG} — input plus the reservation must fit the context window`);
+    return row('warn',
+      `${lead}${OUTPUT_TOKEN_FLAG}=${ambient} in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX ${shownA}: each leg reserves min(${shownA}, the ceiling the engine's catalog knows for it))${a.clauses}`,
+      fixHint + (a.hint ? `; ${a.hint}` : ''));
   }
+  // A malformed ambient value never reaches an engine amicus starts — the
+  // budget overrides it — so the row stays ok, but it says the value is
+  // malformed rather than only "overridden" (council #231 r4 D1).
   const overridden = ambient === undefined ? ''
-    : `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is overridden by outputBudget for engines amicus starts`;
+    : (ambientBad
+      ? `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer and is overridden by outputBudget for engines amicus starts (an engine started outside amicus would read it and fall back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently)`
+      : `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is overridden by outputBudget for engines amicus starts`);
   // normalizeOutputBudget floors a fractional number; say so rather than report
   // a value the user never typed as if they had (council #231 B2).
   const floored = (typeof raw === 'number' && raw !== budget) ? ` (floored from ${raw})` : '';

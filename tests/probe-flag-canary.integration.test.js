@@ -9,7 +9,7 @@
  * and fails if any cell moved: A (bare row, the 32000 default), C3 (flag 64000
  * on a bare row the engine knows), K6 (flag 100000 with a matching descriptor),
  * K12 (flag 8000 lowering a bare row), K13 (flag 8000 on a model neither
- * catalog knows, passed through as-is). Five engine starts, about a minute,
+ * catalog knows, passed through as-is). Five engine starts — about 15 seconds here, up to a minute on a slow runner —
  * zero spend. Integration tier: CI's keyless job runs it on every push, so an
  * engine bump that drops or renames OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
  * turns that job red instead of silently reverting every budget above 32000.
