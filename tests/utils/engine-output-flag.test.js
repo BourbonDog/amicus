@@ -37,9 +37,10 @@ describe('outputTokenFlagValue', () => {
     expect(outputTokenFlagValue(40000.9)).toBe('40000');
   });
 
-  test('a budget at or above 1e21 sets no flag — String() would give exponent form', () => {
-    expect(outputTokenFlagValue(1e21)).toBeNull();
-    expect(outputTokenFlagValue(999999999999999999999)).toBeNull();
+  test('a budget at or above 1e21 still sets the flag, as plain digits (council #231 B1)', () => {
+    expect(outputTokenFlagValue(1e21)).toBe('1000000000000000000000');
+    expect(outputTokenFlagValue(1e21)).toMatch(/^\d+$/);
+    expect(outputTokenFlagValue(999999999999999868928)).toBe('999999999999999900000'); // the largest double below 1e21: plain digits without BigInt
   });
 });
 

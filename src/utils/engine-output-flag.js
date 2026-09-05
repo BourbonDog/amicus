@@ -43,18 +43,21 @@ const ENGINE_DEFAULT_OUTPUT_TOKENS = 32000;
 
 /**
  * The flag value a budget produces, or null when no flag should be set.
- * normalizeOutputBudget's acceptance rule (a positive finite integer, floored)
- * plus one of its own: below 1e21, since a larger value would stringify in
- * exponent form; everything else is "no flag".
+ * Exactly normalizeOutputBudget's acceptance rule (a positive finite integer,
+ * floored), rendered as plain decimal digits even above 1e21; everything else
+ * is "no flag".
  * @param {*} budget raw or normalized outputBudget
  * @returns {string|null}
  */
 function outputTokenFlagValue(budget) {
   const n = positiveCount(budget);
-  // String(1e21) is '1e+21' — not the plain decimal integer the engine is
-  // measured to honour (doctor-output-budget-check.js gates on /^\d+$/ for the
-  // same reason). An absurd budget sets no flag rather than a malformed one.
-  return (n === null || n >= 1e21) ? null : String(n);
+  if (n === null) { return null; }
+  // String(1e21) is '1e+21', which the engine would read as malformed (D1) and
+  // the doctor row would report as unmeasured. BigInt renders every
+  // integer-valued double as plain digits, so the flag always has the one shape
+  // measured to be honoured and a configured budget is never silently dropped
+  // (council #231 B1/C2).
+  return n >= 1e21 ? BigInt(n).toString() : String(n);
 }
 
 /**

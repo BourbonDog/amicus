@@ -140,6 +140,23 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.message).toBe('budget 40000 — each leg reserves min(40000, its ceiling where one is known); 2 of 2 alias routes have a known catalog ceiling');
   });
 
+  test('a fractional budget is floored and the row says so (council #231 B2)', () => {
+    const only = ALIASES.filter((a) => ['kimi', 'haiku'].includes(a.alias));
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000.7, collectAliasSources: () => only }));
+    expect(row.status).toBe('ok');
+    expect(row.message).toBe('budget 8000 (floored from 8000.7) — each leg reserves min(8000, its ceiling where one is known); 2 of 2 alias routes have a known catalog ceiling');
+  });
+
+  test('a budget at or above 1e21 prints as plain digits, the same form the flag carries (council #231 B1/C2 follow-up)', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 1e21, readCache: () => null }));
+    expect(row.message.startsWith('budget 1000000000000000000000 — each leg reserves min(1000000000000000000000, its ceiling where one is known); no catalog cache')).toBe(true);
+    expect(row.message).not.toContain('e+21');
+  });
+  test('the floored note also prints on the no-cache branch', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000.7, readCache: () => null }));
+    expect(row.message.startsWith('budget 8000 (floored from 8000.7) — each leg reserves min(8000, its ceiling where one is known); no catalog cache')).toBe(true);
+  });
+
   test('a reservation of at least half a route\'s context window -> WARN naming the route and the numbers', () => {
     const only = ALIASES.filter((a) => ['kimi', 'glm'].includes(a.alias));
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 100000, collectAliasSources: () => only }));

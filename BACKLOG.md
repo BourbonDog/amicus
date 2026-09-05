@@ -7079,11 +7079,19 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
   `max_tokens` levers measured only in isolation. Thirteen cases (K1–K13) were added to
   `scripts/probe-max-tokens.js` and the whole 32-case matrix re-run under the same sandbox
   (`sandbox:` line: eleven absent names; engine 1.18.15 / sdk 1.18.15 / server 1.18.15; 32 started,
-  32 closed). The first nineteen table rows diff byte-identical against the P1 record above; the
-  `/config/providers` dump differs in two lines. Qwen's, for the reason in the next paragraph; and
-  kimi's, whose `limit.output` the engine now reports as 943718 — live models.dev's figure — where
-  the P1 run's engine copy reported 1048576 (C3's title still names that earlier report). No row in
-  either matrix depends on kimi's ceiling: every kimi case sits far below both numbers.
+  32 closed). The first nineteen table rows diff byte-identical against the P1 record above. The
+  `/config/providers` dump differs from P1's in one line for a real reason — qwen's, explained in
+  the next paragraph — and kimi's line is NOT stable from run to run: the engine's
+  `/config/providers` read races its own startup models.dev refresh in a fresh sandbox HOME, so it
+  reports the bundled catalogue's `limit.output 1048576` before the refresh lands and live
+  models.dev's 943718 after it (observed 1048576 in the P1 run, 943718 in this record's first
+  filing, 1048576 in the re-run filed below; live models.dev read 943718 throughout). No row in
+  either matrix depends on kimi's ceiling — every kimi case sits far below both numbers — and the
+  dump is filed exactly as the run below reported it. A future filing should expect that line to
+  differ and say which value it saw, not treat the flip as a catalogue change. K9's `expected` cell
+  was reworded after council #231 round 1 (C1: the engine's 32000 default does cap a 40000
+  descriptor — only the SUM sits under the ceiling); the table below is the re-run made with that
+  wording, every other cell unchanged, diffed programmatically.
 
   **The run itself caught an external change first.** The first full run mismatched one row, F4 —
   qwen's `variant: 'medium'` put no `reasoning` on the wire, and the qwen dump line read
@@ -7165,14 +7173,14 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
 | K6 | env 100000 + limit.output 100000 (kimi) | 100000 — the shipped budget-100000 shape raises the reservation | 100000 | /api/v1/chat/completions | 100000 | — | — | 204 | length | — | — |
 | K7 | env 64000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the flag (amicus never emits it) | 64000 | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
 | K8 | limit.output 8000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the descriptor (amicus never emits it) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
-| K9 | direct anthropic haiku limit.output 40000 + variant 'max' | 63999 = min(40000, 32000) + 31999 — under the ceiling, nothing clamps | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| K9 | direct anthropic haiku limit.output 40000 + variant 'max' | 63999 = min(40000, 32000) + 31999 — the default caps the descriptor at 32000; the sum sits under the ceiling and is left alone | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
 | K10 | direct anthropic haiku limit.output 70000 + env 100000 + variant 'max' | 64000 — 70000 + 31999 clamped to the ceiling, not to the descriptor | 100000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
 | K11 | env 8000 + direct anthropic haiku limit.output 8000 + variant 'high' | 24000 = 8000 + 16000 — the shipped budget-8000 shape with a thinking variant | 8000 | /v1/messages | 24000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
 | K12 | env 8000 + bare {} (kimi) | 8000 — the flag lowers a row the amicus catalog cannot clamp | 8000 | /api/v1/chat/completions | 8000 | — | — | 204 | length | — | — |
 | K13 | env 8000 + custom unknown model {} | 8000 — a model neither catalog knows receives the budget as-is | 8000 | /v1/chat/completions | 8000 | — | — | 204 | length | — | — |
 
 /config/providers per model:
-- openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":943718},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
+- openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":1048576},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
 - openrouter/qwen/qwen3.8-max-0902: {"fromCase":"F4","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1000000,"output":131072},"variants":{"minimal":{"reasoning":{"effort":"minimal"}},"low":{"reasoning":{"effort":"low"}},"medium":{"reasoning":{"effort":"medium"}},"high":{"reasoning":{"effort":"high"}},"xhigh":{"reasoning":{"effort":"xhigh"}}},"options":{}}
 - anthropic/claude-haiku-4-5: {"fromCase":"H1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":200000,"output":64000},"variants":{"high":{"thinking":{"type":"enabled","budgetTokens":16000}},"max":{"thinking":{"type":"enabled","budgetTokens":31999}}},"options":{}}
 - probe/unknown-model: {"fromCase":"J1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":0,"output":0},"variants":{},"options":{}}

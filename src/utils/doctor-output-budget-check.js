@@ -23,7 +23,7 @@
 'use strict';
 
 const { normalizeOutputBudget, buildLimitLookup, computeModelLimit, positiveCount } = require('./model-output-limit');
-const { OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS } = require('./engine-output-flag');
+const { OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS, outputTokenFlagValue } = require('./engine-output-flag');
 
 const ID = 'output-budget';
 const NAME = 'Output budget';
@@ -63,7 +63,7 @@ function evaluateOutputBudget(d) {
     if (ambient === undefined) { return row('ok', `not set — ${dflt}`); }
     return ambientBad
       ? row('warn', `not set — ${ambientBadText}`, ambientHint)
-      : row('ok', `not set — ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment sets the engine's OUTPUT_TOKEN_MAX to ${ambientOk} (its default is ${ENGINE_DEFAULT_OUTPUT_TOKENS}): each leg reserves min(${ambientOk}, the ceiling the engine's catalog knows for it), and ${ambientOk} as-is on a model it does not know`);
+      : row('ok', `not set — ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment sets the engine's OUTPUT_TOKEN_MAX to ${outputTokenFlagValue(ambientOk)} (its default is ${ENGINE_DEFAULT_OUTPUT_TOKENS}): each leg reserves min(${outputTokenFlagValue(ambientOk)}, the ceiling the engine's catalog knows for it), and ${outputTokenFlagValue(ambientOk)} as-is on a model it does not know`);
   }
 
   const budget = normalizeOutputBudget(raw);
@@ -72,13 +72,17 @@ function evaluateOutputBudget(d) {
     // ambient governs the spawn — the row has to say which value that leaves.
     const then = ambient === undefined ? dflt
       : (ambientBad ? `${dflt} (${ambientBadText})`
-        : `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX ${ambientOk}: each leg reserves min(${ambientOk}, the ceiling the engine's catalog knows for it))`);
+        : `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment governs engines amicus starts (OUTPUT_TOKEN_MAX ${outputTokenFlagValue(ambientOk)}: each leg reserves min(${outputTokenFlagValue(ambientOk)}, the ceiling the engine's catalog knows for it))`);
     return row('warn', `${JSON.stringify(raw)} is not a positive integer — ignored; ${then}`,
       `set outputBudget to a positive integer in ${d.getConfigDir()}/config.json, or remove it`);
   }
   const overridden = ambient === undefined ? ''
     : `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is overridden by outputBudget for engines amicus starts`;
   const aboveDefault = budget > ENGINE_DEFAULT_OUTPUT_TOKENS;
+  // normalizeOutputBudget floors a fractional number; say so rather than report
+  // a value the user never typed as if they had (council #231 B2).
+  const floored = (typeof raw === 'number' && raw !== budget) ? ` (floored from ${raw})` : '';
+  const shown = outputTokenFlagValue(budget); // plain digits even above 1e21, the same form the flag carries
 
   const cache = d.readCache();
   if (!cache || !Array.isArray(cache.models)) {
@@ -88,7 +92,7 @@ function evaluateOutputBudget(d) {
     // ceiling — the same gate as the unclamped-routes case below.
     // Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
     return row(aboveDefault ? 'warn' : 'ok',
-      `budget ${budget} — each leg reserves min(${budget}, its ceiling where one is known); no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${budget} as-is)${overridden}`,
+      `budget ${shown}${floored} — each leg reserves min(${shown}, its ceiling where one is known); no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is)${overridden}`,
       aboveDefault ? 'amicus models --refresh' : null);
   }
 
@@ -104,11 +108,11 @@ function evaluateOutputBudget(d) {
     if (limit.output * 2 >= limit.context) { starved.push(`${id} (${limit.output} of ${limit.context})`); }
   }
 
-  let message = `budget ${budget} — each leg reserves min(${budget}, its ceiling where one is known); ${routes.length - unclamped.length} of ${routes.length} alias routes have a known catalog ceiling`;
+  let message = `budget ${shown}${floored} — each leg reserves min(${shown}, its ceiling where one is known); ${routes.length - unclamped.length} of ${routes.length} alias routes have a known catalog ceiling`;
   let status = 'ok';
   let hint = null;
   if (unclamped.length > 0) {
-    message += `; ${unclamped.length} without one (${shortList(unclamped)}) — the engine clamps those its own catalog knows, an unknown model receives ${budget} as-is`;
+    message += `; ${unclamped.length} without one (${shortList(unclamped)}) — the engine clamps those its own catalog knows, an unknown model receives ${shown} as-is`;
     // At or below the default the flag never raises what the engine sends
     // (K12); above it an unknown model is the one place the number goes out
     // unclamped (J2/K13), so that is the only case worth a warning.
