@@ -10,7 +10,32 @@ const https = require('https');
 
 jest.mock('https');
 
-const { httpGetText, getJson, DEFAULT_TIMEOUT_MS } = require('../../src/utils/http-get');
+const { httpGetText, getJson, DEFAULT_TIMEOUT_MS, DEFAULT_MAX_BYTES, MAX_REDIRECTS } = require('../../src/utils/http-get');
+
+/**
+ * Serve a SCRIPTED sequence, one entry per https.get call (the last entry
+ * repeats, so a one-entry sequence is an endless loop). Returns the array the
+ * requested URLs are pushed into, which is how a hop count is asserted.
+ * @param {Array<{status?: number, body?: string, headers?: object}>} seq
+ * @returns {string[]}
+ */
+function mockSequence(seq) {
+  const urls = [];
+  https.get.mockImplementation((url, _opts, cb) => {
+    urls.push(url);
+    const o = seq[Math.min(urls.length - 1, seq.length - 1)];
+    const req = new EventEmitter();
+    req.destroy = jest.fn();
+    const res = new EventEmitter();
+    res.statusCode = o.status === undefined ? 200 : o.status;
+    res.headers = o.headers || {};
+    res.setEncoding = jest.fn();
+    cb(res);
+    process.nextTick(() => { if (o.body) { res.emit('data', o.body); } res.emit('end'); });
+    return req;
+  });
+  return urls;
+}
 
 /** @param {{status?: number, body?: string, error?: Error, hang?: boolean, hangBody?: boolean}} o */
 function mockGet(o = {}) {
@@ -100,6 +125,59 @@ describe('httpGetText', () => {
     await expect(httpGetText('not a url')).resolves.toEqual({
       ok: false, failure: { reason: 'network-error', detail: 'Invalid URL' },
     });
+  });
+
+  // Council #230 A2: a redirect on models.dev/api.json used to be a terminal
+  // http-status failure, so a domain move would silently stop filling ceilings.
+  it('follows a 302 to the final 200 body', async () => {
+    const urls = mockSequence([
+      { status: 302, headers: { location: 'https://y.test/moved.json' } },
+      { body: '{"final":true}' },
+    ]);
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({ ok: true, body: '{"final":true}' });
+    expect(urls).toEqual(['https://x.test/y', 'https://y.test/moved.json']);
+  });
+
+  it('resolves a relative Location against the URL that produced it', async () => {
+    const urls = mockSequence([
+      { status: 301, headers: { location: '/moved.json' } },
+      { body: 'ok' },
+    ]);
+    await expect(httpGetText('https://x.test/a/b')).resolves.toEqual({ ok: true, body: 'ok' });
+    expect(urls[1]).toBe('https://x.test/moved.json');
+  });
+
+  it('gives up after two hops rather than chasing a redirect loop', async () => {
+    const urls = mockSequence([{ status: 302, headers: { location: 'https://x.test/y' } }]);
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({
+      ok: false, failure: { reason: 'http-status', status: 302, detail: 'redirect limit reached' },
+    });
+    expect(urls).toHaveLength(MAX_REDIRECTS + 1);
+  });
+
+  it('refuses a redirect that downgrades to http and never re-sends the headers', async () => {
+    const urls = mockSequence([{ status: 302, headers: { location: 'http://x.test/y' } }]);
+    await expect(httpGetText('https://x.test/y', { headers: { Authorization: 'Bearer t' } })).resolves.toEqual({
+      ok: false, failure: { reason: 'http-status', status: 302, detail: 'redirect to non-https location' },
+    });
+    expect(urls).toHaveLength(1);
+  });
+
+  it('reports a 3xx with no Location rather than hanging', async () => {
+    mockSequence([{ status: 307 }]);
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({
+      ok: false, failure: { reason: 'http-status', status: 307, detail: 'redirect without Location' },
+    });
+  });
+
+  // Council #230 B3: the body was accumulated into a string with no bound.
+  it('destroys the request and reports too-large when the body passes maxBytes', async () => {
+    const req = mockGet({ body: 'x'.repeat(20) });
+    await expect(httpGetText('https://x.test/y', { maxBytes: 8 })).resolves.toEqual({
+      ok: false, failure: { reason: 'too-large', detail: 'body exceeded 8 bytes' },
+    });
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+    expect(DEFAULT_MAX_BYTES).toBe(16 * 1024 * 1024);
   });
 
   it('decodes the body once at the stream rather than per chunk', async () => {

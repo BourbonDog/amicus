@@ -37,6 +37,13 @@
  * Re-run after every engine bump: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX is an
  * experimental flag, and the effort table changed between 1.2.20 and 1.18.15.
  * The header line names the engine version and binary that served the run.
+ *
+ * THE RUN CHECKS ITSELF (council #230 C2). Every case carries a machine-readable
+ * `want` holding the behaviour currently MEASURED and filed in the BACKLOG
+ * "v4.9.4 records" P1 table. After the table and the dump the run prints
+ * `checks: N matched, N mismatched (ids), N recorded` and exits 1 if anything
+ * moved — so an engine bump that changes the wire fails the run instead of
+ * printing a new table under the old prose.
  */
 
 'use strict';
@@ -335,30 +342,49 @@ async function send(client, captures, c) {
 
 // ---------------------------------------------------------------- case matrix
 const CTX = 1048576;
+
+/**
+ * The machine-readable half of a case's expectation (council #230 C2). `expect`
+ * is prose for the table; `want` is what the run actually CHECKS, and every
+ * value here is the CURRENTLY MEASURED behaviour of the pinned engine as filed
+ * in the BACKLOG "v4.9.4 records" P1 table — not a prediction. That is the
+ * point: an engine bump that moves any of these numbers fails the run instead
+ * of quietly re-filing a new table.
+ * @param {number|null} maxTokens the body's max_tokens, compared exactly
+ * @param {object|null} [reasoning] the body's `reasoning` (else `reasoning_effort`), deep-equal
+ * @param {'any'|null} [thinking] present/absent only — the budget rides in maxTokens
+ * @returns {{maxTokens: number|null, reasoning: object|null, thinking: 'any'|null}}
+ */
+const W = (maxTokens, reasoning = null, thinking = null) => ({ maxTokens, reasoning, thinking });
+const LOW = { effort: 'low' };
+
 const CASES = [
-  { id: 'A',  title: 'bare {} descriptor', or: { [KIMI]: {} }, model: OR(KIMI), expect: 'max_tokens 32000, no reasoning' },
-  { id: 'B',  title: 'limit.output 4096', or: { [KIMI]: { limit: { context: CTX, output: 4096 } } }, model: OR(KIMI), expect: '4096' },
-  { id: 'C1', title: 'env 64000 + limit.output 100000', env: '64000', or: { [KIMI]: { limit: { context: CTX, output: 100000 } } }, model: OR(KIMI), expect: '64000' },
-  { id: 'C2', title: 'env 64000 + limit.output 50000', env: '64000', or: { [QWEN]: { limit: { context: 1000000, output: 50000 } } }, model: OR(QWEN), expect: '50000' },
-  { id: 'C3', title: 'env 64000 + bare {} (engine reports ceiling 1048576)', env: '64000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '64000' },
-  { id: 'D1', title: 'env 64000abc (malformed)', env: '64000abc', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000 silently' },
-  { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000' },
-  { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped")' },
-  { id: 'E2', title: 'options.reasoning {effort:low}', or: { [KIMI]: { options: { reasoning: { effort: 'low' } } } }, model: OR(KIMI), expect: 'reasoning effort low on the wire' },
-  { id: 'F1', title: 'amicus sendPrompt today: body.reasoning {effort:low}', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire' },
-  { id: 'F2', title: "prompt variant 'low' (kimi: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'low' }, expect: 'reasoning effort low' },
-  { id: 'F3', title: "prompt variant 'medium' (kimi has no medium)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'medium' }, expect: 'record: silent no-op or error' },
-  { id: 'F4', title: "prompt variant 'medium' (qwen has medium)", or: { [QWEN]: {} }, model: OR(QWEN), extra: { variant: 'medium' }, expect: 'reasoning effort medium' },
-  { id: 'H1', title: 'direct anthropic haiku {}', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '32000' },
-  { id: 'H2', title: 'direct anthropic haiku {} + env 64000', env: '64000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '64000 (engine ceiling 64000)' },
-  { id: 'H3', title: "direct anthropic haiku variant 'high'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, expect: 'thinking budget_tokens 16000' },
+  { id: 'A',  title: 'bare {} descriptor', or: { [KIMI]: {} }, model: OR(KIMI), expect: 'max_tokens 32000, no reasoning', want: W(32000) },
+  { id: 'B',  title: 'limit.output 4096', or: { [KIMI]: { limit: { context: CTX, output: 4096 } } }, model: OR(KIMI), expect: '4096', want: W(4096) },
+  { id: 'C1', title: 'env 64000 + limit.output 100000', env: '64000', or: { [KIMI]: { limit: { context: CTX, output: 100000 } } }, model: OR(KIMI), expect: '64000', want: W(64000) },
+  { id: 'C2', title: 'env 64000 + limit.output 50000', env: '64000', or: { [QWEN]: { limit: { context: 1000000, output: 50000 } } }, model: OR(QWEN), expect: '50000', want: W(50000) },
+  { id: 'C3', title: 'env 64000 + bare {} (engine reports ceiling 1048576)', env: '64000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '64000', want: W(64000) },
+  { id: 'D1', title: 'env 64000abc (malformed)', env: '64000abc', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000 silently', want: W(32000) },
+  { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000', want: W(32000) },
+  { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped")', want: W(4096) },
+  { id: 'E2', title: 'options.reasoning {effort:low}', or: { [KIMI]: { options: { reasoning: { effort: 'low' } } } }, model: OR(KIMI), expect: 'reasoning effort low on the wire', want: W(32000, LOW) },
+  { id: 'F1', title: 'amicus sendPrompt today: body.reasoning {effort:low}', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire', want: W(32000) },
+  { id: 'F2', title: "prompt variant 'low' (kimi: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'low' }, expect: 'reasoning effort low', want: W(32000, LOW) },
+  // F3's expectation — "silent no-op OR error" — is satisfied by either outcome,
+  // so it cannot fail. `want: 'record'` says so out loud instead of letting a
+  // hand-written pass/fail pretend the row was checked.
+  { id: 'F3', title: "prompt variant 'medium' (kimi has no medium)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'medium' }, expect: 'record: silent no-op or error', want: 'record' },
+  { id: 'F4', title: "prompt variant 'medium' (qwen has medium)", or: { [QWEN]: {} }, model: OR(QWEN), extra: { variant: 'medium' }, expect: 'reasoning effort medium', want: W(32000, { effort: 'medium' }) },
+  { id: 'H1', title: 'direct anthropic haiku {}', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '32000', want: W(32000) },
+  { id: 'H2', title: 'direct anthropic haiku {} + env 64000', env: '64000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '64000 (engine ceiling 64000)', want: W(64000) },
+  { id: 'H3', title: "direct anthropic haiku variant 'high'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, expect: 'thinking budget_tokens 16000', want: W(48000, null, 'any') },
   // H4 is the SECOND data point H3 needs. H3 alone (32000 default + 16000 budget
   // = 48000 on the wire) cannot separate "the budget is added to the default"
   // from "variant 'high' just sets 48000 for this model". The dump says haiku's
   // 'max' variant is budgetTokens 31999, so the additive rule predicts 63999.
-  { id: 'H4', title: "direct anthropic haiku variant 'max'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'max' }, expect: 'thinking budget_tokens 31999; max_tokens 63999 if additive' },
-  { id: 'J1', title: 'custom openai-compatible unknown model {}', custom: true, model: CUSTOM, expect: '32000' },
-  { id: 'J2', title: 'custom unknown model + env 64000', env: '64000', custom: true, model: CUSTOM, expect: '64000 (raw budget, nothing to clamp)' },
+  { id: 'H4', title: "direct anthropic haiku variant 'max'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'max' }, expect: 'thinking budget_tokens 31999; max_tokens 63999 if additive', want: W(63999, null, 'any') },
+  { id: 'J1', title: 'custom openai-compatible unknown model {}', custom: true, model: CUSTOM, expect: '32000', want: W(32000) },
+  { id: 'J2', title: 'custom unknown model + env 64000', env: '64000', custom: true, model: CUSTOM, expect: '64000 (raw budget, nothing to clamp)', want: W(64000) },
 ];
 
 function wireSummary(wire) {
@@ -395,7 +421,7 @@ function cell(v) {
  * serves this case is still alive -- the finally below kills it.
  */
 async function runCase(sdk, cap, c, engines, providers) {
-  const base = { id: c.id, title: c.title, expect: c.expect, env: c.env ?? null };
+  const base = { id: c.id, title: c.title, expect: c.expect, want: c.want ?? null, env: c.env ?? null };
   let handle = null;
   try {
     handle = await startEngine(sdk, buildConfig(cap.origin, c), c.env);
@@ -413,6 +439,46 @@ async function runCase(sdk, cap, c, engines, providers) {
       try { handle.server.close(); engines.closed += 1; } catch (err) { engines.closeErrors.push(`${c.id}: ${err.message}`); }
     }
   }
+}
+
+/**
+ * One row's verdict against its `want`. `reasoning` is compared against the SAME
+ * merged value the table prints (`reasoning`, else `reasoning_effort`), so the
+ * checks line and the table can never disagree; `thinking` is present/absent
+ * only, because the budget itself is already pinned through `maxTokens`.
+ * A case with no `want` at all is a MISMATCH, not a free pass — a matrix entry
+ * that forgets its expectation is exactly the hole this check exists to close.
+ * @param {object} r a runCase() result
+ * @returns {'matched'|'mismatched'|'recorded'}
+ */
+function checkRow(r) {
+  if (r.want === 'record') { return 'recorded'; }
+  if (!r.want || typeof r.want !== 'object') { return 'mismatched'; }
+  const w = wireSummary(r.wire);
+  const reasoning = w.reasoning ?? w.reasoningEffort ?? null;
+  const ok = w.maxTokens === r.want.maxTokens
+    && JSON.stringify(reasoning) === JSON.stringify(r.want.reasoning ?? null)
+    && (w.thinking !== null) === (r.want.thinking === 'any');
+  return ok ? 'matched' : 'mismatched';
+}
+
+/**
+ * The one machine-readable verdict line. Nothing else in this script's output
+ * is checked by a machine, so this is what CI (or a human after an engine bump)
+ * reads, and a non-zero `mismatched` is what makes the run exit 1.
+ * @param {Array<object>} results
+ * @returns {{line: string, mismatched: number}}
+ */
+function checksLine(results) {
+  const bad = [];
+  let matched = 0;
+  let recorded = 0;
+  for (const r of results) {
+    const v = checkRow(r);
+    if (v === 'matched') { matched += 1; } else if (v === 'recorded') { recorded += 1; } else { bad.push(r.id); }
+  }
+  const ids = bad.length > 0 ? bad.join(',') : 'none';
+  return { line: `checks: ${matched} matched, ${bad.length} mismatched (${ids}), ${recorded} recorded`, mismatched: bad.length };
 }
 
 async function main() {
@@ -448,12 +514,16 @@ async function main() {
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
+  const checks = checksLine(results);
+  process.stdout.write(`\n${checks.line}\n`);
   process.stdout.write(`\nengines: ${engines.started} started, ${engines.closed} closed${engines.closeErrors.length ? ` (close errors: ${engines.closeErrors.join('; ')})` : ''}\n`);
   if (outPath) {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify({ engine, engines, providers, cases: results }, null, 2));
+    fs.writeFileSync(outPath, JSON.stringify({ engine, engines, providers, checks: checks.line, cases: results }, null, 2));
     process.stdout.write(`\nraw captures: ${outPath}\n`);
   }
+  // A moved cell is a FAILED run, not a new table to file.
+  if (checks.mismatched > 0) { process.exitCode = 1; }
 }
 
 if (process.argv.slice(2).includes(INNER)) {

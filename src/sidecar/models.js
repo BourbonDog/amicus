@@ -87,15 +87,17 @@ function fmtLiveSkipped(reason) {
 
 /**
  * How a ceiling-enrichment failure is worded, keyed by its `failure.reason`
- * (council #230 D4). `exception` — and any reason a later failure invents — is a
- * local bug, not a statement about models.dev, so it falls through to a neutral
- * lead instead of claiming the site was unreachable.
+ * (council #230 D4/C1). `http-status`, `parse-error`, `too-large` and
+ * `bad-shape` all mean models.dev ANSWERED; `exception` — and any reason a later
+ * failure invents — is a local bug, so it falls through to a neutral lead.
  */
 const CEILING_FAILURE_LEAD = {
   timeout: 'models.dev unreachable',
   'network-error': 'models.dev unreachable',
   'http-status': 'models.dev answered but could not be used',
   'parse-error': 'models.dev answered but could not be used',
+  'too-large': 'models.dev answered but could not be used',
+  'bad-shape': 'models.dev answered but could not be used',
 };
 
 /** #218 P3: one honest line about where the direct-provider ceilings came from. */

@@ -62,8 +62,9 @@ function limitsFromModelsDev(api) {
 /**
  * Fill contextLength / maxOutputTokens in place. A field is filled ONLY when the
  * provider gave no usable positive integer for it — `positiveCount(...) === null`,
- * i.e. null, 0, negative, fractional or non-numeric. A usable provider value is
- * never overwritten.
+ * i.e. null, 0, negative, below 1 or non-numeric. (`positiveCount` FLOORS, so
+ * 1.5 is a usable 1; only a fraction below 1 falls through.) A usable provider
+ * value is never overwritten.
  * @param {Array<object>} rows catalog rows (mutated)
  * @param {Map<string, {context: number|null, output: number|null}>} limits
  * @returns {{filled: number, alreadyKnown: number, unknown: number, skippedRouters: number, skippedLocal: number}}
@@ -100,6 +101,8 @@ function emptyOutcome(failure) {
 /**
  * Fetch models.dev and fill `rows`. ALWAYS resolves; the outcome travels with
  * the rows it describes (model-catalog.js persists it as ceilingEnrichment).
+ * Failure reasons are http-get's (`timeout`, `network-error`, `http-status`,
+ * `too-large`, `parse-error`) plus `bad-shape` and `exception`.
  * @param {Array<object>} rows catalog rows (mutated in place)
  * @param {{getJson?: Function}} [deps] test seam
  * @returns {Promise<{source: 'models.dev', failure: null|{reason: string, status?: number, detail?: string},
@@ -119,7 +122,16 @@ async function enrichCeilings(rows, deps = {}) {
   if (!res || !res.ok) {
     return emptyOutcome((res && res.failure) || { reason: 'exception', detail: 'no result' });
   }
-  return { source: 'models.dev', failure: null, ...fillCeilings(rows, limitsFromModelsDev(res.json)) };
+  const limits = limitsFromModelsDev(res.json);
+  // A 200 that parses but carries no recognised vendor limits — `{}`, an error
+  // object, a reshaped api.json — would otherwise persist as a SUCCESSFUL
+  // enrichment with every row `unknown`, silently leaving direct-provider
+  // ceilings unfilled and outputBudget unable to clamp them (council #230 C1).
+  // It is a failure, and the rows are not touched.
+  if (limits.size === 0) {
+    return emptyOutcome({ reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' });
+  }
+  return { source: 'models.dev', failure: null, ...fillCeilings(rows, limits) };
 }
 
 module.exports = { MODELS_DEV_URL, MODELS_DEV_TIMEOUT_MS, limitsFromModelsDev, fillCeilings, enrichCeilings, emptyOutcome };

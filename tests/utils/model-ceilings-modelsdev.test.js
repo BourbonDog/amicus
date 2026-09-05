@@ -77,7 +77,8 @@ describe('fillCeilings', () => {
     expect(counts.alreadyKnown).toBe(1);
   });
 
-  // Council #230 A1: the rule is `positiveCount(...) === null`, not `=== null`.
+  // Council #230 A1: the rule is `positiveCount(...) === null`, not a bare
+  // `row.X === null`.
   // A 0 or a negative provider value is unusable and IS filled — the contract
   // wording is "no usable positive integer", not "null".
   it('fills a 0 / negative provider value, because neither is a usable positive integer', () => {
@@ -132,6 +133,21 @@ describe('enrichCeilings', () => {
     const out = await enrichCeilings(rows, { getJson });
     expect(rows[0]).toEqual({ id: 'anthropic/claude-opus-5', contextLength: null });
     expect(out).toEqual({ source: 'models.dev', failure: { reason: 'timeout', detail: 'no response within 10000ms' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 });
+  });
+
+  // Council #230 C1: a 200 that PARSES but carries nothing usable used to be
+  // persisted as a successful enrichment with every row `unknown` — the rows
+  // silently kept no ceiling and `Ceilings:` claimed a clean run.
+  it('treats a 200 with no recognised vendor limits as a bad-shape failure and leaves rows untouched', async () => {
+    const getJson = jest.fn(async () => ({ ok: true, json: { error: 'nope' } }));
+    const row = { id: 'anthropic/claude-opus-5', contextLength: null, maxOutputTokens: null };
+    const out = await enrichCeilings([row], { getJson });
+    expect(row).toEqual({ id: 'anthropic/claude-opus-5', contextLength: null, maxOutputTokens: null });
+    expect(out).toEqual({
+      source: 'models.dev',
+      failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' },
+      filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0,
+    });
   });
 
   it('never rejects, even when the fetch throws', async () => {

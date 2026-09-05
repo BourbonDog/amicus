@@ -120,6 +120,23 @@ describe('amicus models', () => {
     expect(out).not.toContain('unreachable');
   });
 
+  // Council #230 C1: `bad-shape` (a 200 with no usable vendor limits) and
+  // `too-large` (http-get's new body cap) are both "it answered", never
+  // "unreachable" — an unmapped reason would fall through to the neutral lead.
+  it('--refresh words a bad-shape body as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (bad-shape: no recognised vendor limits in api.json); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh words an over-size body as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'too-large', detail: 'body exceeded 16777216 bytes' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (too-large: body exceeded 16777216 bytes)');
+    expect(out).not.toContain('unreachable');
+  });
+
   it('--refresh words an exception neutrally, blaming neither models.dev nor the network', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
