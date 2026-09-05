@@ -766,13 +766,25 @@ async function startServer(options = {}) {
     || await getCreateOpencodeServer();
   const serverOptions = buildServerOptions(options);
 
+  // #218 PR 2: the engine reads OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX from the
+  // env it is SPAWNED with, and the pinned SDK spreads process.env into that
+  // spawn synchronously, before its first await. So the flag is set around the
+  // synchronous call only and is restored before the promise is awaited — it
+  // never reaches the caller's env or any other child amicus starts. The budget
+  // comes from config here exactly as buildProviderModels reads it for the
+  // per-model descriptor, so the two levers cannot disagree (measured agreeing:
+  // probe rows C2, K6). Unit pin: tests/opencode-client-output-flag.test.js
+  // through the `_createOpencodeServer` seam; wire canary: probe K6/K12/K13.
+  const { withOutputTokenFlag } = require('./utils/engine-output-flag');
+  const { getOutputBudget } = require('./utils/config');
+
   // Measure the healthy path. The v4.5.2 timeout had to be sized from the
   // asymmetry of the failure (a slow start costs latency, a failed one costs a
   // review seat) because nothing recorded how long a GOOD start takes — so the
   // margin against the ceiling was unmeasurable on exactly the slow boxes that
   // needed it. Now it is one debug line, not an inference.
   const startedAt = Date.now();
-  const sdkServer = await createOpencodeServer(serverOptions);
+  const sdkServer = await withOutputTokenFlag(getOutputBudget(), () => createOpencodeServer(serverOptions));
   const { logger } = require('./utils/logger');
   logger.debug('OpenCode server started', {
     startMs: Date.now() - startedAt,
