@@ -10,10 +10,14 @@ All notable changes to Amicus are documented here. Format follows
 - **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
   `contextLength` / `maxOutputTokens` for `anthropic`, `openai` and `deepseek` rows from the keyless
   [models.dev](https://models.dev) index, and lifts Google's own `outputTokenLimit` first-party. The
-  provider's own number always wins; models.dev fills only what is null, never a zero, and never
-  the `openrouter/openrouter/*` meta-routers. The refresh prints the outcome (`Ceilings: …`) and
-  `--json` carries it as `ceilingEnrichment`. Effect: `outputBudget` can now clamp direct routes
-  too, which 4.9.3 documented as impossible because those lists "don't publish one".
+  provider's own number always wins; models.dev fills only fields the provider left empty or
+  unusable, never a zero, and never the `openrouter/openrouter/*` meta-routers. The models.dev call
+  is keyless, bounded by a 10 s timeout, and its failure is reported on the refresh line rather than
+  hidden. The refresh prints the outcome (`Ceilings: …`) and `--json` carries it as
+  `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
+  now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
+  direct routes once the catalog is refreshed — which 4.9.3 documented as impossible because those
+  lists "don't publish one".
 - **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
@@ -23,7 +27,9 @@ All notable changes to Amicus are documented here. Format follows
 
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) is
-  unchanged.
+  unchanged. A response-stream error mid-body and a synchronous throw from `https.get` (a URL it
+  cannot parse) now resolve as `network-error` instead of escaping the promise. Redirects are not
+  followed: a 3xx is an `http-status` failure, visible rather than silently chased.
 
 ## [4.9.3] - 2026-08-28
 

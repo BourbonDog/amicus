@@ -6941,9 +6941,11 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   models.dev publishes all of them keyless (anthropic 14/14, openai 42/47, google 39/39,
   deepseek 3/3, every `ANTHROPIC_MODELS` id). Measured before writing the fill rule: OpenRouter's
   `top_provider.max_completion_tokens` disagrees with models.dev on 24 of 344 openrouter rows, so
-  the provider's own value wins and models.dev fills nulls only; the 6 ceiling-less openrouter
-  rows are all `openrouter/openrouter/*` meta-routers (models.dev says 2,000,000 for `auto`) and
-  are skipped; models.dev carries `{context:0, output:0}` for openai image rows, never written.
+  the provider's own value wins and models.dev fills only fields the provider left empty or
+  unusable — null, 0, negative or malformed, never a usable positive integer; the 6 ceiling-less
+  openrouter rows are all `openrouter/openrouter/*` meta-routers (models.dev says 2,000,000 for
+  `auto`) and are skipped; models.dev carries `{context:0, output:0}` for openai image rows,
+  never written.
   Hooked at `model-catalog.js :: refreshCatalog` — the one seam the CLI, `setup` and the Electron
   refresh button share — after the floor-only check, in place on the written rows. The engine
   already merges models.dev limits into every `{}` descriptor, so this changes what AMICUS can
@@ -6960,17 +6962,26 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   ran its 19-case matrix against `opencode-ai 1.18.15` (sdk 1.18.15; the server reported 1.18.15),
   binary `C:\Users\sendt\code\amicus\node_modules\opencode-windows-x64\bin\opencode.exe`, every case
   under a throwaway keyless sandbox home built with `run-integration-keyless.js`'s `buildKeylessEnv()`,
-  which deletes every provider key name (current and legacy) and `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`,
-  and repoints `HOME`/`USERPROFILE`/`XDG_DATA_HOME`/`XDG_CONFIG_HOME`/`APPDATA` inside the sandbox —
-  those named channels, not "no credential of any kind". The final review found the engine's own
-  `OPENCODE_AUTH_CONTENT`/`OPENCODE_API_KEY`/`OPENCODE_CONFIG`/`OPENCODE_CONFIG_DIR` uncovered and
-  added them to the scrub; this run predates that, and the measurements are unaffected. Eighteen of the nineteen rows carry a falsifiable
-  `expected` value, and seventeen of those eighteen matched. The nineteenth row, F3, is excluded from
-  that count because its expectation — `record: silent no-op or error` — is satisfied by either
-  outcome and so cannot fail; what it actually observed is reported below. The one falsified row is
-  E1: `options.max_tokens: 4096` is NOT dropped — it reached the wire as `max_tokens 4096`, the same
-  number B's `limit.output` produced, so a descriptor's `options` block is a live lever on the ceiling
-  rather than inert.
+  which deletes every provider key name (current and legacy), `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`
+  and the engine's own `OPENCODE_AUTH_CONTENT`/`OPENCODE_API_KEY`/`OPENCODE_CONFIG`/
+  `OPENCODE_CONFIG_DIR`/`OPENCODE_CONFIG_CONTENT`, and repoints `HOME`/`USERPROFILE`/
+  `XDG_DATA_HOME`/`XDG_CONFIG_HOME`/`APPDATA` inside the sandbox — those named channels, not "no
+  credential of any kind". The first four engine channels came from the final review and
+  `OPENCODE_CONFIG_CONTENT` from the council review; the table below is the re-run made with all
+  five in place, and its `sandbox:` line enumerates all eleven names. Eighteen of the nineteen rows
+  carry a falsifiable `expected` value, and all eighteen matched. The nineteenth row, F3, is
+  excluded from that count because its expectation — `record: silent no-op or error` — is satisfied
+  by either outcome and so cannot fail; what it actually observed is reported below.
+
+  **E1 is a falsified PLAN prediction, not a row that passed.** The plan predicted
+  `32000 (dropped)`; the first run measured `max_tokens 4096` on the wire — the same number B's
+  `limit.output` produced — so a descriptor's `options` block is a live lever on the ceiling rather
+  than inert. The council review of PR 1 flagged that the shipped matrix still carried the falsified
+  string, so E1's `expected` was corrected to the measurement and the whole matrix re-run. E1's row
+  therefore restates its own measurement and is not independent evidence; the falsification is a
+  fact about the plan's fact 4, recorded here. Every other cell reproduced the earlier run
+  byte-for-byte — diffed programmatically, 21 table lines, one differing cell (E1's `expected`) —
+  and the `/config/providers` dump is byte-identical.
 
   **The thinking budget is ADDED to the default output budget — measured on two points, not one.**
   The same bare haiku descriptor sends `max_tokens 32000` with no variant (H1), `48000` with
@@ -7030,7 +7041,7 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
 | C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
 | D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
 | D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
-| E1 | options.max_tokens 4096 | 32000 (dropped) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| E1 | options.max_tokens 4096 | 4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped") | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
 | E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — | — |
 | F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
 | F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | low | — |

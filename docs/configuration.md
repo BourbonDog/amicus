@@ -91,11 +91,13 @@ Two limits worth knowing before you set it:
   compaction for those models. If you want neither effect, leave `outputBudget` unset.
 - **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
   it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's; the direct
-  `openai` / `anthropic` / `deepseek` rows (and any other row still missing a number, except the
-  `openrouter/openrouter/*` meta-routers and local-provider rows, which are never filled) are filled from
-  [models.dev](https://models.dev) at refresh, and the refresh output says how many were filled or why
-  none could be. A model neither source knows keeps the old behaviour rather than receiving a guessed
-  limit.
+  `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider left empty
+  or unusable — are filled from [models.dev](https://models.dev) at refresh. models.dev fills a
+  field only where the provider gave no usable positive integer (a null, a zero, a negative or a
+  malformed number), and never overwrites a usable provider value; the `openrouter/openrouter/*`
+  meta-routers and local-provider rows are never filled at all. The refresh output says how many
+  rows were filled or why none could be. A model neither source knows keeps the old behaviour
+  rather than receiving a guessed limit.
 
 This addresses reservation *rejections*. It does **not** stop a reasoning-heavy model from spending
 its whole allowance on reasoning and emitting nothing — that is governed by reasoning effort
