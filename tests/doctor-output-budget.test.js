@@ -48,10 +48,42 @@ describe('evaluateOutputBudget — nothing configured', () => {
     expect(row.message).toBe("not set — the engine default applies (OUTPUT_TOKEN_MAX 32000: each leg reserves min(32000, the ceiling the engine's catalog knows for it))");
   });
 
-  test('unset, ambient flag a plain integer -> ok, says what OUTPUT_TOKEN_MAX becomes and what each leg then reserves', () => {
-    const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' } }));
+  const AMBIENT_64000_LEAD = "not set — OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment sets the engine's OUTPUT_TOKEN_MAX to 64000 (its default is 32000): each leg reserves min(64000, the ceiling the engine's catalog knows for it), and 64000 as-is on a model it does not know";
+
+  test('unset, ambient 64000, every route has a ceiling -> ok, lead plus the route clause', () => {
+    const only = ALIASES.filter((a) => ['kimi', 'haiku'].includes(a.alias));
+    const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' }, collectAliasSources: () => only }));
     expect(row.status).toBe('ok');
-    expect(row.message).toBe("not set — OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment sets the engine's OUTPUT_TOKEN_MAX to 64000 (its default is 32000): each leg reserves min(64000, the ceiling the engine's catalog knows for it), and 64000 as-is on a model it does not know");
+    expect(row.message).toBe(AMBIENT_64000_LEAD + '; 2 of 2 alias routes have a known catalog ceiling');
+    expect(row.hint).toBeNull();
+  });
+
+  // Named mutant "AMBIENTNOANALYSIS": return row('ok', lead) without analyseRoutes
+  // on the ambient path — the two tests below turn ok.
+  test('unset, ambient ABOVE the default with routes the catalog cannot clamp -> WARN, same rule as a budget (D2)', () => {
+    const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' } }));
+    expect(row.status).toBe('warn');
+    expect(row.message.startsWith(AMBIENT_64000_LEAD + '; 3 of 5 alias routes have a known catalog ceiling; 2 without one (')).toBe(true);
+    expect(row.message).toContain('an unknown model receives 64000 as-is');
+    expect(row.hint).toContain('amicus models --refresh');
+  });
+
+  test('unset, ambient value that starves a route -> WARN naming the route and the ambient knob (D2)', () => {
+    const only = ALIASES.filter((a) => ['kimi', 'glm'].includes(a.alias));
+    const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '100000' }, collectAliasSources: () => only }));
+    expect(row.status).toBe('warn');
+    expect(row.message).toContain('reserves at least half the context window of openrouter/z-ai/glm-5.3 (100000 of 131072)');
+    expect(row.hint).toBe('lower OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX — input plus the reservation must fit the context window');
+  });
+
+  test('unset, ambient above the default with no catalog cache -> WARN with the refresh hint; below it -> ok', () => {
+    const above = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' }, readCache: () => null }));
+    expect(above.status).toBe('warn');
+    expect(above.message).toContain('; no catalog cache, so no route has a known ceiling here');
+    expect(above.hint).toBe('amicus models --refresh');
+    const below = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '8000' }, readCache: () => null }));
+    expect(below.status).toBe('ok');
+    expect(below.hint).toBeNull();
   });
 
   test('unset, ambient flag BELOW the default -> ok, still "sets", never "raises"', () => {
@@ -61,9 +93,9 @@ describe('evaluateOutputBudget — nothing configured', () => {
     expect(row.message).not.toContain('raises');
   });
 
-  // Named mutant "AMBIENTUNCHECKED": replace the /^\d+$/ gate + positiveCount
+  // Named mutant "AMBIENTUNCHECKED": replace the /^[1-9]\d*$/ gate + positiveCount
   // with `Number(ambient) || 1` — every row below turns ok.
-  test.each(['64000abc', '0', '-5', '', ' 64000 ', '1e5', '0x10', '64000.7'])(
+  test.each(['64000abc', '0', '-5', '', ' 64000 ', '1e5', '0x10', '64000.7', '064000'])(
     'unset, ambient flag %p not a plain positive integer -> WARN: unmeasured form, engine falls back silently (D1/D2)', (v) => {
       const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: v } }));
       expect(row.status).toBe('warn');
@@ -94,6 +126,11 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.status).toBe('warn');
     expect(row.message).toContain('"lots" is not a positive integer — ignored; the engine default applies (OUTPUT_TOKEN_MAX 32000');
     expect(row.message).toContain('(OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc in this environment is not a plain positive integer');
+  });
+
+  test('a deps object without getConfigDir still prints a usable hint (council #231 r2 C2)', () => {
+    const d = deps({ readOutputBudgetRaw: () => 'lots' }); delete d.getConfigDir;
+    expect(evaluateOutputBudget(d).hint).toBe('set outputBudget to a positive integer in ~/.config/amicus/config.json, or remove it');
   });
 
   // Named mutant "NOCACHEALWAYSWARN": make the no-cache branch warn regardless

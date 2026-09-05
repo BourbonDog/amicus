@@ -68,6 +68,14 @@ All notable changes to Amicus are documented here. Format follows
   so a refused 3xx whose body never ends cannot hold the socket open after the promise has settled. Response bodies are capped at 16 MiB
   (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
 
+### Fixed
+
+- **The curated `qwen` alias pointed at a model OpenRouter no longer lists.** Between 2026-09-04 and
+  2026-09-05 both OpenRouter and models.dev renamed `qwen/qwen3.8-max` to `qwen/qwen3.8-max-0902`;
+  the #218 PR 2 probe run caught it (a variant sent for the old id went silent, and its ceiling read
+  `0/0`). The pin now names the dated id. Found and fixed in PR #231; the CI bench map already
+  pinned `qwen3.8-27b` and is unchanged.
+
 ## [4.9.3] - 2026-08-28
 
 *Doctor stops vouching for things it never checked.*

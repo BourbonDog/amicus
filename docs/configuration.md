@@ -110,7 +110,9 @@ and PR 2).
   unset and overridden (for Amicus-started engines only) when it is set. A budget of 100,000 on a
   model with a 943,718 ceiling reserves 100,000 (K6); on a model whose ceiling is 64,000 it
   reserves 64,000 (K5). The flag is experimental on the engine's side, and a malformed value is
-  ignored without a word (D1/D2): re-run the probe after every engine bump.
+  ignored without a word (D1/D2): re-run the probe after every engine bump. An SDK bump is
+  covered by a test that drives the real SDK against a fake engine and checks the flag reached the
+  spawn.
 - **It clamps best with a catalog that knows each model's ceiling.** Run `amicus models --refresh`
   after setting it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's;
   the direct `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider

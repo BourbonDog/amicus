@@ -215,7 +215,7 @@ describe('Sidecar Config Module', () => {
     it('should map all qwen variants correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.8-max');
+      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
       expect(aliases['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
       expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     });

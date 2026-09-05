@@ -120,7 +120,7 @@ describe('toLiveSeedAliases', () => {
     // and even if it were, stripGatewayPrefix leaves non-direct vendors
     // openrouter/-prefixed — stays pinned + openrouter/-prefixed regardless
     // of the live catalog containing a qwen row.
-    expect(seeds.qwen).toBe('openrouter/qwen/qwen3.8-max');
+    expect(seeds.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
   });
   test('null/empty catalog returns the static defaults unchanged', () => {
     const { toDefaultAliases } = require('../src/utils/curated-models');

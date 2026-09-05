@@ -7102,9 +7102,9 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
   knows it and F4 reproduced F3's silent no-op against it. Exactly the failure the `checks:` line
   exists to make loud. The probe's `QWEN` constant was repointed to the dated id; F4's title and
   every table cell are unchanged, so the nineteen P1 rows still diff byte-identical, and the qwen
-  dump line below is keyed by the new id. The shipped curated alias `qwen` still pins the vanished
-  un-dated id (`curated-models.js`, a flat pin `models --check` cannot see); filed as an open item
-  directly below this record.
+  dump line below is keyed by the new id. The shipped curated alias `qwen` pinned the vanished
+  un-dated id (`curated-models.js`, a flat pin `models --check` cannot see); filed as an item
+  directly below this record and fixed in this PR's council round 2.
 
   **The descriptor lowers the reservation on the direct Anthropic route exactly as on OpenRouter**
   (K1: `limit.output 8000` → `max_tokens 8000`). **A thinking variant's budget is added on top of the
@@ -7187,7 +7187,7 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
 
 checks: 31 matched, 0 mismatched (none), 1 recorded
 
-- [ ] **Curated `qwen` alias pins `openrouter/qwen/qwen3.8-max`, which OpenRouter and models.dev
+- [x] **Curated `qwen` alias pins `openrouter/qwen/qwen3.8-max`, which OpenRouter and models.dev
   both list only as `qwen/qwen3.8-max-0902` since 2026-09-05 (found by the PR 2 probe run).** A
   default-alias user has a dead `qwen` seat until the pin moves (`src/utils/curated-models.js`, the
   `qwen` route). Two knock-on effects measured in this record: the engine's variant table for the old
@@ -7195,7 +7195,9 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   reads `0/0`, so an `outputBudget` reaches it as-is — the same 0/0 pass-through K13 shows for
   the generic unknown model — and the engine treats its context as unknown. Not fixed in PR 2
   (budget scope): the fix is the pin plus `check:ci-alias-pins`; a flat cardless pin is the class
-  `models --check` cannot see (v4.9.3 skew records).
+  `models --check` cannot see (v4.9.3 skew records). **Fixed in PR #231 (council round 2, D4): the
+  pin moved to `openrouter/qwen/qwen3.8-max-0902`; the six test expectations followed; the CI bench
+  map (`qwen3.8-27b`) is untouched.**
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

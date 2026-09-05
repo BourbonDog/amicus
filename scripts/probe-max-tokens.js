@@ -51,10 +51,11 @@
  * `limit.output` under a thinking variant on the direct Anthropic route
  * (K1/K2/K9), the sum against the model's ceiling (K3/K4/K10), the flag above
  * a ceiling (K5), lever precedence (K7/K8), and the exact shapes amicus ships
- * once the flag is set to the budget (K4/K6/K11/K12/K13). Those rows are the
- * canary for opencode-client.js :: startServer's flag wiring as well as for
- * the engine: if a bump stops the flag reaching the spawn, K6/K12/K13 read
- * 32000.
+ * once the flag is set to the budget (K4/K6/K11/K12/K13). Those rows are the canary
+ * for the ENGINE's reading of the flag (an engine bump that ignored it reads
+ * 32000 on K6/K12/K13). They do not exercise amicus's wrapper — each case sets
+ * the flag in this probe's own env — so the SDK spawn-timing fact is pinned by
+ * tests/opencode-client-sdk-spawn-timing.test.js instead.
  */
 
 'use strict';

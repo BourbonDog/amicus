@@ -30,8 +30,9 @@
  * process.env at call time and may be gone by the time the promise settles.
  * Restoring in `finally` keeps it out of every OTHER child amicus spawns
  * (Electron, the MCP child, on-complete hooks) and out of the caller's own env.
- * The unit pin is tests/opencode-client-output-flag.test.js; the wire canary is
- * the probe's K6/K12/K13 rows.
+ * The unit pin is tests/opencode-client-output-flag.test.js; the SDK-side pin is
+ * tests/opencode-client-sdk-spawn-timing.test.js (the real SDK against a fake engine
+ * on PATH); the engine-side canary is the probe's K6/K12/K13 rows.
  */
 'use strict';
 

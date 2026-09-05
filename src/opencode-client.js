@@ -774,7 +774,10 @@ async function startServer(options = {}) {
   // comes from config here exactly as buildProviderModels reads it for the
   // per-model descriptor, so the two levers cannot disagree (measured agreeing:
   // probe rows C2, K6). Unit pin: tests/opencode-client-output-flag.test.js
-  // through the `_createOpencodeServer` seam; wire canary: probe K6/K12/K13.
+  // through the `_createOpencodeServer` seam. SDK-side canary for the
+  // spread-before-await fact: tests/opencode-client-sdk-spawn-timing.test.js
+  // drives the REAL SDK against a fake engine on PATH. Engine-side canary:
+  // probe rows K6/K12/K13.
   const { withOutputTokenFlag } = require('./utils/engine-output-flag');
   const { getOutputBudget } = require('./utils/config');
 
