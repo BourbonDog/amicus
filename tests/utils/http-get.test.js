@@ -170,6 +170,94 @@ describe('httpGetText', () => {
     });
   });
 
+  // Post-review of the A2 fix: model-fetcher hands this module a live provider
+  // key, so re-issuing a cross-host hop with the SAME headers would forward it.
+  // Delete the CREDENTIAL_HEADERS strip in hopHeaders and this test fails.
+  it('drops credential headers on a cross-origin redirect but keeps the rest', async () => {
+    const urls = mockSequence([
+      { status: 302, headers: { location: 'https://b.test/y' } },
+      { body: 'ok' },
+    ]);
+    const sent = {
+      Authorization: 'Bearer secret', 'x-api-key': 'secret', Cookie: 'sid=1',
+      'Proxy-Authorization': 'Basic secret', 'User-Agent': 'amicus/test',
+    };
+    await expect(httpGetText('https://a.test/x', { headers: sent })).resolves.toEqual({ ok: true, body: 'ok' });
+    expect(urls).toEqual(['https://a.test/x', 'https://b.test/y']);
+    // Hop 1 is the host the key was minted for: it keeps everything.
+    expect(https.get.mock.calls[0][1].headers).toBe(sent);
+    // Hop 2 is a different origin: only the non-credential header survives.
+    expect(https.get.mock.calls[1][1].headers).toEqual({ 'User-Agent': 'amicus/test' });
+  });
+
+  it('keeps credential headers on a same-origin redirect', async () => {
+    const urls = mockSequence([
+      { status: 302, headers: { location: 'https://a.test/moved' } },
+      { body: 'ok' },
+    ]);
+    await expect(httpGetText('https://a.test/x', { headers: { Authorization: 'Bearer secret', 'User-Agent': 'amicus/test' } }))
+      .resolves.toEqual({ ok: true, body: 'ok' });
+    expect(urls[1]).toBe('https://a.test/moved');
+    expect(https.get.mock.calls[1][1].headers).toEqual({ Authorization: 'Bearer secret', 'User-Agent': 'amicus/test' });
+  });
+
+  // The deadline must destroy the LIVE hop. `req = https.get(...)` cannot: the
+  // mock calls back synchronously, so hop 2's assignment lands first and the
+  // outer assignment then overwrites it with hop 1's request.
+  it('times out the live hop: a redirect then a hang destroys the SECOND request', async () => {
+    jest.useFakeTimers();
+    const reqs = [];
+    https.get.mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.destroy = jest.fn();
+      reqs.push(req);
+      if (reqs.length > 1) { return req; }  // hop 2: headers never arrive
+      const res = new EventEmitter();
+      res.statusCode = 302;
+      res.headers = { location: 'https://b.test/y' };
+      res.setEncoding = jest.fn();
+      cb(res);
+      return req;
+    });
+    const p = httpGetText('https://a.test/x', { timeoutMs: 250 });
+    jest.advanceTimersByTime(251);
+    await expect(p).resolves.toEqual({ ok: false, failure: { reason: 'timeout', detail: 'no response within 250ms' } });
+    expect(reqs).toHaveLength(2);
+    expect(reqs[1].destroy).toHaveBeenCalledTimes(1);
+    expect(reqs[0].destroy).not.toHaveBeenCalled();
+  });
+
+  // Stale-hop race: readResponse attaches ctx.onError to EVERY response, so the
+  // abandoned hop could still settle the chain long after it was superseded.
+  it('detaches the superseded response: its later error cannot settle the chain', async () => {
+    let first = null;
+    https.get.mockImplementation((url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.destroy = jest.fn();
+      const res = new EventEmitter();
+      res.setEncoding = jest.fn();
+      res.destroy = jest.fn();
+      if (url === 'https://a.test/x') {
+        res.statusCode = 302;
+        res.headers = { location: 'https://b.test/y' };
+        first = res;
+        cb(res);
+        return req;
+      }
+      res.statusCode = 200;
+      res.headers = {};
+      cb(res);
+      process.nextTick(() => {
+        first.emit('error', new Error('abandoned hop closed'));
+        res.emit('data', 'second hop');
+        res.emit('end');
+      });
+      return req;
+    });
+    await expect(httpGetText('https://a.test/x')).resolves.toEqual({ ok: true, body: 'second hop' });
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+  });
+
   // Council #230 B3: the body was accumulated into a string with no bound.
   it('destroys the request and reports too-large when the body passes maxBytes', async () => {
     const req = mockGet({ body: 'x'.repeat(20) });

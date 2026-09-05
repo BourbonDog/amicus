@@ -13,13 +13,22 @@
  *
  * REDIRECTS ARE FOLLOWED, AT MOST TWICE (council #230 A2). A 301/302/303/307/308
  * carrying a `Location` is resolved against the URL that produced it and
- * re-issued with the SAME headers under the SAME deadline — one timeout covers
- * the whole chain, so a hop never buys the server more time. The target must be
- * `https:`. A plain-http Location, a missing Location and a third redirect are
- * each an `http-status` failure carrying the status plus a `detail` naming
- * which, so a domain move that loops or downgrades stays visible on the
- * caller's failure line (for the models.dev ceiling fetch, the `Ceilings:` line
- * of `amicus models --refresh`) instead of being chased silently.
+ * re-issued under the SAME deadline — one timeout covers the whole chain, so a
+ * hop never buys the server more time. The target must be `https:`. A plain-http
+ * Location, a missing Location and a third redirect are each an `http-status`
+ * failure carrying the status plus a `detail` naming which, so a domain move
+ * that loops or downgrades stays visible on the caller's failure line (for the
+ * models.dev ceiling fetch, the `Ceilings:` line of `amicus models --refresh`)
+ * instead of being chased silently.
+ *
+ * CREDENTIAL HEADERS DO NOT CROSS AN ORIGIN. `model-fetcher.js` hands this
+ * module `Authorization: Bearer <key>` (openrouter/openai/deepseek) or
+ * `x-api-key` (anthropic), so a 302 — or an open redirect — on a provider host
+ * would otherwise forward a live key to whatever host the `Location` named.
+ * A same-origin hop keeps every header; a CROSS-ORIGIN hop is re-issued without
+ * `authorization`, `x-api-key`, `cookie` or `proxy-authorization` (matched
+ * case-insensitively). This is what curl's `--location` and undici's redirect
+ * handler both do, and it is why following redirects at all is safe here.
  *
  * The body is capped at `maxBytes` (council #230 B3): a response that keeps
  * coming is destroyed and reported as `too-large` rather than accumulated in a
@@ -36,32 +45,74 @@ const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
 /** Two hops, then `redirect limit reached`. */
 const MAX_REDIRECTS = 2;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
+/** Dropped on a cross-origin hop. Lower-case: callers spell headers freely. */
+const CREDENTIAL_HEADERS = new Set(['authorization', 'x-api-key', 'cookie', 'proxy-authorization']);
 
 /**
- * One hop's 3xx: resolve `Location` against the URL that produced it and hand
- * the result to `ctx.hop`, or fail with the status and a `detail` naming why
- * the hop was refused. The response is drained either way.
+ * The headers the NEXT hop may carry. A same-origin hop keeps the caller's
+ * object untouched; a cross-origin hop gets a copy with the credential headers
+ * removed. A current URL that will not parse counts as cross-origin — the safe
+ * direction, since the comparison cannot be made.
+ * @param {object} headers the headers this hop was issued with
+ * @param {string} from the URL that produced the redirect
+ * @param {URL} to the resolved target
+ * @returns {object} `headers` itself, or a stripped copy
+ */
+function hopHeaders(headers, from, to) {
+  let fromOrigin = null;
+  try { fromOrigin = new URL(from).origin; } catch (err) { fromOrigin = null; }
+  if (fromOrigin !== null && fromOrigin === to.origin) { return headers; }
+  const kept = {};
+  for (const name of Object.keys(headers)) {
+    if (!CREDENTIAL_HEADERS.has(name.toLowerCase())) { kept[name] = headers[name]; }
+  }
+  return kept;
+}
+
+/**
+ * Retire a SUPERSEDED response before the next hop is started. Its `data`/`end`
+ * listeners and — the point of this — the chain's `error` listener are detached
+ * first, so an abrupt close on the abandoned socket can no longer settle a
+ * promise the live hop now owns. `error` is REPLACED by a swallow rather than
+ * simply removed: a destroyed stream still emits, and an 'error' with no
+ * listener at all throws as an uncaught exception.
+ * @param {object} res the http.IncomingMessage the chain has moved on from
+ */
+function retire(res) {
+  res.removeAllListeners('data');
+  res.removeAllListeners('end');
+  res.removeAllListeners('error');
+  res.on('error', () => {});
+  if (typeof res.destroy === 'function') { res.destroy(); }
+}
+
+/**
+ * One hop's 3xx: resolve `Location` against the URL that produced it, retire
+ * this response, and hand the target plus its (possibly stripped) headers to
+ * `ctx.hop` — or fail with the status and a `detail` naming why the hop was
+ * refused. The response is drained on every refusal.
  * @param {object} res the http.IncomingMessage
- * @param {string} url the URL this response answered
- * @param {number} left redirects still allowed
+ * @param {{url: string, left: number, headers: object}} hop the hop it answered
  * @param {{hop: Function, fail: Function}} ctx
  */
-function followRedirect(res, url, left, ctx) {
+function followRedirect(res, hop, ctx) {
   const status = res.statusCode;
   const loc = (res.headers && res.headers.location) || null;
   res.on('data', () => {});  // drain: an unread socket is never released
   if (loc === null) { ctx.fail({ reason: 'http-status', status, detail: 'redirect without Location' }); return; }
-  if (left <= 0) { ctx.fail({ reason: 'http-status', status, detail: 'redirect limit reached' }); return; }
+  if (hop.left <= 0) { ctx.fail({ reason: 'http-status', status, detail: 'redirect limit reached' }); return; }
   let next;
   try {
-    next = new URL(loc, url);
+    next = new URL(loc, hop.url);
   } catch (err) {
     ctx.fail({ reason: 'http-status', status, detail: `redirect to an unparseable Location: ${err.message}` });
     return;
   }
   // https ONLY: a downgrade would re-send the caller's headers in clear text.
   if (next.protocol !== 'https:') { ctx.fail({ reason: 'http-status', status, detail: 'redirect to non-https location' }); return; }
-  ctx.hop(next.toString(), left - 1);
+  const headers = hopHeaders(hop.headers, hop.url, next);
+  retire(res);  // BEFORE the next hop exists, so the two can never race
+  ctx.hop({ url: next.toString(), left: hop.left - 1, headers });
 }
 
 /**
@@ -69,11 +120,10 @@ function followRedirect(res, url, left, ctx) {
  * `http-status` failure once the body drains, a 200 accumulates under the byte
  * cap.
  * @param {object} res the http.IncomingMessage
- * @param {string} url the URL this response answered
- * @param {number} left redirects still allowed
+ * @param {{url: string, left: number, headers: object}} hop the hop it answered
  * @param {{hop: Function, fail: Function, done: Function, onError: Function, destroy: Function, maxBytes: number}} ctx
  */
-function readResponse(res, url, left, ctx) {
+function readResponse(res, hop, ctx) {
   // Decode once, at the stream: `chunks += chunk` decodes each Buffer on its
   // own and mangles any multi-byte character split across a chunk boundary.
   res.setEncoding('utf8');
@@ -82,7 +132,7 @@ function readResponse(res, url, left, ctx) {
   // settles — so it is attached once, ahead of the status check, and covers the
   // redirect and non-200 drain branches too.
   res.on('error', ctx.onError);
-  if (REDIRECT_STATUS.has(res.statusCode)) { followRedirect(res, url, left, ctx); return; }
+  if (REDIRECT_STATUS.has(res.statusCode)) { followRedirect(res, hop, ctx); return; }
   if (res.statusCode !== 200) {
     // The deadline stays armed until `end`: a non-200 whose body never ends
     // must still time out rather than leave the promise pending for ever.
@@ -109,7 +159,8 @@ function readResponse(res, url, left, ctx) {
 
 /**
  * GET `url`; resolve with the raw body on a 200. Follows at most two https
- * redirects under a single deadline and caps the body at `maxBytes`.
+ * redirects under a single deadline, drops credential headers on a cross-origin
+ * hop, and caps the body at `maxBytes`.
  * @param {string} url
  * @param {{headers?: object, timeoutMs?: number, maxBytes?: number}} [opts]
  * @returns {Promise<{ok: true, body: string}|{ok: false, failure: {reason: string, status?: number, detail?: string}}>}
@@ -119,7 +170,12 @@ function httpGetText(url, opts = {}) {
   const timeoutMs = opts.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : opts.timeoutMs;
   const maxBytes = opts.maxBytes === undefined ? DEFAULT_MAX_BYTES : opts.maxBytes;
   return new Promise((resolve) => {
-    let req = null;
+    // CHAIN-SCOPED. The deadline and the size trip must destroy the LIVE hop, so
+    // every hop assigns this from inside itself BEFORE dispatching its response.
+    // An outer `req = https.get(...)` cannot: https.get may call back
+    // synchronously, and the next hop's assignment would then be undone by the
+    // outer one completing afterwards.
+    let current = null;
     let timer = null;
     let settled = false;
     // Single-settle: a timeout, a stream error, a size trip and an `end` can all
@@ -127,24 +183,30 @@ function httpGetText(url, opts = {}) {
     const done = (v) => { if (settled) { return; } settled = true; clearTimeout(timer); resolve(v); };
     const fail = (failure) => { done({ ok: false, failure }); };
     const onError = (err) => { fail({ reason: 'network-error', detail: err.message }); };
+    const destroy = () => { if (current) { current.destroy(); } };
     // ONE deadline for the WHOLE chain — armed before the first hop, never rearmed.
-    timer = setTimeout(() => {
-      if (req) { req.destroy(); }
-      fail({ reason: 'timeout', detail: `no response within ${timeoutMs}ms` });
-    }, timeoutMs);
-    const ctx = { fail, done, onError, maxBytes, destroy: () => { if (req) { req.destroy(); } }, hop: null };
-    ctx.hop = (target, left) => {
+    timer = setTimeout(() => { destroy(); fail({ reason: 'timeout', detail: `no response within ${timeoutMs}ms` }); }, timeoutMs);
+    const ctx = { fail, done, onError, maxBytes, destroy, hop: null };
+    ctx.hop = (hop) => {
+      let res = null;
+      let armed = false;
+      let request;
       try {
-        req = https.get(target, { headers }, (res) => { readResponse(res, target, left, ctx); });
+        request = https.get(hop.url, { headers: hop.headers }, (r) => { res = r; if (armed) { readResponse(r, hop, ctx); } });
       } catch (err) {
         // `https.get` throws SYNCHRONOUSLY on a malformed URL (and on a bad
         // option object). "Always resolves, never rejects" has to hold for that.
         onError(err);
         return;
       }
-      req.on('error', onError);
+      current = request;
+      request.on('error', onError);
+      armed = true;
+      // A callback that already fired SYNCHRONOUSLY is replayed here, now that
+      // `current` is this hop's request rather than the previous one's.
+      if (res) { readResponse(res, hop, ctx); }
     };
-    ctx.hop(url, MAX_REDIRECTS);
+    ctx.hop({ url, left: MAX_REDIRECTS, headers });
   });
 }
 

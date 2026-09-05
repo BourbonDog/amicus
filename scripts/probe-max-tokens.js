@@ -43,7 +43,9 @@
  * "v4.9.4 records" P1 table. After the table and the dump the run prints
  * `checks: N matched, N mismatched (ids), N recorded` and exits 1 if anything
  * moved — so an engine bump that changes the wire fails the run instead of
- * printing a new table under the old prose.
+ * printing a new table under the old prose. Under `--only` that same line ends
+ * in `partial run (--only …)`, so a subset's counts can never be filed or read
+ * as a full-matrix verdict.
  */
 
 'use strict';
@@ -467,9 +469,10 @@ function checkRow(r) {
  * is checked by a machine, so this is what CI (or a human after an engine bump)
  * reads, and a non-zero `mismatched` is what makes the run exit 1.
  * @param {Array<object>} results
+ * @param {string|null} onlyArg the raw `--only` value, or null for the whole matrix
  * @returns {{line: string, mismatched: number}}
  */
-function checksLine(results) {
+function checksLine(results, onlyArg) {
   const bad = [];
   let matched = 0;
   let recorded = 0;
@@ -478,7 +481,11 @@ function checksLine(results) {
     if (v === 'matched') { matched += 1; } else if (v === 'recorded') { recorded += 1; } else { bad.push(r.id); }
   }
   const ids = bad.length > 0 ? bad.join(',') : 'none';
-  return { line: `checks: ${matched} matched, ${bad.length} mismatched (${ids}), ${recorded} recorded`, mismatched: bad.length };
+  // A SUBSET's counts must never read as the full-matrix verdict — filed in a
+  // record or skimmed on the terminal, `--only` has to be visible on the line
+  // that carries the numbers, not just in the shell history that produced them.
+  const scope = onlyArg ? ` — partial run (--only ${onlyArg})` : '';
+  return { line: `checks: ${matched} matched, ${bad.length} mismatched (${ids}), ${recorded} recorded${scope}`, mismatched: bad.length };
 }
 
 async function main() {
@@ -486,7 +493,8 @@ async function main() {
   const outIdx = args.indexOf('--out');
   const outPath = outIdx >= 0 ? args[outIdx + 1] : null;
   const onlyIdx = args.indexOf('--only');
-  const only = onlyIdx >= 0 ? new Set(String(args[onlyIdx + 1] || '').split(',')) : null;
+  const onlyArg = onlyIdx >= 0 ? String(args[onlyIdx + 1] || '') : null;
+  const only = onlyArg === null ? null : new Set(onlyArg.split(','));
 
   if (!assertSandboxed()) { process.exit(1); }
 
@@ -514,7 +522,7 @@ async function main() {
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
-  const checks = checksLine(results);
+  const checks = checksLine(results, onlyArg);
   process.stdout.write(`\n${checks.line}\n`);
   process.stdout.write(`\nengines: ${engines.started} started, ${engines.closed} closed${engines.closeErrors.length ? ` (close errors: ${engines.closeErrors.join('; ')})` : ''}\n`);
   if (outPath) {
