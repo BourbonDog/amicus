@@ -93,7 +93,9 @@ const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-sto
  * (repeat per name; a zero count means the channel is gone, and a new
  * `OPENCODE_*` credential/config name means the list is short) -- then re-run
  * `node scripts/probe-max-tokens.js` so the sandbox gate is exercised against
- * the engine actually pinned.
+ * the engine actually pinned. The flag the engine reads for output budgets is
+ * watched the same way: tests/probe-flag-canary.integration.test.js runs five
+ * probe rows under this rail on every push.
  * @type {string[]}
  */
 const ENGINE_CREDENTIAL_ENV = [
@@ -190,11 +192,13 @@ function run() {
   // NB: 'jest/bin/jest' (no .js) -- that is the subpath jest's package
   // "exports" map exposes; 'jest/bin/jest.js' throws ERR_PACKAGE_PATH_NOT_EXPORTED.
   const jestBin = require.resolve('jest/bin/jest');
+  // Caller args first: jest's --testMatch is an array option and would swallow
+  // a trailing positional (a file path) as a second glob.
   const args = [
     jestBin,
+    ...process.argv.slice(2),
     '--testPathIgnorePatterns=worktrees',
     '--testMatch=**/tests/**/*.integration.test.js',
-    ...process.argv.slice(2),
   ];
 
   const result = spawnSync(process.execPath, args, {

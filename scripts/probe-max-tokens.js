@@ -46,6 +46,18 @@
  * printing a new table under the old prose. Under `--only` that same line ends
  * in `partial run (--only …)`, so a subset's counts can never be filed or read
  * as a full-matrix verdict.
+ *
+ * THE K GROUP (#218 PR 2) measures what PR 1 left open: a descriptor's
+ * `limit.output` under a thinking variant on the direct Anthropic route
+ * (K1/K2/K9), the sum against the model's ceiling (K3/K4/K10), the flag above
+ * a ceiling (K5), lever precedence (K7/K8), and the exact shapes amicus ships
+ * once the flag is set to the budget (K4/K6/K11/K12/K13). Those rows are the canary
+ * for the ENGINE's reading of the flag (an engine bump that ignored it reads
+ * 32000 on K6/K12/K13). CI runs A/C3/K6/K12/K13 on every push
+ * (tests/probe-flag-canary.integration.test.js). They do not exercise amicus's
+ * wrapper — each case sets the flag in this probe's own env — so the SDK
+ * spawn-timing fact is pinned by tests/opencode-client-sdk-spawn-timing.test.js
+ * instead.
  */
 
 'use strict';
@@ -61,10 +73,11 @@ ensureNodeModulesBinInPath();
 
 // The brief's figures for these three came from LIVE models.dev, which is not
 // necessarily what the pinned engine's own bundled catalogue reports. Where the
-// two differ the run's `/config/providers` dump is the authority -- for kimi it
-// reports `output: 1048576`, not models.dev's 943718.
+// two differ the run's `/config/providers` dump is the authority -- for kimi the P1
+// run reported `output: 1048576` against models.dev's 943718, and the PR 2 run
+// reports 943718 (both filed in the BACKLOG records).
 const KIMI = 'moonshotai/kimi-k3';   // live models.dev: effort low|high|max, ceiling 943718
-const QWEN = 'qwen/qwen3.8-max';      // models.dev: effort minimal..xhigh, ceiling 131072
+const QWEN = 'qwen/qwen3.8-max-0902'; // models.dev: effort minimal..xhigh, ceiling 131072. Renamed from the un-dated `qwen/qwen3.8-max` between 2026-09-04 and 2026-09-05; the engine's variant table for the old id is now empty, so F4 reproduced F3's silent no-op against it (PR 2 record).
 const HAIKU = 'claude-haiku-4-5';     // models.dev: budget_tokens (min 1024), ceiling 64000
 const OR = (id) => ({ providerID: 'openrouter', modelID: id });
 const AN = (id) => ({ providerID: 'anthropic', modelID: id });
@@ -344,6 +357,7 @@ async function send(client, captures, c) {
 
 // ---------------------------------------------------------------- case matrix
 const CTX = 1048576;
+const HCTX = 200000;                  // haiku's context per the engine's own dump (H1)
 
 /**
  * The machine-readable half of a case's expectation (council #230 C2). `expect`
@@ -387,6 +401,23 @@ const CASES = [
   { id: 'H4', title: "direct anthropic haiku variant 'max'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'max' }, expect: 'thinking budget_tokens 31999; max_tokens 63999 if additive', want: W(63999, null, 'any') },
   { id: 'J1', title: 'custom openai-compatible unknown model {}', custom: true, model: CUSTOM, expect: '32000', want: W(32000) },
   { id: 'J2', title: 'custom unknown model + env 64000', env: '64000', custom: true, model: CUSTOM, expect: '64000 (raw budget, nothing to clamp)', want: W(64000) },
+  // PR 2 (K group, measured 2026-09-05): descriptor x thinking budget on the
+  // direct Anthropic route, the flag above a known ceiling, lever precedence,
+  // and the exact shapes amicus ships (env = budget AND limit.output =
+  // min(budget, ceiling)). Every `want` is the measurement, as for the rows above.
+  { id: 'K1', title: 'direct anthropic haiku limit.output 8000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), expect: '8000 — the descriptor lowers the reservation on the Anthropic route too', want: W(8000) },
+  { id: 'K2', title: "direct anthropic haiku limit.output 8000 + variant 'high'", anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '24000 = 8000 + 16000 — the thinking budget is ADDED to the descriptor value, not carved out of it', want: W(24000, null, 'any') },
+  { id: 'K3', title: "direct anthropic haiku {} + env 64000 + variant 'max'", env: '64000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'max' }, expect: '64000 — 64000 + 31999 clamped to the ceiling', want: W(64000, null, 'any') },
+  { id: 'K4', title: "direct anthropic haiku limit.output 64000 + env 64000 + variant 'max'", env: '64000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 64000 } } }, model: AN(HAIKU), extra: { variant: 'max' }, expect: '64000 — the shipped budget-64000 shape, clamped the same way', want: W(64000, null, 'any') },
+  { id: 'K5', title: 'direct anthropic haiku {} + env 100000 (above the 64000 ceiling)', env: '100000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '64000 — the flag is clamped to the ceiling the engine knows', want: W(64000) },
+  { id: 'K6', title: 'env 100000 + limit.output 100000 (kimi)', env: '100000', or: { [KIMI]: { limit: { context: CTX, output: 100000 } } }, model: OR(KIMI), expect: '100000 — the shipped budget-100000 shape raises the reservation', want: W(100000) },
+  { id: 'K7', title: 'env 64000 + options.max_tokens 4096 (kimi)', env: '64000', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens wins over the flag (amicus never emits it)', want: W(4096) },
+  { id: 'K8', title: 'limit.output 8000 + options.max_tokens 4096 (kimi)', or: { [KIMI]: { limit: { context: CTX, output: 8000 }, options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens wins over the descriptor (amicus never emits it)', want: W(4096) },
+  { id: 'K9', title: "direct anthropic haiku limit.output 40000 + variant 'max'", anthropic: { [HAIKU]: { limit: { context: HCTX, output: 40000 } } }, model: AN(HAIKU), extra: { variant: 'max' }, expect: '63999 = min(40000, 32000) + 31999 — the default caps the descriptor at 32000; the sum sits under the ceiling and is left alone', want: W(63999, null, 'any') },
+  { id: 'K10', title: "direct anthropic haiku limit.output 70000 + env 100000 + variant 'max'", env: '100000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 70000 } } }, model: AN(HAIKU), extra: { variant: 'max' }, expect: '64000 — 70000 + 31999 clamped to the ceiling, not to the descriptor', want: W(64000, null, 'any') },
+  { id: 'K11', title: "env 8000 + direct anthropic haiku limit.output 8000 + variant 'high'", env: '8000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '24000 = 8000 + 16000 — the shipped budget-8000 shape with a thinking variant', want: W(24000, null, 'any') },
+  { id: 'K12', title: 'env 8000 + bare {} (kimi)', env: '8000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '8000 — the flag lowers a row the amicus catalog cannot clamp', want: W(8000) },
+  { id: 'K13', title: 'env 8000 + custom unknown model {}', env: '8000', custom: true, model: CUSTOM, expect: '8000 — a model neither catalog knows receives the budget as-is', want: W(8000) },
 ];
 
 function wireSummary(wire) {

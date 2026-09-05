@@ -9,7 +9,7 @@
 #    integration tier is watched instead by the keyless `integration` job in
 #    .github/workflows/ci.yml (free, runs on every push/PR); the paid tier is
 #    the manually dispatched .github/workflows/integration-live.yml. Run
-#    `npm run test:integration` yourself for the free tier -- it is ~10s.
+#    `npm run test:integration` yourself for the free tier -- it is ~10s plus the ~15s engine-flag canary.
 # 2. npm audit (warn only)
 
 # Git runs this file directly (core.hooksPath=.husky, set by

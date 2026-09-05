@@ -4,7 +4,7 @@
 /**
  * makeBaseDeps({ omit = [], ...overrides } = {})
  *
- * Factory for the canonical 30-key `runDoctorChecks` deps fixture, formerly
+ * Factory for the canonical 31-key `runDoctorChecks` deps fixture, formerly
  * duplicated byte-identically across 11 doctor-family suites (~360 lines).
  * Builds a FRESH object on every call and returns it — no shared/module-level
  * state — so each consumer file owns its own instance.
@@ -74,6 +74,10 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
     collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
     findStaleAliases: () => [],
+    // #218 PR 2: the output-budget row reads the stored value as-is. Pinned
+    // absent (not null — null would be "set to null", a malformed value) so the
+    // base fixture stays healthy regardless of the host's real config.json.
+    readOutputBudgetRaw: () => undefined,
     // B3 (council review of PR 198): deterministic no-repair fixture — the
     // 'defaults'-sourced row above would fall through to [] via the real
     // alias-audit module anyway (not 'user-config'), but pinning it explicitly

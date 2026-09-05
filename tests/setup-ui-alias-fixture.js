@@ -17,7 +17,7 @@ const ALIASES_25 = {
   'claude': 'anthropic/claude-sonnet-5',
   'fable': 'anthropic/claude-fable-5',
   'deepseek': 'deepseek/deepseek-v4-pro',
-  'qwen': 'openrouter/qwen/qwen3.8-max',
+  'qwen': 'openrouter/qwen/qwen3.8-max-0902',
   'qwen-flash': 'openrouter/qwen/qwen3.6-flash',
   'minimax': 'openrouter/minimax/minimax-m2.7',
   'grok': 'openrouter/x-ai/grok-4.3',

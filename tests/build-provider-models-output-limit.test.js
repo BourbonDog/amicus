@@ -85,28 +85,43 @@ describe('#218 buildProviderModels output limit', () => {
     expect(config.buildProviderModels([]).openrouter.models['nobody/unknown']).toEqual({});
   });
 
-  // Council #230 A1. A refreshed catalog now knows the direct anthropic
-  // ceilings, so an opt-in budget WOULD emit a descriptor there — but the engine
-  // adds the thinking budget to max_tokens on that route (probe rows H1/H3/H4:
-  // 32000 bare, 48000 with a 16000 budget, 63999 with 31999) and both points
-  // were measured against a bare `{}`. Descriptor x budget is unmeasured, so
-  // direct anthropic keeps its pre-PR behaviour until PR 2 measures it.
-  // Named mutant "ANTHROPICDIRECT": delete the `fullModel.startsWith('anthropic/')`
-  // guard in addRoute and the FIRST test below emits a limit.
+  // Council #230 A1 held DIRECT anthropic out of clamping until descriptor x
+  // thinking-budget was measured. PR 2 measured it (probe rows K1/K2/K3/K4/K9/
+  // K10, BACKLOG "v4.9.4 records"): the descriptor lowers the reservation on
+  // that route (K1: 8000), a thinking variant's budget is added on top (K2:
+  // 8000 + 16000 = 24000) and the sum is clamped to the model's real ceiling
+  // (K3/K4/K10: 64000 for haiku). No budget can push a thinking leg over the
+  // ceiling, so the hold-out is lifted and direct anthropic clamps like any
+  // other route. Named mutant "ANTHROPICHELDOUT": re-add
+  //   if (fullModel.startsWith('anthropic/')) { providers[providerID].models[modelID] = {}; return; }
+  // to addRoute and the FIRST test below fails.
   const HAIKU = [
     { id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 },
     { id: 'openrouter/anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 },
   ];
 
-  test('a DIRECT anthropic route stays `{}` with a budget set and both numbers known', () => {
+  test('a DIRECT anthropic route gets the same limit as any other clamped route (hold-out lifted)', () => {
     const config = load({ aliases: { haiku: 'anthropic/claude-haiku-4-5' }, outputBudget: 8000 }, HAIKU);
-    expect(config.buildProviderModels([]).anthropic.models['claude-haiku-4-5']).toEqual({});
+    expect(config.buildProviderModels([]).anthropic.models['claude-haiku-4-5'])
+      .toEqual({ limit: { context: 200000, output: 8000 } });
   });
 
-  test('the openrouter/anthropic mirror of that same model still gets a limit', () => {
+  test('the openrouter/anthropic mirror of that same model gets the same limit', () => {
     const config = load({ aliases: { haiku: 'anthropic/claude-haiku-4-5' }, outputBudget: 8000 }, HAIKU);
     const m = config.buildProviderModels([]).openrouter.models['anthropic/claude-haiku-4-5'];
     expect(m.limit).toEqual({ context: 200000, output: 8000 });
+  });
+
+  // PR 2: values above the engine's 32000 default are LIVE — the descriptor
+  // carries min(budget, ceiling) and startServer raises the engine side with
+  // the flag (probe K6: 100000 reached the wire). The descriptor's own
+  // arithmetic is what this pins; the flag is pinned in
+  // tests/opencode-client-output-flag.test.js.
+  test('a budget above the engine default is emitted as min(budget, ceiling), not capped at 32000', () => {
+    const config = load({ aliases, outputBudget: 100000 });
+    const p = config.buildProviderModels([]);
+    expect(p.openrouter.models['moonshotai/kimi-k3'].limit).toEqual({ context: 1048576, output: 100000 });
+    expect(p.openrouter.models['tiny/small-model'].limit).toEqual({ context: 8192, output: 4096 });
   });
 
   test('an unreadable/empty catalog degrades to `{}` and never throws', () => {

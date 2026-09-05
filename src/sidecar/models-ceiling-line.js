@@ -43,15 +43,16 @@ function fmtCeilingLine(e) {
     const f = e.failure;
     const why = f.reason + (f.status ? ` ${f.status}` : '') + (f.detail ? `: ${f.detail}` : '');
     const lead = CEILING_FAILURE_LEAD[f.reason] || 'ceiling enrichment failed';
-    return `Ceilings: ${lead} (${why}); rows without a ceiling keep the engine default and outputBudget cannot clamp them`;
+    return `Ceilings: ${lead} (${why}); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine's own catalog knows the model`;
   }
   // A skip is not a failure and not a fill: naming which one it was is the
   // difference between "you turned this off" and "there was nothing to do".
   if (e.skipped === 'disabled') {
     // Named, not "direct routes": Google publishes its own ceiling first-party
-    // and OpenRouter rows keep OpenRouter's, so both still clamp with the
-    // lookup off (council #230 r4 follow-up).
-    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/deepseek direct rows cannot be clamped (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
+    // and OpenRouter rows keep OpenRouter's. Since PR 2 the budget still
+    // reaches the unnamed rows through the engine flag, clamped by the
+    // engine's own catalog (probe K5/K12).
+    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
   }
   if (e.skipped === 'nothing-to-fill') {
     // NOT "every row": routers, local rows and malformed rows are not

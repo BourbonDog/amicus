@@ -14,6 +14,7 @@ const electronMcpCheck = require('./utils/doctor-electron-mcp-check');
 const localProvidersCheck = require('./utils/doctor-local-providers-check');
 // v4.6.2 PR1 (spec §4) — the 'anthropic-base-url' check body.
 const baseUrlCheck = require('./utils/doctor-base-url-check');
+const outputBudgetCheck = require('./utils/doctor-output-budget-check'); // #218 PR 2 — the 'output-budget' row.
 // B3 (council review of PR 198, issue 195) — the 'aliases' check body,
 // including its --fix repair of fabricated bare ids. Same split rationale.
 const aliasCheck = require('./utils/doctor-alias-check');
@@ -45,6 +46,7 @@ function realDeps() {
     resolveModel: () => require('./utils/config').resolveModel(),
     readCache: () => require('./utils/model-catalog').readCache(),
     collectAliasSources: () => require('./utils/alias-audit').collectAliasSources(),
+    readOutputBudgetRaw: () => (require('./utils/config').loadConfig() || {}).outputBudget, // #218 PR 2: as stored, so a malformed value is echoed
     findStaleAliases: (s, c) => require('./utils/alias-audit').findStaleAliases(s, c),
     findDriftedStoredAliases: (s, c) => require('./utils/alias-audit').findDriftedStoredAliases(s, c),
     // B3: the narrow fabricated-bare-id repair class (pure detection) + the
@@ -171,6 +173,7 @@ async function runDoctorChecks(depsOverride = {}) {
   // utils/doctor-alias-check.js for the check body and utils/alias-audit.js's
   // findFabricatedAliasRepairs for the detection rule.
   checks.push(guard('aliases', 'Model aliases', () => aliasCheck.evaluateAliasesCheck(d)));
+  checks.push(guard('output-budget', 'Output budget', () => outputBudgetCheck.evaluateOutputBudget(d))); // #218 PR 2
 
   checks.push(guard('anthropic-base-url', 'ANTHROPIC_BASE_URL',
     () => baseUrlCheck.evaluateAnthropicBaseUrl(d)));

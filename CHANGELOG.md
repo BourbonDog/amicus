@@ -7,30 +7,41 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
-- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
-  `contextLength` / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or
-  `openrouter` row still missing a number, from the keyless [models.dev](https://models.dev) index,
-  and lifts Google's own `outputTokenLimit` first-party. The provider's own number always wins —
-  Google's own ceiling and OpenRouter's own value included; models.dev fills only fields the
-  provider left empty or unusable, never a zero, and `openrouter/openrouter/*` routers and local
-  rows are never filled at all. The models.dev call is keyless, bounded by a 10 s timeout, and its
-  failure is reported on the refresh line rather than hidden — including a 200 that parses but
-  carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. It is
-  also skippable both ways: a refresh where every candidate row already carries both numbers never
-  makes the call at all, and the new top-level `config.json` key **`modelsDevCeilings: false`** opts
-  out of contacting models.dev entirely (`outputBudget` then cannot clamp the openai / deepseek
-  direct rows — direct anthropic is held out regardless; Google publishes its own ceiling and
+- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills `contextLength`
+  / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or `openrouter` row still
+  missing a number, from the keyless [models.dev](https://models.dev) index, and lifts Google's own
+  `outputTokenLimit` first-party. The provider's own number always wins — Google's own ceiling and
+  OpenRouter's own value included; models.dev fills only fields the provider left empty or unusable,
+  never a zero, and `openrouter/openrouter/*` routers and local rows are never filled at all. The
+  models.dev call is keyless, bounded by a 10 s timeout, and its failure is reported on the refresh
+  line rather than hidden — including a 200 that parses but carries no recognised vendor limits,
+  which is a `bad-shape` failure and not a silent no-op. It is also skippable both ways: a refresh
+  where every candidate row already carries both numbers never makes the call at all, and the new
+  top-level `config.json` key **`modelsDevCeilings: false`** opts out of contacting models.dev
+  entirely (the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus
+  catalog and are clamped by the engine's own catalog instead; Google publishes its own ceiling and
   OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
-  of those happened, and `--json` carries it as
-  `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
-  now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
-  the direct `openai` / `google` / `deepseek` routes once the catalog is refreshed — which 4.9.3
-  documented as impossible because those lists "don't publish one". Direct `anthropic/*` is the one
-  route held back: Amicus emits no reservation descriptor there at all, because the engine adds the
-  thinking budget to `max_tokens` on that route (probe rows H1/H3/H4) and how a descriptor's
-  `limit.output` interacts with that addition has only been measured against a bare descriptor. Those
-  rows keep exactly their pre-#218 behaviour until PR 2 measures it; `openrouter/anthropic/*` clamps
-  normally.
+  of those happened, and `--json` carries it as `ceilingEnrichment`. Effect: no request changes with
+  `outputBudget` unset; direct-provider rows now carry context and ceiling numbers (visible in
+  `amicus models`), and `outputBudget` can clamp the direct `openai` / `google` / `deepseek` routes
+  once the catalog is refreshed — which 4.9.3 documented as impossible because those lists "don't
+  publish one". Direct `anthropic/*` was held out of clamping by the council review of PR #230 until
+  the thinking-budget interaction was measured; PR 2 measured it and lifted the hold-out — see the
+  next bullet.
+- **`outputBudget` now works in both directions (#218 PR 2).** A budget above the engine's 32,000
+  default is honoured: Amicus starts every engine with `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to
+  the budget — around the spawn only, restored before anything is awaited, never written to the
+  caller's shell; a value you exported yourself is honoured untouched when no budget is set — so
+  every leg reserves `min(budget, ceiling)` wherever a ceiling is known, by the Amicus catalog through
+  the per-model descriptor or else by the engine's own, and a model neither knows receives the budget
+  as-is, exactly as it received the raw 32,000 before. Direct `anthropic/*` routes are no longer held
+  out: the probe measured the descriptor lowering the reservation there (K1), a thinking variant's
+  budget added on top (K2: 8,000 + 16,000 = 24,000) and the sum clamped to the model's real ceiling
+  (K3/K4/K10), so no budget can push a thinking leg over it. Thirteen new probe rows (K1–K13) pin
+  every shape this ships, and the full 32-case matrix is filed in the BACKLOG. New `doctor` row
+  **`output-budget`** says what the value reaches — routes the catalog can clamp, routes it cannot,
+  an ambient flag honoured or overridden — and flags the one silent failure the engine has here: a
+  malformed budget or flag, on which it falls back to 32,000 without a word.
 - **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
@@ -38,6 +49,13 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Changed
 
+- **`outputBudget` below 32,000 now reaches every leg (#218 PR 2).** On 4.9.3 a budget applied only
+  to routes whose ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The
+  engine flag now carries the budget to those rows too — clamped by the engine's own catalog where
+  it knows the model (K5, K12), as-is on a model it does not (J2, K13). A user who set
+  `outputBudget: 8000` on 4.9.3 sees those rows reserve 8,000 after upgrading. A model neither
+  catalog knows receives a raised budget as-is and may be refused by a provider that enforces its
+  ceiling — loudly; `doctor`'s `output-budget` row names such routes.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
@@ -51,6 +69,14 @@ All notable changes to Amicus are documented here. Format follows
   those refusals releases the connection — the response is retired and the live request destroyed —
   so a refused 3xx whose body never ends cannot hold the socket open after the promise has settled. Response bodies are capped at 16 MiB
   (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
+
+### Fixed
+
+- **The curated `qwen` alias pointed at a model OpenRouter no longer lists.** Between 2026-09-04 and
+  2026-09-05 both OpenRouter and models.dev renamed `qwen/qwen3.8-max` to `qwen/qwen3.8-max-0902`;
+  the #218 PR 2 probe run caught it (a variant sent for the old id went silent, and its ceiling read
+  `0/0`). The pin now names the dated id. Found and fixed in PR #231; the CI bench map already
+  pinned `qwen3.8-27b` and is unchanged.
 
 ## [4.9.3] - 2026-08-28
 

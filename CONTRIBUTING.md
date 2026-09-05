@@ -42,7 +42,7 @@ and ~1.7M input tokens via your Claude subscription — is `command not found` w
 
 ```bash
 npm test                       # unit suite (the green gate)
-npm run test:integration       # integration tier, keyless — free, ~10s, paid suites skip
+npm run test:integration       # integration tier, keyless — free, ~10s plus the ~15s engine-flag canary, paid suites skip
 npm run test:integration:live  # integration tier with real keys — SPENDS MONEY
 npm run lint
 ```

@@ -187,6 +187,7 @@ src/
 │   ├── doctor-key-auth-check.js  # The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js
 │   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
 │   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
+│   ├── doctor-output-budget-check.js  # #218 PR 2: the 'output-budget' doctor row.
 │   ├── doctor-summary.js  # Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the
 │   ├── engine-ensure.js  # ensureEngine() — runtime engine self-heal at server start (report #2).
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
@@ -194,6 +195,7 @@ src/
 │   ├── engine-log-parse.js  # Line-shape parsing for the engine log: level, session, message.
 │   ├── engine-log-tail.js  # One engine-log FILE: read its tail, find the newest usable excerpt in it.
 │   ├── engine-log.js  # Resolve the OpenCode engine's own error line for one session.
+│   ├── engine-output-flag.js  # #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX.
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
 │   ├── engine-skew-records.js  # Server identity and the bounded store of standing engine-skew records.
 │   ├── engine-skew.js  # Runtime detection of an opencode ENGINE version skew: server vs installed.
@@ -620,6 +622,7 @@ evals/
 | `utils/doctor-key-auth-check.js` | The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js | `evaluateKeyAuth()`, `classifyProbeFailure()`, `probeApiKey()`, `probeOpenRouterCredit()`, `liveProbesDisabled()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
+| `utils/doctor-output-budget-check.js` | #218 PR 2: the 'output-budget' doctor row. | `evaluateOutputBudget()` |
 | `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |
 | `utils/engine-ensure.js` | ensureEngine() — runtime engine self-heal at server start (report #2). | `ensureEngine()`, `_resetEnsureEngine()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()`, `resolveNpmRootG()` |
@@ -627,6 +630,7 @@ evals/
 | `utils/engine-log-parse.js` | Line-shape parsing for the engine log: level, session, message. | `isErrorLine()`, `extractMessage()`, `collapseExcerpt()`, `mentionsSession()`, `lineIsAboutSession()` |
 | `utils/engine-log-tail.js` | One engine-log FILE: read its tail, find the newest usable excerpt in it. | `newestExcerptInFile()` |
 | `utils/engine-log.js` | Resolve the OpenCode engine's own error line for one session. | `engineErrorForSession()`, `engineLogDirCandidates()`, `isErrorLine()`, `extractMessage()`, `collapseExcerpt()` |
+| `utils/engine-output-flag.js` | #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX. | `withOutputTokenFlag()`, `outputTokenFlagValue()`, `OUTPUT_TOKEN_FLAG()`, `ENGINE_DEFAULT_OUTPUT_TOKENS()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
 | `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |

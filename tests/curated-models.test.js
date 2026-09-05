@@ -34,7 +34,7 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.gemini).toBe('google/gemini-3.6-flash');
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
-    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max');
+    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k3');
   });
 
@@ -63,7 +63,7 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.fable).toBe('anthropic/claude-fable-5');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
-    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max');
+    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
     expect(defaults['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
     expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     expect(defaults.glm).toBe('openrouter/z-ai/glm-5.3');

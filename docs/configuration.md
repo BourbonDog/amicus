@@ -63,15 +63,22 @@ This request requires more credits, or fewer max_tokens.
 You requested up to 32000 tokens, but can only afford 354
 ```
 
-`outputBudget` lowers the reservation. Each model except a direct `anthropic/*` route reserves
-`min(outputBudget, that model's real ceiling)` (direct Anthropic keeps the engine default until
-PR 2 measures the thinking-budget interaction — see the third limit below), so a small model keeps
-its own lower limit rather than being handed an over-ceiling value.
+`outputBudget` sets the reservation, in either direction. Every leg reserves
+`min(outputBudget, that model's real ceiling)` wherever a ceiling is known — by the Amicus catalog
+(a per-model `limit` descriptor) or, failing that, by the engine's own catalog (every engine Amicus
+starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget). A model neither catalog
+knows receives the budget itself, exactly as it received the raw 32,000 before.
+
+If you set `outputBudget` on 4.9.3, one thing changes on upgrade: a budget below 32,000 now also
+reaches routes the catalog cannot clamp — an unrefreshed direct row, a local-provider model,
+anything the catalog lacks — which 4.9.3 left at the engine's 32,000. Those legs reserve
+`min(budget, the ceiling the engine's own catalog knows)` (K12: 8,000 on a bare kimi row), or the
+budget as-is where the engine knows the model no better (K13).
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
-| `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling; direct `anthropic/*` routes are held out (engine default) until PR 2. Unset means no limit is sent — OpenCode's 32,000 default applies, exactly as before. |
-| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; `outputBudget` then cannot clamp the openai / deepseek direct rows (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
+| `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling wherever one is known. Unset means no limit is sent and no engine flag is set — OpenCode's 32,000 default applies, exactly as before. |
+| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
 
 `modelsDevCeilings` is the opt-out for the one third-party lookup a refresh makes. Only a literal
 `false` turns it off; the key being absent means it runs. Even with it on, the call is **skipped
@@ -85,41 +92,62 @@ Set it by hand-editing `~/.config/amicus/config.json`:
 { "outputBudget": 8000 }
 ```
 
-Three limits worth knowing before you set it:
+`amicus doctor`'s `output-budget` row then says what the value reaches: how many of your alias
+routes the catalog can clamp it to, whether an `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` you exported
+yourself is being honoured or overridden, and a malformed value in either place — the engine falls
+back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces.
 
-- **It can only lower the reservation, never raise it.** OpenCode computes
-  `Math.min(limit.output, 32000)`, so any value at or above 32,000 leaves the reservation itself
-  unchanged. Raising the ceiling past 32,000 needs OpenCode's own
-  `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` environment variable — a different lever that Amicus does
-  not set.
+Four things worth knowing before you set it. Every number below was measured on the wire by
+`scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
+so; the row ids refer to the two probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218 P1
+and PR 2).
 
-  Setting a value ≥ 32,000 is **not** a complete no-op, though. Amicus still emits the `limit`
-  descriptor, which carries the model's context length alongside the output figure — and OpenCode
-  disables prompt compaction for any model whose context reads as `0`, which is what a model it does
-  not recognise otherwise gets. So a high budget leaves `max_tokens` alone while still restoring
-  compaction for those models. If you want neither effect, leave `outputBudget` unset.
-- **It needs a catalog that knows each model's ceiling.** Run `amicus models --refresh` after setting
-  it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's; the direct
-  `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider left empty
-  or unusable — are filled from [models.dev](https://models.dev) at refresh. models.dev fills a
-  field only where the provider gave no usable positive integer (a null, a zero, a negative or a
-  malformed number), and never overwrites a usable provider value; the `openrouter/openrouter/*`
+- **Above 32,000 it is the engine flag doing the work.** OpenCode computes
+  `Math.min(limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX)` with the flag defaulting to
+  32,000 (read in the pinned binary; the rows below are its wire effects), so Amicus sets that
+  flag to your budget for every engine it starts — around the spawn only. It never lands in
+  your shell, and a value you exported yourself is honoured untouched when `outputBudget` is
+  unset and overridden (for Amicus-started engines only) when it is set. A budget of 100,000 on a
+  model with a 943,718 ceiling reserves 100,000 (K6); on a model whose ceiling is 64,000 it
+  reserves 64,000 (K5). The flag is experimental on the engine's side, and a malformed value is
+  ignored without a word (D1/D2): CI runs the probe's flag rows on every push, and the full matrix
+  is re-run and re-filed after every engine bump. An SDK bump is covered by a test that drives the
+  real SDK against a fake engine and checks the flag reached the spawn.
+- **It clamps best with a catalog that knows each model's ceiling.** Run `amicus models --refresh`
+  after setting it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's;
+  the direct `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider
+  left empty or unusable — are filled from [models.dev](https://models.dev) at refresh. models.dev
+  fills a field only where the provider gave no usable positive integer (a null, a zero, a negative
+  or a malformed number), and never overwrites a usable provider value; the `openrouter/openrouter/*`
   meta-routers and local-provider rows are never filled at all. The refresh output says how many
-  rows were filled or why none could be. A model neither source knows keeps the old behaviour
-  rather than receiving a guessed limit.
-- **Direct-Anthropic thinking legs are not yet a safe place for it.** The engine adds the thinking
-  budget to `max_tokens` on that route (measured bare by this PR's probe (#218 PR 1, PR #230): 32000 → 48000 with a 16000 budget,
-  → 63999 with 31999). How a descriptor `limit.output` interacts with that addition is not yet
-  measured. Amicus therefore emits no reservation descriptor for direct `anthropic/*` routes until
-  PR 2 measures it; the engine default applies there. Even with a budget set and both ceilings in
-  the catalog, those rows are registered exactly as they were before this PR. `openrouter/anthropic/*`
-  rows are unaffected: they route through OpenRouter's effort mapping, not the Anthropic
-  thinking-budget path, and clamp normally.
+  rows were filled or why none could be. A route the Amicus catalog cannot clamp still gets the
+  budget through the engine flag, clamped by the engine's own catalog where it knows the model
+  (K5: 100,000 → 64,000 on a bare haiku row; K12: 8,000 on a bare kimi row, passed through
+  under its ceiling); a model neither knows receives the budget as-is (K13). That is the one way a
+  raised budget can fail where the 32,000 default did not: a custom or local model neither catalog
+  knows is asked for the full budget, and a provider that enforces its ceiling refuses the
+  request — loudly, with the provider's own error on the leg, never silently. `amicus doctor`
+  names such routes; lower the budget if you have one, or give the model a catalog entry.
+- **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
+  route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
+  the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:
+  64,000 for haiku, whatever the descriptor or the flag said). Amicus sends no thinking variant
+  today (`--thinking` never reached the engine — F1), so this is the number PR 4 inherits, not one
+  you can hit yet — and PR 4, which sends the variant, must fit it under the budget rather than on
+  top. `openrouter/anthropic/*` rows route through OpenRouter's effort mapping and clamp normally.
+- **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
+  window, and the engine subtracts this same reservation from the window before it decides to
+  compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is
+  the branch for a model without `limit.input`; a model with one loses at most 20,000, and a
+  `compaction.reserved` config overrides both). A budget of 100,000 leaves a 131,072-context
+  model 31,072 tokens for the prompt. `amicus doctor` warns when a budget takes at least half of
+  any alias route's window.
 
-This addresses reservation *rejections*. It does **not** stop a reasoning-heavy model from spending
-its whole allowance on reasoning and emitting nothing — that is governed by reasoning effort
-(`--thinking`), not by `max_tokens`. Lowering the budget makes such a leg fail faster and cheaper; it
-does not make it produce output.
+This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
+from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
+effort, which today's `--thinking` never delivers to the engine (PR 4 sends `variant` instead).
+Lowering the budget makes such a leg fail faster and cheaper; raising it gives the reasoning more
+room; neither makes it produce output.
 
 ---
 

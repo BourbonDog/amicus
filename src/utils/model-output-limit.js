@@ -17,11 +17,13 @@
  * i.e. `ProviderTransform.maxOutputTokens(model) = Math.min(model.limit.output,
  * OUTPUT_TOKEN_MAX)`. Three consequences, each a trap:
  *
- *   1. Supplying the model's REAL ceiling is ARITHMETICALLY INERT. kimi-k3's
- *      true ceiling is 943,718 and Math.min(943718, 32000) is still 32000. Only
- *      a value BELOW 32000 changes the outbound request. The issue's headline
- *      framing ("a 32,000 reservation against a 943,718 ceiling is arbitrary")
- *      reads as though feeding the real ceiling would help. It would not.
+ *   1. Supplying the model's REAL ceiling through THIS DESCRIPTOR ALONE is
+ *      ARITHMETICALLY INERT. kimi-k3's true ceiling is 943,718 and
+ *      Math.min(943718, 32000) is still 32000. Through the descriptor only a
+ *      value BELOW OUTPUT_TOKEN_MAX changes the outbound request. Raising
+ *      OUTPUT_TOKEN_MAX itself is engine-output-flag.js's job (PR 2): with the
+ *      flag set to the same budget the two levers agree on min(budget, ceiling)
+ *      — measured, probe rows C2 and K6.
  *   2. `limit.context` is MANDATORY whenever `limit` is present. A `limit` with
  *      only `output` is a hard ConfigInvalidError — and it poisons the ENTIRE
  *      config for the server's lifetime, not just that model. Measured against
@@ -30,15 +32,18 @@
  *
  * WHAT THIS DOES NOT FIX. #218 conflates two modes that pull in OPPOSITE
  * directions on this one knob. Mode 1 (credit rejection) needs the reservation
- * LOWERED — that is what this module enables. Mode 2 (a leg spending its whole
- * allowance on reasoning and emitting 0-2 output tokens) would need it RAISED,
- * which the descriptor cannot do at all because of the Math.min; its real cause
- * is reasoning effort, a knob amicus already owns (`sidecar/fanout.js` →
- * `body.reasoning`). Lowering the budget makes those legs fail faster and
- * cheaper. It does not make them produce output. No claim is made that it does.
+ * LOWERED — this descriptor does that. Mode 2 (a leg spending its whole
+ * allowance on reasoning and emitting 0-2 output tokens) needs it RAISED, which
+ * this descriptor cannot do (the Math.min) and the engine flag can
+ * (engine-output-flag.js) — but its real cause is reasoning effort, and the
+ * `--thinking` amicus sends today never reaches the engine at all (probe F1:
+ * the prompt API reads `variant`, not `reasoning`; PR 4). Lowering the budget
+ * makes such a leg fail faster and cheaper; raising it gives the reasoning more
+ * room. Neither makes it produce output, and no claim is made that either does.
  *
  * POLICY: opt-in, no default change. With no configured budget every model is
- * still registered as `{}` — byte-identical to pre-#218 behaviour.
+ * still registered as `{}` and no engine flag is set — byte-identical to
+ * pre-#218 behaviour.
  */
 
 'use strict';

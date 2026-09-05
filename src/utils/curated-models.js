@@ -98,14 +98,14 @@ const CARDLESS = [
   // (live smoke wave 47278069) — the entry was OpenRouter-only at authoring.
   { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5',
                               anthropic: 'anthropic/claude-fable-5' } },
-  // qwen/kimi refreshed 2026-08-26 (v4.9 W13): both were a model generation
-  // behind. These are the FALLBACK FLOOR — a caller or fork with no CI alias map
-  // resolves its whole bench through this table (see `inkling` below), while the
-  // owner's machine and .github/amicus-ci-aliases.json already ran the newer ids.
-  // Cardless entries have no `idPattern`, so `models --check` can only ask
-  // whether the OLD id still EXISTS — which is how a pin sits a generation back
-  // with every gate green (scripts/check-ci-alias-pins.js asks the other one).
-  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.8-max' } },
+  // qwen/kimi refreshed 2026-08-26 (v4.9 W13); qwen again 2026-09-05, when
+  // OpenRouter and models.dev dropped the un-dated `qwen3.8-max` for the dated
+  // `qwen3.8-max-0902` (the #218 PR 2 probe caught it: F4 went silent). These are
+  // the FALLBACK FLOOR — a fork with no CI alias map resolves its bench here; the
+  // owner's machine and .github/amicus-ci-aliases.json (qwen3.8-27b) run newer ids.
+  // Cardless entries have no `idPattern`, so `models --check` only asks whether the
+  // OLD id still EXISTS (scripts/check-ci-alias-pins.js asks the other question).
+  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.8-max-0902' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
   { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
   { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-medium-3-5' } },
