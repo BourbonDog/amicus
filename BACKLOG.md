@@ -6966,12 +6966,16 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   and the engine's own `OPENCODE_AUTH_CONTENT`/`OPENCODE_API_KEY`/`OPENCODE_CONFIG`/
   `OPENCODE_CONFIG_DIR`/`OPENCODE_CONFIG_CONTENT`, and repoints `HOME`/`USERPROFILE`/
   `XDG_DATA_HOME`/`XDG_CONFIG_HOME`/`APPDATA` inside the sandbox — those named channels, not "no
-  credential of any kind". The first four engine channels came from the final review and
-  `OPENCODE_CONFIG_CONTENT` from the council review; the table below is the re-run made with all
-  five in place, and its `sandbox:` line enumerates all eleven names. Eighteen of the nineteen rows
+  credential of any kind". All five engine channels came from the whole-branch final review of this
+  PR; the table below is the re-run made with all five in place, and its `sandbox:` line enumerates
+  all eleven names. Eighteen of the nineteen rows
   carry a falsifiable `expected` value, and all eighteen matched. The nineteenth row, F3, is
   excluded from that count because its expectation — `record: silent no-op or error` — is satisfied
-  by either outcome and so cannot fail; what it actually observed is reported below.
+  by either outcome and so cannot fail; what it actually observed is reported below. Those counts
+  are no longer hand-read: the council's second round (C2) gave every case a machine-readable `want`
+  taken from this table, so the probe now prints the `checks:` line reproduced under the dump and
+  exits 1 if a cell moves. That line is from the re-run made after that change, whose 21 table lines
+  and whose `/config/providers` dump both diff byte-identical against the ones filed here.
 
   **E1 is a falsified PLAN prediction, not a row that passed.** The plan predicted
   `32000 (dropped)`; the first run measured `max_tokens 4096` on the wire — the same number B's
@@ -7059,6 +7063,8 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
 - openrouter/qwen/qwen3.8-max: {"fromCase":"F4","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1000000,"output":131072},"variants":{"minimal":{"reasoning":{"effort":"minimal"}},"low":{"reasoning":{"effort":"low"}},"medium":{"reasoning":{"effort":"medium"}},"high":{"reasoning":{"effort":"high"}},"xhigh":{"reasoning":{"effort":"xhigh"}}},"options":{}}
 - anthropic/claude-haiku-4-5: {"fromCase":"H1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":200000,"output":64000},"variants":{"high":{"thinking":{"type":"enabled","budgetTokens":16000}},"max":{"thinking":{"type":"enabled","budgetTokens":31999}}},"options":{}}
 - probe/unknown-model: {"fromCase":"J1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":0,"output":0},"variants":{},"options":{}}
+
+checks: 18 matched, 0 mismatched (none), 1 recorded
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

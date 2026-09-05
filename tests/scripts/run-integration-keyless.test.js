@@ -131,8 +131,8 @@ describe('buildKeylessEnv sandboxes every credential-path root (I-1)', () => {
     expect(probe.openrouterKey).toBeNull();
   });
 
-  // The engine's own credential/config channels (final review of #218 PR 1;
-  // OPENCODE_CONFIG_CONTENT added by the council review of that PR).
+  // The engine's own credential/config channels — all five named by the
+  // whole-branch final review of #218 PR 1.
   // Directory sandboxing cannot contain these: OPENCODE_AUTH_CONTENT and
   // OPENCODE_CONFIG_CONTENT carry their document in the variable itself, and
   // OPENCODE_CONFIG/_DIR can name a provider block (with its key) from anywhere

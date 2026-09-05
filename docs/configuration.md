@@ -76,7 +76,7 @@ Set it by hand-editing `~/.config/amicus/config.json`:
 { "outputBudget": 8000 }
 ```
 
-Two limits worth knowing before you set it:
+Three limits worth knowing before you set it:
 
 - **It can only lower the reservation, never raise it.** OpenCode computes
   `Math.min(limit.output, 32000)`, so any value at or above 32,000 leaves the reservation itself
@@ -98,6 +98,10 @@ Two limits worth knowing before you set it:
   meta-routers and local-provider rows are never filled at all. The refresh output says how many
   rows were filled or why none could be. A model neither source knows keeps the old behaviour
   rather than receiving a guessed limit.
+- **Direct-Anthropic thinking legs are not yet a safe place for it.** The engine adds the thinking
+  budget to `max_tokens` on that route (measured bare in PR #230: 32000 → 48000 with a 16000 budget,
+  → 63999 with 31999). How a descriptor `limit.output` interacts with that addition is not yet
+  measured; PR 2 measures it before recommending a budget there.
 
 This addresses reservation *rejections*. It does **not** stop a reasoning-heavy model from spending
 its whole allowance on reasoning and emitting nothing — that is governed by reasoning effort

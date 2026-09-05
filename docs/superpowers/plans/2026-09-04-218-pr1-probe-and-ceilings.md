@@ -25,7 +25,7 @@
 
 ---
 
-> **Superseded in part (2026-09-04):** the P1 probe refuted fact 4 (a per-model `options.max_tokens` DOES reach the wire, case E1) and the engine reports kimi-k3's ceiling as 1048576, not fact 6's live-models.dev 943718. The BACKLOG "v4.9.4 records" P1 entry is the measured record; read it before this section.
+> **Superseded in part (2026-09-04):** the P1 probe refuted fact 4 (a per-model `options.max_tokens` DOES reach the wire, case E1) and the engine reports kimi-k3's ceiling as 1048576, not fact 6's live-models.dev 943718. Three further sentences drafted here and in the task bodies below were overtaken by review and must not be read as the shipped contract: (a) the fill rule is **"empty or unusable"**, not "nulls only" — the shipped guard is `positiveCount(...) === null`, so a 0, a negative, a value below 1 and a non-number are filled too, and an all-`unknown` models.dev document is now a `bad-shape` failure rather than a successful enrichment; (b) the release note's "Nothing changes with `outputBudget` unset" was replaced by **"no request changes"** with `outputBudget` unset — the catalog rows themselves do change; (c) `fmtCeilingLine` words a failure by its `failure.reason` instead of always claiming models.dev was unreachable. The BACKLOG "v4.9.4 records" P1 entry is the measured record, and `CHANGELOG.md` plus `src/utils/model-ceilings-modelsdev.js` carry the shipped wording; read those before this section.
 
 ## Design (approved 2026-09-04)
 

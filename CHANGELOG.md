@@ -8,12 +8,15 @@ All notable changes to Amicus are documented here. Format follows
 ### Added
 
 - **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
-  `contextLength` / `maxOutputTokens` for `anthropic`, `openai` and `deepseek` rows from the keyless
-  [models.dev](https://models.dev) index, and lifts Google's own `outputTokenLimit` first-party. The
-  provider's own number always wins; models.dev fills only fields the provider left empty or
-  unusable, never a zero, and never the `openrouter/openrouter/*` meta-routers. The models.dev call
-  is keyless, bounded by a 10 s timeout, and its failure is reported on the refresh line rather than
-  hidden. The refresh prints the outcome (`Ceilings: …`) and `--json` carries it as
+  `contextLength` / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or
+  `openrouter` row still missing a number, from the keyless [models.dev](https://models.dev) index,
+  and lifts Google's own `outputTokenLimit` first-party. The provider's own number always wins —
+  Google's own ceiling and OpenRouter's own value included; models.dev fills only fields the
+  provider left empty or unusable, never a zero, and `openrouter/openrouter/*` routers and local
+  rows are never filled at all. The models.dev call is keyless, bounded by a 10 s timeout, and its
+  failure is reported on the refresh line rather than hidden — including a 200 that parses but
+  carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. The
+  refresh prints the outcome (`Ceilings: …`) and `--json` carries it as
   `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
   now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
   direct routes once the catalog is refreshed — which 4.9.3 documented as impossible because those
@@ -26,10 +29,13 @@ All notable changes to Amicus are documented here. Format follows
 ### Changed
 
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
-  inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) is
-  unchanged. A response-stream error mid-body and a synchronous throw from `https.get` (a URL it
-  cannot parse) now resolve as `network-error` instead of escaping the promise. Redirects are not
-  followed: a 3xx is an `http-status` failure, visible rather than silently chased.
+  inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
+  one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
+  (a URL it cannot parse) now resolve as `network-error` instead of escaping the promise. Up to two
+  `https` redirects are followed, with the same headers and under one deadline for the whole chain;
+  a redirect to a non-`https` target, one with no `Location`, and a third hop are each an
+  `http-status` failure whose `detail` names which. Response bodies are capped at 16 MiB
+  (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
 
 ## [4.9.3] - 2026-08-28
 
