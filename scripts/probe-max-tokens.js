@@ -53,9 +53,11 @@
  * a ceiling (K5), lever precedence (K7/K8), and the exact shapes amicus ships
  * once the flag is set to the budget (K4/K6/K11/K12/K13). Those rows are the canary
  * for the ENGINE's reading of the flag (an engine bump that ignored it reads
- * 32000 on K6/K12/K13). They do not exercise amicus's wrapper — each case sets
- * the flag in this probe's own env — so the SDK spawn-timing fact is pinned by
- * tests/opencode-client-sdk-spawn-timing.test.js instead.
+ * 32000 on K6/K12/K13). CI runs A/C3/K6/K12/K13 on every push
+ * (tests/probe-flag-canary.integration.test.js). They do not exercise amicus's
+ * wrapper — each case sets the flag in this probe's own env — so the SDK
+ * spawn-timing fact is pinned by tests/opencode-client-sdk-spawn-timing.test.js
+ * instead.
  */
 
 'use strict';

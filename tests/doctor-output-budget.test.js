@@ -65,7 +65,7 @@ describe('evaluateOutputBudget — nothing configured', () => {
     expect(row.status).toBe('warn');
     expect(row.message.startsWith(AMBIENT_64000_LEAD + '; 3 of 5 alias routes have a known catalog ceiling; 2 without one (')).toBe(true);
     expect(row.message).toContain('an unknown model receives 64000 as-is');
-    expect(row.hint).toContain('amicus models --refresh');
+    expect(row.hint).toContain('lower the value if one of those routes is a model neither catalog knows');
   });
 
   test('unset, ambient value that starves a route -> WARN naming the route and the ambient knob (D2)', () => {
@@ -80,7 +80,7 @@ describe('evaluateOutputBudget — nothing configured', () => {
     const above = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' }, readCache: () => null }));
     expect(above.status).toBe('warn');
     expect(above.message).toContain('; no catalog cache, so no route has a known ceiling here');
-    expect(above.hint).toBe('amicus models --refresh');
+    expect(above.hint).toBe('amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one');
     const below = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '8000' }, readCache: () => null }));
     expect(below.status).toBe('ok');
     expect(below.hint).toBeNull();
@@ -146,7 +146,7 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 40000, readCache: () => null }));
     expect(row.status).toBe('warn');
     expect(row.message).toContain('budget 40000 — each leg reserves min(40000, its ceiling where one is known); no catalog cache');
-    expect(row.hint).toBe('amicus models --refresh');
+    expect(row.hint).toBe('amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one');
   });
 
   test('valid, at or below the engine default, some routes without a ceiling -> ok (the engine clamps what it knows)', () => {
@@ -167,7 +167,7 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.status).toBe('warn');
     expect(row.message).toContain('budget 40000 —');
     expect(row.message).toContain('an unknown model receives 40000 as-is');
-    expect(row.hint).toContain('amicus models --refresh');
+    expect(row.hint).toContain('lower the value if one of those routes is a model neither catalog knows');
   });
 
   test('every route has a ceiling -> ok, no caveat', () => {
@@ -216,7 +216,7 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     const only = ALIASES.filter((a) => ['glm', 'ghost'].includes(a.alias));
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 100000, collectAliasSources: () => only }));
     expect(row.status).toBe('warn');
-    expect(row.hint).toBe('lower outputBudget — input plus the reservation must fit the context window; amicus models --refresh  (a budget above the engine default reaches an unknown model unclamped)');
+    expect(row.hint).toBe('lower outputBudget — input plus the reservation must fit the context window; lower the value if one of those routes is a model neither catalog knows (it receives it unclamped); amicus models --refresh if the catalog is just stale');
   });
 
   test('long lists are shortened to three names plus a count', () => {

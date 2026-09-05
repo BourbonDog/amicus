@@ -62,7 +62,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
     return {
       clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is)`,
       status: aboveDefault ? 'warn' : 'ok',
-      hint: aboveDefault ? 'amicus models --refresh' : null,
+      hint: aboveDefault ? 'amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one' : null,
     };
   }
   const limits = buildLimitLookup(cache.models);
@@ -87,7 +87,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
     // Named mutant "NODEFAULTGATE": drop this condition.
     if (aboveDefault) {
       status = 'warn';
-      hint = 'amicus models --refresh  (a budget above the engine default reaches an unknown model unclamped)';
+      hint = 'lower the value if one of those routes is a model neither catalog knows (it receives it unclamped); amicus models --refresh if the catalog is just stale';
     }
   }
   if (starved.length > 0) {

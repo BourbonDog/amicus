@@ -7198,6 +7198,17 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   `models --check` cannot see (v4.9.3 skew records). **Fixed in PR #231 (council round 2, D4): the
   pin moved to `openrouter/qwen/qwen3.8-max-0902`; the six test expectations followed; the CI bench
   map (`qwen3.8-27b`) is untouched.**
+- [ ] **Per-route ceiling override for a model neither catalog knows (#218 PR 2 council r3 B1).** A
+  custom or local model has no ceiling in either catalog, so a raised `outputBudget` reaches it as-is
+  (J2/K13) and a provider that enforces its ceiling refuses the leg — loudly, and `doctor` names the
+  route, but the user has no way to name the ceiling themselves. A `maxOutputTokens` on the local
+  provider's model entry (or a catalog override) would let `computeModelLimit` clamp it. Not in PR 2.
+- [ ] **PR 4 must fit a thinking variant UNDER the budget on direct Anthropic (#218 PR 2 council r3
+  C1).** The engine adds a variant's budget on top of the descriptor (K2: 8000 + 16000 = 24000) and
+  clamps only at the model's ceiling (K3/K4/K10). amicus sends no variant today (F1), so it cannot
+  happen on this branch; when PR 4 sends `variant`, set the descriptor to budget − the variant's
+  `budgetTokens` (the `/config/providers` dump exposes it per variant) or refuse a variant the budget
+  cannot hold, and add the probe row that proves it.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

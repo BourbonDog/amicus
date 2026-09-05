@@ -32,7 +32,8 @@
  * (Electron, the MCP child, on-complete hooks) and out of the caller's own env.
  * The unit pin is tests/opencode-client-output-flag.test.js; the SDK-side pin is
  * tests/opencode-client-sdk-spawn-timing.test.js (the real SDK against a fake engine
- * on PATH); the engine-side canary is the probe's K6/K12/K13 rows.
+ * on PATH); the engine-side canary is the probe's K6/K12/K13 rows, which CI's
+ * keyless job runs on every push (tests/probe-flag-canary.integration.test.js).
  */
 'use strict';
 

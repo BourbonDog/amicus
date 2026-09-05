@@ -110,9 +110,9 @@ and PR 2).
   unset and overridden (for Amicus-started engines only) when it is set. A budget of 100,000 on a
   model with a 943,718 ceiling reserves 100,000 (K6); on a model whose ceiling is 64,000 it
   reserves 64,000 (K5). The flag is experimental on the engine's side, and a malformed value is
-  ignored without a word (D1/D2): re-run the probe after every engine bump. An SDK bump is
-  covered by a test that drives the real SDK against a fake engine and checks the flag reached the
-  spawn.
+  ignored without a word (D1/D2): CI runs the probe's flag rows on every push, and the full matrix
+  is re-run and re-filed after every engine bump. An SDK bump is covered by a test that drives the
+  real SDK against a fake engine and checks the flag reached the spawn.
 - **It clamps best with a catalog that knows each model's ceiling.** Run `amicus models --refresh`
   after setting it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's;
   the direct `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider
@@ -123,14 +123,18 @@ and PR 2).
   rows were filled or why none could be. A route the Amicus catalog cannot clamp still gets the
   budget through the engine flag, clamped by the engine's own catalog where it knows the model
   (K5: 100,000 → 64,000 on a bare haiku row; K12: 8,000 on a bare kimi row, passed through
-  under its ceiling); a model neither knows receives the budget as-is (K13).
+  under its ceiling); a model neither knows receives the budget as-is (K13). That is the one way a
+  raised budget can fail where the 32,000 default did not: a custom or local model neither catalog
+  knows is asked for the full budget, and a provider that enforces its ceiling refuses the
+  request — loudly, with the provider's own error on the leg, never silently. `amicus doctor`
+  names such routes; lower the budget if you have one, or give the model a catalog entry.
 - **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
   route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
   the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:
   64,000 for haiku, whatever the descriptor or the flag said). Amicus sends no thinking variant
   today (`--thinking` never reached the engine — F1), so this is the number PR 4 inherits, not one
-  you can hit yet. `openrouter/anthropic/*` rows route through OpenRouter's effort mapping and clamp
-  normally.
+  you can hit yet — and PR 4, which sends the variant, must fit it under the budget rather than on
+  top. `openrouter/anthropic/*` rows route through OpenRouter's effort mapping and clamp normally.
 - **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
   window, and the engine subtracts this same reservation from the window before it decides to
   compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is

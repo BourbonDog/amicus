@@ -248,7 +248,9 @@ jobs:
     # through scripts/run-integration-keyless.js, which strips every provider
     # credential and sandboxes the home directory before spawning jest, so the
     # money-spending E2E suites self-skip and only the free assertions execute
-    # (~51 assertions, ~10s, $0).
+    # (~51 assertions plus the engine-flag canary in
+    # tests/probe-flag-canary.integration.test.js — five real engine starts against a
+    # local capture server, ~1 min, $0).
     #
     # DO NOT ADD SECRETS TO THIS JOB. Paid suites belong on the human-initiated
     # rail in integration-live.yml. The keyless wrapper would scrub any key
@@ -261,8 +263,8 @@ jobs:
     runs-on: ubuntu-latest
     # Process-spawn-heavy and runs on every push; without this, a hung spawn
     # inherits GitHub's 6-hour default and burns a runner for six hours.
-    # Measured wall clock is ~10s, so 15 minutes is generous headroom, not a
-    # tight bound.
+    # Measured wall clock is ~10s plus ~1 min for the engine-flag canary, so 15
+    # minutes is generous headroom, not a tight bound.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
