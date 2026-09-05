@@ -4,7 +4,7 @@
 /**
  * makeBaseDeps({ omit = [], ...overrides } = {})
  *
- * Factory for the canonical 30-key `runDoctorChecks` deps fixture, formerly
+ * Factory for the canonical 31-key `runDoctorChecks` deps fixture, formerly
  * duplicated byte-identically across 11 doctor-family suites (~360 lines).
  * Builds a FRESH object on every call and returns it — no shared/module-level
  * state — so each consumer file owns its own instance.
