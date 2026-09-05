@@ -18,12 +18,18 @@ All notable changes to Amicus are documented here. Format follows
   carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. It is
   also skippable both ways: a refresh where every candidate row already carries both numbers never
   makes the call at all, and the new top-level `config.json` key **`modelsDevCeilings: false`** opts
-  out of contacting models.dev entirely (`outputBudget` then cannot clamp direct routes). The
+  out of contacting models.dev entirely (`outputBudget` then cannot clamp the openai / anthropic /
+  deepseek direct rows — Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). The
   refresh prints the outcome (`Ceilings: …`), naming which of those happened, and `--json` carries it as
   `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
   now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
-  direct routes once the catalog is refreshed — which 4.9.3 documented as impossible because those
-  lists "don't publish one".
+  the direct `openai` / `google` / `deepseek` routes once the catalog is refreshed — which 4.9.3
+  documented as impossible because those lists "don't publish one". Direct `anthropic/*` is the one
+  route held back: Amicus emits no reservation descriptor there at all, because the engine adds the
+  thinking budget to `max_tokens` on that route (probe rows H3/H4) and how a descriptor's
+  `limit.output` interacts with that addition has only been measured against a bare descriptor. Those
+  rows keep exactly their pre-#218 behaviour until PR 2 measures it; `openrouter/anthropic/*` clamps
+  normally.
 - **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
@@ -38,9 +44,11 @@ All notable changes to Amicus are documented here. Format follows
   are opt-in per call (`followRedirects`, default off, so the keyed provider fetches are unchanged
   and a 3xx stays their terminal `http-status` failure); with it on, up to two `https` redirects are
   followed under one deadline for the whole chain, and a cross-origin hop carries only an allowlist
-  of headers (`user-agent`, `accept`, `accept-language`, `accept-encoding`) so no credential can
+  of headers (`user-agent`, `accept`, `accept-language`) so no credential can
   follow a `Location` to another host. A redirect to a non-`https` target, one with no `Location`,
-  and a third hop are each an `http-status` failure whose `detail` names which. Response bodies are capped at 16 MiB
+  and a third hop are each an `http-status` failure whose `detail` names which, and every one of
+  those refusals releases the connection — the response is retired and the live request destroyed —
+  so a refused 3xx whose body never ends cannot hold the socket open after the promise has settled. Response bodies are capped at 16 MiB
   (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
 
 ## [4.9.3] - 2026-08-28
