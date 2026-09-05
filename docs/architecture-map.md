@@ -187,6 +187,7 @@ src/
 │   ├── doctor-key-auth-check.js  # The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js
 │   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
 │   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
+│   ├── doctor-output-budget-check.js  # #218 PR 2: the 'output-budget' doctor row.
 │   ├── doctor-summary.js  # Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the
 │   ├── engine-ensure.js  # ensureEngine() — runtime engine self-heal at server start (report #2).
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
@@ -621,6 +622,7 @@ evals/
 | `utils/doctor-key-auth-check.js` | The `key-auth` doctor row (issue #210), split out of src/cli-handlers-doctor.js | `evaluateKeyAuth()`, `classifyProbeFailure()`, `probeApiKey()`, `probeOpenRouterCredit()`, `liveProbesDisabled()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
+| `utils/doctor-output-budget-check.js` | #218 PR 2: the 'output-budget' doctor row. | `evaluateOutputBudget()` |
 | `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |
 | `utils/engine-ensure.js` | ensureEngine() — runtime engine self-heal at server start (report #2). | `ensureEngine()`, `_resetEnsureEngine()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()`, `resolveNpmRootG()` |

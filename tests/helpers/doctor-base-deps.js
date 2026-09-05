@@ -74,6 +74,10 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
     collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
     findStaleAliases: () => [],
+    // #218 PR 2: the output-budget row reads the stored value as-is. Pinned
+    // absent (not null — null would be "set to null", a malformed value) so the
+    // base fixture stays healthy regardless of the host's real config.json.
+    readOutputBudgetRaw: () => undefined,
     // B3 (council review of PR 198): deterministic no-repair fixture — the
     // 'defaults'-sourced row above would fall through to [] via the real
     // alias-audit module anyway (not 'user-config'), but pinning it explicitly
