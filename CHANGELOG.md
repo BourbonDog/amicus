@@ -49,6 +49,11 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Changed
 
+- **`outputBudget` below 32,000 now reaches every leg (#218 PR 2).** On 4.9.3 a budget applied only
+  to routes whose ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The
+  engine flag now carries the budget to those rows too — clamped by the engine's own catalog where
+  it knows the model (K5, K12), as-is on a model it does not (J2, K13). A user who set
+  `outputBudget: 8000` on 4.9.3 sees those rows reserve 8,000 after upgrading.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`

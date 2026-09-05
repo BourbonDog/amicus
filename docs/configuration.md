@@ -69,6 +69,12 @@ You requested up to 32000 tokens, but can only afford 354
 starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget). A model neither catalog
 knows receives the budget itself, exactly as it received the raw 32,000 before.
 
+If you set `outputBudget` on 4.9.3, one thing changes on upgrade: a budget below 32,000 now also
+reaches routes the catalog cannot clamp — an unrefreshed direct row, a local-provider model,
+anything the catalog lacks — which 4.9.3 left at the engine's 32,000. Those legs reserve
+`min(budget, the ceiling the engine's own catalog knows)` (K12: 8,000 on a bare kimi row), or the
+budget as-is where the engine knows the model no better (K13).
+
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling wherever one is known. Unset means no limit is sent and no engine flag is set — OpenCode's 32,000 default applies, exactly as before. |
@@ -92,17 +98,19 @@ yourself is being honoured or overridden, and a malformed value in either place 
 back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces.
 
 Four things worth knowing before you set it. Every number below was measured on the wire by
-`scripts/probe-max-tokens.js` against the pinned engine; the row ids refer to the two probe tables
-filed in `BACKLOG.md` under "v4.9.4 records" (#218 PR 1 and PR 2).
+`scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
+so; the row ids refer to the two probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218 P1
+and PR 2).
 
 - **Above 32,000 it is the engine flag doing the work.** OpenCode computes
   `Math.min(limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX)` with the flag defaulting to
-  32,000, so Amicus sets that flag to your budget for every engine it starts — around the spawn
-  only. It never lands in your shell, and a value you exported yourself is honoured untouched when
-  `outputBudget` is unset and overridden (for Amicus-started engines only) when it is set. A budget
-  of 100,000 on a model with a 943,718 ceiling reserves 100,000 (K6); on a model whose ceiling is
-  64,000 it reserves 64,000 (K5). The flag is experimental on the engine's side, and a malformed
-  value is ignored without a word (D1/D2): re-run the probe after every engine bump.
+  32,000 (read in the pinned binary; the rows below are its wire effects), so Amicus sets that
+  flag to your budget for every engine it starts — around the spawn only. It never lands in
+  your shell, and a value you exported yourself is honoured untouched when `outputBudget` is
+  unset and overridden (for Amicus-started engines only) when it is set. A budget of 100,000 on a
+  model with a 943,718 ceiling reserves 100,000 (K6); on a model whose ceiling is 64,000 it
+  reserves 64,000 (K5). The flag is experimental on the engine's side, and a malformed value is
+  ignored without a word (D1/D2): re-run the probe after every engine bump.
 - **It clamps best with a catalog that knows each model's ceiling.** Run `amicus models --refresh`
   after setting it. OpenRouter rows carry OpenRouter's own ceiling and Google rows carry Google's;
   the direct `openai` / `anthropic` / `deepseek` rows — and any other row whose number the provider
@@ -112,7 +120,8 @@ filed in `BACKLOG.md` under "v4.9.4 records" (#218 PR 1 and PR 2).
   meta-routers and local-provider rows are never filled at all. The refresh output says how many
   rows were filled or why none could be. A route the Amicus catalog cannot clamp still gets the
   budget through the engine flag, clamped by the engine's own catalog where it knows the model
-  (K12: 8,000 on a bare kimi row); a model neither knows receives the budget as-is (K13).
+  (K5: 100,000 → 64,000 on a bare haiku row; K12: 8,000 on a bare kimi row, passed through
+  under its ceiling); a model neither knows receives the budget as-is (K13).
 - **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
   route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
   the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:
@@ -122,9 +131,11 @@ filed in `BACKLOG.md` under "v4.9.4 records" (#218 PR 1 and PR 2).
   normally.
 - **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
   window, and the engine subtracts this same reservation from the window before it decides to
-  compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured). A budget
-  of 100,000 leaves a 131,072-context model 31,072 tokens for the prompt. `amicus doctor` warns when
-  a budget takes at least half of any alias route's window.
+  compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is
+  the branch for a model without `limit.input`; a model with one loses at most 20,000, and a
+  `compaction.reserved` config overrides both). A budget of 100,000 leaves a 131,072-context
+  model 31,072 tokens for the prompt. `amicus doctor` warns when a budget takes at least half of
+  any alias route's window.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning

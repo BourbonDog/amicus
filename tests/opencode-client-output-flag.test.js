@@ -77,7 +77,8 @@ describe('startServer sets the engine output flag around the synchronous spawn',
     // Named mutant "FLAGAFTERAWAIT": set process.env before `await
     // createOpencodeServer(...)` and restore after it — afterFirstAwait reads '40000'.
     // Named mutant "NOFLAG": drop the withOutputTokenFlag wrapper — atCall is undefined.
-    expect(seen).toEqual([{ atCall: '40000', afterFirstAwait: undefined }]);
+    // toStrictEqual: an absent afterFirstAwait (mock never reached its second read) must not pass as undefined.
+    expect(seen).toStrictEqual([{ atCall: '40000', afterFirstAwait: undefined }]);
     expect(Object.prototype.hasOwnProperty.call(process.env, FLAG)).toBe(false);
   });
 

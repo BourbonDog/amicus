@@ -70,8 +70,9 @@ ensureNodeModulesBinInPath();
 
 // The brief's figures for these three came from LIVE models.dev, which is not
 // necessarily what the pinned engine's own bundled catalogue reports. Where the
-// two differ the run's `/config/providers` dump is the authority -- for kimi it
-// reports `output: 1048576`, not models.dev's 943718.
+// two differ the run's `/config/providers` dump is the authority -- for kimi the P1
+// run reported `output: 1048576` against models.dev's 943718, and the PR 2 run
+// reports 943718 (both filed in the BACKLOG records).
 const KIMI = 'moonshotai/kimi-k3';   // live models.dev: effort low|high|max, ceiling 943718
 const QWEN = 'qwen/qwen3.8-max-0902'; // models.dev: effort minimal..xhigh, ceiling 131072. Renamed from the un-dated `qwen/qwen3.8-max` between 2026-09-04 and 2026-09-05; the engine's variant table for the old id is now empty, so F4 reproduced F3's silent no-op against it (PR 2 record).
 const HAIKU = 'claude-haiku-4-5';     // models.dev: budget_tokens (min 1024), ceiling 64000

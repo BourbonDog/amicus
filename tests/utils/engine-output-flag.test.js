@@ -36,6 +36,11 @@ describe('outputTokenFlagValue', () => {
   test('a fractional budget above 1 floors, matching normalizeOutputBudget', () => {
     expect(outputTokenFlagValue(40000.9)).toBe('40000');
   });
+
+  test('a budget at or above 1e21 sets no flag — String() would give exponent form', () => {
+    expect(outputTokenFlagValue(1e21)).toBeNull();
+    expect(outputTokenFlagValue(999999999999999999999)).toBeNull();
+  });
 });
 
 describe('withOutputTokenFlag', () => {

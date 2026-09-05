@@ -7129,10 +7129,12 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
 
   **One consequence of the flag is read, not measured:** the pinned binary's
   `SessionCompaction.isOverflow` subtracts the same `maxOutputTokens(model, outputTokenMax)` from
-  the model's context window when deciding to compact, so a large budget shrinks the prompt budget
-  (100,000 on a 131,072-context model leaves 31,072). `docs/configuration.md` says so with that
-  provenance, and the new `doctor` `output-budget` row warns when a budget takes at least half of
-  any alias route's window.
+  the model's context window when deciding to compact (the branch for a model without
+  `limit.input`; one with it loses min(20000, that reservation) instead, and
+  `compaction.reserved` overrides both), so a large budget shrinks the prompt budget (100,000 on
+  a 131,072-context model leaves 31,072). `docs/configuration.md` says so with that provenance,
+  and the new `doctor` `output-budget` row warns when a budget takes at least half of any alias
+  route's window.
 
 | id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |
 |---|---|---|---|---|---|---|---|---|---|---|---|

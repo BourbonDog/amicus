@@ -2,12 +2,14 @@
  * @module engine-output-flag
  * #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX.
  *
- * WHY A FLAG AT ALL. The per-model `limit` descriptor (model-output-limit.js) can
- * only LOWER a leg's max_tokens reservation: the pinned engine computes
+ * WHY A FLAG AT ALL. The per-model `limit` descriptor (model-output-limit.js)
+ * can only LOWER a leg's max_tokens reservation: the pinned engine computes
  * `Math.min(limit.output, OUTPUT_TOKEN_MAX)` and OUTPUT_TOKEN_MAX defaults to
  * 32000. Raising it is this flag's job. The engine reads the flag from the env
- * it is SPAWNED with, as a positive integer; `0`, `-1` and `64000abc` all fall
- * back to 32000 with no error anywhere (probe rows D1/D2).
+ * it is SPAWNED with, as a positive integer; `64000abc` and `0` fall back to
+ * 32000 with no error anywhere (probe rows D1/D2), and a negative value is
+ * rejected by the same positive-integer check, read in the pinned binary
+ * (`Number.isInteger(w) && w > 0`), not wire-measured.
  *
  * THE ONE RULE: when `outputBudget` is configured, the flag is set TO THE BUDGET
  * for every engine amicus starts — around the synchronous spawn only, restored
@@ -42,13 +44,16 @@ const ENGINE_DEFAULT_OUTPUT_TOKENS = 32000;
 /**
  * The flag value a budget produces, or null when no flag should be set.
  * Same acceptance rule as normalizeOutputBudget: a positive finite integer,
- * floored; everything else is "no flag".
+ * floored, below 1e21 (larger values would stringify in exponent form); everything else is "no flag".
  * @param {*} budget raw or normalized outputBudget
  * @returns {string|null}
  */
 function outputTokenFlagValue(budget) {
   const n = positiveCount(budget);
-  return n === null ? null : String(n);
+  // String(1e21) is '1e+21' — not the plain decimal integer the engine is
+  // measured to honour (doctor-output-budget-check.js gates on /^\d+$/ for the
+  // same reason). An absurd budget sets no flag rather than a malformed one.
+  return (n === null || n >= 1e21) ? null : String(n);
 }
 
 /**
