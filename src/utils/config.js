@@ -382,23 +382,15 @@ function buildProviderModels(resolvedRoutes = []) {
     if (!Object.prototype.hasOwnProperty.call(providers, providerID)) {
       providers[providerID] = { models: {} };
     }
-    // #218 council #230 A1: DIRECT anthropic routes are HELD OUT of clamping.
-    // A refreshed catalog now knows their ceilings, so an opt-in outputBudget
-    // would emit a `limit` here -- but the engine ADDS the thinking budget to
-    // `max_tokens` on that route (this PR's probe, rows H1/H3/H4: the same bare
-    // haiku descriptor sent 32000 with no variant, 48000 with a 16000 budget
-    // and 63999 with 31999), and BOTH points were measured against a BARE `{}`
-    // descriptor. How a descriptor's `limit.output` interacts with that
-    // addition is unmeasured; PR 2 measures descriptor x budget before a budget
-    // is recommended there. Until then these rows keep exactly their pre-PR
-    // behaviour -- no descriptor at all, engine default applies.
-    // `openrouter/anthropic/*` is NOT held out: it routes through OpenRouter's
-    // effort mapping, not the Anthropic thinking-budget path.
-    // Named mutant "ANTHROPICDIRECT": delete the two lines below.
-    if (fullModel.startsWith('anthropic/')) {
-      providers[providerID].models[modelID] = {};
-      return;
-    }
+    // #218 PR 2: direct `anthropic/*` is no longer held out (council #230 A1
+    // held it out until descriptor x thinking-budget was measured). Measured,
+    // probe rows K1/K2/K3/K4/K9/K10: the descriptor lowers the reservation on
+    // that route exactly as on OpenRouter (K1: 8000); a thinking variant's
+    // budget is ADDED on top of it (K2: 8000 + 16000 = 24000); and the sum is
+    // clamped to the model's real ceiling whatever the descriptor or flag said
+    // (K3/K4/K10: 64000 for haiku). No descriptor can push a thinking leg over
+    // the ceiling. amicus sends no variant today (F1); PR 4 inherits the numbers.
+    // Named mutant "ANTHROPICHELDOUT" in tests/build-provider-models-output-limit.test.js.
     // #218: `{}` unless a budget is set AND the catalog knows both numbers.
     const limit = computeModelLimit(limits.get(fullModel), budget);
     providers[providerID].models[modelID] = limit ? { limit } : {};
@@ -632,19 +624,19 @@ function resolveCouncilMembers(name, catalog = []) {
 /**
  * #218: the configured per-leg output budget, or null when unset.
  *
- * OPT-IN BY DESIGN — unset means "register every model as `{}`", which is
- * pre-#218 behaviour exactly. Set it and each leg — except a direct
- * `anthropic/*` route, held out until PR 2 measures the thinking-budget
- * interaction — reserves min(budget, the model's real ceiling) instead of
- * opencode's fixed 32000 default.
+ * OPT-IN BY DESIGN — unset means "register every model as `{}` and set no
+ * engine flag", which is pre-#218 behaviour exactly. Set it and every leg
+ * reserves min(budget, the model's real ceiling) wherever a ceiling is known.
+ * This one value feeds BOTH levers so they can never disagree: the per-model
+ * `limit` descriptor (buildProviderModels, for routes the amicus catalog knows)
+ * and OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX (opencode-client.js :: startServer,
+ * set to the budget for every engine amicus starts and clamped by the engine's
+ * own catalog). Values above 32000 are LIVE since PR 2 (probe K6: 100000 on the
+ * wire); a model neither catalog knows receives the budget as-is (J2/K13).
  *
- * ⚠️ Values >= 32000 are ACCEPTED but INERT: opencode computes
- * `Math.min(limit.output, 32000)` (measured in the 1.18.15 binary), so the
- * reservation can only be lowered here, never raised. Raising it at all
- * requires OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, a different lever.
- *
- * ⚠️ Requires a catalog refreshed since #218 added `maxOutputTokens`
- * (`amicus models --refresh`); older rows have no ceiling and stay `{}`.
+ * ⚠️ The descriptor half needs a catalog refreshed since #218 added
+ * `maxOutputTokens` (`amicus models --refresh`); the flag half needs nothing.
+ * `amicus doctor`'s `output-budget` row says which routes get which.
  *
  * @returns {number|null} positive integer, or null when unset/malformed
  */
