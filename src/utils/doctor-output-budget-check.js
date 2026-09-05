@@ -10,6 +10,8 @@
  * What earns a WARN, and why (probe rows in brackets, BACKLOG "v4.9.4 records"):
  *   - a malformed budget or a malformed ambient flag: the engine falls back to
  *     32000 SILENTLY (D1/D2) — the one failure the product principle forbids;
+ *     only a plain decimal integer is measured to be honoured, so any other
+ *     form is reported as unmeasured rather than as healthy;
  *   - a budget above the engine default with alias routes the catalog cannot
  *     clamp: the engine clamps routes its own catalog knows (K5), but a model
  *     neither catalog knows receives the budget as-is (J2/K13);
@@ -44,36 +46,53 @@ function evaluateOutputBudget(d) {
   const raw = d.readOutputBudgetRaw();
   const dflt = `the engine default (${ENGINE_DEFAULT_OUTPUT_TOKENS} per leg) applies`;
 
+  // Only a PLAIN decimal integer is measured to be honoured — it is the shape
+  // amicus itself writes (engine-output-flag.js :: outputTokenFlagValue) and
+  // the shape the probe ran (C1, K5, K12). `64000abc` and `0` fall back to
+  // 32000 silently (D1/D2); ' 64000 ', '1e5', '0x10' and '64000.7' have never
+  // been probed, so they are reported as unmeasured rather than as healthy.
+  const ambientOk = (ambient !== undefined && /^\d+$/.test(ambient)) ? positiveCount(Number(ambient)) : null;
+  const ambientBad = ambient !== undefined && ambientOk === null;
+  const ambientBadText = `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer — the only form measured to be honoured; the engine silently falls back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} on a malformed value`;
+  const ambientHint = `unset ${OUTPUT_TOKEN_FLAG}, or set it to a plain positive integer`;
+
   if (raw === undefined) {
     if (ambient === undefined) { return row('ok', `not set — ${dflt}`); }
-    // The engine parses the flag as a positive integer and otherwise ignores it
-    // without a word (D1 `64000abc`, D2 `0`): the value has to be checked here
-    // or a user following the docs' "export the flag" advice gets a silent 32000.
-    const n = positiveCount(Number(ambient));
-    return n === null
-      ? row('warn',
-        `not set — ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a positive integer; the engine silently falls back to ${ENGINE_DEFAULT_OUTPUT_TOKENS}`,
-        `unset ${OUTPUT_TOKEN_FLAG}, or set it to a positive integer`)
-      : row('ok', `not set — ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment raises the engine default to ${n} per leg`);
+    return ambientBad
+      ? row('warn', `not set — ${ambientBadText}`, ambientHint)
+      : row('ok', `not set — ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment sets the engine's per-leg reservation to ${ambientOk} (its default is ${ENGINE_DEFAULT_OUTPUT_TOKENS})`);
   }
 
   const budget = normalizeOutputBudget(raw);
   if (budget === null) {
-    return row('warn', `${JSON.stringify(raw)} is not a positive integer — ignored; ${dflt}`,
+    // A malformed budget sets no flag (engine-output-flag.js), so whatever is
+    // ambient governs the spawn — the row has to say which value that leaves.
+    const then = ambient === undefined ? dflt
+      : (ambientBad ? `${dflt} (${ambientBadText})`
+        : `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment governs engines amicus starts (${ambientOk} per leg)`);
+    return row('warn', `${JSON.stringify(raw)} is not a positive integer — ignored; ${then}`,
       `set outputBudget to a positive integer in ${d.getConfigDir()}/config.json, or remove it`);
   }
   const overridden = ambient === undefined ? ''
     : `; ${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is overridden by outputBudget for engines amicus starts`;
+  const aboveDefault = budget > ENGINE_DEFAULT_OUTPUT_TOKENS;
 
   const cache = d.readCache();
   if (!cache || !Array.isArray(cache.models)) {
-    return row('warn',
-      `${budget} per leg — no catalog cache, so no route is clamped to a known ceiling (the engine clamps routes its own catalog knows; an unknown model receives ${budget} as-is)${overridden}`,
-      'amicus models --refresh');
+    // At or below the engine default the flag alone can only lower what goes
+    // out (K12), so a missing cache is informational; above it an unknown model
+    // receives the budget as-is (J2/K13) and the cache is what would name a
+    // ceiling — the same gate as the unclamped-routes case below.
+    // Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
+    return row(aboveDefault ? 'warn' : 'ok',
+      `${budget} per leg — no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${budget} as-is)${overridden}`,
+      aboveDefault ? 'amicus models --refresh' : null);
   }
 
   const limits = buildLimitLookup(cache.models);
-  const routes = [...new Set(d.collectAliasSources().map((s) => s.model))];
+  const routes = [...new Set(d.collectAliasSources()
+    .map((s) => s && s.model)
+    .filter((m) => typeof m === 'string' && m.length > 0))];
   const unclamped = [];
   const starved = [];
   for (const id of routes) {
@@ -82,15 +101,15 @@ function evaluateOutputBudget(d) {
     if (limit.output * 2 >= limit.context) { starved.push(`${id} (${limit.output} of ${limit.context})`); }
   }
 
-  let message = `${budget} per leg; ${routes.length - unclamped.length} of ${routes.length} alias routes clamped to a catalog ceiling`;
+  let message = `${budget} per leg; ${routes.length - unclamped.length} of ${routes.length} alias routes have a known catalog ceiling`;
   let status = 'ok';
   let hint = null;
   if (unclamped.length > 0) {
-    message += `; ${unclamped.length} without a catalog ceiling (${shortList(unclamped)}) — the engine clamps those its own catalog knows, an unknown model receives ${budget} as-is`;
+    message += `; ${unclamped.length} without one (${shortList(unclamped)}) — the engine clamps those its own catalog knows, an unknown model receives ${budget} as-is`;
     // At or below the default the flag can only lower what the engine sends
     // (K12); above it an unknown model is the one place the number goes out
     // unclamped (J2/K13), so that is the only case worth a warning.
-    if (budget > ENGINE_DEFAULT_OUTPUT_TOKENS) {
+    if (aboveDefault) {
       status = 'warn';
       hint = 'amicus models --refresh  (a budget above the engine default reaches an unknown model unclamped)';
     }
@@ -98,7 +117,8 @@ function evaluateOutputBudget(d) {
   if (starved.length > 0) {
     message += `; reserves at least half the context window of ${shortList(starved)}`;
     status = 'warn';
-    hint = hint || 'lower outputBudget — input plus the reservation must fit the context window';
+    // Starvation leads: a catalog refresh cannot fix it, lowering the budget can.
+    hint = 'lower outputBudget — input plus the reservation must fit the context window' + (hint ? `; ${hint}` : '');
   }
   return row(status, message + overridden, hint);
 }

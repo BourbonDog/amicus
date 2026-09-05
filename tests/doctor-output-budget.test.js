@@ -48,68 +48,96 @@ describe('evaluateOutputBudget — nothing configured', () => {
     expect(row.message).toBe('not set — the engine default (32000 per leg) applies');
   });
 
-  test('unset, ambient flag valid -> ok, says the ambient value raises the default', () => {
+  test('unset, ambient flag a plain integer -> ok, says it SETS the per-leg reservation', () => {
     const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' } }));
     expect(row.status).toBe('ok');
-    expect(row.message).toContain('OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000');
-    expect(row.message).toContain('raises the engine default to 64000 per leg');
+    expect(row.message).toBe("not set — OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment sets the engine's per-leg reservation to 64000 (its default is 32000)");
   });
 
-  test.each(['64000abc', '0', '-5', ''])(
-    'unset, ambient flag %p malformed -> WARN: the engine falls back to 32000 silently (D1/D2)', (v) => {
+  test('unset, ambient flag BELOW the default -> ok, still "sets", never "raises"', () => {
+    const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '8000' } }));
+    expect(row.status).toBe('ok');
+    expect(row.message).toContain('sets the engine\'s per-leg reservation to 8000');
+    expect(row.message).not.toContain('raises');
+  });
+
+  // Named mutant "AMBIENTUNCHECKED": replace the /^\d+$/ gate + positiveCount
+  // with `Number(ambient) || 1` — every row below turns ok.
+  test.each(['64000abc', '0', '-5', '', ' 64000 ', '1e5', '0x10', '64000.7'])(
+    'unset, ambient flag %p not a plain positive integer -> WARN: unmeasured form, engine falls back silently (D1/D2)', (v) => {
       const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: v } }));
-      // Named mutant "AMBIENTUNCHECKED": treat any ambient string as valid — status ok.
       expect(row.status).toBe('warn');
-      expect(row.message).toContain('not a positive integer');
+      expect(row.message).toContain('not a plain positive integer — the only form measured to be honoured');
       expect(row.message).toContain('silently falls back to 32000');
-      expect(row.hint).toContain('OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX');
+      expect(row.hint).toBe('unset OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, or set it to a plain positive integer');
     });
 });
 
 describe('evaluateOutputBudget — a budget is configured', () => {
   test.each([0, -1, 'lots', '8000', true, 0.5])(
-    'malformed %p -> WARN, value echoed, hint names the config file', (bad) => {
+    'malformed %p, no ambient -> WARN, value echoed, engine default named, hint names the config file', (bad) => {
       const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => bad }));
       expect(row.status).toBe('warn');
       expect(row.message).toContain(JSON.stringify(bad));
-      expect(row.message).toContain('not a positive integer');
+      expect(row.message).toContain('not a positive integer — ignored; the engine default (32000 per leg) applies');
       expect(row.hint).toContain('/cfg/config.json');
     });
 
-  test('valid, no catalog cache -> WARN with the refresh hint; still says what the flag does', () => {
-    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000, readCache: () => null }));
+  test('malformed budget with a VALID ambient flag -> WARN that names the ambient value as what governs', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 0, env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000' } }));
+    // A malformed budget sets no flag, so the ambient 64000 reaches the spawn.
     expect(row.status).toBe('warn');
-    expect(row.message).toContain('8000 per leg');
-    expect(row.message).toContain('no catalog cache');
-    expect(row.message).toContain('an unknown model receives 8000 as-is');
-    expect(row.hint).toBe('amicus models --refresh');
+    expect(row.message).toBe('0 is not a positive integer — ignored; OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 in this environment governs engines amicus starts (64000 per leg)');
   });
 
-  test('valid, at or below the engine default, some routes unclamped -> ok (the engine clamps what it knows)', () => {
-    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000 }));
+  test('malformed budget with a MALFORMED ambient flag -> WARN naming both, default applies', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 'lots', env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000abc' } }));
+    expect(row.status).toBe('warn');
+    expect(row.message).toContain('"lots" is not a positive integer — ignored; the engine default (32000 per leg) applies (OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc in this environment is not a plain positive integer');
+  });
+
+  // Named mutant "NOCACHEALWAYSWARN": make the no-cache branch warn regardless
+  // of the budget — the first test below fails.
+  test('valid at/below the default, no catalog cache -> ok: the flag alone can only lower (K12)', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000, readCache: () => null }));
     expect(row.status).toBe('ok');
-    expect(row.message).toContain('8000 per leg');
-    // 5 distinct models: kimi, glm, haiku clamp; old (no ceiling) + ghost (absent) do not.
-    expect(row.message).toContain('3 of 5 alias routes clamped to a catalog ceiling');
-    expect(row.message).toContain('2 without a catalog ceiling (openrouter/old/no-ceiling, openrouter/nobody/unknown)');
+    expect(row.message).toBe('8000 per leg — no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives 8000 as-is)');
     expect(row.hint).toBeNull();
   });
 
-  test('valid, ABOVE the engine default, some routes unclamped -> WARN: an unknown model gets it raw (J2/K13)', () => {
+  test('valid ABOVE the default, no catalog cache -> WARN with the refresh hint', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 40000, readCache: () => null }));
+    expect(row.status).toBe('warn');
+    expect(row.message).toContain('40000 per leg — no catalog cache');
+    expect(row.hint).toBe('amicus models --refresh');
+  });
+
+  test('valid, at or below the engine default, some routes without a ceiling -> ok (the engine clamps what it knows)', () => {
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000 }));
+    expect(row.status).toBe('ok');
+    expect(row.message).toContain('8000 per leg');
+    // 5 distinct models: kimi, glm, haiku have a ceiling; old (null ceiling) + ghost (absent) do not.
+    expect(row.message).toContain('3 of 5 alias routes have a known catalog ceiling');
+    expect(row.message).toContain('2 without one (openrouter/old/no-ceiling, openrouter/nobody/unknown)');
+    expect(row.message).not.toContain('clamped');
+    expect(row.hint).toBeNull();
+  });
+
+  test('valid, ABOVE the engine default, some routes without a ceiling -> WARN: an unknown model gets it raw (J2/K13)', () => {
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 40000 }));
-    // Named mutant "NODEFAULTGATE": drop the `budget > ENGINE_DEFAULT_OUTPUT_TOKENS`
-    // condition — the previous test turns warn; keep both.
+    // Named mutant "NODEFAULTGATE": drop the `aboveDefault` condition on the
+    // unclamped-routes warn — the previous test turns warn; keep both.
     expect(row.status).toBe('warn');
     expect(row.message).toContain('40000 per leg');
     expect(row.message).toContain('an unknown model receives 40000 as-is');
     expect(row.hint).toContain('amicus models --refresh');
   });
 
-  test('every route clamped -> ok, no caveat', () => {
+  test('every route has a ceiling -> ok, no caveat', () => {
     const only = ALIASES.filter((a) => ['kimi', 'haiku'].includes(a.alias));
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 40000, collectAliasSources: () => only }));
     expect(row.status).toBe('ok');
-    expect(row.message).toBe('40000 per leg; 2 of 2 alias routes clamped to a catalog ceiling');
+    expect(row.message).toBe('40000 per leg; 2 of 2 alias routes have a known catalog ceiling');
   });
 
   test('a reservation of at least half a route\'s context window -> WARN naming the route and the numbers', () => {
@@ -119,7 +147,7 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.status).toBe('warn');
     expect(row.message).toContain('reserves at least half the context window of openrouter/z-ai/glm-5.3 (100000 of 131072)');
     expect(row.message).not.toContain('kimi-k3 (');
-    expect(row.hint).toContain('lower outputBudget');
+    expect(row.hint).toBe('lower outputBudget — input plus the reservation must fit the context window');
   });
 
   test('exactly half counts as at least half', () => {
@@ -130,10 +158,23 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.message).toContain('(10000 of 20000)');
   });
 
+  test('both warns at once -> the starvation hint leads and the refresh hint follows', () => {
+    const only = ALIASES.filter((a) => ['glm', 'ghost'].includes(a.alias));
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 100000, collectAliasSources: () => only }));
+    expect(row.status).toBe('warn');
+    expect(row.hint).toBe('lower outputBudget — input plus the reservation must fit the context window; amicus models --refresh  (a budget above the engine default reaches an unknown model unclamped)');
+  });
+
   test('long lists are shortened to three names plus a count', () => {
     const many = Array.from({ length: 5 }, (_, i) => ({ alias: `g${i}`, model: `openrouter/ghost/m${i}`, source: 'user-config' }));
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000, collectAliasSources: () => many }));
     expect(row.message).toContain('(openrouter/ghost/m0, openrouter/ghost/m1, openrouter/ghost/m2, +2 more)');
+  });
+
+  test('an alias row without a string model is ignored, never printed as "undefined"', () => {
+    const odd = [{ alias: 'kimi', model: 'openrouter/moonshotai/kimi-k3', source: 'defaults' }, { alias: 'junk', model: undefined, source: 'user-config' }, null];
+    const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000, collectAliasSources: () => odd }));
+    expect(row.message).toBe('8000 per leg; 1 of 1 alias routes have a known catalog ceiling');
   });
 
   test('an ambient flag alongside a configured budget is reported as overridden for amicus-started engines', () => {
