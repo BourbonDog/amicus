@@ -17,6 +17,7 @@ if (out) {
     flag: flag === undefined ? null : flag,
     args: process.argv.slice(2),
     configContent: process.env.OPENCODE_CONFIG_CONTENT ? 'present' : 'absent',
+    hasProviderKey: ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'DEEPSEEK_API_KEY'].some((k) => process.env[k] !== undefined),
   }));
 }
 process.stdout.write('opencode server listening on http://127.0.0.1:1\n');

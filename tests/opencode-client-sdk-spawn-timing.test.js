@@ -14,7 +14,7 @@
  *
  * This test drives the REAL SDK through the REAL startServer against a fake
  * engine on PATH (tests/fixtures/fake-engine) that records the env it was
- * spawned with. No real engine, no network, no config outside a temp dir. It
+ * spawned with. No real engine, no network, no config or credential outside a temp dir (the child env is built with the keyless rail's buildKeylessEnv). It
  * runs in a child node process because the SDK is ESM behind a dynamic
  * import() that jest cannot load. Named mutant "SPREADAFTERAWAIT": edit
  * node_modules/@opencode-ai/sdk/dist/server.js to `await` anything before the
@@ -25,6 +25,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { buildKeylessEnv } = require('../scripts/run-integration-keyless');
 
 const CHILD = path.join(__dirname, 'helpers', 'sdk-spawn-timing-child.js');
 
@@ -33,8 +34,15 @@ function runChild(config) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdk-spawn-timing-'));
   const out = path.join(dir, 'seen.json');
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config));
-  const env = { ...process.env, AMICUS_CONFIG_DIR: dir, AMICUS_ENV_DIR: dir, FAKE_ENGINE_OUT: out };
+  // The same scrub the keyless integration rail uses: no provider key, no
+  // OPENCODE_* credential channel and no real HOME reaches the child or the
+  // fake engine it spawns. The three amicus dirs then point at the temp dir.
+  const env = buildKeylessEnv(process.env, dir);
+  env.AMICUS_CONFIG_DIR = dir;
+  env.AMICUS_ENV_DIR = dir;
+  env.FAKE_ENGINE_OUT = out;
   delete env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX;
+  delete env.ANTHROPIC_BASE_URL; // keeps the host-form notice out of the test output
   try {
     const stdout = execFileSync(process.execPath, [CHILD], { env, encoding: 'utf8', timeout: 60000 });
     return JSON.parse(stdout);
@@ -49,6 +57,7 @@ describe('the real SDK spawn sees the flag withOutputTokenFlag sets around it', 
     expect(seen.flag).toBe('40000');
     expect(seen.args[0]).toBe('serve');
     expect(seen.configContent).toBe('present');
+    expect(seen.hasProviderKey).toBe(false);
   });
 
   test('with no budget configured the engine\'s env carries no flag', () => {
