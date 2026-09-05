@@ -7080,7 +7080,10 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
   `scripts/probe-max-tokens.js` and the whole 32-case matrix re-run under the same sandbox
   (`sandbox:` line: eleven absent names; engine 1.18.15 / sdk 1.18.15 / server 1.18.15; 32 started,
   32 closed). The first nineteen table rows diff byte-identical against the P1 record above; the
-  `/config/providers` dump differs in exactly one line, qwen's, for the reason in the next paragraph.
+  `/config/providers` dump differs in two lines. Qwen's, for the reason in the next paragraph; and
+  kimi's, whose `limit.output` the engine now reports as 943718 — live models.dev's figure — where
+  the P1 run's engine copy reported 1048576 (C3's title still names that earlier report). No row in
+  either matrix depends on kimi's ceiling: every kimi case sits far below both numbers.
 
   **The run itself caught an external change first.** The first full run mismatched one row, F4 —
   qwen's `variant: 'medium'` put no `reasoning` on the wire, and the qwen dump line read
@@ -7179,9 +7182,10 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   default-alias user has a dead `qwen` seat until the pin moves (`src/utils/curated-models.js`, the
   `qwen` route). Two knock-on effects measured in this record: the engine's variant table for the old
   id is empty, so any variant sent for it (PR 4) is a silent no-op — F4 showed it — and its `limit`
-  reads `0/0`, so an `outputBudget` reaches it as-is (K13) and the engine treats its context as
-  unknown. Not fixed in PR 2 (budget scope): the fix is the pin plus `check:ci-alias-pins`; a flat
-  cardless pin is the class `models --check` cannot see (v4.9.3 skew records).
+  reads `0/0`, so an `outputBudget` reaches it as-is — the same 0/0 pass-through K13 shows for
+  the generic unknown model — and the engine treats its context as unknown. Not fixed in PR 2
+  (budget scope): the fix is the pin plus `check:ci-alias-pins`; a flat cardless pin is the class
+  `models --check` cannot see (v4.9.3 skew records).
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
