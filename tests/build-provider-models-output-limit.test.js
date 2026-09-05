@@ -85,6 +85,30 @@ describe('#218 buildProviderModels output limit', () => {
     expect(config.buildProviderModels([]).openrouter.models['nobody/unknown']).toEqual({});
   });
 
+  // Council #230 A1. A refreshed catalog now knows the direct anthropic
+  // ceilings, so an opt-in budget WOULD emit a descriptor there — but the engine
+  // adds the thinking budget to max_tokens on that route (probe rows H3/H4:
+  // 32000 bare, 48000 with a 16000 budget, 63999 with 31999) and both points
+  // were measured against a bare `{}`. Descriptor x budget is unmeasured, so
+  // direct anthropic keeps its pre-PR behaviour until PR 2 measures it.
+  // Named mutant "ANTHROPICDIRECT": delete the `fullModel.startsWith('anthropic/')`
+  // guard in addRoute and the FIRST test below emits a limit.
+  const HAIKU = [
+    { id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 },
+    { id: 'openrouter/anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 },
+  ];
+
+  test('a DIRECT anthropic route stays `{}` with a budget set and both numbers known', () => {
+    const config = load({ aliases: { haiku: 'anthropic/claude-haiku-4-5' }, outputBudget: 8000 }, HAIKU);
+    expect(config.buildProviderModels([]).anthropic.models['claude-haiku-4-5']).toEqual({});
+  });
+
+  test('the openrouter/anthropic mirror of that same model still gets a limit', () => {
+    const config = load({ aliases: { haiku: 'anthropic/claude-haiku-4-5' }, outputBudget: 8000 }, HAIKU);
+    const m = config.buildProviderModels([]).openrouter.models['anthropic/claude-haiku-4-5'];
+    expect(m.limit).toEqual({ context: 200000, output: 8000 });
+  });
+
   test('an unreadable/empty catalog degrades to `{}` and never throws', () => {
     const config = load({ aliases, outputBudget: 8000 }, null);
     let p;

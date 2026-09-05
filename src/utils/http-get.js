@@ -30,12 +30,21 @@
  * or `x-api-key` (anthropic), so a 302 — or an open redirect — on a provider
  * host would otherwise forward a live key to whatever host the `Location`
  * named. A same-origin hop keeps every header; a CROSS-ORIGIN hop keeps ONLY
- * `user-agent`, `accept`, `accept-language` and `accept-encoding` (matched
+ * `user-agent`, `accept` and `accept-language` (matched
  * case-insensitively) and drops everything else. An allowlist rather than a
  * deny-list because the deny-list has to be extended for every new vendor
  * header — `x-goog-api-key` was not on it — and the one that is forgotten is
  * the one that leaks. Once dropped, stay dropped: the stripped set is what the
  * next hop carries, so a same-origin third hop cannot resurrect a credential.
+ * `accept-encoding` is NOT on the allowlist (council #230 C3): nothing here
+ * decodes a content-encoded body, so forwarding it would invite compressed
+ * bytes to be concatenated into the body as text.
+ *
+ * A REFUSED 3xx RELEASES THE CONNECTION (council #230 C1). Each refusal branch
+ * settles the promise first and then retires the response and destroys the live
+ * request: the chain's single deadline is cleared the moment the promise
+ * settles, so a refused redirect whose body never ends would otherwise hold the
+ * socket open with nothing left to close it.
  *
  * The body is capped at `maxBytes` (council #230 B3): a response that keeps
  * coming is destroyed and reported as `too-large` rather than accumulated in a
@@ -52,8 +61,13 @@ const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
 /** Two hops, then `redirect limit reached`. */
 const MAX_REDIRECTS = 2;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
-/** The ONLY headers a cross-origin hop keeps. Lower-case: callers spell headers freely. */
-const CROSS_ORIGIN_HEADERS = new Set(['user-agent', 'accept', 'accept-language', 'accept-encoding']);
+/**
+ * The ONLY headers a cross-origin hop keeps. Lower-case: callers spell headers
+ * freely. `accept-encoding` is deliberately NOT here (council #230 C3): this
+ * module never decodes a content-encoded body, so forwarding it would invite a
+ * compressed response to be concatenated into a string as text.
+ */
+const CROSS_ORIGIN_HEADERS = new Set(['user-agent', 'accept', 'accept-language']);
 
 /**
  * The headers the NEXT hop may carry. A same-origin hop keeps the caller's
@@ -94,29 +108,47 @@ function retire(res) {
 }
 
 /**
+ * A REFUSED 3xx: settle with the failure, then release the connection it came
+ * on. Draining alone was not enough (council #230 C1) — settling clears the
+ * chain's only deadline, so after the refusal nothing would ever close a socket
+ * whose body never ends. The failure is raised FIRST and the teardown second,
+ * because destroying the request can emit `error` on it and `ctx.onError` is
+ * still attached; single-settle then makes that late event a no-op instead of
+ * rewriting the reason as `network-error`.
+ * @param {object} res the http.IncomingMessage
+ * @param {{fail: Function, destroy: Function}} ctx
+ * @param {{reason: string, status: number, detail: string}} failure
+ */
+function refuseRedirect(res, ctx, failure) {
+  ctx.fail(failure);
+  retire(res);
+  ctx.destroy();
+}
+
+/**
  * One hop's 3xx: resolve `Location` against the URL that produced it, retire
  * this response, and hand the target plus its (possibly stripped) headers to
  * `ctx.hop` — or fail with the status and a `detail` naming why the hop was
- * refused. The response is drained on every refusal.
+ * refused. Every refusal goes through `refuseRedirect`, which releases the
+ * connection as well as failing.
  * @param {object} res the http.IncomingMessage
  * @param {{url: string, left: number, headers: object}} hop the hop it answered
- * @param {{hop: Function, fail: Function, retireRequest: Function}} ctx
+ * @param {{hop: Function, fail: Function, destroy: Function, retireRequest: Function}} ctx
  */
 function followRedirect(res, hop, ctx) {
   const status = res.statusCode;
   const loc = (res.headers && res.headers.location) || null;
-  res.on('data', () => {});  // drain: an unread socket is never released
-  if (loc === null) { ctx.fail({ reason: 'http-status', status, detail: 'redirect without Location' }); return; }
-  if (hop.left <= 0) { ctx.fail({ reason: 'http-status', status, detail: 'redirect limit reached' }); return; }
+  if (loc === null) { refuseRedirect(res, ctx, { reason: 'http-status', status, detail: 'redirect without Location' }); return; }
+  if (hop.left <= 0) { refuseRedirect(res, ctx, { reason: 'http-status', status, detail: 'redirect limit reached' }); return; }
   let next;
   try {
     next = new URL(loc, hop.url);
   } catch (err) {
-    ctx.fail({ reason: 'http-status', status, detail: `redirect to an unparseable Location: ${err.message}` });
+    refuseRedirect(res, ctx, { reason: 'http-status', status, detail: `redirect to an unparseable Location: ${err.message}` });
     return;
   }
   // https ONLY: a downgrade would re-send the caller's headers in clear text.
-  if (next.protocol !== 'https:') { ctx.fail({ reason: 'http-status', status, detail: 'redirect to non-https location' }); return; }
+  if (next.protocol !== 'https:') { refuseRedirect(res, ctx, { reason: 'http-status', status, detail: 'redirect to non-https location' }); return; }
   const headers = hopHeaders(hop.headers, hop.url, next);
   retire(res);  // BEFORE the next hop exists, so the two can never race
   ctx.retireRequest();  // and its REQUEST's 'error' listener with it

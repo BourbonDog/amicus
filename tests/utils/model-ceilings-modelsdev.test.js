@@ -106,6 +106,19 @@ describe('fillCeilings', () => {
     expect(counts).toEqual({ filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 1, skippedRouters: 0, skippedLocal: 0 });
   });
 
+  // Council #230 A2: `knownBefore` was consulted only inside the `lim` branch,
+  // so a complete row models.dev happens not to list fell through to `unknown`
+  // — the success line reported a row outputBudget CAN clamp as one models.dev
+  // knows nothing about. Named mutant "A2LOOKUPFIRST": move the alreadyKnown
+  // short-circuit back below `limits.get(row.id)` (as `else if (knownBefore)`)
+  // and this test reads `unknown: 1, alreadyKnown: 0`.
+  it('counts a complete row that models.dev does NOT list as alreadyKnown, never unknown', () => {
+    const row = { id: 'openai/gpt-4-0613', contextLength: 8192, maxOutputTokens: 4096 };
+    const counts = fillCeilings([row], limits());
+    expect(limits().has('openai/gpt-4-0613')).toBe(false);  // the premise: models.dev has no such row
+    expect(counts).toEqual({ filled: 0, alreadyKnown: 1, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 });
+  });
+
   it('counts a row it filled only halfway as stillMissing too', () => {
     const row = { id: 'openai/gpt-5-mini', contextLength: null, maxOutputTokens: null };
     const counts = fillCeilings([row], limits());
@@ -170,7 +183,7 @@ describe('enrichCeilings', () => {
   });
 
   // Council #230 C1: a 200 that PARSES but carries nothing usable used to be
-  // persisted as a successful enrichment with every row `unknown` — the rows
+  // persisted as a successful enrichment with every candidate row `unknown` — the rows
   // silently kept no ceiling and `Ceilings:` claimed a clean run.
   it('treats a 200 with no recognised vendor limits as a bad-shape failure and leaves rows untouched', async () => {
     const getJson = jest.fn(async () => ({ ok: true, json: { error: 'nope' } }));

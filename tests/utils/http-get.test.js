@@ -184,6 +184,36 @@ describe('httpGetText', () => {
     });
   });
 
+  // Council #230 C1: a refused 3xx was only DRAINED. Settling clears the chain's
+  // one deadline, so after the refusal nothing was left to close a connection
+  // whose body never ends. Delete `ctx.destroy()` from refuseRedirect and the
+  // req.destroy assertion below fails; delete `retire(res)` and the response
+  // keeps its listeners on a live socket.
+  it('releases the connection when a redirect is refused and the body never ends', async () => {
+    let req = null;
+    let res = null;
+    https.get.mockImplementation((_url, _opts, cb) => {
+      req = new EventEmitter();
+      req.destroy = jest.fn();
+      res = new EventEmitter();
+      res.statusCode = 302;
+      res.headers = {};  // no Location: refused
+      res.setEncoding = jest.fn();
+      res.destroy = jest.fn();
+      cb(res);
+      // The body keeps coming and never emits 'end' -- exactly the shape that
+      // used to leave the socket open once the promise had settled.
+      process.nextTick(() => { res.emit('data', 'still coming'); });
+      return req;
+    });
+    await expect(httpGetText('https://x.test/y', { followRedirects: true })).resolves.toEqual({
+      ok: false, failure: { reason: 'http-status', status: 302, detail: 'redirect without Location' },
+    });
+    expect(req.destroy).toHaveBeenCalledTimes(1);
+    expect(res.destroy).toHaveBeenCalledTimes(1);
+    expect(res.listenerCount('data')).toBe(0);
+  });
+
   // Post-review of the A2 fix: model-fetcher hands this module a live provider
   // key, so re-issuing a cross-host hop with the SAME headers would forward it.
   // Council #230 C3 turned the strip into an ALLOWLIST: `x-goog-api-key` is the
@@ -197,6 +227,9 @@ describe('httpGetText', () => {
     const sent = {
       Authorization: 'Bearer secret', 'x-api-key': 'secret', Cookie: 'sid=1',
       'Proxy-Authorization': 'Basic secret', 'x-goog-api-key': 'secret',
+      // Council #230 C3: this module never decodes a content-encoded body, so
+      // accept-encoding came OFF the allowlist. Put it back and this test fails.
+      'Accept-Encoding': 'gzip',
       'User-Agent': 'amicus/test', Accept: 'application/json',
     };
     await expect(httpGetText('https://a.test/x', { headers: sent, followRedirects: true })).resolves.toEqual({ ok: true, body: 'ok' });

@@ -83,6 +83,17 @@ const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-sto
  * Deleted by buildKeylessEnv() and asserted absent by probe-max-tokens.js's
  * assertSandboxed(), which imports this same list so scrub and gate agree by
  * construction.
+ *
+ * PINNED TO opencode 1.18.15, AND HAND-MAINTAINED (council #230 B2). Nothing
+ * makes it follow an engine bump: a release that adds a sixth channel would
+ * leave a credential path open with no test failing. RE-VERIFY IT ON EVERY
+ * ENGINE BUMP -- grep the new binary for each name and for any other it reads,
+ * e.g.
+ *   grep -a -c OPENCODE_AUTH_CONTENT node_modules/opencode-windows-x64/bin/opencode.exe
+ * (repeat per name; a zero count means the channel is gone, and a new
+ * `OPENCODE_*` credential/config name means the list is short) -- then re-run
+ * `node scripts/probe-max-tokens.js` so the sandbox gate is exercised against
+ * the engine actually pinned.
  * @type {string[]}
  */
 const ENGINE_CREDENTIAL_ENV = [

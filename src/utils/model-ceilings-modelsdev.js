@@ -100,9 +100,11 @@ function missingACeiling(row) {
  *
  * COUNTERS. `filled` / `alreadyKnown` / `unknown` describe what the pass did;
  * `stillMissing` describes the STATE it left behind and deliberately overlaps
- * them. `alreadyKnown` means both fields were usable BEFORE the pass — a row
- * with one field known and the other unfillable is `stillMissing`, never
- * "already known" (council #230 C1/D5): outputBudget cannot clamp it.
+ * them. `alreadyKnown` means both fields were usable BEFORE the pass, and is
+ * decided BEFORE the models.dev lookup (council #230 A2) — a complete row
+ * models.dev does not list is `alreadyKnown`, not `unknown`. A row with one
+ * field known and the other unfillable is `stillMissing`, never "already known"
+ * (council #230 C1/D5): outputBudget cannot clamp it.
  * @param {Array<object>} rows catalog rows (mutated)
  * @param {Map<string, {context: number|null, output: number|null}>} limits
  * @returns {{filled: number, alreadyKnown: number, unknown: number, stillMissing: number,
@@ -115,7 +117,12 @@ function fillCeilings(rows, limits) {
     if (skip === 'malformed') { continue; }
     if (skip === 'local') { counts.skippedLocal++; continue; }
     if (skip === 'router') { counts.skippedRouters++; continue; }
-    const knownBefore = !missingACeiling(row);
+    // BEFORE the lookup (council #230 A2): a row that already carries both
+    // usable numbers has nothing for models.dev to fill, so whether models.dev
+    // happens to list it is irrelevant. Looking first counted such a row
+    // `unknown` when models.dev did not have it — reporting a row outputBudget
+    // CAN clamp as one it knows nothing about.
+    if (!missingACeiling(row)) { counts.alreadyKnown++; continue; }
     const lim = limits.get(row.id);
     if (!lim) {
       counts.unknown++;
@@ -123,7 +130,7 @@ function fillCeilings(rows, limits) {
       let touched = false;
       if (positiveCount(row.contextLength) === null && lim.context !== null) { row.contextLength = lim.context; touched = true; }
       if (positiveCount(row.maxOutputTokens) === null && lim.output !== null) { row.maxOutputTokens = lim.output; touched = true; }
-      if (touched) { row.limitSource = 'models.dev'; counts.filled++; } else if (knownBefore) { counts.alreadyKnown++; }
+      if (touched) { row.limitSource = 'models.dev'; counts.filled++; }
     }
     if (missingACeiling(row)) { counts.stillMissing++; }
   }
@@ -199,7 +206,7 @@ async function enrichCeilings(rows, deps = {}) {
   const limits = limitsFromModelsDev(res.json);
   // A 200 that parses but carries no recognised vendor limits — `{}`, an error
   // object, a reshaped api.json — would otherwise persist as a SUCCESSFUL
-  // enrichment with every row `unknown`, silently leaving direct-provider
+  // enrichment with every candidate row `unknown`, silently leaving direct-provider
   // ceilings unfilled and outputBudget unable to clamp them (council #230 C1).
   // It is a failure, and the rows are not touched.
   if (limits.size === 0) {
@@ -208,7 +215,9 @@ async function enrichCeilings(rows, deps = {}) {
   return { source: 'models.dev', failure: null, skipped: null, ...fillCeilings(rows, limits) };
 }
 
+// `enrichCeilings` — the entry point — is first so the generated architecture
+// map, which lists a module's first five exports, actually names it.
 module.exports = {
+  enrichCeilings, fillCeilings, needsFillCount, limitsFromModelsDev, emptyOutcome,
   MODELS_DEV_URL, MODELS_DEV_TIMEOUT_MS,
-  limitsFromModelsDev, fillCeilings, needsFillCount, enrichCeilings, emptyOutcome,
 };

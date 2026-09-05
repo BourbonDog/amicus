@@ -382,6 +382,23 @@ function buildProviderModels(resolvedRoutes = []) {
     if (!Object.prototype.hasOwnProperty.call(providers, providerID)) {
       providers[providerID] = { models: {} };
     }
+    // #218 council #230 A1: DIRECT anthropic routes are HELD OUT of clamping.
+    // A refreshed catalog now knows their ceilings, so an opt-in outputBudget
+    // would emit a `limit` here -- but the engine ADDS the thinking budget to
+    // `max_tokens` on that route (this PR's probe, rows H3/H4: the same bare
+    // haiku descriptor sent 32000 with no variant, 48000 with a 16000 budget
+    // and 63999 with 31999), and BOTH points were measured against a BARE `{}`
+    // descriptor. How a descriptor's `limit.output` interacts with that
+    // addition is unmeasured; PR 2 measures descriptor x budget before a budget
+    // is recommended there. Until then these rows keep exactly their pre-PR
+    // behaviour -- no descriptor at all, engine default applies.
+    // `openrouter/anthropic/*` is NOT held out: it routes through OpenRouter's
+    // effort mapping, not the Anthropic thinking-budget path.
+    // Named mutant "ANTHROPICDIRECT": delete the two lines below.
+    if (fullModel.startsWith('anthropic/')) {
+      providers[providerID].models[modelID] = {};
+      return;
+    }
     // #218: `{}` unless a budget is set AND the catalog knows both numbers.
     const limit = computeModelLimit(limits.get(fullModel), budget);
     providers[providerID].models[modelID] = limit ? { limit } : {};

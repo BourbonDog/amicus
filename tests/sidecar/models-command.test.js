@@ -114,7 +114,7 @@ describe('amicus models', () => {
   // Council #230 D4: 'unreachable' is a claim about models.dev. A parse-error means
   // it answered; an exception is a local bug. Neither may be worded as unreachable.
   it('--refresh words a parse-error as answered-but-unusable, not unreachable', async () => {
-    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'parse-error', detail: 'Unexpected token <' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'parse-error', detail: 'Unexpected token <' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(out).toContain('Ceilings: models.dev answered but could not be used (parse-error: Unexpected token <); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
     expect(out).not.toContain('unreachable');
@@ -124,21 +124,21 @@ describe('amicus models', () => {
   // `too-large` (http-get's new body cap) are both "it answered", never
   // "unreachable" — an unmapped reason would fall through to the neutral lead.
   it('--refresh words a bad-shape body as answered-but-unusable, not unreachable', async () => {
-    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(out).toContain('Ceilings: models.dev answered but could not be used (bad-shape: no recognised vendor limits in api.json); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
     expect(out).not.toContain('unreachable');
   });
 
   it('--refresh words an over-size body as answered-but-unusable, not unreachable', async () => {
-    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'too-large', detail: 'body exceeded 16777216 bytes' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'too-large', detail: 'body exceeded 16777216 bytes' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(out).toContain('Ceilings: models.dev answered but could not be used (too-large: body exceeded 16777216 bytes)');
     expect(out).not.toContain('unreachable');
   });
 
   it('--refresh words an exception neutrally, blaming neither models.dev nor the network', async () => {
-    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(out).toContain('Ceilings: ceiling enrichment failed (exception: kaboom); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
     expect(out).not.toContain('unreachable');
@@ -158,14 +158,14 @@ describe('amicus models', () => {
   it('--refresh says so when models.dev is disabled by config', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'disabled', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); outputBudget cannot clamp direct routes');
+    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows cannot be clamped');
     expect(out).not.toContain('rows filled from models.dev');
   });
 
   it('--refresh says so when there was nothing to fill', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'nothing-to-fill', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: nothing to fill (every row already carries both numbers)');
+    expect(out).toContain('Ceilings: nothing to fill (no candidate row is missing a number)');
     expect(out).not.toContain('rows filled from models.dev');
   });
 

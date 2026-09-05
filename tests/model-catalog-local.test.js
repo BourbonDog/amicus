@@ -26,7 +26,8 @@ describe('refreshCatalog: localhost-only refresh never clobbers a good OR cache'
     jest.resetModules();
     const { dir, good } = seedGoodCache();
     const catalogFile = path.join(dir, 'model-catalog.json');
-    // getConfigDir() is the only config export refreshCatalog touches.
+    // The two config exports refreshCatalog touches: getConfigDir() for the
+    // cache path, and loadConfig() for the #218 P3 `modelsDevCeilings` opt-out.
     jest.doMock('../src/utils/config', () => ({
       getConfigDir: () => dir,
       // #218 P3 opt-out: refreshCatalog reads `modelsDevCeilings` off the real

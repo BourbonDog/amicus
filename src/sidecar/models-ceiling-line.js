@@ -48,10 +48,15 @@ function fmtCeilingLine(e) {
   // A skip is not a failure and not a fill: naming which one it was is the
   // difference between "you turned this off" and "there was nothing to do".
   if (e.skipped === 'disabled') {
-    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); outputBudget cannot clamp direct routes';
+    // Named, not "direct routes": Google publishes its own ceiling first-party
+    // and OpenRouter rows keep OpenRouter's, so both still clamp with the
+    // lookup off (council #230 r4 follow-up).
+    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows cannot be clamped';
   }
   if (e.skipped === 'nothing-to-fill') {
-    return 'Ceilings: nothing to fill (every row already carries both numbers)';
+    // NOT "every row": routers, local rows and malformed rows are not
+    // candidates and are never asked about (council #230 C2).
+    return 'Ceilings: nothing to fill (no candidate row is missing a number)';
   }
   // `?? 0`: a hand-built or pre-field cache doc can carry a partial object, and
   // `undefined already complete` would be a worse lie than a zero. `stillMissing`
