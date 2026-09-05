@@ -11,8 +11,9 @@
  *
  * WHAT THIS DOES NOT CHANGE: the engine already resolves every `{}` descriptor's
  * limit from its own models.dev copy. This gives AMICUS the same numbers so it
- * can clamp an outputBudget on direct routes and name a reservation in a
- * dead-leg note. It reads models.dev directly, not the engine's cache file,
+ * can clamp an outputBudget on direct routes (direct `anthropic/*` is held out until the
+ * thinking-budget interaction is measured — `config.js :: buildProviderModels`) and name a
+ * reservation in a dead-leg note. It reads models.dev directly, not the engine's cache file,
  * because that file's path and refresh flags are engine-private.
  *
  * RULES (measured 2026-09-04 against live data, see the plan):

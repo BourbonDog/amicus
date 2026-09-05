@@ -385,7 +385,7 @@ function buildProviderModels(resolvedRoutes = []) {
     // #218 council #230 A1: DIRECT anthropic routes are HELD OUT of clamping.
     // A refreshed catalog now knows their ceilings, so an opt-in outputBudget
     // would emit a `limit` here -- but the engine ADDS the thinking budget to
-    // `max_tokens` on that route (this PR's probe, rows H3/H4: the same bare
+    // `max_tokens` on that route (this PR's probe, rows H1/H3/H4: the same bare
     // haiku descriptor sent 32000 with no variant, 48000 with a 16000 budget
     // and 63999 with 31999), and BOTH points were measured against a BARE `{}`
     // descriptor. How a descriptor's `limit.output` interacts with that
@@ -633,8 +633,10 @@ function resolveCouncilMembers(name, catalog = []) {
  * #218: the configured per-leg output budget, or null when unset.
  *
  * OPT-IN BY DESIGN — unset means "register every model as `{}`", which is
- * pre-#218 behaviour exactly. Set it and each leg reserves min(budget, the
- * model's real ceiling) instead of opencode's fixed 32000 default.
+ * pre-#218 behaviour exactly. Set it and each leg — except a direct
+ * `anthropic/*` route, held out until PR 2 measures the thinking-budget
+ * interaction — reserves min(budget, the model's real ceiling) instead of
+ * opencode's fixed 32000 default.
  *
  * ⚠️ Values >= 32000 are ACCEPTED but INERT: opencode computes
  * `Math.min(limit.output, 32000)` (measured in the 1.18.15 binary), so the

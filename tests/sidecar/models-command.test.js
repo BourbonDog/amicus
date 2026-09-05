@@ -158,7 +158,7 @@ describe('amicus models', () => {
   it('--refresh says so when models.dev is disabled by config', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'disabled', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows cannot be clamped');
+    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/deepseek direct rows cannot be clamped (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)');
     expect(out).not.toContain('rows filled from models.dev');
   });
 

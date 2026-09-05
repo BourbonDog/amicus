@@ -18,15 +18,16 @@ All notable changes to Amicus are documented here. Format follows
   carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. It is
   also skippable both ways: a refresh where every candidate row already carries both numbers never
   makes the call at all, and the new top-level `config.json` key **`modelsDevCeilings: false`** opts
-  out of contacting models.dev entirely (`outputBudget` then cannot clamp the openai / anthropic /
-  deepseek direct rows — Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). The
-  refresh prints the outcome (`Ceilings: …`), naming which of those happened, and `--json` carries it as
+  out of contacting models.dev entirely (`outputBudget` then cannot clamp the openai / deepseek
+  direct rows — direct anthropic is held out regardless; Google publishes its own ceiling and
+  OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
+  of those happened, and `--json` carries it as
   `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
   now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
   the direct `openai` / `google` / `deepseek` routes once the catalog is refreshed — which 4.9.3
   documented as impossible because those lists "don't publish one". Direct `anthropic/*` is the one
   route held back: Amicus emits no reservation descriptor there at all, because the engine adds the
-  thinking budget to `max_tokens` on that route (probe rows H3/H4) and how a descriptor's
+  thinking budget to `max_tokens` on that route (probe rows H1/H3/H4) and how a descriptor's
   `limit.output` interacts with that addition has only been measured against a bare descriptor. Those
   rows keep exactly their pre-#218 behaviour until PR 2 measures it; `openrouter/anthropic/*` clamps
   normally.

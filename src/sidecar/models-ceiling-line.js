@@ -51,7 +51,7 @@ function fmtCeilingLine(e) {
     // Named, not "direct routes": Google publishes its own ceiling first-party
     // and OpenRouter rows keep OpenRouter's, so both still clamp with the
     // lookup off (council #230 r4 follow-up).
-    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows cannot be clamped';
+    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/deepseek direct rows cannot be clamped (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
   }
   if (e.skipped === 'nothing-to-fill') {
     // NOT "every row": routers, local rows and malformed rows are not

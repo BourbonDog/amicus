@@ -6954,7 +6954,7 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   literal `false` only) and was skipped entirely whenever no candidate row was missing a number, and
   direct `anthropic/*` routes were held out of clamping in `config.js :: buildProviderModels` —
   registered `{}` regardless of the budget, restoring their pre-PR behaviour exactly, because the
-  engine ADDS the thinking budget to `max_tokens` on that route (H3/H4) and that was measured only
+  engine ADDS the thinking budget to `max_tokens` on that route (H1/H3/H4) and that was measured only
   against a bare descriptor, so PR 2 measures descriptor x budget before the guard is lifted.
 - [x] **The repo's engine copy was stale, and its source map misled #218's research (2026-09-04).**
   `node_modules` held opencode 1.2.20 (`package-lock` pins 1.18.15) because `npm ci` had not run

@@ -63,13 +63,15 @@ This request requires more credits, or fewer max_tokens.
 You requested up to 32000 tokens, but can only afford 354
 ```
 
-`outputBudget` lowers the reservation. Each model reserves `min(outputBudget, that model's real
-ceiling)`, so a small model keeps its own lower limit rather than being handed an over-ceiling value.
+`outputBudget` lowers the reservation. Each model except a direct `anthropic/*` route reserves
+`min(outputBudget, that model's real ceiling)` (direct Anthropic keeps the engine default until
+PR 2 measures the thinking-budget interaction — see the third limit below), so a small model keeps
+its own lower limit rather than being handed an over-ceiling value.
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
-| `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling. Unset means no limit is sent — OpenCode's 32,000 default applies, exactly as before. |
-| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; `outputBudget` then cannot clamp the openai / anthropic / deepseek direct rows (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
+| `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling; direct `anthropic/*` routes are held out (engine default) until PR 2. Unset means no limit is sent — OpenCode's 32,000 default applies, exactly as before. |
+| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; `outputBudget` then cannot clamp the openai / deepseek direct rows (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
 
 `modelsDevCeilings` is the opt-out for the one third-party lookup a refresh makes. Only a literal
 `false` turns it off; the key being absent means it runs. Even with it on, the call is **skipped

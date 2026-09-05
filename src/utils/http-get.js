@@ -91,7 +91,8 @@ function hopHeaders(headers, from, to) {
 }
 
 /**
- * Retire a SUPERSEDED response before the next hop is started. Its `data`/`end`
+ * Retire a response the chain has finished with — either before the next hop starts, or on a
+ * refused redirect (`refuseRedirect`). Its `data`/`end`
  * listeners and — the point of this — the chain's `error` listener are detached
  * first, so an abrupt close on the abandoned socket can no longer settle a
  * promise the live hop now owns. `error` is REPLACED by a swallow rather than

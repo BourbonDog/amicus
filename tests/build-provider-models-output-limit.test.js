@@ -87,7 +87,7 @@ describe('#218 buildProviderModels output limit', () => {
 
   // Council #230 A1. A refreshed catalog now knows the direct anthropic
   // ceilings, so an opt-in budget WOULD emit a descriptor there — but the engine
-  // adds the thinking budget to max_tokens on that route (probe rows H3/H4:
+  // adds the thinking budget to max_tokens on that route (probe rows H1/H3/H4:
   // 32000 bare, 48000 with a 16000 budget, 63999 with 31999) and both points
   // were measured against a bare `{}`. Descriptor x budget is unmeasured, so
   // direct anthropic keeps its pre-PR behaviour until PR 2 measures it.
