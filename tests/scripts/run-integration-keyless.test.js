@@ -166,3 +166,36 @@ describe('buildKeylessEnv sandboxes every credential-path root (I-1)', () => {
     expect(probe.openrouterKey).toBeNull();
   });
 });
+
+describe('run() orders jest args caller-first (#218 PR 2 pre-push)', () => {
+  /**
+   * run() spawns jest via spawnSync and inherits process.argv, so it cannot be
+   * driven directly in a unit test -- this is a textual pin on the source
+   * instead of a behavioural one. jest's --testMatch is an array option: a
+   * positional file argument (e.g. `npm run test:integration -- tests/foo.js`)
+   * passed AFTER --testMatch would be swallowed as a second glob rather than
+   * selecting one file, silently running the whole rail. Pinning the caller
+   * args ahead of --testMatch keeps a single-file selection working.
+   *
+   * Mutant this catches: ARGVLAST -- move the `...process.argv.slice(2)`
+   * spread after the `--testMatch=` literal in run()'s args array.
+   */
+  test('the ...process.argv.slice(2) spread appears before the --testMatch= literal inside run()', () => {
+    const scriptPath = require.resolve('../../scripts/run-integration-keyless');
+    const source = fs.readFileSync(scriptPath, 'utf-8');
+
+    const runMatch = source.match(/function run\(\)\s*{[\s\S]*?\n}\n/);
+    expect(runMatch).not.toBeNull();
+
+    const argsMatch = runMatch[0].match(/const args = \[[\s\S]*?\];/);
+    expect(argsMatch).not.toBeNull();
+
+    const argsLiteral = argsMatch[0];
+    const spreadIndex = argsLiteral.indexOf('...process.argv.slice(2)');
+    const testMatchIndex = argsLiteral.indexOf('--testMatch=');
+
+    expect(spreadIndex).toBeGreaterThan(-1);
+    expect(testMatchIndex).toBeGreaterThan(-1);
+    expect(spreadIndex).toBeLessThan(testMatchIndex);
+  });
+});

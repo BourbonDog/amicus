@@ -192,11 +192,13 @@ function run() {
   // NB: 'jest/bin/jest' (no .js) -- that is the subpath jest's package
   // "exports" map exposes; 'jest/bin/jest.js' throws ERR_PACKAGE_PATH_NOT_EXPORTED.
   const jestBin = require.resolve('jest/bin/jest');
+  // Caller args first: jest's --testMatch is an array option and would swallow
+  // a trailing positional (a file path) as a second glob.
   const args = [
     jestBin,
+    ...process.argv.slice(2),
     '--testPathIgnorePatterns=worktrees',
     '--testMatch=**/tests/**/*.integration.test.js',
-    ...process.argv.slice(2),
   ];
 
   const result = spawnSync(process.execPath, args, {
