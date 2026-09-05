@@ -45,7 +45,7 @@ describe('evaluateOutputBudget — nothing configured', () => {
   test('unset, no ambient flag -> ok, names the engine default', () => {
     const row = evaluateOutputBudget(deps());
     expect(row).toMatchObject({ id: 'output-budget', name: 'Output budget', status: 'ok', hint: null });
-    expect(row.message).toBe('not set — the engine default (32000 per leg) applies');
+    expect(row.message).toBe("not set — the engine default applies (OUTPUT_TOKEN_MAX 32000: each leg reserves min(32000, the ceiling the engine's catalog knows for it))");
   });
 
   test('unset, ambient flag a plain integer -> ok, says what OUTPUT_TOKEN_MAX becomes and what each leg then reserves', () => {
@@ -67,7 +67,7 @@ describe('evaluateOutputBudget — nothing configured', () => {
     'unset, ambient flag %p not a plain positive integer -> WARN: unmeasured form, engine falls back silently (D1/D2)', (v) => {
       const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: v } }));
       expect(row.status).toBe('warn');
-      expect(row.message).toContain('not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to 32000 silently); this form is unmeasured');
+      expect(row.message).toContain('not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to 32000 silently); any other form is unmeasured');
       expect(row.hint).toBe('unset OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX, or set it to a plain positive integer');
     });
 });
@@ -78,7 +78,7 @@ describe('evaluateOutputBudget — a budget is configured', () => {
       const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => bad }));
       expect(row.status).toBe('warn');
       expect(row.message).toContain(JSON.stringify(bad));
-      expect(row.message).toContain('not a positive integer — ignored; the engine default (32000 per leg) applies');
+      expect(row.message).toContain('not a positive integer — ignored; the engine default applies (OUTPUT_TOKEN_MAX 32000');
       expect(row.hint).toContain('/cfg/config.json');
     });
 
@@ -92,7 +92,8 @@ describe('evaluateOutputBudget — a budget is configured', () => {
   test('malformed budget with a MALFORMED ambient flag -> WARN naming both, default applies', () => {
     const row = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 'lots', env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000abc' } }));
     expect(row.status).toBe('warn');
-    expect(row.message).toContain('"lots" is not a positive integer — ignored; the engine default (32000 per leg) applies (OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc in this environment is not a plain positive integer');
+    expect(row.message).toContain('"lots" is not a positive integer — ignored; the engine default applies (OUTPUT_TOKEN_MAX 32000');
+    expect(row.message).toContain('(OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc in this environment is not a plain positive integer');
   });
 
   // Named mutant "NOCACHEALWAYSWARN": make the no-cache branch warn regardless

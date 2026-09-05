@@ -43,8 +43,9 @@ const ENGINE_DEFAULT_OUTPUT_TOKENS = 32000;
 
 /**
  * The flag value a budget produces, or null when no flag should be set.
- * Same acceptance rule as normalizeOutputBudget: a positive finite integer,
- * floored, below 1e21 (larger values would stringify in exponent form); everything else is "no flag".
+ * normalizeOutputBudget's acceptance rule (a positive finite integer, floored)
+ * plus one of its own: below 1e21, since a larger value would stringify in
+ * exponent form; everything else is "no flag".
  * @param {*} budget raw or normalized outputBudget
  * @returns {string|null}
  */

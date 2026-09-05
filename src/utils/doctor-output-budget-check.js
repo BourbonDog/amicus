@@ -44,7 +44,10 @@ function evaluateOutputBudget(d) {
   const env = d.env || process.env;
   const ambient = env[OUTPUT_TOKEN_FLAG];
   const raw = d.readOutputBudgetRaw();
-  const dflt = `the engine default (${ENGINE_DEFAULT_OUTPUT_TOKENS} per leg) applies`;
+  // Not "32000 per leg": under the default a leg reserves min(32000, the
+  // ceiling the engine's catalog knows for it) — probe B sent 4096 for a
+  // 4096-ceiling row with no flag at all.
+  const dflt = `the engine default applies (OUTPUT_TOKEN_MAX ${ENGINE_DEFAULT_OUTPUT_TOKENS}: each leg reserves min(${ENGINE_DEFAULT_OUTPUT_TOKENS}, the ceiling the engine's catalog knows for it))`;
 
   // Only a PLAIN decimal integer is measured to be honoured — it is the shape
   // amicus itself writes (engine-output-flag.js :: outputTokenFlagValue) and
@@ -53,7 +56,7 @@ function evaluateOutputBudget(d) {
   // been probed, so they are reported as unmeasured rather than as healthy.
   const ambientOk = (ambient !== undefined && /^\d+$/.test(ambient)) ? positiveCount(Number(ambient)) : null;
   const ambientBad = ambient !== undefined && ambientOk === null;
-  const ambientBadText = `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); this form is unmeasured`;
+  const ambientBadText = `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); any other form is unmeasured`;
   const ambientHint = `unset ${OUTPUT_TOKEN_FLAG}, or set it to a plain positive integer`;
 
   if (raw === undefined) {
