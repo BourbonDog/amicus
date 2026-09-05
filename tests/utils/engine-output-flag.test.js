@@ -48,6 +48,9 @@ describe('withOutputTokenFlag', () => {
     expect(Object.prototype.hasOwnProperty.call(env, OUTPUT_TOKEN_FLAG)).toBe(false);
   });
 
+  // Named mutant "ALWAYSDELETE": replace the `if (had) … else …` restore with an
+  // unconditional `delete env[OUTPUT_TOKEN_FLAG]` — the ambient '64000' is lost
+  // and this test fails.
   test('restores an AMBIENT value the user exported, rather than deleting it', () => {
     const env = { [OUTPUT_TOKEN_FLAG]: '64000' };
     let seen;
@@ -56,6 +59,8 @@ describe('withOutputTokenFlag', () => {
     expect(env[OUTPUT_TOKEN_FLAG]).toBe('64000');
   });
 
+  // Named mutant "NULLGUARD": delete the `if (value === null) { return fn(); }`
+  // fast path — the flag is then set to the string 'null' and this test fails.
   test('with no usable budget the env is not touched — an ambient value is honoured as-is', () => {
     const env = { [OUTPUT_TOKEN_FLAG]: '64000' };
     let seen;
