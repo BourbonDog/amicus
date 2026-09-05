@@ -27,11 +27,16 @@ describe('refreshCatalog: localhost-only refresh never clobbers a good OR cache'
     const { dir, good } = seedGoodCache();
     const catalogFile = path.join(dir, 'model-catalog.json');
     // getConfigDir() is the only config export refreshCatalog touches.
-    jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
+    jest.doMock('../src/utils/config', () => ({
+      getConfigDir: () => dir,
+      // #218 P3 opt-out: refreshCatalog reads `modelsDevCeilings` off the real
+      // config file, so the mock has to serve the sandbox one rather than a stub.
+      loadConfig: () => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf-8')); } catch { return null; } },
+    }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({}) }));
     // #218 P3: refreshCatalog enriches ceilings from models.dev; keep the unit suite offline.
     jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({
-      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 })),
+      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 })),
     }));
     // The network is offline except loopback: fetchAllModelsDetailed yields ONLY local rows.
     jest.doMock('../src/utils/model-fetcher', () => ({

@@ -132,6 +132,7 @@ src/
 │   ├── list-council.js  # Council rows on the CLI `amicus list` surface (v4.9 W12).
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
+│   ├── models-ceiling-line.js  # The one `Ceilings:` line `amicus models --refresh` prints (#218 P3).
 │   ├── models-probe.js
 │   ├── models-render.js  # Presentation helpers for `amicus models` -- pure string formatting, no I/O.
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
@@ -566,6 +567,7 @@ evals/
 | `sidecar/list-council.js` | Council rows on the CLI `amicus list` surface (v4.9 W12). | `padModel()`, `modelCell()`, `mergeCouncilRows()`, `councilScopeNotice()` |
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
+| `sidecar/models-ceiling-line.js` | The one `Ceilings:` line `amicus models --refresh` prints (#218 P3). | `fmtCeilingLine()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
 | `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS()`, `fmtProbeCost()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
@@ -654,7 +656,7 @@ evals/
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
 | `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()`, `vendorOfId()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
-| `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `MODELS_DEV_URL()`, `MODELS_DEV_TIMEOUT_MS()`, `limitsFromModelsDev()`, `fillCeilings()`, `enrichCeilings()` |
+| `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `MODELS_DEV_URL()`, `MODELS_DEV_TIMEOUT_MS()`, `limitsFromModelsDev()`, `fillCeilings()`, `needsFillCount()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |

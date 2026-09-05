@@ -23,7 +23,7 @@ describe('model-catalog schema v2', () => {
     jest.doMock('../../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({}) }));
     // #218 P3: refreshCatalog enriches ceilings from models.dev; keep the unit suite offline.
     jest.doMock('../../src/utils/model-ceilings-modelsdev', () => ({
-      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 })),
+      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 })),
     }));
   }
 

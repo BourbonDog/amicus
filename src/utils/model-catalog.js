@@ -22,6 +22,8 @@ function _readApiKeyValues() { return require('./api-key-store').readApiKeyValue
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModelsDetailed(keys); }
 async function _enrichCeilings(rows) { return require('./model-ceilings-modelsdev').enrichCeilings(rows); }
 function _emptyOutcome(failure) { return require('./model-ceilings-modelsdev').emptyOutcome(failure); }
+/** #218 P3 opt-out: `modelsDevCeilings: false` in config.json, and ONLY a literal false. */
+function _modelsDevEnabled() { return require('./config').loadConfig()?.modelsDevCeilings !== false; }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 const CATALOG_SCHEMA_VERSION = 2;
@@ -137,13 +139,20 @@ async function refreshCatalog() {
   // and IN PLACE on the fresh row objects, so `authoritative`/`local` ride
   // through untouched. enrichCeilings never rejects; the belt-and-braces catch
   // keeps a bug there from failing a refresh that already succeeded.
+  // Council #230 D1/C2: `modelsDevCeilings: false` means models.dev is never
+  // contacted. The persisted outcome still carries the full counter set, so
+  // `--json` readers and the `Ceilings:` line see "disabled", not a blank.
   let ceilingEnrichment;
-  try {
-    ceilingEnrichment = await _enrichCeilings(models);
-  } catch (err) {
-    // Same shape enrichCeilings' own failures use (council #230 C4/D5), so every
-    // reader of ceilingEnrichment sees the full counter set however it failed.
-    ceilingEnrichment = _emptyOutcome({ reason: 'exception', detail: err.message });
+  if (!_modelsDevEnabled()) {
+    ceilingEnrichment = { ..._emptyOutcome(null), skipped: 'disabled' };
+  } else {
+    try {
+      ceilingEnrichment = await _enrichCeilings(models);
+    } catch (err) {
+      // Same shape enrichCeilings' own failures use (council #230 C4/D5), so every
+      // reader of ceilingEnrichment sees the full counter set however it failed.
+      ceilingEnrichment = _emptyOutcome({ reason: 'exception', detail: err.message });
+    }
   }
   writeCache(models, providerFailures, ceilingEnrichment);
   return models;

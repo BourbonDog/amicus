@@ -22,6 +22,7 @@ const { pickCurrent } = require('../utils/quick-picks');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
+const { fmtCeilingLine } = require('./models-ceiling-line');
 
 const CHECK_EXIT_CAP = 100;
 
@@ -83,37 +84,6 @@ async function runList(args) {
 // v4.6.2 PR3 Task 4: shared --live skip line; reason doubles as the JSON probeSkipped slug.
 function fmtLiveSkipped(reason) {
   return `--live skipped: ${reason} — nothing was probed`;
-}
-
-/**
- * How a ceiling-enrichment failure is worded, keyed by its `failure.reason`
- * (council #230 D4/C1). `http-status`, `parse-error`, `too-large` and
- * `bad-shape` all mean models.dev ANSWERED; `exception` — and any reason a later
- * failure invents — is a local bug, so it falls through to a neutral lead.
- */
-const CEILING_FAILURE_LEAD = {
-  timeout: 'models.dev unreachable',
-  'network-error': 'models.dev unreachable',
-  'http-status': 'models.dev answered but could not be used',
-  'parse-error': 'models.dev answered but could not be used',
-  'too-large': 'models.dev answered but could not be used',
-  'bad-shape': 'models.dev answered but could not be used',
-};
-
-/** #218 P3: one honest line about where the direct-provider ceilings came from. */
-function fmtCeilingLine(e) {
-  // Unreachable in production after #218 P3 (every successful refresh persists a
-  // ceilingEnrichment object); kept for a hand-built or pre-field cache doc.
-  if (!e) { return 'Ceilings: not attempted'; }
-  if (e.failure) {
-    const f = e.failure;
-    const why = f.reason + (f.status ? ` ${f.status}` : '') + (f.detail ? `: ${f.detail}` : '');
-    const lead = CEILING_FAILURE_LEAD[f.reason] || 'ceiling enrichment failed';
-    return `Ceilings: ${lead} (${why}); rows without a ceiling keep the engine default and outputBudget cannot clamp them`;
-  }
-  // `?? 0`: a hand-built or pre-field cache doc can carry a partial object, and
-  // `undefined already known` would be a worse lie than a zero.
-  return `Ceilings: ${e.filled ?? 0} rows filled from models.dev (${e.alreadyKnown ?? 0} already known, ${e.unknown ?? 0} unknown to models.dev)`;
 }
 
 async function runRefresh(args) {

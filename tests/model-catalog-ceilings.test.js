@@ -17,12 +17,17 @@ describe('model-catalog: ceiling enrichment (#218 P3)', () => {
   beforeEach(() => {
     jest.resetModules();
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-catceil-'));
-    jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
+    jest.doMock('../src/utils/config', () => ({
+      getConfigDir: () => dir,
+      // #218 P3 opt-out: refreshCatalog reads `modelsDevCeilings` off the real
+      // config file, so the mock has to serve the sandbox one rather than a stub.
+      loadConfig: () => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf-8')); } catch { return null; } },
+    }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({ openrouter: 'k' }) }));
   });
   afterEach(() => { jest.dontMock('../src/utils/config'); fs.rmSync(dir, { recursive: true, force: true }); });
 
-  const OK = { source: 'models.dev', failure: null, filled: 1, alreadyKnown: 2, unknown: 3, skippedRouters: 0, skippedLocal: 0 };
+  const OK = { source: 'models.dev', failure: null, skipped: null, filled: 1, alreadyKnown: 2, unknown: 3, stillMissing: 4, skippedRouters: 0, skippedLocal: 0 };
 
   function mockFetcher(rows) {
     jest.doMock('../src/utils/model-fetcher', () => ({
@@ -77,9 +82,40 @@ describe('model-catalog: ceiling enrichment (#218 P3)', () => {
     const { refreshCatalog, readCache } = require('../src/utils/model-catalog');
     expect((await refreshCatalog()).length).toBe(1);
     expect(readCache().ceilingEnrichment).toEqual({
-      source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' },
-      filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0,
+      source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, skipped: null,
+      filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0,
     });
+  });
+
+  // Council #230 D1/C2: the models.dev lookup is opt-out. `modelsDevCeilings: false`
+  // must stop the module being called at all, not merely discard its answer.
+  // Delete the `_modelsDevEnabled()` branch in refreshCatalog and this fails.
+  test('modelsDevCeilings: false skips the lookup entirely and records it', async () => {
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modelsDevCeilings: false }));
+    mockFetcher([{ id: 'openrouter/x', name: 'x' }]);
+    const enrich = mockEnrich(async () => OK);
+    const { refreshCatalog, readCache, getCatalogInfo } = require('../src/utils/model-catalog');
+    expect((await refreshCatalog()).length).toBe(1);
+    expect(enrich).not.toHaveBeenCalled();
+    expect(readCache().ceilingEnrichment).toEqual({
+      source: 'models.dev', failure: null, skipped: 'disabled',
+      filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0,
+    });
+    expect((await getCatalogInfo()).ceilingEnrichment.skipped).toBe('disabled');
+  });
+
+  // ONLY a literal false opts out: a missing key, and any other value, still run.
+  test('the lookup runs as before when the key is absent, and when it is true', async () => {
+    mockFetcher([{ id: 'openrouter/x', name: 'x' }]);
+    const enrich = mockEnrich(async () => OK);
+    const { refreshCatalog, readCache } = require('../src/utils/model-catalog');
+    await refreshCatalog();
+    expect(enrich).toHaveBeenCalledTimes(1);
+    expect(readCache().ceilingEnrichment).toEqual(OK);
+
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modelsDevCeilings: true }));
+    await refreshCatalog();
+    expect(enrich).toHaveBeenCalledTimes(2);
   });
 
   test('getCatalogInfo reports null when the cache predates the field', async () => {

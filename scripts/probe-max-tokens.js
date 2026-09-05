@@ -484,7 +484,10 @@ function checksLine(results, onlyArg) {
   // A SUBSET's counts must never read as the full-matrix verdict — filed in a
   // record or skimmed on the terminal, `--only` has to be visible on the line
   // that carries the numbers, not just in the shell history that produced them.
-  const scope = onlyArg ? ` — partial run (--only ${onlyArg})` : '';
+  // `!== null`, not truthiness: a bare trailing `--only` parses as the EMPTY
+  // string, which selects no case at all — the one run whose "0 matched" most
+  // needs the marker (council #230 r4).
+  const scope = onlyArg !== null ? ` — partial run (--only ${onlyArg})` : '';
   return { line: `checks: ${matched} matched, ${bad.length} mismatched (${ids}), ${recorded} recorded${scope}`, mismatched: bad.length };
 }
 

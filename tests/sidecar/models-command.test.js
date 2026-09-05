@@ -99,10 +99,10 @@ describe('amicus models', () => {
   });
 
   it('--refresh prints the ceilings line when models.dev filled rows', async () => {
-    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, filled: 12, alreadyKnown: 380, unknown: 5, skippedRouters: 6, skippedLocal: 0 } });
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: null, filled: 12, alreadyKnown: 380, unknown: 5, stillMissing: 9, skippedRouters: 6, skippedLocal: 0 } });
     const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(code).toBe(0);
-    expect(out).toContain('Ceilings: 12 rows filled from models.dev (380 already known, 5 unknown to models.dev)');
+    expect(out).toContain('Ceilings: 12 rows filled from models.dev (380 already complete, 5 unknown to models.dev, 9 still missing a number)');
   });
 
   it('--refresh says so when models.dev was unreachable', async () => {
@@ -147,12 +147,30 @@ describe('amicus models', () => {
   it('--refresh prints zeros, not undefined, for a partial ceilingEnrichment object', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, filled: 3 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: 3 rows filled from models.dev (0 already known, 0 unknown to models.dev)');
+    expect(out).toContain('Ceilings: 3 rows filled from models.dev (0 already complete, 0 unknown to models.dev, 0 still missing a number)');
     expect(out).not.toContain('undefined');
   });
 
+  // Council #230 D1/C2: the two SKIPS are neither a failure nor a fill, and a
+  // user who turned the lookup off must be told that is why. Delete either
+  // `e.skipped` branch in fmtCeilingLine and the matching test prints the
+  // "0 rows filled" success line instead.
+  it('--refresh says so when models.dev is disabled by config', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'disabled', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); outputBudget cannot clamp direct routes');
+    expect(out).not.toContain('rows filled from models.dev');
+  });
+
+  it('--refresh says so when there was nothing to fill', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'nothing-to-fill', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: nothing to fill (every row already carries both numbers)');
+    expect(out).not.toContain('rows filled from models.dev');
+  });
+
   it('--refresh --json carries ceilingEnrichment', async () => {
-    const enrichment = { source: 'models.dev', failure: null, filled: 1, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 };
+    const enrichment = { source: 'models.dev', failure: null, skipped: null, filled: 1, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 };
     const { handleModels } = loadHandler({ ceilingEnrichment: enrichment });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true, json: true }));
     expect(JSON.parse(out).ceilingEnrichment).toEqual(enrichment);
