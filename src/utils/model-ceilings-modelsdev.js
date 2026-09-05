@@ -16,8 +16,10 @@
  * because that file's path and refresh flags are engine-private.
  *
  * RULES (measured 2026-09-04 against live data, see the plan):
- *   - the provider's own value WINS; models.dev fills ONLY null fields
- *     (OpenRouter and models.dev disagree on 24 of 344 openrouter ceilings);
+ *   - the provider's own value WINS: models.dev fills a field only when the
+ *     provider gave no usable positive integer — null, 0, negative or malformed
+ *     — and a usable provider value is never overwritten (OpenRouter and
+ *     models.dev disagree on 24 of 344 openrouter ceilings);
  *   - a zero/absent models.dev limit is never written (openai image rows);
  *   - `openrouter/openrouter/*` meta-routers are skipped (models.dev says
  *     2,000,000 for `auto`, a number no underlying model honours);
@@ -58,7 +60,10 @@ function limitsFromModelsDev(api) {
 }
 
 /**
- * Fill null contextLength / maxOutputTokens in place. Provider value wins.
+ * Fill contextLength / maxOutputTokens in place. A field is filled ONLY when the
+ * provider gave no usable positive integer for it — `positiveCount(...) === null`,
+ * i.e. null, 0, negative, fractional or non-numeric. A usable provider value is
+ * never overwritten.
  * @param {Array<object>} rows catalog rows (mutated)
  * @param {Map<string, {context: number|null, output: number|null}>} limits
  * @returns {{filled: number, alreadyKnown: number, unknown: number, skippedRouters: number, skippedLocal: number}}
@@ -80,6 +85,19 @@ function fillCeilings(rows, limits) {
 }
 
 /**
+ * The outcome a FAILED enrichment persists: the failure plus every counter at
+ * zero. One shape, so this module's own failure returns and `model-catalog.js ::
+ * refreshCatalog`'s belt-and-braces catch cannot drift apart and
+ * `models.js :: fmtCeilingLine` always has the counters it prints.
+ * @param {{reason: string, status?: number, detail?: string}} failure
+ * @returns {{source: 'models.dev', failure: object, filled: number, alreadyKnown: number,
+ *   unknown: number, skippedRouters: number, skippedLocal: number}}
+ */
+function emptyOutcome(failure) {
+  return { source: 'models.dev', failure, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 };
+}
+
+/**
  * Fetch models.dev and fill `rows`. ALWAYS resolves; the outcome travels with
  * the rows it describes (model-catalog.js persists it as ceilingEnrichment).
  * @param {Array<object>} rows catalog rows (mutated in place)
@@ -88,7 +106,6 @@ function fillCeilings(rows, limits) {
  *   filled: number, alreadyKnown: number, unknown: number, skippedRouters: number, skippedLocal: number}>}
  */
 async function enrichCeilings(rows, deps = {}) {
-  const zero = { filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 };
   const getJson = deps.getJson || require('./http-get').getJson;
   let res;
   try {
@@ -97,12 +114,12 @@ async function enrichCeilings(rows, deps = {}) {
       headers: { 'User-Agent': `amicus/${require('../../package.json').version}` },
     });
   } catch (err) {
-    return { source: 'models.dev', failure: { reason: 'exception', detail: err.message }, ...zero };
+    return emptyOutcome({ reason: 'exception', detail: err.message });
   }
   if (!res || !res.ok) {
-    return { source: 'models.dev', failure: (res && res.failure) || { reason: 'exception', detail: 'no result' }, ...zero };
+    return emptyOutcome((res && res.failure) || { reason: 'exception', detail: 'no result' });
   }
   return { source: 'models.dev', failure: null, ...fillCeilings(rows, limitsFromModelsDev(res.json)) };
 }
 
-module.exports = { MODELS_DEV_URL, MODELS_DEV_TIMEOUT_MS, limitsFromModelsDev, fillCeilings, enrichCeilings };
+module.exports = { MODELS_DEV_URL, MODELS_DEV_TIMEOUT_MS, limitsFromModelsDev, fillCeilings, enrichCeilings, emptyOutcome };

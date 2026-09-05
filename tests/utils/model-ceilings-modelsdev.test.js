@@ -2,8 +2,10 @@
 /**
  * #218 P3 — direct-provider ceilings from models.dev.
  *
- * Rules under test (approved design 2026-09-04): provider's own value wins and
- * models.dev fills ONLY null contextLength/maxOutputTokens; zero/absent limits
+ * Rules under test (approved design 2026-09-04): the provider's own value wins
+ * and models.dev fills a contextLength/maxOutputTokens only where the provider
+ * gave no usable positive integer (null, 0, negative or malformed); zero/absent
+ * models.dev limits
  * are never written; openrouter/openrouter/* routers and local rows are
  * skipped; the fill is in place so `authoritative`/`local` flags ride through;
  * the fetch failure vocabulary is http-get's.
@@ -58,7 +60,7 @@ describe('limitsFromModelsDev', () => {
 describe('fillCeilings', () => {
   const limits = () => limitsFromModelsDev(API);
 
-  it('fills only null fields, in place, and stamps limitSource', () => {
+  it('fills only fields the provider left empty or unusable, in place, and stamps limitSource', () => {
     const row = { id: 'anthropic/claude-opus-5', name: 'Opus', contextLength: null, pricing: null, authoritative: false };
     const rows = [row];
     const counts = fillCeilings(rows, limits());
@@ -73,6 +75,16 @@ describe('fillCeilings', () => {
     expect(row.maxOutputTokens).toBe(131072);
     expect(row.limitSource).toBeUndefined();
     expect(counts.alreadyKnown).toBe(1);
+  });
+
+  // Council #230 A1: the rule is `positiveCount(...) === null`, not `=== null`.
+  // A 0 or a negative provider value is unusable and IS filled — the contract
+  // wording is "no usable positive integer", not "null".
+  it('fills a 0 / negative provider value, because neither is a usable positive integer', () => {
+    const row = { id: 'anthropic/claude-opus-5', contextLength: 0, maxOutputTokens: -5 };
+    const counts = fillCeilings([row], limits());
+    expect(row).toMatchObject({ contextLength: 1000000, maxOutputTokens: 128000, limitSource: 'models.dev' });
+    expect(counts).toEqual({ filled: 1, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 });
   });
 
   it('fills the one missing field when the other is known', () => {

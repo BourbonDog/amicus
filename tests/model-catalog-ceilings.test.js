@@ -31,7 +31,11 @@ describe('model-catalog: ceiling enrichment (#218 P3)', () => {
   }
   function mockEnrich(impl) {
     const enrichCeilings = jest.fn(impl);
-    jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({ enrichCeilings }));
+    // emptyOutcome comes from the REAL module: refreshCatalog's belt-and-braces
+    // catch calls it, and the point of the shared helper is that both sites
+    // produce one shape (council #230 C4/D5).
+    const { emptyOutcome } = jest.requireActual('../src/utils/model-ceilings-modelsdev');
+    jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({ enrichCeilings, emptyOutcome }));
     return enrichCeilings;
   }
 
@@ -72,7 +76,10 @@ describe('model-catalog: ceiling enrichment (#218 P3)', () => {
     mockEnrich(async () => { throw new Error('kaboom'); });
     const { refreshCatalog, readCache } = require('../src/utils/model-catalog');
     expect((await refreshCatalog()).length).toBe(1);
-    expect(readCache().ceilingEnrichment).toEqual({ source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, filled: 0 });
+    expect(readCache().ceilingEnrichment).toEqual({
+      source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' },
+      filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0,
+    });
   });
 
   test('getCatalogInfo reports null when the cache predates the field', async () => {

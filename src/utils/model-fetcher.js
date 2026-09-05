@@ -64,7 +64,8 @@ const PROVIDER_FETCH_CONFIG = {
         id: `google/${m.name.replace('models/', '')}`,
         name: m.displayName || m.name.replace('models/', ''),
         contextLength: m.inputTokenLimit ?? null,
-        // #218 P3: Google's ListModels publishes the ceiling first-party; models.dev fills only what stays null.
+        // #218 P3: Google's ListModels publishes the ceiling first-party; models.dev fills only
+        // what the provider left empty or unusable.
         maxOutputTokens: m.outputTokenLimit ?? null,
         pricing: null
       }));

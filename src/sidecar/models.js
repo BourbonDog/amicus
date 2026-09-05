@@ -85,6 +85,19 @@ function fmtLiveSkipped(reason) {
   return `--live skipped: ${reason} — nothing was probed`;
 }
 
+/**
+ * How a ceiling-enrichment failure is worded, keyed by its `failure.reason`
+ * (council #230 D4). `exception` — and any reason a later failure invents — is a
+ * local bug, not a statement about models.dev, so it falls through to a neutral
+ * lead instead of claiming the site was unreachable.
+ */
+const CEILING_FAILURE_LEAD = {
+  timeout: 'models.dev unreachable',
+  'network-error': 'models.dev unreachable',
+  'http-status': 'models.dev answered but could not be used',
+  'parse-error': 'models.dev answered but could not be used',
+};
+
 /** #218 P3: one honest line about where the direct-provider ceilings came from. */
 function fmtCeilingLine(e) {
   // Unreachable in production after #218 P3 (every successful refresh persists a
@@ -93,9 +106,12 @@ function fmtCeilingLine(e) {
   if (e.failure) {
     const f = e.failure;
     const why = f.reason + (f.status ? ` ${f.status}` : '') + (f.detail ? `: ${f.detail}` : '');
-    return `Ceilings: models.dev unreachable (${why}); rows without a ceiling keep the engine default and outputBudget cannot clamp them`;
+    const lead = CEILING_FAILURE_LEAD[f.reason] || 'ceiling enrichment failed';
+    return `Ceilings: ${lead} (${why}); rows without a ceiling keep the engine default and outputBudget cannot clamp them`;
   }
-  return `Ceilings: ${e.filled} rows filled from models.dev (${e.alreadyKnown} already known, ${e.unknown} unknown to models.dev)`;
+  // `?? 0`: a hand-built or pre-field cache doc can carry a partial object, and
+  // `undefined already known` would be a worse lie than a zero.
+  return `Ceilings: ${e.filled ?? 0} rows filled from models.dev (${e.alreadyKnown ?? 0} already known, ${e.unknown ?? 0} unknown to models.dev)`;
 }
 
 async function runRefresh(args) {

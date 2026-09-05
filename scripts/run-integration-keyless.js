@@ -74,7 +74,12 @@ const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-sto
  *     it never touches the filesystem at all;
  *   - OPENCODE_API_KEY: a bare key the engine accepts directly;
  *   - OPENCODE_CONFIG / OPENCODE_CONFIG_DIR: config-file overrides that can
- *     name providers (and their keys) from outside the sandbox.
+ *     name providers (and their keys) from outside the sandbox;
+ *   - OPENCODE_CONFIG_CONTENT: an inline config document, read straight out of
+ *     the variable like OPENCODE_AUTH_CONTENT. The pinned SDK writes its own
+ *     value on every server it spawns, so an engine started THROUGH the SDK
+ *     never inherits an ambient one -- but a hand-spawned `opencode serve`
+ *     would, so it is scrubbed rather than left to be shadowed.
  * Deleted by buildKeylessEnv() and asserted absent by probe-max-tokens.js's
  * assertSandboxed(), which imports this same list so scrub and gate agree by
  * construction.
@@ -85,6 +90,9 @@ const ENGINE_CREDENTIAL_ENV = [
   'OPENCODE_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_DIR',
+  // The SDK overwrites this one on every spawn it makes, so it cannot reach an
+  // SDK-started engine -- but a hand-spawned engine would read it.
+  'OPENCODE_CONFIG_CONTENT',
 ];
 
 /**

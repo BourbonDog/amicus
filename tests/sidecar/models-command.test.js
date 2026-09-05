@@ -111,6 +111,29 @@ describe('amicus models', () => {
     expect(out).toContain('Ceilings: models.dev unreachable (timeout: no response within 10000ms); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
   });
 
+  // Council #230 D4: 'unreachable' is a claim about models.dev. A parse-error means
+  // it answered; an exception is a local bug. Neither may be worded as unreachable.
+  it('--refresh words a parse-error as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'parse-error', detail: 'Unexpected token <' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (parse-error: Unexpected token <); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh words an exception neutrally, blaming neither models.dev nor the network', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, filled: 0, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: ceiling enrichment failed (exception: kaboom); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh prints zeros, not undefined, for a partial ceilingEnrichment object', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, filled: 3 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: 3 rows filled from models.dev (0 already known, 0 unknown to models.dev)');
+    expect(out).not.toContain('undefined');
+  });
+
   it('--refresh --json carries ceilingEnrichment', async () => {
     const enrichment = { source: 'models.dev', failure: null, filled: 1, alreadyKnown: 0, unknown: 0, skippedRouters: 0, skippedLocal: 0 };
     const { handleModels } = loadHandler({ ceilingEnrichment: enrichment });

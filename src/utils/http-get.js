@@ -10,6 +10,13 @@
  * The call shape is deliberately `https.get(url, { headers }, cb)` — the one
  * tests/model-fetcher.test.js mocks — so that suite keeps intercepting after
  * the extraction.
+ *
+ * REDIRECTS ARE NOT FOLLOWED. A 3xx is reported as an `http-status` failure
+ * carrying the status, exactly like a 404 or a 500 — so a domain move or an
+ * http-to-https hop shows up on the caller's failure line (for the models.dev
+ * ceiling fetch, the `Ceilings:` line of `amicus models --refresh`) rather than
+ * being followed silently. Adding redirect-following would mean re-deciding
+ * which headers survive the hop; the failure is visible instead.
  */
 
 'use strict';
@@ -29,29 +36,41 @@ function httpGetText(url, opts = {}) {
   const timeoutMs = opts.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : opts.timeoutMs;
   return new Promise((resolve) => {
     let chunks = '';
+    let req;
     const fail = (failure) => resolve({ ok: false, failure });
     const timer = setTimeout(() => {
       req.destroy();
       fail({ reason: 'timeout', detail: `no response within ${timeoutMs}ms` });
     }, timeoutMs);
-    const req = https.get(url, { headers }, (res) => {
-      // Decode once, at the stream: `chunks += chunk` decodes each Buffer on its
-      // own and mangles any multi-byte character split across a chunk boundary.
-      res.setEncoding('utf8');
-      if (res.statusCode !== 200) {
-        // The timer stays armed until `end`: a non-200 whose body never ends
-        // must still time out rather than leave the promise pending for ever.
-        res.on('data', () => {});
-        res.on('end', () => { clearTimeout(timer); fail({ reason: 'http-status', status: res.statusCode }); });
-        return;
-      }
-      res.on('data', (chunk) => { chunks += chunk; });
-      res.on('end', () => { clearTimeout(timer); resolve({ ok: true, body: chunks }); });
-    });
-    req.on('error', (err) => {
+    const onError = (err) => { clearTimeout(timer); fail({ reason: 'network-error', detail: err.message }); };
+    try {
+      req = https.get(url, { headers }, (res) => {
+        // Decode once, at the stream: `chunks += chunk` decodes each Buffer on its
+        // own and mangles any multi-byte character split across a chunk boundary.
+        res.setEncoding('utf8');
+        // A mid-body stream error is emitted on `res`, NOT on `req`. With no
+        // listener here node rethrows it as an uncaught exception and the promise
+        // never settles — so it is attached once, ahead of the status check, and
+        // covers the non-200 drain branch too.
+        res.on('error', onError);
+        if (res.statusCode !== 200) {
+          // The timer stays armed until `end`: a non-200 whose body never ends
+          // must still time out rather than leave the promise pending for ever.
+          res.on('data', () => {});
+          res.on('end', () => { clearTimeout(timer); fail({ reason: 'http-status', status: res.statusCode }); });
+          return;
+        }
+        res.on('data', (chunk) => { chunks += chunk; });
+        res.on('end', () => { clearTimeout(timer); resolve({ ok: true, body: chunks }); });
+      });
+    } catch (err) {
+      // `https.get` throws SYNCHRONOUSLY on a malformed URL (and on a bad option
+      // object). "Always resolves, never rejects" has to hold for that too.
       clearTimeout(timer);
       fail({ reason: 'network-error', detail: err.message });
-    });
+      return;
+    }
+    req.on('error', onError);
   });
 }
 

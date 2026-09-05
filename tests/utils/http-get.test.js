@@ -74,6 +74,34 @@ describe('httpGetText', () => {
     expect(req.destroy).toHaveBeenCalledTimes(1);
   });
 
+  // Council #230 A2/C1: a mid-body error is emitted on `res`, and an EventEmitter
+  // with no 'error' listener rethrows it — the promise would never settle. Drop the
+  // `res.on('error', onError)` line and this test fails with an uncaught error.
+  it('resolves network-error when the response stream errors mid-body, and never throws', async () => {
+    https.get.mockImplementation((_url, _opts, cb) => {
+      const req = new EventEmitter();
+      req.destroy = jest.fn();
+      const res = new EventEmitter();
+      res.statusCode = 200;
+      res.setEncoding = jest.fn();
+      cb(res);
+      process.nextTick(() => { res.emit('data', '{\"half\":'); res.emit('error', new Error('aborted mid-body')); });
+      return req;
+    });
+    await expect(httpGetText('https://x.test/y')).resolves.toEqual({
+      ok: false, failure: { reason: 'network-error', detail: 'aborted mid-body' },
+    });
+  });
+
+  // Council #230 D6: https.get throws SYNCHRONOUSLY on a URL it cannot parse, which
+  // would reject the promise and break the "always resolves" contract.
+  it('resolves network-error when https.get throws synchronously on a malformed URL', async () => {
+    https.get.mockImplementation(() => { throw new TypeError('Invalid URL'); });
+    await expect(httpGetText('not a url')).resolves.toEqual({
+      ok: false, failure: { reason: 'network-error', detail: 'Invalid URL' },
+    });
+  });
+
   it('decodes the body once at the stream rather than per chunk', async () => {
     let captured = null;
     https.get.mockImplementation((_url, _opts, cb) => {

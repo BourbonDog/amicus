@@ -21,10 +21,12 @@
  * than implied: every PROVIDER_ENV_MAP and legacy key deleted;
  * AMICUS_ENV_DIR/AMICUS_CONFIG_DIR deleted; the engine's own credential/config
  * channels deleted (OPENCODE_AUTH_CONTENT, OPENCODE_API_KEY, OPENCODE_CONFIG,
- * OPENCODE_CONFIG_DIR -- see ENGINE_CREDENTIAL_ENV); and
+ * OPENCODE_CONFIG_DIR, OPENCODE_CONFIG_CONTENT -- see ENGINE_CREDENTIAL_ENV); and
  * HOME/USERPROFILE/XDG_DATA_HOME/XDG_CONFIG_HOME/APPDATA repointed inside the
- * sandbox. The INNER run re-asserts that every one of those variable names is
- * undefined and exits 1 BEFORE starting an engine if any survived. The
+ * sandbox. The INNER run re-asserts that every DELETED key name is undefined --
+ * the provider keys, the legacy names, and the engine's own OPENCODE_*
+ * credential/config channels -- and that HOME resolves inside the sandbox; it
+ * exits 1 BEFORE starting an engine if any of that fails. The
  * `apiKey: 'probe-key'` in every provider block is defence in depth. This is a
  * scrub of the credential channels enumerated above, not a proof that no other
  * channel exists: an engine bump that adds one has to be added to that list.
@@ -102,8 +104,11 @@ function runOuter(args) {
 }
 
 /**
- * INNER half's gate: every provider key name must be undefined before an engine
- * is allowed to start. Prints the sandbox line the run is judged on.
+ * INNER half's gate: every DELETED key name -- the provider keys, the legacy
+ * names, and the engine's own OPENCODE_* credential/config channels
+ * (ENGINE_CREDENTIAL_ENV) -- must be undefined before an engine is allowed to
+ * start, and HOME must resolve inside the sandbox. Prints the sandbox line the
+ * run is judged on, which enumerates exactly those names.
  *
  * HOME is checked too, not only the env-var names: a hand-typed `--inner` in a
  * real home has no provider variables set on plenty of machines and would still
@@ -234,6 +239,11 @@ function buildConfig(origin, c) {
 async function startEngine(sdk, config, env) {
   // Same discipline PR 2 will ship: set only around the synchronous spawn, restore
   // before awaiting. The pinned SDK spreads process.env before its first await.
+  // The C1/C3/H2/J2 rows are the canary for that undocumented SDK behaviour: if a
+  // future SDK stops spreading process.env before its first await, those four rows
+  // would read 32000 instead of 64000 and this probe would report it. PR 2 adds a
+  // unit pin through the `_createOpencodeServer` seam so a regression is caught
+  // without a full matrix run.
   const saved = process.env[FLAG];
   if (env === undefined) { delete process.env[FLAG]; } else { process.env[FLAG] = env; }
   let pending;
@@ -333,7 +343,7 @@ const CASES = [
   { id: 'C3', title: 'env 64000 + bare {} (engine reports ceiling 1048576)', env: '64000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '64000' },
   { id: 'D1', title: 'env 64000abc (malformed)', env: '64000abc', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000 silently' },
   { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000' },
-  { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '32000 (dropped)' },
+  { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped")' },
   { id: 'E2', title: 'options.reasoning {effort:low}', or: { [KIMI]: { options: { reasoning: { effort: 'low' } } } }, model: OR(KIMI), expect: 'reasoning effort low on the wire' },
   { id: 'F1', title: 'amicus sendPrompt today: body.reasoning {effort:low}', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire' },
   { id: 'F2', title: "prompt variant 'low' (kimi: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'low' }, expect: 'reasoning effort low' },

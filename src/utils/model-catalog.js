@@ -21,6 +21,7 @@ function _getConfigDir() { return require('./config').getConfigDir(); }
 function _readApiKeyValues() { return require('./api-key-store').readApiKeyValues(); }
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModelsDetailed(keys); }
 async function _enrichCeilings(rows) { return require('./model-ceilings-modelsdev').enrichCeilings(rows); }
+function _emptyOutcome(failure) { return require('./model-ceilings-modelsdev').emptyOutcome(failure); }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 const CATALOG_SCHEMA_VERSION = 2;
@@ -140,7 +141,9 @@ async function refreshCatalog() {
   try {
     ceilingEnrichment = await _enrichCeilings(models);
   } catch (err) {
-    ceilingEnrichment = { source: 'models.dev', failure: { reason: 'exception', detail: err.message }, filled: 0 };
+    // Same shape enrichCeilings' own failures use (council #230 C4/D5), so every
+    // reader of ceilingEnrichment sees the full counter set however it failed.
+    ceilingEnrichment = _emptyOutcome({ reason: 'exception', detail: err.message });
   }
   writeCache(models, providerFailures, ceilingEnrichment);
   return models;
