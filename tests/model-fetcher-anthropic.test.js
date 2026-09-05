@@ -10,7 +10,7 @@ function loadFetcher(httpsStub) {
 function fakeHttps({ statusCode, body }) {
   return {
     get(_url, _opts, cb) {
-      const res = { statusCode, on(evt, h) { if (evt === 'data' && body) h(body); if (evt === 'end') h(); } };
+      const res = { statusCode, setEncoding() {}, on(evt, h) { if (evt === 'data' && body) h(body); if (evt === 'end') h(); } };
       cb(res);
       return { on() {}, destroy() {} };
     },

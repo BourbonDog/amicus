@@ -8,8 +8,17 @@ describe('model-catalog', () => {
   beforeEach(() => {
     jest.resetModules();
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-cat-'));
-    jest.doMock('../src/utils/config', () => ({ getConfigDir: () => dir }));
+    jest.doMock('../src/utils/config', () => ({
+      getConfigDir: () => dir,
+      // #218 P3 opt-out: refreshCatalog reads `modelsDevCeilings` off the real
+      // config file, so the mock has to serve the sandbox one rather than a stub.
+      loadConfig: () => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf-8')); } catch { return null; } },
+    }));
     jest.doMock('../src/utils/api-key-store', () => ({ readApiKeyValues: () => ({ openrouter: 'k' }) }));
+    // #218 P3: refreshCatalog enriches ceilings from models.dev; keep the unit suite offline.
+    jest.doMock('../src/utils/model-ceilings-modelsdev', () => ({
+      enrichCeilings: jest.fn(async () => ({ source: 'models.dev', failure: null, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 })),
+    }));
   });
   afterEach(() => { jest.dontMock('../src/utils/config'); fs.rmSync(dir, { recursive: true, force: true }); });
 

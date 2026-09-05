@@ -33,7 +33,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { buildKeylessEnv } = require('../../scripts/run-integration-keyless');
+const { buildKeylessEnv, ENGINE_CREDENTIAL_ENV } = require('../../scripts/run-integration-keyless');
 
 const AUTH_JSON_MODULE = require.resolve('../../src/utils/auth-json');
 const ENV_LOADER_MODULE = require.resolve('../../src/utils/env-loader');
@@ -129,6 +129,28 @@ describe('buildKeylessEnv sandboxes every credential-path root (I-1)', () => {
     expect(probe.resolvedAuthPath).not.toBe(plantedPath);
     expect(probe.resolvedAuthPath.startsWith(sandboxHome)).toBe(true);
     expect(probe.openrouterKey).toBeNull();
+  });
+
+  // The engine's own credential/config channels — all five named by the
+  // whole-branch final review of #218 PR 1.
+  // Directory sandboxing cannot contain these: OPENCODE_AUTH_CONTENT and
+  // OPENCODE_CONFIG_CONTENT carry their document in the variable itself, and
+  // OPENCODE_CONFIG/_DIR can name a provider block (with its key) from anywhere
+  // on disk.
+  test.each(ENGINE_CREDENTIAL_ENV)('%s is deleted, not carried through', (name) => {
+    const built = buildKeylessEnv({ [name]: 'PLANTED-engine-credential' }, sandboxHome);
+    expect(built[name]).toBeUndefined();
+    expect(Object.keys(built)).not.toContain(name);
+  });
+
+  test('ENGINE_CREDENTIAL_ENV names exactly the five engine channels the probe gate asserts', () => {
+    expect(ENGINE_CREDENTIAL_ENV).toEqual([
+      'OPENCODE_AUTH_CONTENT',
+      'OPENCODE_API_KEY',
+      'OPENCODE_CONFIG',
+      'OPENCODE_CONFIG_DIR',
+      'OPENCODE_CONFIG_CONTENT',
+    ]);
   });
 
   test('control: a fake key planted under the real HOME was already unreachable (HOME/USERPROFILE sandboxing predates this fix)', () => {

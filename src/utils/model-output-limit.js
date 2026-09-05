@@ -121,4 +121,4 @@ function computeModelLimit(row, budget) {
   return { context, output: Math.max(1, Math.min(ceiling, want)) };
 }
 
-module.exports = { normalizeOutputBudget, buildLimitLookup, computeModelLimit };
+module.exports = { normalizeOutputBudget, buildLimitLookup, computeModelLimit, positiveCount };

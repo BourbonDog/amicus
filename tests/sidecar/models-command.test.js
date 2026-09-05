@@ -11,10 +11,11 @@ const CATALOG = [
     contextLength: 1048576, pricing: null },
 ];
 
-function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings, probeStoredAliases } = {}) {
+function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings, probeStoredAliases,
+  ceilingEnrichment = null } = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/model-catalog', () => ({
-    getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000 })),
+    getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000, ceilingEnrichment })),
     refreshCatalog: jest.fn(async () => catalog),
     catalogPath: () => 'C:/fake/model-catalog.json',
   }));
@@ -95,6 +96,84 @@ describe('amicus models', () => {
     const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
     expect(code).toBe(0);
     expect(out).toContain('Refreshed catalog: 2 models');
+  });
+
+  it('--refresh prints the ceilings line when models.dev filled rows', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: null, filled: 12, alreadyKnown: 380, unknown: 5, stillMissing: 9, skippedRouters: 6, skippedLocal: 0 } });
+    const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(code).toBe(0);
+    expect(out).toContain('Ceilings: 12 rows filled from models.dev (380 already complete, 5 unknown to models.dev, 9 still missing a number)');
+  });
+
+  it('--refresh says so when models.dev was unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'timeout', detail: 'no response within 10000ms' }, filled: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev unreachable (timeout: no response within 10000ms); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+  });
+
+  // Council #230 D4: 'unreachable' is a claim about models.dev. A parse-error means
+  // it answered; an exception is a local bug. Neither may be worded as unreachable.
+  it('--refresh words a parse-error as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'parse-error', detail: 'Unexpected token <' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (parse-error: Unexpected token <); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  // Council #230 C1: `bad-shape` (a 200 with no usable vendor limits) and
+  // `too-large` (http-get's new body cap) are both "it answered", never
+  // "unreachable" — an unmapped reason would fall through to the neutral lead.
+  it('--refresh words a bad-shape body as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (bad-shape: no recognised vendor limits in api.json); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh words an over-size body as answered-but-unusable, not unreachable', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'too-large', detail: 'body exceeded 16777216 bytes' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (too-large: body exceeded 16777216 bytes)');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh words an exception neutrally, blaming neither models.dev nor the network', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: ceiling enrichment failed (exception: kaboom); rows without a ceiling keep the engine default and outputBudget cannot clamp them');
+    expect(out).not.toContain('unreachable');
+  });
+
+  it('--refresh prints zeros, not undefined, for a partial ceilingEnrichment object', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, filled: 3 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: 3 rows filled from models.dev (0 already complete, 0 unknown to models.dev, 0 still missing a number)');
+    expect(out).not.toContain('undefined');
+  });
+
+  // Council #230 D1/C2: the two SKIPS are neither a failure nor a fill, and a
+  // user who turned the lookup off must be told that is why. Delete either
+  // `e.skipped` branch in fmtCeilingLine and the matching test prints the
+  // "0 rows filled" success line instead.
+  it('--refresh says so when models.dev is disabled by config', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'disabled', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/deepseek direct rows cannot be clamped (direct anthropic is held out regardless; Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)');
+    expect(out).not.toContain('rows filled from models.dev');
+  });
+
+  it('--refresh says so when there was nothing to fill', async () => {
+    const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'nothing-to-fill', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+    expect(out).toContain('Ceilings: nothing to fill (no candidate row is missing a number)');
+    expect(out).not.toContain('rows filled from models.dev');
+  });
+
+  it('--refresh --json carries ceilingEnrichment', async () => {
+    const enrichment = { source: 'models.dev', failure: null, skipped: null, filled: 1, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 };
+    const { handleModels } = loadHandler({ ceilingEnrichment: enrichment });
+    const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true, json: true }));
+    expect(JSON.parse(out).ceilingEnrichment).toEqual(enrichment);
   });
 
   it('--check clean → exit 0', async () => {

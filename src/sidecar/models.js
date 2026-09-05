@@ -22,6 +22,7 @@ const { pickCurrent } = require('../utils/quick-picks');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
+const { fmtCeilingLine } = require('./models-ceiling-line');
 
 const CHECK_EXIT_CAP = 100;
 
@@ -87,7 +88,7 @@ function fmtLiveSkipped(reason) {
 
 async function runRefresh(args) {
   const models = await refreshCatalog();
-  const { fetchedAt, lastRefreshAttempt, lastRefreshError } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
+  const { fetchedAt, lastRefreshAttempt, lastRefreshError, ceilingEnrichment } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
   // --refresh short-circuits --check below (args.check is guaranteed true here) — must announce, not silently skip.
   if (args.live) {
     const line = fmtLiveSkipped('refresh-precedes-check');
@@ -95,7 +96,7 @@ async function runRefresh(args) {
   }
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
-      models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError
+      models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError, ceilingEnrichment
     }), null, 2) + '\n');
     return models.length === 0 && !fetchedAt ? 1 : 0;
   }
@@ -112,6 +113,7 @@ async function runRefresh(args) {
     return 1; // no cache at all: a real failure
   }
   process.stdout.write(`Refreshed catalog: ${models.length} models.\n`);
+  process.stdout.write(fmtCeilingLine(ceilingEnrichment) + '\n');
   process.stdout.write(`Cache: ${catalogPath()}\n`);
   return 0;
 }

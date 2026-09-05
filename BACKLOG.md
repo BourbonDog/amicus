@@ -6931,6 +6931,147 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.4 records — dispositions and rulings made in-cycle (2026-09-04)
+
+Filed past-tense in the same commit as each fix, per the falsified-record rule.
+
+- [x] **#218 P3 — direct-provider ceilings from models.dev (2026-09-04).** The 4.9.3 docs said the
+  direct `openai` / `anthropic` / `google` / `deepseek` lists "don't publish one"; Google's
+  ListModels does (`outputTokenLimit`, one key from the `inputTokenLimit` already lifted) and
+  models.dev publishes all of them keyless (anthropic 14/14, openai 42/47, google 39/39,
+  deepseek 3/3, every `ANTHROPIC_MODELS` id). Measured before writing the fill rule: OpenRouter's
+  `top_provider.max_completion_tokens` disagrees with models.dev on 24 of 344 openrouter rows, so
+  the provider's own value wins and models.dev fills only fields the provider left empty or
+  unusable — null, 0, negative or malformed, never a usable positive integer; the 6 ceiling-less
+  openrouter rows are all `openrouter/openrouter/*` meta-routers (models.dev says 2,000,000 for
+  `auto`) and are skipped; models.dev carries `{context:0, output:0}` for openai image rows,
+  never written.
+  Hooked at `model-catalog.js :: refreshCatalog` — the one seam the CLI, `setup` and the Electron
+  refresh button share — after the floor-only check, in place on the written rows. The engine
+  already merges models.dev limits into every `{}` descriptor, so this changes what AMICUS can
+  clamp and name, not what the engine knows.
+  Council review then narrowed it three ways: the lookup became opt-out (`modelsDevCeilings: false`,
+  literal `false` only) and was skipped entirely whenever no candidate row was missing a number, and
+  direct `anthropic/*` routes were held out of clamping in `config.js :: buildProviderModels` —
+  registered `{}` regardless of the budget, restoring their pre-PR behaviour exactly, because the
+  engine ADDS the thinking budget to `max_tokens` on that route (H1/H3/H4) and that was measured only
+  against a bare descriptor, so PR 2 measures descriptor x budget before the guard is lifted.
+- [x] **The repo's engine copy was stale, and its source map misled #218's research (2026-09-04).**
+  `node_modules` held opencode 1.2.20 (`package-lock` pins 1.18.15) because `npm ci` had not run
+  since the pin. Three engine-behaviour claims in the #218 research comment were read from the
+  1.2.20 source map and are wrong for the pin: the OpenRouter effort table (1.2.20 sent effort only
+  for gpt/gemini-3/claude ids; 1.18.15 maps every OpenRouter model's effort), the Anthropic
+  thinking-budget selection (1.18.15 selects by the models.dev row's `reasoning_options`), and the
+  flag parser (an Effect `Config.number` in the pin). `npm ci` aligned the copy; 1.18.15 ships no
+  source map, so engine claims are now measured by `scripts/probe-max-tokens.js`, not read.
+- [x] **#218 P1 — the wire probe, run against the pin (2026-09-04).** `scripts/probe-max-tokens.js`
+  ran its 19-case matrix against `opencode-ai 1.18.15` (sdk 1.18.15; the server reported 1.18.15),
+  binary `C:\Users\sendt\code\amicus\node_modules\opencode-windows-x64\bin\opencode.exe`, every case
+  under a throwaway keyless sandbox home built with `run-integration-keyless.js`'s `buildKeylessEnv()`,
+  which deletes every provider key name (current and legacy), `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`
+  and the engine's own `OPENCODE_AUTH_CONTENT`/`OPENCODE_API_KEY`/`OPENCODE_CONFIG`/
+  `OPENCODE_CONFIG_DIR`/`OPENCODE_CONFIG_CONTENT`, and repoints `HOME`/`USERPROFILE`/
+  `XDG_DATA_HOME`/`XDG_CONFIG_HOME`/`APPDATA` inside the sandbox — those named channels, not "no
+  credential of any kind". All five engine channels came from the whole-branch final review of this
+  PR; the table below is the re-run made with all five in place, and its `sandbox:` line enumerates
+  all eleven names. Eighteen of the nineteen rows
+  carry a falsifiable `expected` value, and all eighteen matched. The nineteenth row, F3, is
+  excluded from that count because its expectation — `record: silent no-op or error` — is satisfied
+  by either outcome and so cannot fail; what it actually observed is reported below. Those counts
+  are no longer hand-read: the council's second round (C2) gave every case a machine-readable `want`
+  taken from this table, so the probe now prints the `checks:` line reproduced under the dump and
+  exits 1 if a cell moves. That line is from the re-run made after that change, whose 21 table lines
+  and whose `/config/providers` dump both diff byte-identical against the ones filed here.
+
+  **E1 is a falsified PLAN prediction, not a row that passed.** The plan predicted
+  `32000 (dropped)`; the first run measured `max_tokens 4096` on the wire — the same number B's
+  `limit.output` produced — so a descriptor's `options` block is a live lever on the ceiling rather
+  than inert. The council review of PR 1 flagged that the shipped matrix still carried the falsified
+  string, so E1's `expected` was corrected to the measurement and the whole matrix re-run. E1's row
+  therefore restates its own measurement and is not independent evidence; the falsification is a
+  fact about the plan's fact 4, recorded here. Every other cell reproduced the earlier run
+  byte-for-byte — diffed programmatically, 21 table lines, one differing cell (E1's `expected`) —
+  and the `/config/providers` dump is byte-identical.
+
+  **The thinking budget is ADDED to the default output budget — measured on two points, not one.**
+  The same bare haiku descriptor sends `max_tokens 32000` with no variant (H1), `48000` with
+  `variant: 'high'` and `thinking {"type":"enabled","budget_tokens":16000}` (H3), and `63999` with
+  `variant: 'max'` and `thinking {"type":"enabled","budget_tokens":31999}` (H4). 32000 + 16000 = 48000
+  and 32000 + 31999 = 63999: two different budgets, two different sums, the same rule. That rules out
+  the competing reading a single point could not — that a variant simply sets an absolute `max_tokens`
+  for the model — since it would have to set two values that both coincide with default-plus-budget.
+  Neither row was clamped: haiku's dump line below reports `limit.output 64000` and 63999 fits under
+  it by one token, so this matrix has NOT measured what the engine does when default plus budget would
+  exceed a model's own ceiling. That is the case PR 2 has to check.
+
+  Everything else held. A bare `{}` descriptor sends `32000` (A, F1), and so does J1 — whose
+  descriptor is not `{}` but `{ name: 'unknown-model' }` on a custom `@ai-sdk/openai-compatible`
+  provider block, i.e. a model the engine has no catalogue entry for at all. `limit.output` wins under
+  the default budget (B, `4096`); `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` raises the budget to its
+  value (C1, C3, H2 and J2 all `64000`) and is then clamped by a smaller `limit.output` (C2,
+  `50000`); and a malformed or zero flag falls back to `32000` with no error on the row (D1
+  `64000abc`, D2 `0`).
+
+  `/config/providers` DOES expose `variants`, for every model the matrix touched. The dump pasted
+  under the table is taken from each model's first BARE-descriptor case only — kimi from A, qwen from
+  F4, haiku from H1, the custom model from J1 — and every line names its source case in `fromCase`,
+  because `/config/providers` reports the MERGED descriptor: a dump seeded from a case that sets
+  `limit.output` reads the probe's own input back as if it were the engine's ceiling. That is not
+  hypothetical. The first filing of this record dumped qwen from C2 and reported
+  `limit.output 50000`, which is C2's own input; seeded from F4 the engine reports `131072`. For the
+  same reason C3's case title names `1048576` — kimi's dump line reports
+  `limit {"context":1048576,"output":1048576}`, where live models.dev carries 943718. The declared
+  vocabularies are per model and enumerable at runtime: kimi `low`/`high`/`max`, qwen
+  `minimal`/`low`/`medium`/`high`/`xhigh`, haiku `high`/`max` carrying `thinking.budgetTokens`
+  16000/31999. The custom unknown model declares `variants: {}` and `limit {"context":0,"output":0}`,
+  which is what lets J2's raw flag budget through unclamped.
+
+  The assistant message carried `finish: 'length'` on all 15 rows the capture server answered with an
+  SSE stream; the four direct-anthropic rows (H1, H2, H3, H4) show `finish: —` with `error: APIError`
+  because the probe answers `/v1/messages` with a 400 by design, after the body has already been
+  captured. **F1 versus F2 is the headline: amicus's `sendPrompt` `body.reasoning {effort:'low'}` put
+  NOTHING on the wire (F1), while `variant: 'low'` in the same prompt body put
+  `reasoning {"effort":"low"}` there (F2) — `variant` is the working lever and today's `reasoning`
+  field is a silent no-op.** F3 is the failure mode of that working lever: `variant: 'medium'` against
+  kimi, which declares no `medium`, was accepted (prompt status 204, `finish: 'length'`, no error) and
+  put no reasoning on the wire at all — silent, not an error. The table itself now shows the
+  observability trap: F3's `assistant variant` column reads `medium` while its `reasoning` column
+  is empty — the engine recorded the requested variant on the assistant message and sent no
+  effort to the provider, so a run's own artifact can claim an effort level the wire never saw.
+  E2 shows the descriptor-side route still works
+  (`options.reasoning {effort:'low'}` → `reasoning {"effort":"low"}`), and F4 shows a variant the
+  model does declare landing (`reasoning {"effort":"medium"}` on qwen).
+
+| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — | — |
+| C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| E1 | options.max_tokens 4096 | 4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped") | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — | — |
+| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | low | — |
+| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | medium | — |
+| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | medium | — |
+| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | — | APIError |
+| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | — | — | APIError |
+| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
+| H4 | direct anthropic haiku variant 'max' | thinking budget_tokens 31999; max_tokens 63999 if additive | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+
+/config/providers per model:
+- openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":1048576},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
+- openrouter/qwen/qwen3.8-max: {"fromCase":"F4","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1000000,"output":131072},"variants":{"minimal":{"reasoning":{"effort":"minimal"}},"low":{"reasoning":{"effort":"low"}},"medium":{"reasoning":{"effort":"medium"}},"high":{"reasoning":{"effort":"high"}},"xhigh":{"reasoning":{"effort":"xhigh"}}},"options":{}}
+- anthropic/claude-haiku-4-5: {"fromCase":"H1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":200000,"output":64000},"variants":{"high":{"thinking":{"type":"enabled","budgetTokens":16000}},"max":{"thinking":{"type":"enabled","budgetTokens":31999}}},"options":{}}
+- probe/unknown-model: {"fromCase":"J1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":0,"output":0},"variants":{},"options":{}}
+
+checks: 18 matched, 0 mismatched (none), 1 recorded
+
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
 **✅ v4.9.3 RELEASED 2026-08-28** — tag `v4.9.3` → `f8a178cd`, main `e91d3ac5` (`--no-ff`),

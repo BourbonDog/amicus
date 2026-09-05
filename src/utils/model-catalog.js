@@ -20,6 +20,10 @@ const path = require('path');
 function _getConfigDir() { return require('./config').getConfigDir(); }
 function _readApiKeyValues() { return require('./api-key-store').readApiKeyValues(); }
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModelsDetailed(keys); }
+async function _enrichCeilings(rows) { return require('./model-ceilings-modelsdev').enrichCeilings(rows); }
+function _emptyOutcome(failure) { return require('./model-ceilings-modelsdev').emptyOutcome(failure); }
+/** #218 P3 opt-out: `modelsDevCeilings: false` in config.json, and ONLY a literal false. */
+function _modelsDevEnabled() { return require('./config').loadConfig()?.modelsDevCeilings !== false; }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 const CATALOG_SCHEMA_VERSION = 2;
@@ -68,8 +72,13 @@ function writeCacheDoc(doc) {
   }
 }
 
-/** Write a successful fetch: fresh models/fetchedAt, outcome fields cleared. @param {Array} models */
-function writeCache(models, providerFailures) {
+/**
+ * Write a successful fetch: fresh models/fetchedAt, outcome fields cleared.
+ * @param {Array} models
+ * @param {Array} [providerFailures]
+ * @param {object|null} [ceilingEnrichment] #218 P3 outcome for THESE rows (model-ceilings-modelsdev.js)
+ */
+function writeCache(models, providerFailures, ceilingEnrichment) {
   writeCacheDoc({
     schemaVersion: CATALOG_SCHEMA_VERSION,
     fetchedAt: Date.now(),
@@ -78,6 +87,7 @@ function writeCache(models, providerFailures) {
     // alongside the rows because it describes THESE rows -- a cache served later
     // is still a catalog whose deepseek namespace is empty for a reason.
     providerFailures: Array.isArray(providerFailures) ? providerFailures : [],
+    ceilingEnrichment: ceilingEnrichment || null,
   });
 }
 
@@ -124,7 +134,27 @@ async function refreshCatalog() {
     writeRefreshFailure(reason, providerFailures);
     return [];
   }
-  writeCache(models, providerFailures);
+  // #218 P3: fill direct-provider ceilings from models.dev AFTER the floor-only
+  // check (a failed refresh is never enriched, so "stale cache stands" holds)
+  // and IN PLACE on the fresh row objects, so `authoritative`/`local` ride
+  // through untouched. enrichCeilings never rejects; the belt-and-braces catch
+  // keeps a bug there from failing a refresh that already succeeded.
+  // Council #230 D1/C2: `modelsDevCeilings: false` means models.dev is never
+  // contacted. The persisted outcome still carries the full counter set, so
+  // `--json` readers and the `Ceilings:` line see "disabled", not a blank.
+  let ceilingEnrichment;
+  if (!_modelsDevEnabled()) {
+    ceilingEnrichment = { ..._emptyOutcome(null), skipped: 'disabled' };
+  } else {
+    try {
+      ceilingEnrichment = await _enrichCeilings(models);
+    } catch (err) {
+      // Same shape enrichCeilings' own failures use (council #230 C4/D5), so every
+      // reader of ceilingEnrichment sees the full counter set however it failed.
+      ceilingEnrichment = _emptyOutcome({ reason: 'exception', detail: err.message });
+    }
+  }
+  writeCache(models, providerFailures, ceilingEnrichment);
   return models;
 }
 
@@ -154,7 +184,7 @@ async function getCatalog(opts = {}) {
  * #13: also threads the last-refresh outcome so callers can tell "current"
  * apart from "stale because refreshing keeps failing" — null/null when the
  * last attempt on record succeeded (or none has happened yet).
- * @returns {Promise<{models: Array, fetchedAt: number|null, lastRefreshAttempt: number|null, lastRefreshError: string|null}>}
+ * @returns {Promise<{models: Array, fetchedAt: number|null, lastRefreshAttempt: number|null, lastRefreshError: string|null, providerFailures: Array, ceilingEnrichment: object|null}>}
  */
 async function getCatalogInfo(opts = {}) {
   const models = await getCatalog(opts);
@@ -167,6 +197,8 @@ async function getCatalogInfo(opts = {}) {
     lastRefreshError: (doc && doc.lastRefreshError) || null,
     // #209: namespace-level fetch outcomes for the CACHED rows above.
     providerFailures: (doc && Array.isArray(doc.providerFailures)) ? doc.providerFailures : [],
+    // #218 P3: where the direct-provider ceilings came from, or why they did not.
+    ceilingEnrichment: (doc && doc.ceilingEnrichment) || null,
   };
 }
 

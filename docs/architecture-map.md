@@ -132,6 +132,7 @@ src/
 │   ├── list-council.js  # Council rows on the CLI `amicus list` surface (v4.9 W12).
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
+│   ├── models-ceiling-line.js  # The one `Ceilings:` line `amicus models --refresh` prints (#218 P3).
 │   ├── models-probe.js
 │   ├── models-render.js  # Presentation helpers for `amicus models` -- pure string formatting, no I/O.
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
@@ -207,6 +208,7 @@ src/
 │   ├── gateway-route-audit.js  # Per-gateway-form audit for curated DEFAULT aliases (Task 6, #gwid).
 │   ├── gateway-route-catalog.js  # Conservative cross-gateway catalog pairing helper (Task 5, #gwid).
 │   ├── gateway-router.js  # Pure gateway router (#61). Decides direct vs OpenRouter for a request using
+│   ├── http-get.js  # One HTTPS GET, always resolved, never rejected — the timer/destroy/failure
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
 │   ├── known-flags.js
@@ -221,6 +223,7 @@ src/
 │   ├── mcp-validators.js  # MCP Validators
 │   ├── model-canonicalization.js  # Direct-first id canonicalization, guarded by `classifyModel`
 │   ├── model-catalog.js  # OpenRouter model catalog cache (F3 #18 / F5 foundation).
+│   ├── model-ceilings-modelsdev.js  # #218 P3 — output ceilings for the direct-provider catalog rows.
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
@@ -395,6 +398,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
 ├── run-integration-keyless.js
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh
@@ -563,6 +567,7 @@ evals/
 | `sidecar/list-council.js` | Council rows on the CLI `amicus list` surface (v4.9 W12). | `padModel()`, `modelCell()`, `mergeCouncilRows()`, `councilScopeNotice()` |
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
+| `sidecar/models-ceiling-line.js` | The one `Ceilings:` line `amicus models --refresh` prints (#218 P3). | `fmtCeilingLine()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
 | `sidecar/models-render.js` | Presentation helpers for `amicus models` -- pure string formatting, no I/O. | `perMtok()`, `fmtRow()`, `fmtGatewayFinding()`, `PROBE_LABELS()`, `fmtProbeCost()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
@@ -636,6 +641,7 @@ evals/
 | `utils/gateway-route-audit.js` | Per-gateway-form audit for curated DEFAULT aliases (Task 6, #gwid). | `auditGatewayRoutes()` |
 | `utils/gateway-route-catalog.js` | Conservative cross-gateway catalog pairing helper (Task 5, #gwid). | `pairAcrossGateways()` |
 | `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `gatewayOf()`, `resolveRoute()` |
+| `utils/http-get.js` | One HTTPS GET, always resolved, never rejected — the timer/destroy/failure | `httpGetText()`, `getJson()`, `DEFAULT_TIMEOUT_MS()`, `DEFAULT_MAX_BYTES()`, `MAX_REDIRECTS()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/known-flags.js` |  | `getKnownFlags()`, `unknownFlags()`, `INTERNAL_FLAGS()` |
@@ -650,11 +656,12 @@ evals/
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
 | `utils/model-canonicalization.js` | Direct-first id canonicalization, guarded by `classifyModel` | `directFormIfSafe()`, `directFormIfProven()`, `namespaceFetchFailed()`, `vendorOfId()` |
 | `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
+| `utils/model-ceilings-modelsdev.js` | #218 P3 — output ceilings for the direct-provider catalog rows. | `enrichCeilings()`, `fillCeilings()`, `needsFillCount()`, `limitsFromModelsDev()`, `emptyOutcome()` |
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
-| `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()` |
+| `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |

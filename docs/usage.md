@@ -24,7 +24,7 @@ amicus setup --api-keys                   # Open just the API-key step
 amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview  # bare canonical, direct-first
 amicus models                             # List the live catalog
 amicus models --search gemini             # Filter by substring
-amicus models --refresh                   # Force-fetch from provider APIs
+amicus models --refresh                   # Force-fetch from provider APIs (+ ceilings from models.dev)
 amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
@@ -381,7 +381,7 @@ Amicus does **not** ship a frozen table of model names. Aliases and validation r
 ```bash
 amicus models                  # List the catalog
 amicus models --search gemini  # Filter by substring over id and name
-amicus models --refresh        # Force-refresh from provider APIs
+amicus models --refresh        # Force-fetch from provider APIs (+ ceilings from models.dev)
 amicus models --check          # Audit your aliases against the catalog
 amicus models --check --strict # + exit non-zero on curated per-gateway drift too
 amicus models --check --live   # + probe every stored alias with a real leg (spends)

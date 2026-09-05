@@ -3,6 +3,55 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
+  `contextLength` / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or
+  `openrouter` row still missing a number, from the keyless [models.dev](https://models.dev) index,
+  and lifts Google's own `outputTokenLimit` first-party. The provider's own number always wins —
+  Google's own ceiling and OpenRouter's own value included; models.dev fills only fields the
+  provider left empty or unusable, never a zero, and `openrouter/openrouter/*` routers and local
+  rows are never filled at all. The models.dev call is keyless, bounded by a 10 s timeout, and its
+  failure is reported on the refresh line rather than hidden — including a 200 that parses but
+  carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. It is
+  also skippable both ways: a refresh where every candidate row already carries both numbers never
+  makes the call at all, and the new top-level `config.json` key **`modelsDevCeilings: false`** opts
+  out of contacting models.dev entirely (`outputBudget` then cannot clamp the openai / deepseek
+  direct rows — direct anthropic is held out regardless; Google publishes its own ceiling and
+  OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
+  of those happened, and `--json` carries it as
+  `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
+  now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
+  the direct `openai` / `google` / `deepseek` routes once the catalog is refreshed — which 4.9.3
+  documented as impossible because those lists "don't publish one". Direct `anthropic/*` is the one
+  route held back: Amicus emits no reservation descriptor there at all, because the engine adds the
+  thinking budget to `max_tokens` on that route (probe rows H1/H3/H4) and how a descriptor's
+  `limit.output` interacts with that addition has only been measured against a bare descriptor. Those
+  rows keep exactly their pre-#218 behaviour until PR 2 measures it; `openrouter/anthropic/*` clamps
+  normally.
+- **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
+  provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
+  read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
+  engine bump.
+
+### Changed
+
+- `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
+  inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
+  one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
+  (a URL it cannot parse) now resolve as `network-error` instead of escaping the promise. Redirects
+  are opt-in per call (`followRedirects`, default off, so the keyed provider fetches are unchanged
+  and a 3xx stays their terminal `http-status` failure); with it on, up to two `https` redirects are
+  followed under one deadline for the whole chain, and a cross-origin hop carries only an allowlist
+  of headers (`user-agent`, `accept`, `accept-language`) so no credential can
+  follow a `Location` to another host. A redirect to a non-`https` target, one with no `Location`,
+  and a third hop are each an `http-status` failure whose `detail` names which, and every one of
+  those refusals releases the connection — the response is retired and the live request destroyed —
+  so a refused 3xx whose body never ends cannot hold the socket open after the promise has settled. Response bodies are capped at 16 MiB
+  (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
+
 ## [4.9.3] - 2026-08-28
 
 *Doctor stops vouching for things it never checked.*

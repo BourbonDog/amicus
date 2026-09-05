@@ -67,6 +67,46 @@ const { spawnSync } = require('child_process');
 const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-store');
 
 /**
+ * The engine's OWN credential/config env channels, which no AMICUS_* or
+ * provider-key name covers. The pinned opencode engine honours each:
+ *   - OPENCODE_AUTH_CONTENT: an inline auth.json, read straight out of the
+ *     variable -- it bypasses the HOME/XDG/APPDATA sandbox entirely, because
+ *     it never touches the filesystem at all;
+ *   - OPENCODE_API_KEY: a bare key the engine accepts directly;
+ *   - OPENCODE_CONFIG / OPENCODE_CONFIG_DIR: config-file overrides that can
+ *     name providers (and their keys) from outside the sandbox;
+ *   - OPENCODE_CONFIG_CONTENT: an inline config document, read straight out of
+ *     the variable like OPENCODE_AUTH_CONTENT. The pinned SDK writes its own
+ *     value on every server it spawns, so an engine started THROUGH the SDK
+ *     never inherits an ambient one -- but a hand-spawned `opencode serve`
+ *     would, so it is scrubbed rather than left to be shadowed.
+ * Deleted by buildKeylessEnv() and asserted absent by probe-max-tokens.js's
+ * assertSandboxed(), which imports this same list so scrub and gate agree by
+ * construction.
+ *
+ * PINNED TO opencode 1.18.15, AND HAND-MAINTAINED (council #230 B2). Nothing
+ * makes it follow an engine bump: a release that adds a sixth channel would
+ * leave a credential path open with no test failing. RE-VERIFY IT ON EVERY
+ * ENGINE BUMP -- grep the new binary for each name and for any other it reads,
+ * e.g.
+ *   grep -a -c OPENCODE_AUTH_CONTENT node_modules/opencode-windows-x64/bin/opencode.exe
+ * (repeat per name; a zero count means the channel is gone, and a new
+ * `OPENCODE_*` credential/config name means the list is short) -- then re-run
+ * `node scripts/probe-max-tokens.js` so the sandbox gate is exercised against
+ * the engine actually pinned.
+ * @type {string[]}
+ */
+const ENGINE_CREDENTIAL_ENV = [
+  'OPENCODE_AUTH_CONTENT',
+  'OPENCODE_API_KEY',
+  'OPENCODE_CONFIG',
+  'OPENCODE_CONFIG_DIR',
+  // The SDK overwrites this one on every spawn it makes, so it cannot reach an
+  // SDK-started engine -- but a hand-spawned engine would read it.
+  'OPENCODE_CONFIG_CONTENT',
+];
+
+/**
  * The three sandbox-rooted directories buildKeylessEnv() points
  * XDG_DATA_HOME / XDG_CONFIG_HOME / APPDATA at. Shared with run() below so the
  * paths it mkdir's can never drift from the ones actually placed in env.
@@ -98,6 +138,11 @@ function buildKeylessEnv(sourceEnv, sandboxHome) {
   //    only remaining lookup path -- and step 3 sandboxes that.
   delete env.AMICUS_ENV_DIR;
   delete env.AMICUS_CONFIG_DIR;
+
+  // 2b. The engine's own credential/config channels. OPENCODE_AUTH_CONTENT in
+  //     particular carries an inline auth.json in the variable itself, so no
+  //     amount of directory sandboxing below can contain it.
+  for (const name of ENGINE_CREDENTIAL_ENV) { delete env[name]; }
 
   // 3. An empty home. os.homedir() reads $HOME on POSIX and %USERPROFILE% on
   //    Windows, so both are set. This is what defeats the
@@ -169,4 +214,4 @@ if (require.main === module) {
   process.exit(run());
 }
 
-module.exports = { buildKeylessEnv, run };
+module.exports = { buildKeylessEnv, run, ENGINE_CREDENTIAL_ENV };

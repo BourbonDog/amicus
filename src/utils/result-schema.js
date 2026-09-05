@@ -184,10 +184,11 @@ const { buildRunResultFromSession, buildWaveResultFromSession } = require('./res
  * #13: lastRefreshAttempt/lastRefreshError are additive — null/null when the
  * last refresh attempt on record succeeded (or none has happened yet).
  * @param {{models: Array, fetchedAt: number|null, refreshed?: boolean, search?: string|null,
- *   lastRefreshAttempt?: number|null, lastRefreshError?: string|null}} opts
+ *   lastRefreshAttempt?: number|null, lastRefreshError?: string|null,
+ *   ceilingEnrichment?: object|null}} opts
  */
 function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
-  lastRefreshAttempt = null, lastRefreshError = null }) {
+  lastRefreshAttempt = null, lastRefreshError = null, ceilingEnrichment = null }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'model-catalog',
@@ -198,6 +199,7 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
     models,
     lastRefreshAttempt: lastRefreshAttempt || null,
     lastRefreshError: lastRefreshError || null,
+    ceilingEnrichment: ceilingEnrichment || null, // #218 P3: additive within SCHEMA_VERSION
   };
 }
 
