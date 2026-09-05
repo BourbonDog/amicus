@@ -7072,6 +7072,117 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
 
 checks: 18 matched, 0 mismatched (none), 1 recorded
 
+- [x] **#218 PR 2 — descriptor × thinking budget, the flag above a ceiling, and the shipped
+  budget shapes, measured (2026-09-05).** PR 1 held direct `anthropic/*` routes out of clamping
+  (council #230 A1) because the engine ADDS a thinking variant's budget to `max_tokens` on that
+  route and both of PR 1's points were measured against a bare descriptor; it also left the three
+  `max_tokens` levers measured only in isolation. Thirteen cases (K1–K13) were added to
+  `scripts/probe-max-tokens.js` and the whole 32-case matrix re-run under the same sandbox
+  (`sandbox:` line: eleven absent names; engine 1.18.15 / sdk 1.18.15 / server 1.18.15; 32 started,
+  32 closed). The first nineteen table rows diff byte-identical against the P1 record above; the
+  `/config/providers` dump differs in exactly one line, qwen's, for the reason in the next paragraph.
+
+  **The run itself caught an external change first.** The first full run mismatched one row, F4 —
+  qwen's `variant: 'medium'` put no `reasoning` on the wire, and the qwen dump line read
+  `limit {"context":0,"output":0}, variants {}` where the P1 record shows five variants and real
+  limits. Not a flake: `--only F2,F4` reproduced it, and live models.dev and live OpenRouter both
+  list the model only as `qwen/qwen3.8-max-0902` now (2026-09-05) — the un-dated
+  `qwen/qwen3.8-max` the P1 matrix used was renamed between the two runs, so the engine no longer
+  knows it and F4 reproduced F3's silent no-op against it. Exactly the failure the `checks:` line
+  exists to make loud. The probe's `QWEN` constant was repointed to the dated id; F4's title and
+  every table cell are unchanged, so the nineteen P1 rows still diff byte-identical, and the qwen
+  dump line below is keyed by the new id. The shipped curated alias `qwen` still pins the vanished
+  un-dated id (`curated-models.js`, a flat pin `models --check` cannot see); filed as an open item
+  directly below this record.
+
+  **The descriptor lowers the reservation on the direct Anthropic route exactly as on OpenRouter**
+  (K1: `limit.output 8000` → `max_tokens 8000`). **A thinking variant's budget is added on top of the
+  descriptor value, not carved out of it, and the variant's budget is not shrunk by a small
+  descriptor** (K2: 8000 + 16000 = 24000, `budget_tokens` still 16000; K11 the same with the flag
+  at 8000). **The sum is clamped to the model's real ceiling regardless of what the descriptor or
+  the flag said** (K3: bare `{}` + flag 64000 + `max` 31999 → 64000, not 95999; K4 the same with
+  `limit.output 64000`; K10: `limit.output 70000` + flag 100000 + `max` → 64000, not 101999; K9:
+  `limit.output 40000` + `max` → 63999 = min(40000, 32000) + 31999, under the ceiling and left
+  alone). Haiku's dump line reports `limit.output 64000` and every clamped row landed on exactly
+  that number. So no descriptor and no flag can push a thinking leg over the ceiling on this route,
+  and the hold-out was lifted in `config.js :: buildProviderModels` in this PR. amicus sends no
+  thinking variant today (F1 above); PR 4, which will, inherits these numbers.
+
+  **The flag raises the reservation to the budget, clamped by whichever ceiling is known.** With a
+  matching descriptor: K6 (flag 100000 + `limit.output 100000` on kimi → 100000). On a bare `{}`
+  row the engine knows: K5 (flag 100000 on haiku → 64000, the engine's own ceiling). With a small
+  flag on a bare row: K12 (flag 8000 on kimi → 8000). On a model neither catalog knows: K13 (flag
+  8000 on the custom unknown model → 8000, as-is; J2 above is the same row at 64000). Those four
+  rows are why PR 2 sets the flag TO THE BUDGET whenever a budget is configured, for every engine
+  amicus starts (`opencode-client.js :: startServer`, around the synchronous spawn, restored before
+  anything is awaited): a route the amicus catalog can clamp gets `min(budget, ceiling)` through the
+  descriptor and the flag never exceeds it; a route it cannot clamp gets the budget through the flag,
+  clamped by the engine's own catalog where it knows the model; a model neither knows gets the
+  budget itself, exactly as it got the raw 32000 before.
+
+  **`options.max_tokens` wins over both other levers** (K7: 4096 under a 64000 flag; K8: 4096 under
+  `limit.output 8000`). amicus never emits it (council #230 r5 B1, grep-verified); the precedence is
+  now measured rather than asserted.
+
+  **One consequence of the flag is read, not measured:** the pinned binary's
+  `SessionCompaction.isOverflow` subtracts the same `maxOutputTokens(model, outputTokenMax)` from
+  the model's context window when deciding to compact, so a large budget shrinks the prompt budget
+  (100,000 on a 131,072-context model leaves 31,072). `docs/configuration.md` says so with that
+  provenance, and the new `doctor` `output-budget` row warns when a budget takes at least half of
+  any alias route's window.
+
+| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — | — |
+| C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| E1 | options.max_tokens 4096 | 4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped") | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — | — |
+| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | low | — |
+| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | medium | — |
+| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | medium | — |
+| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | — | — | APIError |
+| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | — | — | APIError |
+| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
+| H4 | direct anthropic haiku variant 'max' | thinking budget_tokens 31999; max_tokens 63999 if additive | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — | — |
+| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — | — |
+| K1 | direct anthropic haiku limit.output 8000 | 8000 — the descriptor lowers the reservation on the Anthropic route too | — | /v1/messages | 8000 | — | — | 204 | — | — | APIError |
+| K2 | direct anthropic haiku limit.output 8000 + variant 'high' | 24000 = 8000 + 16000 — the thinking budget is ADDED to the descriptor value, not carved out of it | — | /v1/messages | 24000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
+| K3 | direct anthropic haiku {} + env 64000 + variant 'max' | 64000 — 64000 + 31999 clamped to the ceiling | 64000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| K4 | direct anthropic haiku limit.output 64000 + env 64000 + variant 'max' | 64000 — the shipped budget-64000 shape, clamped the same way | 64000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| K5 | direct anthropic haiku {} + env 100000 (above the 64000 ceiling) | 64000 — the flag is clamped to the ceiling the engine knows | 100000 | /v1/messages | 64000 | — | — | 204 | — | — | APIError |
+| K6 | env 100000 + limit.output 100000 (kimi) | 100000 — the shipped budget-100000 shape raises the reservation | 100000 | /api/v1/chat/completions | 100000 | — | — | 204 | length | — | — |
+| K7 | env 64000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the flag (amicus never emits it) | 64000 | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| K8 | limit.output 8000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the descriptor (amicus never emits it) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — |
+| K9 | direct anthropic haiku limit.output 40000 + variant 'max' | 63999 = min(40000, 32000) + 31999 — under the ceiling, nothing clamps | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| K10 | direct anthropic haiku limit.output 70000 + env 100000 + variant 'max' | 64000 — 70000 + 31999 clamped to the ceiling, not to the descriptor | 100000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | — | max | APIError |
+| K11 | env 8000 + direct anthropic haiku limit.output 8000 + variant 'high' | 24000 = 8000 + 16000 — the shipped budget-8000 shape with a thinking variant | 8000 | /v1/messages | 24000 | — | {"type":"enabled","budget_tokens":16000} | 204 | — | high | APIError |
+| K12 | env 8000 + bare {} (kimi) | 8000 — the flag lowers a row the amicus catalog cannot clamp | 8000 | /api/v1/chat/completions | 8000 | — | — | 204 | length | — | — |
+| K13 | env 8000 + custom unknown model {} | 8000 — a model neither catalog knows receives the budget as-is | 8000 | /v1/chat/completions | 8000 | — | — | 204 | length | — | — |
+
+/config/providers per model:
+- openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":943718},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
+- openrouter/qwen/qwen3.8-max-0902: {"fromCase":"F4","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1000000,"output":131072},"variants":{"minimal":{"reasoning":{"effort":"minimal"}},"low":{"reasoning":{"effort":"low"}},"medium":{"reasoning":{"effort":"medium"}},"high":{"reasoning":{"effort":"high"}},"xhigh":{"reasoning":{"effort":"xhigh"}}},"options":{}}
+- anthropic/claude-haiku-4-5: {"fromCase":"H1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":200000,"output":64000},"variants":{"high":{"thinking":{"type":"enabled","budgetTokens":16000}},"max":{"thinking":{"type":"enabled","budgetTokens":31999}}},"options":{}}
+- probe/unknown-model: {"fromCase":"J1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":0,"output":0},"variants":{},"options":{}}
+
+checks: 31 matched, 0 mismatched (none), 1 recorded
+
+- [ ] **Curated `qwen` alias pins `openrouter/qwen/qwen3.8-max`, which OpenRouter and models.dev
+  both list only as `qwen/qwen3.8-max-0902` since 2026-09-05 (found by the PR 2 probe run).** A
+  default-alias user has a dead `qwen` seat until the pin moves (`src/utils/curated-models.js`, the
+  `qwen` route). Two knock-on effects measured in this record: the engine's variant table for the old
+  id is empty, so any variant sent for it (PR 4) is a silent no-op — F4 showed it — and its `limit`
+  reads `0/0`, so an `outputBudget` reaches it as-is (K13) and the engine treats its context as
+  unknown. Not fixed in PR 2 (budget scope): the fix is the pin plus `check:ci-alias-pins`; a flat
+  cardless pin is the class `models --check` cannot see (v4.9.3 skew records).
+
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
 **✅ v4.9.3 RELEASED 2026-08-28** — tag `v4.9.3` → `f8a178cd`, main `e91d3ac5` (`--no-ff`),
