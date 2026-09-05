@@ -69,6 +69,13 @@ ceiling)`, so a small model keeps its own lower limit rather than being handed a
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling. Unset means no limit is sent — OpenCode's 32,000 default applies, exactly as before. |
+| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; `outputBudget` then cannot clamp direct routes. |
+
+`modelsDevCeilings` is the opt-out for the one third-party lookup a refresh makes. Only a literal
+`false` turns it off; the key being absent means it runs. Even with it on, the call is **skipped
+automatically when every row already carries both numbers** — a refresh with nothing to fill never
+contacts models.dev at all. `amicus models --refresh` names whichever of those happened on its
+`Ceilings:` line.
 
 Set it by hand-editing `~/.config/amicus/config.json`:
 
@@ -99,7 +106,7 @@ Three limits worth knowing before you set it:
   rows were filled or why none could be. A model neither source knows keeps the old behaviour
   rather than receiving a guessed limit.
 - **Direct-Anthropic thinking legs are not yet a safe place for it.** The engine adds the thinking
-  budget to `max_tokens` on that route (measured bare in PR #230: 32000 → 48000 with a 16000 budget,
+  budget to `max_tokens` on that route (measured bare by this PR's probe (#218 PR 1, PR #230): 32000 → 48000 with a 16000 budget,
   → 63999 with 31999). How a descriptor `limit.output` interacts with that addition is not yet
   measured; PR 2 measures it before recommending a budget there.
 

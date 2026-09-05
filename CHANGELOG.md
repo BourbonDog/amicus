@@ -15,8 +15,11 @@ All notable changes to Amicus are documented here. Format follows
   provider left empty or unusable, never a zero, and `openrouter/openrouter/*` routers and local
   rows are never filled at all. The models.dev call is keyless, bounded by a 10 s timeout, and its
   failure is reported on the refresh line rather than hidden — including a 200 that parses but
-  carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. The
-  refresh prints the outcome (`Ceilings: …`) and `--json` carries it as
+  carries no recognised vendor limits, which is a `bad-shape` failure and not a silent no-op. It is
+  also skippable both ways: a refresh where every candidate row already carries both numbers never
+  makes the call at all, and the new top-level `config.json` key **`modelsDevCeilings: false`** opts
+  out of contacting models.dev entirely (`outputBudget` then cannot clamp direct routes). The
+  refresh prints the outcome (`Ceilings: …`), naming which of those happened, and `--json` carries it as
   `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset; direct-provider rows
   now carry context and ceiling numbers (visible in `amicus models`), and `outputBudget` can clamp
   direct routes once the catalog is refreshed — which 4.9.3 documented as impossible because those
@@ -31,10 +34,13 @@ All notable changes to Amicus are documented here. Format follows
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
-  (a URL it cannot parse) now resolve as `network-error` instead of escaping the promise. Up to two
-  `https` redirects are followed, with the same headers and under one deadline for the whole chain;
-  a redirect to a non-`https` target, one with no `Location`, and a third hop are each an
-  `http-status` failure whose `detail` names which. Response bodies are capped at 16 MiB
+  (a URL it cannot parse) now resolve as `network-error` instead of escaping the promise. Redirects
+  are opt-in per call (`followRedirects`, default off, so the keyed provider fetches are unchanged
+  and a 3xx stays their terminal `http-status` failure); with it on, up to two `https` redirects are
+  followed under one deadline for the whole chain, and a cross-origin hop carries only an allowlist
+  of headers (`user-agent`, `accept`, `accept-language`, `accept-encoding`) so no credential can
+  follow a `Location` to another host. A redirect to a non-`https` target, one with no `Location`,
+  and a third hop are each an `http-status` failure whose `detail` names which. Response bodies are capped at 16 MiB
   (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
 
 ## [4.9.3] - 2026-08-28
