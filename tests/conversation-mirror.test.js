@@ -174,6 +174,27 @@ describe('mirrorMessages', () => {
     mirrorMessages([m1, grown], st, { now: NOW });
     expect(st.output).toBe('Partial review, continued'); // further growth appends normally
   });
+
+  test('a whitespace-only text chunk after a promotion neither replaces the stand-in nor blocks the real answer from replacing it (council #232 r1b breakage)', () => {
+    const st = createMirrorState();
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1], st, { now: NOW });
+    expect(st.output).toBe('thinking…');
+    const m2 = { info: { role: 'assistant', id: 'm2', time: {} }, parts: [{ id: 'm2:t', type: 'text', text: '  \n' }] };
+    mirrorMessages([m1, m2], st, { now: NOW });
+    // A whitespace-only chunk must not consume the stand-in: it is neither a real
+    // answer nor a block on the real one arriving later. Named mutant "WHITESPACERESET":
+    // reset on `newText.length > 0` (drop the trim) reads this poll as the real answer.
+    expect(st.output).toBe('thinking…  \n');
+    expect(st.promotedOutput).toBe('thinking…');
+    const grown = { ...m2, parts: [{ id: 'm2:t', type: 'text', text: '  \nPartial review' }] };
+    const r3 = mirrorMessages([m1, grown], st, { now: NOW });
+    // Only the NEW portion is appended (slice(prevLen)), so the reset leaves exactly
+    // the real answer text behind -- the whitespace prefix never rejoins it.
+    expect(st.output).toBe('Partial review');
+    expect(st.promotedOutput).toBe('');
+    expect(r3.appendLines).toEqual([{ role: 'assistant', content: 'Partial review', timestamp: NOW() }]);
+  });
 });
 
 describe('reasoning-delta progress (F6d)', () => {

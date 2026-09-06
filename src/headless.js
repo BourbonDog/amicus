@@ -1012,6 +1012,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // seven first, and nothing observes them afterwards.
         // Hoisting the whole block (rather than adding a second stamp beside each
         // gate) is what keeps ONE definition of the predicate and ONE stamp site.
+        // #218 PR 3: the mirror's promotion reset (conversation-mirror.js ::
+        // mirrorMessages) can SHRINK output once -- the poll where real answer
+        // text replaces a longer promoted stand-in reads no growth here. Bounded
+        // to that poll: TTFT and the backstop were already latched by the
+        // reasoning growth, and the next growth compares against the new length.
         const outputGrew = mirror.output.length > lastOutputLength;
         lastOutputLength = mirror.output.length;
         const toolActivity = mirror.toolCalls.length > lastToolCallCount;
@@ -1140,19 +1145,21 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // no answer text -- the Mode 2 death (probe row L1: hidden reasoning,
         // no content part); decided on THAT message's parts, not on the
         // session's accumulated output (council #232 r1 B2/D1).
-        // Nothing more will arrive from that message. For a leg with no text so
-        // far every exit below requires output, so without this one the leg
-        // waits out the no-output backstop and dies under ITS name, which says
-        // "silence past the deadline" about a message the engine had already
-        // finished with a reason; for a leg whose earlier message produced text
-        // the idle exits would end it a poll later -- this exit is the same
-        // death, sooner. Gated on 'length' only: the finalized message's finish
-        // is never a step-level 'tool-calls' (B4's measured evidence below:
-        // time.completed lands after the tool ends), and a 'stop' with no text
-        // is a different, unnamed death. The message flag here matches the
-        // post-loop decision, which is the pinned one (named mutants NOEXIT and
-        // SESSIONWIDE in tests/headless-output-length.test.js); an in-loop
-        // `!mirror.output` alone would only defer the same death.
+        // Nothing more will arrive from that message. With EMPTY output (hidden
+        // reasoning, L1) every exit below requires output, so without this one
+        // the leg waits out the no-output backstop and dies under ITS name,
+        // which says "silence past the deadline" about a message the engine had
+        // already finished with a reason. With output -- reasoning the mirror
+        // promoted (L2/L4; the backstop is already disarmed by that growth) or
+        // an earlier message's text -- the idle exits would end it instead: in
+        // this same poll on SDK idle, up to stableIdlePolls later on the
+        // heuristic. This exit is the same death, no later. Gated on 'length'
+        // only: the finalized message's finish is never a step-level
+        // 'tool-calls' (B4's measured evidence below: time.completed lands after
+        // the tool ends), and a 'stop' with no text is a different, unnamed
+        // death. The message flag here matches the post-loop decision, which is
+        // the pinned one (named mutants NOEXIT and SESSIONWIDE in
+        // tests/headless-output-length.test.js).
         if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.lastAssistantHasText) {
           logger.error('Assistant message finished for length with no answer text, exiting', { taskId, pollCount });
           break;

@@ -149,9 +149,10 @@ P1, PR 2 and PR 3).
   `error` with a reason starting `OUTPUT_LENGTH:` that carries the engine's reasoning/output counts
   for the leg and the budget in force; it used to end `complete` with an empty summary or, when the
   provider streamed the reasoning, with its *thinking* promoted to the review (L2/L4). A leg whose
-  finalized message carries answer text keeps its review — that text alone: reasoning an earlier
-  message promoted as a stand-in is dropped the moment answer text arrives — and a council prints a
-  `Note:` on the `output-truncated` channel — informational, the exit code does not move. The counts
+  finalized message carries answer text keeps its review — the answer text (a tool loop's earlier
+  answer text included; reasoning an earlier message promoted as a stand-in is dropped the moment
+  real answer text arrives) — and a council prints a `Note:` on the `output-truncated` channel —
+  informational, the exit code does not move. The counts
   are reported, never decided on: on OpenAI-compatible routes the engine subtracts reasoning from
   completion (L3: 8 = 40 − 32); on the direct Anthropic route it reports no split (L4: 24,000 output
   / 0 reasoning). Two limits: a leg whose hidden reasoning outlasts the no-output backstop window

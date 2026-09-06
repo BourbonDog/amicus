@@ -159,9 +159,9 @@ function mirrorMessages(messages, state, opts = {}) {
         if (part.text.length > prevLen) {
           // Append only the new portion (handles streaming growth)
           const newText = part.text.slice(prevLen);
-          // A promotion's stand-in gives way to the first real answer text: `output` restarts from
-          // the answer alone; conversation.jsonl keeps the reasoning line it wrote. Mutant "KEEPPROMOTED".
-          if (state.promotedOutput && state.output === state.promotedOutput) { state.output = ''; state.promotedOutput = ''; }
+          // The first non-whitespace text replaces the stand-in; output restarts from the answer;
+          // conversation.jsonl keeps its reasoning. KEEPPROMOTED; WHITESPACERESET drops the trim.
+          if (state.promotedOutput && newText.trim().length > 0) { state.output = ''; state.promotedOutput = ''; }
           state.output += newText;
           state.seenTextParts.set(partId, part.text.length);
           appendLines.push({ role: 'assistant', content: newText, timestamp: now() });
