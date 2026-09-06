@@ -26,7 +26,9 @@
 'use strict';
 
 const { normalizeOutputBudget, buildLimitLookup, computeModelLimit, positiveCount } = require('./model-output-limit');
-const { OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS, outputTokenFlagValue } = require('./engine-output-flag');
+const {
+  OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS, outputTokenFlagValue, PLAIN_OUTPUT_TOKEN_FLAG,
+} = require('./engine-output-flag');
 
 const ID = 'output-budget';
 const NAME = 'Output budget';
@@ -114,13 +116,12 @@ function evaluateOutputBudget(d) {
   // 4096-ceiling row with no flag at all.
   const dflt = `the engine default applies (OUTPUT_TOKEN_MAX ${ENGINE_DEFAULT_OUTPUT_TOKENS}: each leg reserves min(${ENGINE_DEFAULT_OUTPUT_TOKENS}, the ceiling the engine's catalog knows for it))`;
 
-  // Only a PLAIN decimal integer — digits, no leading zero — is measured to be
-  // honoured: it is the shape amicus itself writes (engine-output-flag.js ::
-  // outputTokenFlagValue) and the shape the probe ran (C1, K5, K12). `64000abc`
+  // Only PLAIN_OUTPUT_TOKEN_FLAG (engine-output-flag.js) is measured to be honoured —
+  // it is the shape the probe ran (C1, K5, K12). `64000abc`
   // and `0` fall back to 32000 silently (D1/D2); ' 64000 ', '064000', '1e5',
   // '0x10' and '64000.7' have never been probed, so they are reported as
   // unmeasured rather than as healthy (council #231 r1 finding 3, r2 D5).
-  const ambientOk = (ambient !== undefined && /^[1-9]\d*$/.test(ambient)) ? positiveCount(Number(ambient)) : null;
+  const ambientOk = (ambient !== undefined && PLAIN_OUTPUT_TOKEN_FLAG.test(ambient)) ? positiveCount(Number(ambient)) : null;
   const ambientBad = ambient !== undefined && ambientOk === null;
   const ambientBadText = `${OUTPUT_TOKEN_FLAG}=${ambient} in this environment is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); any other form is unmeasured`;
   const ambientHint = `unset ${OUTPUT_TOKEN_FLAG}, or set it to a plain positive integer`;

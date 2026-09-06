@@ -25,7 +25,9 @@
  */
 'use strict';
 
-const { outputTokenFlagValue, ENGINE_DEFAULT_OUTPUT_TOKENS, OUTPUT_TOKEN_FLAG } = require('./engine-output-flag');
+const {
+  outputTokenFlagValue, ENGINE_DEFAULT_OUTPUT_TOKENS, OUTPUT_TOKEN_FLAG, PLAIN_OUTPUT_TOKEN_FLAG,
+} = require('./engine-output-flag');
 
 /** The prefix a consumer can classify on, like `NO_OUTPUT_BACKSTOP:`. */
 const OUTPUT_LENGTH_PREFIX = 'OUTPUT_LENGTH:';
@@ -46,9 +48,9 @@ function isOutputLengthDeath({ finish, hasText }) {
 /**
  * The reason string. Every clause is an observation: `finish` and the two
  * counts are the engine's own record of the message; the budget clause is what
- * the engine serving the leg was spawned with — the budget, or the ambient flag
- * when no budget was set (`null` = unset, `undefined` =
- * unknown: no handle value and config unreadable). The remedy names the one
+ * the engine serving the leg was spawned with: the budget (`null` = unset,
+ * `undefined` = unknown — no handle value and config unreadable) or, when no
+ * budget was set, the ambient flag. The remedy names the one
  * lever that exists today; PR 4 adds the effort lever. Named mutant
  * "BUDGETUNSET": always print the unset clause.
  * @param {{tokens?: {reasoning?: number, output?: number}|null,
@@ -66,10 +68,10 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
   const streamed = reasoningOnly
     ? 'only reasoning was streamed, no answer text'
     : 'no answer text arrived';
-  // Only a PLAIN positive integer is measured to be honoured by the engine (probe
-  // D1/D2: anything else falls back to 32000 silently) -- the same gate
-  // doctor-output-budget-check.js :: evaluateOutputBudget applies to an ambient value.
-  const PLAIN_FLAG = /^[1-9]\d*$/;
+  // PLAIN_OUTPUT_TOKEN_FLAG is the one form measured to be honoured (C1, K5,
+  // K12); 64000abc and 0 fell back to 32000 (D1/D2); every other form is
+  // unmeasured, and the clause below says so -- shared with the doctor row
+  // (doctor-output-budget-check.js :: evaluateOutputBudget) so the gates agree.
   const ambient = typeof ambientFlag === 'string' ? ambientFlag : null;
   const knob = budget === undefined
     ? 'outputBudget could not be read'
@@ -77,9 +79,9 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
       ? `outputBudget is ${outputTokenFlagValue(budget)}`
       : ambient === null
         ? `outputBudget is unset — the engine's ${ENGINE_DEFAULT_OUTPUT_TOKENS} default reservation governs`
-        : PLAIN_FLAG.test(ambient)
+        : PLAIN_OUTPUT_TOKEN_FLAG.test(ambient)
           ? `outputBudget is unset — the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with governs (each leg reserves min(${ambient}, the ceiling the engine's catalog knows for it))`
-          : `outputBudget is unset and the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with is not a plain positive integer — the engine's ${ENGINE_DEFAULT_OUTPUT_TOKENS} default reservation governs`;
+          : `outputBudget is unset and the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); this value is unmeasured`;
   return `${OUTPUT_LENGTH_PREFIX} the provider stopped at the max_tokens reservation (finish 'length') and ${streamed} — `
     + `${count(t.reasoning)} reasoning / ${count(t.output)} output tokens; ${knob} — `
     + 'raise outputBudget in config.json (docs/configuration.md, Output budget)';

@@ -45,11 +45,12 @@ describe('formatOutputLengthReason (#218 PR 3)', () => {
       '; outputBudget is unset — the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 the engine was '
       + "started with governs (each leg reserves min(64000, the ceiling the engine's catalog knows for it)) — raise");
   });
-  test('a malformed ambient flag is named and the default clause follows', () => {
+  test('a malformed ambient flag is named as unmeasured, with the two measured fallbacks', () => {
     // Only a plain positive integer is measured to be honoured (probe D1/D2).
     expect(formatOutputLengthReason({ tokens, budget: null, ambientFlag: '64000abc' })).toContain(
       'outputBudget is unset and the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc the engine was '
-      + "started with is not a plain positive integer — the engine's 32000 default reservation governs");
+      + 'started with is not a plain positive integer — the only form measured to be honoured '
+      + '(probe D1/D2: 64000abc and 0 fell back to 32000 silently); this value is unmeasured');
   });
   test('an ambient flag beside a configured budget is not named — the budget overrode it', () => {
     const s = formatOutputLengthReason({ tokens, budget: 8000, ambientFlag: '64000' });
