@@ -52,7 +52,7 @@ function fmtCeilingLine(e) {
     // and OpenRouter rows keep OpenRouter's. Since PR 2 the budget still
     // reaches the unnamed rows through the engine flag, clamped by the
     // engine's own catalog (probe K5/K12).
-    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
+    return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead; direct openai rows send no output reservation at all (#218 PR 4) (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
   }
   if (e.skipped === 'nothing-to-fill') {
     // NOT "every row": routers, local rows and malformed rows are not

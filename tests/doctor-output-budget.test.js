@@ -18,6 +18,7 @@ const CATALOG = {
     { id: 'openrouter/z-ai/glm-5.3', contextLength: 131072, maxOutputTokens: 131072 },
     { id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 },
     { id: 'openrouter/old/no-ceiling', contextLength: 131072, maxOutputTokens: null },
+    { id: 'openai/gpt-5.6-terra', contextLength: 1050000, maxOutputTokens: 128000 },
   ],
 };
 const ALIASES = [
@@ -28,6 +29,7 @@ const ALIASES = [
   { alias: 'ghost', model: 'openrouter/nobody/unknown', source: 'user-config' },
   // the same model under two aliases counts ONCE
   { alias: 'kimi2', model: 'openrouter/moonshotai/kimi-k3', source: 'user-config' },
+  { alias: 'gpt', model: 'openai/gpt-5.6-terra', source: 'defaults' },
 ];
 
 function deps(over = {}) {
@@ -171,6 +173,13 @@ describe('evaluateOutputBudget — a budget is configured', () => {
     expect(row.message).toContain('2 without one (openrouter/old/no-ceiling, openrouter/nobody/unknown)');
     expect(row.message).not.toContain('clamped');
     expect(row.hint).toBeNull();
+  });
+
+  test('a direct openai alias route is listed as carrying no reservation at all and never counted as clamped (#218 PR 4, M5/M13/M22)', () => {
+    // Named mutant "OPENAIGOVERNED": count openai/* routes among the routes with a known ceiling.
+    const r = evaluateOutputBudget(deps({ readOutputBudgetRaw: () => 8000 }));
+    expect(r.message).toContain('1 direct openai route (openai/gpt-5.6-terra) carries no output reservation at all — the engine drives that provider through the Responses API, whose request has no output-limit field (probe M5/M13/M22), so the value does not apply there');
+    expect(r.message).toMatch(/\b3 of 5 alias routes have a known catalog ceiling/); // kimi, glm, haiku of {kimi, glm, haiku, old, ghost}; gpt is outside the count
   });
 
   test('valid, ABOVE the engine default, some routes without a ceiling -> WARN: an unknown model gets it raw (J2/K13)', () => {

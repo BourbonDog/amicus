@@ -66,7 +66,8 @@ You requested up to 32000 tokens, but can only afford 354
 `outputBudget` sets the reservation, in either direction. Every leg reserves
 `min(outputBudget, that model's real ceiling)` wherever a ceiling is known — by the Amicus catalog
 (a per-model `limit` descriptor) or, failing that, by the engine's own catalog (every engine Amicus
-starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget). A model neither catalog
+starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget) — except on the direct
+`openai` route, which carries no reservation field at all (M5/M13/M22). A model neither catalog
 knows receives the budget itself, exactly as it received the raw 32,000 before.
 
 If you set `outputBudget` on 4.9.3, one thing changes on upgrade: a budget below 32,000 now also
@@ -78,7 +79,7 @@ budget as-is where the engine knows the model no better (K13).
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling wherever one is known. Unset means no limit is sent and no engine flag is set — OpenCode's 32,000 default applies, exactly as before. |
-| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
+| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; the anthropic / deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's); the direct `openai` rows send no output reservation at all regardless (#218 PR 4). |
 
 `modelsDevCeilings` is the opt-out for the one third-party lookup a refresh makes. Only a literal
 `false` turns it off; the key being absent means it runs. Even with it on, the call is **skipped
@@ -120,14 +121,18 @@ P1, PR 2 and PR 3).
   fills a field only where the provider gave no usable positive integer (a null, a zero, a negative
   or a malformed number), and never overwrites a usable provider value; the `openrouter/openrouter/*`
   meta-routers and local-provider rows are never filled at all. The refresh output says how many
-  rows were filled or why none could be. A route the Amicus catalog cannot clamp still gets the
-  budget through the engine flag, clamped by the engine's own catalog where it knows the model
-  (K5: 100,000 → 64,000 on a bare haiku row; K12: 8,000 on a bare kimi row, passed through
-  under its ceiling); a model neither knows receives the budget as-is (K13). That is the one way a
-  raised budget can fail where the 32,000 default did not: a custom or local model neither catalog
-  knows is asked for the full budget, and a provider that enforces its ceiling refuses the
-  request — loudly, with the provider's own error on the leg, never silently. `amicus doctor`
-  names such routes; lower the budget if you have one, or give the model a catalog entry.
+  rows were filled or why none could be. One route no budget reaches: the direct `openai` provider —
+  the engine drives it through the Responses API, whose request carries no output-limit field at all
+  (M5 bare; M13 with the descriptor and the flag both at 8,000; M22 for gpt-4o), so neither lever
+  changes what goes out there; `doctor` lists those routes apart from the clamped and unclamped
+  counts. A route the Amicus catalog cannot clamp still gets the budget through the engine flag,
+  clamped by the engine's own catalog where it knows the model (K5: 100,000 → 64,000 on a bare haiku
+  row; K12: 8,000 on a bare kimi row, passed through under its ceiling); a model neither knows
+  receives the budget as-is (K13). That is the one way a raised budget can fail where the 32,000
+  default did not: a custom or local model neither catalog knows is asked for the full budget, and a
+  provider that enforces its ceiling refuses the request — loudly, with the provider's own error on
+  the leg, never silently. `amicus doctor` names such routes; lower the budget if you have one, or
+  give the model a catalog entry.
 - **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
   route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
   the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:

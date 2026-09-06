@@ -23,25 +23,29 @@ All notable changes to Amicus are documented here. Format follows
   OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
   of those happened, and `--json` carries it as `ceilingEnrichment`. Effect: no request changes with
   `outputBudget` unset; direct-provider rows now carry context and ceiling numbers (visible in
-  `amicus models`), and `outputBudget` can clamp the direct `openai` / `google` / `deepseek` routes
-  once the catalog is refreshed — which 4.9.3 documented as impossible because those lists "don't
-  publish one". Direct `anthropic/*` was held out of clamping by the council review of PR #230 until
-  the thinking-budget interaction was measured; PR 2 measured it and lifted the hold-out — see the
-  next bullet.
+  `amicus models`), and `outputBudget` can clamp the direct `google` / `deepseek` routes once the
+  catalog is refreshed — which 4.9.3 documented as impossible because those lists "don't publish
+  one". The direct `openai` route is the exception, measured in PR 4 (probe M5/M13/M22): the engine
+  drives that provider through the Responses API, whose request carries no output-limit field at
+  all, so neither the descriptor nor the flag changes what goes out there and a budget never reaches
+  it; `doctor` lists such routes apart. Direct `anthropic/*` was held out of clamping by the council
+  review of PR #230 until the thinking-budget interaction was measured; PR 2 measured it and lifted
+  the hold-out — see the next bullet.
 - **`outputBudget` now works in both directions (#218 PR 2).** A budget above the engine's 32,000
   default is honoured: Amicus starts every engine with `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to
   the budget — around the spawn only, restored before anything is awaited, never written to the
   caller's shell; a value you exported yourself is honoured untouched when no budget is set — so
-  every leg reserves `min(budget, ceiling)` wherever a ceiling is known, by the Amicus catalog through
-  the per-model descriptor or else by the engine's own, and a model neither knows receives the budget
-  as-is, exactly as it received the raw 32,000 before. Direct `anthropic/*` routes are no longer held
-  out: the probe measured the descriptor lowering the reservation there (K1), a thinking variant's
-  budget added on top (K2: 8,000 + 16,000 = 24,000) and the sum clamped to the model's real ceiling
-  (K3/K4/K10), so no budget can push a thinking leg over it. Thirteen new probe rows (K1–K13) pin
-  every shape this ships, and the full 32-case matrix is filed in the BACKLOG. New `doctor` row
-  **`output-budget`** says what the value reaches — routes the catalog can clamp, routes it cannot,
-  an ambient flag honoured or overridden — and flags the one silent failure the engine has here: a
-  malformed budget or flag, on which it falls back to 32,000 without a word.
+  every leg reserves `min(budget, ceiling)` wherever a ceiling is known (every leg but a direct
+  `openai` one — that route carries no reservation field, see the previous bullet), by the Amicus
+  catalog through the per-model descriptor or else by the engine's own, and a model neither knows
+  receives the budget as-is, exactly as it received the raw 32,000 before. Direct `anthropic/*`
+  routes are no longer held out: the probe measured the descriptor lowering the reservation there
+  (K1), a thinking variant's budget added on top (K2: 8,000 + 16,000 = 24,000) and the sum clamped
+  to the model's real ceiling (K3/K4/K10), so no budget can push a thinking leg over it. Thirteen
+  new probe rows (K1–K13) pin every shape this ships, and the full 32-case matrix is filed in the
+  BACKLOG. New `doctor` row **`output-budget`** says what the value reaches — routes the catalog can
+  clamp, routes it cannot, an ambient flag honoured or overridden — and flags the one silent failure
+  the engine has here: a malformed budget or flag, on which it falls back to 32,000 without a word.
 - **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
