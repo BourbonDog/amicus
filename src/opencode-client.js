@@ -186,8 +186,18 @@ async function createSession(client, directory) {
  * @param {Array} options.parts - Message parts
  * @param {string} [options.agent] - Agent to use (e.g., 'build', 'explore')
  * @param {object} [options.tools] - Tool configuration
- * @param {object} [options.reasoning] - Reasoning/thinking configuration
- * @param {string} [options.reasoning.effort] - Effort level: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'none'
+ * @param {string} [options.variant] - #218 PR 4: the effort level to request, sent as the
+ *   engine's `variant` prompt field (probe F2 — the `reasoning` object sent before PR 4 was
+ *   never a prompt field, F1). Validated against the model's DECLARED variants first
+ *   (utils/engine-variants.js): refused with a VariantRefusedError (code VARIANT_UNDECLARED
+ *   or VARIANT_OVER_BUDGET) BEFORE any request when the engine would drop it silently or add
+ *   its thinking budget over the budget; sent unverified when the engine's catalogue does not
+ *   know the model within the wait. On a send the result carries
+ *   `sentVariant: {variant, verified, waitedMs}` (decorated like `providerError`).
+ * @param {number|null} [options.outputBudget] - the budget the engine serving this session
+ *   was spawned with (the server handle's `outputBudget`); `null` = unset; omitted = unknown.
+ *   Only the fit check reads it.
+ * @param {object} [options._declaration] - test seam: readModelDeclaration's opts (waitMs/pollMs/sleep)
  * @param {object} [options.watchdog] - IdleWatchdog instance to signal busy/idle around the API call
  * @param {string} [options.directory] - Optional project directory to scope the
  *   call to (threaded to the SDK as query.directory). Omitting it keeps the
@@ -195,7 +205,7 @@ async function createSession(client, directory) {
  * @returns {Promise<object>} API response
  */
 async function sendPrompt(client, sessionId, options) {
-  const { model, system, parts, agent, tools, reasoning, watchdog, directory } = options;
+  const { model, system, parts, agent, tools, variant, outputBudget, watchdog, directory } = options;
 
   // Parse model string to SDK format
   const modelSpec = parseModelString(model);
@@ -220,8 +230,20 @@ async function sendPrompt(client, sessionId, options) {
     body.tools = tools;
   }
 
-  if (reasoning) {
-    body.reasoning = reasoning;
+  // #218 PR 4: `variant` is the engine's prompt field for effort (F2); `reasoning`
+  // never was one and is not forwarded (F1 — named mutant "REASONINGLEAK" in
+  // tests/opencode-client.test.js). Validated against the engine's own declaration
+  // BEFORE the request, so a refusal sends nothing (mutant "SENTANYWAY") and the
+  // declaration is read only when a variant was asked for (mutant "ALWAYSREAD").
+  let sentVariant = null;
+  if (variant) {
+    const { readModelDeclaration, checkVariant, VariantRefusedError } = require('./utils/engine-variants');
+    const modelId = `${modelSpec.providerID}/${modelSpec.modelID}`;
+    const declaration = await readModelDeclaration(client, modelId, options._declaration);
+    const verdict = checkVariant({ variant, model: modelId, declaration, outputBudget });
+    if (!verdict.ok) { throw new VariantRefusedError(verdict.code, verdict.reason); }
+    body.variant = variant;
+    sentVariant = { variant, verified: verdict.verified, waitedMs: declaration.waitedMs };
   }
 
   if (watchdog) {
@@ -246,6 +268,10 @@ async function sendPrompt(client, sessionId, options) {
   // assistant message carrying info.error — otherwise the run looks idle/empty.
   // Keyed on HTTP status so benign informational errors (model config warnings
   // on a 2xx) keep the fire-and-forget "continue to poll" behavior below.
+  // #218 PR 4: what was SENT, for the leg record (headless.js reads it). Same
+  // decoration-of-the-SDK-result precedent as `providerError` below.
+  if (sentVariant && result && typeof result === 'object') { result.sentVariant = sentVariant; }
+
   const reason = providerErrorReason(result);
   if (reason) {
     result.providerError = reason;

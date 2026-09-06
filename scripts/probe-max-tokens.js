@@ -420,7 +420,7 @@ async function send(client, captures, c) {
   let res;
   if (c.viaAmicus) {
     const { sendPrompt } = require('../src/opencode-client');
-    res = await sendPrompt(client, sessionId, { model: `${c.model.providerID}/${c.model.modelID}`, parts, agent: 'chat', reasoning: c.reasoning });
+    res = await sendPrompt(client, sessionId, { model: `${c.model.providerID}/${c.model.modelID}`, parts, agent: 'chat', variant: c.variant, outputBudget: c.outputBudget, reasoning: c.reasoning });
   } else {
     res = await client.session.promptAsync({ path: { id: sessionId }, body: { model: c.model, agent: 'chat', parts, ...(c.extra || {}) } });
   }
@@ -492,7 +492,7 @@ const CASES = [
   { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000', want: W(32000) },
   { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped")', want: W(4096) },
   { id: 'E2', title: 'options.reasoning {effort:low}', or: { [KIMI]: { options: { reasoning: { effort: 'low' } } } }, model: OR(KIMI), expect: 'reasoning effort low on the wire', want: W(32000, LOW) },
-  { id: 'F1', title: 'amicus sendPrompt today: body.reasoning {effort:low}', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire', want: W(32000) },
+  { id: 'F1', title: 'amicus sendPrompt with the pre-PR-4 `reasoning` option (never a prompt field; ignored since PR 4)', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire', want: W(32000) },
   { id: 'F2', title: "prompt variant 'low' (kimi: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'low' }, expect: 'reasoning effort low', want: W(32000, LOW) },
   // F3's expectation — "silent no-op OR error" — is satisfied by either outcome,
   // so it cannot fail. `want: 'record'` says so out loud instead of letting a
@@ -570,6 +570,18 @@ const CASES = [
   { id: 'M16', title: "direct deepseek deepseek-v4-pro limit.output 8000 + env 8000 + variant 'high'", env: '8000', deepseek: { 'deepseek-v4-pro': { limit: { context: 1000000, output: 8000 } } }, model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' }, extra: { variant: 'high' }, expect: 'record: 8000 if the direct DeepSeek route clamps with a variant in play and adds nothing on top', want: 'record' },
   { id: 'M17', title: "direct anthropic haiku limit.output 8000 (= 24000 − the high variant's 16000) + env 24000 + variant 'high' — the FITTED shape", env: '24000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '24000 = min(8000, 24000) + 16000 — a descriptor lowered by the variant\'s budget lands the sum exactly on the budget', want: W(24000, null, 'any') },
   { id: 'M22', title: 'direct openai gpt-4o limit.output 8000 + env 8000, no variant (a chat-completions-era id: does the reservation appear on THAT path?)', env: '8000', openai: { 'gpt-4o': { limit: { context: 128000, output: 8000 } } }, model: { providerID: 'openai', modelID: 'gpt-4o' }, expect: 'record: the wire path and whether a reservation field is carried — scopes the M5/M13 finding to the Responses API or to the whole direct openai provider', want: 'record' },
+  // PR 4 rows through amicus's OWN door (opencode-client.js :: sendPrompt), so the
+  // validator runs against the live engine: M18 sends a declared level, M19 is
+  // refused before the wire, M20 is refused for the budget, M21 sends the K4 shape.
+  { id: 'M18', title: "amicus sendPrompt variant 'low' on kimi (declared)", or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, variant: 'low', expect: 'reasoning effort low — F2 through the shipped path', want: W(32000, LOW) },
+  { id: 'M19', title: "amicus sendPrompt variant 'medium' on kimi (undeclared: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, variant: 'medium', expect: 'refused before any request: VARIANT_UNDECLARED, no capture', want: { refused: 'VARIANT_UNDECLARED' } },
+  // M20 uses the BARE-descriptor + flag shape (what amicus ships for a model its
+  // catalog does not know, K5/K12): /config/providers echoes a WRITTEN descriptor
+  // (M3), and the sandbox has no amicus catalog, so the catalog-known shape is
+  // pinned in tests/opencode-client.test.js and tests/utils/engine-variants.test.js
+  // instead. Found by this row's first run (Task 2 report).
+  { id: 'M20', title: "amicus sendPrompt variant 'high' on direct haiku {} + env 24000 with outputBudget 24000 (bare descriptor + the flag: the catalog-unknown shape)", env: '24000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), viaAmicus: true, variant: 'high', outputBudget: 24000, expect: "refused before any request: VARIANT_OVER_BUDGET — the bare descriptor reads the engine's own 64000 ceiling, and 24000 + 16000 = 40000 would overshoot the budget; no capture", want: { refused: 'VARIANT_OVER_BUDGET' } },
+  { id: 'M21', title: "amicus sendPrompt variant 'max' on direct haiku with outputBudget 64000 (the K4 shape)", env: '64000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 64000 } } }, model: AN(HAIKU), viaAmicus: true, variant: 'max', outputBudget: 64000, expect: '64000 — budget at the ceiling, the sum clamped to it (K4), sent', want: W(64000, null, 'any') },
 ];
 
 function wireSummary(wire) {
@@ -765,7 +777,7 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
     if (c.dumpOnly) { return { ...base, config, prompt: null, status: null, error: null, wire: null, assistant: null, update, refresh }; }
     cap.setCase(c);
     const r = await send(handle.client, cap.captures, c);
-    return { ...base, config, prompt: c.viaAmicus ? { viaAmicus: true, reasoning: c.reasoning } : (c.extra || {}), ...r, update, refresh };
+    return { ...base, config, prompt: c.viaAmicus ? { viaAmicus: true, variant: c.variant ?? null, outputBudget: c.outputBudget ?? null, reasoning: c.reasoning ?? null } : (c.extra || {}), ...r, update, refresh };
   } catch (err) {
     return { ...base, error: err.message, wire: null, assistant: null };
   } finally {
@@ -787,6 +799,11 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
  */
 function checkRow(r) {
   if (r.want === 'record') { return 'recorded'; }
+  // PR 4: a row whose expectation is a REFUSAL before the wire — no capture at
+  // all, and the thrown reason starts with the code.
+  if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
+    return (!r.wire && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
+  }
   if (!r.want || typeof r.want !== 'object') { return 'mismatched'; }
   const w = wireSummary(r.wire);
   const reasoning = w.reasoning ?? w.reasoningEffort ?? null;

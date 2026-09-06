@@ -398,103 +398,99 @@ describe('OpenCode Client Wrapper', () => {
       });
     });
 
-    it('should include reasoning parameter when provided', async () => {
-      const mockClient = {
-        session: {
-          promptAsync: jest.fn().mockResolvedValue({
-            data: { parts: [] }
-          })
-        }
-      };
+    // #218 PR 4: the effort lever goes out as `variant` (probe F2), validated
+    // against the model's declared variants first (utils/engine-variants.js).
+    const KIMI_DUMP = { data: { providers: [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 1048576, output: 943718 }, variants: { low: { reasoning: { effort: 'low' } }, high: { reasoning: { effort: 'high' } }, max: { reasoning: { effort: 'max' } } } } } }] } };
+    const HAIKU_DUMP = { data: { providers: [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 64000 }, variants: { high: { thinking: { type: 'enabled', budgetTokens: 16000 } } } } } }] } };
+    const COLD_DUMP = { data: { providers: [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 0, output: 0 }, variants: {} } } }] } };
+    const clientWith = (dump) => ({
+      session: { promptAsync: jest.fn().mockResolvedValue({ data: { parts: [] } }) },
+      config: { providers: jest.fn().mockResolvedValue(dump) },
+    });
+    const NO_WAIT = { waitMs: 0, readCache: () => null };
 
-      await sendPrompt(mockClient, 'session-123', {
-        model: 'openrouter/google/gemini-3-pro-preview',
-        parts: [{ type: 'text', text: 'Hello' }],
-        reasoning: { effort: 'low' }
+    it('sends a declared variant as the body\'s `variant` field, never as `reasoning` (F1/F2)', async () => {
+      const mockClient = clientWith(KIMI_DUMP);
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'Hello' }], variant: 'low', _declaration: NO_WAIT,
       });
-
-      expect(mockClient.session.promptAsync).toHaveBeenCalledWith({
-        path: { id: 'session-123' },
-        body: expect.objectContaining({
-          reasoning: { effort: 'low' }
-        })
-      });
+      const body = mockClient.session.promptAsync.mock.calls[0][0].body;
+      expect(body.variant).toBe('low');
+      expect(body).not.toHaveProperty('reasoning');
+      expect(result.sentVariant).toEqual({ variant: 'low', verified: true, waitedMs: expect.any(Number) });
     });
 
-    it('should support all reasoning effort levels', async () => {
-      const mockClient = {
-        session: {
-          promptAsync: jest.fn().mockResolvedValue({
-            data: { parts: [] }
-          })
-        }
-      };
-
-      const effortLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none'];
-
-      for (const effort of effortLevels) {
-        await sendPrompt(mockClient, 'session-123', {
-          model: 'openrouter/openai/gpt-5.2',
-          parts: [{ type: 'text', text: 'Test' }],
-          reasoning: { effort }
-        });
-
-        expect(mockClient.session.promptAsync).toHaveBeenLastCalledWith({
-          path: { id: 'session-123' },
-          body: expect.objectContaining({
-            reasoning: { effort }
-          })
-        });
+    it('sends every level the curated routes declare between them', async () => {
+      const ALL = { data: { providers: [{ id: 'openrouter', models: { 'openai/gpt-5.6-terra': { limit: { context: 1050000, output: 128000 }, variants: Object.fromEntries(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((v) => [v, { reasoning: { effort: v } }])) } } }] } };
+      for (const variant of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+        const mockClient = clientWith(ALL);
+        await sendPrompt(mockClient, 'session-123', { model: 'openrouter/openai/gpt-5.6-terra', parts: [{ type: 'text', text: 'T' }], variant, _declaration: NO_WAIT });
+        expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe(variant);
       }
     });
 
-    it('should not include reasoning when not provided', async () => {
-      const mockClient = {
-        session: {
-          promptAsync: jest.fn().mockResolvedValue({
-            data: { parts: [] }
-          })
-        }
-      };
-
-      await sendPrompt(mockClient, 'session-123', {
-        model: 'openrouter/google/gemini-3-flash-preview',
-        parts: [{ type: 'text', text: 'Hello' }]
-      });
-
-      const callBody = mockClient.session.promptAsync.mock.calls[0][0].body;
-      expect(callBody).not.toHaveProperty('reasoning');
+    it('refuses an undeclared variant BEFORE any request (F3) — a typed error, promptAsync never called', async () => {
+      // Named mutant "SENTANYWAY": send the prompt and then throw.
+      const mockClient = clientWith(KIMI_DUMP);
+      await expect(sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'Hello' }], variant: 'medium', _declaration: NO_WAIT,
+      })).rejects.toMatchObject({ name: 'VariantRefusedError', code: 'VARIANT_UNDECLARED', message: expect.stringContaining("does not declare a 'medium' variant — the engine's catalogue lists low, high, max") });
+      expect(mockClient.session.promptAsync).not.toHaveBeenCalled();
     });
 
-    it('should combine reasoning with other optional parameters', async () => {
-      const mockClient = {
-        session: {
-          promptAsync: jest.fn().mockResolvedValue({
-            data: { parts: [] }
-          })
-        }
-      };
+    it('refuses the direct-Anthropic enabled + budgetTokens shape over the budget (M2) with the handle\'s budget', async () => {
+      const mockClient = clientWith(HAIKU_DUMP);
+      await expect(sendPrompt(mockClient, 'session-123', {
+        model: 'anthropic/claude-haiku-4-5', parts: [{ type: 'text', text: 'Hello' }], variant: 'high', outputBudget: 24000, _declaration: NO_WAIT,
+      })).rejects.toMatchObject({ name: 'VariantRefusedError', code: 'VARIANT_OVER_BUDGET', message: expect.stringContaining('would reserve 40000 (24000 + 16000)') });
+      expect(mockClient.session.promptAsync).not.toHaveBeenCalled();
+    });
 
-      await sendPrompt(mockClient, 'session-123', {
-        model: 'openrouter/google/gemini-3-pro-preview',
-        parts: [{ type: 'text', text: 'Hello' }],
-        system: 'You are a helpful assistant',
-        agent: 'build',
-        tools: { Bash: true },
-        reasoning: { effort: 'high' }
-      });
+    it('judges the fit against the catalog ceiling when the dump echoes a budget-derived descriptor (M3; Task 2 finding M20)', async () => {
+      const ECHO_DUMP = { data: { providers: [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 24000 }, variants: { high: { thinking: { type: 'enabled', budgetTokens: 16000 } } } } } }] } };
+      const mockClient = clientWith(ECHO_DUMP);
+      await expect(sendPrompt(mockClient, 'session-123', {
+        model: 'anthropic/claude-haiku-4-5', parts: [{ type: 'text', text: 'Hello' }], variant: 'high', outputBudget: 24000, _declaration: { waitMs: 0, catalogCeiling: 64000 },
+      })).rejects.toMatchObject({ code: 'VARIANT_OVER_BUDGET', message: expect.stringContaining('would reserve 40000 (24000 + 16000)') });
+      expect(mockClient.session.promptAsync).not.toHaveBeenCalled();
+    });
 
-      expect(mockClient.session.promptAsync).toHaveBeenCalledWith({
-        path: { id: 'session-123' },
-        body: {
-          model: { providerID: 'openrouter', modelID: 'google/gemini-3-pro-preview' },
-          parts: [{ type: 'text', text: 'Hello' }],
-          system: 'You are a helpful assistant',
-          agent: 'build',
-          tools: { Bash: true },
-          reasoning: { effort: 'high' }
-        }
-      });
+    it('sends the same shape with no budget (H3) and marks it verified', async () => {
+      const mockClient = clientWith(HAIKU_DUMP);
+      const result = await sendPrompt(mockClient, 'session-123', { model: 'anthropic/claude-haiku-4-5', parts: [{ type: 'text', text: 'Hello' }], variant: 'high', outputBudget: null, _declaration: NO_WAIT });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('high');
+      expect(result.sentVariant.verified).toBe(true);
+    });
+
+    it('sends a variant to a model the catalogue does not know, marked unverified (M0 cold read)', async () => {
+      const mockClient = clientWith(COLD_DUMP);
+      const result = await sendPrompt(mockClient, 'session-123', { model: 'openrouter/qwen/qwen3.8-max-0902', parts: [{ type: 'text', text: 'Hello' }], variant: 'medium', _declaration: NO_WAIT });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('medium');
+      expect(result.sentVariant).toEqual({ variant: 'medium', verified: false, waitedMs: expect.any(Number) });
+    });
+
+    it('reads the declaration only when a variant is requested, and sends no `variant` key otherwise', async () => {
+      // Named mutant "ALWAYSREAD": read the declaration unconditionally — providers() is called here.
+      const mockClient = clientWith(KIMI_DUMP);
+      const result = await sendPrompt(mockClient, 'session-123', { model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'Hello' }] });
+      expect(mockClient.config.providers).not.toHaveBeenCalled();
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body).not.toHaveProperty('variant');
+      expect(result).not.toHaveProperty('sentVariant');
+    });
+
+    it('ignores the pre-PR-4 `reasoning` option — it was never a prompt field (F1)', async () => {
+      // Named mutant "REASONINGLEAK": forward options.reasoning onto the body.
+      const mockClient = clientWith(KIMI_DUMP);
+      await sendPrompt(mockClient, 'session-123', { model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'Hello' }], reasoning: { effort: 'low' } });
+      const body = mockClient.session.promptAsync.mock.calls[0][0].body;
+      expect(body).not.toHaveProperty('reasoning');
+      expect(body).not.toHaveProperty('variant');
+    });
+
+    it('resolves the declaration from the SDK-shaped model object too', async () => {
+      const mockClient = clientWith(KIMI_DUMP);
+      await sendPrompt(mockClient, 'session-123', { model: { providerID: 'openrouter', modelID: 'moonshotai/kimi-k3' }, parts: [{ type: 'text', text: 'Hello' }], variant: 'low', _declaration: NO_WAIT });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
     });
   });
 
