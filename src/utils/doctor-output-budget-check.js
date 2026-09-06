@@ -18,7 +18,7 @@
  *   - a reservation of at least half a route's context window: input plus
  *     max_tokens has to fit the window, and the engine subtracts the same
  *     reservation from the window before compaction (read in the binary), so
- *     such a value starves the prompt.
+ *     such a value starves the prompt;
  *   - nothing for a direct openai route: it carries no reservation field at
  *     all (M5/M13/M22), so it is listed apart from the clamped/unclamped counts.
  * A configured budget and a valid ambient flag get the SAME analysis: they
@@ -65,7 +65,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
     // receives the value as-is (J2/K13) and the cache is what would name a
     // ceiling. Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
     return {
-      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is)`,
+      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is; a direct openai route carries no output reservation at all — probe M5/M13/M22)`,
       status: aboveDefault ? 'warn' : 'ok',
       hint: aboveDefault ? 'amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one' : null,
     };

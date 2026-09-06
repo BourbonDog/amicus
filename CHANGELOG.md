@@ -7,30 +7,32 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
-- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills `contextLength`
-  / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or `openrouter` row still
-  missing a number, from the keyless [models.dev](https://models.dev) index, and lifts Google's own
-  `outputTokenLimit` first-party. The provider's own number always wins — Google's own ceiling and
-  OpenRouter's own value included; models.dev fills only fields the provider left empty or unusable,
-  never a zero, and `openrouter/openrouter/*` routers and local rows are never filled at all. The
-  models.dev call is keyless, bounded by a 10 s timeout, and its failure is reported on the refresh
-  line rather than hidden — including a 200 that parses but carries no recognised vendor limits,
-  which is a `bad-shape` failure and not a silent no-op. It is also skippable both ways: a refresh
-  where every candidate row already carries both numbers never makes the call at all, and the new
-  top-level `config.json` key **`modelsDevCeilings: false`** opts out of contacting models.dev
-  entirely (the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus
-  catalog and are clamped by the engine's own catalog instead; Google publishes its own ceiling and
-  OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
-  of those happened, and `--json` carries it as `ceilingEnrichment`. Effect: no request changes with
-  `outputBudget` unset; direct-provider rows now carry context and ceiling numbers (visible in
-  `amicus models`), and `outputBudget` can clamp the direct `google` / `deepseek` routes once the
-  catalog is refreshed — which 4.9.3 documented as impossible because those lists "don't publish
-  one". The direct `openai` route is the exception, measured in PR 4 (probe M5/M13/M22): the engine
-  drives that provider through the Responses API, whose request carries no output-limit field at
-  all, so neither the descriptor nor the flag changes what goes out there and a budget never reaches
-  it; `doctor` lists such routes apart. Direct `anthropic/*` was held out of clamping by the council
-  review of PR #230 until the thinking-budget interaction was measured; PR 2 measured it and lifted
-  the hold-out — see the next bullet.
+- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
+  `contextLength` / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or
+  `openrouter` row still missing a number, from the keyless [models.dev](https://models.dev)
+  index, and lifts Google's own `outputTokenLimit` first-party. The provider's own number
+  always wins — Google's own ceiling and OpenRouter's own value included; models.dev fills
+  only fields the provider left empty or unusable, never a zero, and `openrouter/openrouter/*`
+  routers and local rows are never filled at all. The models.dev call is keyless, bounded by a
+  10 s timeout, and its failure is reported on the refresh line rather than hidden — including
+  a 200 that parses but carries no recognised vendor limits, which is a `bad-shape` failure
+  and not a silent no-op. It is also skippable both ways: a refresh where every candidate row
+  already carries both numbers never makes the call at all, and the new top-level `config.json`
+  key **`modelsDevCeilings: false`** opts out of contacting models.dev entirely (the anthropic /
+  deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's
+  own catalog instead, and the direct openai rows send no output reservation at all regardless
+  — M5/M13/M22; Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). The
+  refresh prints the outcome (`Ceilings: …`), naming which of those happened, and `--json`
+  carries it as `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset;
+  direct-provider rows now carry context and ceiling numbers (visible in `amicus models`), and
+  `outputBudget` can clamp the direct `google` / `deepseek` routes once the catalog is refreshed
+  — which 4.9.3 documented as impossible because those lists "don't publish one". The direct
+  `openai` route is the exception, measured in PR 4 (probe M5/M13/M22): the engine drives that
+  provider through the Responses API, whose request carries no output-limit field at all, so
+  neither the descriptor nor the flag changes what goes out there and a budget never reaches it;
+  `doctor` lists such routes apart. Direct `anthropic/*` was held out of clamping by the council
+  review of PR #230 until the thinking-budget interaction was measured; PR 2 measured it and
+  lifted the hold-out — see the next bullet.
 - **`outputBudget` now works in both directions (#218 PR 2).** A budget above the engine's 32,000
   default is honoured: Amicus starts every engine with `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to
   the budget — around the spawn only, restored before anything is awaited, never written to the

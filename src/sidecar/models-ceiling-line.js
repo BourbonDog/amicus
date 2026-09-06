@@ -50,8 +50,9 @@ function fmtCeilingLine(e) {
   if (e.skipped === 'disabled') {
     // Named, not "direct routes": Google publishes its own ceiling first-party
     // and OpenRouter rows keep OpenRouter's. Since PR 2 the budget still
-    // reaches the unnamed rows through the engine flag, clamped by the
-    // engine's own catalog (probe K5/K12).
+    // reaches the anthropic/deepseek rows through the engine flag, clamped by
+    // the engine's own catalog (probe K5/K12); it never reaches a direct
+    // openai row at all (#218 PR 4, M5/M13/M22).
     return 'Ceilings: models.dev lookup disabled (modelsDevCeilings: false); anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead; direct openai rows send no output reservation at all (#218 PR 4) (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)';
   }
   if (e.skipped === 'nothing-to-fill') {
