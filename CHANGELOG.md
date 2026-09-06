@@ -81,6 +81,11 @@ All notable changes to Amicus are documented here. Format follows
   the #218 PR 2 probe run caught it (a variant sent for the old id went silent, and its ceiling read
   `0/0`). The pin now names the dated id. Found and fixed in PR #231; the CI bench map already
   pinned `qwen3.8-27b` and is unchanged.
+- **CI council read its alias map from the PR's frozen base sha.** `council-review.yml` provisioned
+  `.github/amicus-ci-aliases.json` from `github.event.pull_request.base.sha`, which GitHub fixes at
+  PR creation — so a bench change merged to `main` afterwards never reached an open PR (PR #232's
+  round 3 still reviewed with the pre-#233 map). The map is now read from the base branch name,
+  which resolves to its current tip on every run; still never the PR head.
 
 ## [4.9.3] - 2026-08-28
 
