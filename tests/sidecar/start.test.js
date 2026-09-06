@@ -270,6 +270,27 @@ describe('createSessionMetadata PID preservation', () => {
     expect(result.status).toBe('running');
     expect(result.createdAt).toBeDefined();
   });
+
+  it('#218 PR 4: metadata carries `thinking` only when one was requested', () => {
+    const { createSessionMetadata } = require('../../src/sidecar/start');
+    const { SessionPaths } = require('../../src/sidecar/session-utils');
+
+    createSessionMetadata(taskId, tmpDir, {
+      model: 'kimi', prompt: 'p', noUi: true, agent: 'build'
+    });
+    const sessionDir = SessionPaths.sessionDir(tmpDir, taskId);
+    const result = JSON.parse(fs.readFileSync(SessionPaths.metadataFile(sessionDir), 'utf-8'));
+    expect('thinking' in result).toBe(false);
+
+    // Named mutant "MEDIUMDEFAULT": restore `|| 'medium'`.
+    const taskId2 = `${taskId}-2`;
+    createSessionMetadata(taskId2, tmpDir, {
+      model: 'kimi', prompt: 'p', noUi: true, agent: 'build', thinking: 'low'
+    });
+    const sessionDir2 = SessionPaths.sessionDir(tmpDir, taskId2);
+    const result2 = JSON.parse(fs.readFileSync(SessionPaths.metadataFile(sessionDir2), 'utf-8'));
+    expect(result2.thinking).toBe('low');
+  });
 });
 
 describe('startSidecar includeContext option', () => {

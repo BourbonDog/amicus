@@ -225,6 +225,7 @@ async function startSidecar(options) {
         taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
         op: 'start', status: statusFromResult(result), project: effectiveProject,
         finish: result && result.finish, // #218 PR 3: appendSpend keeps it only when it is a string
+        variant: result && result.variant, // #218 PR 4: same emit-when-set rule
         // ⚠️ DE-ROT: `metadata` is NOT in scope at startSidecar's finalize site — the objects
         // there are `meta` (createSessionMetadata result) and `m`; `metadata` is a local only
         // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the

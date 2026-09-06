@@ -28,6 +28,15 @@
       "type": "string",
       "description": "#218 PR 3, optional. The engine's finish reason for the leg's last assistant message ('stop', 'length', 'tool-calls', …), copied verbatim from the assistant message's `finish`. EMIT-WHEN-SET like `ttftMs`: absent means the engine recorded none (the message never finalized, or an older engine). 'length' means the provider stopped at the max_tokens reservation — with answer text that is a cut review (announced as a Note on the `output-truncated` channel); without, the leg is status 'error' with an `OUTPUT_LENGTH:` reason."
     },
+    "variant": {
+      "type": "string",
+      "description": "#218 PR 4, optional. The effort level amicus SENT as the engine's `variant` prompt field for this leg, after checking the engine's own declaration for the model (/config/providers). EMIT-WHEN-SENT: absent means no --thinking was requested, or the request was refused before anything was sent (then `status` is 'error' and `error` starts VARIANT_UNDECLARED or VARIANT_OVER_BUDGET). Not the engine's own `variant` echo, which it records even for a level it dropped (probe F3/M7). A leg whose no-output backstop fired before the prompt send resolved carries no `variant` even though one went out — the send result never arrived, so the record cannot claim it."
+    },
+    "variantUnverified": {
+      "type": "boolean",
+      "enum": [true],
+      "description": "#218 PR 4, optional, emit-when-true. The variant was sent to a model the engine's catalogue did not know within the wait (limit.context 0, no variants declared — a model newer than the engine's bundled catalogue before its startup refresh landed, or a custom/local model): the engine applied it only if it learned the model before building the request, and dropped it silently otherwise; amicus cannot tell which."
+    },
     "ttftMs": {
       "type": "integer",
       "minimum": 0,
