@@ -7192,8 +7192,8 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   were added to `scripts/probe-max-tokens.js`, the capture server learned to answer with a
   per-case body (content, OpenRouter-style `reasoning`, an Anthropic `thinking` block, usage) and
   to speak the Anthropic messages SSE (stop_reason `max_tokens`), the table gained the assistant
-  message's token counts and text/reasoning parts, and `want` gained an `assistant` half that A
-  and H1 now pin. The whole 37-case matrix was run under the same sandbox (engine 1.18.15 / sdk
+  message's token counts and text/reasoning parts, and `want` gained an `assistant` half that A,
+  H1 and L1–L4 now pin. The whole 37-case matrix was run under the same sandbox (engine 1.18.15 / sdk
   1.18.15 / server 1.18.15; 37 started, 37 closed): 36 matched, F3 recorded, nothing moved on
   the wire rows A–K13. Every direct `anthropic` row now records `finish: 'length'` where the P1
   and PR 2 tables show `error: APIError` — the capture server previously answered those rows with
@@ -7209,9 +7209,6 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   100000 → 64000). The kimi dump line reports `limit.output 943718` on this run (the
   startup-refresh race the PR 2 record describes; live models.dev says 943718); no row depends
   on it. Filed exactly as the run printed it:
-
-engine: opencode-ai 1.18.15 (sdk 1.18.15), server reports 1.18.15
-binary: C:\Users\sendt\code\amicus\node_modules\opencode-windows-x64\bin\opencode.exe
 
 | id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error | assistant tokens in/out/reasoning | assistant parts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -7283,6 +7280,21 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   happen on this branch; when PR 4 sends `variant`, set the descriptor to budget − the variant's
   `budgetTokens` (the `/config/providers` dump exposes it per variant) or refuse a variant the budget
   cannot hold, and add the probe row that proves it.
+- [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
+  PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
+  so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi
+  row). Skipping it loses a seat a variance in reasoning length might have saved; shrinking the
+  reservation per retry is impossible today (the flag is per engine spawn, the descriptor per
+  server). Owner's call; PR 3 kept the retry unchanged.
+- [ ] **The chair packet should flag a review cut at its reservation (#218 PR 3, R4).** The
+  `output-truncated` Note reaches stderr, `run.json` and the Workspace, but the chair reads the cut
+  review with no marker that it ended where the reservation ended. Carry `finish: 'length'` into the
+  chair briefing's per-review header (briefings-chair.js) so the chair weighs it as partial.
+- [ ] **Stage-2 judge, chair and debate legs cut at their reservation get the death name but no
+  Note (#218 PR 3, R4).** headless.js names the death for every leg; the `output-truncated` Note is
+  emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails
+  parse today with no length clue on the record; extend the Note to `run-stage2.js` and the chair
+  path once the Stage-1 shape has been seen in a real run.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

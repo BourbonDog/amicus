@@ -10,6 +10,17 @@
 
 **Spec:** The four-PR sequence approved on 2026-09-04 (`docs/superpowers/plans/2026-09-04-218-pr1-probe-and-ceilings.md`, "PR sequence": *PR 3 = name the Mode 2 death (`finish: 'length'` on the leg)*), the two items PR 2 parked for PR 3 (ledger of `.superpowers/sdd/2026-09-05-218-pr2-output-budget/progress.md`: "pass the budget once through buildServerOptions"; "a K row for a descriptor ABOVE the engine's own ceiling with no variant"), plus the **Design** section below, which is this PR's spec: written from measurements taken on 2026-09-05 with the probe as extended in commit `1aa04537` (already on this branch), and every rule in it cites the row that measured it.
 
+> **Superseded in part (2026-09-05, by the task reviews during execution):** Task 1 — the record's
+> prose names A, H1 and L1–L4 as the rows that pin `want.assistant`, and the pasted block starts at
+> the table header like the PR 2 record's (the run's `engine:`/`binary:` preamble is not filed).
+> Task 2 — the test file has ten tests, not eleven. Task 5 — the `output-truncated` note's `effect`
+> is capitalised ("The review is in the packet…"), matching the rendered-string assertion and the
+> `stage1-retry` heal note. Task 6 — the DOUBLEREAD mutant is killed by the assertion that
+> `buildProviderModels` receives the value `startServer` read, not by a read count:
+> `buildProviderModels`'s fallback calls the module-lexical `getOutputBudget`, which a partial mock
+> of the export cannot see; both comments say so. The measured facts in the Design section stand
+> unchanged.
+
 ## Global Constraints
 
 - Engine pin: `opencode-ai` **1.18.15** / `@opencode-ai/sdk` **1.18.15** (`package-lock.json`). `node_modules` must match (`npm ci` if `node_modules/opencode-ai/package.json` disagrees).

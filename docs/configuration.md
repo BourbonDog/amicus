@@ -97,10 +97,10 @@ routes the catalog can clamp it to, whether an `OPENCODE_EXPERIMENTAL_OUTPUT_TOK
 yourself is being honoured or overridden, and a malformed value in either place — the engine falls
 back to 32,000 *silently* on those (measured), so the doctor row is where it surfaces.
 
-Four things worth knowing before you set it. Every number below was measured on the wire by
+Five things worth knowing before you set it. Every number below was measured on the wire by
 `scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
-so; the row ids refer to the two probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218 P1
-and PR 2).
+so; the row ids refer to the three probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218
+P1, PR 2 and PR 3).
 
 - **Above 32,000 it is the engine flag doing the work.** OpenCode computes
   `Math.min(limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX)` with the flag defaulting to
@@ -142,12 +142,31 @@ and PR 2).
   `compaction.reserved` config overrides both). A budget of 100,000 leaves a 131,072-context
   model 31,072 tokens for the prompt. `amicus doctor` warns when a budget takes at least half of
   any alias route's window.
+- **When a leg hits it, the run says so.** The engine records `finish: 'length'` on the leg's
+  assistant message whenever the provider stopped at the reservation (A, H1, L1–L4 — both provider
+  families). A leg that stopped there with **no answer text** — the whole reservation went to
+  reasoning, the #218 "Mode 2" rows (32,000 reasoning, 0 output, $0.63 billed) — now ends `error`
+  with a reason starting `OUTPUT_LENGTH:` that carries the engine's reasoning/output counts for the
+  leg and the budget in force; it used to end `complete` with an empty summary or, when the provider
+  streamed the reasoning, with its *thinking* promoted to the review (L2/L4). A leg that stopped
+  there **with** answer text keeps its review, and a council prints a `Note:` on the
+  `output-truncated` channel — informational, the exit code does not move. The counts are reported,
+  never decided on: on OpenAI-compatible routes the engine subtracts reasoning from completion
+  (L3: 8 = 40 − 32); on the direct Anthropic route it reports no split (L4: 24,000 output / 0
+  reasoning). Two limits: a leg whose hidden reasoning outlasts the no-output backstop window dies
+  under `NO_OUTPUT_BACKSTOP` first (the message has not finalized yet), and the Note is Stage-1
+  only — a judge, chair or debate leg cut at its reservation gets the death name but no Note.
+  Separately, L5 settles the catalog question PR 2 parked: a descriptor above the engine's own
+  ceiling is clamped to that ceiling with or without a thinking variant (70,000 + flag 100,000 →
+  64,000 on haiku), so a catalog row whose ceiling exceeds the engine's is harmless.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
 effort, which today's `--thinking` never delivers to the engine (PR 4 sends `variant` instead).
 Lowering the budget makes such a leg fail faster and cheaper; raising it gives the reasoning more
-room; neither makes it produce output.
+room; neither makes it produce output — but since #218 PR 3 the failure is at least *named*: the leg
+ends `error` with an `OUTPUT_LENGTH:` reason instead of `complete` with nothing (see
+[Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length)).
 
 ---
 

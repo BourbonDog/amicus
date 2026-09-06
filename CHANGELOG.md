@@ -46,6 +46,22 @@ All notable changes to Amicus are documented here. Format follows
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
   engine bump.
+- **The "Mode 2" death is named (#218 PR 3).** A leg whose provider stopped at the `max_tokens`
+  reservation before any answer text — the whole reservation spent on reasoning — now ends `error`
+  with a reason starting `OUTPUT_LENGTH:` that carries the engine's own reasoning/output counts for
+  the leg and the `outputBudget` in force, and the poll loop exits the moment the engine finalizes
+  such a message instead of waiting out the no-output backstop. The engine records `finish` on every
+  assistant message; it now rides every leg document (`metadata.json`, `run.json`, the wave doc), the
+  spend-ledger row (`finish`, present only when recorded) and solo session metadata. A review that
+  was cut at the reservation but still answered is kept and announced as a `Note:` on the new
+  `output-truncated` channel (`kind: "info"` — never a loss, never an exit-code change). Five probe
+  rows (L1–L5) measured the shapes: `finish: 'length'` on both provider families; reasoning
+  subtracted from completion on OpenAI-compatible routes but no split on direct Anthropic; a
+  `reasoning` part and no `text` part when the reasoning was visible; and a descriptor above the
+  engine's own ceiling clamped to that ceiling with no thinking variant in play. The probe's capture
+  server now answers with a per-case body and speaks the Anthropic messages SSE, so the direct rows
+  record the assistant message instead of an APIError; the full 37-case matrix is filed in the
+  BACKLOG.
 
 ### Changed
 
@@ -56,6 +72,13 @@ All notable changes to Amicus are documented here. Format follows
   `outputBudget: 8000` on 4.9.3 sees those rows reserve 8,000 after upgrading. A model neither
   catalog knows receives a raised budget as-is and may be refused by a provider that enforces its
   ceiling — loudly; `doctor`'s `output-budget` row names such routes.
+- **A length-stopped leg with no answer text is an error, not a completion (#218 PR 3).** On 4.9.3
+  such a leg ended `complete` with an empty summary (a council dropped it as "ended 'complete' with
+  no usable output"; `amicus start --no-ui` exited 0 with "No Output") or, when the provider streamed
+  its reasoning, `complete` with the *thinking* as the review — adjudicated as one. It now ends
+  `error` with the `OUTPUT_LENGTH:` reason: a council still retries the seat once and degrades if
+  the retry dies too; `start --no-ui` exits 1 with the reason. The ledger row for such a leg reads
+  `status: "error"` where it read `complete`.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
@@ -77,6 +100,10 @@ All notable changes to Amicus are documented here. Format follows
   the #218 PR 2 probe run caught it (a variant sent for the old id went silent, and its ceiling read
   `0/0`). The pin now names the dated id. Found and fixed in PR #231; the CI bench map already
   pinned `qwen3.8-27b` and is unchanged.
+- **`startServer` read `config.json` twice for one budget.** The per-model descriptor and the engine
+  flag each called `loadConfig()`; a config write between the two reads could hand the engine a
+  descriptor from one budget and a flag from another (bounded — the engine takes the smaller — but
+  split). One read now feeds both (#218 PR 3).
 
 ## [4.9.3] - 2026-08-28
 
