@@ -202,6 +202,20 @@ describe('#218 PR 3 — a leg whose provider stopped for length', () => {
     expect(r2.error).toContain('outputBudget is unset');
   });
 
+  it('with no budget, the reason names the ambient flag the server was started with (council #232 r3 B1)', async () => {
+    mockGetMessages.mockResolvedValue(finished());
+    mockStartServer.mockResolvedValue({
+      client: {},
+      server: {
+        url: 'http://127.0.0.1:1', close: mockServerClose, outputBudget: null, ambientOutputTokenFlag: '64000',
+      },
+    });
+    // Named mutant "AMBIENTNOTREAD": drop the `ambientFlag:` property at the
+    // formatOutputLengthReason call site — the default clause is read instead.
+    const r = await run();
+    expect(r.error).toContain('the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 the engine was started with governs');
+  });
+
   it('finish and tokens that land only on the usage-settle re-poll still name the death', async () => {
     // The loop exits on a finalized message that has not yet been stamped (time.completed set,
     // no finish, no tokens) via the stable-finished heuristic on promoted reasoning; the settle

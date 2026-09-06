@@ -104,17 +104,23 @@ describe('startServer sets the engine output flag around the synchronous spawn',
 
   it('with no budget, the env is untouched — an ambient flag the user exported reaches the spawn as-is', async () => {
     process.env[FLAG] = '64000';
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen).toEqual([{ atCall: '64000', afterFirstAwait: '64000' }]);
     expect(process.env[FLAG]).toBe('64000');
+    // The value that governed THIS spawn rides the handle beside the budget, so the
+    // death report names it rather than the engine's default (council #232 r3 B1).
+    expect(server.ambientOutputTokenFlag).toBe('64000'); // named mutant "AMBIENTNOTSTAMPED"
   });
 
   it('with a budget, an ambient flag is overridden for the spawn and restored afterwards', async () => {
     process.env[FLAG] = '64000';
     config.getOutputBudget.mockReturnValue(40000);
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen).toEqual([{ atCall: '40000', afterFirstAwait: '64000' }]);
     expect(process.env[FLAG]).toBe('64000');
+    // The budget overrode the ambient value for the spawn, so there is no ambient
+    // value to name — the budget clause is the whole story.
+    expect(server.ambientOutputTokenFlag).toBeNull();
   });
 
   it('a spawn failure still restores the env before the rejection is seen, and the error propagates', async () => {
@@ -131,5 +137,7 @@ describe('startServer sets the engine output flag around the synchronous spawn',
     // The handle carries the unset value, so the death report says "unset" rather
     // than naming a budget nothing reserved (council #232 r1 B3).
     expect(server.outputBudget).toBeNull();
+    // No ambient flag in this env either (beforeEach deletes it), so nothing to name.
+    expect(server.ambientOutputTokenFlag).toBeNull();
   });
 });

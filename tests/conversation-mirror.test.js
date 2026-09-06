@@ -83,6 +83,18 @@ describe('mirrorMessages', () => {
     expect(st.lastAssistantFinish).toBe('stop');
   });
 
+  test('an empty-string finish is recorded as none (council #232 r3 C1)', () => {
+    const st = createMirrorState();
+    const empty = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: '', tokens: { input: 5, output: 0 } }, parts: [] };
+    // Named mutant "EMPTYFINISH": revert to `msg.info.finish ?? null` — '' is recorded
+    // and every string guard downstream reads it as a finish.
+    mirrorMessages([empty], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBeNull();
+    st.lastAssistantFinish = 'length';
+    mirrorUsageOnly([empty], st);
+    expect(st.lastAssistantFinish).toBeNull();
+  });
+
   test('records whether the LAST assistant message carries answer text / reasoning, on both passes (council #232 r1 B2/D1)', () => {
     const st = createMirrorState();
     expect(st.lastAssistantHasText).toBe(false);

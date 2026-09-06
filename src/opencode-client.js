@@ -790,7 +790,7 @@ async function startServer(options = {}) {
   // fact: tests/opencode-client-sdk-spawn-timing.test.js drives the REAL SDK
   // against a fake engine on PATH. Engine-side canary: probe rows K6/K12/K13,
   // run in CI's keyless job by tests/probe-flag-canary.integration.test.js.
-  const { withOutputTokenFlag } = require('./utils/engine-output-flag');
+  const { withOutputTokenFlag, OUTPUT_TOKEN_FLAG } = require('./utils/engine-output-flag');
 
   // Measure the healthy path. The v4.5.2 timeout had to be sized from the
   // asymmetry of the failure (a slow start costs latency, a failed one costs a
@@ -798,6 +798,13 @@ async function startServer(options = {}) {
   // margin against the ceiling was unmeasurable on exactly the slow boxes that
   // needed it. Now it is one debug line, not an inference.
   const startedAt = Date.now();
+  // #218 PR 3 (council #232 r3 B1): with no budget the wrapper leaves an ambient
+  // OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX untouched (PR 2 ruling R2) and the
+  // engine honours it (probe C3/J2), so a death report must name THAT value, not
+  // the 32000 default. Read here, before the spawn, from the same env the wrapper
+  // reads; null whenever a budget is set (the wrapper overrides the flag then).
+  const ambientOutputTokenFlag = outputBudget === null && typeof process.env[OUTPUT_TOKEN_FLAG] === 'string'
+    ? process.env[OUTPUT_TOKEN_FLAG] : null;
   const sdkServer = await withOutputTokenFlag(outputBudget, () => createOpencodeServer(serverOptions));
   const { logger } = require('./utils/logger');
   logger.debug('OpenCode server started', {
@@ -816,6 +823,9 @@ async function startServer(options = {}) {
   // the finish, not whatever config.json says by then (headless.js ::
   // readOutputBudgetSafe reads it first). null = unset.
   server.outputBudget = outputBudget;
+  // Stamped beside the budget for the same reader (headless.js's death report).
+  // Named mutant "AMBIENTNOTSTAMPED" (tests/opencode-client-output-flag.test.js).
+  server.ambientOutputTokenFlag = ambientOutputTokenFlag;
 
   return { client, server };
 }

@@ -57,11 +57,11 @@ function createMirrorState() {
 function captureMsgUsage(msg, state) {
   // #218 PR 3: `finish` was observed beside tokens/cost on every probe L row, so
   // both mirror passes record it here; the last assistant message in the
-  // snapshot wins, and one still streaming (no finish yet) resets it to null.
+  // snapshot wins, and one still streaming (no finish yet) resets it to null; '' counts as none (council #232 r3 C1; mutant "EMPTYFINISH").
   // The two part flags are read off THIS message's parts, never off `output`
   // (council #232 r1 B2/D1). Named mutants "NOFINISH", "TEXTOFFOUTPUT"
   // (tests/conversation-mirror.test.js).
-  state.lastAssistantFinish = msg.info.finish ?? null;
+  state.lastAssistantFinish = (typeof msg.info.finish === 'string' && msg.info.finish.length > 0) ? msg.info.finish : null;
   const parts = Array.isArray(msg.parts) ? msg.parts : [];
   state.lastAssistantHasText = parts.some((p) => p && p.type === 'text' && typeof p.text === 'string' && p.text.trim().length > 0);
   state.lastAssistantHasReasoning = parts.some((p) => p && p.type === 'reasoning' && typeof p.text === 'string' && p.text.length > 0);

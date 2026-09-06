@@ -29,7 +29,7 @@
 > on the server handle (B3); `finalizeSession` and the resume/MCP error branches remove a prior
 > `finish` when the run recorded none (B1). Council #232 round 2: a cut review is marked in the
 > chair packet's review header (B1, pulled forward from the filed R4 item); the once-only retry
-> stays (B2, owner's decision); the output-truncated note's effect now says the chair-packet header carries the mark (Task 5's code blocks quote the earlier wording). The measured facts in the Design section stand unchanged.
+> stays (B2, owner's decision); the output-truncated note's effect now says the chair-packet header carries the mark (Task 5's code blocks quote the earlier wording). Council #232 round 3 (the last paid round; merged after this wave on the suite + the wave's refuters, the round-4 run cancelled): with no budget set the reason names the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` the engine was started with, stamped on the server handle beside the budget (B1); an empty-string `finish` is recorded as none (C1); the docs say a handle amicus did not start carries no spawn value (D3). Refuted: the retry (owner's decision, third raise), the role guard (both callers guard), Stage-2 Notes (filed), the tests' config read (hermetic config dir). The measured facts in the Design section stand unchanged.
 
 ## Global Constraints
 

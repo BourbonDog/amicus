@@ -39,6 +39,23 @@ describe('formatOutputLengthReason (#218 PR 3)', () => {
     expect(formatOutputLengthReason({ tokens, budget: 8000 })).toContain('; outputBudget is 8000 — raise');
     expect(formatOutputLengthReason({ tokens, budget: 1e21 })).toContain('; outputBudget is 1000000000000000000000 — raise');
   });
+  test('with no budget, an ambient plain-integer flag is named as what governs (council #232 r3 B1)', () => {
+    // Named mutant "AMBIENTIGNORED": drop the two ambient branches — the default clause prints instead.
+    expect(formatOutputLengthReason({ tokens, budget: null, ambientFlag: '64000' })).toContain(
+      '; outputBudget is unset — the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000 the engine was '
+      + "started with governs (each leg reserves min(64000, the ceiling the engine's catalog knows for it)) — raise");
+  });
+  test('a malformed ambient flag is named and the default clause follows', () => {
+    // Only a plain positive integer is measured to be honoured (probe D1/D2).
+    expect(formatOutputLengthReason({ tokens, budget: null, ambientFlag: '64000abc' })).toContain(
+      'outputBudget is unset and the ambient OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=64000abc the engine was '
+      + "started with is not a plain positive integer — the engine's 32000 default reservation governs");
+  });
+  test('an ambient flag beside a configured budget is not named — the budget overrode it', () => {
+    const s = formatOutputLengthReason({ tokens, budget: 8000, ambientFlag: '64000' });
+    expect(s).toContain('; outputBudget is 8000 — raise');
+    expect(s).not.toContain('ambient');
+  });
   test('an unreadable config is reported as such, never as "unset"', () => {
     expect(formatOutputLengthReason({ tokens, budget: undefined })).toContain('; outputBudget could not be read — raise');
   });

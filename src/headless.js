@@ -1537,6 +1537,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // Decided on the LAST message's own facts (council #232 r1 B2/D1): a tool
     // loop's earlier text or promoted reasoning is not this message's answer.
+    // The ambient flag rides the handle beside the budget (council #232 r3 B1); named mutant "AMBIENTNOTREAD" drops it here.
     const { isOutputLengthDeath, formatOutputLengthReason } = require('./utils/output-length');
     const finish = mirror.lastAssistantFinish;
     const reasoningOnly = mirror.lastAssistantHasReasoning && !mirror.lastAssistantHasText;
@@ -1544,6 +1545,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (outputLengthDeath && !sessionError) {
       sessionError = formatOutputLengthReason({
         tokens: usage.tokens, budget: readOutputBudgetSafe(server, options._readOutputBudget), reasoningOnly,
+        ambientFlag: server && typeof server.ambientOutputTokenFlag === 'string' ? server.ambientOutputTokenFlag : null,
       });
       logger.error('Leg stopped for length with no answer text', { taskId, error: sessionError });
     }

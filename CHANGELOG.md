@@ -50,12 +50,13 @@ All notable changes to Amicus are documented here. Format follows
   reservation before any answer text on the message it finalized — the whole reservation spent on
   reasoning; a tool loop's earlier text or promoted reasoning does not count — now ends `error`
   with a reason starting `OUTPUT_LENGTH:` that carries the engine's own reasoning/output counts for
-  the leg and the `outputBudget` in force, and the poll loop exits the moment the engine finalizes
-  such a message instead of waiting out the no-output backstop. The engine records `finish` on the
-  finalized assistant message (measured on both provider families for a length stop); it now rides
-  every leg document (`metadata.json`, `run.json`, the wave doc), the spend-ledger row (`finish`,
-  present only when recorded) and solo session metadata. A review that was cut at the reservation
-  but still answered is kept, announced as a `Note:` on the new `output-truncated` channel
+  the leg and the `outputBudget` in force (or the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`
+  the engine was started with, when no budget is set), and the poll loop exits the moment the engine
+  finalizes such a message instead of waiting out the no-output backstop. The engine records `finish`
+  on the finalized assistant message (measured on both provider families for a length stop); it now
+  rides every leg document (`metadata.json`, `run.json`, the wave doc), the spend-ledger row
+  (`finish`, present only when recorded) and solo session metadata. A review that was cut at the
+  reservation but still answered is kept, announced as a `Note:` on the new `output-truncated` channel
   (`kind: "info"` — never a loss, never an exit-code change), and marked as cut in its chair-packet
   header. Five probe rows (L1–L5) measured the shapes: `finish: 'length'` on both provider families;
   reasoning subtracted from completion on OpenAI-compatible routes but no split on direct Anthropic;
