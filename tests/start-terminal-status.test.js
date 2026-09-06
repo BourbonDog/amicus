@@ -156,4 +156,29 @@ describe('start.js terminal state classification', () => {
     expect(metadata.status).toBe('complete');
     expect('finish' in metadata).toBe(false);
   });
+
+  // #218 PR 4: variant/variantUnverified ride the same error branch as finish.
+  // Named mutant "SOLOERRORNOVARIANT" (delete the `meta.variant` / `meta.variantUnverified`
+  // lines from start.js's error branch).
+  it('an OUTPUT_LENGTH result carrying variant stamps it beside finish on the error branch (#218 PR 4)', async () => {
+    const { code, metadata } = await runWith({
+      completed: false, timedOut: false, aborted: false, summary: '', taskId: 'test07',
+      finish: 'length', variant: 'high', variantUnverified: true,
+      error: "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)",
+    });
+    expect(code).toBe(1);
+    expect(metadata.status).toBe('error');
+    expect(metadata.finish).toBe('length');
+    expect(metadata.variant).toBe('high'); // SOLOERRORNOVARIANT
+    expect(metadata.variantUnverified).toBe(true); // SOLOERRORNOVARIANT
+  });
+
+  it('a completed result carrying variant reaches metadata through finalizeSession', async () => {
+    const { metadata } = await runWith({
+      completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test08', variant: 'low',
+    });
+    expect(metadata.status).toBe('complete');
+    expect(metadata.variant).toBe('low');
+    expect('variantUnverified' in metadata).toBe(false);
+  });
 });

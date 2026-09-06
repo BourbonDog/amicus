@@ -56,6 +56,20 @@ describe('start --json (F4)', () => {
     expect(doc.sessionDir).toContain('feed0001');
   });
 
+  it('a solo --json run document carries variant when the result did (#218 PR 4)', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'JSON MODE SUMMARY', completed: true, timedOut: false, aborted: false,
+      taskId: 'x', toolCalls: [], exitCode: 0, variant: 'low',
+    });
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, modelInput: 'somealias', taskId: 'feed0006',
+    });
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(doc.status).toBe('complete');
+    expect(doc.variant).toBe('low');
+  });
+
   it('emits a parseable error document when the run errors', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false, error: 'model exploded', taskId: 'x',

@@ -251,7 +251,7 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
   // Named mutant "STALEFINISH": drop the `else { delete … }` from resume.js's
   // error branch / session-utils.js :: finalizeSession.
   it("a resumed run that errors with no finish REMOVES the prior attempt's (council #232 r1 B1)", async () => {
-    seedSession(projectDir, 'res0e2e4', { finish: 'length' });
+    seedSession(projectDir, 'res0e2e4', { finish: 'length', variant: 'low', variantUnverified: true });
     runHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false,
       taskId: 'res0e2e4', error: 'connection reset', usage,
@@ -263,6 +263,9 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
       SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e4')), 'utf-8'));
     expect(meta.status).toBe('error');
     expect('finish' in meta).toBe(false); // STALEFINISH
+    // #218 PR 4: variant/variantUnverified follow the same removal rule as finish.
+    expect('variant' in meta).toBe(false);
+    expect('variantUnverified' in meta).toBe(false);
   });
 
   it("a resumed run that completes with no finish also drops the prior attempt's (council #232 r1 B1)", async () => {
