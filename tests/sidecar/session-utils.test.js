@@ -237,6 +237,34 @@ describe('Session Utils', () => {
     });
   });
 
+  describe('finalizeSession opts.finish (#218 PR 3)', () => {
+    let sessDir;
+
+    beforeEach(() => {
+      detectConflicts.mockReturnValue([]);
+      sessDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'finalize-finish-'));
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
+    });
+
+    afterEach(() => {
+      fs.rmSync(sessDir, { recursive: true, force: true });
+    });
+
+    it('stamps metadata.finish when opts.finish is set', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', finish: 'length' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      expect(saved.finish).toBe('length');
+    });
+
+    it('carries no finish key when opts.finish is absent', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      expect('finish' in saved).toBe(false);
+    });
+  });
+
   describe('outputSummary', () => {
     it('wraps the summary in the untrusted_sidecar_output fence (B03)', () => {
       const spy = jest.spyOn(console, 'log').mockImplementation(() => {});

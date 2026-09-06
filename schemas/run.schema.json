@@ -24,6 +24,10 @@
     "usage": { "type": ["object", "null"] },
     "pack": { "type": "object" },
     "tag": { "type": "string" },
+    "finish": {
+      "type": "string",
+      "description": "#218 PR 3, optional. The engine's finish reason for the leg's last assistant message ('stop', 'length', 'tool-calls', …), copied verbatim from the assistant message's `finish`. EMIT-WHEN-SET like `ttftMs`: absent means the engine recorded none (the message never finalized, or an older engine). 'length' means the provider stopped at the max_tokens reservation — with answer text that is a cut review (announced as a Note on the `output-truncated` channel); without, the leg is status 'error' with an `OUTPUT_LENGTH:` reason."
+    },
     "ttftMs": {
       "type": "integer",
       "minimum": 0,

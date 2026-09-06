@@ -36,6 +36,7 @@ describe('appendSpend additive attribution fields (spec 7.1)', () => {
     expect('attempt' in row).toBe(false);
     expect('substitutedFor' in row).toBe(false);
     expect('retryOfWaveId' in row).toBe(false);
+    expect('finish' in row).toBe(false);
     expect(row.councilRunId).toBeNull();
     expect(row.gateway).toBeNull();
     expect(row.project).toBeNull();
@@ -64,6 +65,14 @@ describe('appendSpend additive attribution fields (spec 7.1)', () => {
     expect(row.attempt).toBe(1);
     expect(row.substitutedFor).toBe('opus');
     expect(row.retryOfWaveId).toBe('w0');
+  });
+
+  test('carries finish when provided, as a linkage-style field (#218 PR 3)', () => {
+    const dir = tmp();
+    appendSpend({ taskId: 't5', waveId: 'w1', model: 'kimi', mode: 'leg', usage, op: 'leg', status: 'error', finish: 'length' }, { dir });
+    const [row] = readSpendRows(dir);
+    expect(row.finish).toBe('length');
+    expect(row.status).toBe('error');
   });
 
   test('a null usage still no-ops (unchanged guarantee)', () => {

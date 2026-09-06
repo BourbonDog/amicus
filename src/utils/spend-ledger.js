@@ -62,11 +62,12 @@ const SPEND_LEDGER_FILE = 'spend-ledger.jsonl';
  * @param {number} [opts.attempt] fallback attempt count (omitted if absent)
  * @param {string} [opts.substitutedFor] substituted model (omitted if absent)
  * @param {string} [opts.retryOfWaveId] wave id being retried (omitted if absent)
+ * @param {string} [opts.finish] the leg's finish reason (omitted if absent) — #218 PR 3: 'length' on a row is the Mode 2 receipt
  * @param {{dir?:string}} [ctx] test seam — dir overrides getConfigDir()
  */
 function appendSpend({ taskId, waveId, model, mode, usage,
   op, status, councilRunId, councilName, project, gateway, tag,
-  attempt, substitutedFor, retryOfWaveId }, ctx = {}) {
+  attempt, substitutedFor, retryOfWaveId, finish }, ctx = {}) {
   if (!usage) { return; }
   try {
     const dir = ctx.dir || getConfigDir();
@@ -96,6 +97,7 @@ function appendSpend({ taskId, waveId, model, mode, usage,
     if (attempt !== undefined) { row.attempt = attempt; }
     if (substitutedFor !== undefined) { row.substitutedFor = substitutedFor; }
     if (retryOfWaveId !== undefined) { row.retryOfWaveId = retryOfWaveId; }
+    if (typeof finish === 'string') { row.finish = finish; }
     // v4.4.1 CA-2: a leg whose OWN cost is known but which spawned a child
     // session the walk could not price writes a PRICED row — so `unpricedRows`
     // never catches it and `amicus spend` reads as a complete measurement while

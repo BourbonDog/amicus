@@ -205,7 +205,7 @@ async function startSidecar(options) {
     logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
     // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
-    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status });
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish });
   }
 
   const { resolveUsage } = require('../utils/pricing');

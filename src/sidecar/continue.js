@@ -249,7 +249,7 @@ async function continueSidecar(options) {
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status });
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish });
   }
   // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).

@@ -62,9 +62,9 @@ function captureMsgUsage(msg, state) {
 }
 
 /**
- * USAGE-ONLY mirror pass (v4.4 B1). Captures `info.tokens`/`info.cost` from a
- * fresh getMessages() snapshot and NOTHING else — no appendLines, no
- * `state.output` growth, no progress updates, no pending-tool bookkeeping.
+ * USAGE-ONLY mirror pass (v4.4 B1). Captures `info.tokens`/`info.cost` — and, since #218 PR 3,
+ * the last assistant message's `finish` — from a fresh getMessages() snapshot and NOTHING else —
+ * no appendLines, no `state.output` growth, no progress updates, no pending-tool bookkeeping.
  *
  * This exists because the headless poll loop's fast-path exits (trailing fold
  * marker, SDK `idle`) break BEFORE OpenCode stamps usage at finalization, so a
@@ -73,7 +73,7 @@ function captureMsgUsage(msg, state) {
  * conversation.jsonl a second time; this function cannot, because it never
  * touches seenTextParts/output at all.
  * @param {Array} messages getMessages() snapshot
- * @param {object} state from createMirrorState() (only usageByMsg is mutated)
+ * @param {object} state from createMirrorState() (only usageByMsg and lastAssistantFinish are mutated)
  * @returns {number} count of messages whose usage was captured
  */
 function mirrorUsageOnly(messages, state) {
