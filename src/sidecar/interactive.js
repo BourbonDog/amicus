@@ -33,7 +33,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     };
   }
 
-  const { agent, isResume, conversation, mcp, reasoning, opencodeSessionId, client, foldNonce } = options;
+  const { agent, isResume, conversation, mcp, variant, opencodeSessionId, client, foldNonce } = options;
 
   // F6c: mirror headless's lifecycle stages (best-effort — a write failure must
   // never break the GUI) so the heartbeat/status never read "Starting up...".
@@ -93,7 +93,13 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
 
       // Always set agent — defaults to 'chat' when not specified
       promptOptions.agent = agentConfig.agent;
-      if (reasoning) { promptOptions.reasoning = reasoning; }
+      // #218 PR 4: the engine's `variant` field, validated in sendPrompt; the
+      // spawn-time budget rides the handle (PR 3). A refusal lands in the catch
+      // below as "Session setup failed: VARIANT_…" — nothing was sent.
+      if (variant) {
+        promptOptions.variant = variant;
+        promptOptions.outputBudget = Object.prototype.hasOwnProperty.call(server, 'outputBudget') ? server.outputBudget : undefined;
+      }
 
       await sendPromptAsync(ocClient, sessionId, promptOptions);
       progressStage('prompt_sent');

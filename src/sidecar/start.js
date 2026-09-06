@@ -125,7 +125,7 @@ async function startSidecar(options) {
     mcp, mcpConfig, clientType: client, noMcp, excludeMcp, projectDir: effectiveProject
   });
   const taskId = options.taskId || generateTaskId();
-  const reasoning = thinking ? { effort: thinking } : undefined;
+  const variant = thinking || undefined; // #218 PR 4: the level itself is the engine's `variant` field
   // 15b.3: one nonce per run, generated BEFORE prompt construction so the
   // SAME value can be baked into the prompt's instruction (buildPrompts) and
   // handed to the detector (runHeadless.options.nonce / the GUI fold writer
@@ -158,7 +158,7 @@ async function startSidecar(options) {
         result = await runHeadless(
           model, systemPrompt, userMessage, taskId, effectiveProject,
           timeout * 60 * 1000, agent || 'build',
-          { mcp: mcpServers, summaryLength, reasoning, port: opencodePort, nonce: foldNonce }
+          { mcp: mcpServers, summaryLength, variant, port: opencodePort, nonce: foldNonce }
         );
       } catch (err) {
         if (!json) { throw err; }
@@ -174,7 +174,7 @@ async function startSidecar(options) {
       logger.info('Launching interactive sidecar', { taskId, model, agent: effectiveAgent });
       result = await runInteractive(
         model, systemPrompt, userMessage, taskId, effectiveProject,
-        { agent, mcp: mcpServers, reasoning, client, windowPosition: position, foldNonce }
+        { agent, mcp: mcpServers, variant, client, windowPosition: position, foldNonce }
       );
       summary = result.summary || '';
       if (result.error) { logger.error('Interactive task error', { taskId, error: result.error }); }

@@ -587,6 +587,26 @@ describe('runFanout orchestrator', () => {
     expect('finish' in wave.legs[1]).toBe(false);
   });
 
+  // The leg DOCUMENT this asserts on is metadata.json — the hop `legPatch` owns.
+  // The wave doc's own legs are built by result-schema.js :: buildRunResult,
+  // which copies a whitelist off metadata (ttftMs, finish, pack, tag) and does
+  // not yet carry these two; that hop is not this change's.
+  it('#218 PR 4: a leg\'s variant and unverified flag reach the leg document', async () => {
+    // Named mutant "LEGVARIANTDROPPED": drop the two `legPatch` fields.
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), variant: 'low', variantUnverified: true }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // no variant asked for
+    await runFanout({ ...baseOpts(), waveId: 'var12345' });
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'var12345-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.variant).toBe('low');
+    expect(legMeta1.variantUnverified).toBe(true);
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'var12345-2', 'metadata.json'), 'utf-8'));
+    expect('variant' in legMeta2).toBe(false);
+    expect('variantUnverified' in legMeta2).toBe(false);
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))

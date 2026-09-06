@@ -663,7 +663,7 @@ describe('Headless Mode Runner', () => {
       }]);
     });
 
-    it('should pass reasoning parameter to sendPromptAsync when provided', async () => {
+    it('passes variant to sendPromptAsync when provided', async () => {
       await runHeadless(
         testModel,
         testSystemPrompt,
@@ -672,22 +672,22 @@ describe('Headless Mode Runner', () => {
         testProject,
         5000,
         'build',
-        { reasoning: { effort: 'low' } }
+        { variant: 'low' }
       );
 
       expect(mockSendPromptAsync).toHaveBeenCalledWith(
         expect.anything(),
         'session-123',
         expect.objectContaining({
-          reasoning: { effort: 'low' }
+          variant: 'low'
         })
       );
     });
 
-    it('should support all reasoning effort levels', async () => {
-      const effortLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none'];
+    it('supports all variant levels', async () => {
+      const effortLevels = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-      for (const effort of effortLevels) {
+      for (const variant of effortLevels) {
         mockSendPromptAsync.mockClear();
 
         await runHeadless(
@@ -698,20 +698,20 @@ describe('Headless Mode Runner', () => {
           testProject,
           5000,
           'build',
-          { reasoning: { effort } }
+          { variant }
         );
 
         expect(mockSendPromptAsync).toHaveBeenCalledWith(
           expect.anything(),
           'session-123',
           expect.objectContaining({
-            reasoning: { effort }
+            variant
           })
         );
       }
     }, 30000);
 
-    it('should not include reasoning when not provided in options', async () => {
+    it('does not include variant when not provided in options', async () => {
       await runHeadless(
         testModel,
         testSystemPrompt,
@@ -724,10 +724,10 @@ describe('Headless Mode Runner', () => {
       );
 
       const callArgs = mockSendPromptAsync.mock.calls[0][2];
-      expect(callArgs).not.toHaveProperty('reasoning');
+      expect(callArgs).not.toHaveProperty('variant');
     });
 
-    it('should combine reasoning with other options like mcp', async () => {
+    it('combines variant with other options like mcp', async () => {
       const mcpConfig = { 'my-server': { type: 'remote', url: 'https://example.com' } };
 
       await runHeadless(
@@ -738,14 +738,14 @@ describe('Headless Mode Runner', () => {
         testProject,
         5000,
         'build',
-        { mcp: mcpConfig, reasoning: { effort: 'high' } }
+        { mcp: mcpConfig, variant: 'high' }
       );
 
       expect(mockSendPromptAsync).toHaveBeenCalledWith(
         expect.anything(),
         'session-123',
         expect.objectContaining({
-          reasoning: { effort: 'high' }
+          variant: 'high'
         })
       );
 
