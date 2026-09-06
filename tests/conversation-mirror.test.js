@@ -83,22 +83,38 @@ describe('mirrorMessages', () => {
     expect(st.lastAssistantFinish).toBe('stop');
   });
 
-  test('promoting reasoning to output is flagged on the state (#218 PR 3)', () => {
+  test('records whether the LAST assistant message carries answer text / reasoning, on both passes (council #232 r1 B2/D1)', () => {
     const st = createMirrorState();
-    expect(st.promotedReasoning).toBe(false);
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:t', type: 'text', text: 'Let me look at the file.' }] };
+    const m2 = { info: { role: 'assistant', id: 'm2', time: { completed: 2 }, finish: 'length' }, parts: [{ id: 'm2:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1, m2], st, { now: NOW });
+    // Named mutant "TEXTOFFOUTPUT": derive lastAssistantHasText from state.output.length > 0 —
+    // m1's text is already in `output`, so this reads true.
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(true);
+    const m3 = { info: { role: 'assistant', id: 'm3', time: { completed: 3 }, finish: 'stop' }, parts: [{ id: 'm3:t', type: 'text', text: 'ok' }] };
+    mirrorMessages([m1, m2, m3], st, { now: NOW });
+    expect(st.lastAssistantHasText).toBe(true);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+    // Whitespace-only text is not an answer.
+    const blank = { info: { role: 'assistant', id: 'm4', time: { completed: 4 }, finish: 'length' }, parts: [{ id: 'm4:t', type: 'text', text: '  \n' }] };
+    mirrorMessages([m1, m2, m3, blank], st, { now: NOW });
+    expect(st.lastAssistantHasText).toBe(false);
+    // The usage-only pass records the same two facts.
+    mirrorUsageOnly([blank, m3], st);
+    expect(st.lastAssistantHasText).toBe(true);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+  });
+
+  test('a reasoning-only finished message is still promoted to output (#218 PR 3)', () => {
+    const st = createMirrorState();
     const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
     mirrorMessages([msg], st, { now: NOW });
     expect(st.output).toBe('thinking…');
-    // Named mutant "NOPROMOTEFLAG": drop the flag write in the promotion block.
-    expect(st.promotedReasoning).toBe(true);
-  });
-
-  test('a real text part never sets promotedReasoning', () => {
-    const st = createMirrorState();
-    const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }, { id: 'm1:t', type: 'text', text: 'Partial review' }] };
-    mirrorMessages([msg], st, { now: NOW });
-    expect(st.output).toBe('Partial review');
-    expect(st.promotedReasoning).toBe(false);
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(true);
   });
 
   test('captures model error from msg.info.error', () => {

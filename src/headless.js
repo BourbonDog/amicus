@@ -260,13 +260,18 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
 }
 
 /**
- * #218 PR 3: the configured budget for the OUTPUT_LENGTH reason string, or
- * `undefined` when config cannot be read -- the string then says so rather
- * than claiming "unset". `read` is a test seam (options._readOutputBudget).
+ * #218 PR 3: the budget for the OUTPUT_LENGTH reason string. The engine's own
+ * handle carries the value it was spawned with (opencode-client.js ::
+ * startServer, council #232 r1 B3) and wins; config is read only for a handle
+ * from outside amicus (a test seam or an older caller), and `undefined` when
+ * that read fails -- the string then says so rather than claiming "unset".
+ * `read` is a test seam (options._readOutputBudget).
+ * @param {{outputBudget?: number|null}} [server] the leg's server handle
  * @param {() => (number|null)} [read]
  * @returns {number|null|undefined}
  */
-function readOutputBudgetSafe(read) {
+function readOutputBudgetSafe(server, read) {
+  if (server && Object.prototype.hasOwnProperty.call(server, 'outputBudget')) { return server.outputBudget; }
   try { return (read || require('./utils/config').getOutputBudget)(); } catch { return undefined; }
 }
 
@@ -1133,16 +1138,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
         // #218 PR 3: the engine finalized the message with finish 'length' and
         // no answer text -- the Mode 2 death (probe row L1: hidden reasoning,
-        // no content part). Nothing more will arrive; every exit below requires
-        // output, so without this one the leg waits out the no-output backstop
-        // and dies under ITS name, which says "silence past the deadline" about
-        // a message the engine had already finished with a reason. Gated on
-        // 'length' only: the finalized message's finish is never a step-level
-        // 'tool-calls' (B4's measured evidence below: time.completed lands after
-        // the tool ends), and a 'stop' with no text is a different, unnamed death.
-        // Named mutant "NOEXIT" (tests/headless-output-length.test.js).
-        if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.output) {
-          logger.error('Assistant message finished for length with no output, exiting', { taskId, pollCount });
+        // no content part); decided on THAT message's parts, not on the
+        // session's accumulated output (council #232 r1 B2/D1). Nothing more
+        // will arrive; every exit below requires output, so without this one the
+        // leg waits out the no-output backstop and dies under ITS name, which
+        // says "silence past the deadline" about a message the engine had
+        // already finished with a reason. Gated on 'length' only: the finalized
+        // message's finish is never a step-level 'tool-calls' (B4's measured
+        // evidence below: time.completed lands after the tool ends), and a
+        // 'stop' with no text is a different, unnamed death. Named mutants
+        // (tests/headless-output-length.test.js): "NOEXIT" drops this exit,
+        // "SESSIONWIDE" tests `!mirror.output` here instead of the message flag.
+        if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.lastAssistantHasText) {
+          logger.error('Assistant message finished for length with no answer text, exiting', { taskId, pollCount });
           break;
         }
 
@@ -1515,12 +1523,16 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // (tests/headless-output-length.test.js): "ENGINEERRORLOST" drops the
     // `!sessionError` guard; "DEATHNOTFORCED" drops `|| outputLengthDeath` from
     // failedWithNoUsableOutput below.
+    //
+    // Decided on the LAST message's own facts (council #232 r1 B2/D1): a tool
+    // loop's earlier text or promoted reasoning is not this message's answer.
     const { isOutputLengthDeath, formatOutputLengthReason } = require('./utils/output-length');
     const finish = mirror.lastAssistantFinish;
-    const outputLengthDeath = isOutputLengthDeath({ finish, output: mirror.output, promotedReasoning: mirror.promotedReasoning });
+    const reasoningOnly = mirror.lastAssistantHasReasoning && !mirror.lastAssistantHasText;
+    const outputLengthDeath = isOutputLengthDeath({ finish, hasText: mirror.lastAssistantHasText });
     if (outputLengthDeath && !sessionError) {
       sessionError = formatOutputLengthReason({
-        tokens: usage.tokens, budget: readOutputBudgetSafe(options._readOutputBudget), promotedReasoning: mirror.promotedReasoning,
+        tokens: usage.tokens, budget: readOutputBudgetSafe(server, options._readOutputBudget), reasoningOnly,
       });
       logger.error('Leg stopped for length with no answer text', { taskId, error: sessionError });
     }

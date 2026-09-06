@@ -14,9 +14,10 @@
  * families; a reasoning/output token split on OpenAI-compatible routes
  * (L3: output = completion - reasoning) but NOT on the direct Anthropic route
  * (L4: everything is `output`, reasoning 0); and, with visible reasoning, a
- * `reasoning` part and no `text` part (L2/L4) -- exactly the shape
- * sidecar/conversation-mirror.js :: mirrorMessages promotes to `output`. No
- * row carries an engine error for the stop.
+ * `reasoning` part and no `text` part (L2/L4), which
+ * sidecar/conversation-mirror.js :: mirrorMessages promotes to `output` -- so
+ * `output` cannot be the test; the mirror records the last message's own facts
+ * and this module reads only those. No row carries an engine error for the stop.
  *
  * So the death is keyed on `finish` plus "no answer text arrived", never on a
  * token count; the counts are reported, not decided on. Pure: no I/O, no clock.
@@ -30,31 +31,34 @@ const { outputTokenFlagValue, ENGINE_DEFAULT_OUTPUT_TOKENS } = require('./engine
 const OUTPUT_LENGTH_PREFIX = 'OUTPUT_LENGTH:';
 
 /**
- * Is this leg the Mode 2 death? The provider stopped for length AND no answer
- * text arrived: nothing at all (L1), or only reasoning, which the mirror
- * promoted to `output` (L2/L4). Named mutants (tests/utils/output-length.test.js):
- * "NOTLENGTH" drops the finish check, "PROMOTEIGNORED" drops the promotion clause.
- * @param {{finish?: string|null, output?: string, promotedReasoning?: boolean}} leg
+ * Is this leg the Mode 2 death? The provider stopped for length AND the LAST
+ * assistant message carries no answer text: nothing at all (L1), or only
+ * reasoning (L2/L4). Decided per message, never on the session's accumulated
+ * output (council #232 r1 B2/D1). Named mutants (tests/utils/output-length.test.js):
+ * "NOTLENGTH" drops the finish check, "TEXTIGNORED" drops the text check.
+ * @param {{finish?: string|null, hasText?: boolean}} last the last assistant message's facts
  * @returns {boolean}
  */
-function isOutputLengthDeath({ finish, output, promotedReasoning }) {
-  return finish === 'length' && (!output || promotedReasoning === true);
+function isOutputLengthDeath({ finish, hasText }) {
+  return finish === 'length' && hasText !== true;
 }
 
 /**
  * The reason string. Every clause is an observation: `finish` and the two
  * counts are the engine's own record of the message; the budget clause is what
- * config holds (`null` = unset, `undefined` = could not be read). The remedy
- * names the one lever that exists today; PR 4 adds the effort lever. Named
- * mutant "BUDGETUNSET": always print the unset clause.
+ * the engine serving the leg was spawned with (`null` = unset, `undefined` =
+ * unknown: no handle value and config unreadable). The remedy names the one
+ * lever that exists today; PR 4 adds the effort lever. Named mutant
+ * "BUDGETUNSET": always print the unset clause.
  * @param {{tokens?: {reasoning?: number, output?: number}|null,
- *   budget?: number|null, promotedReasoning?: boolean}} args
+ *   budget?: number|null, reasoningOnly?: boolean}} args `reasoningOnly` = the
+ *   message carried reasoning parts and no text -- L2/L4
  * @returns {string}
  */
-function formatOutputLengthReason({ tokens, budget, promotedReasoning }) {
+function formatOutputLengthReason({ tokens, budget, reasoningOnly }) {
   const t = tokens || {};
   const count = (n) => (Number.isFinite(n) ? n : 0);
-  const streamed = promotedReasoning
+  const streamed = reasoningOnly
     ? 'only reasoning was streamed, no answer text'
     : 'no answer text arrived';
   const knob = budget === undefined

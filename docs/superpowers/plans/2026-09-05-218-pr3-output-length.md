@@ -22,7 +22,12 @@
 > `finish` on the error branches of `start`/`continue`/`resume` and on the solo ledger rows — the
 > branch an OUTPUT_LENGTH death takes; R5 is corrected — the retry pass is unchanged, but making the
 > promoted-thinking shape an error extends the once-only retry to a leg 4.9.3 counted as a review,
-> and the CHANGELOG says so. The measured facts in the Design section stand
+> and the CHANGELOG says so. Council #232 round 1: the death is decided on the LAST assistant
+> message's own facts (`lastAssistantHasText` / `lastAssistantHasReasoning` on the mirror;
+> `isOutputLengthDeath({ finish, hasText })`), never on the session's accumulated output or a
+> sticky promotion flag (B2/D1); the reason names the budget the engine was spawned with, carried
+> on the server handle (B3); `finalizeSession` and the resume/MCP error branches remove a prior
+> `finish` when the run recorded none (B1). The measured facts in the Design section stand
 > unchanged.
 
 ## Global Constraints

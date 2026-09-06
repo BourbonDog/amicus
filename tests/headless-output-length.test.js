@@ -55,6 +55,15 @@ const finished = ({ parts = [], tokens = { input: 5, output: 0, reasoning: 32000
   info: { role: 'assistant', id: 'm1', time: { created: 1, completed: 2 }, finish, tokens, cost: 0.63, ...(error ? { error } : {}) },
   parts,
 }];
+/**
+ * One assistant message in a MULTI-message leg, as a tool loop leaves them:
+ * `m1` finalized earlier, `m2` last. Same finalized shape as `finished` above,
+ * with the id and the token block per message so the leg's totals are the sum.
+ */
+const msg = (id, { parts = [], finish = 'stop', tokens = { input: 5, output: 1, reasoning: 0, cache: CACHE }, completed = true } = {}) => ({
+  info: { role: 'assistant', id, time: completed ? { created: 1, completed: 2 } : { created: 1 }, finish, tokens, cost: 0.01 },
+  parts,
+});
 const OPTS = { nonce: 'testnonce1234567', pollIntervalMs: 5, stableFinishedPolls: 1, stableIdlePolls: 2, usageSettlePolls: 0, noOutputBackstopMs: 1500 };
 const run = (opts = {}) => runHeadless('openrouter/moonshotai/kimi-k3', 'sys', 'user', 'task1234', '/proj', 60000, 'build', { ...OPTS, ...opts });
 
@@ -128,6 +137,68 @@ describe('#218 PR 3 — a leg whose provider stopped for length', () => {
     expect(r.error).toContain('; outputBudget is 8000 — raise');
     const r2 = await run({ _readOutputBudget: () => { throw new Error('config unreadable'); } });
     expect(r2.error).toContain('; outputBudget could not be read — raise');
+  });
+
+  it('an earlier reasoning-only message that was promoted does not condemn a later length-stopped message WITH answer text (council #232 r1 B2/D1)', async () => {
+    const m1 = msg('m1', { parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] });
+    const m2 = msg('m2', {
+      parts: [{ id: 'm2:t', type: 'text', text: 'Partial review' }],
+      finish: 'length', tokens: { input: 5, output: 8, reasoning: 32, cache: CACHE },
+    });
+    mockGetMessages.mockResolvedValueOnce([m1]).mockResolvedValue([m1, m2]);
+    const r = await run();
+    // Named mutant "STICKYPROMOTION": decide on the session-wide promotion flag
+    // (`hasText: !!mirror.output && !mirror.promotedReasoning`) — m1's reasoning was
+    // promoted on the first poll, so the death is named on a message that answered
+    // and this reads completed:false.
+    expect(r.completed).toBe(true);
+    expect(r.error).toBeUndefined();
+    expect(r.finish).toBe('length');
+    expect(r.summary).toContain('Partial review');
+  });
+
+  it('an earlier message with text does not hide a final length stop with none: the death is named (council #232 r1 B2)', async () => {
+    const m1 = msg('m1', { parts: [{ id: 'm1:t', type: 'text', text: 'Let me look at the file.' }] });
+    const m2 = msg('m2', { finish: 'length', tokens: { input: 5, output: 0, reasoning: 32000, cache: CACHE } });
+    mockGetMessages.mockResolvedValue([m1, m2]);
+    const r = await run();
+    // Named mutant "SESSIONWIDE": test `!mirror.output` instead of the message flag —
+    // m1's text is in `output`, so the leg completes and this reads completed:true.
+    expect(r.completed).toBe(false);
+    expect(r.error.startsWith('OUTPUT_LENGTH:')).toBe(true);
+    // The counts are the leg's totals, summed per message: m1 spent 1 output token
+    // on its text, m2 spent 32000 reasoning tokens and produced none.
+    expect(r.error).toContain('no answer text arrived — 32000 reasoning / 1 output tokens');
+    expect(r.finish).toBe('length');
+  });
+
+  it('reasoning on the last message and no text says only reasoning was streamed; text on it never does', async () => {
+    mockGetMessages.mockResolvedValue([msg('m1', {
+      parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }],
+      finish: 'length', tokens: { input: 5, output: 0, reasoning: 32000, cache: CACHE },
+    })]);
+    const r1 = await run();
+    expect(r1.completed).toBe(false);
+    expect(r1.error).toContain('only reasoning was streamed');
+    mockGetMessages.mockResolvedValue([msg('m2', {
+      parts: [{ id: 'm2:r', type: 'reasoning', text: 'thinking…' }, { id: 'm2:t', type: 'text', text: 'Partial review' }],
+      finish: 'length', tokens: { input: 5, output: 8, reasoning: 32, cache: CACHE },
+    })]);
+    const r2 = await run();
+    expect(r2.completed).toBe(true);
+    expect(r2.error).toBeUndefined();
+  });
+
+  it('the reason names the budget the server was SPAWNED with, not config at death (council #232 r1 B3)', async () => {
+    mockGetMessages.mockResolvedValue(finished());
+    mockStartServer.mockResolvedValue({ client: {}, server: { url: 'http://127.0.0.1:1', close: mockServerClose, outputBudget: 12000 } });
+    // Named mutant "CONFIGATDEATH": drop the handle branch from readOutputBudgetSafe —
+    // the seam's 8000 is named instead of the 12000 the engine reserved.
+    const r = await run({ _readOutputBudget: () => 8000 });
+    expect(r.error).toContain('; outputBudget is 12000 — raise');
+    mockStartServer.mockResolvedValue({ client: {}, server: { url: 'http://127.0.0.1:1', close: mockServerClose, outputBudget: null } });
+    const r2 = await run({ _readOutputBudget: () => 8000 });
+    expect(r2.error).toContain('outputBudget is unset');
   });
 
   it('finish and tokens that land only on the usage-settle re-poll still name the death', async () => {

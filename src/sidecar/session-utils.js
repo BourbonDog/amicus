@@ -70,7 +70,7 @@ function saveInitialContext(sessionDir, systemPrompt, userMessage) {
   fs.writeFileSync(SessionPaths.contextFile(sessionDir), content, { mode: 0o600 });
 }
 
-/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set. */
+/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
 function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
 
@@ -102,7 +102,7 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   // summary must never silently default to 'complete' — that hid errored/empty
   // shared-server runs behind a 0-byte summary and a false success.
   const hasSummary = typeof summary === 'string' && summary.trim().length > 0;
-  if (typeof opts.finish === 'string') { metadata.finish = opts.finish; }
+  if (typeof opts.finish === 'string') { metadata.finish = opts.finish; } else { delete metadata.finish; }
   metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });

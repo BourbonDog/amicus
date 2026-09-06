@@ -3,21 +3,21 @@
 const { OUTPUT_LENGTH_PREFIX, isOutputLengthDeath, formatOutputLengthReason } = require('../../src/utils/output-length');
 
 describe('isOutputLengthDeath (#218 PR 3)', () => {
-  test("finish 'length' with no output at all is the death (L1 shape)", () => {
-    expect(isOutputLengthDeath({ finish: 'length', output: '', promotedReasoning: false })).toBe(true);
+  test("finish 'length' with no answer text on that message is the death (L1/L2/L4 shapes)", () => {
+    expect(isOutputLengthDeath({ finish: 'length', hasText: false })).toBe(true);
   });
-  test("finish 'length' with output PROMOTED from reasoning is the death (L2/L4 shape)", () => {
-    // Named mutant "PROMOTEIGNORED": drop the promotedReasoning clause — this reads false.
-    expect(isOutputLengthDeath({ finish: 'length', output: 'thinking…', promotedReasoning: true })).toBe(true);
+  test("finish 'length' with answer text on that message is NOT the death — a cut review (L3)", () => {
+    // Named mutant "TEXTIGNORED": drop the hasText check — this reads true.
+    expect(isOutputLengthDeath({ finish: 'length', hasText: true })).toBe(false);
   });
-  test("finish 'length' with real answer text is NOT the death — a cut review", () => {
-    expect(isOutputLengthDeath({ finish: 'length', output: 'Partial review', promotedReasoning: false })).toBe(false);
+  test('no answer text with any other finish is not this death', () => {
+    // Named mutant "NOTLENGTH": drop the finish check — 'stop' with no text reads true.
+    expect(isOutputLengthDeath({ finish: 'stop', hasText: false })).toBe(false);
+    expect(isOutputLengthDeath({ finish: null, hasText: false })).toBe(false);
+    expect(isOutputLengthDeath({ finish: undefined, hasText: false })).toBe(false);
   });
-  test('no output with any other finish is not this death', () => {
-    // Named mutant "NOTLENGTH": drop the finish check — 'stop' with no output reads true.
-    expect(isOutputLengthDeath({ finish: 'stop', output: '', promotedReasoning: false })).toBe(false);
-    expect(isOutputLengthDeath({ finish: null, output: '', promotedReasoning: false })).toBe(false);
-    expect(isOutputLengthDeath({ finish: undefined, output: '' })).toBe(false);
+  test('an unrecorded hasText is not text: a message with no parts is the death', () => {
+    expect(isOutputLengthDeath({ finish: 'length' })).toBe(true);
   });
 });
 
@@ -25,13 +25,13 @@ describe('formatOutputLengthReason (#218 PR 3)', () => {
   const tokens = { input: 5, output: 0, reasoning: 32000 };
 
   test('the ledger shape, budget unset: prefix, finish, counts, the engine default, the remedy', () => {
-    expect(formatOutputLengthReason({ tokens, budget: null, promotedReasoning: false })).toBe(
+    expect(formatOutputLengthReason({ tokens, budget: null, reasoningOnly: false })).toBe(
       "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — "
       + "32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — "
       + 'raise outputBudget in config.json (docs/configuration.md, Output budget)');
   });
-  test('promoted reasoning says so', () => {
-    expect(formatOutputLengthReason({ tokens, budget: null, promotedReasoning: true }))
+  test('a reasoning-only message says so', () => {
+    expect(formatOutputLengthReason({ tokens, budget: null, reasoningOnly: true }))
       .toContain('and only reasoning was streamed, no answer text — 32000 reasoning / 0 output tokens');
   });
   test('a configured budget is named as plain digits', () => {

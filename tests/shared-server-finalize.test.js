@@ -89,6 +89,15 @@ describe('finalizeHeadlessResult (shared-server path)', () => {
     expect(m.reason).toMatch(/^OUTPUT_LENGTH:/);
     expect(m.finish).toBe('length');
   });
+
+  it('an error run with no finish REMOVES a prior one from metadata (council #232 r1 B1)', () => {
+    const sdir = tmpSession({ finish: 'length' });
+    finalizeHeadlessResult(sdir, { completed: false, error: 'connection reset' }, os.tmpdir(), readMeta(sdir));
+    const m = readMeta(sdir);
+    expect(m.status).toBe('error');
+    // Named mutant "STALEFINISH": drop the `else { delete metadata.finish; }`.
+    expect('finish' in m).toBe(false);
+  });
 });
 
 describe('finalizeSession defense-in-depth guard (#36)', () => {

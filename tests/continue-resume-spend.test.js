@@ -244,6 +244,40 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(rows[0].status).toBe('error');
     expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
   });
+
+  // Council #232 r1 B1: a resume REUSES the session's own metadata.json, so a
+  // finish stamped by the previous attempt is still on the object resume.js
+  // writes back. When this attempt records none, it must be removed.
+  // Named mutant "STALEFINISH": drop the `else { delete … }` from resume.js's
+  // error branch / session-utils.js :: finalizeSession.
+  it("a resumed run that errors with no finish REMOVES the prior attempt's (council #232 r1 B1)", async () => {
+    seedSession(projectDir, 'res0e2e4', { finish: 'length' });
+    runHeadless.mockResolvedValue({
+      summary: '', completed: false, timedOut: false, aborted: false,
+      taskId: 'res0e2e4', error: 'connection reset', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e4', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e4')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect('finish' in meta).toBe(false); // STALEFINISH
+  });
+
+  it("a resumed run that completes with no finish also drops the prior attempt's (council #232 r1 B1)", async () => {
+    seedSession(projectDir, 'res0e2e5', { finish: 'length' });
+    runHeadless.mockResolvedValue({
+      summary: 'resumed', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e5', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e5', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e5')), 'utf-8'));
+    expect(meta.status).toBe('complete');
+    expect('finish' in meta).toBe(false); // STALEFINISH
+  });
 });
 
 // v4.7.1 Task 7 (R-C): `continue`/`resume` must inherit the parent session's

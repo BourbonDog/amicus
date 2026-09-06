@@ -263,6 +263,14 @@ describe('Session Utils', () => {
       const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
       expect('finish' in saved).toBe(false);
     });
+
+    it('REMOVES a prior finish when opts.finish is absent — a resumed run reuses the same metadata (council #232 r1 B1)', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [], finish: 'length' };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      // Named mutant "STALEFINISH": drop the `else { delete metadata.finish; }` — reads 'length'.
+      expect('finish' in saved).toBe(false);
+    });
   });
 
   describe('outputSummary', () => {

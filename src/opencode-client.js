@@ -811,6 +811,11 @@ async function startServer(options = {}) {
   // findListenerPid may return null if the port isn't bound yet (startup race);
   // in that case close() degrades to SIGTERM-only, which is acceptable best-effort.
   const server = buildServerHandle(sdkServer);
+  // #218 PR 3 (council #232 r1 B3): the budget this engine was SPAWNED with
+  // rides its handle, so a death report names the reservation that produced
+  // the finish, not whatever config.json says by then (headless.js ::
+  // readOutputBudgetSafe reads it first). null = unset.
+  server.outputBudget = outputBudget;
 
   return { client, server };
 }

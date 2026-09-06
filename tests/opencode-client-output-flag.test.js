@@ -85,7 +85,10 @@ describe('startServer sets the engine output flag around the synchronous spawn',
   it('reads config ONCE and hands the same budget to the descriptor and the flag (#218 PR 3)', async () => {
     const spy = jest.spyOn(config, 'buildProviderModels');
     config.getOutputBudget.mockReturnValue(40000);
-    await startServer(OK);
+    const { server } = await startServer(OK);
+    // #218 PR 3 (council #232 r1 B3): the same one read also rides the handle, so a
+    // death report names the reservation this engine was spawned with.
+    expect(server.outputBudget).toBe(40000);
     // toHaveBeenCalledTimes(1) pins startServer's own explicit read through the
     // mocked export — its single call to config.getOutputBudget. It cannot see
     // a call buildProviderModels makes internally, because that call reaches
@@ -123,7 +126,10 @@ describe('startServer sets the engine output flag around the synchronous spawn',
 
   it('a malformed budget sets nothing (the engine would fall back to 32000 silently)', async () => {
     config.getOutputBudget.mockReturnValue(null); // normalizeOutputBudget already rejected it
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen[0].atCall).toBeUndefined();
+    // The handle carries the unset value, so the death report says "unset" rather
+    // than naming a budget nothing reserved (council #232 r1 B3).
+    expect(server.outputBudget).toBeNull();
   });
 });

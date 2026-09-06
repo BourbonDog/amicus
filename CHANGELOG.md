@@ -47,7 +47,8 @@ All notable changes to Amicus are documented here. Format follows
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
   engine bump.
 - **The "Mode 2" death is named (#218 PR 3).** A leg whose provider stopped at the `max_tokens`
-  reservation before any answer text — the whole reservation spent on reasoning — now ends `error`
+  reservation before any answer text on the message it finalized — the whole reservation spent on
+  reasoning; a tool loop's earlier text or promoted reasoning does not count — now ends `error`
   with a reason starting `OUTPUT_LENGTH:` that carries the engine's own reasoning/output counts for
   the leg and the `outputBudget` in force, and the poll loop exits the moment the engine finalizes
   such a message instead of waiting out the no-output backstop. The engine records `finish` on the

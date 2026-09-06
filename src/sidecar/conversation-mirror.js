@@ -34,11 +34,16 @@ function createMirrorState() {
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
     reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
-    // #218 PR 3: the LAST assistant message's `finish` (the engine stamps it at
-    // finalization, beside tokens/cost) and whether `output` was promoted from
-    // reasoning parts -- together the death test in utils/output-length.js.
+    // #218 PR 3: three facts about the LAST assistant message in the snapshot
+    // -- its `finish` (stamped at finalization, beside tokens/cost), whether it
+    // carries answer text, whether it carries reasoning -- the whole input of
+    // the death test in utils/output-length.js. Per MESSAGE on purpose: `output`
+    // above accumulates across a tool loop's messages and would let earlier
+    // text hide a final length stop, or earlier promoted reasoning condemn a
+    // later message that answered (council #232 r1 B2/D1).
     lastAssistantFinish: null,
-    promotedReasoning: false,
+    lastAssistantHasText: false,
+    lastAssistantHasReasoning: false,
   };
 }
 
@@ -52,8 +57,13 @@ function captureMsgUsage(msg, state) {
   // #218 PR 3: `finish` was observed beside tokens/cost on every probe L row, so
   // both mirror passes record it here; the last assistant message in the
   // snapshot wins, and one still streaming (no finish yet) resets it to null.
-  // Named mutant "NOFINISH" (tests/conversation-mirror.test.js).
+  // The two part flags are read off THIS message's parts, never off `output`
+  // (council #232 r1 B2/D1). Named mutants "NOFINISH", "TEXTOFFOUTPUT"
+  // (tests/conversation-mirror.test.js).
   state.lastAssistantFinish = msg.info.finish ?? null;
+  const parts = Array.isArray(msg.parts) ? msg.parts : [];
+  state.lastAssistantHasText = parts.some((p) => p && p.type === 'text' && typeof p.text === 'string' && p.text.trim().length > 0);
+  state.lastAssistantHasReasoning = parts.some((p) => p && p.type === 'reasoning' && typeof p.text === 'string' && p.text.length > 0);
   if (msg.info.tokens || typeof msg.info.cost === 'number') {
     state.usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
     return true;
@@ -73,7 +83,7 @@ function captureMsgUsage(msg, state) {
  * conversation.jsonl a second time; this function cannot, because it never
  * touches seenTextParts/output at all.
  * @param {Array} messages getMessages() snapshot
- * @param {object} state from createMirrorState() (only usageByMsg and lastAssistantFinish are mutated)
+ * @param {object} state from createMirrorState() (only usageByMsg and the three lastAssistant* facts are mutated)
  * @returns {number} count of messages whose usage was captured
  */
 function mirrorUsageOnly(messages, state) {
@@ -259,7 +269,6 @@ function mirrorMessages(messages, state, opts = {}) {
   // completion gates fire and the answer isn't lost as "No Output". Runs once — once
   // `output` is non-empty this is skipped on subsequent polls.
   if (assistantFinished && !state.output && state.reasoningOutput) {
-    state.promotedReasoning = true; // #218 PR 3: named mutant "NOPROMOTEFLAG"
     state.output = state.reasoningOutput;
     appendLines.push({ role: 'assistant', content: state.reasoningOutput, timestamp: now() });
   }
