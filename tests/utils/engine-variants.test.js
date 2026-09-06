@@ -121,11 +121,13 @@ describe('readModelDeclaration', () => {
   };
   const KNOWN = [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 1048576, output: 943718 }, variants: KIMI.variants } } }];
   const COLD = [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 0, output: 0 }, variants: {} } } }];
+  const NO_CATALOG = { readCache: () => null };
 
   it('reads a known model once (no wait)', async () => {
     const client = clientOf([KNOWN]);
-    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 1, sleep: async () => {} });
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 1, sleep: async () => {}, ...NO_CATALOG });
     expect(d.known).toBe(true);
+    expect(d.limitOutput).toBe(943718);
     expect(d.ceiling).toBe(943718);
     expect(Object.keys(d.variants)).toEqual(['low', 'high', 'max']);
     expect(client.config.providers).toHaveBeenCalledTimes(1);
@@ -133,14 +135,14 @@ describe('readModelDeclaration', () => {
   it('waits for the startup refresh: unknown on the first read, known on the third (M0 -> M12)', async () => {
     // Named mutant "NOWAIT": return the first read whatever it says — `known` is false and providers() was called once.
     const client = clientOf([COLD, COLD, KNOWN]);
-    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 1, sleep: async () => {} });
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 1, sleep: async () => {}, ...NO_CATALOG });
     expect(d.known).toBe(true);
     expect(client.config.providers).toHaveBeenCalledTimes(3);
   });
   it('gives up at the deadline and reports the wait', async () => {
     let now = 0;
     const client = clientOf([COLD]);
-    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now });
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now, ...NO_CATALOG });
     expect(d.known).toBe(false);
     expect(d.variants).toEqual({});
     expect(d.ceiling).toBeNull();
@@ -148,13 +150,37 @@ describe('readModelDeclaration', () => {
   });
   it('a model or provider missing from the dump is unknown, not a throw', async () => {
     const client = clientOf([[{ id: 'anthropic', models: {} }]]);
-    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 0 });
-    expect(d).toMatchObject({ known: false, variants: {}, ceiling: null });
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
+    expect(d).toMatchObject({ known: false, variants: {}, limitOutput: null, ceiling: null });
   });
   it('splits the id at the FIRST slash so an OpenRouter vendor path stays whole', async () => {
     // Named mutant "LASTSLASH": split at lastIndexOf('/') — the model id becomes 'kimi-k3' and is never found.
     const client = clientOf([KNOWN]);
-    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 0 });
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
     expect(d.known).toBe(true);
+  });
+  it("judges the fit against the catalog's ceiling when the dump echoes a budget-derived descriptor (M3)", async () => {
+    // Named mutant "ECHOEDCEILING": `ceiling: d.limitOutput` unconditionally — reads 24000 here.
+    const ECHO = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 24000 }, variants: HAIKU.variants } } }];
+    const client = clientOf([ECHO]);
+    const d = await readModelDeclaration(client, 'anthropic/claude-haiku-4-5', {
+      waitMs: 0, readCache: () => ({ models: [{ id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 }] }),
+    });
+    expect(d.limitOutput).toBe(24000);
+    expect(d.ceiling).toBe(64000);
+    expect(checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: d, outputBudget: 24000 }).code).toBe('VARIANT_OVER_BUDGET');
+  });
+  it("uses the dump's own value when the catalog does not know the model — a bare descriptor is the engine's ceiling (K5/K12)", async () => {
+    const BARE = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 64000 }, variants: HAIKU.variants } } }];
+    const d = await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', {
+      waitMs: 0, readCache: () => ({ models: [{ id: 'openrouter/moonshotai/kimi-k3', contextLength: 1048576, maxOutputTokens: 943718 }] }),
+    });
+    expect(d.ceiling).toBe(64000);
+  });
+  it('an explicit catalogCeiling seam wins; a throwing or absent catalog falls back to the dump', async () => {
+    const BARE = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 64000 }, variants: HAIKU.variants } } }];
+    expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, catalogCeiling: 100000 })).ceiling).toBe(100000);
+    expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, catalogCeiling: null })).ceiling).toBe(64000);
+    expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, readCache: () => { throw new Error('corrupt'); } })).ceiling).toBe(64000);
   });
 });

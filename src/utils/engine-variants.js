@@ -27,6 +27,7 @@
  *     config.json into its cwd (M3/M4/M11). The exact pre-spawn fit (descriptor
  *     = budget − N, proven M17) is filed, not built; this module REFUSES the
  *     over-budget shape with the numbers instead (BACKLOG C1's second clause).
+ *   - /config/providers echoes a descriptor amicus wrote (M3: a 24000 limit.output reads back as 24000), so the ceiling a fit judges against comes from amicus's own catalog when it knows the model and from the dump only for a bare descriptor.
  */
 'use strict';
 
@@ -52,7 +53,8 @@ class VariantRefusedError extends Error {
  * One read of `/config/providers` for one model. `known` is `limit.context > 0`:
  * a model amicus registered that the engine's catalogue lacks reads 0/0 (J1, M0);
  * a provider or model missing from the dump altogether is unknown too.
- * @returns {Promise<{known: boolean, variants: object, ceiling: number|null}>}
+ * `limitOutput` is whatever the dump says — the engine's own ceiling for a bare descriptor, and the ECHO of a descriptor amicus wrote otherwise (M3).
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null}>}
  */
 async function readDeclarationOnce(client, providerID, modelID) {
   const r = await client.config.providers();
@@ -63,8 +65,25 @@ async function readDeclarationOnce(client, providerID, modelID) {
   return {
     known: positiveCount(limit.context) !== null,
     variants: (m && m.variants && typeof m.variants === 'object') ? m.variants : {},
-    ceiling: positiveCount(limit.output),
+    limitOutput: positiveCount(limit.output),
   };
+}
+
+/**
+ * The ceiling amicus's own catalog knows for `model` — the number
+ * config.js :: buildProviderModels clamps a budget-derived descriptor to — or
+ * null when it knows none (the descriptor was then bare).
+ * @param {string} model executable id
+ * @param {Function} [readCache] test seam for model-catalog.js :: readCache
+ * @returns {number|null}
+ */
+function catalogCeilingFor(model, readCache) {
+  try {
+    const { buildLimitLookup } = require('./model-output-limit');
+    const cache = (readCache || require('./model-catalog').readCache)();
+    const row = buildLimitLookup(cache && cache.models).get(model);
+    return row ? positiveCount(row.maxOutputTokens) : null;
+  } catch { return null; }
 }
 
 /**
@@ -73,8 +92,8 @@ async function readDeclarationOnce(client, providerID, modelID) {
  * the catalogue to know it. Named mutant "NOWAIT" (tests/utils/engine-variants.test.js).
  * @param {object} client SDK client
  * @param {string} model executable id
- * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function}} [opts] test seams
- * @returns {Promise<{known: boolean, variants: object, ceiling: number|null, waitedMs: number}>}
+ * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, ceiling: number|null, waitedMs: number}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`.
  */
 async function readModelDeclaration(client, model, opts = {}) {
   const idx = typeof model === 'string' ? model.indexOf('/') : -1;
@@ -90,7 +109,17 @@ async function readModelDeclaration(client, model, opts = {}) {
     await sleep(pollMs);
     d = await readDeclarationOnce(client, providerID, modelID);
   }
-  return { ...d, waitedMs: now() - start };
+  // #218 PR 4 (found by probe row M20 in Task 2): /config/providers ECHOES the
+  // descriptor amicus wrote -- a budget-derived limit.output 24000 reads back as
+  // 24000 (M3's dump-after) -- so with a budget in force the dump cannot tell
+  // the model's ceiling. The fit judges against the ceiling amicus clamped that
+  // descriptor to (its own catalog's maxOutputTokens, the same number
+  // config.js :: buildProviderModels used) and against the dump's value only
+  // when the catalog has none: then the descriptor was bare and the dump is the
+  // engine's own ceiling (K5/K12). Named mutant "ECHOEDCEILING"
+  // (tests/utils/engine-variants.test.js): `ceiling: d.limitOutput` unconditionally.
+  const catalogCeiling = opts.catalogCeiling !== undefined ? opts.catalogCeiling : catalogCeilingFor(model, opts.readCache);
+  return { ...d, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, waitedMs: now() - start };
 }
 
 /**
