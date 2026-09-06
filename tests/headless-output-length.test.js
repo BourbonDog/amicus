@@ -154,7 +154,8 @@ describe('#218 PR 3 — a leg whose provider stopped for length', () => {
     expect(r.completed).toBe(true);
     expect(r.error).toBeUndefined();
     expect(r.finish).toBe('length');
-    expect(r.summary).toContain('Partial review');
+    // the promoted thinking is NOT in the review (council #232 r1 breakage; mutant KEEPPROMOTED)
+    expect(r.summary).toBe('Partial review');
   });
 
   it('an earlier message with text does not hide a final length stop with none: the death is named (council #232 r1 B2)', async () => {

@@ -144,17 +144,18 @@ P1, PR 2 and PR 3).
   any alias route's window.
 - **When a leg hits it, the run says so.** The engine records `finish: 'length'` on the leg's
   assistant message whenever the provider stopped at the reservation (A, H1, L1–L4 — both provider
-  families). A leg that stopped there with **no answer text** — the whole reservation went to
-  reasoning, the #218 "Mode 2" rows (32,000 reasoning, 0–2 output, $0.63 billed) — now ends `error`
-  with a reason starting `OUTPUT_LENGTH:` that carries the engine's reasoning/output counts for the
-  leg and the budget in force; it used to end `complete` with an empty summary or, when the provider
-  streamed the reasoning, with its *thinking* promoted to the review (L2/L4). A leg that stopped
-  there **with** answer text keeps its review, and a council prints a `Note:` on the
-  `output-truncated` channel — informational, the exit code does not move. The counts are reported,
-  never decided on: on OpenAI-compatible routes the engine subtracts reasoning from completion
-  (L3: 8 = 40 − 32); on the direct Anthropic route it reports no split (L4: 24,000 output / 0
-  reasoning). Two limits: a leg whose hidden reasoning outlasts the no-output backstop window dies
-  under `NO_OUTPUT_BACKSTOP` first (the message has not finalized yet), and the Note is Stage-1
+  families). A leg whose finalized message carries **no answer text** — the whole reservation went
+  to reasoning, the #218 "Mode 2" rows (32,000 reasoning, 0–2 output, $0.63 billed) — now ends
+  `error` with a reason starting `OUTPUT_LENGTH:` that carries the engine's reasoning/output counts
+  for the leg and the budget in force; it used to end `complete` with an empty summary or, when the
+  provider streamed the reasoning, with its *thinking* promoted to the review (L2/L4). A leg whose
+  finalized message carries answer text keeps its review — that text alone: reasoning an earlier
+  message promoted as a stand-in is dropped the moment answer text arrives — and a council prints a
+  `Note:` on the `output-truncated` channel — informational, the exit code does not move. The counts
+  are reported, never decided on: on OpenAI-compatible routes the engine subtracts reasoning from
+  completion (L3: 8 = 40 − 32); on the direct Anthropic route it reports no split (L4: 24,000 output
+  / 0 reasoning). Two limits: a leg whose hidden reasoning outlasts the no-output backstop window
+  dies under `NO_OUTPUT_BACKSTOP` first (the message has not finalized yet), and the Note is Stage-1
   only — a judge, chair or debate leg cut at its reservation gets the death name but no Note.
   Separately, L5 settles the catalog question PR 2 parked: a descriptor above the engine's own
   ceiling is clamped to that ceiling with a thinking variant (K10: 70,000 + 31,999 → 64,000) and

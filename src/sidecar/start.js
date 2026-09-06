@@ -200,7 +200,7 @@ async function startSidecar(options) {
   if (terminal.status === 'error') {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
-    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set, as the finalizeSession branch below
+    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: meta.reason });

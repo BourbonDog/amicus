@@ -156,6 +156,24 @@ describe('mirrorMessages', () => {
     expect(st.reasoningOutput).toBe('let me think hard about this');
     expect(r.appendLines).toEqual([{ role: 'assistant', content: 'PONG', timestamp: NOW() }]);
   });
+
+  test('real answer text on a later message REPLACES reasoning promoted earlier (council #232 r1 breakage)', () => {
+    const st = createMirrorState();
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1], st, { now: NOW });
+    expect(st.output).toBe('thinking…');         // the stand-in for an answer that had not come
+    expect(st.promotedOutput).toBe('thinking…');
+    const m2 = { info: { role: 'assistant', id: 'm2', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm2:t', type: 'text', text: 'Partial review' }] };
+    const r2 = mirrorMessages([m1, m2], st, { now: NOW });
+    // Named mutant "KEEPPROMOTED": drop the reset in the text branch — `output` reads
+    // 'thinking…Partial review' and the chair adjudicates the thinking beside the answer.
+    expect(st.output).toBe('Partial review');
+    expect(st.promotedOutput).toBe('');
+    expect(r2.appendLines).toEqual([{ role: 'assistant', content: 'Partial review', timestamp: NOW() }]);
+    const grown = { ...m2, parts: [{ id: 'm2:t', type: 'text', text: 'Partial review, continued' }] };
+    mirrorMessages([m1, grown], st, { now: NOW });
+    expect(st.output).toBe('Partial review, continued'); // further growth appends normally
+  });
 });
 
 describe('reasoning-delta progress (F6d)', () => {

@@ -78,12 +78,13 @@ All notable changes to Amicus are documented here. Format follows
   such a leg ended `complete` with an empty summary (a council dropped it as "ended 'complete' with
   no usable output"; `amicus start --no-ui` exited 0 with "No Output") or, when the provider streamed
   its reasoning, `complete` with the *thinking* as the review — adjudicated as one. It now ends
-  `error` with the `OUTPUT_LENGTH:` reason, and a council treats it as any other dead leg: the
-  once-only Stage-1 retry fires and the run degrades if the retry dies too. For the no-output shape
-  that retry is unchanged from 4.9.3; for the promoted-thinking shape it is new — 4.9.3 counted that
-  leg as a review and never retried it, so such a seat now bills one more reservation.
-  `start --no-ui` exits 1 with the reason. The ledger row for such a leg reads `status: "error"`
-  where it read `complete`.
+  `error` with the `OUTPUT_LENGTH:` reason — decided on the message the engine finalized, so a tool
+  loop's earlier text neither hides the death nor, once promoted reasoning is replaced by the
+  answer, pollutes a kept review — and a council treats it as any other dead leg: the once-only
+  Stage-1 retry fires and the run degrades if the retry dies too. For the no-output shape that retry
+  is unchanged from 4.9.3; for the promoted-thinking shape it is new — 4.9.3 counted that leg as a
+  review and never retried it, so such a seat now bills one more reservation. `start --no-ui` exits
+  1 with the reason. The ledger row for such a leg reads `status: "error"` where it read `complete`.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`

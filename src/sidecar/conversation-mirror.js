@@ -32,7 +32,7 @@ function createMirrorState() {
     receivingReported: false,
     output: '',                 // accumulated assistant text
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
-    reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
+    reasoningOutput: '',        // accumulated reasoning text (promoted to output when no text part has arrived; see promotedOutput)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
     // #218 PR 3: three facts about the LAST assistant message in the snapshot
     // -- its `finish` (stamped at finalization, beside tokens/cost), whether it
@@ -44,6 +44,7 @@ function createMirrorState() {
     lastAssistantFinish: null,
     lastAssistantHasText: false,
     lastAssistantHasReasoning: false,
+    promotedOutput: '',         // the reasoning a promotion put into `output` as a stand-in; the first real answer text on a later message replaces it (council #232 r1)
   };
 }
 
@@ -158,6 +159,9 @@ function mirrorMessages(messages, state, opts = {}) {
         if (part.text.length > prevLen) {
           // Append only the new portion (handles streaming growth)
           const newText = part.text.slice(prevLen);
+          // A promotion's stand-in gives way to the first real answer text: `output` restarts from
+          // the answer alone; conversation.jsonl keeps the reasoning line it wrote. Mutant "KEEPPROMOTED".
+          if (state.promotedOutput && state.output === state.promotedOutput) { state.output = ''; state.promotedOutput = ''; }
           state.output += newText;
           state.seenTextParts.set(partId, part.text.length);
           appendLines.push({ role: 'assistant', content: newText, timestamp: now() });
@@ -264,12 +268,12 @@ function mirrorMessages(messages, state, opts = {}) {
   const lastAssistant = list.filter(m => m.info && m.info.role === 'assistant').pop();
   assistantFinished = !!(lastAssistant && lastAssistant.info.time && lastAssistant.info.time.completed);
 
-  // Reasoning-only fallback: if the assistant finished but emitted only reasoning
-  // parts (no visible text), promote the reasoning text to `output` so the headless
-  // completion gates fire and the answer isn't lost as "No Output". Runs once — once
-  // `output` is non-empty this is skipped on subsequent polls.
+  // Reasoning-only fallback: if the assistant finished but emitted only reasoning parts (no
+  // visible text), promote the reasoning text to `output` so the headless completion gates fire
+  // and the answer isn't lost as "No Output". Runs once — a non-empty `output` skips it on later
+  // polls. `promotedOutput` records the stand-in, which the first real text part replaces above.
   if (assistantFinished && !state.output && state.reasoningOutput) {
-    state.output = state.reasoningOutput;
+    state.output = state.promotedOutput = state.reasoningOutput;
     appendLines.push({ role: 'assistant', content: state.reasoningOutput, timestamp: now() });
   }
 

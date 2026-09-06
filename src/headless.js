@@ -1139,16 +1139,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // #218 PR 3: the engine finalized the message with finish 'length' and
         // no answer text -- the Mode 2 death (probe row L1: hidden reasoning,
         // no content part); decided on THAT message's parts, not on the
-        // session's accumulated output (council #232 r1 B2/D1). Nothing more
-        // will arrive; every exit below requires output, so without this one the
-        // leg waits out the no-output backstop and dies under ITS name, which
-        // says "silence past the deadline" about a message the engine had
-        // already finished with a reason. Gated on 'length' only: the finalized
-        // message's finish is never a step-level 'tool-calls' (B4's measured
-        // evidence below: time.completed lands after the tool ends), and a
-        // 'stop' with no text is a different, unnamed death. Named mutants
-        // (tests/headless-output-length.test.js): "NOEXIT" drops this exit,
-        // "SESSIONWIDE" tests `!mirror.output` here instead of the message flag.
+        // session's accumulated output (council #232 r1 B2/D1).
+        // Nothing more will arrive from that message. For a leg with no text so
+        // far every exit below requires output, so without this one the leg
+        // waits out the no-output backstop and dies under ITS name, which says
+        // "silence past the deadline" about a message the engine had already
+        // finished with a reason; for a leg whose earlier message produced text
+        // the idle exits would end it a poll later -- this exit is the same
+        // death, sooner. Gated on 'length' only: the finalized message's finish
+        // is never a step-level 'tool-calls' (B4's measured evidence below:
+        // time.completed lands after the tool ends), and a 'stop' with no text
+        // is a different, unnamed death. The message flag here matches the
+        // post-loop decision, which is the pinned one (named mutants NOEXIT and
+        // SESSIONWIDE in tests/headless-output-length.test.js); an in-loop
+        // `!mirror.output` alone would only defer the same death.
         if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.lastAssistantHasText) {
           logger.error('Assistant message finished for length with no answer text, exiting', { taskId, pollCount });
           break;
@@ -1609,8 +1613,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // `failedWithNoUsableOutput` is hoisted out of the `if` below so the stage
     // and the returned shape are decided by ONE predicate and cannot drift.
-    // #218 PR 3: an OUTPUT_LENGTH death with PROMOTED reasoning has a non-empty
-    // mirror.output and must still fail.
+    // #218 PR 3: an OUTPUT_LENGTH death can have a non-empty mirror.output -- a
+    // tool loop's earlier message text, or reasoning promoted before the answer
+    // was known -- and must still fail.
     const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled || outputLengthDeath));
     const { resolveTerminalState } = require('./sidecar/session-finalize');
     const terminalStage = resolveTerminalState({
