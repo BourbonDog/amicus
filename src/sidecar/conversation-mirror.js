@@ -49,7 +49,7 @@ function createMirrorState() {
  * @returns {boolean} true when this message carried a usage payload
  */
 function captureMsgUsage(msg, state) {
-  // #218 PR 3: `finish` is stamped at the same finalization as tokens/cost, so
+  // #218 PR 3: `finish` was observed beside tokens/cost on every probe L row, so
   // both mirror passes record it here; the last assistant message in the
   // snapshot wins, and one still streaming (no finish yet) resets it to null.
   // Named mutant "NOFINISH" (tests/conversation-mirror.test.js).

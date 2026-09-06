@@ -131,4 +131,29 @@ describe('start.js terminal state classification', () => {
     expect(code).toBe(2);
     expect(metadata.status).toBe('aborted');
   });
+
+  // #218 PR 3 whole-branch review: an OUTPUT_LENGTH death resolves to
+  // `status: 'error'`, so start.js takes the branch that writes metadata.json
+  // directly and never calls finalizeSession — the branch Task 4 left without a
+  // `finish` stamp. Named mutant "SOLOERRORNOFINISH" (delete the `meta.finish`
+  // line from that branch in start.js/continue.js/resume.js).
+  it("an OUTPUT_LENGTH result → metadata status \"error\", an OUTPUT_LENGTH: reason and finish 'length'", async () => {
+    const { code, metadata } = await runWith({
+      completed: false, timedOut: false, aborted: false, summary: '', taskId: 'test05',
+      finish: 'length',
+      error: "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)",
+    });
+    expect(code).toBe(1);
+    expect(metadata.status).toBe('error');
+    expect(metadata.reason.startsWith('OUTPUT_LENGTH:')).toBe(true);
+    expect(metadata.finish).toBe('length'); // SOLOERRORNOFINISH
+  });
+
+  it('a completed result with no finish leaves the key off metadata (emit-when-set)', async () => {
+    const { metadata } = await runWith({
+      completed: true, timedOut: false, aborted: false, summary: 'done', taskId: 'test06'
+    });
+    expect(metadata.status).toBe('complete');
+    expect('finish' in metadata).toBe(false);
+  });
 });

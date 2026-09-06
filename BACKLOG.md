@@ -7206,9 +7206,9 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   no content part (L1), visible reasoning with no answer leaves a `reasoning` part and no `text`
   part (L2, L4); no row carries a `MessageOutputLengthError`; and a descriptor above the
   engine's own ceiling is clamped to that ceiling with no variant in play (L5: 70000 + flag
-  100000 → 64000). The kimi dump line reports `limit.output 943718` on this run (the
-  startup-refresh race the PR 2 record describes; live models.dev says 943718); no row depends
-  on it. Filed exactly as the run printed it:
+  100000 → 64000). The kimi dump line reports `limit.output 943718` on this run — the live
+  models.dev value; the PR 2 record describes the startup-refresh race that can make it read the
+  bundled 1048576 instead — no row depends on it. Filed exactly as the run printed it:
 
 | id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error | assistant tokens in/out/reasoning | assistant parts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -7285,7 +7285,9 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi
   row). Skipping it loses a seat a variance in reasoning length might have saved; shrinking the
   reservation per retry is impossible today (the flag is per engine spawn, the descriptor per
-  server). Owner's call; PR 3 kept the retry unchanged.
+  server). Owner's call. PR 3 changed nothing in the retry pass itself, but by making the
+  promoted-thinking shape an error it extended the retry to a leg 4.9.3 counted as a review — that
+  seat now bills a second reservation where it billed none (the CHANGELOG "Changed" entry says so).
 - [ ] **The chair packet should flag a review cut at its reservation (#218 PR 3, R4).** The
   `output-truncated` Note reaches stderr, `run.json` and the Workspace, but the chair reads the cut
   review with no marker that it ended where the reservation ended. Carry `finish: 'length'` into the
@@ -7295,6 +7297,14 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails
   parse today with no length clue on the record; extend the Note to `run-stage2.js` and the chair
   path once the Stage-1 shape has been seen in a real run.
+- [ ] **`continue`/`resume` after a length-dead turn can trip the no-output exits on the first poll
+  (#218 PR 3 whole-branch review).** `headless.js :: runHeadless` polls the whole session, so before
+  the new turn's assistant placeholder exists the prior turn's finalized message is the last
+  assistant message: an engine-error message already tripped the `sessionError && !mirror.output &&
+  assistantFinished` exit that way, and a `'length'` message now trips the OUTPUT_LENGTH exit the
+  same way — the continuation dies under the prior turn's name without running. Same race class,
+  one more member. Fix: both exits consider only assistant messages created after the prompt was
+  sent (the mirror can record the ids present on the first snapshot). Not in PR 3.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

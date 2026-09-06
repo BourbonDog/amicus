@@ -50,9 +50,10 @@ All notable changes to Amicus are documented here. Format follows
   reservation before any answer text — the whole reservation spent on reasoning — now ends `error`
   with a reason starting `OUTPUT_LENGTH:` that carries the engine's own reasoning/output counts for
   the leg and the `outputBudget` in force, and the poll loop exits the moment the engine finalizes
-  such a message instead of waiting out the no-output backstop. The engine records `finish` on every
-  assistant message; it now rides every leg document (`metadata.json`, `run.json`, the wave doc), the
-  spend-ledger row (`finish`, present only when recorded) and solo session metadata. A review that
+  such a message instead of waiting out the no-output backstop. The engine records `finish` on the
+  finalized assistant message (measured on both provider families for a length stop); it now rides
+  every leg document (`metadata.json`, `run.json`, the wave doc), the spend-ledger row (`finish`,
+  present only when recorded) and solo session metadata. A review that
   was cut at the reservation but still answered is kept and announced as a `Note:` on the new
   `output-truncated` channel (`kind: "info"` — never a loss, never an exit-code change). Five probe
   rows (L1–L5) measured the shapes: `finish: 'length'` on both provider families; reasoning
@@ -76,9 +77,12 @@ All notable changes to Amicus are documented here. Format follows
   such a leg ended `complete` with an empty summary (a council dropped it as "ended 'complete' with
   no usable output"; `amicus start --no-ui` exited 0 with "No Output") or, when the provider streamed
   its reasoning, `complete` with the *thinking* as the review — adjudicated as one. It now ends
-  `error` with the `OUTPUT_LENGTH:` reason: a council still retries the seat once and degrades if
-  the retry dies too; `start --no-ui` exits 1 with the reason. The ledger row for such a leg reads
-  `status: "error"` where it read `complete`.
+  `error` with the `OUTPUT_LENGTH:` reason, and a council treats it as any other dead leg: the
+  once-only Stage-1 retry fires and the run degrades if the retry dies too. For the no-output shape
+  that retry is unchanged from 4.9.3; for the promoted-thinking shape it is new — 4.9.3 counted that
+  leg as a review and never retried it, so such a seat now bills one more reservation.
+  `start --no-ui` exits 1 with the reason. The ledger row for such a leg reads `status: "error"`
+  where it read `complete`.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`

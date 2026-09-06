@@ -145,7 +145,7 @@ P1, PR 2 and PR 3).
 - **When a leg hits it, the run says so.** The engine records `finish: 'length'` on the leg's
   assistant message whenever the provider stopped at the reservation (A, H1, L1–L4 — both provider
   families). A leg that stopped there with **no answer text** — the whole reservation went to
-  reasoning, the #218 "Mode 2" rows (32,000 reasoning, 0 output, $0.63 billed) — now ends `error`
+  reasoning, the #218 "Mode 2" rows (32,000 reasoning, 0–2 output, $0.63 billed) — now ends `error`
   with a reason starting `OUTPUT_LENGTH:` that carries the engine's reasoning/output counts for the
   leg and the budget in force; it used to end `complete` with an empty summary or, when the provider
   streamed the reasoning, with its *thinking* promoted to the review (L2/L4). A leg that stopped
@@ -157,16 +157,17 @@ P1, PR 2 and PR 3).
   under `NO_OUTPUT_BACKSTOP` first (the message has not finalized yet), and the Note is Stage-1
   only — a judge, chair or debate leg cut at its reservation gets the death name but no Note.
   Separately, L5 settles the catalog question PR 2 parked: a descriptor above the engine's own
-  ceiling is clamped to that ceiling with or without a thinking variant (70,000 + flag 100,000 →
-  64,000 on haiku), so a catalog row whose ceiling exceeds the engine's is harmless.
+  ceiling is clamped to that ceiling with a thinking variant (K10: 70,000 + 31,999 → 64,000) and
+  without one (L5: 70,000 + flag 100,000 → 64,000 on haiku), so a catalog row whose ceiling exceeds
+  the engine's is harmless.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
 effort, which today's `--thinking` never delivers to the engine (PR 4 sends `variant` instead).
 Lowering the budget makes such a leg fail faster and cheaper; raising it gives the reasoning more
 room; neither makes it produce output — but since #218 PR 3 the failure is at least *named*: the leg
-ends `error` with an `OUTPUT_LENGTH:` reason instead of `complete` with nothing (see
-[Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length)).
+ends `error` with an `OUTPUT_LENGTH:` reason instead of `complete` with nothing, or with its thinking
+as the review (see [Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length)).
 
 ---
 

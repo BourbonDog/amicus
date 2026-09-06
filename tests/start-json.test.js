@@ -185,6 +185,42 @@ describe('spend ledger append on start finalize (B24)', () => {
     expect(rows[0].tag).toBeNull();
   });
 
+  // #218 PR 3 whole-branch review: the solo `start` ledger row carries `finish`
+  // when the result has one — the OUTPUT_LENGTH death's receipt.
+  // Named mutant "SOLOROWNOFINISH" (drop `finish` from start.js's appendSpend).
+  it("an OUTPUT_LENGTH run's ledger row carries finish 'length' beside status 'error'", async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: '', completed: false, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      finish: 'length',
+      error: "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)",
+      usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0006',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('error');
+    expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+  });
+
+  it('a run with no finish on the result leaves the key off the ledger row', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      usage: { tokens: { input: 5, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.001 },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0007',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect('finish' in rows[0]).toBe(false);
+  });
+
   it('a run with no usage on the result does not append a row', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],

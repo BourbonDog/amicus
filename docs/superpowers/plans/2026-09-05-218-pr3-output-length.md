@@ -18,7 +18,11 @@
 > `stage1-retry` heal note. Task 6 — the DOUBLEREAD mutant is killed by the assertion that
 > `buildProviderModels` receives the value `startServer` read, not by a read count:
 > `buildProviderModels`'s fallback calls the module-lexical `getOutputBudget`, which a partial mock
-> of the export cannot see; both comments say so. The measured facts in the Design section stand
+> of the export cannot see; both comments say so. Whole-branch review: R6's solo path now stamps
+> `finish` on the error branches of `start`/`continue`/`resume` and on the solo ledger rows — the
+> branch an OUTPUT_LENGTH death takes; R5 is corrected — the retry pass is unchanged, but making the
+> promoted-thinking shape an error extends the once-only retry to a leg 4.9.3 counted as a review,
+> and the CHANGELOG says so. The measured facts in the Design section stand
 > unchanged.
 
 ## Global Constraints

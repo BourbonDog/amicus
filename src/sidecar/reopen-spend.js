@@ -24,7 +24,8 @@ function finalizeSpendForReopen({ taskId, model, mode, op, result, status, proje
       const gateway = metadata.gateway || gatewayOf(model);
       // v4.7.1 Task 7 D16: null-not-absent, the OPPOSITE convention from
       // metadata.tag's absent-not-null (D13) — same `|| null` idiom as start.js:237.
-      appendSpend({ taskId, model, mode, usage, op, status, project, gateway, tag: metadata.tag || null }, ctx);
+      // #218 PR 3: finish rides the same way (appendSpend keeps it only when it is a string).
+      appendSpend({ taskId, model, mode, usage, op, status, project, gateway, tag: metadata.tag || null, finish: result && result.finish }, ctx);
     } catch { /* best-effort */ }
   }
   return { usage };

@@ -200,6 +200,7 @@ async function startSidecar(options) {
   if (terminal.status === 'error') {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set, as the finalizeSession branch below
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: meta.reason });
@@ -223,6 +224,7 @@ async function startSidecar(options) {
       appendSpend({
         taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
         op: 'start', status: statusFromResult(result), project: effectiveProject,
+        finish: result && result.finish, // #218 PR 3: appendSpend keeps it only when it is a string
         // ⚠️ DE-ROT: `metadata` is NOT in scope at startSidecar's finalize site — the objects
         // there are `meta` (createSessionMetadata result) and `m`; `metadata` is a local only
         // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the

@@ -245,6 +245,7 @@ async function continueSidecar(options) {
   if (terminal.status === 'error') {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set, as the finalizeSession branch below
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });

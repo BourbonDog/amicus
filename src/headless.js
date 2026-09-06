@@ -1137,7 +1137,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // output, so without this one the leg waits out the no-output backstop
         // and dies under ITS name, which says "silence past the deadline" about
         // a message the engine had already finished with a reason. Gated on
-        // 'length' only: a 'tool-calls' finish is followed by another message.
+        // 'length' only: the finalized message's finish is never a step-level
+        // 'tool-calls' (B4's measured evidence below: time.completed lands after
+        // the tool ends), and a 'stop' with no text is a different, unnamed death.
         // Named mutant "NOEXIT" (tests/headless-output-length.test.js).
         if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.output) {
           logger.error('Assistant message finished for length with no output, exiting', { taskId, pollCount });
