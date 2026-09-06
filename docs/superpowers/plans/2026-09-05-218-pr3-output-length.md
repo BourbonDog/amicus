@@ -27,8 +27,9 @@
 > `isOutputLengthDeath({ finish, hasText })`), never on the session's accumulated output or a
 > sticky promotion flag (B2/D1); the reason names the budget the engine was spawned with, carried
 > on the server handle (B3); `finalizeSession` and the resume/MCP error branches remove a prior
-> `finish` when the run recorded none (B1). The measured facts in the Design section stand
-> unchanged.
+> `finish` when the run recorded none (B1). Council #232 round 2: a cut review is marked in the
+> chair packet's review header (B1, pulled forward from the filed R4 item); the once-only retry
+> stays (B2, owner's decision). The measured facts in the Design section stand unchanged.
 
 ## Global Constraints
 

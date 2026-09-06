@@ -727,3 +727,31 @@ describe('artifact emission', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+// #218 PR 3 (council #232 r2 B1). `cut` is the ONE leg fact the review projection
+// forwards, emit-when-cut: `finish: 'length'` on the leg becomes `cut: true` on the
+// projected review, and every other leg shape projects exactly as it did before, so
+// an uncut bench's packet is byte-identical. Named mutant: CUTDROPPED (drop the
+// `cut` spread from run-assemble.js :: buildChairPacketFile's projection).
+describe('#218 PR 3 (council #232 r2 B1) — the projection forwards a cut leg', () => {
+  const TIERS = { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 };
+
+  test("only the leg that finished 'length' is marked cut, in the packet and on disk", () => {
+    const packet = asm.buildChairPacketFile({
+      runDir: tmp,
+      reviews: [
+        { model: 'kimi', text: 'Partial review.', leg: { finish: 'length' } },
+        { model: 'glm', text: 'Full review.', leg: { finish: 'stop' } },
+        { model: 'qwen', text: 'No finish.', leg: {} },
+      ],
+      claudeReview: null,
+      tallyInput: { rankings: [], adjudications: [] },
+      record: { findings: [], tierCounts: TIERS },
+      debateOutcomes: null, date: '2026-09-06',
+    });
+    expect(packet).toContain('--- Review by kimi — CUT at its output reservation (the provider stopped for length; the text ends where the reservation ended) ---\nPartial review.');
+    expect(packet).toContain('--- Review by glm ---\nFull review.');
+    expect(packet).toContain('--- Review by qwen ---\nNo finish.');
+    expect(fs.readFileSync(path.join(tmp, 'chair-packet.md'), 'utf-8')).toBe(packet);
+  });
+});

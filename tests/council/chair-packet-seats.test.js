@@ -214,3 +214,31 @@ describe('SI-25 R25-5 — buildChairPacketFile forwards the seat emit-when-DIFFE
       .toContain('--- Review by gemini ---\nG.');
   });
 });
+
+// #218 PR 3 (council #232 r2 B1). The chair packet is the ONLY artifact the chair
+// reads, and a review the provider cut at its output reservation reaches it looking
+// complete. These pin the marker that makes the chair weigh it as partial. Named
+// mutant: NOMARKER (drop the `r.cut` clause from the review header in
+// briefings-chair.js :: buildChairPacket).
+describe('#218 PR 3 (council #232 r2 B1) — a cut review is marked in its header', () => {
+  test('a cut review says so in its header and an uncut review is untouched', () => {
+    const packet = buildChairPacket({
+      reviews: [
+        { model: 'kimi', text: 'Partial review.', cut: true },
+        { model: 'glm', text: 'Full review.' },
+      ],
+      rankings: [], adjudications: [], tierCounts: TIERS,
+    });
+    expect(packet).toContain('--- Review by kimi — CUT at its output reservation (the provider stopped for length; the text ends where the reservation ended) ---\nPartial review.');
+    expect(packet).toContain('--- Review by glm ---\nFull review.');
+  });
+
+  test('the marker follows the seat name, not the alias, on a twin bench', () => {
+    const twins = buildSeats(['deepseek', 'deepseek'], null, null);
+    const packet = buildChairPacket({
+      reviews: [{ model: 'deepseek', text: 'x', seat: twins[0], cut: true }],
+      rankings: [], adjudications: [], tierCounts: TIERS,
+    });
+    expect(packet).toContain('--- Review by deepseek#1 — CUT at its output reservation (the provider stopped for length; the text ends where the reservation ended) ---\nx');
+  });
+});

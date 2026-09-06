@@ -254,14 +254,19 @@ function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, recor
   const packet = buildChairPacket({
     // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
     // no rankings/adjudications, so it appears ONLY as one more review block.
-    // The projection is DELIBERATE — it drops findings/conformance/role/leg; v4.8
+    // The projection is DELIBERATE — it drops findings/conformance/role/leg;
+    // `cut` (r2 B1) is the one leg fact forwarded, emit-when-cut. v4.8
     // SI-25 adds `seat`, ⚠️ EMIT-WHEN-DIFFERENT like rankings/adjudications above:
     // `r.model` is the leg's `modelInput || model`, which falls back to the RESOLVED
     // id, so an unconditional forward breaks §4.2 byte identity on a NO-TWIN bench.
     // Mutant: tests/council/chair-packet-seat-mutants.js :: HDRSEATFWD.
     // ⚠️ The Claude review keeps NO seat and renders `claude` via the fallback.
+    // #218 PR 3 (council #232 r2 B1): a review the provider cut at the output
+    // reservation is MARKED for the chair, emit-when-cut so an uncut bench's
+    // packet stays byte-identical. Named mutant "CUTDROPPED".
     reviews: reviews.map(r => ({ model: r.model, text: r.text,
-      ...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {}) }))
+      ...(r.seat && r.seat.id !== r.seat.alias ? { seat: r.seat } : {}),
+      ...(r.leg && r.leg.finish === 'length' ? { cut: true } : {}) }))
       .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
     rankings: tallyInput.rankings,
     adjudications: tallyInput.adjudications,

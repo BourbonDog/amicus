@@ -155,7 +155,7 @@ describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
     const r = makeDegrade(truncatedReviewNote('kimi', leg));
     expect(r.kind).toBe('info');
     expect(r.channel).toBe('output-truncated');
-    expect(formatDegrade(r)).toBe("Note: seat kimi's review was cut at its output reservation — the provider stopped for length (finish 'length') after 31000 reasoning / 700 output tokens; the review ends where the reservation ended. The review is in the packet as far as it got and the chair reads it as such; nothing else changes. Try: raise outputBudget in config.json (docs/configuration.md, Output budget).\n");
+    expect(formatDegrade(r)).toBe("Note: seat kimi's review was cut at its output reservation — the provider stopped for length (finish 'length') after 31000 reasoning / 700 output tokens; the review ends where the reservation ended. The review is in the packet as far as it got, and its header in the chair packet says it was cut; nothing else changes. Try: raise outputBudget in config.json (docs/configuration.md, Output budget).\n");
     expect(r.data).toEqual({ seat: 'kimi', finish: 'length', reasoningTokens: 31000, outputTokens: 700 });
   });
   test('a leg with no usage still formats with zero counts', () => {

@@ -347,8 +347,10 @@ instead of implying that no council ever ran.
 assistant message carries `finish: 'length'` and still delivered answer text, the run prints a
 `Note:` on the `output-truncated` channel (`kind: "info"`, so it never degrades the run or moves the
 exit code) naming the seat and the engine's reasoning/output token counts for the leg, with `Try:
-raise outputBudget…`. A length stop with **no** answer text is a dead leg whose reason starts
-`OUTPUT_LENGTH:` — see [Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length).
+raise outputBudget…`. The chair packet marks that review too — its header reads `--- Review by
+<seat> — CUT at its output reservation (…) ---` — so the chair weighs it as partial. A length stop
+with **no** answer text is a dead leg whose reason starts `OUTPUT_LENGTH:` — see
+[Troubleshooting](./troubleshooting.md#headless-leg-fails-with-output_length).
 
 **Read the tiers correctly.** A task run's report carries the line *"Tiers report peer concurrence,
 never verification."* directly under the tier counts, and the chair's own packet carries the same

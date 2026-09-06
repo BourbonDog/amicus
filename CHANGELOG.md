@@ -54,12 +54,12 @@ All notable changes to Amicus are documented here. Format follows
   such a message instead of waiting out the no-output backstop. The engine records `finish` on the
   finalized assistant message (measured on both provider families for a length stop); it now rides
   every leg document (`metadata.json`, `run.json`, the wave doc), the spend-ledger row (`finish`,
-  present only when recorded) and solo session metadata. A review that
-  was cut at the reservation but still answered is kept and announced as a `Note:` on the new
-  `output-truncated` channel (`kind: "info"` — never a loss, never an exit-code change). Five probe
-  rows (L1–L5) measured the shapes: `finish: 'length'` on both provider families; reasoning
-  subtracted from completion on OpenAI-compatible routes but no split on direct Anthropic; a
-  `reasoning` part and no `text` part when the reasoning was visible; and a descriptor above the
+  present only when recorded) and solo session metadata. A review that was cut at the reservation
+  but still answered is kept, announced as a `Note:` on the new `output-truncated` channel
+  (`kind: "info"` — never a loss, never an exit-code change), and marked as cut in its chair-packet
+  header. Five probe rows (L1–L5) measured the shapes: `finish: 'length'` on both provider families;
+  reasoning subtracted from completion on OpenAI-compatible routes but no split on direct Anthropic;
+  a `reasoning` part and no `text` part when the reasoning was visible; and a descriptor above the
   engine's own ceiling clamped to that ceiling with no thinking variant in play. The probe's capture
   server now answers with a per-case body and speaks the Anthropic messages SSE, so the direct rows
   record the assistant message instead of an APIError; the full 37-case matrix is filed in the

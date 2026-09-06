@@ -7288,10 +7288,14 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   server). Owner's call. PR 3 changed nothing in the retry pass itself, but by making the
   promoted-thinking shape an error it extended the retry to a leg 4.9.3 counted as a review — that
   seat now bills a second reservation where it billed none (the CHANGELOG "Changed" entry says so).
-- [ ] **The chair packet should flag a review cut at its reservation (#218 PR 3, R4).** The
+- [x] **The chair packet should flag a review cut at its reservation (#218 PR 3, R4).** The
   `output-truncated` Note reaches stderr, `run.json` and the Workspace, but the chair reads the cut
   review with no marker that it ended where the reservation ended. Carry `finish: 'length'` into the
-  chair briefing's per-review header (briefings-chair.js) so the chair weighs it as partial.
+  chair briefing's per-review header (briefings-chair.js) so the chair weighs it as partial. **Done
+  in PR #232 (council round 2, B1): `run-assemble.js :: buildChairPacketFile` forwards `cut: true`
+  for a leg whose `finish` is `'length'` (emit-when-cut) and
+  `briefings-chair.js :: buildChairPacket` renders `— CUT at its output reservation (…)` in
+  that review's header.**
 - [ ] **Stage-2 judge, chair and debate legs cut at their reservation get the death name but no
   Note (#218 PR 3, R4).** headless.js names the death for every leg; the `output-truncated` Note is
   emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails

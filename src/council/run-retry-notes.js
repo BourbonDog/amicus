@@ -184,7 +184,9 @@ function missingLegStillDeadNote(seat, ff, unit, counts) {
  * `kind: 'info'` -- announced, never a loss (utils/degrade.js on the channel).
  * The counts are the engine's own token record for the leg; the remedy names
  * the one lever that exists today.
- * @param {string} seat the alias every note renders (leg.modelInput || leg.model)
+ * @param {string} seat the alias every note renders — `materializeReviews` has
+ *   already resolved it (`leg.modelInput || leg.model`), so the caller passes
+ *   `m.modelInput` as-is
  * @param {object} leg the leg run document (finish === 'length')
  */
 function truncatedReviewNote(seat, leg) {
@@ -192,7 +194,7 @@ function truncatedReviewNote(seat, leg) {
   return { kind: 'info', channel: 'output-truncated',
     what: `seat ${seat}'s review was cut at its output reservation`,
     why: `the provider stopped for length (finish 'length') after ${t.reasoning || 0} reasoning / ${t.output || 0} output tokens; the review ends where the reservation ended`,
-    effect: 'The review is in the packet as far as it got and the chair reads it as such; nothing else changes',
+    effect: 'The review is in the packet as far as it got, and its header in the chair packet says it was cut; nothing else changes',
     remedy: 'raise outputBudget in config.json (docs/configuration.md, Output budget)',
     data: { seat, finish: 'length', reasoningTokens: t.reasoning || 0, outputTokens: t.output || 0 } };
 }

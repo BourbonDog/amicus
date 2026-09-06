@@ -152,15 +152,16 @@ P1, PR 2 and PR 3).
   finalized message carries answer text keeps its review — the answer text (a tool loop's earlier
   answer text included; reasoning an earlier message promoted as a stand-in is dropped the moment
   real answer text arrives) — and a council prints a `Note:` on the `output-truncated` channel —
-  informational, the exit code does not move. The counts are reported, never decided on: on
-  OpenAI-compatible routes the engine subtracts reasoning from completion (L3: 8 = 40 − 32); on the
-  direct Anthropic route it reports no split (L4: 24,000 output / 0 reasoning). Two limits: a leg
-  whose hidden reasoning outlasts the no-output backstop window dies under `NO_OUTPUT_BACKSTOP`
-  first (the message has not finalized yet), and the Note is Stage-1 only — a judge, chair or debate
-  leg cut at its reservation gets the death name but no Note. Separately, L5 settles the catalog
-  question PR 2 parked: a descriptor above the engine's own ceiling is clamped to that ceiling with
-  a thinking variant (K10: 70,000 + 31,999 → 64,000) and without one (L5: 70,000 + flag 100,000 →
-  64,000 on haiku), so a catalog row whose ceiling exceeds the engine's is harmless.
+  informational, the exit code does not move — and marks the review as cut in the chair packet's
+  header. The counts are reported, never decided on: on OpenAI-compatible routes the engine
+  subtracts reasoning from completion (L3: 8 = 40 − 32); on the direct Anthropic route it reports
+  no split (L4: 24,000 output / 0 reasoning). Two limits: a leg whose hidden reasoning outlasts the
+  no-output backstop window dies under `NO_OUTPUT_BACKSTOP` first (the message has not finalized
+  yet), and the Note is Stage-1 only — a judge, chair or debate leg cut at its reservation gets the
+  death name but no Note. Separately, L5 settles the catalog question PR 2 parked: a descriptor
+  above the engine's own ceiling is clamped to that ceiling with a thinking variant (K10: 70,000 +
+  31,999 → 64,000) and without one (L5: 70,000 + flag 100,000 → 64,000 on haiku), so a catalog row
+  whose ceiling exceeds the engine's is harmless.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
