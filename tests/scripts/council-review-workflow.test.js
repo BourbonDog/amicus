@@ -578,9 +578,15 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(yml()).not.toContain('${{ runner.temp }}');
     });
 
-    test('the alias map is read from the BASE ref, never the PR head', () => {
+    test('the alias map is read from the BASE branch, never the PR head and never the frozen base sha', () => {
       const step = stepFor('Provision the alias map', 'Pre-flight the bench');
-      expect(step).toContain('github.event.pull_request.base.sha');
+      // The branch NAME resolves to the base's current tip on every run. GitHub
+      // freezes `pull_request.base.sha` at PR creation, so a map change merged
+      // to main after that never reached an open PR (measured on PR #232).
+      expect(step).toContain('github.event.pull_request.base.ref');
+      // The EXPRESSION, not the substring — the comment above it in the workflow
+      // names the frozen sha deliberately, to say why it is not used.
+      expect(step).not.toContain('github.event.pull_request.base.sha');
       expect(step).not.toContain('pull_request.head.sha');
       expect(step).toContain('.github/amicus-ci-aliases.json');
       // Still no checkout anywhere — the map comes over the API.
@@ -651,7 +657,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // #194 B1: the parser is the repo's own tested module, fetched from the
       // BASE ref, not a copy inlined in the heredoc. One source, one test suite.
       // Base and not head so a PR cannot swap the parser reading its own workflow.
-      expect(step).toContain('scripts/extract-workflow-env.js?ref=${BASE_SHA}');
+      expect(step).toContain('scripts/extract-workflow-env.js?ref=${BASE_REF}');
       // Supplementary context, so an absent parser is a notice and a skip, never
       // a silently EMPTY section that reads as "this workflow defines no env".
       expect(step).toContain('ENV_CTX=0');

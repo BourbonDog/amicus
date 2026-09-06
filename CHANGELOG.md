@@ -99,6 +99,10 @@ All notable changes to Amicus are documented here. Format follows
   those refusals releases the connection — the response is retired and the live request destroyed —
   so a refused 3xx whose body never ends cannot hold the socket open after the promise has settled. Response bodies are capped at 16 MiB
   (`maxBytes`); an over-size body is destroyed and reported as `too-large` rather than accumulated.
+- CI council bench: `deepseek` moves from `deepseek-v4-pro` to `deepseek-v4-flash-0731` — 1.3M context
+  (was 1M), input ~$0.05/M and output ~$0.10/M on OpenRouter (was ~$0.69/M and ~$1.38/M), output
+  ceiling 131,072 (was 384,000). Bench-only; the shipped alias table is unchanged. The alias-shadow
+  notice now names `deepseek` beside `qwen` as a bench pin that differs from the shipped one.
 
 ### Fixed
 
@@ -111,6 +115,11 @@ All notable changes to Amicus are documented here. Format follows
   flag each called `loadConfig()`; a config write between the two reads could hand the engine a
   descriptor from one budget and a flag from another (bounded — the engine takes the smaller — but
   split). One read now feeds both (#218 PR 3).
+- **CI council read its alias map from the PR's frozen base sha.** `council-review.yml` provisioned
+  `.github/amicus-ci-aliases.json` from `github.event.pull_request.base.sha`, which GitHub fixes at
+  PR creation — so a bench change merged to `main` afterwards never reached an open PR (PR #232's
+  round 3 still reviewed with the pre-#233 map). The map is now read from the base branch name,
+  which resolves to its current tip on every run; still never the PR head.
 
 ## [4.9.3] - 2026-08-28
 
