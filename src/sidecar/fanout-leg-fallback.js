@@ -47,6 +47,7 @@ function recordAttemptSpend({ doc, leg, currentModel, legId, waveId, project, at
       project, attempt: leg && leg.attempt, substitutedFor: leg && leg.substitutedFor,
       retryOfWaveId: leg && leg.retryOfWaveId,
       tag: (leg && leg.tag) || null,
+      finish: doc.finish,
     };
     if (attempt > 0) { row.attempt = attempt; row.substitutedFor = originalModel; }
     appendSpend(row, deps.spendDir ? { dir: deps.spendDir } : undefined);

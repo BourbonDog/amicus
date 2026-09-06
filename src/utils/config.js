@@ -340,8 +340,13 @@ const LOCAL_REQUEST_TIMEOUT_MS = 300000;
  * serve (fixed in v4.1.2). Aliases the user has overridden fall back to the
  * prefix form, since no authored gateway route describes them.
  * @param {string[]} [resolvedRoutes] executable model id(s) actually launched
+ * @param {number|null} [outputBudget] the budget to clamp with. `undefined` (every
+ *   caller but startServer) reads config here; `null` means unset. #218 PR 3:
+ *   opencode-client.js :: startServer reads config ONCE and hands the same value
+ *   to this descriptor and to the engine flag, so a config write between two
+ *   reads can no longer split the levers. Named mutant "PARAMIGNORED".
  * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
-function buildProviderModels(resolvedRoutes = []) {
+function buildProviderModels(resolvedRoutes = [], outputBudget) {
   const aliases = getEffectiveAliases();
   const providers = {};
 
@@ -353,7 +358,7 @@ function buildProviderModels(resolvedRoutes = []) {
   // ConfigInvalidError that poisons the whole config, not a per-model degrade.
   const { normalizeOutputBudget, buildLimitLookup, computeModelLimit } =
     require('./model-output-limit');
-  const budget = normalizeOutputBudget(getOutputBudget());
+  const budget = normalizeOutputBudget(outputBudget === undefined ? getOutputBudget() : outputBudget);
   let limits = new Map();
   if (budget !== null) {
     try {

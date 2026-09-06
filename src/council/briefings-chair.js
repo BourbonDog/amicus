@@ -148,7 +148,7 @@ function seatKeyedOrder(order, orderSeats) {
  * changing it would move a shipped tally schema. These are three arrays each
  * with one consistently-typed field, not one polymorphic field. PR #189's
  * council raised it as D1 (major, CONTESTED a1/d1/n1); declined on that reading.
- * @param {{reviews: Array<{model: string, text: string, seat?: ?object}>,
+ * @param {{reviews: Array<{model: string, text: string, seat?: ?object, cut?: boolean}>,
  *   rankings: Array<{judge: string, seat?: ?string, order: Array<string|string[]>,
  *     orderSeats?: ?Array<?string|Array<?string>>}>,
  *   adjudications: Array<{findingId: string, judge: string, seat?: ?string, verdict: string}>,
@@ -182,7 +182,9 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date, 
   // construction — and the review projection that feeds site (1) applies that
   // same rule for a reason its own comment gives.
   const reviewBlocks = reviews
-    .map(r => `--- Review by ${displayName(r.seat) || r.model} ---\n${r.text}`).join('\n\n');
+    // #218 PR 3 (council #232 r2 B1): a cut review says so in its header, so the
+    // chair weighs it as partial. Named mutant "NOMARKER".
+    .map(r => `--- Review by ${displayName(r.seat) || r.model}${r.cut ? ' — CUT at its output reservation (the provider stopped for length; the text ends where the reservation ended)' : ''} ---\n${r.text}`).join('\n\n');
   const rankingLines = (rankings || [])
     .map(r => `${r.seat || r.judge}: ${JSON.stringify(seatKeyedOrder(r.order, r.orderSeats))}`)
     .join('\n');

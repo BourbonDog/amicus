@@ -242,11 +242,12 @@ async function resumeSidecar(options) {
     if (terminal.status === 'error') {
       updatedMetadata.status = 'error';
       updatedMetadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+      if (result && typeof result.finish === 'string') { updatedMetadata.finish = result.finish; } else { delete updatedMetadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
       updatedMetadata.completedAt = new Date().toISOString();
       writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
-      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status });
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish });
     }
     // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
     // a ledger row (status: statusFromResult, matching start.js — not terminal.status).

@@ -32,18 +32,39 @@ function createMirrorState() {
     receivingReported: false,
     output: '',                 // accumulated assistant text
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
-    reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
+    reasoningOutput: '',        // accumulated reasoning text (promoted to output when no text part has arrived; see promotedOutput)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
+    // #218 PR 3: three facts about the LAST assistant message in the snapshot
+    // -- its `finish` (stamped at finalization, beside tokens/cost), whether it
+    // carries answer text, whether it carries reasoning -- the whole input of
+    // the death test in utils/output-length.js. Per MESSAGE on purpose: `output`
+    // above accumulates across a tool loop's messages and would let earlier
+    // text hide a final length stop, or earlier promoted reasoning condemn a
+    // later message that answered (council #232 r1 B2/D1).
+    lastAssistantFinish: null,
+    lastAssistantHasText: false,
+    lastAssistantHasReasoning: false,
+    promotedOutput: '',         // the reasoning a promotion put into `output` as a stand-in; the first real answer text on a later message replaces it (council #232 r1)
   };
 }
 
 /**
- * Capture one assistant message's usage snapshot into `state.usageByMsg`.
+ * Capture one assistant message's usage snapshot AND its finish into the state.
  * The poll loop re-reads ALL messages every poll, so the latest snapshot per
  * message id wins (keyed Map, never additive) — see pricing.sumPerMessageUsage.
  * @returns {boolean} true when this message carried a usage payload
  */
 function captureMsgUsage(msg, state) {
+  // #218 PR 3: `finish` was observed beside tokens/cost on every probe L row, so
+  // both mirror passes record it here; the last assistant message in the
+  // snapshot wins, and one still streaming (no finish yet) resets it to null; '' counts as none (council #232 r3 C1; mutant "EMPTYFINISH").
+  // The two part flags are read off THIS message's parts, never off `output`
+  // (council #232 r1 B2/D1). Named mutants "NOFINISH", "TEXTOFFOUTPUT"
+  // (tests/conversation-mirror.test.js).
+  state.lastAssistantFinish = (typeof msg.info.finish === 'string' && msg.info.finish.length > 0) ? msg.info.finish : null;
+  const parts = Array.isArray(msg.parts) ? msg.parts : [];
+  state.lastAssistantHasText = parts.some((p) => p && p.type === 'text' && typeof p.text === 'string' && p.text.trim().length > 0);
+  state.lastAssistantHasReasoning = parts.some((p) => p && p.type === 'reasoning' && typeof p.text === 'string' && p.text.length > 0);
   if (msg.info.tokens || typeof msg.info.cost === 'number') {
     state.usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
     return true;
@@ -52,9 +73,9 @@ function captureMsgUsage(msg, state) {
 }
 
 /**
- * USAGE-ONLY mirror pass (v4.4 B1). Captures `info.tokens`/`info.cost` from a
- * fresh getMessages() snapshot and NOTHING else — no appendLines, no
- * `state.output` growth, no progress updates, no pending-tool bookkeeping.
+ * USAGE-ONLY mirror pass (v4.4 B1). Captures `info.tokens`/`info.cost` — and, since #218 PR 3,
+ * the last assistant message's `finish` — from a fresh getMessages() snapshot and NOTHING else —
+ * no appendLines, no `state.output` growth, no progress updates, no pending-tool bookkeeping.
  *
  * This exists because the headless poll loop's fast-path exits (trailing fold
  * marker, SDK `idle`) break BEFORE OpenCode stamps usage at finalization, so a
@@ -63,7 +84,7 @@ function captureMsgUsage(msg, state) {
  * conversation.jsonl a second time; this function cannot, because it never
  * touches seenTextParts/output at all.
  * @param {Array} messages getMessages() snapshot
- * @param {object} state from createMirrorState() (only usageByMsg is mutated)
+ * @param {object} state from createMirrorState() (only usageByMsg and the three lastAssistant* facts are mutated)
  * @returns {number} count of messages whose usage was captured
  */
 function mirrorUsageOnly(messages, state) {
@@ -138,6 +159,9 @@ function mirrorMessages(messages, state, opts = {}) {
         if (part.text.length > prevLen) {
           // Append only the new portion (handles streaming growth)
           const newText = part.text.slice(prevLen);
+          // The first non-whitespace text replaces the stand-in; output restarts from the answer;
+          // conversation.jsonl keeps its reasoning. KEEPPROMOTED; WHITESPACERESET drops the trim.
+          if (state.promotedOutput && newText.trim().length > 0) { state.output = ''; state.promotedOutput = ''; }
           state.output += newText;
           state.seenTextParts.set(partId, part.text.length);
           appendLines.push({ role: 'assistant', content: newText, timestamp: now() });
@@ -244,12 +268,12 @@ function mirrorMessages(messages, state, opts = {}) {
   const lastAssistant = list.filter(m => m.info && m.info.role === 'assistant').pop();
   assistantFinished = !!(lastAssistant && lastAssistant.info.time && lastAssistant.info.time.completed);
 
-  // Reasoning-only fallback: if the assistant finished but emitted only reasoning
-  // parts (no visible text), promote the reasoning text to `output` so the headless
-  // completion gates fire and the answer isn't lost as "No Output". Runs once — once
-  // `output` is non-empty this is skipped on subsequent polls.
+  // Reasoning-only fallback: if the assistant finished but emitted only reasoning parts (no
+  // visible text), promote the reasoning text to `output` so the headless completion gates fire
+  // and the answer isn't lost as "No Output". Runs once — a non-empty `output` skips it on later
+  // polls. `promotedOutput` records the stand-in, which the first real text part replaces above.
   if (assistantFinished && !state.output && state.reasoningOutput) {
-    state.output = state.reasoningOutput;
+    state.output = state.promotedOutput = state.reasoningOutput;
     appendLines.push({ role: 'assistant', content: state.reasoningOutput, timestamp: now() });
   }
 

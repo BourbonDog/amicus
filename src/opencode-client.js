@@ -493,6 +493,8 @@ function resolveServerStartTimeoutMs(options = {}, env, platform) {
  * @param {string} [options.client] - Client type ('cowork', 'code-local', etc.)
  * @param {string} [options.systemPrompt] - System prompt to set on agent config (hidden from UI)
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
+ * @param {number|null} [options.outputBudget] - #218 PR 3: the per-leg output budget startServer
+ *   already read; omitted means buildProviderModels reads config itself
  * @returns {object} Server options ready for createOpencodeServer
  */
 function buildServerOptions(options = {}) {
@@ -573,7 +575,7 @@ function buildServerOptions(options = {}) {
   const resolvedForProvider = (Array.isArray(options.models) && options.models.length)
     ? options.models
     : (options.model ? [options.model] : []);
-  config.provider = buildProviderModels(resolvedForProvider);
+  config.provider = buildProviderModels(resolvedForProvider, options.outputBudget);
 
   // v4.6.2 PR1 (spec §4, D1/D2): a host-form ANTHROPIC_BASE_URL is correct
   // for Anthropic SDKs (they append /v1) and fatal for OpenCode's
@@ -764,23 +766,31 @@ async function startServer(options = {}) {
   // path is otherwise unreachable from a unit test.
   const createOpencodeServer = options._createOpencodeServer
     || await getCreateOpencodeServer();
-  const serverOptions = buildServerOptions(options);
+
+  // #218 PR 3: ONE config read feeds both levers. The descriptor
+  // (buildProviderModels, inside buildServerOptions) and the engine flag
+  // (withOutputTokenFlag below) used to call loadConfig() separately; a config
+  // write between the two reads could hand the engine a descriptor from one
+  // budget and a flag from another. Named mutant "DOUBLEREAD"
+  // (tests/opencode-client-output-flag.test.js: buildProviderModels must
+  // receive the value startServer read).
+  const { getOutputBudget } = require('./utils/config');
+  const outputBudget = getOutputBudget();
+  const serverOptions = buildServerOptions({ ...options, outputBudget });
 
   // #218 PR 2: the engine reads OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX from the
   // env it is SPAWNED with, and the pinned SDK spreads process.env into that
   // spawn synchronously, before its first await. So the flag is set around the
   // synchronous call only and is restored before the promise is awaited — it
   // never reaches the caller's env or any other child amicus starts. The budget
-  // comes from config here exactly as buildProviderModels reads it for the
-  // per-model descriptor, so the two levers cannot disagree (measured agreeing:
-  // probe rows C2, K6). Unit pin: tests/opencode-client-output-flag.test.js
-  // through the `_createOpencodeServer` seam. SDK-side canary for the
-  // spread-before-await fact: tests/opencode-client-sdk-spawn-timing.test.js
-  // drives the REAL SDK against a fake engine on PATH. Engine-side canary:
-  // probe rows K6/K12/K13, run in CI's keyless job by
-  // tests/probe-flag-canary.integration.test.js.
-  const { withOutputTokenFlag } = require('./utils/engine-output-flag');
-  const { getOutputBudget } = require('./utils/config');
+  // is the ONE value read above and handed to buildProviderModels as well, so
+  // the two levers cannot disagree (measured agreeing: probe rows C2, K6). Unit
+  // pin: tests/opencode-client-output-flag.test.js through the
+  // `_createOpencodeServer` seam. SDK-side canary for the spread-before-await
+  // fact: tests/opencode-client-sdk-spawn-timing.test.js drives the REAL SDK
+  // against a fake engine on PATH. Engine-side canary: probe rows K6/K12/K13,
+  // run in CI's keyless job by tests/probe-flag-canary.integration.test.js.
+  const { withOutputTokenFlag, OUTPUT_TOKEN_FLAG } = require('./utils/engine-output-flag');
 
   // Measure the healthy path. The v4.5.2 timeout had to be sized from the
   // asymmetry of the failure (a slow start costs latency, a failed one costs a
@@ -788,7 +798,14 @@ async function startServer(options = {}) {
   // margin against the ceiling was unmeasurable on exactly the slow boxes that
   // needed it. Now it is one debug line, not an inference.
   const startedAt = Date.now();
-  const sdkServer = await withOutputTokenFlag(getOutputBudget(), () => createOpencodeServer(serverOptions));
+  // #218 PR 3 (council #232 r3 B1): with no budget the wrapper leaves an ambient
+  // OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX untouched (PR 2 ruling R2) and the
+  // engine honours it (probe C3/J2), so a death report must name THAT value, not
+  // the 32000 default. Read here, before the spawn, from the same env the wrapper
+  // reads; null whenever a budget is set (the wrapper overrides the flag then).
+  const ambientOutputTokenFlag = outputBudget === null && typeof process.env[OUTPUT_TOKEN_FLAG] === 'string'
+    ? process.env[OUTPUT_TOKEN_FLAG] : null;
+  const sdkServer = await withOutputTokenFlag(outputBudget, () => createOpencodeServer(serverOptions));
   const { logger } = require('./utils/logger');
   logger.debug('OpenCode server started', {
     startMs: Date.now() - startedAt,
@@ -801,6 +818,14 @@ async function startServer(options = {}) {
   // findListenerPid may return null if the port isn't bound yet (startup race);
   // in that case close() degrades to SIGTERM-only, which is acceptable best-effort.
   const server = buildServerHandle(sdkServer);
+  // #218 PR 3 (council #232 r1 B3): the budget this engine was SPAWNED with
+  // rides its handle, so a death report names the reservation that produced
+  // the finish, not whatever config.json says by then (headless.js ::
+  // readOutputBudgetSafe reads it first). null = unset.
+  server.outputBudget = outputBudget;
+  // Stamped beside the budget for the same reader (headless.js's death report).
+  // Named mutant "AMBIENTNOTSTAMPED" (tests/opencode-client-output-flag.test.js).
+  server.ambientOutputTokenFlag = ambientOutputTokenFlag;
 
   return { client, server };
 }

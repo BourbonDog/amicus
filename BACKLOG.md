@@ -7187,6 +7187,77 @@ checks: 18 matched, 0 mismatched (none), 1 recorded
 
 checks: 31 matched, 0 mismatched (none), 1 recorded
 
+- [x] **#218 PR 3 — what the assistant message carries when the provider stops for length,
+  and a descriptor above the engine's own ceiling, measured (2026-09-05).** Five cases (L1–L5)
+  were added to `scripts/probe-max-tokens.js`, the capture server learned to answer with a
+  per-case body (content, OpenRouter-style `reasoning`, an Anthropic `thinking` block, usage) and
+  to speak the Anthropic messages SSE (stop_reason `max_tokens`), the table gained the assistant
+  message's token counts and text/reasoning parts, and `want` gained an `assistant` half that A,
+  H1 and L1–L4 now pin. The whole 37-case matrix was run under the same sandbox (engine 1.18.15 / sdk
+  1.18.15 / server 1.18.15; 37 started, 37 closed): 36 matched, F3 recorded, nothing moved on
+  the wire rows A–K13. Every direct `anthropic` row now records `finish: 'length'` where the P1
+  and PR 2 tables show `error: APIError` — the capture server previously answered those rows with
+  an OpenAI-shaped stream the Anthropic provider could not parse, so the assistant columns of
+  H1–H4, K1–K5 and K9–K11 differ from the earlier records for that reason alone; their wire
+  columns are identical. What the L rows measured: the engine records `finish: 'length'` on
+  both provider families (A, H1, L1–L5); on OpenAI-compatible routes it subtracts reasoning from
+  completion (L3: output 8 = 40 − 32; L1/L2: 0 output / 32000 reasoning), on the direct
+  Anthropic route it reports no split (L4: 24000 output / 0 reasoning); hidden reasoning leaves
+  no content part (L1), visible reasoning with no answer leaves a `reasoning` part and no `text`
+  part (L2, L4); no row carries a `MessageOutputLengthError`; and a descriptor above the
+  engine's own ceiling is clamped to that ceiling with no variant in play (L5: 70000 + flag
+  100000 → 64000). The kimi dump line reports `limit.output 943718` on this run — the live
+  models.dev value; the PR 2 record describes the startup-refresh race that can make it read the
+  bundled 1048576 instead — no row depends on it. Filed exactly as the run printed it:
+
+| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error | assistant tokens in/out/reasoning | assistant parts |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | bare {} descriptor | max_tokens 32000, no reasoning | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| B | limit.output 4096 | 4096 | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — | 5/1/0 | text |
+| C1 | env 64000 + limit.output 100000 | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| C2 | env 64000 + limit.output 50000 | 50000 | 64000 | /api/v1/chat/completions | 50000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| C3 | env 64000 + bare {} (engine reports ceiling 1048576) | 64000 | 64000 | /api/v1/chat/completions | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| D1 | env 64000abc (malformed) | 32000 silently | 64000abc | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| D2 | env 0 | 32000 | 0 | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| E1 | options.max_tokens 4096 | 4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped") | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — | 5/1/0 | text |
+| E2 | options.reasoning {effort:low} | reasoning effort low on the wire | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | — | — | 5/1/0 | text |
+| F1 | amicus sendPrompt today: body.reasoning {effort:low} | NO reasoning on the wire | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| F2 | prompt variant 'low' (kimi: low, high, max) | reasoning effort low | — | /api/v1/chat/completions | 32000 | {"effort":"low"} | — | 204 | length | low | — | 5/1/0 | text |
+| F3 | prompt variant 'medium' (kimi has no medium) | record: silent no-op or error | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | medium | — | 5/1/0 | text |
+| F4 | prompt variant 'medium' (qwen has medium) | reasoning effort medium | — | /api/v1/chat/completions | 32000 | {"effort":"medium"} | — | 204 | length | medium | — | 5/1/0 | text |
+| H1 | direct anthropic haiku {} | 32000 | — | /v1/messages | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| H2 | direct anthropic haiku {} + env 64000 | 64000 (engine ceiling 64000) | 64000 | /v1/messages | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| H3 | direct anthropic haiku variant 'high' | thinking budget_tokens 16000 | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | length | high | — | 5/1/0 | text |
+| H4 | direct anthropic haiku variant 'max' | thinking budget_tokens 31999; max_tokens 63999 if additive | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| J1 | custom openai-compatible unknown model {} | 32000 | — | /v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| J2 | custom unknown model + env 64000 | 64000 (raw budget, nothing to clamp) | 64000 | /v1/chat/completions | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K1 | direct anthropic haiku limit.output 8000 | 8000 — the descriptor lowers the reservation on the Anthropic route too | — | /v1/messages | 8000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K2 | direct anthropic haiku limit.output 8000 + variant 'high' | 24000 = 8000 + 16000 — the thinking budget is ADDED to the descriptor value, not carved out of it | — | /v1/messages | 24000 | — | {"type":"enabled","budget_tokens":16000} | 204 | length | high | — | 5/1/0 | text |
+| K3 | direct anthropic haiku {} + env 64000 + variant 'max' | 64000 — 64000 + 31999 clamped to the ceiling | 64000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| K4 | direct anthropic haiku limit.output 64000 + env 64000 + variant 'max' | 64000 — the shipped budget-64000 shape, clamped the same way | 64000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| K5 | direct anthropic haiku {} + env 100000 (above the 64000 ceiling) | 64000 — the flag is clamped to the ceiling the engine knows | 100000 | /v1/messages | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K6 | env 100000 + limit.output 100000 (kimi) | 100000 — the shipped budget-100000 shape raises the reservation | 100000 | /api/v1/chat/completions | 100000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K7 | env 64000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the flag (amicus never emits it) | 64000 | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K8 | limit.output 8000 + options.max_tokens 4096 (kimi) | 4096 — options.max_tokens wins over the descriptor (amicus never emits it) | — | /api/v1/chat/completions | 4096 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K9 | direct anthropic haiku limit.output 40000 + variant 'max' | 63999 = min(40000, 32000) + 31999 — the default caps the descriptor at 32000; the sum sits under the ceiling and is left alone | — | /v1/messages | 63999 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| K10 | direct anthropic haiku limit.output 70000 + env 100000 + variant 'max' | 64000 — 70000 + 31999 clamped to the ceiling, not to the descriptor | 100000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| K11 | env 8000 + direct anthropic haiku limit.output 8000 + variant 'high' | 24000 = 8000 + 16000 — the shipped budget-8000 shape with a thinking variant | 8000 | /v1/messages | 24000 | — | {"type":"enabled","budget_tokens":16000} | 204 | length | high | — | 5/1/0 | text |
+| K12 | env 8000 + bare {} (kimi) | 8000 — the flag lowers a row the amicus catalog cannot clamp | 8000 | /api/v1/chat/completions | 8000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| K13 | env 8000 + custom unknown model {} | 8000 — a model neither catalog knows receives the budget as-is | 8000 | /v1/chat/completions | 8000 | — | — | 204 | length | — | — | 5/1/0 | text |
+| L1 | kimi {} — length, no content, HIDDEN reasoning (usage completion 32000 / reasoning 32000) | finish 'length', tokens 0 output / 32000 reasoning, no text or reasoning part — the Mode 2 shape as the ledger showed it | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/0/32000 | (none) |
+| L2 | kimi {} — length, no content, VISIBLE reasoning (same usage) | finish 'length', a reasoning part and no text part — the shape headless would promote to output | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/0/32000 | reasoning |
+| L3 | kimi {} — length, visible reasoning AND content (usage completion 40 / reasoning 32) | output 8 = 40 − 32 if the engine subtracts reasoning from completion; both parts | — | /api/v1/chat/completions | 32000 | — | — | 204 | length | — | — | 5/8/32 | reasoning,text |
+| L4 | direct anthropic haiku {} + variant 'high' — thinking block, no text, stop_reason max_tokens (usage output 24000) | finish 'length', 24000 output / 0 reasoning (Anthropic reports no split), a reasoning part and no text part | — | /v1/messages | 48000 | — | {"type":"enabled","budget_tokens":16000} | 204 | length | high | — | 5/24000/0 | reasoning |
+| L5 | direct anthropic haiku limit.output 70000 + env 100000, no variant | 64000 if the engine clamps a descriptor above its own ceiling with no variant in play; 70000 if only a thinking sum is clamped (K10) | 100000 | /v1/messages | 64000 | — | — | 204 | length | — | — | 5/1/0 | text |
+
+/config/providers per model:
+- openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":943718},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
+- openrouter/qwen/qwen3.8-max-0902: {"fromCase":"F4","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1000000,"output":131072},"variants":{"minimal":{"reasoning":{"effort":"minimal"}},"low":{"reasoning":{"effort":"low"}},"medium":{"reasoning":{"effort":"medium"}},"high":{"reasoning":{"effort":"high"}},"xhigh":{"reasoning":{"effort":"xhigh"}}},"options":{}}
+- anthropic/claude-haiku-4-5: {"fromCase":"H1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":200000,"output":64000},"variants":{"high":{"thinking":{"type":"enabled","budgetTokens":16000}},"max":{"thinking":{"type":"enabled","budgetTokens":31999}}},"options":{}}
+- probe/unknown-model: {"fromCase":"J1","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":0,"output":0},"variants":{},"options":{}}
+
+checks: 36 matched, 0 mismatched (none), 1 recorded
+
 - [x] **Curated `qwen` alias pins `openrouter/qwen/qwen3.8-max`, which OpenRouter and models.dev
   both list only as `qwen/qwen3.8-max-0902` since 2026-09-05 (found by the PR 2 probe run).** A
   default-alias user has a dead `qwen` seat until the pin moves (`src/utils/curated-models.js`, the
@@ -7209,6 +7280,27 @@ checks: 31 matched, 0 mismatched (none), 1 recorded
   happen on this branch; when PR 4 sends `variant`, set the descriptor to budget − the variant's
   `budgetTokens` (the `/config/providers` dump exposes it per variant) or refuse a variant the budget
   cannot hold, and add the probe row that proves it.
+- [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
+  PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
+  so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi
+  row). Skipping it loses a seat a variance in reasoning length might have saved; shrinking the
+  reservation per retry is impossible today (the flag is per engine spawn, the descriptor per
+  server). Owner's call. PR 3 changed nothing in the retry pass itself, but by making the
+  promoted-thinking shape an error it extended the retry to a leg 4.9.3 counted as a review — that
+  seat now bills a second reservation where it billed none (the CHANGELOG "Changed" entry says so).
+- [x] **The chair packet should flag a review cut at its reservation (#218 PR 3, R4).** The
+  `output-truncated` Note reaches stderr, `run.json` and the Workspace, but the chair reads the cut
+  review with no marker that it ended where the reservation ended. Carry `finish: 'length'` into the
+  chair briefing's per-review header (briefings-chair.js) so the chair weighs it as partial. **Done
+  in PR #232 (council round 2, B1): `run-assemble.js :: buildChairPacketFile` forwards `cut: true`
+  for a leg whose `finish` is `'length'` (emit-when-cut) and
+  `briefings-chair.js :: buildChairPacket` renders `— CUT at its output reservation (…)` in
+  that review's header.**
+- [ ] **Stage-2 judge, chair and debate legs cut at their reservation get the death name but no
+  Note (#218 PR 3, R4).** headless.js names the death for every leg; the `output-truncated` Note is
+  emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails
+  parse today with no length clue on the record; extend the Note to `run-stage2.js` and the chair
+  path once the Stage-1 shape has been seen in a real run.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 

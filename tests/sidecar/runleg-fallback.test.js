@@ -117,6 +117,46 @@ describe('runLegWithFallback (spec 6.2)', () => {
     for (const row of rows) { expect(row.tag).toBe('sprint42'); }
   });
 
+  // #218 PR 3: recordAttemptSpend must carry the engine's `finish` (already on
+  // `doc` by the time runSingleAttempt hands it back) onto the attempt's row,
+  // emit-when-set — same convention as `tag` above, but omitted (not null)
+  // when absent, matching appendSpend's linkage-field convention.
+  test('a finish on the attempt doc threads onto its one spend row (#218 PR 3)', async () => {
+    const project = tmp();
+    const fakeRunOnce = async ({ model }) => ({ legId: 'w1-1', status: 'error', model, finish: 'length',
+      usage: { tokens: { input: 100, output: 60 }, cost: { amount: 0.03, source: 'reported' } } });
+    await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w1-1', waveId: 'w1', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async ({ model }) => ({ kind: 'resolved', executableId: model, gateway: 'direct' }),
+      spendDir: project,
+    });
+    const rows = readSpendRows(project);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].finish).toBe('length');
+  });
+
+  test('an attempt doc without finish carries no finish key on its spend row (#218 PR 3)', async () => {
+    const project = tmp();
+    const fakeRunOnce = async ({ model }) => ({ legId: 'w1-1', status: 'complete', model,
+      usage: { tokens: { input: 100, output: 60 }, cost: { amount: 0.03, source: 'reported' } } });
+    await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w1-1', waveId: 'w1', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async ({ model }) => ({ kind: 'resolved', executableId: model, gateway: 'direct' }),
+      spendDir: project,
+    });
+    const rows = readSpendRows(project);
+    expect(rows).toHaveLength(1);
+    expect('finish' in rows[0]).toBe(false);
+  });
+
   // D16 convention pin: an untagged leg's attempt row carries tag:null.
   test('an untagged leg carries tag:null on its attempt row', async () => {
     const project = tmp();

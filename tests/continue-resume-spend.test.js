@@ -75,6 +75,37 @@ describe('continue/resume finalize writes usage + ledger row (BACKLOG.md :: "con
     expect('usage' in meta).toBe(false);
     expect(require('../src/utils/spend-ledger').readSpendRows(dir)).toEqual([]);
   });
+
+  // #218 PR 3 whole-branch review: the reopen ledger row carries `finish` when
+  // the result has one. Named mutant "SOLOROWNOFINISH" (drop `finish` from the
+  // appendSpend call in reopen-spend.js :: finalizeSpendForReopen).
+  test("result.finish 'length' rides the reopen ledger row", () => {
+    const dir = tmp();
+    const meta = { taskId: 'k3', model: 'gpt', mode: 'headless', status: 'error' };
+    finalizeSpendForReopen({
+      taskId: 'k3', model: 'gpt', mode: 'headless', op: 'continue',
+      result: {
+        summary: '', completed: false, error: 'OUTPUT_LENGTH: ...', finish: 'length',
+        usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
+      },
+      status: 'error', project: '/p', metadata: meta,
+    }, { dir });
+    const rows = require('../src/utils/spend-ledger').readSpendRows(dir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+  });
+
+  test("a result with no finish leaves the key off the row (appendSpend's typeof-string gate)", () => {
+    const dir = tmp();
+    const meta = { taskId: 'k4', model: 'gpt', mode: 'headless', status: 'complete' };
+    finalizeSpendForReopen({
+      taskId: 'k4', model: 'gpt', mode: 'headless', op: 'continue',
+      result, status: 'complete', project: '/p', metadata: meta,
+    }, { dir });
+    const rows = require('../src/utils/spend-ledger').readSpendRows(dir);
+    expect(rows).toHaveLength(1);
+    expect('finish' in rows[0]).toBe(false);
+  });
 });
 
 // Finding 2: only the pure helper above had coverage — the reload -> call-helper
@@ -165,6 +196,87 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('timeout');
+  });
+
+  // #218 PR 3 whole-branch review: an OUTPUT_LENGTH death is `status: 'error'`,
+  // so it takes continue.js/resume.js's `terminal.status === 'error'` branch —
+  // the one that writes metadata.json directly and never calls finalizeSession.
+  // Named mutants: "SOLOERRORNOFINISH" (drop the `meta.finish` line from that
+  // branch) and "SOLOROWNOFINISH" (drop `finish` from the appendSpend call).
+  const OUTPUT_LENGTH_REASON = "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)";
+  const lengthDeath = {
+    completed: false, error: OUTPUT_LENGTH_REASON, summary: '', finish: 'length',
+    usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
+  };
+
+  it("an OUTPUT_LENGTH continue writes finish 'length' on metadata.json and on its ledger row", async () => {
+    seedSession(projectDir, 'old0e2e3');
+    runHeadless.mockResolvedValue({ ...lengthDeath, timedOut: false, aborted: false, taskId: 'new0e2e3' });
+    await continueSidecar({
+      taskId: 'old0e2e3', newTaskId: 'new0e2e3', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'new0e2e3')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect(meta.reason.startsWith('OUTPUT_LENGTH:')).toBe(true);
+    expect(meta.finish).toBe('length'); // SOLOERRORNOFINISH
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('error');
+    expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+  });
+
+  it("an OUTPUT_LENGTH resume writes finish 'length' on metadata.json and on its ledger row", async () => {
+    seedSession(projectDir, 'res0e2e3');
+    runHeadless.mockResolvedValue({ ...lengthDeath, timedOut: false, aborted: false, taskId: 'res0e2e3' });
+    await resumeSidecar({
+      taskId: 'res0e2e3', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e3')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect(meta.reason.startsWith('OUTPUT_LENGTH:')).toBe(true);
+    expect(meta.finish).toBe('length'); // SOLOERRORNOFINISH
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('error');
+    expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+  });
+
+  // Council #232 r1 B1: a resume REUSES the session's own metadata.json, so a
+  // finish stamped by the previous attempt is still on the object resume.js
+  // writes back. When this attempt records none, it must be removed.
+  // Named mutant "STALEFINISH": drop the `else { delete … }` from resume.js's
+  // error branch / session-utils.js :: finalizeSession.
+  it("a resumed run that errors with no finish REMOVES the prior attempt's (council #232 r1 B1)", async () => {
+    seedSession(projectDir, 'res0e2e4', { finish: 'length' });
+    runHeadless.mockResolvedValue({
+      summary: '', completed: false, timedOut: false, aborted: false,
+      taskId: 'res0e2e4', error: 'connection reset', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e4', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e4')), 'utf-8'));
+    expect(meta.status).toBe('error');
+    expect('finish' in meta).toBe(false); // STALEFINISH
+  });
+
+  it("a resumed run that completes with no finish also drops the prior attempt's (council #232 r1 B1)", async () => {
+    seedSession(projectDir, 'res0e2e5', { finish: 'length' });
+    runHeadless.mockResolvedValue({
+      summary: 'resumed', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e5', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e5', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e5')), 'utf-8'));
+    expect(meta.status).toBe('complete');
+    expect('finish' in meta).toBe(false); // STALEFINISH
   });
 });
 

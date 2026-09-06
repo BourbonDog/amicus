@@ -12,7 +12,20 @@
 
 const {
   withOutputTokenFlag, outputTokenFlagValue, OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS,
+  PLAIN_OUTPUT_TOKEN_FLAG,
 } = require('../../src/utils/engine-output-flag');
+
+describe('PLAIN_OUTPUT_TOKEN_FLAG — the one measured form', () => {
+  test.each(['64000', '8000', '1'])('%s is the measured shape', (v) => {
+    expect(PLAIN_OUTPUT_TOKEN_FLAG.test(v)).toBe(true);
+  });
+  test.each(['064000', '64000abc', '0', ' 64000', '64000 ', '1e5', '0x10', '64000.7', ''])(
+    '%s is not the measured shape',
+    (v) => {
+      expect(PLAIN_OUTPUT_TOKEN_FLAG.test(v)).toBe(false);
+    },
+  );
+});
 
 describe('constants', () => {
   test('the flag name is the engine\'s, and the default is the measured 32000', () => {

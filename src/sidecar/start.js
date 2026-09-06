@@ -200,12 +200,13 @@ async function startSidecar(options) {
   if (terminal.status === 'error') {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
     // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
-    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status });
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish });
   }
 
   const { resolveUsage } = require('../utils/pricing');
@@ -223,6 +224,7 @@ async function startSidecar(options) {
       appendSpend({
         taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
         op: 'start', status: statusFromResult(result), project: effectiveProject,
+        finish: result && result.finish, // #218 PR 3: appendSpend keeps it only when it is a string
         // ⚠️ DE-ROT: `metadata` is NOT in scope at startSidecar's finalize site — the objects
         // there are `meta` (createSessionMetadata result) and `m`; `metadata` is a local only
         // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the
@@ -232,7 +234,7 @@ async function startSidecar(options) {
         // (To also attribute v4.2 'local': thread the resolved route gateway — dropped today at
         // cli-handlers-run.js:47 — into createSessionMetadata and read `meta.gateway`, as continue.js:111 does.)
         // v4.7 F8 D16: same in-scope-value rule as gateway above — `m` is the
-        // just-re-read metadata (line 214), which carries `tag` when
+        // just-re-read metadata (line 215), which carries `tag` when
         // createSessionMetadata stored one (absent otherwise); `|| null` folds
         // that into spend-ledger.js's null-not-absent dim convention.
         tag: m.tag || null,

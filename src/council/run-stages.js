@@ -27,7 +27,7 @@ const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
 const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
-const { skippedWaveNote } = require('./run-retry-notes');
+const { skippedWaveNote, truncatedReviewNote } = require('./run-retry-notes');
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -139,6 +139,13 @@ async function runStage1(ctx) {
   // it is the twin clobber this PR removes (two healed twins, one file).
   const allSeatOf = new Map([...seatOf, ...retry.seatOf]);
   const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs], allSeatOf);
+  // #218 PR 3: a review the provider cut at the reservation still counts -- it
+  // is announced, not lost. Only MATERIALIZED legs qualify (a length-stopped
+  // leg with no answer text is a dead leg and never reaches this list); named
+  // mutants "DEADNOTED" (iterate `legs` instead) and "NONOTE" (drop the loop).
+  for (const m of materialized) {
+    if (m.leg && m.leg.finish === 'length') { ctx.degrade.note(truncatedReviewNote(m.modelInput, m.leg)); }
+  }
   const stillDeadLegs = [...retry.skippedDeadLegs, ...retry.stillDeadLegs];
   const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
 

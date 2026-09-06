@@ -82,26 +82,45 @@ describe('startServer sets the engine output flag around the synchronous spawn',
     expect(Object.prototype.hasOwnProperty.call(process.env, FLAG)).toBe(false);
   });
 
-  it('reads the budget from config, the same source buildProviderModels uses', async () => {
-    config.getOutputBudget.mockReturnValue(8000);
-    await startServer(OK);
-    expect(config.getOutputBudget).toHaveBeenCalled();
-    expect(seen[0].atCall).toBe('8000');
+  it('reads config ONCE and hands the same budget to the descriptor and the flag (#218 PR 3)', async () => {
+    const spy = jest.spyOn(config, 'buildProviderModels');
+    config.getOutputBudget.mockReturnValue(40000);
+    const { server } = await startServer(OK);
+    // #218 PR 3 (council #232 r1 B3): the same one read also rides the handle, so a
+    // death report names the reservation this engine was spawned with.
+    expect(server.outputBudget).toBe(40000);
+    // toHaveBeenCalledTimes(1) pins startServer's own explicit read through the
+    // mocked export — its single call to config.getOutputBudget. It cannot see
+    // a call buildProviderModels makes internally, because that call reaches
+    // the module's real (unmocked) lexical getOutputBudget, not this spy.
+    expect(config.getOutputBudget).toHaveBeenCalledTimes(1);
+    // Named mutant "DOUBLEREAD": drop `outputBudget` from the spread startServer
+    // hands buildServerOptions — buildProviderModels then receives `undefined`
+    // instead of 40000 as its second argument, so this assertion fails.
+    expect(spy).toHaveBeenCalledWith(expect.any(Array), 40000);
+    expect(seen[0].atCall).toBe('40000');
+    spy.mockRestore();
   });
 
   it('with no budget, the env is untouched — an ambient flag the user exported reaches the spawn as-is', async () => {
     process.env[FLAG] = '64000';
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen).toEqual([{ atCall: '64000', afterFirstAwait: '64000' }]);
     expect(process.env[FLAG]).toBe('64000');
+    // The value that governed THIS spawn rides the handle beside the budget, so the
+    // death report names it rather than the engine's default (council #232 r3 B1).
+    expect(server.ambientOutputTokenFlag).toBe('64000'); // named mutant "AMBIENTNOTSTAMPED"
   });
 
   it('with a budget, an ambient flag is overridden for the spawn and restored afterwards', async () => {
     process.env[FLAG] = '64000';
     config.getOutputBudget.mockReturnValue(40000);
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen).toEqual([{ atCall: '40000', afterFirstAwait: '64000' }]);
     expect(process.env[FLAG]).toBe('64000');
+    // The budget overrode the ambient value for the spawn, so there is no ambient
+    // value to name — the budget clause is the whole story.
+    expect(server.ambientOutputTokenFlag).toBeNull();
   });
 
   it('a spawn failure still restores the env before the rejection is seen, and the error propagates', async () => {
@@ -113,7 +132,12 @@ describe('startServer sets the engine output flag around the synchronous spawn',
 
   it('a malformed budget sets nothing (the engine would fall back to 32000 silently)', async () => {
     config.getOutputBudget.mockReturnValue(null); // normalizeOutputBudget already rejected it
-    await startServer(OK);
+    const { server } = await startServer(OK);
     expect(seen[0].atCall).toBeUndefined();
+    // The handle carries the unset value, so the death report says "unset" rather
+    // than naming a budget nothing reserved (council #232 r1 B3).
+    expect(server.outputBudget).toBeNull();
+    // No ambient flag in this env either (beforeEach deletes it), so nothing to name.
+    expect(server.ambientOutputTokenFlag).toBeNull();
   });
 });

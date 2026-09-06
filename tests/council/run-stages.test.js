@@ -715,6 +715,59 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
   });
 });
 
+// ---- #218 PR 3: a Stage-1 review the provider cut at its output reservation ----
+//
+// The sibling of the OUTPUT_LENGTH death (utils/output-length.js): the leg's
+// `finish` is 'length' AND it still carried answer text, so the review reaches
+// the packet. It is announced once per seat as `kind: 'info'` on
+// `output-truncated` — never a loss, never a flip of `degraded`.
+describe('#218 PR 3: a review cut at its output reservation is announced, not lost', () => {
+  test('a review cut at the reservation is announced once as info on output-truncated and is NOT a loss (#218 PR 3)', async () => {
+    // roster (-s1): ['a', 'b'] -> a=slot1, b=slot2. `cut` is b's own leg, complete
+    // and carrying review prose, but stopped at the reservation.
+    const cut = { ...mkLeg('b', review('b'), 'complete', 'abc123-s1', 2), finish: 'length',
+      usage: { tokens: { input: 900, output: 700, reasoning: 31000 }, cost: { amount: 0.5, source: 'reported' } } };
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1), cut] }, exitCode: 0 });
+    const res = await runStage1(ctx);
+    const notes = ctx._notes.filter((n) => n.channel === 'output-truncated');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].kind).toBe('info');
+    expect(notes[0].what).toBe("seat b's review was cut at its output reservation");
+    expect(notes[0].why).toBe("the provider stopped for length (finish 'length') after 31000 reasoning / 700 output tokens; the review ends where the reservation ended");
+    expect(ctx._notes.filter((n) => n.channel === 'dead-leg')).toHaveLength(0);
+    expect(res.reviews.map((r) => r.modelInput).sort()).toEqual(['a', 'b']);
+    expect(res.degraded).toBe(false);
+  });
+
+  test('an OUTPUT_LENGTH death is a dead leg whose note carries the reason verbatim, and gets NO truncation note', async () => {
+    const dead = { ...deadLeg('b', 'error', "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)", 'abc123-s1', 2), finish: 'length' };
+    // Same harness as 'retry also dies': roster (-s1) ['a', 'b'], retry roster (-s1r1) ['b'] alone.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1), dead] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('b', 'timeout', null, 'abc123-s1r1', 1)] }, exitCode: 0 });
+    await runStage1(ctx);
+    // Named mutant "DEADNOTED": iterate `legs` instead of `materialized` in run-stages — a note appears here.
+    expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
+    const n = ctx._notes.find((x) => x.channel === 'dead-leg');
+    expect(n.why).toMatch(/^the leg ended 'error': OUTPUT_LENGTH: the provider stopped at the max_tokens reservation \(finish 'length'\) and no answer text arrived — 32000 reasoning \/ 0 output tokens; .* with no usable output/);
+  });
+
+  test('legs with no finish produce no output-truncated note', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'],
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: () => { throw new Error('no solos expected'); } });
+    const res = await runStage1(ctx);
+    expect(res.reviews.map((r) => r.modelInput).sort()).toEqual(['a', 'b']);
+    // Named mutant "NONOTE": drop the loop — the first test fails; this one pins the quiet path.
+    expect(ctx._notes.filter((n) => n.channel === 'output-truncated')).toHaveLength(0);
+  });
+});
+
 // ---- v4.8 PR2b Task 7 (R-B): a launched seat whose leg never came back ----
 //
 // The class this block owns is invisible before it: the wave DID return legs,

@@ -237,6 +237,7 @@ src/
 │   ├── no-output-backstop.js  # v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces
 │   ├── node-version-guard.js
 │   ├── openrouter-credit.js  # The OpenRouter credit/limit probe, split out of api-key-validation.js to keep
+│   ├── output-length.js  # #218 PR 3: name the "Mode 2" death.
 │   ├── path-fence.js  # Shared realpath-containment fence.
 │   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
@@ -630,7 +631,7 @@ evals/
 | `utils/engine-log-parse.js` | Line-shape parsing for the engine log: level, session, message. | `isErrorLine()`, `extractMessage()`, `collapseExcerpt()`, `mentionsSession()`, `lineIsAboutSession()` |
 | `utils/engine-log-tail.js` | One engine-log FILE: read its tail, find the newest usable excerpt in it. | `newestExcerptInFile()` |
 | `utils/engine-log.js` | Resolve the OpenCode engine's own error line for one session. | `engineErrorForSession()`, `engineLogDirCandidates()`, `isErrorLine()`, `extractMessage()`, `collapseExcerpt()` |
-| `utils/engine-output-flag.js` | #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX. | `withOutputTokenFlag()`, `outputTokenFlagValue()`, `OUTPUT_TOKEN_FLAG()`, `ENGINE_DEFAULT_OUTPUT_TOKENS()` |
+| `utils/engine-output-flag.js` | #218 PR 2 — the one engine env flag amicus sets: OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX. | `withOutputTokenFlag()`, `outputTokenFlagValue()`, `OUTPUT_TOKEN_FLAG()`, `ENGINE_DEFAULT_OUTPUT_TOKENS()`, `PLAIN_OUTPUT_TOKEN_FLAG()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
 | `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |
@@ -672,6 +673,7 @@ evals/
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `DEFAULT_NO_OUTPUT_BACKSTOP_MS()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
+| `utils/output-length.js` | #218 PR 3: name the "Mode 2" death. | `OUTPUT_LENGTH_PREFIX()`, `isOutputLengthDeath()`, `formatOutputLengthReason()` |
 | `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |

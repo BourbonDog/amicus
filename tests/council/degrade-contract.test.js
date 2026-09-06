@@ -145,6 +145,24 @@ describe("kind 'info' + channel 'ledger-skipped' (v4.9 task mode, W5.1)", () => 
   });
 });
 
+describe("kind 'info' + channel 'output-truncated' (#218 PR 3)", () => {
+  const { truncatedReviewNote } = require('../../src/council/run-retry-notes');
+  test('DEGRADE_CHANNELS has output-truncated', () => {
+    expect(DEGRADE_CHANNELS.has('output-truncated')).toBe(true);
+  });
+  test('truncatedReviewNote is an info record that formats with Note: and Try:', () => {
+    const leg = { finish: 'length', usage: { tokens: { input: 900, output: 700, reasoning: 31000 } } };
+    const r = makeDegrade(truncatedReviewNote('kimi', leg));
+    expect(r.kind).toBe('info');
+    expect(r.channel).toBe('output-truncated');
+    expect(formatDegrade(r)).toBe("Note: seat kimi's review was cut at its output reservation — the provider stopped for length (finish 'length') after 31000 reasoning / 700 output tokens; the review ends where the reservation ended. The review is in the packet as far as it got, and its header in the chair packet says it was cut; nothing else changes. Try: raise outputBudget in config.json (docs/configuration.md, Output budget).\n");
+    expect(r.data).toEqual({ seat: 'kimi', finish: 'length', reasoningTokens: 31000, outputTokens: 700 });
+  });
+  test('a leg with no usage still formats with zero counts', () => {
+    expect(makeDegrade(truncatedReviewNote('glm', { finish: 'length' })).why).toContain('after 0 reasoning / 0 output tokens;');
+  });
+});
+
 describe('seat-unbound channel (v4.8)', () => {
   test('makeDegrade round-trips a seat-unbound degrade', () => {
     const r = makeDegrade({

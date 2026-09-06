@@ -572,6 +572,21 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[0].ttftMs).toBe(0);
   });
 
+  it("threads a leg's finish from runHeadless onto its on-disk leg patch and the wave doc (#218 PR 3)", async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), finish: 'length' }))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // older engine: no finish
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'fin12345' });
+    const legMeta1 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'fin12345-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta1.finish).toBe('length');
+    expect(wave.legs[0].finish).toBe('length');
+    const legMeta2 = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'fin12345-2', 'metadata.json'), 'utf-8'));
+    expect('finish' in legMeta2).toBe(false);
+    expect('finish' in wave.legs[1]).toBe(false);
+  });
+
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))

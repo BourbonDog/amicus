@@ -252,6 +252,18 @@ The two clauses are independent: either can appear without the other, and the sk
 
 ---
 
+## Headless Leg Fails with `OUTPUT_LENGTH`
+
+**Symptom:** A headless leg (`amicus start --no-ui`, or one leg of a `fanout`/council run) ends `error` with a reason starting `OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget …`. The middle clause may instead read `and only reasoning was streamed, no answer text` — the provider showed its reasoning and nothing else. On a council run the seat is a dead leg and is retried once like any other death — unchanged for the no-output shape; new for the promoted-thinking shape, which 4.9.3 counted as a review — and if the retry dies too the seat is announced (`Notice: seat … did not review — the leg ended 'error': OUTPUT_LENGTH: …`).
+
+**Cause:** The model spent its whole output reservation reasoning and never started the answer. Every clause is an observation, not a guess: `finish 'length'` is the engine's record of the provider's own stop reason; the two counts are the engine's token record for that message (on OpenAI-compatible routes reasoning and output are split; on the direct Anthropic route everything lands in `output` and reasoning reads 0 — the message still says `finish 'length'`); the budget clause is the value the engine serving the leg was started with — read once at spawn and carried on the server handle (`config.json` at that moment; a later edit does not change what the leg reserved); with no budget set it names the ambient `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` the engine was started with when there was one (a plain positive integer is honoured; anything else falls back to 32,000 — measured, D1/D2) and the engine's 32,000 default otherwise. A server handle amicus did not start carries no spawn value; then `config.json` is read when the death is named. The reservation is 32,000 by default (see [Output budget](./configuration.md#output-budget-outputbudget)). The likeliest driver is reasoning effort — OpenRouter applies a model's default effort when none is sent, and `--thinking` does not reach the engine today (PR 4 fixes that) — so raising the budget gives the reasoning room, and the leg still bills for it.
+
+**Confirm:** `finish: 'length'` is on the leg's `metadata.json` and on its row in `~/.config/amicus/spend-ledger.jsonl` (the `finish` field, present only when the engine recorded one), beside the token counts. A council run's `run.json` carries it on the leg document.
+
+**Fix:** Raise `outputBudget` in `config.json` (the reservation is `min(outputBudget, the model's ceiling)`; see the five bullets in [Output budget](./configuration.md#output-budget-outputbudget)), or seat a model whose default effort fits the reservation. If the same seat dies the same way on its retry, the retry cost you the reservation twice — lower the effort once PR 4 lands, or drop the seat. A leg that took longer than `AMICUS_NO_OUTPUT_BACKSTOP_MS` to reason with nothing visible dies as `NO_OUTPUT_BACKSTOP` first, not as this — see that section above.
+
+---
+
 ## Multiple Active Sessions / Wrong Session Picked Up
 
 **Symptom:** Amicus resumes or reads from the wrong session.

@@ -44,6 +44,17 @@ const OUTPUT_TOKEN_FLAG = 'OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX';
 const ENGINE_DEFAULT_OUTPUT_TOKENS = 32000;
 
 /**
+ * The ONE form of OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX measured to be honoured:
+ * a plain decimal integer with no leading zero -- the shape amicus writes
+ * (outputTokenFlagValue) and the shape the probe ran (C1, K5, K12). `64000abc`
+ * and `0` fell back to 32000 silently (D1/D2); ' 64000 ', '064000', '1e5',
+ * '0x10' and '64000.7' have never been probed. Shared by the doctor row
+ * (doctor-output-budget-check.js :: evaluateOutputBudget) and the death report
+ * (output-length.js :: formatOutputLengthReason) so the two gates cannot drift.
+ */
+const PLAIN_OUTPUT_TOKEN_FLAG = /^[1-9]\d*$/;
+
+/**
  * The flag value a budget produces, or null when no flag should be set.
  * Exactly normalizeOutputBudget's acceptance rule (a positive finite integer,
  * floored), rendered as plain decimal digits even above 1e21; everything else
@@ -88,4 +99,7 @@ function withOutputTokenFlag(budget, fn, env = process.env) {
   }
 }
 
-module.exports = { withOutputTokenFlag, outputTokenFlagValue, OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS };
+module.exports = {
+  withOutputTokenFlag, outputTokenFlagValue, OUTPUT_TOKEN_FLAG, ENGINE_DEFAULT_OUTPUT_TOKENS,
+  PLAIN_OUTPUT_TOKEN_FLAG,
+};

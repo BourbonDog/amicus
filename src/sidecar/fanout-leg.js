@@ -215,6 +215,9 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // nothing whichever one holds: it is one `&&` against a value already in a
     // register, and it is dead code if `result` is truly always assigned.
     ttftMs: result && isMeasuredTtft(result.ttftMs) ? result.ttftMs : undefined,
+    // #218 PR 3: the engine's `finish` for the leg's last assistant message
+    // ('length' = stopped at the reservation), emit-when-set like ttftMs above.
+    finish: (result && typeof result.finish === 'string') ? result.finish : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

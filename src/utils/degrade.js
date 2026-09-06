@@ -17,6 +17,13 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
   'stage1-retry',
+  // #218 PR 3: a Stage-1 review the provider cut at the max_tokens reservation
+  // (the leg's `finish` is 'length' and it still carried answer text). kind
+  // 'info' only -- the review is in the packet, nothing was lost, the exit code
+  // does not move; the chair just reads a review that ends where the
+  // reservation ended. A cut with NO answer text is a dead leg (leg.error
+  // starts `OUTPUT_LENGTH:`) and rides `dead-leg` like every other death.
+  'output-truncated',
   // v4.9 task mode: a task run writes no reliability-ledger rows — announced as kind:'info'.
   'ledger-skipped',
   // v4.8: the seat<->leg join failed. THREE shapes, one channel: a launched seat whose wave

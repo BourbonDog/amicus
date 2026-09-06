@@ -245,11 +245,12 @@ async function continueSidecar(options) {
   if (terminal.status === 'error') {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status });
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish });
   }
   // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).

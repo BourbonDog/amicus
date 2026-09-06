@@ -50,6 +50,7 @@ function durationBetween(createdAt, completedAt) {
  *   metadata.pack was recorded (solo session launched via --pack), sourced straight off
  *   `metadata` like `usage`/`opencodeSessionId` already are (no new function parameter needed).
  *   `tag` (v4.7 F8/D13) is additive the same way — present only when metadata.tag was recorded.
+ *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message.
  */
 function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
@@ -80,6 +81,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     // (B3): emit-when-VALID via the shared predicate — `metadata` is read off
     // disk, so NaN/±Infinity/negatives/fractions all reach here. See ./ttft.js.
     ...(isMeasuredTtft(metadata.ttftMs) ? { ttftMs: metadata.ttftMs } : {}),
+    ...(typeof metadata.finish === 'string' ? { finish: metadata.finish } : {}), // #218 PR 3: emit-when-set (named mutant FINISHCOERCED)
     usage: usage !== null ? usage : (metadata.usage || null),
     ...(metadata.pack ? { pack: metadata.pack } : {}),
     ...(metadata.tag ? { tag: metadata.tag } : {}),

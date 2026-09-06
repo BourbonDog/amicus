@@ -1,6 +1,6 @@
 // tests/conversation-mirror.test.js
 'use strict';
-const { createMirrorState, mirrorMessages } = require('../src/sidecar/conversation-mirror');
+const { createMirrorState, mirrorMessages, mirrorUsageOnly } = require('../src/sidecar/conversation-mirror');
 const NOW = () => '2026-06-23T00:00:00.000Z';
 
 const asstText = (id, text, completed) => ({ info: { role: 'assistant', id, time: completed ? { completed: 1 } : {} }, parts: [{ id: `${id}:t`, type: 'text', text }] });
@@ -68,6 +68,67 @@ describe('mirrorMessages', () => {
     expect(r.messageCount).toBe(1);
   });
 
+  test("records the LAST assistant message's finish on both mirror passes (#218 PR 3)", () => {
+    const st = createMirrorState();
+    expect(st.lastAssistantFinish).toBeNull();
+    const done = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length', tokens: { input: 5, output: 0, reasoning: 32000 } }, parts: [] };
+    const streaming = { info: { role: 'assistant', id: 'm2', time: {} }, parts: [] };
+    mirrorMessages([done], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBe('length');
+    // A later message still streaming (no finish yet) is the last one — it wins, as null.
+    mirrorMessages([done, streaming], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBeNull();
+    // Named mutant "NOFINISH": stop recording finish in captureMsgUsage — stays null here.
+    mirrorUsageOnly([done, { ...streaming, info: { ...streaming.info, finish: 'stop', tokens: { input: 1, output: 1 } } }], st);
+    expect(st.lastAssistantFinish).toBe('stop');
+  });
+
+  test('an empty-string finish is recorded as none (council #232 r3 C1)', () => {
+    const st = createMirrorState();
+    const empty = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: '', tokens: { input: 5, output: 0 } }, parts: [] };
+    // Named mutant "EMPTYFINISH": revert to `msg.info.finish ?? null` — '' is recorded
+    // and every string guard downstream reads it as a finish.
+    mirrorMessages([empty], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBeNull();
+    st.lastAssistantFinish = 'length';
+    mirrorUsageOnly([empty], st);
+    expect(st.lastAssistantFinish).toBeNull();
+  });
+
+  test('records whether the LAST assistant message carries answer text / reasoning, on both passes (council #232 r1 B2/D1)', () => {
+    const st = createMirrorState();
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:t', type: 'text', text: 'Let me look at the file.' }] };
+    const m2 = { info: { role: 'assistant', id: 'm2', time: { completed: 2 }, finish: 'length' }, parts: [{ id: 'm2:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1, m2], st, { now: NOW });
+    // Named mutant "TEXTOFFOUTPUT": derive lastAssistantHasText from state.output.length > 0 —
+    // m1's text is already in `output`, so this reads true.
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(true);
+    const m3 = { info: { role: 'assistant', id: 'm3', time: { completed: 3 }, finish: 'stop' }, parts: [{ id: 'm3:t', type: 'text', text: 'ok' }] };
+    mirrorMessages([m1, m2, m3], st, { now: NOW });
+    expect(st.lastAssistantHasText).toBe(true);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+    // Whitespace-only text is not an answer.
+    const blank = { info: { role: 'assistant', id: 'm4', time: { completed: 4 }, finish: 'length' }, parts: [{ id: 'm4:t', type: 'text', text: '  \n' }] };
+    mirrorMessages([m1, m2, m3, blank], st, { now: NOW });
+    expect(st.lastAssistantHasText).toBe(false);
+    // The usage-only pass records the same two facts.
+    mirrorUsageOnly([blank, m3], st);
+    expect(st.lastAssistantHasText).toBe(true);
+    expect(st.lastAssistantHasReasoning).toBe(false);
+  });
+
+  test('a reasoning-only finished message is still promoted to output (#218 PR 3)', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([msg], st, { now: NOW });
+    expect(st.output).toBe('thinking…');
+    expect(st.lastAssistantHasText).toBe(false);
+    expect(st.lastAssistantHasReasoning).toBe(true);
+  });
+
   test('captures model error from msg.info.error', () => {
     const st = createMirrorState();
     const msg = { info: { role: 'assistant', id: 'm1', time: {}, error: { name: 'RateLimit', data: { message: 'slow down' } } }, parts: [] };
@@ -106,6 +167,45 @@ describe('mirrorMessages', () => {
     expect(st.output).toBe('PONG');              // text wins; thinking stays out of the answer
     expect(st.reasoningOutput).toBe('let me think hard about this');
     expect(r.appendLines).toEqual([{ role: 'assistant', content: 'PONG', timestamp: NOW() }]);
+  });
+
+  test('real answer text on a later message REPLACES reasoning promoted earlier (council #232 r1 breakage)', () => {
+    const st = createMirrorState();
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1], st, { now: NOW });
+    expect(st.output).toBe('thinking…');         // the stand-in for an answer that had not come
+    expect(st.promotedOutput).toBe('thinking…');
+    const m2 = { info: { role: 'assistant', id: 'm2', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm2:t', type: 'text', text: 'Partial review' }] };
+    const r2 = mirrorMessages([m1, m2], st, { now: NOW });
+    // Named mutant "KEEPPROMOTED": drop the reset in the text branch — `output` reads
+    // 'thinking…Partial review' and the chair adjudicates the thinking beside the answer.
+    expect(st.output).toBe('Partial review');
+    expect(st.promotedOutput).toBe('');
+    expect(r2.appendLines).toEqual([{ role: 'assistant', content: 'Partial review', timestamp: NOW() }]);
+    const grown = { ...m2, parts: [{ id: 'm2:t', type: 'text', text: 'Partial review, continued' }] };
+    mirrorMessages([m1, grown], st, { now: NOW });
+    expect(st.output).toBe('Partial review, continued'); // further growth appends normally
+  });
+
+  test('a whitespace-only text chunk after a promotion neither replaces the stand-in nor blocks the real answer from replacing it (council #232 r1b breakage)', () => {
+    const st = createMirrorState();
+    const m1 = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([m1], st, { now: NOW });
+    expect(st.output).toBe('thinking…');
+    const m2 = { info: { role: 'assistant', id: 'm2', time: {} }, parts: [{ id: 'm2:t', type: 'text', text: '  \n' }] };
+    mirrorMessages([m1, m2], st, { now: NOW });
+    // A whitespace-only chunk must not consume the stand-in: it is neither a real
+    // answer nor a block on the real one arriving later. Named mutant "WHITESPACERESET":
+    // reset on `newText.length > 0` (drop the trim) reads this poll as the real answer.
+    expect(st.output).toBe('thinking…  \n');
+    expect(st.promotedOutput).toBe('thinking…');
+    const grown = { ...m2, parts: [{ id: 'm2:t', type: 'text', text: '  \nPartial review' }] };
+    const r3 = mirrorMessages([m1, grown], st, { now: NOW });
+    // Only the NEW portion is appended (slice(prevLen)), so the reset leaves exactly
+    // the real answer text behind -- the whitespace prefix never rejoins it.
+    expect(st.output).toBe('Partial review');
+    expect(st.promotedOutput).toBe('');
+    expect(r3.appendLines).toEqual([{ role: 'assistant', content: 'Partial review', timestamp: NOW() }]);
   });
 });
 

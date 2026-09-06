@@ -260,6 +260,22 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
 }
 
 /**
+ * #218 PR 3: the budget for the OUTPUT_LENGTH reason string. The engine's own
+ * handle carries the value it was spawned with (opencode-client.js ::
+ * startServer, council #232 r1 B3) and wins; config is read only for a handle
+ * from outside amicus (a test seam or an older caller), and `undefined` when
+ * that read fails -- the string then says so rather than claiming "unset".
+ * `read` is a test seam (options._readOutputBudget).
+ * @param {{outputBudget?: number|null}} [server] the leg's server handle
+ * @param {() => (number|null)} [read]
+ * @returns {number|null|undefined}
+ */
+function readOutputBudgetSafe(server, read) {
+  if (server && Object.prototype.hasOwnProperty.call(server, 'outputBudget')) { return server.outputBudget; }
+  try { return (read || require('./utils/config').getOutputBudget)(); } catch { return undefined; }
+}
+
+/**
  * v4.9 W10 (#133 piece 2): the engine-log lookup, wrapped so it can never
  * become the failure it reports on. The resolver is already best-effort
  * internally; this second belt is at the CALL site because the caller is a
@@ -996,6 +1012,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // seven first, and nothing observes them afterwards.
         // Hoisting the whole block (rather than adding a second stamp beside each
         // gate) is what keeps ONE definition of the predicate and ONE stamp site.
+        // #218 PR 3: the mirror's promotion reset (conversation-mirror.js ::
+        // mirrorMessages) can SHRINK output once -- the poll where real answer
+        // text replaces a longer promoted stand-in reads no growth here. Bounded
+        // to that poll: TTFT and the backstop were already latched by the
+        // reasoning growth, and the next growth compares against the new length.
         const outputGrew = mirror.output.length > lastOutputLength;
         lastOutputLength = mirror.output.length;
         const toolActivity = mirror.toolCalls.length > lastToolCallCount;
@@ -1117,6 +1138,30 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           logger.error('Model returned error with no output, exiting', {
             sessionError, pollCount
           });
+          break;
+        }
+
+        // #218 PR 3: the engine finalized the message with finish 'length' and
+        // no answer text -- the Mode 2 death (probe row L1: hidden reasoning,
+        // no content part); decided on THAT message's parts, not on the
+        // session's accumulated output (council #232 r1 B2/D1).
+        // Nothing more will arrive from that message. With EMPTY output (hidden
+        // reasoning, L1) every exit below requires output, so without this one
+        // the leg waits out the no-output backstop and dies under ITS name,
+        // which says "silence past the deadline" about a message the engine had
+        // already finished with a reason. With output -- reasoning the mirror
+        // promoted (L2/L4; the backstop is already disarmed by that growth) or
+        // an earlier message's text -- the idle exits would end it instead: in
+        // this same poll on SDK idle, up to stableFinishedPolls later on the
+        // heuristic. This exit is the same death, no later. Gated on 'length'
+        // only: the finalized message's finish is never a step-level
+        // 'tool-calls' (B4's measured evidence below: time.completed lands after
+        // the tool ends), and a 'stop' with no text is a different, unnamed
+        // death. The message flag here matches the post-loop decision, which is
+        // the pinned one (named mutants NOEXIT and SESSIONWIDE in
+        // tests/headless-output-length.test.js).
+        if (assistantFinished && mirror.lastAssistantFinish === 'length' && !mirror.lastAssistantHasText) {
+          logger.error('Assistant message finished for length with no answer text, exiting', { taskId, pollCount });
           break;
         }
 
@@ -1478,6 +1523,33 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const { sumPerMessageUsage } = require('./utils/pricing');
     const usage = sumPerMessageUsage(mirror.usageByMsg);
 
+    // #218 PR 3: name the Mode 2 death. The engine records `finish: 'length'`
+    // when the provider stopped at the max_tokens reservation (probe rows
+    // A/H1/L1-L4); with no answer text that is a dead leg, and it used to leave
+    // here as `completed` with an empty summary -- or with its THINKING promoted
+    // to the summary (L2/L4's shape). Named through the channel every other
+    // death uses (sessionError -> leg.error -> metadata.reason -> the dead-leg
+    // note), so no consumer needs a new case. An error the engine itself put on
+    // the message wins: its own name is the better observation. Named mutants
+    // (tests/headless-output-length.test.js): "ENGINEERRORLOST" drops the
+    // `!sessionError` guard; "DEATHNOTFORCED" drops `|| outputLengthDeath` from
+    // failedWithNoUsableOutput below.
+    //
+    // Decided on the LAST message's own facts (council #232 r1 B2/D1): a tool
+    // loop's earlier text or promoted reasoning is not this message's answer.
+    // The ambient flag rides the handle beside the budget (council #232 r3 B1); named mutant "AMBIENTNOTREAD" drops it here.
+    const { isOutputLengthDeath, formatOutputLengthReason } = require('./utils/output-length');
+    const finish = mirror.lastAssistantFinish;
+    const reasoningOnly = mirror.lastAssistantHasReasoning && !mirror.lastAssistantHasText;
+    const outputLengthDeath = isOutputLengthDeath({ finish, hasText: mirror.lastAssistantHasText });
+    if (outputLengthDeath && !sessionError) {
+      sessionError = formatOutputLengthReason({
+        tokens: usage.tokens, budget: readOutputBudgetSafe(server, options._readOutputBudget), reasoningOnly,
+        ambientFlag: server && typeof server.ambientOutputTokenFlag === 'string' ? server.ambientOutputTokenFlag : null,
+      });
+      logger.error('Leg stopped for length with no answer text', { taskId, error: sessionError });
+    }
+
     // ---- v4.4 B3: one TERMINAL progress record carrying the settled usage ----
     // progress.json's `usage` block was previously stamped only on 'receiving'
     // flushes, which fire on text/tool/reasoning GROWTH — always strictly before
@@ -1550,7 +1622,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // `failedWithNoUsableOutput` is hoisted out of the `if` below so the stage
     // and the returned shape are decided by ONE predicate and cannot drift.
-    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled));
+    // #218 PR 3: an OUTPUT_LENGTH death can have a non-empty mirror.output -- a
+    // tool loop's earlier message text, or reasoning promoted before the answer
+    // was known -- and must still fail.
+    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled || outputLengthDeath));
     const { resolveTerminalState } = require('./sidecar/session-finalize');
     const terminalStage = resolveTerminalState({
       completed,
@@ -1587,6 +1662,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // and must keep it. (PR #207 round 3, B3: emit-when-VALID too — see the
         // clock-skew ruling at the stamp site above.)
         ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
+        // #218 PR 3: the engine's finish for the last assistant message, emit-when-set like ttftMs.
+        ...(typeof finish === 'string' ? { finish } : {}),
         error: sessionError
       };
     }
@@ -1606,6 +1683,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       opencodeSessionId: sessionId,
       // v4.9 W13 Task A: emit-when-set — see the sibling return above.
       ...(isMeasuredTtft(ttftMs) ? { ttftMs } : {}),
+      // #218 PR 3: the engine's finish for the last assistant message, emit-when-set like ttftMs.
+      ...(typeof finish === 'string' ? { finish } : {}),
       exitCode: 0
     };
 

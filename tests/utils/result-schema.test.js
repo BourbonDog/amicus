@@ -89,6 +89,16 @@ describe('result-schema', () => {
       expect(buildRunResult({ taskId: 't', metadata: { ...baseMeta, usage } }).usage).toEqual(usage);
       expect(buildRunResult({ taskId: 't', metadata: baseMeta }).usage).toBeNull();
     });
+
+    it('carries metadata.finish emit-when-set (#218 PR 3)', () => {
+      const withFinish = buildRunResult({ taskId: 'f1', metadata: { ...baseMeta, finish: 'length' }, result: { completed: true }, summary: 'cut' });
+      expect(withFinish.finish).toBe('length');
+      const without = buildRunResult({ taskId: 'f2', metadata: baseMeta, result: { completed: true }, summary: 'ok' });
+      expect('finish' in without).toBe(false);
+      // Named mutant "FINISHCOERCED": `finish: metadata.finish || null` — the key appears as null.
+      const bogus = buildRunResult({ taskId: 'f3', metadata: { ...baseMeta, finish: 7 }, result: { completed: true }, summary: 'ok' });
+      expect('finish' in bogus).toBe(false);
+    });
   });
 
   describe('waveStatusFromLegs + waveExitCode', () => {

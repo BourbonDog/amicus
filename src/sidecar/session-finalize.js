@@ -51,6 +51,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
     fs.writeFileSync(SessionPaths.summaryFile(sessionDir), result && result.summary ? result.summary : '', { mode: 0o600 });
     metadata.status = 'error';
     metadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    if (result && typeof result.finish === 'string') { metadata.finish = result.finish; } else { delete metadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
     metadata.completedAt = new Date().toISOString();
     writeFileAtomic(
       path.join(sessionDir, 'metadata.json'),
@@ -61,7 +62,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
   }
   // complete / timed-out / aborted: persist the (possibly partial) summary with
   // the resolved status. Explicit status means the #36 guard won't re-classify.
-  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status });
+  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish });
 }
 
 module.exports = { resolveTerminalState, finalizeHeadlessResult };
