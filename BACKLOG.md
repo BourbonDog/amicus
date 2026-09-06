@@ -7329,7 +7329,7 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   the bundled catalogue predates all three — while in this run every one of them is known (glm-5.3
   and qwen3.8-27b in the M0 dump at case 38, qwen3.8-max-0902 already at F4); the kimi line is
   dumped from case A, which is always case 1 and therefore the only engine that can read cold — it
-  read the bundled ceiling 1048576 this run (and in `m1`/`m3`/`m9recheck`) where the live models.dev
+  read the bundled ceiling 1048576 this run (and in `m9warm`, the other run with a case A; `m1`/`m3` read the same 1048576 from case M0, their first engine) where the live models.dev
   value is 943718, but the PR 3 record's run read 943718 from the SAME case, so the first engine's
   read is still the race the PR 2 record describes (whichever catalogue its own startup fetch has
   reached); only the later engines' warm reads are deterministic; and M12's wait found its model
@@ -7511,7 +7511,7 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   (M13). Nothing to build: Mode 1 (the credit pre-check) is an OpenRouter behaviour, and Mode 2's
   lever there is the effort, which PR 4 now sends. The two `[Unreleased]` sentences were corrected in
   PR 4 (Task 6).
-- [ ] **Whole-branch review of #218 PR 4 — six minors deferred (2026-09-06).** EP-5: a provider
+- [ ] **Whole-branch review of #218 PR 4 — six minors deferred, plus m10 (2026-09-06).** EP-5: a provider
   absent from the `/config/providers` dump waits the full 5 s before the level is sent unverified —
   fold into a `providerMissing` stop when the wait shape is next touched. REC-4: `pack save
   --from-run <wave>` reads `legMeta.thinking`, a key no leg document carries — read `variant`
