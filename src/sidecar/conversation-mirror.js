@@ -34,16 +34,26 @@ function createMirrorState() {
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
     reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
+    // #218 PR 3: the LAST assistant message's `finish` (the engine stamps it at
+    // finalization, beside tokens/cost) and whether `output` was promoted from
+    // reasoning parts -- together the death test in utils/output-length.js.
+    lastAssistantFinish: null,
+    promotedReasoning: false,
   };
 }
 
 /**
- * Capture one assistant message's usage snapshot into `state.usageByMsg`.
+ * Capture one assistant message's usage snapshot AND its finish into the state.
  * The poll loop re-reads ALL messages every poll, so the latest snapshot per
  * message id wins (keyed Map, never additive) — see pricing.sumPerMessageUsage.
  * @returns {boolean} true when this message carried a usage payload
  */
 function captureMsgUsage(msg, state) {
+  // #218 PR 3: `finish` is stamped at the same finalization as tokens/cost, so
+  // both mirror passes record it here; the last assistant message in the
+  // snapshot wins, and one still streaming (no finish yet) resets it to null.
+  // Named mutant "NOFINISH" (tests/conversation-mirror.test.js).
+  state.lastAssistantFinish = msg.info.finish ?? null;
   if (msg.info.tokens || typeof msg.info.cost === 'number') {
     state.usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
     return true;
@@ -249,6 +259,7 @@ function mirrorMessages(messages, state, opts = {}) {
   // completion gates fire and the answer isn't lost as "No Output". Runs once — once
   // `output` is non-empty this is skipped on subsequent polls.
   if (assistantFinished && !state.output && state.reasoningOutput) {
+    state.promotedReasoning = true; // #218 PR 3: named mutant "NOPROMOTEFLAG"
     state.output = state.reasoningOutput;
     appendLines.push({ role: 'assistant', content: state.reasoningOutput, timestamp: now() });
   }

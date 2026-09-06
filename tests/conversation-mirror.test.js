@@ -1,6 +1,6 @@
 // tests/conversation-mirror.test.js
 'use strict';
-const { createMirrorState, mirrorMessages } = require('../src/sidecar/conversation-mirror');
+const { createMirrorState, mirrorMessages, mirrorUsageOnly } = require('../src/sidecar/conversation-mirror');
 const NOW = () => '2026-06-23T00:00:00.000Z';
 
 const asstText = (id, text, completed) => ({ info: { role: 'assistant', id, time: completed ? { completed: 1 } : {} }, parts: [{ id: `${id}:t`, type: 'text', text }] });
@@ -66,6 +66,39 @@ describe('mirrorMessages', () => {
     expect(r.currentAssistantMsgId).toBe('m1');
     expect(r.assistantFinished).toBe(true);
     expect(r.messageCount).toBe(1);
+  });
+
+  test("records the LAST assistant message's finish on both mirror passes (#218 PR 3)", () => {
+    const st = createMirrorState();
+    expect(st.lastAssistantFinish).toBeNull();
+    const done = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length', tokens: { input: 5, output: 0, reasoning: 32000 } }, parts: [] };
+    const streaming = { info: { role: 'assistant', id: 'm2', time: {} }, parts: [] };
+    mirrorMessages([done], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBe('length');
+    // A later message still streaming (no finish yet) is the last one — it wins, as null.
+    mirrorMessages([done, streaming], st, { now: NOW });
+    expect(st.lastAssistantFinish).toBeNull();
+    // Named mutant "NOFINISH": stop recording finish in captureMsgUsage — stays null here.
+    mirrorUsageOnly([done, { ...streaming, info: { ...streaming.info, finish: 'stop', tokens: { input: 1, output: 1 } } }], st);
+    expect(st.lastAssistantFinish).toBe('stop');
+  });
+
+  test('promoting reasoning to output is flagged on the state (#218 PR 3)', () => {
+    const st = createMirrorState();
+    expect(st.promotedReasoning).toBe(false);
+    const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }] };
+    mirrorMessages([msg], st, { now: NOW });
+    expect(st.output).toBe('thinking…');
+    // Named mutant "NOPROMOTEFLAG": drop the flag write in the promotion block.
+    expect(st.promotedReasoning).toBe(true);
+  });
+
+  test('a real text part never sets promotedReasoning', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'length' }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'thinking…' }, { id: 'm1:t', type: 'text', text: 'Partial review' }] };
+    mirrorMessages([msg], st, { now: NOW });
+    expect(st.output).toBe('Partial review');
+    expect(st.promotedReasoning).toBe(false);
   });
 
   test('captures model error from msg.info.error', () => {
