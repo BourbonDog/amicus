@@ -294,8 +294,9 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
     test("this repo's own CI alias map raises only genuine model differences", () => {
       // Concrete, non-hypothetical version of the pin above: the map is real,
       // provisioned into every CI council run, and pins the OpenRouter form of
-      // gpt/deepseek. Those must be silent; a map entry naming a DIFFERENT model
-      // (glm, deliberately ahead of the shipped floor) must not be.
+      // gpt. That must be silent; a map entry naming a DIFFERENT model (glm and
+      // qwen, deliberately off the shipped pins; deepseek, benched on
+      // v4-flash-0731 where the shipped table pins v4-pro) must not be.
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
       writeConfig(map.aliases);
@@ -305,7 +306,7 @@ describe('v4.9 W13 Task B: the alias-shadow notice (C5)', () => {
         expect(stripGatewayPrefix(s.local)).not.toBe(stripGatewayPrefix(s.curated));
       }
       expect(shadows.map(s => s.alias)).not.toContain('gpt');
-      expect(shadows.map(s => s.alias)).not.toContain('deepseek');
+      expect(shadows.map(s => s.alias)).toContain('deepseek');
     });
 
     test('an alias with no local override at all is silent', () => {
