@@ -1152,7 +1152,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // already finished with a reason. With output -- reasoning the mirror
         // promoted (L2/L4; the backstop is already disarmed by that growth) or
         // an earlier message's text -- the idle exits would end it instead: in
-        // this same poll on SDK idle, up to stableIdlePolls later on the
+        // this same poll on SDK idle, up to stableFinishedPolls later on the
         // heuristic. This exit is the same death, no later. Gated on 'length'
         // only: the finalized message's finish is never a step-level
         // 'tool-calls' (B4's measured evidence below: time.completed lands after
