@@ -93,8 +93,9 @@ describe('evaluateOutputBudget — nothing configured', () => {
     expect(row.message).not.toContain('raises');
   });
 
-  // Named mutant "AMBIENTUNCHECKED": replace the /^[1-9]\d*$/ gate + positiveCount
-  // with `Number(ambient) || 1` — every row below turns ok.
+  // Named mutant "AMBIENTUNCHECKED": replace the PLAIN_OUTPUT_TOKEN_FLAG gate
+  // (engine-output-flag.js) + positiveCount with `Number(ambient) || 1` —
+  // every row below turns ok.
   test.each(['64000abc', '0', '-5', '', ' 64000 ', '1e5', '0x10', '64000.7', '064000'])(
     'unset, ambient flag %p not a plain positive integer -> WARN: unmeasured form, engine falls back silently (D1/D2)', (v) => {
       const row = evaluateOutputBudget(deps({ env: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: v } }));

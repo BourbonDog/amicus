@@ -81,7 +81,7 @@ function formatOutputLengthReason({ tokens, budget, reasoningOnly, ambientFlag }
         ? `outputBudget is unset — the engine's ${ENGINE_DEFAULT_OUTPUT_TOKENS} default reservation governs`
         : PLAIN_OUTPUT_TOKEN_FLAG.test(ambient)
           ? `outputBudget is unset — the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with governs (each leg reserves min(${ambient}, the ceiling the engine's catalog knows for it))`
-          : `outputBudget is unset and the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); this value is unmeasured`;
+          : `outputBudget is unset and the ambient ${OUTPUT_TOKEN_FLAG}=${ambient} the engine was started with is not a plain positive integer — the only form measured to be honoured (probe D1/D2: 64000abc and 0 fell back to ${ENGINE_DEFAULT_OUTPUT_TOKENS} silently); any other form is unmeasured`;
   return `${OUTPUT_LENGTH_PREFIX} the provider stopped at the max_tokens reservation (finish 'length') and ${streamed} — `
     + `${count(t.reasoning)} reasoning / ${count(t.output)} output tokens; ${knob} — `
     + 'raise outputBudget in config.json (docs/configuration.md, Output budget)';
