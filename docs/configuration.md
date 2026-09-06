@@ -133,13 +133,25 @@ P1, PR 2 and PR 3).
   provider that enforces its ceiling refuses the request — loudly, with the provider's own error on
   the leg, never silently. `amicus doctor` names such routes; lower the budget if you have one, or
   give the model a catalog entry.
-- **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
-  route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
-  the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:
-  64,000 for haiku, whatever the descriptor or the flag said). Amicus sends no thinking variant
-  today (`--thinking` never reached the engine — F1), so this is the number PR 4 inherits, not one
-  you can hit yet — and PR 4, which sends the variant, must fit it under the budget rather than on
-  top. `openrouter/anthropic/*` rows route through OpenRouter's effort mapping and clamp normally.
+- **A thinking variant leaves the budget alone on every route but one.** `--thinking` now reaches
+  the engine (#218 PR 4) as its `variant` field, and the probe measured the reservation with a
+  variant in play on each provider amicus curates: OpenRouter (M1: 8,000 stays 8,000 under `low`;
+  M9: OpenRouter's Anthropic row carries the thinking budget *inside* the reservation), direct
+  Google (M15: 8,000), direct DeepSeek (M16: 8,000) and an adaptive-thinking Anthropic model
+  (M10b: `claude-sonnet-5` at 8,000) all hold it. The one shape that does not is a direct
+  Anthropic variant declared as `thinking: {type: 'enabled', budgetTokens: N}` — today Haiku 4.5
+  (`high` 16,000, `max` 31,999) and Opus 4.5 (16,000 for `low`, `medium` and `high`) — where the
+  engine adds N on top (M2: 24,000 + 16,000 = 40,000; K2) and clamps the sum to the model's ceiling
+  (K3/K4/K10). Amicus cannot lower the descriptor by N before the spawn (N is the engine's own
+  number, read only from a running engine, and nothing changes a descriptor afterwards — a runtime
+  `PATCH /config` is accepted, changes nothing the engine serves, and writes a `config.json` into
+  the engine's working directory, M3/M4/M11), so with a budget below that model's ceiling such a
+  leg is **refused before anything is sent**, with the reservation it would have made and three
+  ways out: raise the budget to at least the ceiling (the sum is then clamped to it, K4), route the
+  model through OpenRouter (M9), or use an adaptive-thinking model (M10b). With no budget set the
+  engine's own behaviour applies (32,000 + N, H3/H4). The exact fit — a descriptor lowered by N
+  lands the sum exactly on the budget (M17: 8,000 + 16,000 = 24,000) — is filed in the BACKLOG as
+  the follow-up it would take.
 - **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
   window, and the engine subtracts this same reservation from the window before it decides to
   compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is
@@ -171,7 +183,9 @@ P1, PR 2 and PR 3).
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
-effort, which today's `--thinking` never delivers to the engine (PR 4 sends `variant` instead).
+effort — which `--thinking` now delivers to the engine as its `variant` field (#218 PR 4), checked
+against what the model declares before anything is sent, on solo and fanout legs; a council seat has
+no effort knob yet (filed).
 Lowering the budget makes such a leg fail faster and cheaper; raising it gives the reasoning more
 room; neither makes it produce output — but since #218 PR 3 the failure is at least *named*: the leg
 ends `error` with an `OUTPUT_LENGTH:` reason instead of `complete` with nothing, or with its thinking

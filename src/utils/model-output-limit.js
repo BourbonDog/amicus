@@ -35,9 +35,12 @@
  * LOWERED — this descriptor does that. Mode 2 (a leg spending its whole
  * allowance on reasoning and emitting 0-2 output tokens) needs it RAISED, which
  * this descriptor cannot do (the Math.min) and the engine flag can
- * (engine-output-flag.js) — but its real cause is reasoning effort, and the
- * `--thinking` amicus sends today never reaches the engine at all (probe F1:
- * the prompt API reads `variant`, not `reasoning`; PR 4). Lowering the budget
+ * (engine-output-flag.js) — but its real cause is reasoning effort, which #218
+ * PR 4 now delivers: `--thinking` reaches the engine as its `variant` field, not
+ * the `reasoning` object the prompt API never read (F1), and is checked against
+ * the model's own declaration first — so on the one route where a variant moves
+ * the reservation the leg is refused, not silently overshot (M2: 24000 + 16000 =
+ * 40000; the fit that lands the sum on the budget is M17). Lowering the budget
  * makes such a leg fail faster and cheaper; raising it gives the reasoning more
  * room. Neither makes it produce output, and no claim is made that either does.
  *
