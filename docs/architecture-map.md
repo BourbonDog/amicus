@@ -237,6 +237,7 @@ src/
 │   ├── no-output-backstop.js  # v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces
 │   ├── node-version-guard.js
 │   ├── openrouter-credit.js  # The OpenRouter credit/limit probe, split out of api-key-validation.js to keep
+│   ├── output-length.js  # #218 PR 3: name the "Mode 2" death.
 │   ├── path-fence.js  # Shared realpath-containment fence.
 │   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
@@ -672,6 +673,7 @@ evals/
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `DEFAULT_NO_OUTPUT_BACKSTOP_MS()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
+| `utils/output-length.js` | #218 PR 3: name the "Mode 2" death. | `OUTPUT_LENGTH_PREFIX()`, `isOutputLengthDeath()`, `formatOutputLengthReason()` |
 | `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
