@@ -14,12 +14,20 @@
  * engine bump that drops or renames OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX
  * turns that job red instead of silently reverting every budget above 32000.
  * The full 32-row matrix is still the record to re-run and re-file on a bump.
+ *
+ * #218 PR 4 adds M2 (the direct-Anthropic `enabled` + budgetTokens shape adds
+ * its budget on top of the reservation — the fact the VARIANT_OVER_BUDGET
+ * refusal stands on) and M17 (the fitted descriptor lands exactly on the budget
+ * — the fact the filed exact-fit follow-up stands on). Seven engine starts.
+ * The seven rows pin max_tokens only — a cell both the engine's bundled
+ * catalogue (case A, cold) and the cached live one (every later case) agree on
+ * — so the run's case order cannot move them.
  */
 
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const ROWS = 'A,C3,K6,K12,K13';
+const ROWS = 'A,C3,K6,K12,K13,M2,M17';
 const PROBE = path.join(__dirname, '..', 'scripts', 'probe-max-tokens.js');
 
 test(`the pinned engine honours OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX on the wire (probe rows ${ROWS})`, () => {
@@ -33,6 +41,6 @@ test(`the pinned engine honours OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX on the wi
   const checks = out.split(/\r?\n/).find((l) => l.startsWith('checks: '));
   // The whole line, not just "0 mismatched": a row that never captured would
   // count as mismatched, and the partial marker proves the subset ran as such.
-  expect(checks).toBe(`checks: 5 matched, 0 mismatched (none), 0 recorded — partial run (--only ${ROWS})`);
+  expect(checks).toBe(`checks: 7 matched, 0 mismatched (none), 0 recorded — partial run (--only ${ROWS})`);
   expect(r.status).toBe(0);
 }, 300000);
