@@ -772,7 +772,8 @@ async function startServer(options = {}) {
   // (withOutputTokenFlag below) used to call loadConfig() separately; a config
   // write between the two reads could hand the engine a descriptor from one
   // budget and a flag from another. Named mutant "DOUBLEREAD"
-  // (tests/opencode-client-output-flag.test.js counts the reads).
+  // (tests/opencode-client-output-flag.test.js: buildProviderModels must
+  // receive the value startServer read).
   const { getOutputBudget } = require('./utils/config');
   const outputBudget = getOutputBudget();
   const serverOptions = buildServerOptions({ ...options, outputBudget });

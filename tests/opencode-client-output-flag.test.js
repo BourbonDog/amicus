@@ -86,9 +86,14 @@ describe('startServer sets the engine output flag around the synchronous spawn',
     const spy = jest.spyOn(config, 'buildProviderModels');
     config.getOutputBudget.mockReturnValue(40000);
     await startServer(OK);
-    // Named mutant "DOUBLEREAD": drop `outputBudget` from the spread startServer hands
-    // buildServerOptions — buildProviderModels reads config again and the count is 2.
+    // toHaveBeenCalledTimes(1) pins startServer's own explicit read through the
+    // mocked export — its single call to config.getOutputBudget. It cannot see
+    // a call buildProviderModels makes internally, because that call reaches
+    // the module's real (unmocked) lexical getOutputBudget, not this spy.
     expect(config.getOutputBudget).toHaveBeenCalledTimes(1);
+    // Named mutant "DOUBLEREAD": drop `outputBudget` from the spread startServer
+    // hands buildServerOptions — buildProviderModels then receives `undefined`
+    // instead of 40000 as its second argument, so this assertion fails.
     expect(spy).toHaveBeenCalledWith(expect.any(Array), 40000);
     expect(seen[0].atCall).toBe('40000');
     spy.mockRestore();
