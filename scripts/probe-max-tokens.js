@@ -58,6 +58,16 @@
  * wrapper — each case sets the flag in this probe's own env — so the SDK
  * spawn-timing fact is pinned by tests/opencode-client-sdk-spawn-timing.test.js
  * instead.
+ *
+ * THE L GROUP (#218 PR 3) measures what the ASSISTANT MESSAGE carries when the
+ * provider stops for length -- the fields amicus reads to name the Mode 2 death
+ * (32000 reasoning tokens, no answer): `finish`, the `tokens` split, and which
+ * parts exist (a reasoning part with no text part is the shape headless would
+ * promote to output). Those rows tell the capture server what to answer with
+ * (`serve`: content, reasoning, thinking, usage), and the server now speaks the
+ * Anthropic messages SSE too, so the direct rows measure `finish` instead of
+ * recording an APIError against an OpenAI-shaped stream. L5 is the K-row gap
+ * PR 2 parked: a descriptor above the engine's own ceiling with no variant.
  */
 
 'use strict';
@@ -165,20 +175,72 @@ function assertSandboxed() {
 }
 
 // ---------------------------------------------------------------- capture server
-function sseLength(res, model) {
+/**
+ * What a case asks the capture server to answer with. Every field is optional;
+ * the defaults reproduce the P1/P2 rows byte for byte ('ok', one output token).
+ * @typedef {{content?: string, reasoning?: string, thinking?: string, usage?: object}} Serve
+ */
+const DEFAULT_OPENAI_USAGE = { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 };
+
+/**
+ * OpenAI-compatible chat-completions SSE ending in finish_reason 'length'.
+ * `serve.reasoning` rides on the delta as OpenRouter's `reasoning` field (visible
+ * reasoning); an empty `serve.content` sends no content at all (an answer that
+ * never started).
+ */
+function sseLength(res, model, serve = {}) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
   const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+  const content = serve.content === undefined ? 'ok' : serve.content;
+  const delta = { role: 'assistant' };
+  if (content) { delta.content = content; }
+  if (serve.reasoning) { delta.reasoning = serve.reasoning; }
   chunk({ id: 'probe', object: 'chat.completion.chunk', created: 0, model,
-    choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' }, finish_reason: null }] });
+    choices: [{ index: 0, delta, finish_reason: null }] });
   chunk({ id: 'probe', object: 'chat.completion.chunk', created: 0, model,
     choices: [{ index: 0, delta: {}, finish_reason: 'length' }],
-    usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 } });
+    usage: serve.usage || DEFAULT_OPENAI_USAGE });
   res.write('data: [DONE]\n\n');
+  res.end();
+}
+
+/**
+ * Anthropic messages SSE ending in stop_reason 'max_tokens' (the direct route's
+ * "length"). `serve.thinking` adds a thinking block BEFORE the text; an empty
+ * `serve.content` sends no text block. Anthropic reports no reasoning/output
+ * split -- `usage.output_tokens` is the whole thing -- so that is what goes out.
+ */
+function sseAnthropicMaxTokens(res, model, serve = {}) {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+  const ev = (type, o) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...o })}\n\n`);
+  const content = serve.content === undefined ? 'ok' : serve.content;
+  const usage = serve.usage || { input_tokens: 5, output_tokens: 1 };
+  ev('message_start', { message: { id: 'msg_probe', type: 'message', role: 'assistant', model, content: [],
+    stop_reason: null, stop_sequence: null, usage: { input_tokens: usage.input_tokens, output_tokens: 0 } } });
+  let index = 0;
+  if (serve.thinking) {
+    ev('content_block_start', { index, content_block: { type: 'thinking', thinking: '' } });
+    ev('content_block_delta', { index, delta: { type: 'thinking_delta', thinking: serve.thinking } });
+    ev('content_block_delta', { index, delta: { type: 'signature_delta', signature: 'probe' } });
+    ev('content_block_stop', { index });
+    index += 1;
+  }
+  if (content) {
+    ev('content_block_start', { index, content_block: { type: 'text', text: '' } });
+    ev('content_block_delta', { index, delta: { type: 'text_delta', text: content } });
+    ev('content_block_stop', { index });
+  }
+  ev('message_delta', { delta: { stop_reason: 'max_tokens', stop_sequence: null }, usage: { output_tokens: usage.output_tokens } });
+  ev('message_stop', {});
   res.end();
 }
 
 function startCapture() {
   const captures = [];
+  // The case being served, set by runCase before it sends -- cases run one at a
+  // time on one server, so a single slot is the whole state.
+  const state = { current: null };
+  const serveFor = () => (state.current && state.current.serve) || {};
   const server = http.createServer((req, res) => {
     // Concat the buffers and decode once: `raw += chunk` decodes each chunk on
     // its own and mangles any multi-byte character split across a boundary.
@@ -191,15 +253,19 @@ function startCapture() {
       const headers = { ...req.headers };
       delete headers.authorization; delete headers['x-api-key'];
       captures.push({ at: Date.now(), method: req.method, url: req.url, headers, body });
+      if (req.method === 'POST' && /\/messages(\?.*)?$/.test(req.url)) {
+        sseAnthropicMaxTokens(res, body && body.model, serveFor());
+        return;
+      }
       if (req.method === 'POST' && /\/chat\/completions(\?.*)?$/.test(req.url)) {
         if (body && body.stream === false) {
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ id: 'probe', object: 'chat.completion',
             choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'length' }],
-            usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 } }));
+            usage: DEFAULT_OPENAI_USAGE }));
           return;
         }
-        sseLength(res, body && body.model);
+        sseLength(res, body && body.model, serveFor());
         return;
       }
       res.writeHead(400, { 'content-type': 'application/json' });
@@ -211,6 +277,7 @@ function startCapture() {
     server.listen(0, '127.0.0.1', () => resolve({
       origin: `http://127.0.0.1:${server.address().port}`,
       captures,
+      setCase: (c) => { state.current = c; },
       close: () => new Promise((r) => server.close(() => r())),
     }));
   });
@@ -340,19 +407,25 @@ async function send(client, captures, c) {
   // A case that never captures still has to yield a ROW: the promptAsync
   // status/error plus whatever assistant state exists is the measurement then.
   let assistant = null;
+  let msgParts = [];
   let pollError = null;
   try {
     for (let i = 0; i < 25 && !(assistant && (assistant.finish || assistant.error)); i++) {
       await sleep(200);
       const msgs = await client.session.messages({ path: { id: sessionId } });
-      const infos = (msgs.data || []).map((m) => m.info).filter((m) => m && m.role === 'assistant');
-      assistant = infos[infos.length - 1] || null;
+      const assistants = (msgs.data || []).filter((m) => m && m.info && m.info.role === 'assistant');
+      const last = assistants[assistants.length - 1] || null;
+      assistant = last ? last.info : null;
+      msgParts = last ? (last.parts || []) : [];
     }
   } catch (err) { pollError = err.message; }
+  // `parts` keeps only the two content kinds the L rows pin (text / reasoning);
+  // step-start / step-finish bookkeeping parts are engine noise here.
   return { engineVersion, status, error, pollError, wire, assistant: assistant ? {
     keys: Object.keys(assistant), finish: assistant.finish ?? null,
     error: assistant.error ? (assistant.error.name || assistant.error.type || 'error') : null,
-    variant: assistant.variant ?? null, tokens: assistant.tokens ?? null } : null };
+    variant: assistant.variant ?? null, tokens: assistant.tokens ?? null,
+    parts: msgParts.map((p) => p.type).filter((t) => t === 'text' || t === 'reasoning') } : null };
 }
 
 // ---------------------------------------------------------------- case matrix
@@ -372,10 +445,20 @@ const HCTX = 200000;                  // haiku's context per the engine's own du
  * @returns {{maxTokens: number|null, reasoning: object|null, thinking: 'any'|null}}
  */
 const W = (maxTokens, reasoning = null, thinking = null) => ({ maxTokens, reasoning, thinking });
+/**
+ * The ASSISTANT-MESSAGE half of a `want` (#218 PR 3): what the engine recorded
+ * once the provider stopped for length. Attached as `want.assistant`; a row
+ * without one checks the wire only, exactly as before.
+ * @param {string|null} finish the message's `finish`
+ * @param {number} output `tokens.output`
+ * @param {number} reasoning `tokens.reasoning`
+ * @param {string[]} parts the text/reasoning part types, in order
+ */
+const WA = (finish, output, reasoning, parts) => ({ finish, output, reasoning, parts });
 const LOW = { effort: 'low' };
 
 const CASES = [
-  { id: 'A',  title: 'bare {} descriptor', or: { [KIMI]: {} }, model: OR(KIMI), expect: 'max_tokens 32000, no reasoning', want: W(32000) },
+  { id: 'A',  title: 'bare {} descriptor', or: { [KIMI]: {} }, model: OR(KIMI), expect: 'max_tokens 32000, no reasoning', want: { ...W(32000), assistant: WA('length', 1, 0, ['text']) } },
   { id: 'B',  title: 'limit.output 4096', or: { [KIMI]: { limit: { context: CTX, output: 4096 } } }, model: OR(KIMI), expect: '4096', want: W(4096) },
   { id: 'C1', title: 'env 64000 + limit.output 100000', env: '64000', or: { [KIMI]: { limit: { context: CTX, output: 100000 } } }, model: OR(KIMI), expect: '64000', want: W(64000) },
   { id: 'C2', title: 'env 64000 + limit.output 50000', env: '64000', or: { [QWEN]: { limit: { context: 1000000, output: 50000 } } }, model: OR(QWEN), expect: '50000', want: W(50000) },
@@ -391,7 +474,7 @@ const CASES = [
   // hand-written pass/fail pretend the row was checked.
   { id: 'F3', title: "prompt variant 'medium' (kimi has no medium)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'medium' }, expect: 'record: silent no-op or error', want: 'record' },
   { id: 'F4', title: "prompt variant 'medium' (qwen has medium)", or: { [QWEN]: {} }, model: OR(QWEN), extra: { variant: 'medium' }, expect: 'reasoning effort medium', want: W(32000, { effort: 'medium' }) },
-  { id: 'H1', title: 'direct anthropic haiku {}', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '32000', want: W(32000) },
+  { id: 'H1', title: 'direct anthropic haiku {}', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '32000', want: { ...W(32000), assistant: WA('length', 1, 0, ['text']) } },
   { id: 'H2', title: 'direct anthropic haiku {} + env 64000', env: '64000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), expect: '64000 (engine ceiling 64000)', want: W(64000) },
   { id: 'H3', title: "direct anthropic haiku variant 'high'", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, expect: 'thinking budget_tokens 16000', want: W(48000, null, 'any') },
   // H4 is the SECOND data point H3 needs. H3 alone (32000 default + 16000 budget
@@ -418,6 +501,14 @@ const CASES = [
   { id: 'K11', title: "env 8000 + direct anthropic haiku limit.output 8000 + variant 'high'", env: '8000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '24000 = 8000 + 16000 — the shipped budget-8000 shape with a thinking variant', want: W(24000, null, 'any') },
   { id: 'K12', title: 'env 8000 + bare {} (kimi)', env: '8000', or: { [KIMI]: {} }, model: OR(KIMI), expect: '8000 — the flag lowers a row the amicus catalog cannot clamp', want: W(8000) },
   { id: 'K13', title: 'env 8000 + custom unknown model {}', env: '8000', custom: true, model: CUSTOM, expect: '8000 — a model neither catalog knows receives the budget as-is', want: W(8000) },
+  // PR 3 (L group, measured 2026-09-05): the assistant message when the provider
+  // stops for length. `serve` is what the capture server answers with; the
+  // usage figures replay the #218 ledger rows (32000 reasoning, no answer).
+  { id: 'L1', title: 'kimi {} — length, no content, HIDDEN reasoning (usage completion 32000 / reasoning 32000)', or: { [KIMI]: {} }, model: OR(KIMI), serve: { content: '', usage: { prompt_tokens: 5, completion_tokens: 32000, total_tokens: 32005, completion_tokens_details: { reasoning_tokens: 32000 } } }, expect: "finish 'length', tokens 0 output / 32000 reasoning, no text or reasoning part — the Mode 2 shape as the ledger showed it", want: { ...W(32000), assistant: WA('length', 0, 32000, []) } },
+  { id: 'L2', title: 'kimi {} — length, no content, VISIBLE reasoning (same usage)', or: { [KIMI]: {} }, model: OR(KIMI), serve: { content: '', reasoning: 'thinking…', usage: { prompt_tokens: 5, completion_tokens: 32000, total_tokens: 32005, completion_tokens_details: { reasoning_tokens: 32000 } } }, expect: "finish 'length', a reasoning part and no text part — the shape headless would promote to output", want: { ...W(32000), assistant: WA('length', 0, 32000, ['reasoning']) } },
+  { id: 'L3', title: 'kimi {} — length, visible reasoning AND content (usage completion 40 / reasoning 32)', or: { [KIMI]: {} }, model: OR(KIMI), serve: { content: 'ok', reasoning: 'thinking…', usage: { prompt_tokens: 5, completion_tokens: 40, total_tokens: 45, completion_tokens_details: { reasoning_tokens: 32 } } }, expect: 'output 8 = 40 − 32 if the engine subtracts reasoning from completion; both parts', want: { ...W(32000), assistant: WA('length', 8, 32, ['reasoning', 'text']) } },
+  { id: 'L4', title: "direct anthropic haiku {} + variant 'high' — thinking block, no text, stop_reason max_tokens (usage output 24000)", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, serve: { content: '', thinking: 'thinking…', usage: { input_tokens: 5, output_tokens: 24000 } }, expect: "finish 'length', 24000 output / 0 reasoning (Anthropic reports no split), a reasoning part and no text part", want: { ...W(48000, null, 'any'), assistant: WA('length', 24000, 0, ['reasoning']) } },
+  { id: 'L5', title: 'direct anthropic haiku limit.output 70000 + env 100000, no variant', env: '100000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 70000 } } }, model: AN(HAIKU), expect: '64000 if the engine clamps a descriptor above its own ceiling with no variant in play; 70000 if only a thinking sum is clamped (K10)', want: W(64000) },
 ];
 
 function wireSummary(wire) {
@@ -463,6 +554,7 @@ async function runCase(sdk, cap, c, engines, providers) {
     if (!providers[key] && isBareDescriptor(c)) {
       try { providers[key] = await providersDump(handle.client, c.model.providerID, c.model.modelID, c.id); } catch (err) { providers[key] = { fromCase: c.id, error: err.message }; }
     }
+    cap.setCase(c);
     const r = await send(handle.client, cap.captures, c);
     return { ...base, config: buildConfig('<capture>', c).provider, prompt: c.viaAmicus ? { viaAmicus: true, reasoning: c.reasoning } : (c.extra || {}), ...r };
   } catch (err) {
@@ -492,7 +584,23 @@ function checkRow(r) {
   const ok = w.maxTokens === r.want.maxTokens
     && JSON.stringify(reasoning) === JSON.stringify(r.want.reasoning ?? null)
     && (w.thinking !== null) === (r.want.thinking === 'any');
-  return ok ? 'matched' : 'mismatched';
+  return ok && assistantMatches(r) ? 'matched' : 'mismatched';
+}
+
+/**
+ * The assistant half of a row's verdict (#218 PR 3): `finish`, the two token
+ * counts and the text/reasoning part list, compared exactly. A row that pins
+ * no `want.assistant` passes this by construction.
+ * @param {object} r a runCase() result
+ * @returns {boolean}
+ */
+function assistantMatches(r) {
+  const wa = r.want && r.want.assistant;
+  if (!wa) { return true; }
+  const a = r.assistant || {};
+  const t = a.tokens || {};
+  return a.finish === wa.finish && t.output === wa.output && t.reasoning === wa.reasoning
+    && JSON.stringify(a.parts || []) === JSON.stringify(wa.parts);
 }
 
 /**
@@ -547,12 +655,13 @@ async function main() {
   await cap.close();
 
   process.stdout.write(`\nengine: opencode-ai ${engine.packageVersion} (sdk ${engine.sdkVersion}), server reports ${engine.version || '?'}\nbinary: ${engine.binary}\n\n`);
-  process.stdout.write('| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n');
+  process.stdout.write('| id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error | assistant tokens in/out/reasoning | assistant parts |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n');
   for (const r of results) {
     const w = wireSummary(r.wire);
     const a = r.assistant || {};
+    const t = a.tokens || null;
     const status = `${cell(r.status)}${r.error ? ' ' + cell(r.error.slice(0, 60)) : ''}`;
-    process.stdout.write(`| ${cell(r.id)} | ${cell(r.title)} | ${cell(r.expect)} | ${cell(r.env)} | ${cell(w.path)} | ${cell(w.maxTokens)} | ${cell(w.reasoning ?? w.reasoningEffort)} | ${cell(w.thinking)} | ${status} | ${cell(a.finish)} | ${cell(a.variant)} | ${cell(a.error)} |\n`);
+    process.stdout.write(`| ${cell(r.id)} | ${cell(r.title)} | ${cell(r.expect)} | ${cell(r.env)} | ${cell(w.path)} | ${cell(w.maxTokens)} | ${cell(w.reasoning ?? w.reasoningEffort)} | ${cell(w.thinking)} | ${status} | ${cell(a.finish)} | ${cell(a.variant)} | ${cell(a.error)} | ${t ? cell(`${t.input}/${t.output}/${t.reasoning}`) : cell(null)} | ${a.parts ? cell(a.parts.join(',') || '(none)') : cell(null)} |\n`);
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
