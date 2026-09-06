@@ -584,7 +584,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // freezes `pull_request.base.sha` at PR creation, so a map change merged
       // to main after that never reached an open PR (measured on PR #232).
       expect(step).toContain('github.event.pull_request.base.ref');
-      expect(step).not.toContain('pull_request.base.sha');
+      // The EXPRESSION, not the substring — the comment above it in the workflow
+      // names the frozen sha deliberately, to say why it is not used.
+      expect(step).not.toContain('github.event.pull_request.base.sha');
       expect(step).not.toContain('pull_request.head.sha');
       expect(step).toContain('.github/amicus-ci-aliases.json');
       // Still no checkout anywhere — the map comes over the API.
