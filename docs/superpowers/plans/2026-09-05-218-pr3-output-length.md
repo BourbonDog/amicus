@@ -29,7 +29,7 @@
 > on the server handle (B3); `finalizeSession` and the resume/MCP error branches remove a prior
 > `finish` when the run recorded none (B1). Council #232 round 2: a cut review is marked in the
 > chair packet's review header (B1, pulled forward from the filed R4 item); the once-only retry
-> stays (B2, owner's decision). The measured facts in the Design section stand unchanged.
+> stays (B2, owner's decision); the output-truncated note's effect now says the chair-packet header carries the mark (Task 5's code blocks quote the earlier wording). The measured facts in the Design section stand unchanged.
 
 ## Global Constraints
 

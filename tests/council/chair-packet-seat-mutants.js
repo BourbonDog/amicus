@@ -24,41 +24,84 @@
 // f7fe180d. Every mutant was applied by hand, run at FULL suite scope, reverted
 // by hand, and byte-verified with `git diff` plus a SHA-1 against
 // `git show HEAD:<path>` — never `git checkout --`/`restore`/`stash`.
+//
+// ⚠️ ALIASBACK and SEATONLY (below) now carry a DIFFERENT denominator — 605
+// suites / 9414 tests (8 skipped, 9406 passing), `npx jest --no-coverage` at
+// f7f122e1 (#218 PR 3 council r2 fix round 2b) — because the site (1)
+// expression both mutants guard changed there (it grew the `r.cut` clause) and
+// both records' pins moved with it. NULLLEAK, FLATTIE, and HDRSEATFWD are
+// UNCHANGED since the 546/7914 measurement — `seatKeyedOrder` and the
+// run-assemble.js seat spread are byte-identical across f7fe180d..f7f122e1 —
+// and keep that denominator. SHAPESWAP already carries its own denominator for
+// the same reason (see below). A denominator split across records in one file
+// is not an error; it is what "re-take the denominator with it" produces when
+// only some records are re-run.
 
 // ── on src/council/briefings-chair.js :: buildChairPacket ────────────────────
 
   // Named mutant "ALIASBACK": revert site (1) to its pre-SI-25 alias-only
-  // expression — `` `--- Review by ${r.model} ---` `` — i.e. delete the
-  // `displayName(r.seat) ||` half. It is the "SI-25 never happened" mutant for
-  // the review header, and it is the shape the packet actually shipped.
-  // MEASURED red set: 1 suite / 3 tests, out of 546 / 7914. By suite:
-  //   chair-packet-seats 3 —
+  // expression — `` `--- Review by ${r.model}${r.cut ? ' — CUT at its output
+  // reservation (…)' : ''} ---` `` — i.e. delete the `displayName(r.seat) ||`
+  // half, leaving the #218 PR 3 r2 B1 `r.cut` clause untouched. It is the
+  // "SI-25 never happened" mutant for the review header, and it is the shape
+  // the packet actually shipped.
+  // RE-MEASURED at f7f122e1 (#218 PR 3 council r2 fix round 2b): the guarded
+  // expression grew the `r.cut` clause and chair-packet-seats.test.js gained a
+  // twin-bench cut-marker pin that reads site (1), so the red set gained one
+  // test.
+  // MEASURED red set: 1 suite / 4 tests, out of 605 / 9414. By suite:
+  //   chair-packet-seats 4 —
   //     "site (1) — the two review headers are distinguishable"
   //     "the packet a paid chair reads carries no bare alias for a twinned seat"
   //     "a TWIN seat DOES ride the projection into the header"
-  // ⚠️ NOTHING ELSE IN 546 SUITES NOTICES, and that is the measurement this item
+  //     "the marker follows the seat name, not the alias, on a twin bench" —
+  //       the #218 PR 3 r2 B1 pin; ALIASBACK renders the bare `r.model`
+  //       (`deepseek`, not `deepseek#1`) even though the mutation leaves the
+  //       `r.cut` clause itself intact.
+  // ⚠️ NOTHING ELSE IN 605 SUITES NOTICES, and that is the measurement this item
   // exists because of: the collapsed twin-bench header was invisible to the whole
-  // tree before these pins. Do not read 3/7914 as a weak pin.
+  // tree before these pins. Do not read 4/9414 as a weak pin.
 
   // Named mutant "SEATONLY": drop the `|| <alias>` fallback at ALL THREE sites at
   // once — `${displayName(r.seat)}`, `${r.seat}` for the ranking key, and
   // `${a.seat}` for the adjudication key. THIS IS THE MUTANT THAT PROVES R25-2
   // (spec §4.2 byte identity) IS LOAD-BEARING rather than decorative.
-  // MEASURED red set: 4 suites / 12 tests, out of 546 / 7914. By suite:
-  //   chair-packet-seats 9 · run-all-clean 1 · run-claude-review 1 ·
-  //   briefings-stage2 1.
-  //   The three OUTSIDE this item's own file are the pre-existing pins §0.7
-  //   named, and they fire for three different reasons:
+  // RE-MEASURED at f7f122e1 (#218 PR 3 council r2 fix round 2b): site (1)'s
+  // expression grew the `r.cut` clause (irrelevant to this mutant's own sites,
+  // but it re-ran the file anyway per the guarded-expression rule), and two new
+  // seatless pins were added since the 546/7914 measurement — one in
+  // chair-packet-seats.test.js (the #218 PR 3 r2 B1 cut-marker test whose
+  // reviews carry no `seat`) and one in run-assemble.test.js (the cut-leg
+  // projection test, same reason) — plus briefings-chair-task.test.js, a whole
+  // suite that did not exist at the 546/7914 measurement and exercises the same
+  // three fallback sites through the task-intent twin packet.
+  // MEASURED red set: 6 suites / 18 tests, out of 605 / 9414. By suite:
+  //   chair-packet-seats 12 · briefings-chair-task 2 · briefings-stage2 1 ·
+  //   run-all-clean 1 · run-assemble 1 · run-claude-review 1.
+  //   Every failure here is a seatless ranking, adjudication, or review losing
+  //   its `judge`/`model` fallback — never a seat-carrying fixture:
   //     run-claude-review "claude joins the bundle as review N+1…" — the Claude
   //       review carries NO seat at all, so site (1) renders `undefined`. The
   //       fallback is load-bearing there, not defensive.
   //     briefings-stage2 "the rankings the judges DID produce still reach the
-  //       chair" and run-all-clean "the chair packet says the bench was clean…"
-  //       — ordinary unique-alias benches, where the seat channel is ABSENT by
-  //       the emit-when-DIFFERENT rule and every site falls back.
-  // ⚠️ The R25-3 tie test does NOT red here: its ranking carries a seat, and
-  // SEATONLY does not touch seatKeyedOrder. A smaller-than-expected overlap
-  // between two mutants is information, not an error.
+  //       chair", run-all-clean "the chair packet says the bench was clean…",
+  //       and briefings-chair-task's two pins ("every section header and review
+  //       label is shared with the review packet", "the ranking and
+  //       adjudication rows render identically in both intents") — ordinary
+  //       unique-alias benches (or the task-intent packet built from one),
+  //       where the seat channel is ABSENT by the emit-when-DIFFERENT rule and
+  //       every site falls back.
+  //     Inside chair-packet-seats (12): all three R25-2 pins (byte-identity,
+  //       the pre-SI-25 rendering, and the Claude fallback), five of the six
+  //       R25-3 ranking pins (every one whose fixture omits `seat` — see the
+  //       tie-slot exception below), both R25-5 pins whose reviews omit `seat`,
+  //       and the new #218 PR 3 r2 B1 cut-marker pin, whose reviews also omit
+  //       `seat`.
+  // ⚠️ The R25-3 TIE-SLOT test ("a TIE slot zips element-wise…") does NOT red
+  // here: its ranking is the one R25-3 fixture that carries an explicit `seat`
+  // ('gemini#1'), and SEATONLY does not touch seatKeyedOrder — only the
+  // fallback around it. A smaller-than-expected overlap between two mutants is
+  // information, not an error.
 
 // ── on src/council/briefings-chair.js :: seatKeyedOrder ──────────────────────
 
