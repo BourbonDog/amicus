@@ -170,9 +170,14 @@ jobs:
         if: steps.gate.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          # The base sha, NOT the head: this map decides which models get paid to
-          # run, so a PR must never edit the map used to review that same PR.
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          # The base BRANCH, not the head and not the PR's base sha: this map decides
+          # which models get paid to run, so a PR must never edit the map used to
+          # review that same PR — and GitHub freezes `pull_request.base.sha` at PR
+          # creation, so a map change merged to the base branch afterwards never
+          # reached an open PR (measured on PR #232: the deepseek pin moved on main
+          # in #233, the next round still read the map @48530aea). The branch name
+          # resolves to the base's CURRENT tip on every run.
+          BASE_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
         run: |
           mkdir -p "$AMICUS_CONFIG_DIR"
           # SHAPE, not just syntax (council A2): a map that parses but carries no
@@ -214,11 +219,11 @@ jobs:
           # auth, 5xx, DNS — FAILS the run. Treating a transient blip as "no map"
           # would swap the bench's models on a network hiccup, which is precisely
           # the silent substitution this workflow exists to eliminate.
-          if gh api "repos/${GH_REPO}/contents/.github/amicus-ci-aliases.json?ref=${BASE_SHA}" \
+          if gh api "repos/${GH_REPO}/contents/.github/amicus-ci-aliases.json?ref=${BASE_REF}" \
                --jq '.content' > alias-map.b64 2> alias-map.err; then
             base64 -d < alias-map.b64 > "$AMICUS_CONFIG_DIR/config.json"
             node validate-map.js "$AMICUS_CONFIG_DIR/config.json" || exit 1
-            echo "::notice::alias map provisioned from .github/amicus-ci-aliases.json@${BASE_SHA}"
+            echo "::notice::alias map provisioned from .github/amicus-ci-aliases.json@${BASE_REF}"
           elif grep -q 'HTTP 404' alias-map.err; then
             rm -f "$AMICUS_CONFIG_DIR/config.json"
             echo "::notice::no .github/amicus-ci-aliases.json on the base ref — using amicus's shipped alias table"
@@ -367,7 +372,7 @@ jobs:
           # ADDS or MOVES this parser cannot use it, because the base ref predates the
           # file. That PR takes the notice path and gets no env section; every PR after
           # the merge gets the feature. Do not read that first notice as a defect.
-          if gh api "repos/${GH_REPO}/contents/scripts/extract-workflow-env.js?ref=${BASE_SHA}" \
+          if gh api "repos/${GH_REPO}/contents/scripts/extract-workflow-env.js?ref=${BASE_REF}" \
                --jq '.content' 2>/dev/null | base64 -d > env-context.js && [ -s env-context.js ]; then
             ENV_CTX=1
           else
