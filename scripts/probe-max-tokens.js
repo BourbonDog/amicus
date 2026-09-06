@@ -809,7 +809,10 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
     // `wire —` and match. Named mutant "SENTTHENREFUSED" (no unit test — the probe is not
     // requirable; the refuter's extracted-function repro is the evidence): `wire: null` literal.
     const posted = cap.captures.slice(captureStart).find((x) => x.method === 'POST') || null;
-    return { ...base, error: err.message, wire: posted, capturedAfterRefusal: cap.captures.length - captureStart, assistant: null };
+    // `threw: true` marks the row as one that never reached the assistant read; checkRow
+    // scores a thrown row only when it is a REFUSAL row (want.refused) -- any other
+    // thrown row is a mismatch whatever its wire says (whole-branch review, Wave A re-review).
+    return { ...base, error: err.message, threw: true, wire: posted, capturedAfterRefusal: cap.captures.length - captureStart, assistant: null };
   } finally {
     if (handle) {
       try { handle.server.close(); engines.closed += 1; } catch (err) { engines.closeErrors.push(`${c.id}: ${err.message}`); }
@@ -834,6 +837,11 @@ function checkRow(r) {
   if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
     return (!r.wire && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
   }
+  // A row that THREW (runCase's catch) and is not a refusal row never matches: its
+  // measured wire, if any, is filed in the JSON for the reader, but a case that died
+  // before the assistant read cannot satisfy a wire/assistant pin (the pre-PR-4
+  // scoring, restored after the Wave A re-review noted the measured wire had widened it).
+  if (r.threw) { return 'mismatched'; }
   if (!r.want || typeof r.want !== 'object') { return 'mismatched'; }
   const w = wireSummary(r.wire);
   const reasoning = w.reasoning ?? w.reasoningEffort ?? null;
