@@ -659,9 +659,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // budget the engine was spawned with rides the handle (readOutputBudgetSafe,
     // PR 3) so the direct-Anthropic fit check (M2/M17) judges the same number the
     // death report names. Named mutant "VARIANTNOTSENT" (tests/headless-variant.test.js).
+    const sendAbort = new AbortController();
     if (variant) {
       promptOptions.variant = variant;
       promptOptions.outputBudget = readOutputBudgetSafe(server, options._readOutputBudget);
+      promptOptions.signal = sendAbort.signal; // #218 PR 4 whole-branch review (EP-2): see the backstop catch below
     }
 
     // v4.6.2 PR2 amendment (controller live smoke, field evidence): arm BEFORE
@@ -784,6 +786,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // internally, so this is defensive belt-and-suspenders, not load-bearing
       // — verified empirically before relying on it).
       sendPromptPromise.catch(() => {});
+      // #218 PR 4 whole-branch review (EP-2): the send may still be INSIDE its declaration
+      // wait (sendPrompt reads /config/providers for up to 5 s when a variant was asked for);
+      // this leg is finalized and its session aborted below, so the orphan must not send.
+      // Named mutant "ORPHANSENDS" (tests/headless-variant.test.js): drop the abort.
+      sendAbort.abort();
       backstopFired = true;
       logger.warn('No-output backstop fired before the prompt send resolved', {
         taskId, sessionId, backstopMs: noOutputBackstopMs,
@@ -814,7 +821,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       : {};
     if (sent && !sent.verified) {
       const { formatUnverifiedVariantNote } = require('./utils/engine-variants');
-      logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs }) });
+      logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable }) });
     }
 
     // Hard provider failure detected at the client boundary (#37): a non-2xx /

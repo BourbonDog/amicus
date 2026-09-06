@@ -764,6 +764,7 @@ async function waitKnown(client, key, deadlineMs) {
 async function runCase(sdk, cap, c, engines, providers, updates) {
   const base = { id: c.id, title: c.title, expect: c.expect, want: c.want ?? null, env: c.env ?? null };
   let handle = null;
+  const captureStart = cap.captures.length; // PR 4 whole-branch review (PR-3): so the refused-row catch can MEASURE "no capture"
   try {
     handle = await startEngine(sdk, buildConfig(cap.origin, c), c.env);
     engines.started += 1;
@@ -801,7 +802,12 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
     const r = await send(handle.client, cap.captures, c);
     return { ...base, config, prompt: c.viaAmicus ? { viaAmicus: true, variant: c.variant ?? null, outputBudget: c.outputBudget ?? null, reasoning: c.reasoning ?? null } : (c.extra || {}), ...r, update, refresh };
   } catch (err) {
-    return { ...base, error: err.message, wire: null, assistant: null };
+    // PR 4 whole-branch review (PR-3): a refusal must be measured against the capture server,
+    // not asserted by construction — a sendPrompt that sent and THEN threw would otherwise print
+    // `wire —` and match. Named mutant "SENTTHENREFUSED" (no unit test — the probe is not
+    // requirable; the refuter's extracted-function repro is the evidence): `wire: null` literal.
+    const posted = cap.captures.slice(captureStart).find((x) => x.method === 'POST') || null;
+    return { ...base, error: err.message, wire: posted, capturedAfterRefusal: cap.captures.length - captureStart, assistant: null };
   } finally {
     if (handle) {
       try { handle.server.close(); engines.closed += 1; } catch (err) { engines.closeErrors.push(`${c.id}: ${err.message}`); }
@@ -822,7 +828,7 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
 function checkRow(r) {
   if (r.want === 'record') { return 'recorded'; }
   // PR 4: a row whose expectation is a REFUSAL before the wire — no capture at
-  // all, and the thrown reason starts with the code.
+  // all (measured: runCase's catch reads the captures taken since the case began), and the thrown reason starts with the code.
   if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
     return (!r.wire && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
   }

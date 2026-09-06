@@ -924,7 +924,7 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   // only safe when the failure direction is inert; here it is not. The enum
   // matches amicus_council_run's own `z.enum(['review','task'])`, so one input
   // does not mean two things at two doors.
-  test("amicus_council_tally meta.intent REJECTS a near-miss spelling at the boundary", () => {
+  test('amicus_council_tally meta.intent REJECTS a near-miss spelling at the boundary', () => {
     const schema = byName().amicus_council_tally.inputSchema;
     const meta = extra => ({ runId: 'r', models: ['a', 'b'], ...extra });
     expect(() => schema.meta.parse(meta({ intent: 'Task' }))).toThrow();

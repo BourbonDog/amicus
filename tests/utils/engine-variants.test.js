@@ -62,7 +62,7 @@ describe('checkVariant — the direct-Anthropic enabled + budgetTokens shape bes
     const v = checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: HAIKU, outputBudget: 24000 });
     expect(v.ok).toBe(false);
     expect(v.code).toBe('VARIANT_OVER_BUDGET');
-    expect(v.reason).toBe("VARIANT_OVER_BUDGET: the 'high' variant on anthropic/claude-haiku-4-5 carries a 16000-token thinking budget that the engine adds ON TOP of the reservation on this route (probe M2: 24000 + 16000 = 40000; K2), so with outputBudget 24000 this leg would reserve 40000 (24000 + 16000) — 16000 over the budget; nothing was sent. Raise outputBudget to at least 64000 (the sum is then clamped to the ceiling, K4), route the model through OpenRouter (its OpenRouter row carries the thinking budget inside the reservation, M9), or use an adaptive-thinking model such as claude-sonnet-5 (M10b)");
+    expect(v.reason).toBe("VARIANT_OVER_BUDGET: the 'high' variant on anthropic/claude-haiku-4-5 carries a 16000-token thinking budget that the engine adds ON TOP of the reservation on this route (probe M2: 24000 + 16000 = 40000; K2), so with outputBudget 24000 this leg would reserve 40000 (24000 + 16000) — 16000 over the budget; nothing was sent. Raise outputBudget to at least 64000 (the sum is then clamped to the ceiling, K4), route the model through OpenRouter (a variant leaves the reservation at the budget there — M1: 8000 stayed 8000 under 'low'; M9: 32000 with 'high' on both of the engine's catalogues), or use an adaptive-thinking model such as claude-sonnet-5 (M10b)");
   });
   it('says so when the sum is clamped to the ceiling (K3-shaped: 48000 + 31999 > 64000)', () => {
     const v = checkVariant({ variant: 'max', model: 'anthropic/claude-haiku-4-5', declaration: HAIKU, outputBudget: 48000 });
@@ -99,7 +99,7 @@ describe('checkVariant — the model the catalogue does not know', () => {
   });
   it('formats the unverified note with the wait and the rows', () => {
     expect(formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'medium', waitedMs: 5003 })).toBe(
-      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (limit.context 0, no variants declared), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known within 36 ms on one run and unknown at the first read on another, M0) and is a silent no-op otherwise (M7)");
+      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (limit.context 0, no variants declared), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)");
   });
 });
 
@@ -182,5 +182,68 @@ describe('readModelDeclaration', () => {
     expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, catalogCeiling: 100000 })).ceiling).toBe(100000);
     expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, catalogCeiling: null })).ceiling).toBe(64000);
     expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, readCache: () => { throw new Error('corrupt'); } })).ceiling).toBe(64000);
+  });
+  it('keeps waiting when the first read is an ECHOED descriptor with no variants — a cold model amicus registered (EP-1)', async () => {
+    // Named mutant "ECHOKNOWN": drop `couldBeEcho(d)` from the loop condition — providers() is called once and `variants` is {}.
+    const ECHO_COLD = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }];
+    const WARM = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 131072 }, variants: { low: { reasoning: { effort: 'low' } } } } } }];
+    const client = clientOf([ECHO_COLD, ECHO_COLD, WARM]);
+    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 131072 });
+    expect(client.config.providers).toHaveBeenCalledTimes(3);
+    expect(d.known).toBe(true);
+    expect(Object.keys(d.variants)).toEqual(['low']);
+  });
+  it('does not wait on a variant-less model amicus has no catalog row for — the read cannot be an echo (M0: gpt-4o, bare)', async () => {
+    const BARE_NOVARIANTS = [{ id: 'openai', models: { 'gpt-4o': { limit: { context: 128000, output: 16384 }, variants: {} } } }];
+    const client = clientOf([BARE_NOVARIANTS]);
+    const d = await readModelDeclaration(client, 'openai/gpt-4o', { waitMs: 1000, pollMs: 1, sleep: async () => {}, ...NO_CATALOG });
+    expect(client.config.providers).toHaveBeenCalledTimes(1);
+    expect(d.known).toBe(true);
+  });
+  it('a non-2xx /config/providers is UNREADABLE — one read, no wait, and the note says so (EP-3)', async () => {
+    // Named mutant "UNREADABLEISCOLD": treat the error tuple as an empty provider list — providers() is polled to the deadline and `unreadable` is null.
+    const client = { config: { providers: jest.fn(async () => ({ error: { name: 'Internal' }, response: { status: 500 } })) } };
+    let now = 0;
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 5000, pollMs: 250, sleep: async () => { now += 250; }, now: () => now, ...NO_CATALOG });
+    expect(client.config.providers).toHaveBeenCalledTimes(1);
+    expect(d).toMatchObject({ known: false, unreadable: 'HTTP 500' });
+    expect(checkVariant({ variant: 'medium', model: 'openrouter/moonshotai/kimi-k3', declaration: d, outputBudget: null })).toEqual({ ok: true, verified: false });
+    expect(formatUnverifiedVariantNote({ model: 'openrouter/moonshotai/kimi-k3', variant: 'medium', waitedMs: d.waitedMs, unreadable: d.unreadable }))
+      .toMatch(/^the engine's \/config\/providers could not be read \(HTTP 500; one read, no wait\), so 'medium' was sent unverified: /);
+  });
+  it('a dump without a providers array is unreadable too (a reshaped response), while an empty list is a readable "unknown"', async () => {
+    const reshaped = await readModelDeclaration({ config: { providers: jest.fn(async () => ({ data: [] })) } }, 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
+    expect(reshaped.unreadable).toBe('no providers array in the response');
+    const empty = await readModelDeclaration(clientOf([[]]), 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
+    expect(empty).toMatchObject({ known: false, unreadable: null });
+  });
+  it('stops polling when the caller abandons the wait (EP-2)', async () => {
+    // Named mutant "IGNORESIGNAL": drop the `signal.aborted` clause — providers() is called 3 times.
+    const signal = { aborted: false };
+    const client = clientOf([COLD, COLD, KNOWN]);
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 1, sleep: async () => { signal.aborted = true; }, signal, ...NO_CATALOG });
+    // 2, not 1: the seam sets `aborted` DURING the sleep, so the poll it was already
+    // committed to still lands; the loop then exits instead of running to the deadline.
+    expect(client.config.providers).toHaveBeenCalledTimes(2);
+    expect(d.known).toBe(false);
+  });
+  it('reads the ceiling through the real model-catalog module when no seam is passed (parked minor m1)', async () => {
+    // Named mutant "UNSEAMEDRENAME": `require('./model-catalog').readCatalog` in catalogCeilingFor — the test reads 24000.
+    const ECHO = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 24000 }, variants: HAIKU.variants } } }];
+    let pending;
+    try {
+      jest.isolateModules(() => {
+        jest.doMock('../../src/utils/model-catalog', () => ({
+          readCache: () => ({ models: [{ id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 }] }),
+        }));
+        const isolated = require('../../src/utils/engine-variants');
+        pending = isolated.readModelDeclaration(clientOf([ECHO]), 'anthropic/claude-haiku-4-5', { waitMs: 0 });
+      });
+      const d = await pending;
+      expect(d.limitOutput).toBe(24000);
+      expect(d.ceiling).toBe(64000);
+    } finally {
+      jest.dontMock('../../src/utils/model-catalog');
+    }
   });
 });

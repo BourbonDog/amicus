@@ -205,7 +205,7 @@ describe('spend ledger append on start finalize (B24)', () => {
   it("an OUTPUT_LENGTH run's ledger row carries finish 'length' beside status 'error'", async () => {
     mockRunHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
-      finish: 'length',
+      finish: 'length', variant: 'high',
       error: "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)",
       usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
     });
@@ -218,6 +218,7 @@ describe('spend ledger append on start finalize (B24)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('error');
     expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+    expect(rows[0].variant).toBe('high'); // SOLOROWNOVARIANT
   });
 
   it('a run with no finish on the result leaves the key off the ledger row', async () => {
@@ -233,6 +234,7 @@ describe('spend ledger append on start finalize (B24)', () => {
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect('finish' in rows[0]).toBe(false);
+    expect('variant' in rows[0]).toBe(false);
   });
 
   it('a run with no usage on the result does not append a row', async () => {

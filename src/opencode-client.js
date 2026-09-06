@@ -197,7 +197,8 @@ async function createSession(client, directory) {
  * @param {number|null} [options.outputBudget] - the budget the engine serving this session
  *   was spawned with (the server handle's `outputBudget`); `null` = unset; omitted = unknown.
  *   Only the fit check reads it.
- * @param {object} [options._declaration] - test seam: readModelDeclaration's opts (waitMs/pollMs/sleep)
+ * @param {object} [options._declaration] - test seam: readModelDeclaration's opts (waitMs/pollMs/sleep/now/catalogCeiling/readCache)
+ * @param {{aborted: boolean}} [options.signal] - abandon signal (headless.js): when set before the send, nothing is sent
  * @param {object} [options.watchdog] - IdleWatchdog instance to signal busy/idle around the API call
  * @param {string} [options.directory] - Optional project directory to scope the
  *   call to (threaded to the SDK as query.directory). Omitting it keeps the
@@ -239,11 +240,17 @@ async function sendPrompt(client, sessionId, options) {
   if (variant) {
     const { readModelDeclaration, checkVariant, VariantRefusedError } = require('./utils/engine-variants');
     const modelId = `${modelSpec.providerID}/${modelSpec.modelID}`;
-    const declaration = await readModelDeclaration(client, modelId, options._declaration);
+    const declaration = await readModelDeclaration(client, modelId, { ...(options._declaration || {}), signal: options.signal });
+    // #218 PR 4 whole-branch review (EP-2): headless races this call against its no-output
+    // backstop; when the window is shorter than the declaration wait the leg is already
+    // finalized and its session aborted by the time the wait ends. Never send after that —
+    // and never let a refusal reach the leg's swallowed orphan as if it had been a send.
+    // Named mutant "SENDAFTERABANDON" (tests/opencode-client.test.js): drop this check.
+    if (options.signal && options.signal.aborted) { throw new Error('sendPrompt abandoned: the caller gave up during the declaration wait; nothing was sent'); }
     const verdict = checkVariant({ variant, model: modelId, declaration, outputBudget });
     if (!verdict.ok) { throw new VariantRefusedError(verdict.code, verdict.reason); }
     body.variant = variant;
-    sentVariant = { variant, verified: verdict.verified, waitedMs: declaration.waitedMs };
+    sentVariant = { variant, verified: verdict.verified, waitedMs: declaration.waitedMs, ...(declaration.unreadable ? { unreadable: declaration.unreadable } : {}) };
   }
 
   if (watchdog) {
@@ -263,15 +270,15 @@ async function sendPrompt(client, sessionId, options) {
     }
   }
 
+  // #218 PR 4: what was SENT, for the leg record (headless.js reads it). Same
+  // decoration-of-the-SDK-result precedent as `providerError` below.
+  if (sentVariant && result && typeof result === 'object') { result.sentVariant = sentVariant; }
+
   // Detect a hard provider failure at the client boundary (#37). A non-2xx /
   // 402 here must surface as a session error EVEN WHEN the server emits no
   // assistant message carrying info.error — otherwise the run looks idle/empty.
   // Keyed on HTTP status so benign informational errors (model config warnings
   // on a 2xx) keep the fire-and-forget "continue to poll" behavior below.
-  // #218 PR 4: what was SENT, for the leg record (headless.js reads it). Same
-  // decoration-of-the-SDK-result precedent as `providerError` below.
-  if (sentVariant && result && typeof result === 'object') { result.sentVariant = sentVariant; }
-
   const reason = providerErrorReason(result);
   if (reason) {
     result.providerError = reason;

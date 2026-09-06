@@ -107,6 +107,50 @@ describe('#218 PR 4 — the effort lever through runHeadless', () => {
     }));
   });
 
+  it('an UNREADABLE /config/providers reaches the same warn with the reason it observed (EP-3)', async () => {
+    // Named mutant "UNREADABLEDROPPED": drop `unreadable` from headless.js's note call.
+    const { logger } = require('../src/utils/logger');
+    mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'medium', verified: false, waitedMs: 0, unreadable: 'HTTP 500' } });
+    const r = await run({ variant: 'medium' });
+    expect(r.variantUnverified).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith('Variant sent unverified', expect.objectContaining({
+      note: expect.stringContaining('/config/providers could not be read (HTTP 500; one read, no wait)'),
+    }));
+  });
+
+  it('records the variant on a failed-with-no-usable-output return too (the OUTPUT_LENGTH death)', async () => {
+    // Named mutant "ERRORVARIANTDROPPED": drop the `...sentVariantFields` spread from that return.
+    mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'high', verified: true, waitedMs: 0 } });
+    mockGetMessages.mockResolvedValue(finished({ parts: [], finish: 'length' }));
+    const r = await run({ variant: 'high' });
+    expect(r.completed).toBe(false);
+    expect(r.error.startsWith('OUTPUT_LENGTH:')).toBe(true);
+    expect(r.finish).toBe('length');
+    expect(r.variant).toBe('high');
+  });
+
+  it('aborts the send when the no-output backstop wins the race against the declaration wait (EP-2)', async () => {
+    // Named mutant "ORPHANSENDS": drop `sendAbort.abort()` in the backstop catch — the signal is never aborted.
+    let seenSignal = null;
+    mockSendPromptAsync.mockImplementation((_c, _s, opts) => new Promise((resolve) => {
+      seenSignal = opts.signal;
+      setTimeout(() => resolve({ data: {}, sentVariant: { variant: 'low', verified: true, waitedMs: 400 } }), 400);
+    }));
+    const r = await run({ variant: 'low', noOutputBackstopMs: 100 });
+    expect(r.completed).toBe(false);
+    expect(r.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal.aborted).toBe(true);
+    expect('variant' in r).toBe(false);
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes no signal when no variant was requested (the no-variant path is byte-identical)', async () => {
+    mockSendPromptAsync.mockResolvedValue({ data: {} });
+    await run({});
+    expect(mockSendPromptAsync.mock.calls[0][2]).not.toHaveProperty('signal');
+  });
+
   it("a refused variant is the leg's named death through runHeadless's outer handler: no poll, no spend, the reason on `error`, no finish", async () => {
     // Preservation pin (green at HEAD by construction): runHeadless's outer `catch (error)`
     // already turns any pre-loop throw into the standard error result — it aborts the

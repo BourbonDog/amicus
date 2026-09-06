@@ -646,7 +646,7 @@ describe('Headless Mode Runner', () => {
     });
   });
 
-  describe('Reasoning/Thinking Support', () => {
+  describe('Variant (effort level) support — #218 PR 4', () => {
     const testProject = '/test/project';
     const testModel = 'openrouter/google/gemini-3-pro-preview';
     const testSystemPrompt = '# Test system prompt';

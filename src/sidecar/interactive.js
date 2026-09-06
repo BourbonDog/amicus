@@ -70,6 +70,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     };
   }
 
+  let sent = null; // #218 PR 4 whole-branch review (EP-4): what sendPrompt SENT, for the record
   // Create or reconnect to session
   let sessionId;
   try {
@@ -96,12 +97,18 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       // #218 PR 4: the engine's `variant` field, validated in sendPrompt; the
       // spawn-time budget rides the handle (PR 3). A refusal lands in the catch
       // below as "Session setup failed: VARIANT_…" — nothing was sent.
+      // Named mutants "GUIBUDGETDROPPED" / "GUIREFUSALPREFIX" (tests/sidecar/interactive-variant.test.js).
       if (variant) {
         promptOptions.variant = variant;
         promptOptions.outputBudget = Object.prototype.hasOwnProperty.call(server, 'outputBudget') ? server.outputBudget : undefined;
       }
 
-      await sendPromptAsync(ocClient, sessionId, promptOptions);
+      const promptResult = await sendPromptAsync(ocClient, sessionId, promptOptions);
+      sent = promptResult && promptResult.sentVariant;
+      if (sent && !sent.verified) {
+        const { formatUnverifiedVariantNote } = require('../utils/engine-variants');
+        logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable }) });
+      }
       progressStage('prompt_sent');
     }
     logger.debug('Interactive session ready', { sessionId, isResume: !!isResume });
@@ -207,6 +214,11 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       } catch (err) { logger.debug('mirror stop failed', { error: err.message }); }
       try { await server.close(); } catch { /* best-effort */ }
       logger.debug('OpenCode server closed after Electron exit');
+      // #218 PR 4 whole-branch review (EP-4/REC-2/PRT-2): the level SENT rides the interactive
+      // result too (emit-when-sent, the derivation headless.js:811-814 makes), so start.js's
+      // writers stamp `variant` / `variantUnverified` for the default GUI mode as well.
+      // Named mutant "INTERACTIVEVARIANTDROPPED" (tests/sidecar/interactive-variant.test.js).
+      if (sent) { result.variant = sent.variant; if (!sent.verified) { result.variantUnverified = true; } }
       result.opencodeSessionId = sessionId;
       resolve(result);
     });

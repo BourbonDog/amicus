@@ -361,6 +361,20 @@ describe('runFanout orchestrator', () => {
     }
   });
 
+  it('forwards --thinking to every leg\'s runHeadless call as `variant` (#218 PR 4 whole-branch review, TM-1)', async () => {
+    // Named mutant "FANOUTVARIANTDROPPED": drop `variant` from fanout.js's runLeg args.
+    await runFanout({ ...baseOpts(), thinking: 'high' });
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) { expect(call[7].variant).toBe('high'); }
+  });
+
+  it('leaves runHeadless options.variant undefined when no thinking was requested', async () => {
+    await runFanout(baseOpts());
+    // `variant` is a shorthand key on the options literal (fanout-leg.js), so it is
+    // always PRESENT; what must not survive is a value.
+    for (const call of mockRunHeadless.mock.calls) { expect(call[7].variant).toBeUndefined(); }
+  });
+
   // v4.6.2 PR3 Task 1: the live-probe override rides the same options-object
   // vehicle as `directory` above — runFanout -> runLeg -> runSingleAttempt's
   // runHeadless call. Mirrors the directory pair exactly (forwards / stays
@@ -587,16 +601,12 @@ describe('runFanout orchestrator', () => {
     expect('finish' in wave.legs[1]).toBe(false);
   });
 
-  // The leg DOCUMENT this asserts on is metadata.json — the hop `legPatch` owns.
-  // The wave doc's own legs are built by result-schema.js :: buildRunResult,
-  // which copies a whitelist off metadata (ttftMs, finish, pack, tag) and does
-  // not yet carry these two; that hop is not this change's.
   it('#218 PR 4: a leg\'s variant and unverified flag reach the leg document', async () => {
     // Named mutant "LEGVARIANTDROPPED": drop the two `legPatch` fields.
     mockRunHeadless
       .mockImplementationOnce(async (_m, _s, _u, taskId) => ({ ...legOk(taskId), variant: 'low', variantUnverified: true }))
       .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId)); // no variant asked for
-    await runFanout({ ...baseOpts(), waveId: 'var12345' });
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'var12345' });
     const legMeta1 = JSON.parse(fsReal.readFileSync(
       pathReal.join(project, '.claude', 'amicus_sessions', 'var12345-1', 'metadata.json'), 'utf-8'));
     expect(legMeta1.variant).toBe('low');
@@ -605,6 +615,11 @@ describe('runFanout orchestrator', () => {
       pathReal.join(project, '.claude', 'amicus_sessions', 'var12345-2', 'metadata.json'), 'utf-8'));
     expect('variant' in legMeta2).toBe(false);
     expect('variantUnverified' in legMeta2).toBe(false);
+    // TM-5: the wave doc carries both too (result-schema.js :: buildRunResult), mirroring
+    // the finish sibling above — emit-when-set, so leg 2 has neither key.
+    expect(wave.legs[0].variant).toBe('low');
+    expect(wave.legs[0].variantUnverified).toBe(true);
+    expect('variant' in wave.legs[1]).toBe(false);
   });
 
   it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
@@ -1057,6 +1072,26 @@ describe('runFanout orchestrator', () => {
         expect(row.tokens).toMatchObject({ input: 100, output: 50 });
         expect(row.cost).toEqual({ amount: 0.005, currency: 'USD', source: 'reported' });
       }
+    });
+
+    it("a leg's ledger row carries the variant it SENT, and omits the key when it sent none (#218 PR 4 whole-branch review, TM-3)", async () => {
+      // Named mutant "LEGROWNOVARIANT": drop `variant` from fanout-leg-fallback.js's appendSpend row.
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      mockRunHeadless
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({
+          ...legOk(taskId), variant: 'low',
+          usage: { tokens: { input: 100, output: 50, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.005 },
+        }))
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({
+          ...legOk(taskId),
+          usage: { tokens: { input: 100, output: 50, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.005 },
+        }));
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave4' });
+      const rows = readSpendRows(ledgerDir);
+      const row1 = rows.find((r) => r.taskId === 'ledgerwave4-1');
+      const row2 = rows.find((r) => r.taskId === 'ledgerwave4-2');
+      expect(row1.variant).toBe('low');
+      expect('variant' in row2).toBe(false);
     });
 
     it('a leg with no usage (errored before pricing) does not append a row', async () => {

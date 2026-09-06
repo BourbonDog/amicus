@@ -30,7 +30,7 @@
     },
     "variant": {
       "type": "string",
-      "description": "#218 PR 4, optional. The effort level amicus SENT as the engine's `variant` prompt field for this leg, after checking the engine's own declaration for the model (/config/providers). EMIT-WHEN-SENT: absent means no --thinking was requested, or the request was refused before anything was sent (then `status` is 'error' and `error` starts VARIANT_UNDECLARED or VARIANT_OVER_BUDGET). Not the engine's own `variant` echo, which it records even for a level it dropped (probe F3/M7). A leg whose no-output backstop fired before the prompt send resolved carries no `variant` even though one went out — the send result never arrived, so the record cannot claim it."
+      "description": "#218 PR 4, optional. The effort level amicus SENT as the engine's `variant` prompt field for this leg, after checking the engine's own declaration for the model (/config/providers). EMIT-WHEN-SENT: absent means no --thinking was requested, or the request was refused before anything was sent (then `status` is 'error' and `error` starts VARIANT_UNDECLARED or VARIANT_OVER_BUDGET — prefixed `Session setup failed: ` on an interactive `amicus start`). Not the engine's own `variant` echo, which it records even for a level it dropped (probe F3/M7). A leg whose no-output backstop fired before the prompt send resolved carries no `variant` even though one went out — the send result never arrived, so the record cannot claim it."
     },
     "variantUnverified": {
       "type": "boolean",

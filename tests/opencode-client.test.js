@@ -421,10 +421,10 @@ describe('OpenCode Client Wrapper', () => {
     });
 
     it('sends every level the curated routes declare between them', async () => {
-      const ALL = { data: { providers: [{ id: 'openrouter', models: { 'openai/gpt-5.6-terra': { limit: { context: 1050000, output: 128000 }, variants: Object.fromEntries(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((v) => [v, { reasoning: { effort: v } }])) } } }] } };
+      const ALL = { data: { providers: [{ id: 'openrouter', models: { 'probe/all-levels': { limit: { context: 1050000, output: 128000 }, variants: Object.fromEntries(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].map((v) => [v, { reasoning: { effort: v } }])) } } }] } };
       for (const variant of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
         const mockClient = clientWith(ALL);
-        await sendPrompt(mockClient, 'session-123', { model: 'openrouter/openai/gpt-5.6-terra', parts: [{ type: 'text', text: 'T' }], variant, _declaration: NO_WAIT });
+        await sendPrompt(mockClient, 'session-123', { model: 'openrouter/probe/all-levels', parts: [{ type: 'text', text: 'T' }], variant, _declaration: NO_WAIT });
         expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe(variant);
       }
     });
@@ -491,6 +491,27 @@ describe('OpenCode Client Wrapper', () => {
       const mockClient = clientWith(KIMI_DUMP);
       await sendPrompt(mockClient, 'session-123', { model: { providerID: 'openrouter', modelID: 'moonshotai/kimi-k3' }, parts: [{ type: 'text', text: 'Hello' }], variant: 'low', _declaration: NO_WAIT });
       expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
+    });
+
+    it('carries the unreadable reason onto sentVariant and still SENDS (EP-3)', async () => {
+      // Named mutant "UNREADABLEISCOLD" (src/utils/engine-variants.js): the error tuple reads as
+      // an empty provider list — `sentVariant.unreadable` is then absent.
+      const mockClient = clientWith({ error: {}, response: { status: 500 } });
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'T' }], variant: 'low', _declaration: NO_WAIT,
+      });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
+      expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, unreadable: 'HTTP 500' });
+    });
+
+    it('never sends after the caller abandoned the declaration wait (EP-2)', async () => {
+      // Named mutant "SENDAFTERABANDON": drop the `options.signal.aborted` check before checkVariant.
+      const signal = { aborted: false };
+      const mockClient = clientWith(KIMI_DUMP);
+      mockClient.config.providers.mockImplementation(async () => { signal.aborted = true; return KIMI_DUMP; });
+      await expect(sendPrompt(mockClient, 'session-123', { model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'T' }], variant: 'low', signal, _declaration: NO_WAIT }))
+        .rejects.toThrow('sendPrompt abandoned: the caller gave up during the declaration wait; nothing was sent');
+      expect(mockClient.session.promptAsync).not.toHaveBeenCalled();
     });
   });
 

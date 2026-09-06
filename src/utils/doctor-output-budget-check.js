@@ -64,6 +64,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
     // out (K12), so a missing cache is informational; above it an unknown model
     // receives the value as-is (J2/K13) and the cache is what would name a
     // ceiling. Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
+    // Named mutant "NOCACHEOPENAI" (tests/doctor-output-budget.test.js): drop the openai clause.
     return {
       clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is; a direct openai route carries no output reservation at all — probe M5/M13/M22)`,
       status: aboveDefault ? 'warn' : 'ok',

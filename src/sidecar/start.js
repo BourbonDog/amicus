@@ -125,7 +125,7 @@ async function startSidecar(options) {
     mcp, mcpConfig, clientType: client, noMcp, excludeMcp, projectDir: effectiveProject
   });
   const taskId = options.taskId || generateTaskId();
-  const variant = thinking || undefined; // #218 PR 4: the level itself is the engine's `variant` field
+  const variant = thinking || undefined; // #218 PR 4: the level itself is the engine's `variant` field (named mutant "STARTVARIANTDROPPED", tests/sidecar/start.test.js: drop `variant` from the two options objects below)
   // 15b.3: one nonce per run, generated BEFORE prompt construction so the
   // SAME value can be baked into the prompt's instruction (buildPrompts) and
   // handed to the detector (runHeadless.options.nonce / the GUI fold writer
@@ -227,7 +227,7 @@ async function startSidecar(options) {
         taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
         op: 'start', status: statusFromResult(result), project: effectiveProject,
         finish: result && result.finish, // #218 PR 3: appendSpend keeps it only when it is a string
-        variant: result && result.variant, // #218 PR 4: same emit-when-set rule
+        variant: result && result.variant, // #218 PR 4: same emit-when-set rule (named mutant "SOLOROWNOVARIANT", tests/start-json.test.js)
         // ⚠️ DE-ROT: `metadata` is NOT in scope at startSidecar's finalize site — the objects
         // there are `meta` (createSessionMetadata result) and `m`; `metadata` is a local only
         // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the

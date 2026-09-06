@@ -246,7 +246,7 @@ async function runFanout(options) {
         HEARTBEAT_INTERVAL
       );
   const timeoutMs = (options.timeout || 15) * 60 * 1000;
-  const variant = options.thinking || undefined; // #218 PR 4: one level for every leg, sent as the engine's `variant` field
+  const variant = options.thinking || undefined; // #218 PR 4: one level for every leg, sent as the engine's `variant` field (named mutant "FANOUTVARIANTDROPPED", tests/sidecar/fanout.test.js: drop `variant` from the runLeg args)
   let legDocs;
   try {
     // retryContexts/retryOfWaveId (v4.3 Task 19): absent on a normal wave, so

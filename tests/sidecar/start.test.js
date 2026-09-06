@@ -383,6 +383,26 @@ describe('startSidecar includeContext option', () => {
     expect(contextArg).not.toContain(PARENT_MARKER);
   });
 
+  it('passes --thinking to runHeadless as `variant` and omits the key when none was requested (#218 PR 4 whole-branch review, TM-1)', async () => {
+    // Named mutant "STARTVARIANTDROPPED": drop `variant` from start.js's runHeadless options.
+    const { startSidecar } = require('../../src/sidecar/start');
+    const { runHeadless } = require('../../src/headless');
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: true, includeContext: false, thinking: 'low' });
+    expect(runHeadless.mock.calls[0][7].variant).toBe('low');
+    runHeadless.mockClear();
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: true, includeContext: false });
+    // `variant` is a shorthand key on the options literal, so it is always PRESENT;
+    // what must not survive is a value (start.js: `thinking || undefined`).
+    expect(runHeadless.mock.calls[0][7].variant).toBeUndefined();
+  });
+
+  it('passes --thinking to runInteractive as `variant` (the default mode)', async () => {
+    const { startSidecar } = require('../../src/sidecar/start');
+    const { runInteractive } = require('../../src/sidecar/interactive');
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: false, includeContext: false, thinking: 'low' });
+    expect(runInteractive.mock.calls[0][5].variant).toBe('low');
+  });
+
   it('passes parent context to buildPrompts when includeContext is true', async () => {
     const PARENT_MARKER = '<<<PARENT_CONVERSATION_LEAK>>>';
     buildContextMock.mockReturnValue(PARENT_MARKER);

@@ -53,12 +53,22 @@ class VariantRefusedError extends Error {
  * One read of `/config/providers` for one model. `known` is `limit.context > 0`:
  * a model amicus registered that the engine's catalogue lacks reads 0/0 (J1, M0);
  * a provider or model missing from the dump altogether is unknown too.
+ * A descriptor amicus wrote is echoed with `variants {}` (M3), so a positive context alone does not prove the ENGINE knows the model — readModelDeclaration keeps polling on that shape.
  * `limitOutput` is whatever the dump says — the engine's own ceiling for a bare descriptor, and the ECHO of a descriptor amicus wrote otherwise (M3).
- * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null}>}
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null}>}
  */
 async function readDeclarationOnce(client, providerID, modelID) {
   const r = await client.config.providers();
-  const list = (r && r.data && Array.isArray(r.data.providers)) ? r.data.providers : [];
+  // #218 PR 4 whole-branch review (EP-3): the SDK returns a non-2xx as a VALUE ({error,
+  // response}, no data — opencode-client.js :: providerErrorReason keys on the same shape).
+  // A response with no providers array is UNREADABLE, not "model unknown": the wait must not
+  // burn 5 s on it and the note must not claim a read that never happened.
+  // Named mutant "UNREADABLEISCOLD" (tests/utils/engine-variants.test.js): `list = []` on that shape.
+  const list = (r && r.data && Array.isArray(r.data.providers)) ? r.data.providers : null;
+  if (list === null) {
+    const status = r && ((r.response && r.response.status) || (r.error && r.error.status));
+    return { known: false, variants: {}, limitOutput: null, unreadable: typeof status === 'number' ? `HTTP ${status}` : 'no providers array in the response' };
+  }
   const p = list.find((x) => x && x.id === providerID);
   const m = (p && p.models && Object.prototype.hasOwnProperty.call(p.models, modelID)) ? p.models[modelID] : null;
   const limit = (m && m.limit && typeof m.limit === 'object') ? m.limit : {};
@@ -66,6 +76,7 @@ async function readDeclarationOnce(client, providerID, modelID) {
     known: positiveCount(limit.context) !== null,
     variants: (m && m.variants && typeof m.variants === 'object') ? m.variants : {},
     limitOutput: positiveCount(limit.output),
+    unreadable: null,
   };
 }
 
@@ -92,8 +103,8 @@ function catalogCeilingFor(model, readCache) {
  * the catalogue to know it. Named mutant "NOWAIT" (tests/utils/engine-variants.test.js).
  * @param {object} client SDK client
  * @param {string} model executable id
- * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`
- * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, ceiling: number|null, waitedMs: number}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`.
+ * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function, signal?: {aborted: boolean}}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null, ceiling: number|null, waitedMs: number}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`.
  */
 async function readModelDeclaration(client, model, opts = {}) {
   const idx = typeof model === 'string' ? model.indexOf('/') : -1;
@@ -103,9 +114,20 @@ async function readModelDeclaration(client, model, opts = {}) {
   const pollMs = opts.pollMs === undefined ? DECLARATION_POLL_MS : opts.pollMs;
   const sleep = opts.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = opts.now || Date.now;
+  const catalogCeiling = opts.catalogCeiling !== undefined ? opts.catalogCeiling : catalogCeilingFor(model, opts.readCache);
+  const signal = opts.signal || null; // #218 PR 4 whole-branch review (EP-2): the caller's abandon signal
+  // #218 PR 4 whole-branch review (EP-1): with a budget in force amicus wrote a descriptor
+  // for every model its own catalog knows, and /config/providers ECHOES it (M3) — so a
+  // model the ENGINE's catalogue does not know yet reads `limit.context > 0, variants {}`
+  // instead of 0/0 and would count as known on the FIRST read, skipping the wait rule 3
+  // exists for. Keep polling while the read could be that echo: amicus's catalog knows the
+  // model and no variant has appeared. A model the engine genuinely knows with no variants
+  // (M0: gpt-4o) then costs the wait once before its VARIANT_UNDECLARED — a refusal path.
+  // Named mutant "ECHOKNOWN" (tests/utils/engine-variants.test.js): drop `couldBeEcho(d)`.
+  const couldBeEcho = (r) => catalogCeiling !== null && Object.keys(r.variants).length === 0;
   const start = now();
   let d = await readDeclarationOnce(client, providerID, modelID);
-  while (!d.known && now() - start < waitMs) {
+  while (!d.unreadable && (!d.known || couldBeEcho(d)) && !(signal && signal.aborted) && now() - start < waitMs) {
     await sleep(pollMs);
     d = await readDeclarationOnce(client, providerID, modelID);
   }
@@ -118,7 +140,6 @@ async function readModelDeclaration(client, model, opts = {}) {
   // when the catalog has none: then the descriptor was bare and the dump is the
   // engine's own ceiling (K5/K12). Named mutant "ECHOEDCEILING"
   // (tests/utils/engine-variants.test.js): `ceiling: d.limitOutput` unconditionally.
-  const catalogCeiling = opts.catalogCeiling !== undefined ? opts.catalogCeiling : catalogCeilingFor(model, opts.readCache);
   return { ...d, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, waitedMs: now() - start };
 }
 
@@ -152,18 +173,21 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
     const sum = budget + budgetTokens;
     const reservation = Math.min(sum, ceiling);
     const how = sum > ceiling ? `${budget} + ${budgetTokens}, clamped to the model's ${ceiling} ceiling` : `${budget} + ${budgetTokens}`;
-    return { ok: false, code: 'VARIANT_OVER_BUDGET', reason: `VARIANT_OVER_BUDGET: the '${variant}' variant on ${model} carries a ${budgetTokens}-token thinking budget that the engine adds ON TOP of the reservation on this route (probe M2: 24000 + 16000 = 40000; K2), so with outputBudget ${budget} this leg would reserve ${reservation} (${how}) — ${reservation - budget} over the budget; nothing was sent. Raise outputBudget to at least ${ceiling} (the sum is then clamped to the ceiling, K4), route the model through OpenRouter (its OpenRouter row carries the thinking budget inside the reservation, M9), or use an adaptive-thinking model such as claude-sonnet-5 (M10b)` };
+    return { ok: false, code: 'VARIANT_OVER_BUDGET', reason: `VARIANT_OVER_BUDGET: the '${variant}' variant on ${model} carries a ${budgetTokens}-token thinking budget that the engine adds ON TOP of the reservation on this route (probe M2: 24000 + 16000 = 40000; K2), so with outputBudget ${budget} this leg would reserve ${reservation} (${how}) — ${reservation - budget} over the budget; nothing was sent. Raise outputBudget to at least ${ceiling} (the sum is then clamped to the ceiling, K4), route the model through OpenRouter (a variant leaves the reservation at the budget there — M1: 8000 stayed 8000 under 'low'; M9: 32000 with 'high' on both of the engine's catalogues), or use an adaptive-thinking model such as claude-sonnet-5 (M10b)` };
   }
   return { ok: true, verified: true, entry };
 }
 
 /**
  * The log line for a variant sent to a model the catalogue did not know in time.
- * @param {{model: string, variant: string, waitedMs: number}} a
+ * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null}} a
  * @returns {string}
  */
-function formatUnverifiedVariantNote({ model, variant, waitedMs }) {
-  return `the engine's catalogue did not know ${model} within ${waitedMs} ms (limit.context 0, no variants declared), so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known within 36 ms on one run and unknown at the first read on another, M0) and is a silent no-op otherwise (M7)`;
+function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable }) {
+  const why = unreadable
+    ? `the engine's /config/providers could not be read (${unreadable}; one read, no wait)`
+    : `the engine's catalogue did not know ${model} within ${waitedMs} ms (limit.context 0, no variants declared)`;
+  return `${why}, so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)`;
 }
 
 module.exports = { VARIANT_LEVELS, VariantRefusedError, readModelDeclaration, checkVariant, formatUnverifiedVariantNote };
