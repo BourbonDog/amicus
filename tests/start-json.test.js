@@ -237,6 +237,27 @@ describe('spend ledger append on start finalize (B24)', () => {
     expect('variant' in rows[0]).toBe(false);
   });
 
+  // #218 PR 4 whole-branch review (PRT-4): docs/troubleshooting.md says a refused
+  // run IS on the ledger — `status: "error"`, zero tokens, no `variant`. A
+  // preservation pin: the behaviour is already right, the doc sentence was not.
+  // Named mutant "REFUSEDROWSKIPPED" (skip appendSpend when every token count is 0).
+  it('a VARIANT_UNDECLARED refusal still appends a zero-token error row with no variant', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: '', completed: false, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      error: "VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not declare a 'medium' variant — the engine's catalogue lists low, high, max for it (/config/providers); an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Pick one of the listed levels, or omit --thinking to run at the provider's own default effort",
+      usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/moonshotai/kimi-k3', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0008',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1); // REFUSEDROWSKIPPED
+    expect(rows[0].status).toBe('error');
+    expect('variant' in rows[0]).toBe(false);
+  });
+
   it('a run with no usage on the result does not append a row', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],

@@ -21,9 +21,9 @@
  * refusal stands on) and M17 (the fitted descriptor lands exactly on the budget
  * — the fact the filed exact-fit follow-up stands on). Seven engine starts.
  * The seven rows pin max_tokens (and, for M2 and M17, only the presence of a
- * thinking block) — cells both the engine's bundled catalogue (case A, cold)
- * and the cached live one (every later case) agree on — so the run's case order
- * cannot move them.
+ * thinking block) — cells both the engine's bundled catalogue (case A, the run's
+ * first engine — cold or live) and the cached live one (every later case) agree
+ * on — so the run's case order cannot move them.
  */
 
 const { spawnSync } = require('child_process');

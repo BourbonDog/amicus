@@ -78,30 +78,36 @@ All notable changes to Amicus are documented here. Format follows
   level the model does not declare is refused before anything is sent (`VARIANT_UNDECLARED`, naming
   the declared set — the engine would have dropped it silently and still echoed it on the message,
   F3/M7); a declared level whose thinking budget the direct Anthropic route adds on top of the
-  reservation (Haiku 4.5, Opus 4.5 — M2: 24,000 + 16,000 = 40,000) is refused when `outputBudget`
-  is below the model's ceiling (`VARIANT_OVER_BUDGET`, with the reservation the leg would have made
-  and three remedies); a model the engine's catalogue does not know within a five-second wait — its
-  bundled catalogue predates the model and the models.dev fetch has not landed yet, the state of a
-  cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level unverified, logged and marked
-  `variantUnverified: true` on the leg document. A refusal is a zero-spend leg death through the
-  usual channel (`error` with the reason; a fanout's other legs run; `start --no-ui` exits 1).
-  `max` joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the
-  levels the curated routes declare between them, M0). The level SENT rides the run document
-  (`variant`), the spend-ledger row (`variant`, present only when one was sent) and the leg patch.
-  Twenty-four probe rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured
-  every shape this ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job
-  now also runs M2 and M17. Council seats have no effort knob in this release (filed as the owner's
-  decision).
+  reservation (Haiku 4.5 — M2: 24,000 + 16,000 = 40,000; Opus 4.5 declares the same shape, M0) is
+  refused when `outputBudget` is below the model's ceiling (`VARIANT_OVER_BUDGET`, with the
+  reservation the leg would have made and three remedies); a model the engine's catalogue does not
+  know within a five-second wait — its bundled catalogue predates the model and the models.dev fetch
+  has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
+  unverified, logged and marked `variantUnverified: true` on the leg document. A refusal is a
+  zero-spend leg death through the usual channel (`error` with the reason; a fanout's other legs
+  run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process (shared-server) path
+  carries the level too — its `thinking` had been argv-only, which that path never read. A backstop
+  window shorter than the five-second declaration wait ends the leg `NO_OUTPUT_BACKSTOP` before
+  anything is sent (an abandon signal stops the orphaned send); an unreadable `/config/providers` (a
+  non-2xx) sends the level unverified after ONE read, and the log line says so. `max` joins the
+  vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the curated
+  routes declare between them, M0). The level SENT rides the run document (`variant`), the
+  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-four probe
+  rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured every shape this
+  ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M2
+  and M17. Council seats have no effort knob in this release (filed as the owner's decision).
 
 ### Changed
 
-- **`outputBudget` below 32,000 now reaches every leg (#218 PR 2).** On 4.9.3 a budget applied only
-  to routes whose ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The
-  engine flag now carries the budget to those rows too — clamped by the engine's own catalog where
-  it knows the model (K5, K12), as-is on a model it does not (J2, K13). A user who set
-  `outputBudget: 8000` on 4.9.3 sees those rows reserve 8,000 after upgrading. A model neither
-  catalog knows receives a raised budget as-is and may be refused by a provider that enforces its
-  ceiling — loudly; `doctor`'s `output-budget` row names such routes.
+- **`outputBudget` below 32,000 now reaches every leg but a direct `openai` one (#218 PR 2; the
+  openai exception measured in PR 4, M5/M13/M22).** On 4.9.3 a budget applied only to routes whose
+  ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The engine flag now
+  carries the budget to those rows too — clamped by the engine's own catalog where it knows the
+  model (K5, K12), as-is on a model it does not (J2, K13). A user who set `outputBudget: 8000` on
+  4.9.3 sees those rows reserve 8,000 after upgrading — except a direct `openai` route, which
+  carries no reservation field at all. A model neither catalog knows receives a raised budget as-is
+  and may be refused by a provider that enforces its ceiling — loudly; `doctor`'s `output-budget`
+  row names such routes.
 - **A length-stopped leg with no answer text is an error, not a completion (#218 PR 3).** On 4.9.3
   such a leg ended `complete` with an empty summary (a council dropped it as "ended 'complete' with
   no usable output"; `amicus start --no-ui` exited 0 with "No Output") or, when the provider streamed
@@ -116,13 +122,16 @@ All notable changes to Amicus are documented here. Format follows
 - **A `--thinking` level the model does not declare is refused, not adjusted (#218 PR 4).** On
   4.9.3 the CLI rewrote `minimal` to `low` and any other unsupported level to `medium` from a static
   per-model table (gpt-5 "without minimal", gemini "with everything") with a warning, then sent the
-  result as a field the engine never read; the table is gone (the engine's catalogue contradicts
-  it: gpt-5.6-terra declares no `minimal`, gemini-3.6-flash no `none` — M0), the CLI checks only
-  the vocabulary, and the model's own declaration decides at send time. Solo session metadata
-  records `thinking` only when one was requested — it used to record `medium` for every run,
-  including runs that sent nothing. MCP `thinking` parameters no longer claim "Default: medium":
-  omitted means nothing is sent and the provider's default effort governs (on the direct OpenAI
-  route the engine sends `medium` itself, M13).
+  result as a field the engine never read; the table is gone (the engine's catalogue contradicts it:
+  gpt-5.6-terra declares no `minimal`, gemini-3.6-flash no `none` — M0), the CLI checks only the
+  vocabulary, and the model's own declaration decides at send time. Solo session metadata records
+  `thinking` only when one was requested — it used to record `medium` for every run, including runs
+  that sent nothing. A pack saved with `pack save --from-run` on 4.9.3 or earlier copied that
+  `medium` into its `options.thinking`; such a pack now SENDS it — refused on every model that does
+  not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes) — so delete
+  the key or re-save the pack from a run that requested a level. MCP `thinking` parameters no longer
+  claim "Default: medium": omitted means nothing is sent and the provider's default effort governs
+  (on the direct OpenAI route the engine sends `medium` itself, M13).
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`

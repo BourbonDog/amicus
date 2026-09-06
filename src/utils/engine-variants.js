@@ -13,7 +13,7 @@
  * Measured, engine 1.18.15 (BACKLOG "v4.9.4 records", the PR 4 table):
  *   - a model newer than the engine's bundled catalogue reads `limit 0/0,
  *     variants {}` until the startup models.dev refresh lands (M0: qwen3.8-max-0902,
- *     glm-5.3 on a cold engine) and is known within 36 ms on another run (M12) —
+ *     glm-5.3 on a cold engine) and is known on the first poll of a WARM engine (M12: 36 ms on one run) —
  *     so a read that finds the model unknown WAITS, bounded, before deciding;
  *   - a variant does not move the reservation on OpenRouter (M1, M9), direct
  *     Google (M15), direct DeepSeek (M16) or an adaptive-thinking Anthropic model
@@ -36,7 +36,7 @@ const { positiveCount } = require('./model-output-limit');
 /** Every level the curated routes declare between them (M0), in effort order. */
 const VARIANT_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-/** How long a read waits for the engine's startup refresh to make a model known (M12: 36 ms). */
+/** How long a read waits for the engine's startup refresh to make a model known (the cold wait is unmeasured — BACKLOG item 3; M12's 36 ms was a warm read). */
 const DECLARATION_WAIT_MS = 5000;
 const DECLARATION_POLL_MS = 250;
 

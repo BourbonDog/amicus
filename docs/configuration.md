@@ -71,10 +71,11 @@ starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget) — exce
 knows receives the budget itself, exactly as it received the raw 32,000 before.
 
 If you set `outputBudget` on 4.9.3, one thing changes on upgrade: a budget below 32,000 now also
-reaches routes the catalog cannot clamp — an unrefreshed direct row, a local-provider model,
-anything the catalog lacks — which 4.9.3 left at the engine's 32,000. Those legs reserve
-`min(budget, the ceiling the engine's own catalog knows)` (K12: 8,000 on a bare kimi row), or the
-budget as-is where the engine knows the model no better (K13).
+reaches routes the catalog cannot clamp — an unrefreshed direct row (other than `openai`, which no
+budget reaches — M13/M22), a local-provider model, anything the catalog lacks — which 4.9.3 left at
+the engine's 32,000. Those legs reserve `min(budget, the ceiling the engine's own catalog knows)`
+(K12: 8,000 on a bare kimi row), or the budget as-is where the engine knows the model no better
+(K13).
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
@@ -100,8 +101,8 @@ back to 32,000 *silently* on those (measured), so the doctor row is where it sur
 
 Five things worth knowing before you set it. Every number below was measured on the wire by
 `scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
-so; the row ids refer to the three probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218
-P1, PR 2 and PR 3).
+so; the row ids refer to the four probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218
+P1, PR 2, PR 3 and PR 4).
 
 - **Above 32,000 it is the engine flag doing the work.** OpenCode computes
   `Math.min(limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX)` with the flag defaulting to
@@ -135,23 +136,25 @@ P1, PR 2 and PR 3).
   give the model a catalog entry.
 - **A thinking variant leaves the budget alone on every route but one.** `--thinking` now reaches
   the engine (#218 PR 4) as its `variant` field, and the probe measured the reservation with a
-  variant in play on each provider amicus curates: OpenRouter (M1: 8,000 stays 8,000 under `low`;
-  M9: OpenRouter's Anthropic row carries the thinking budget *inside* the reservation), direct
-  Google (M15: 8,000), direct DeepSeek (M16: 8,000) and an adaptive-thinking Anthropic model
+  variant in play on each provider whose request carries one (the direct openai route carries
+  none — M5/M13/M22): OpenRouter (M1: 8,000 stays 8,000 under `low`; M9: OpenRouter's Anthropic
+  row sends 32,000 with `high` on both of the engine's catalogues — a variant adds nothing there),
+  direct Google (M15: 8,000), direct DeepSeek (M16: 8,000) and an adaptive-thinking Anthropic model
   (M10b: `claude-sonnet-5` at 8,000) all hold it. The one shape that does not is a direct
   Anthropic variant declared as `thinking: {type: 'enabled', budgetTokens: N}` — today Haiku 4.5
   (`high` 16,000, `max` 31,999) and Opus 4.5 (16,000 for `low`, `medium` and `high`) — where the
-  engine adds N on top (M2: 24,000 + 16,000 = 40,000; K2) and clamps the sum to the model's ceiling
-  (K3/K4/K10). Amicus cannot lower the descriptor by N before the spawn (N is the engine's own
-  number, read only from a running engine, and nothing changes a descriptor afterwards — a runtime
-  `PATCH /config` is accepted, changes nothing the engine serves, and writes a `config.json` into
-  the engine's working directory, M3/M4/M11), so with a budget below that model's ceiling such a
-  leg is **refused before anything is sent**, with the reservation it would have made and three
-  ways out: raise the budget to at least the ceiling (the sum is then clamped to it, K4), route the
-  model through OpenRouter (M9), or use an adaptive-thinking model (M10b). With no budget set the
-  engine's own behaviour applies (32,000 + N, H3/H4). The exact fit — a descriptor lowered by N
-  lands the sum exactly on the budget (M17: 8,000 + 16,000 = 24,000) — is filed in the BACKLOG as
-  the follow-up it would take.
+  engine adds N on top (M2, measured on Haiku: 24,000 + 16,000 = 40,000; K2 — Opus 4.5 declares
+  the same `enabled` + `budgetTokens` shape, M0, and is refused on the shape) and clamps the sum
+  to the model's ceiling (K3/K4/K10). Amicus cannot lower the descriptor by N before the spawn (N
+  is the engine's own number, read only from a running engine, and nothing changes a descriptor
+  afterwards — a runtime `PATCH /config` is accepted, changes nothing the engine serves, and
+  writes a `config.json` into the engine's working directory, M3/M4/M11), so with a budget below
+  that model's ceiling such a leg is **refused before anything is sent**, with the reservation it
+  would have made and three ways out: raise the budget to at least the ceiling (the sum is then
+  clamped to it, K4), route the model through OpenRouter (M1, M9), or use an adaptive-thinking
+  model (M10b). With no budget set the engine's own behaviour applies (32,000 + N, H3/H4). The
+  exact fit — a descriptor lowered by N lands the sum exactly on the budget (M17: 8,000 + 16,000
+  = 24,000) — is filed in the BACKLOG as the follow-up it would take.
 - **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
   window, and the engine subtracts this same reservation from the window before it decides to
   compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is
@@ -298,7 +301,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_STABLE_IDLE_POLLS` | Number of consecutive idle polls required when no explicit completion signal is received (approximately 60 s at the 2 s default). This is the fallback heuristic for models or SDK versions that don't emit a clean completion event. | `30` |
 | `AMICUS_MAX_CONSECUTIVE_POLL_FAILURES` | Consecutive poll failures before the headless runner bails. At the 2 s interval this is approximately 30 s. Prevents a dead server from burning the full session timeout on futile polls. | `15` |
 | `AMICUS_TOOL_CALL_STALL_MS` | How long a tool call may sit pending with **no** result and no output growth before the leg is failed with `Tool call stalled: <tool>` and its OpenCode session aborted. This is the wedge guard: it targets a leg producing nothing at all, and it is skipped while a tool-settle deferral is active (`AMICUS_TOOL_SETTLE_GRACE_MS` owns that decision instead, and ends in a completion rather than a failure). **`0` is ignored** — it falls back to the default rather than disabling the guard, because a `0` threshold would kill every leg on its first poll. There is no way to switch this off; raise it if you legitimately run very long single tool calls. | `180000` |
-| `AMICUS_NO_OUTPUT_BACKSTOP_MS` | Fail a headless leg fast when the model has produced no output, reasoning, or tool calls for this long — the "accepted but not serving" class. Disarms permanently on the first sign of activity, so slow cold-prefill local models are unaffected. **Set `0` (or negative) to disable the backstop entirely** — silent legs then run to the ordinary timeout. | `300000` |
+| `AMICUS_NO_OUTPUT_BACKSTOP_MS` | Fail a headless leg fast when the model has produced no output, reasoning, or tool calls for this long — the "accepted but not serving" class. Disarms permanently on the first sign of activity, so slow cold-prefill local models are unaffected. **Set `0` (or negative) to disable the backstop entirely** — silent legs then run to the ordinary timeout. A window shorter than the five-second declaration wait a `--thinking` leg makes (#218 PR 4) cuts that wait short: the leg dies `NO_OUTPUT_BACKSTOP` before the level is validated and nothing is sent. | `300000` |
 | `AMICUS_USAGE_SETTLE_POLLS` | How many extra `getMessages` reads run **after** a leg has already finished, to catch provider usage/cost that lands milliseconds after the completion signal (measured: real paid legs losing their cost by 29 ms and 155 ms). The loop breaks early as soon as every assistant message carries usage, so the common case is one extra read. **Set to `0` to disable the reconciliation entirely** — legs then report whatever usage was present at completion, which can be `$0` on a leg that really did cost money. | `3` |
 | `AMICUS_USAGE_SETTLE_INTERVAL_MS` | Delay between those settle reads. **`0` is honoured and means no delay** — the reads run back to back. It does **not** disable the reconciliation (that is `AMICUS_USAGE_SETTLE_POLLS=0`); it only removes the gap between attempts. | `400` |
 | `AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS` | Per-call deadline for a settle read and for the child-session (subagent) spend walk. Deliberately much tighter than `AMICUS_POLL_CALL_TIMEOUT_MS`: the leg is already finished, so a hung read must not add 30 s × 3 to a run's wall time. The effective value is the **smaller** of this and `AMICUS_POLL_CALL_TIMEOUT_MS`, so raising it above that has no effect. **`0` is honoured and means no timer is armed at all** — a hung settle read or subtree walk would then wait indefinitely. | `5000` |

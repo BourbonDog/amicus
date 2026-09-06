@@ -43,7 +43,8 @@ function fmtCeilingLine(e) {
     const f = e.failure;
     const why = f.reason + (f.status ? ` ${f.status}` : '') + (f.detail ? `: ${f.detail}` : '');
     const lead = CEILING_FAILURE_LEAD[f.reason] || 'ceiling enrichment failed';
-    return `Ceilings: ${lead} (${why}); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine's own catalog knows the model`;
+    // #218 PR 4 (whole-branch review VCMD-4): the flag never reaches a direct openai row — M5/M13/M22, the same fact the disabled literal below states.
+    return `Ceilings: ${lead} (${why}); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine's own catalog knows the model; direct openai rows send no output reservation at all (#218 PR 4, M5/M13/M22)`;
   }
   // A skip is not a failure and not a fill: naming which one it was is the
   // difference between "you turned this off" and "there was nothing to do".

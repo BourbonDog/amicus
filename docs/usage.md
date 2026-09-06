@@ -76,7 +76,7 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 | `--context-since <duration>` | Time filter (e.g. `2h`); overrides turns. | |
 | `--context-max-tokens <N>` | Max context tokens. | 80000 |
 | `--no-context` | Skip parent conversation history. | off |
-| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A level the model does not declare is refused before anything is sent. | provider default (nothing sent) |
+| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A level the model does not declare is refused before anything is sent. A model the engine's catalogue does not know in time is sent the level unverified (`variantUnverified: true` on the record). | provider default (nothing sent) |
 | `--summary-length <length>` | Fold summary verbosity: `brief`, `normal`, `verbose`. | `normal` |
 | `--mcp <spec>` | Add an MCP server (`name=url` or `name=command`). | |
 | `--mcp-config <path>` | Path to an `opencode.json` with MCP config. | |
@@ -303,7 +303,7 @@ Then invoke it with `--pack <name|path>` on `start` / `fanout` / `council run` �
 | `fanout` | `bench` (a saved council name, or an array of ≥2 members) | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noContext`, `contextTurns`, `contextMaxTokens` |
 | `solo` | `model` | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noUi`, `noContext`, `contextTurns`, `contextMaxTokens` |
 
-`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs.
+`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs. A pack saved with `pack save --from-run` on 4.9.3 or earlier copied that `medium` into its `options.thinking`; such a pack now SENDS it — refused on every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes) — so delete the key or re-save the pack from a run that requested a level.
 
 Every kind may also carry `description`, `version` (semver, default `1.0.0`), and `briefing.template` (a template **reference**, not rendered text — a pack never captures briefing prose).
 
@@ -886,7 +886,7 @@ Every tool below also takes an optional `project` — an absolute path naming th
 - `prompt` — the task briefing: objective, background, files of interest, success criteria.
 - `agent` — OpenCode agent mode (`Chat`, `Plan`, `Build`); see [OpenCode Agent Types](#opencode-agent-types) below.
 - `noUi` — run headless instead of opening the Electron window. Default `false`.
-- `thinking` — reasoning effort (`none` | `minimal` | `low` | `medium` | `high` | `xhigh` | `max`). Omitted: nothing is sent and the provider's own default effort governs. A level the model does not declare is refused before anything is sent.
+- `thinking` — reasoning effort (`none` | `minimal` | `low` | `medium` | `high` | `xhigh` | `max`). Omitted: nothing is sent and the provider's own default effort governs. A level the model does not declare is refused before anything is sent. A model the engine's catalogue does not know in time is sent the level unverified (`variantUnverified: true` on the record).
 - `timeout` — headless timeout in minutes (default 15); applies only when `noUi` is true.
 - `contextTurns` — max parent-conversation turns to include. Default 50; the MCP twin of `--context-turns`.
 - `contextSince` — time window for parent context (`30m`, `2h`, `1d`); overrides `contextTurns` when set. The MCP twin of `--context-since`.

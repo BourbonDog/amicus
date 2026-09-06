@@ -7309,29 +7309,40 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
 
   **The sandbox cache is shared within a run** — found by this task's first full-matrix run and
   isolated with a `--only M9` run and a `--only A,M9` run beside it. The probe makes ONE sandbox
-  HOME per run, so the first engine lives on the engine's bundled catalogue and its models.dev
-  fetch writes `HOME/.cache/opencode/models.json` (it is in every PATCH row's `sandboxFiles` list);
-  every later engine spawns with that live catalogue already on disk. Served cold as case 1,
+  HOME per run, so the first engine lives on the engine's bundled catalogue and its models.dev fetch
+  writes `HOME/.cache/opencode/models.json` (it is in every PATCH row's `sandboxFiles` list); every
+  later engine spawns with that live catalogue already on disk. Served cold as case 1,
   `openrouter/anthropic/claude-haiku-4.5` declared `high`/`max` as `reasoning.max_tokens`
   16000/31999 and M9 sent `reasoning {max_tokens: 16000}`; served warm — `--only A,M9`, and this
-  matrix — it declared `low`/`medium`/`high` as `reasoning.effort` and M9 sent
-  `reasoning {effort: high}`. `max_tokens` was 32000 in both, so rule 4 holds either way and M9's
-  `want` pins the reservation and RECORDS the effort field (`reasoning: 'any'`) instead of letting
-  case order decide it. The same window explains the rest of the cold/warm split: in the `m1` and
-  `m3` partial runs, where M0 was case 1, `openrouter/qwen/qwen3.8-max-0902`, `openrouter/z-ai/glm-5.3`
-  and `openrouter/qwen/qwen3.8-27b` all read `limit 0/0, variants {}` — the bundled catalogue
-  predates all three — while in this run every one of them is known (glm-5.3 and qwen3.8-27b in the
-  M0 dump at case 38, qwen3.8-max-0902 already at F4); the kimi line is dumped from case A, which is
-  always case 1 and therefore always cold, and reads the bundled ceiling 1048576 where the live
-  models.dev value is 943718 (the flip the PR 2 record calls the startup-refresh race); and M12's
-  wait found its model already known on the FIRST poll on both sides of the split, because
-  `waitKnown` polls `/config/providers` until the model is known before prompting, so a cold M12
-  waits for the fetch instead of sending an undeclared variant — 36 ms in the `m2` partial run, 285
-  ms here. The plan's Design section was written from the cold partial runs; the dump filed here is
-  the WARM view, and the union of declared levels is unchanged (`none, minimal, low, medium, high,
-  xhigh, max`). No config file under the sandbox HOME was created or changed by any PATCH —
-  `HOME/.config/opencode/` holds only a `.gitignore` — and no `config.json` appeared in the repo
-  root. Filed exactly as the run printed it:
+  matrix — it declared `low`/`medium`/`high` as `reasoning.effort` and M9 sent `reasoning {effort:
+  high}`. `max_tokens` was 32000 in both, so rule 4 holds either way and M9's `want` pins the
+  reservation and RECORDS the effort field (`reasoning: 'any'`) instead of letting case order decide
+  it. The declared SET itself differs between the two catalogues on two curated routes —
+  `openrouter/anthropic/claude-haiku-4.5` declares `high`/`max` cold and `low`/`medium`/`high` warm;
+  `openrouter/qwen/qwen3.6-flash` declares `high`/`max` cold (the `m3` M0 dump) and `{}` warm (the
+  dump below) — so for those levels `checkVariant`'s VARIANT_UNDECLARED decision depends on the
+  engine cache state: `--thinking max` on the first and `--thinking high` on the second are SENT by
+  a cold engine and REFUSED by a warm one, and `low`/`medium` on haiku-4.5 the reverse (the union is
+  unchanged, the per-model set is not). The same window explains the rest of the cold/warm split: in
+  the `m1` and `m3` partial runs, where M0 was case 1, `openrouter/qwen/qwen3.8-max-0902`,
+  `openrouter/z-ai/glm-5.3` and `openrouter/qwen/qwen3.8-27b` all read `limit 0/0, variants {}` —
+  the bundled catalogue predates all three — while in this run every one of them is known (glm-5.3
+  and qwen3.8-27b in the M0 dump at case 38, qwen3.8-max-0902 already at F4); the kimi line is
+  dumped from case A, which is always case 1 and therefore the only engine that can read cold — it
+  read the bundled ceiling 1048576 this run (and in `m1`/`m3`/`m9recheck`) where the live models.dev
+  value is 943718, but the PR 3 record's run read 943718 from the SAME case, so the first engine's
+  read is still the race the PR 2 record describes (whichever catalogue its own startup fetch has
+  reached); only the later engines' warm reads are deterministic; and M12's wait found its model
+  already known on the FIRST poll in every filed run — all of them warm (`m2`: case 5, after M9–M11;
+  here: case 51) — so `waitKnown`'s cold path (poll until the fetch lands) has never fired: the 36
+  ms in `m2` and the 285 ms here are the cost of one `/config/providers` call on a warm engine, not
+  a refresh; item 3 below asks for the cold row. The plan's Design section was written from the cold
+  partial runs; the dump filed here is the WARM view, and the union of declared levels is unchanged
+  (`none, minimal, low, medium, high, xhigh, max`). No config file under the sandbox HOME's config
+  directory was created or changed by any PATCH — `HOME/.config/opencode/` holds only a
+  `.gitignore`; the only config file written is the engine cwd's `HOME/project/config.json` (M3's
+  `newFiles`, M4/M11's `changedFiles`) — and no `config.json` appeared in the repo root. Filed
+  exactly as the run printed it:
 
 | id | case | expected | env | wire path | max_tokens | reasoning | thinking | prompt status | assistant finish | assistant variant | assistant error | assistant tokens in/out/reasoning | assistant parts |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -7479,21 +7490,38 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   (PR 3). A council-wide `--thinking`, a per-seat level on the bench member, or nothing — Christian's
   call.
 - [ ] **A model newer than the engine's bundled catalogue is unknown on a COLD engine cache until the
-  models.dev fetch lands (#218 PR 4, Task 7).** `openrouter/qwen/qwen3.8-max-0902`,
-  `openrouter/z-ai/glm-5.3` and `openrouter/qwen/qwen3.8-27b` read `limit 0/0, variants {}` on a cold
-  cache (the `m1`/`m3` M0 dumps, where M0 was the run's first engine) and are known on the first
-  poll once the cache is warm (M12 polled qwen3.8-max-0902; the full-matrix M0 dump above shows all
-  three); the same race moves kimi's ceiling (PR 2 record). PR 4's validator waits up to 5 s and
-  then sends unverified; the engine's own `limit.output` for such a row is 0 → the `|| 32000`
-  fallback until the fetch lands, so the FIRST leg on a cold engine cache can reserve 32000 where a
-  warm one reserves the catalogue ceiling — unmeasured on the wire, because every probe row read the
-  dump, not a racing prompt. Worth one probe row that prompts immediately after a cold spawn.
+  models.dev fetch lands — and two curated routes declare a DIFFERENT level set on each catalogue
+  (#218 PR 4, Task 7).** `openrouter/qwen/qwen3.8-max-0902`, `openrouter/z-ai/glm-5.3` and
+  `openrouter/qwen/qwen3.8-27b` read `limit 0/0, variants {}` on a cold cache (the `m1`/`m3` M0
+  dumps, where M0 was the run's first engine) and are known on the first poll once the cache is warm
+  (M12 polled qwen3.8-max-0902; the full-matrix M0 dump above shows all three); the same race moves
+  kimi's ceiling (PR 2 record; the PR 3 record's case A read the live 943718, so the FIRST engine of
+  a run is cold only usually, never always). PR 4's validator waits up to 5 s and then sends
+  unverified; the engine's own `limit.output` for such a row is 0 → the `|| 32000` fallback until
+  the fetch lands, so the FIRST leg on a cold engine cache can reserve 32000 where a warm one
+  reserves the catalogue ceiling — unmeasured on the wire, because every probe row read the dump,
+  not a racing prompt. Worth one probe row that prompts immediately after a cold spawn. A second row
+  for the known-model flip: `openrouter/anthropic/claude-haiku-4.5 --thinking max` and
+  `openrouter/qwen/qwen3.6-flash --thinking high` are sent cold and refused warm (the M0 `m3` dump
+  vs the dump above) — a cold-spawn prompt on an unknown model would not reproduce it, because those
+  two are KNOWN cold.
 - [ ] **The direct openai provider carries no output reservation (#218 PR 4, M5/M13/M22) — record
   only.** The engine drives it through the Responses API for every id, the body has no
   `max_output_tokens`, and the engine sends `reasoning.effort medium` itself when no variant is given
   (M13). Nothing to build: Mode 1 (the credit pre-check) is an OpenRouter behaviour, and Mode 2's
   lever there is the effort, which PR 4 now sends. The two `[Unreleased]` sentences were corrected in
   PR 4 (Task 6).
+- [ ] **Whole-branch review of #218 PR 4 — six minors deferred (2026-09-06).** EP-5: a provider
+  absent from the `/config/providers` dump waits the full 5 s before the level is sent unverified —
+  fold into a `providerMissing` stop when the wait shape is next touched. REC-4: `pack save
+  --from-run <wave>` reads `legMeta.thinking`, a key no leg document carries — read `variant`
+  instead. VCMD-5 / VCMD-6: the doctor `output-budget` row's default-state wording lacks the
+  direct-openai exception, and an alias set made only of direct openai routes prints "0 of 0 alias
+  routes". PR-6: the probe's `want.update.configJson` pin matches any path ending `/config.json`,
+  not only the engine cwd's. PR-7: the probe's bare-descriptor dump is taken before `waitKnown`, so
+  a dump-seeding case on a cold engine files the bundled view. m10: M12's `expect` prose credits the
+  startup refresh for what was a warm read (36 ms) — reword to the invariant on the next probe run
+  and re-file.
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi

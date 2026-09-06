@@ -266,30 +266,38 @@ The two clauses are independent: either can appear without the other, and the sk
 
 ## `--thinking` Refused Before Anything Is Sent (`VARIANT_UNDECLARED`, `VARIANT_OVER_BUDGET`)
 
-**Symptom:** A solo run (`amicus start`, with or without `--no-ui`) or a fanout leg ends `error`
-with a reason starting `VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not declare a
+**Symptom:** A solo run (`amicus start --no-ui`) or a fanout leg ends `error` with a reason starting
+`VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not declare a
 'medium' variant — the engine's catalogue lists low, high, max for it …` or `VARIANT_OVER_BUDGET:
 the 'high' variant on anthropic/claude-haiku-4-5 carries a 16000-token thinking budget that the
 engine adds ON TOP of the reservation on this route … with outputBudget 24000 this leg would
-reserve 40000 …`. Nothing was billed: the request was never sent. On a fanout the other legs run.
+reserve 40000 …` (an interactive `amicus start` ends the same way with the reason prefixed
+`Session setup failed: `). Nothing was billed: the request was never sent. On a fanout the other
+legs run.
 
 **Cause:** Since #218 PR 4, `--thinking` is sent as the engine's `variant` field and checked first
 against what the engine's own catalogue declares for that model (`/config/providers`). A level the
 model does not declare would be a silent no-op the engine still echoes on the artifact (probe
-F3/M7), so it is refused. A declared level whose entry carries a thinking budget the engine adds on
-top of the reservation (direct Anthropic Haiku 4.5 / Opus 4.5 — M2) is refused when `outputBudget`
+F3/M7), so it is refused. The declared set is read from the engine's catalogue at that moment: on a
+cold `~/.cache/opencode` (first engine start after an install or a cleared cache) the bundled
+catalogue can declare a different set than the live one for the same model (PR 4 record:
+`openrouter/anthropic/claude-haiku-4.5` `high`/`max` cold, `low`/`medium`/`high` warm), so a level
+refused on one run can be accepted on the next; the reason always lists the set in force. A declared
+level whose entry carries a thinking budget the engine adds on top of the reservation (direct
+Anthropic Haiku 4.5 — M2; Opus 4.5 declares the same shape, M0) is refused when `outputBudget`
 is below the model's ceiling, because the leg would reserve more than the budget promises. The
 reason names the model, the level, what the catalogue lists, and — for the budget case — the exact
 reservation, the budget and the ceiling.
 
 **Confirm:** The reason is on the session's `metadata.json` (`reason`) and, for a fanout, on the
-leg document in `wave.json`; the ledger has no row for it (nothing was spent). `amicus models`
-does not list variants; the declared set is in the reason itself.
+leg document in `wave.json`; the ledger row for it reads `status: "error"` with zero tokens and no
+`variant` (nothing was spent, but the run is still attributed — its `cost.source` is `unknown`,
+not a price). `amicus models` does not list variants; the declared set is in the reason itself.
 
 **Fix:** Pick a level the reason lists, or omit `--thinking` to run at the provider's own default.
 For `VARIANT_OVER_BUDGET`: raise `outputBudget` to at least the ceiling the reason names (the sum
-is then clamped to the ceiling), route the model through OpenRouter (its OpenRouter row keeps the
-thinking budget inside the reservation), or use an adaptive-thinking model such as
+is then clamped to the ceiling), route the model through OpenRouter (a variant leaves the
+reservation at the budget there — M1, M9), or use an adaptive-thinking model such as
 `claude-sonnet-5`. A model the engine's catalogue does not know yet (a custom or local model, or one
 newer than the engine's bundled list before its startup refresh lands) is never refused: the level
 is sent after a bounded wait and the run logs `Variant sent unverified`; the leg document carries

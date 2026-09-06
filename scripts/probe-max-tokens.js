@@ -85,11 +85,13 @@
  * first engine starts on the engine's bundled catalogue and its models.dev fetch
  * writes HOME/.cache/opencode/models.json; every later engine starts on that cached
  * live catalogue. So `--only X` serves X cold and the full matrix serves everything
- * after A warm; the A dump (always case 1) reads kimi's bundled 1048576 where the live
- * value is 943718, a partial run's M0 reads models newer than the bundle as `limit
- * 0/0, variants {}`, and the full run's M0 knows them -- the "startup-refresh race"
- * the PR 2/PR 3 records describe is this window. A row's want must pin only what
- * both catalogues agree on (M9: max_tokens; its effort field is `reasoning: 'any'`).
+ * after A warm; the A dump (always case 1) is the one read that can be cold -- it read
+ * kimi's bundled 1048576 in every PR 4 run, the PR 3 record's run read the live 943718
+ * from the same case, so the first engine is still a race; a partial run's M0 reads
+ * models newer than the bundle as `limit 0/0, variants {}`, and the full run's M0 knows
+ * them -- the "startup-refresh race" the PR 2/PR 3 records describe is this window. A
+ * row's want must pin only what both catalogues agree on (M9: max_tokens; its effort
+ * field is `reasoning: 'any'`).
  */
 
 'use strict';

@@ -82,7 +82,7 @@ function getTools() {
       thinking: z.enum([
         'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'
       ]).optional().describe(
-        'Reasoning effort level. Omitted: nothing is sent and the provider\'s own default effort governs. A level the model does not declare is refused before anything is spent (the engine lists what each model declares).'
+        'Reasoning effort level. Omitted: nothing is sent and the provider\'s own default effort governs. A level the model does not declare is refused before anything is spent (the engine lists what each model declares). A model the engine\'s catalogue does not know in time is sent the level unverified (variantUnverified: true on the record).'
       ),
       timeout: z.number().optional().describe(
         'Headless timeout in minutes. Default: 15. Only applies when noUi is true.'
@@ -348,7 +348,7 @@ function getTools() {
         'Agent mode for every leg. Build (default): full tool access. Plan: read-only analysis. Chat is not supported headless.'
       ),
       thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe(
-        'Reasoning effort for every leg. Omitted: nothing is sent and each provider\'s own default effort governs. A leg whose model does not declare the level is refused before anything is spent; the other legs run.'
+        'Reasoning effort for every leg. Omitted: nothing is sent and each provider\'s own default effort governs. A leg whose model does not declare the level is refused before anything is spent; the other legs run. A leg whose model the engine\'s catalogue does not know in time is sent the level unverified.'
       ),
       timeout: z.number().positive('timeout must be a positive number of minutes').optional().describe(
         'Per-leg timeout in minutes (wall-clock ≈ slowest leg). Default: 15.'
