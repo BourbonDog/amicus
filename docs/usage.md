@@ -76,7 +76,7 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 | `--context-since <duration>` | Time filter (e.g. `2h`); overrides turns. | |
 | `--context-max-tokens <N>` | Max context tokens. | 80000 |
 | `--no-context` | Skip parent conversation history. | off |
-| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. | model default |
+| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A level the model does not declare is refused before anything is sent. | provider default (nothing sent) |
 | `--summary-length <length>` | Fold summary verbosity: `brief`, `normal`, `verbose`. | `normal` |
 | `--mcp <spec>` | Add an MCP server (`name=url` or `name=command`). | |
 | `--mcp-config <path>` | Path to an `opencode.json` with MCP config. | |
@@ -886,7 +886,7 @@ Every tool below also takes an optional `project` — an absolute path naming th
 - `prompt` — the task briefing: objective, background, files of interest, success criteria.
 - `agent` — OpenCode agent mode (`Chat`, `Plan`, `Build`); see [OpenCode Agent Types](#opencode-agent-types) below.
 - `noUi` — run headless instead of opening the Electron window. Default `false`.
-- `thinking` — reasoning effort (`low` | `medium` | `high`). Default `medium`.
+- `thinking` — reasoning effort (`none` | `minimal` | `low` | `medium` | `high` | `xhigh` | `max`). Omitted: nothing is sent and the provider's own default effort governs. A level the model does not declare is refused before anything is sent.
 - `timeout` — headless timeout in minutes (default 15); applies only when `noUi` is true.
 - `contextTurns` — max parent-conversation turns to include. Default 50; the MCP twin of `--context-turns`.
 - `contextSince` — time window for parent context (`30m`, `2h`, `1d`); overrides `contextTurns` when set. The MCP twin of `--context-since`.

@@ -80,9 +80,9 @@ function getTools() {
         'Run headless without GUI. Default false (opens Electron window).'
       ),
       thinking: z.enum([
-        'none', 'minimal', 'low', 'medium', 'high', 'xhigh'
+        'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'
       ]).optional().describe(
-        'Reasoning effort level. Default: medium.'
+        'Reasoning effort level. Omitted: nothing is sent and the provider\'s own default effort governs. A level the model does not declare is refused before anything is spent (the engine lists what each model declares).'
       ),
       timeout: z.number().optional().describe(
         'Headless timeout in minutes. Default: 15. Only applies when noUi is true.'
@@ -347,8 +347,8 @@ function getTools() {
       agent: z.enum(['Plan', 'Build']).optional().describe(
         'Agent mode for every leg. Build (default): full tool access. Plan: read-only analysis. Chat is not supported headless.'
       ),
-      thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional().describe(
-        'Reasoning effort for every leg. Default: medium.'
+      thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe(
+        'Reasoning effort for every leg. Omitted: nothing is sent and each provider\'s own default effort governs. A leg whose model does not declare the level is refused before anything is spent; the other legs run.'
       ),
       timeout: z.number().positive('timeout must be a positive number of minutes').optional().describe(
         'Per-leg timeout in minutes (wall-clock ≈ slowest leg). Default: 15.'

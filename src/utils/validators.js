@@ -214,7 +214,7 @@ function validateHeadlessAgent(agent) {
 }
 
 const { validateMcpSpec, validateMcpConfigFile } = require('./mcp-validators');
-const { MODEL_THINKING_SUPPORT, getSupportedThinkingLevels, validateThinkingLevel } = require('./thinking-validators');
+const { VARIANT_LEVELS, validateThinkingLevel } = require('./thinking-validators');
 
 /**
  * Validate API key is present for the given model's provider.
@@ -260,7 +260,7 @@ function validateApiKey(model) {
 module.exports = {
   VALID_AGENT_MODES,
   PROVIDER_KEY_MAP,
-  MODEL_THINKING_SUPPORT,
+  VARIANT_LEVELS,
   TASK_ID_PATTERN,
   validateTaskId,
   TAG_PATTERN,
@@ -278,7 +278,6 @@ module.exports = {
   validateMcpConfigFile,
   validateApiKey,
   validateThinkingLevel,
-  getSupportedThinkingLevels,
   findSessionInProjectDirs,
   // Re-exported from input-validators.js
   validateStartInputs: require('./input-validators').validateStartInputs,

@@ -708,13 +708,13 @@ evals/
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
-| `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS()`, `validateThinkingLevel()` |
 | `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
-| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
+| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `VARIANT_LEVELS()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
 | `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()` |
 | `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanExonerations()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |

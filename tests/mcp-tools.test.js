@@ -156,6 +156,17 @@ describe('MCP Tool Definitions', () => {
       expect(startTool.inputSchema).toHaveProperty('thinking');
     });
 
+    test('thinking accepts every declared level incl. max and rejects one outside the vocabulary (#218 PR 4)', () => {
+      const schema = startTool.inputSchema.thinking;
+      expect(schema.parse('max')).toBe('max');
+      expect(() => schema.parse('turbo')).toThrow();
+
+      const fanoutTool = TOOLS.find(t => t.name === 'amicus_fanout');
+      const fanoutSchema = fanoutTool.inputSchema.thinking;
+      expect(fanoutSchema.parse('max')).toBe('max');
+      expect(() => fanoutSchema.parse('turbo')).toThrow();
+    });
+
     test('has timeout in input schema', () => {
       expect(startTool.inputSchema).toHaveProperty('timeout');
     });
