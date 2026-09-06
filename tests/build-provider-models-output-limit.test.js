@@ -69,6 +69,14 @@ describe('#218 buildProviderModels output limit', () => {
     expect(m.limit.context).toBeGreaterThan(0);
   });
 
+  test('an explicit budget argument wins over config; undefined reads config; null means unset (#218 PR 3)', () => {
+    const config = load({ aliases, outputBudget: 8000 });
+    // Named mutant "PARAMIGNORED": read config regardless of the argument — 8000 here, not 4096.
+    expect(config.buildProviderModels([], 4096).openrouter.models['moonshotai/kimi-k3'].limit).toEqual({ context: 1048576, output: 4096 });
+    expect(config.buildProviderModels([], null).openrouter.models['moonshotai/kimi-k3']).toEqual({});
+    expect(config.buildProviderModels([]).openrouter.models['moonshotai/kimi-k3'].limit).toEqual({ context: 1048576, output: 8000 });
+  });
+
   test('a model whose real ceiling is below the budget keeps its own ceiling', () => {
     const config = load({ aliases, outputBudget: 8000 });
     const m = config.buildProviderModels([]).openrouter.models['tiny/small-model'];

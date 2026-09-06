@@ -82,11 +82,16 @@ describe('startServer sets the engine output flag around the synchronous spawn',
     expect(Object.prototype.hasOwnProperty.call(process.env, FLAG)).toBe(false);
   });
 
-  it('reads the budget from config, the same source buildProviderModels uses', async () => {
-    config.getOutputBudget.mockReturnValue(8000);
+  it('reads config ONCE and hands the same budget to the descriptor and the flag (#218 PR 3)', async () => {
+    const spy = jest.spyOn(config, 'buildProviderModels');
+    config.getOutputBudget.mockReturnValue(40000);
     await startServer(OK);
-    expect(config.getOutputBudget).toHaveBeenCalled();
-    expect(seen[0].atCall).toBe('8000');
+    // Named mutant "DOUBLEREAD": drop `outputBudget` from the spread startServer hands
+    // buildServerOptions — buildProviderModels reads config again and the count is 2.
+    expect(config.getOutputBudget).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(expect.any(Array), 40000);
+    expect(seen[0].atCall).toBe('40000');
+    spy.mockRestore();
   });
 
   it('with no budget, the env is untouched — an ambient flag the user exported reaches the spawn as-is', async () => {
