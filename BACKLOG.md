@@ -7297,14 +7297,6 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
   emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails
   parse today with no length clue on the record; extend the Note to `run-stage2.js` and the chair
   path once the Stage-1 shape has been seen in a real run.
-- [ ] **`continue`/`resume` after a length-dead turn can trip the no-output exits on the first poll
-  (#218 PR 3 whole-branch review).** `headless.js :: runHeadless` polls the whole session, so before
-  the new turn's assistant placeholder exists the prior turn's finalized message is the last
-  assistant message: an engine-error message already tripped the `sessionError && !mirror.output &&
-  assistantFinished` exit that way, and a `'length'` message now trips the OUTPUT_LENGTH exit the
-  same way — the continuation dies under the prior turn's name without running. Same race class,
-  one more member. Fix: both exits consider only assistant messages created after the prompt was
-  sent (the mirror can record the ids present on the first snapshot). Not in PR 3.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
