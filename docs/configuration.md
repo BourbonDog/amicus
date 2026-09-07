@@ -343,6 +343,19 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_GUI_LOAD_TIMEOUT_MS` | Maximum wait in milliseconds for the Electron UI to load before the load-failsafe fires. If the OpenCode web UI fails to respond within this window, Amicus shows a load-error page instead of hanging invisibly. | `15000` |
 | `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. Increment (e.g. `9223`) to avoid conflicts with a running Chrome or another Amicus window. | `9222` |
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
+| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal. For one case only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
+
+> **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
+> anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`,
+> `npm_config_electron_use_remote_checksums`, `npm_config_platform` and
+> `npm_config_arch` stay stripped from the Electron installer's environment
+> whether it is set or not — those are the names a *repository* can plant in a
+> child process through its own `.npmrc` or `package.json`, which is why this
+> variable is a plain environment variable read under that exact bare spelling
+> only: a repo-planted `npm_config_amicus_allow_unverified_electron` reads back
+> as unset. It also does not change where the download comes from — a real
+> `ELECTRON_MIRROR` environment variable is honoured exactly as before, and the
+> digest is enforced against whatever it serves either way.
 
 ---
 

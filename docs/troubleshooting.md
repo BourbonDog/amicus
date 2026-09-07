@@ -396,6 +396,33 @@ unverified, with `variantUnverified: true` on the leg document.
 - **Manual install (most reliable):** on a machine/network with direct access, run any `amicus start` once to populate the Electron cache, then copy the cache directory to the target machine — `%LOCALAPPDATA%\electron\Cache` (Windows), `~/Library/Caches/electron` (macOS), `$XDG_CACHE_HOME/electron` or `~/.cache/electron` (Linux). Amicus reuses a valid cached binary without re-downloading.
 - **Point at your own mirror:** set `ELECTRON_MIRROR` (and `ELECTRON_CUSTOM_DIR` if needed) to an internal Electron mirror that is reachable without a proxy.
 - Headless runs and the full council never need Electron — use `--no-ui` if the GUI is not required.
+- Run `npx -y amicus@latest` from a directory you trust. `npx` inherits the `.npmrc` and `package.json` of whatever directory you are standing in, so an untrusted clone can point package downloads at a host of its choosing.
+
+---
+
+## Electron Artifact REFUSED (digest mismatch)
+
+**Symptom:** provisioning stops and stderr carries a block like:
+
+```
+[amicus] Electron artifact REFUSED: electron-v43.1.1-win32-x64.zip
+[amicus]   C:\Users\me\AppData\Local\electron\Cache\<sha>\electron-v43.1.1-win32-x64.zip
+[amicus]   sha256 3f2a... does not match the published b4e9...
+[amicus]   The file has been removed.
+```
+
+`amicus doctor` and the `npm install` notice report the same artifact as REFUSED. Nothing is extracted and the GUI is not installed.
+
+**Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus hashes a cached zip **before** extracting it, and pins the digest on the download, so unverified bytes never become an Electron install.
+
+That is what a swapped mirror or a planted cache file looks like. It is **also** what a truncated download, a failing disk, or a corporate mirror serving a *rebuilt* Electron looks like — amicus cannot tell them apart, and says so rather than guessing.
+
+**Fix:**
+- **Let it retry.** Online, amicus removes the offending cache entry — only when its filename and its resolved location both say it really is that cache entry — and downloads again with the digest pinned. A one-off truncated download heals itself.
+- **Air-gapped / hand-seeded cache:** re-copy the cache directory from the machine that downloaded it. A partial copy is the usual cause.
+- **You deliberately run a rebuilt Electron:** set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` (see [configuration.md](./configuration.md#gui-and-debug)). It downgrades the refusal to a warning on every use and re-enables nothing else.
+- **Otherwise treat it as real.** Check what `ELECTRON_MIRROR` is set to, and whether the directory you ran `npx -y amicus@latest` in is one you trust.
+- Headless runs and the full council work without the GUI in every one of these cases.
 
 ---
 
