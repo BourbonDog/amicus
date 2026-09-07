@@ -520,7 +520,7 @@ usage error when combined with `continue`, `resume`, or `--retry-failed` — the
 set. An untagged parent still leaves the key absent (not `null`) on the new metadata, and its spend
 row still groups under `(unattributed)`, exactly as an untagged `start`/`fanout` would.
 
-**Effort level on a reopen.** Neither `continue` nor `resume` sends an effort level — both reject `--thinking` outright and a level is not carried across a reopen — so when the session being reopened recorded one, each prints a `Notice:` on stderr naming the level it is dropping and saying the leg runs at the provider's default.
+**Effort level on a reopen.** Neither `continue` nor `resume` sends an effort level — both reject `--thinking` outright and a level is not carried across a reopen — so when the session being reopened recorded one, each prints a `Notice:` on stderr naming the level it is dropping and saying the leg runs at the provider's default. That line reports what the session's metadata RECORDS, not what was typed: 4.9.3 and earlier stamped `thinking: medium` on every session whether or not the flag was given (and never sent it), so on a session from those releases the Notice names that stamp and says so in the same breath.
 
 **`amicus status <id>` output.** Human-readable:
 

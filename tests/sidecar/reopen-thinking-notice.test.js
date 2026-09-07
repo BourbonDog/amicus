@@ -83,7 +83,7 @@ describe('a reopen announces the effort level it is dropping (council #235 r5, J
     seedSession(projectDir, 'resnote1', { thinking: 'high' });
     await resumeSidecar({ taskId: 'resnote1', project: projectDir, headless: true, timeout: 5, json: true });
     expect(stderrText()).toContain(
-      "Notice: session resnote1 was started with --thinking high; this resumed leg sends no effort level and runs at the provider's default — a level is not carried across a reopen\n");
+      "Notice: session resnote1 records --thinking high; this resumed leg sends no effort level and runs at the provider's default — a level is not carried across a reopen\n");
     // stdout carries the --json run document and nothing else.
     expect(logSpy.mock.calls.map((c) => String(c[0])).join('')).not.toContain('--thinking');
   });
@@ -91,7 +91,7 @@ describe('a reopen announces the effort level it is dropping (council #235 r5, J
   it('resume: a session with no recorded level prints nothing', async () => {
     seedSession(projectDir, 'resnote2');
     await resumeSidecar({ taskId: 'resnote2', project: projectDir, headless: true, timeout: 5, json: true });
-    expect(stderrText()).not.toContain('was started with --thinking');
+    expect(stderrText()).not.toContain('--thinking');
   });
 
   it('continue: the PARENT session\'s recorded level is announced against the new session', async () => {
@@ -102,7 +102,7 @@ describe('a reopen announces the effort level it is dropping (council #235 r5, J
       model: 'google/gemini-2.5-flash', project: projectDir, headless: true, timeout: 5, json: true,
     });
     expect(stderrText()).toContain(
-      'Notice: session connote1 was started with --thinking max; this continuation opens a NEW session and sends no effort level, ' +
+      'Notice: session connote1 records --thinking max; this continuation opens a NEW session and sends no effort level, ' +
       "so it runs at the provider's default — a level belongs on the `start` that opens a session and is not carried across a reopen\n");
   });
 
@@ -112,7 +112,21 @@ describe('a reopen announces the effort level it is dropping (council #235 r5, J
       taskId: 'connote2', newTaskId: 'connew02', briefing: 'follow-up',
       model: 'google/gemini-2.5-flash', project: projectDir, headless: true, timeout: 5, json: true,
     });
-    expect(stderrText()).not.toContain('was started with --thinking');
+    expect(stderrText()).not.toContain('--thinking');
+  });
+
+  it("resume of a 4.9.3-era session says the recorded medium may be that release's unconditional stamp", async () => {
+    // Council #235 r5 wave 6 repair: 4.9.3 and earlier wrote `thinking: 'medium'` on EVERY
+    // session's metadata whether or not the flag was typed (this release's own CHANGELOG says
+    // so), and never sent it — so the whole on-disk session history reaches this Notice with a
+    // level nobody asked for. The line must not report that stamp as a request.
+    // Named mutant "NOTICECLAIMSINTENT": drop the caveat (or say "was started with" again).
+    seedSession(projectDir, 'legacy01', { thinking: 'medium' });
+    await resumeSidecar({ taskId: 'legacy01', project: projectDir, headless: true, timeout: 5, json: true });
+    expect(stderrText()).toContain(
+      'Notice: session legacy01 records --thinking medium (4.9.3 and earlier recorded medium on every session, '
+      + 'typed or not, and never sent it); this resumed leg sends no effort level');
+    expect(stderrText()).not.toContain('was started with');
   });
 });
 
@@ -133,5 +147,31 @@ describe('formatDroppedLevelNotice — the line itself', () => {
     // eslint-disable-next-line no-control-regex
     expect(line).not.toMatch(/[\u0000-\u001F\u007F`<>]/);
     expect(line.split('\n')).toHaveLength(1); // one line: nothing can forge a second Notice line
+  });
+
+  it('drops the classes only the HOUSE sanitizer sees — bidi controls, C1 controls, ANSI', () => {
+    // Council #235 r5 wave 6 repair: src/utils/text-sanitize.js states the rule in its own header
+    // — it is the ONLY sanitizer, because "a second implementation would be a second set of holes".
+    // A private regex over [\u0000-\u001F\u007F] cannot see the PRINTABLE-range bidi controls (a
+    // RIGHT-TO-LEFT OVERRIDE renders the rest of the line backwards) or the C1 range, and this
+    // module quotes both straight out of a file. Named mutant "NOTICESECONDSANITIZER": swap the
+    // collapseExcerpt delegation back for a local control-character regex.
+    const bidi = 'high\u202Ereversed\u2066x\u0085c1\u001b[31mred';
+    const line = formatDroppedLevelNotice({ taskId: 't1', level: bidi, kind: 'resume' });
+    expect(line).not.toMatch(/[\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/); // bidi
+    expect(line).not.toMatch(/[\u0080-\u009f]/); // C1
+    expect(line).not.toContain('\u001b'); // ANSI introducer
+    expect(line).toContain('--thinking highreversedx c1red');
+  });
+
+  it('names the WHOLE task id — a valid id is up to 64 characters (validators.js TASK_ID_PATTERN)', () => {
+    // Council #235 r5 wave 6 repair: the id is not an attacker-shaped fragment — `--task-id`
+    // accepts /^[a-zA-Z0-9_-]{1,64}$/, which already excludes every character the sanitizer
+    // strips. Capping it at the LEVEL's 40 named a session that does not exist.
+    // Named mutant "NOTICETRUNCATESTASKID": cap the id at MAX_LEVEL_CHARS again.
+    const id = 'nightly-regression-sweep-2026-09-07-shard-03-seat-a';
+    expect(id).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    expect(formatDroppedLevelNotice({ taskId: id, level: 'high', kind: 'resume' }))
+      .toContain(`Notice: session ${id} records --thinking high;`);
   });
 });

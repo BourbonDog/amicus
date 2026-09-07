@@ -197,8 +197,11 @@ All notable changes to Amicus are documented here. Format follows
   The flag parses on every command (the unknown-flag gate is built from the whole usage string), but
   neither handler ever read it and the vocabulary check runs only on `start` — so a level typed on a
   continuation, valid or not, used to exit 0 having done nothing. Both now fail with `BAD_ARGS`
-  naming where the level belongs, the same way `--tag` already does. Forwarding a level on
-  `continue` is filed, not built.
+  naming where the level belongs, the same way `--tag` already does. Each also prints a stderr
+  `Notice:` when the session being reopened records a level, naming it and saying the leg runs at
+  the provider's default — worded as what the metadata RECORDS, since 4.9.3 and earlier stamped
+  `medium` on every session typed or not, so an older session's `medium` may be that stamp rather
+  than a request. Forwarding a level on `continue` is filed, not built.
 
 ### Fixed
 

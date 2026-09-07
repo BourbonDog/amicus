@@ -42,8 +42,8 @@ function loadInitialContext(sessionDir) {
 /** Check for file drift - files that were read may have changed */
 function checkFileDrift(metadata, project) {
   const filesRead = metadata.filesRead || [];
-  // council #235 r5 (J2/A4): `completedAt` is now deleted on every running write (updateSessionStatus below), so this — its one legitimate reader — gains `resumedAt` as a middle fallback. After a crashed resume "last activity" is when THAT attempt started, strictly more accurate than the previous attempt's completion. Named mutant "DRIFTNORESUMEDAT": drop the middle term.
-  const lastActivity = metadata.completedAt || metadata.resumedAt || metadata.createdAt;
+  // council #235 r5 (J2/A4): the previous attempt's terminal timestamps are all deleted on every running write (updateSessionStatus below), so this — their one legitimate reader — falls back through them. `abortedAt` is a terminal stamp of that attempt and later than its start, so it is read first (wave 6 repair); `resumedAt` is when a crashed attempt STARTED, strictly more accurate than the previous attempt's completion. Named mutants "DRIFTNORESUMEDAT" / "DRIFTNOABORTEDAT": drop either middle term.
+  const lastActivity = metadata.completedAt || metadata.abortedAt || metadata.resumedAt || metadata.createdAt;
   const lastActivityTime = new Date(lastActivity).getTime();
   const changedFiles = [];
 
@@ -118,9 +118,9 @@ function updateSessionStatus(sessionDir, status) {
     // — an abort or crash of the resumed run must not ship the previous attempt's as its own
     // (the terminal writers preserve every key they do not set). Named mutant
     // "RESUMESTALEVARIANT" (tests/sidecar/resume.test.js): drop the three deletes.
-    // council #235 r5 (J2/A4): `reason` and `completedAt` are stamped ONLY by a terminal writer, so an attempt that never reaches one must not inherit the previous attempt's — a resume that crashes mid-attempt used to leave `status: 'running'` beside the last failure's reason and completion time, and both are read (src/utils/result-schema.js reports `metadata.reason` for every non-complete status; the MCP server prints it as the Reason). Named mutant "RESUMESTALEREASON": drop the second delete line.
+    // council #235 r5 (J2/A4): `reason` and the terminal timestamps are stamped ONLY by a terminal writer, so an attempt that never reaches one must not inherit the previous attempt's — a resume that crashes mid-attempt used to leave `status: 'running'` beside the last failure's reason and completion time, and both are read (src/utils/result-schema.js reports `metadata.reason` for every non-complete status and `completedAt || abortedAt` as the end; the MCP server prints the reason and adds `crashedAt` to that chain). ALL THREE timestamps go (wave 6 repair): `abortedAt` is the one an `amicus abort` writes and `completedAt` is never written on that path, so clearing only `completedAt` left the defect live on the commonest precursor to a resume — and, for an attempt that stamped both, made the reported end fall through to the OLDER one. Named mutants "RESUMESTALEREASON" (drop `reason`/`completedAt`) and "RESUMESTALEABORTEDAT" (drop `abortedAt`/`crashedAt`).
     delete meta.finish; delete meta.variant; delete meta.variantUnverified;
-    delete meta.reason; delete meta.completedAt;
+    delete meta.reason; delete meta.completedAt; delete meta.abortedAt; delete meta.crashedAt;
   }
   writeFileAtomic(metaPath, JSON.stringify(meta, null, 2));
   return meta;

@@ -101,7 +101,7 @@ describe('Resume Operations', () => {
     it("falls back to resumedAt when the crashed attempt's completedAt is gone (council #235 r5, J2/A4)", () => {
       // The J2 delete removes `completedAt` on every running write, so the ONE legitimate reader
       // needs its fallback: after a crashed resume "last activity" is when THAT attempt started
-      // (`resumedAt`, written on the same line as the delete), which is strictly more accurate
+      // (`resumedAt`, stamped in the same branch as the delete), which is strictly more accurate
       // than the previous attempt's completion. Named mutant "DRIFTNORESUMEDAT": drop the
       // `metadata.resumedAt ||` term — lastActivity falls all the way back to createdAt and every
       // file touched between session creation and this resume is reported as drift.
@@ -115,6 +115,25 @@ describe('Resume Operations', () => {
       }, tmpDir);
       expect(drift.lastActivityTime).toBe(new Date(resumedAt).getTime());
       expect(drift.hasChanges).toBe(false); // the file predates THIS attempt's start, so it is not drift
+    });
+
+    it('prefers the previous attempt\'s abortedAt over its start (council #235 r5 wave 6 repair)', () => {
+      // An ABORTED attempt stamps `abortedAt`, never `completedAt` (src/utils/session-abort.js),
+      // and it is later than that attempt's `resumedAt` — so the chain reads it before falling
+      // back to when the attempt started, and only then to session creation.
+      // Named mutant "DRIFTNOABORTEDAT": drop the `metadata.abortedAt ||` term — every file
+      // touched between that attempt's START and its abort is reported as drift.
+      const testFile = path.join(tmpDir, 'test.js');
+      fs.writeFileSync(testFile, 'content');
+      const abortedAt = new Date(Date.now() + 60000).toISOString();
+      const drift = checkFileDrift({
+        filesRead: ['test.js'],
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        resumedAt: new Date(Date.now() - 3600000).toISOString(),
+        abortedAt,
+      }, tmpDir);
+      expect(drift.lastActivityTime).toBe(new Date(abortedAt).getTime());
+      expect(drift.hasChanges).toBe(false);
     });
 
     it('should handle empty filesRead', () => {
@@ -174,7 +193,34 @@ describe('Resume Operations', () => {
       expect(onDisk.status).toBe('running');
       expect('reason' in onDisk).toBe(false);
       expect('completedAt' in onDisk).toBe(false);
-      expect(onDisk.resumedAt).toBeDefined(); // written on the same line as the deletes
+      expect(onDisk.resumedAt).toBeDefined(); // stamped in the same branch as the deletes
+    });
+
+    it("the running write drops the previous attempt's abortedAt / crashedAt too (council #235 r5 wave 6 repair)", () => {
+      // `completedAt` is one of THREE terminal timestamps and not the one the commonest
+      // precursor to a resume writes: src/utils/session-abort.js :: markTerminal writes
+      // `abortedAt` (never `completedAt`) for an aborted attempt — the `amicus abort` path —
+      // and src/mcp-server.js stamps `crashedAt`. Both readers that consume the stale value
+      // read all three (src/utils/result-schema.js:58 `completedAt || abortedAt`; the MCP
+      // server's elapsedMs adds `crashedAt`), so clearing only `completedAt` left the same
+      // defect live on the abort path — and, when an attempt stamped BOTH, made the reported
+      // end fall THROUGH to the older `abortedAt`.
+      // Named mutant "RESUMESTALEABORTEDAT": drop `delete meta.abortedAt; delete meta.crashedAt;`.
+      fs.writeFileSync(path.join(tmpDir, 'metadata.json'), JSON.stringify({
+        taskId: 'abc123', status: 'aborted', reason: 'Aborted (SIGINT)',
+        abortedAt: '2026-01-01T00:05:00.000Z', crashedAt: '2026-01-01T00:06:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }));
+      updateSessionStatus(tmpDir, 'running');
+      const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'metadata.json'), 'utf-8'));
+      expect(onDisk.status).toBe('running');
+      expect('abortedAt' in onDisk).toBe(false);
+      expect('crashedAt' in onDisk).toBe(false);
+      // The reader the finding names now reports no end for a run that has not reached one.
+      const { buildRunResult } = require('../../src/utils/result-schema');
+      const doc = buildRunResult({ taskId: 'abc123', metadata: onDisk });
+      expect(doc.completedAt).toBeNull();
+      expect(doc.durationMs).toBeNull();
     });
   });
 
