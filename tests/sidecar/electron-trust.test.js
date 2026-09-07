@@ -39,13 +39,6 @@ function fakePkg({ version = '43.1.1', table } = {}) {
   return dir;
 }
 
-function writeZip(body = ZIP_BODY) {
-  const dir = mkTmp('amicus-trust-zip-');
-  const zip = path.join(dir, ZIP_NAME);
-  fs.writeFileSync(zip, body);
-  return zip;
-}
-
 const NO_ENV = Object.freeze({});
 
 describe('artifactFileName (plan §2.1)', () => {
@@ -135,34 +128,42 @@ describe('resolveAnchor + expectedDigest', () => {
   });
 });
 
-describe('sha256File', () => {
-  test('matches crypto over a >1 MiB file', () => {
-    const dir = mkTmp('amicus-trust-big-');
-    const big = path.join(dir, 'big.bin');
+describe('sha256Bytes', () => {
+  test('matches crypto over a multi-MiB Buffer', () => {
     const chunk = Buffer.alloc(256 * 1024, 0xab);
-    // 2.5 MiB + a partial tail, so the 1 MiB read buffer wraps AND ends short.
     const body = Buffer.concat([...Array(10).fill(chunk), Buffer.from('tail')]);
-    fs.writeFileSync(big, body);
     expect(body.length).toBeGreaterThan(1024 * 1024);
-    expect(trust.sha256File(big, fs)).toBe(crypto.createHash('sha256').update(body).digest('hex'));
+    expect(trust.sha256Bytes(body)).toBe(crypto.createHash('sha256').update(body).digest('hex'));
   });
 });
 
-describe('verifyArtifact — THE GATE', () => {
+describe('verifyArtifactBytes — THE GATE', () => {
+  // THE PATH FORM IS GONE, and its `unreadable` verdict with it. `verifyArtifact`
+  // and `sha256File` were deleted in the second council round: hashing a name and
+  // then handing that name to an extractor is the race, and hashing a private
+  // COPY of it is the race the staged-copy remedy re-enacted. Unreadability is
+  // decided by electron-custody.readArtifactBytes BEFORE anything is hashed, so
+  // there is no longer a gate verdict for it to return.
   const anchorFor = (digest) => ({ table: { [ZIP_NAME]: digest }, source: '<test>' });
+  const bytes = (body = ZIP_BODY) => Buffer.from(body);
+
+  test('the path form is not exported, so nothing can hash a name again', () => {
+    expect(trust.verifyArtifact).toBeUndefined();
+    expect(trust.sha256File).toBeUndefined();
+  });
 
   test('verified for matching bytes', () => {
-    const r = trust.verifyArtifact({
-      zip: writeZip(), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
-      policy: trust.electronTrustPolicy(NO_ENV), fs,
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
+      policy: trust.electronTrustPolicy(NO_ENV),
     });
     expect(r).toEqual({ verdict: 'verified', allowed: true, actual: ZIP_SHA256 });
   });
 
   test('mismatch (allowed:false) for one flipped byte', () => {
-    const r = trust.verifyArtifact({
-      zip: writeZip('PKziq'), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
-      policy: trust.electronTrustPolicy(NO_ENV), fs,
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes('PKziq'), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
+      policy: trust.electronTrustPolicy(NO_ENV),
     });
     expect(r.verdict).toBe('mismatch');
     expect(r.allowed).toBe(false);
@@ -170,21 +171,11 @@ describe('verifyArtifact — THE GATE', () => {
     expect(r.actual).not.toBe(ZIP_SHA256);
   });
 
-  test('unreadable (never throws, never allowed) for a missing file', () => {
-    const r = trust.verifyArtifact({
-      zip: path.join(os.tmpdir(), 'amicus-nope-xyz.zip'), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
-      policy: trust.electronTrustPolicy({ AMICUS_ALLOW_UNVERIFIED_ELECTRON: '1' }), fs,
-    });
-    expect(r.verdict).toBe('unreadable');
-    expect(r.allowed).toBe(false);
-    expect(typeof r.reason).toBe('string');
-  });
-
   test('no-digest is ALLOWED and marked — a package with no anchor is not pushed into a re-download loop', () => {
     const lines = [];
-    const r = trust.verifyArtifact({
-      zip: writeZip(), anchor: null, fileName: ZIP_NAME,
-      policy: trust.electronTrustPolicy(NO_ENV), fs, log: (m) => lines.push(m),
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes(), anchor: null, fileName: ZIP_NAME, policy: trust.electronTrustPolicy(NO_ENV),
+      log: (m) => lines.push(m),
     });
     expect(r).toEqual({ verdict: 'no-digest', allowed: true });
     expect(lines.join('\n')).toContain(ZIP_NAME);
@@ -193,10 +184,10 @@ describe('verifyArtifact — THE GATE', () => {
 
   test('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 downgrades a mismatch to a LOUD warning', () => {
     const lines = [];
-    const r = trust.verifyArtifact({
-      zip: writeZip('PKziq'), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
+    const r = trust.verifyArtifactBytes({
+      bytes: bytes('PKziq'), anchor: anchorFor(ZIP_SHA256), fileName: ZIP_NAME,
       policy: trust.electronTrustPolicy({ AMICUS_ALLOW_UNVERIFIED_ELECTRON: '1' }),
-      fs, log: (m) => lines.push(m),
+      log: (m) => lines.push(m),
     });
     expect(r.verdict).toBe('mismatch');
     expect(r.allowed).toBe(true);

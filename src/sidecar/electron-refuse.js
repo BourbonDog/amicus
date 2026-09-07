@@ -35,6 +35,20 @@ const { collapseExcerpt } = require('../utils/text-sanitize');
  */
 const PATH_EXCERPT_CHARS = 320;
 
+/**
+ * What each of `readArtifactBytes`'s refusals MEANS, in one clause the user can
+ * act on. Kept here rather than in the custody module so every user-facing
+ * sentence in this subsystem is written in one file.
+ */
+const UNREADABLE_REASON = {
+  unreadable: 'could not be opened or read at all',
+  'not-a-file': 'is not a regular file',
+  empty: 'is empty',
+  'too-large': 'is far larger than any electron artifact',
+  'short-read': 'ended early while amicus was reading it',
+  grew: 'changed size while amicus was reading it',
+};
+
 /** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
 function isUnsafeArchive(err) {
   return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
@@ -169,43 +183,55 @@ function rejectDownloadedZip({ gate, fileName, log = () => {} }) {
 }
 
 /**
- * F#6/F#8 — bytes amicus could not take private are never extracted.
+ * Bytes amicus could not take into custody are never extracted.
  *
- * The first cut of the staging work FAILED OPEN here: when `stageArtifact`
- * returned null the download route quietly extracted the unstaged cache path —
- * the exact v4.9.5 hash-then-reopen race the staging exists to close — while the
- * one line on screen said "the cached bytes will not be extracted". MEASURED
- * both shapes: an unwritable `os.tmpdir()` (that message, and the cache path
- * extracted anyway) and a full one (no message at all).
+ * REPLACES `refuseUnstagedArtifact`, and the replacement is not cosmetic. The
+ * old refusal existed because staging COPIED the artifact into `os.tmpdir()`,
+ * so its whole vocabulary was about temp: "could not be copied into a private
+ * directory", "free up space in the temp directory". Council finding A3 caught
+ * the consequence — a cache entry deleted by a concurrent repair mid-copy was
+ * reported as "no space, or an unwritable temp directory", advice that could
+ * not possibly help. There is no copy and no temp directory any more; the only
+ * way to fail here is that the ARTIFACT ITSELF could not be read, and `why`
+ * says which way.
  *
- * `stageArtifact` has already said WHICH step failed on stderr — an unreadable
- * artifact, a temp directory it could not create in, a copy that ran out of room;
- * this says what that MEANS and gives the caller a result shape instead of a
- * silent success. `integrity` is set, so `scripts/postinstall.js` prints the
- * reason instead of its generic "provisions on first use" notice.
+ * The first cut of the staging work FAILED OPEN in this position: when the
+ * artifact could not be taken private the download route quietly extracted the
+ * unstaged cache path anyway, while the one line on screen said the bytes would
+ * not be extracted (seats F#6/F#8, MEASURED both shapes). Both routes refuse
+ * here now, and `integrity` is set so `scripts/postinstall.js` prints the reason
+ * instead of its generic "provisions on first use" notice.
  *
- * F5: `zip` is an attacker-influenced cache path (its `<sha>` directory name came
- * out of a `readdirSync` of a directory anyone can write), so it is sanitized
- * before it reaches stderr or the returned reason.
- * @returns {{repaired:false, integrity:'unstaged', reason:string}}
+ * F5: `zip` is an attacker-influenced cache path (its `<sha>` directory name
+ * came out of a `readdirSync` of a directory anyone can write) and `detail` is
+ * an fs error string, so both are sanitized before reaching stderr or the
+ * returned reason.
+ * @param {object} o
+ * @param {string} o.fileName
+ * @param {string} o.zip
+ * @param {string} o.why    one of readArtifactBytes's named refusals
+ * @param {string} [o.detail]
+ * @returns {{repaired:false, integrity:'unreadable', reason:string}}
  */
-function refuseUnstagedArtifact({ fileName, zip, log = () => {} }) {
+function refuseUnreadableArtifact({ fileName, zip, why, detail = '', log = () => {} }) {
   const where = collapseExcerpt(zip, PATH_EXCERPT_CHARS);
+  const what = UNREADABLE_REASON[why] || 'could not be read';
   log(`[amicus] Electron artifact NOT extracted: ${fileName}`);
   log(`[amicus]   ${where}`);
-  log('[amicus] Its bytes could not be copied into a private directory, so amicus cannot');
-  log('[amicus] promise the bytes it hashed are the bytes it would extract. Free up space in');
-  log('[amicus] the temp directory (or point TMPDIR somewhere writable) and try again.');
+  log(`[amicus]   ${what}${detail ? ` (${collapseExcerpt(detail)})` : ''}`);
+  log('[amicus] amicus reads an artifact ONCE, into memory, and hashes and extracts THOSE');
+  log('[amicus] bytes. It could not read these, so it has nothing it could vouch for and');
+  log('[amicus] has extracted nothing. The file was left exactly where it is.');
   log('[amicus] Headless runs and the council work without the GUI.');
   return {
     repaired: false,
-    integrity: 'unstaged',
-    reason: `Electron artifact ${fileName} could not be staged privately, so it was NOT extracted`
-      + `: ${where}. Free up space in the temp directory and provision again.`,
+    integrity: 'unreadable',
+    reason: `Electron artifact ${fileName} ${what}, so it was NOT extracted: ${where}.`
+      + ' It was left in place.',
   };
 }
 
 module.exports = {
-  isUnsafeArchive, refuseUnsafeArchive, rejectCachedZip, rejectDownloadedZip, refuseUnstagedArtifact,
+  isUnsafeArchive, refuseUnsafeArchive, rejectCachedZip, rejectDownloadedZip, refuseUnreadableArtifact,
   PATH_EXCERPT_CHARS,
 };

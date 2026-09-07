@@ -14,11 +14,13 @@
  * electron/index.js + install.js semantics). Cache layout (@electron/get):
  * <cacheRoot>/<sha256>/electron-v<ver>-<platform>-<arch>.zip
  *
- * AT THE SIZE GATE, so pieces live next door: `./electron-layout` holds
- * `platformExe`/`writePathTxt`/`extractFromCache` (re-exported here for
- * `ei.platformExe`), `./electron-refuse` holds the refusal messages,
- * `./electron-stage` the private staging, `./electron-provision` the pinned
- * download. The arrow points one way out of this file and never back.
+ * AT THE SIZE GATE, so pieces live next door: `./electron-custody` reads the
+ * artifact into memory once, `./zip-from-buffer` extracts what was read,
+ * `./electron-layout` holds `platformExe`/`writePathTxt`/`extractBytesToDist`
+ * (`platformExe` re-exported here for `ei.platformExe`), `./electron-refuse`
+ * holds the refusal messages, `./electron-repair-cache` the whole cached-artifact
+ * route, `./electron-provision` the pinned download. The arrow points one way out
+ * of this file and never back.
  */
 
 'use strict';
@@ -28,18 +30,15 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { cachedZip } = require('./electron-cache');
+const { isSafeArtifactName } = require('./electron-custody');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
-const { extractFromCache, platformExe } = require('./electron-layout');
-const { controlledProvision, mayDeleteRejectedZip, runInstaller } = require('./electron-provision');
-const {
-  isUnsafeArchive, refuseUnsafeArchive, refuseUnstagedArtifact, rejectCachedZip,
-} = require('./electron-refuse');
-const {
-  isSafeArtifactName, releaseStage, stageArtifact, sweepStaleStages,
-} = require('./electron-stage');
-const { artifactFileName, electronTrustPolicy, resolveAnchor, verifyArtifact } = require('./electron-trust');
-const { robustExtract } = require('./unzip');
+const { platformExe } = require('./electron-layout');
+const { controlledProvision, runInstaller } = require('./electron-provision');
+const { repairFromCache } = require('./electron-repair-cache');
+const { isUnsafeArchive, refuseUnsafeArchive } = require('./electron-refuse');
+const { artifactFileName, electronTrustPolicy, resolveAnchor } = require('./electron-trust');
+const { extractZipBuffer } = require('./zip-from-buffer');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
@@ -125,9 +124,13 @@ async function repairElectron({
   deps = {},
 } = {}) {
   const fs = deps.fs || fsDefault;
-  // Default extract: extract-zip bounded (idle/max) + native-unzip fallback (extract-zip-node24 stall).
+  // Default extract: from the BUFFER amicus already hashed, never from a name.
+  // `unzip.js`'s bounded extract-zip + native-unzip fallback is byte-for-byte
+  // unchanged and still exported; it is simply no longer on this path, because
+  // every one of its strategies takes a PATH and a path is what the custody
+  // finding is about (see zip-from-buffer.js).
   const extract = deps.extract
-    || ((zipPath, o) => robustExtract(zipPath, { ...o, platform, deps: { fs, log: stderrLog } }));
+    || ((bytes, o) => extractZipBuffer(bytes, { ...o, deps: { fs, log: stderrLog } }));
   // Default-bound (8 min) so a first-GUI-use provision that reaches runInstaller
   // without an explicit timeoutMs can't hang the holder; caller's value wins.
   const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs || 480000 }));
@@ -150,9 +153,10 @@ async function repairElectron({
   const fileName = artifactFileName({ version, platform, arch });
   // F#3: `version` may have just been read out of an UNTRUSTED <electronDir>/
   // package.json (doctor --fix supplies none, for a dir it found by scanning npx
-  // caches), and `fileName` becomes a path component in stageArtifact. A `..` in
-  // it escaped the private staging directory — MEASURED. Nothing downstream ever
-  // sees a name that is not a plain filename.
+  // caches), and `fileName` is joined into paths downstream. MEASURED before the
+  // check, with a planted "43.1.1/../../victim": a path two levels outside the
+  // intended directory was written and a pre-existing file there was destroyed.
+  // Nothing downstream ever sees a name that is not a plain filename.
   if (!isSafeArtifactName(fileName)) {
     return { repaired: false, integrity: 'unsafe-name', reason: `Refusing to provision electron: ${collapseExcerpt(fileName, 160)} is not a usable artifact name.` };
   }
@@ -172,65 +176,19 @@ async function repairElectron({
 
   let refusal = null;   // a cache refusal the caller must still hear about if the download also fails
   try {
-    // Attempt 1: extract from cache (always preferred, fully offline).
+    // Attempt 1: extract from cache (always preferred, fully offline). The whole
+    // route lives in ./electron-repair-cache — read once into memory, hash THOSE
+    // bytes, extract THOSE bytes — and answers `done` when nothing is left to try.
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
-      // F1: COPY the artifact into a private staging dir, then hash and extract
-      // THERE. v4.9.5 hashed the cache path and re-opened it for the extract, so a
-      // cache-dir writer — the exact actor C2 exists to stop — could swap the bytes
-      // in between and have the unhashed replacement extracted. A copy makes an
-      // inode nothing else has a name for or a handle on; the original stays put,
-      // so no exit path can leave the user without it (electron-stage.js).
-      const stage = stageArtifact({ zip, fileName, fs, log: stderrLog });
-      try {
-        // Unstaged bytes are never HASHED either: a verdict on a file its writer
-        // still controls would only license an extract it cannot vouch for. This is
-        // a REFUSAL, not a `deferred` — the download route stages too, so "try the
-        // network" is not a fix for it, and postinstall must print the reason.
-        if (!stage) {
-          refusal = refuseUnstagedArtifact({ fileName, zip, log: stderrLog });
-          if (cacheOnly) { return refusal; }
-        } else {
-          // C2: extraction must be unreachable for an artifact the anchor
-          // contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
-          const gate = verifyArtifact({ zip: stage.path, anchor, fileName, policy, fs, log: stderrLog });
-          if (!gate.allowed) {
-            const mayDelete = mayDeleteRejectedZip({ zip, fileName, env: process.env });
-            refusal = rejectCachedZip({ gate, zip, mayDelete, fileName, fs, log: stderrLog });
-            if (cacheOnly) { return refusal; }
-          } else {
-            try {
-              await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
-              // Non-throwing extract w/ absent exe = the AV-quarantine signature.
-              const outcome = verifyExtractOutcome({ electronDir, platform, fs });
-              return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
-            } catch (extractErr) {
-              // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
-              // deleted-and-retried, nor reported as "corrupt" — it stops here, and
-              // the archive is LEFT IN PLACE, because a refused archive is evidence.
-              if (isUnsafeArchive(extractErr)) { return refuseUnsafeArchive({ err: extractErr, fileName, log: stderrLog }); }
-              // F#4/F#5: EVICT THE CORRUPT ORIGINAL, and claim only what happened.
-              // The first cut set `stage.discard`, which dropped the private COPY and
-              // left the cache entry in place on the branch that copied — turning a
-              // corrupt artifact into a permanent cacheOnly loop while the reason
-              // asserted a removal. v4.9.5's own unconditional rmSync, restored.
-              let removed = false;
-              try { fs.rmSync(zip, { force: true }); removed = true; } catch { /* an unwritable cache is not a repair failure */ }
-              if (cacheOnly) {
-                return { repaired: false, reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and ${removed ? 'removed' : 'left in place'}; deferring re-download.${avHint(platform)}` };
-              }
-            }
-          }
-        }
-        // Every branch that did not return drops into the controlled download below.
-      } finally {
-        releaseStage({ stage, fs });
-      }
+      const attempt = await repairFromCache({
+        zip, fileName, anchor, policy, electronDir, platform, arch, version, cacheOnly,
+        extract, verifyOutcome: () => verifyExtractOutcome({ electronDir, platform, fs }),
+        fs, env: process.env, log: stderrLog,
+      });
+      if (attempt.done) { return attempt.result; }
+      refusal = attempt.refusal;
     } else if (cacheOnly) {
-      // F#7: the ONE path that reaches no stageArtifact, and so no sweep — an
-      // offline run with an empty cache. Anything a killed run left under
-      // os.tmpdir() would otherwise wait for a cache hit that may never come.
-      sweepStaleStages({ fs });
       return { deferred: true, reason: `No cached electron zip found for v${version} (${platform}-${arch}); deferring download.${avHint(platform)}` };
     }
 
@@ -240,13 +198,13 @@ async function repairElectron({
     // A non-null `provision` means download + extract returned without throwing;
     // its `pinned:false` means the extracted bytes were vouched for only by the
     // mirror — either no `checksums` went out (no anchor row, or the hatch dropped
-    // the pin) or amicus's own hash of the staged copy did not say `verified`.
+    // the pin) or amicus's own hash of the bytes it read did not say `verified`.
     // F3 marks that, as both docs already promise it does.
     let provision = null;
     try {
       const downloadArtifact = await resolveDownloadArtifact();
       provision = await controlledProvision({
-        electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
+        electronDir, platform, arch, version, anchor, downloadArtifact, extract,
         fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
       }) || { pinned: false };   // an unrecognisable return marks, never claims a pin
     } catch (provisionErr) {
@@ -258,14 +216,17 @@ async function repairElectron({
       // verify below; we always return isElectronUsable().
       try { runInstaller({ electronDir, force, spawn, platform, arch }); } catch { /* ignore */ }
     }
-    // F#2/F#6/F#8: the download hashed its own staged bytes and refused them, or
-    // could not stage them at all. Nothing was extracted, so there is no outcome to
-    // verify — return the refusal, carrying any cache refusal that preceded it.
+    // F#2: the download hashed the bytes it read and refused them, or could not
+    // read them at all. Nothing was extracted, so there is no outcome to verify —
+    // return the refusal, carrying any cache refusal that preceded it.
     if (provision && provision.refused) {
-      // Carry a cache refusal only when it says something DIFFERENT. Both routes
-      // stage, so "temp is full" refuses twice; repeating the same sentence with a
-      // second path is noise in the one message the user actually reads.
-      const carried = refusal && refusal.integrity !== provision.refused.integrity ? refusal.reason : null;
+      // A4/D4: this used to drop the cache refusal whenever the two shared an
+      // `integrity` class — so TWO mismatches (a poisoned cache entry AND a
+      // hostile mirror, the single most alarming pair this code can observe)
+      // reported only the second, and never told the user the cached artifact had
+      // also been refused and possibly deleted. Dedupe on the SENTENCE instead:
+      // identical text is noise, a different path or a different digest is not.
+      const carried = refusal && refusal.reason !== provision.refused.reason ? refusal.reason : null;
       return { ...provision.refused, reason: [carried, provision.refused.reason].filter(Boolean).join(' ') };
     }
     // A NON-throwing controlled extract that left no usable exe is the

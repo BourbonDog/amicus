@@ -11,9 +11,9 @@
  *   C1  controlledProvision passes `checksums` to downloadArtifact, so
  *       @electron/get writes a LOCAL SHASUMS256.txt and never fetches one from a
  *       mirror an attacker may have chosen.
- *   C2  repairElectron HASHES a cached zip against the anchor BEFORE
- *       extractFromCache can run, deletes a mismatch only through the fence, and
- *       treats "no anchor" as a mark rather than a refusal.
+ *   C2  repairElectron HASHES the cached artifact's bytes against the anchor
+ *       BEFORE anything is extracted, deletes a mismatch only through the fence,
+ *       and treats "no anchor" as a mark rather than a refusal.
  *   C3  runInstaller spawns electron's own install.js with a SCRUBBED env, so a
  *       blocked attacker cannot be funnelled into an unpinned downloader.
  *
@@ -29,9 +29,9 @@
 // 2026-09-07 against the named test via `npx jest <this file> -t "<name>"`
 // (exit 1 in every case). The red set was not enumerated beyond the named test.
 //
-// DIGESTNOTCHECKED   electron-install.js :: repairElectron — replace the
-//   `const gate = verifyArtifact(...)` line with `{ verdict: 'verified',
-//   allowed: true }`, i.e. extract the cached zip without hashing it.
+// DIGESTNOTCHECKED   electron-repair-cache.js :: repairFromCache — replace the
+//   `const gate = verifyArtifactBytes(...)` line with `{ verdict: 'verified',
+//   allowed: true }`, i.e. extract the cached artifact without hashing it.
 //   RED: "a MISMATCHING cached zip is NOT extracted" (extract called 1x, not 0).
 // POISONKEPT         electron-refuse.js :: rejectCachedZip — `if (false &&`
 //   before the mismatch/fence condition, so nothing is ever deleted.
@@ -148,16 +148,15 @@ describe('C1 — the digest is PINNED on the network path', () => {
     // A REAL file: v4.9.6's second round stages the download and hashes the copy,
     // so a path that does not exist is refused before extraction is ever reached.
     const downloadArtifact = jest.fn(async () => writeZip());
-    const extractFromCache = jest.fn(async () => {});
+    const extract = jest.fn(async () => {});
     await controlledProvision({
-      electronDir: '/tmp/pkg',
+      electronDir: mkTmp('amicus-pkg-'),
       platform: PLATFORM,
       arch: ARCH,
       version: VERSION,
       anchor: { table: fakeChecksums({ version: VERSION, platform: PLATFORM, arch: ARCH }), source: '<test>' },
       downloadArtifact,
-      extract: jest.fn(),
-      extractFromCache,
+      extract,
       fs,
       env: {},
       downloadMs: 1000,
@@ -166,7 +165,10 @@ describe('C1 — the digest is PINNED on the network path', () => {
     // THE control: with `checksums` supplied, @electron/get writes SHASUMS256.txt
     // locally and never fetches one from the mirror.
     expect(opts.checksums).toEqual({ [ZIP_NAME]: ZIP_SHA256 });
-    expect(extractFromCache).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(1);
+    // ...and what it was handed is the BUFFER amicus read and hashed, not a name.
+    expect(Buffer.isBuffer(extract.mock.calls[0][0])).toBe(true);
+    expect(extract.mock.calls[0][0].toString('utf8')).toBe(ZIP_BODY);
   });
 
   test('with NO anchor entry the `checksums` key is ABSENT, never an empty table', async () => {
@@ -177,7 +179,7 @@ describe('C1 — the digest is PINNED on the network path', () => {
     for (const anchor of [null, { table: { 'electron-v1.0.0-linux-x64.zip': ZIP_SHA256 }, source: '<test>' }]) {
       await controlledProvision({
         electronDir: '/tmp/pkg', platform: PLATFORM, arch: ARCH, version: VERSION, anchor,
-        downloadArtifact, extract: jest.fn(), extractFromCache: jest.fn(async () => {}), fs, env: {},
+        downloadArtifact, extract: jest.fn(), fs, env: {},
       });
     }
     expect(downloadArtifact.mock.calls[0][0]).not.toHaveProperty('checksums');
@@ -318,10 +320,12 @@ describe('C2 — the poison delete is FENCED', () => {
   });
 
   test('an UNREADABLE candidate is refused and never deleted', async () => {
-    // v4.9.6 (second round): an artifact amicus cannot even copy into a private
-    // directory is refused THERE, one step earlier than the hash — `unstaged`
-    // rather than `unreadable`. Both set `integrity`, so postinstall still prints
-    // the reason; what matters is unchanged: nothing extracted, nothing deleted.
+    // v4.9.6 (second round): an artifact amicus cannot READ is refused by
+    // readArtifactBytes, one step earlier than the hash. `integrity` is set, so
+    // postinstall still prints the reason; what matters is unchanged: nothing
+    // extracted, nothing deleted. (The intermediate staged-copy cut called this
+    // `unstaged` and blamed the temp directory — there is no temp copy now, and
+    // council finding A3 was exactly that misdiagnosis.)
     const cacheRoot = mkTmp('amicus-cacheroot-');
     process.env.ELECTRON_CACHE = cacheRoot;
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
@@ -329,8 +333,9 @@ describe('C2 — the poison delete is FENCED', () => {
       dir, exeName, distDir, zip: path.join(cacheRoot, 'gone', ZIP_NAME), cacheOnly: true,
     });
     expect(extract).not.toHaveBeenCalled();
-    expect(res.integrity).toBe('unstaged');
+    expect(res.integrity).toBe('unreadable');
     expect(res.repaired).toBe(false);
+    expect(res.reason).toMatch(/could not be opened or read at all/);
   });
 });
 
@@ -423,6 +428,10 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
   });
 
   test('an ORDINARY extract failure still deletes and still falls through (the fix stayed narrow)', async () => {
+    // A1 (council, confirmed 4 of 4): this branch used to delete the user's cache
+    // entry and then, when the re-download also failed, return a bare
+    // {repaired:false} with NO reason — the one message that would have explained
+    // where their artifact went. The eviction is unchanged; the silence is not.
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const zip = writeZip();
     const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
@@ -431,7 +440,8 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
     });
     expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
     expect(spawn).toHaveBeenCalledTimes(1);                // ...and the last-resort installer still runs
-    expect(res.integrity).toBeUndefined();
+    expect(res.integrity).toBe('corrupt-artifact');
+    expect(res.reason).toMatch(/was corrupt and removed/);
   });
 });
 

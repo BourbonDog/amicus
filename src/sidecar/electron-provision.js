@@ -5,11 +5,11 @@
  * Split out of electron-install.js because that file sits at the repo's 300-line
  * gate and cannot grow; the refusal MESSAGES were split out of this file, into
  * ./electron-refuse, for the same reason. The require arrow is
- * electron-install -> electron-provision -> {electron-trust, electron-stage,
- * electron-refuse} and must never point back, so `extractFromCache` arrives as
- * an argument rather than an import. electron-stage and electron-refuse are
- * near-leaves required by both this module and electron-install.js, which adds
- * no cycle.
+ * electron-install -> electron-provision -> {electron-custody, electron-layout,
+ * electron-refuse, electron-trust} and must never point back. Those four are
+ * near-leaves required by both this module and electron-install.js — and by
+ * ./electron-repair-cache, which requires THIS module for `mayDeleteRejectedZip`
+ * and is required only by electron-install.js, so the arrow stays acyclic.
  *
  * @module sidecar/electron-provision
  */
@@ -19,9 +19,10 @@
 const path = require('path');
 
 const { resolveCacheRoots } = require('./electron-cache');
-const { refuseUnstagedArtifact, rejectDownloadedZip } = require('./electron-refuse');
-const { releaseStage, stageArtifact } = require('./electron-stage');
-const { artifactFileName, expectedDigest, scrubbedChildEnv, verifyArtifact } = require('./electron-trust');
+const { readArtifactBytes } = require('./electron-custody');
+const { extractBytesToDist } = require('./electron-layout');
+const { refuseUnreadableArtifact, rejectDownloadedZip } = require('./electron-refuse');
+const { artifactFileName, expectedDigest, scrubbedChildEnv, verifyArtifactBytes } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
@@ -31,9 +32,9 @@ function cacheRootFor(env = process.env) {
 
 /**
  * CONTROLLED provision: fetch the zip ourselves with the SAME @electron/get
- * api install.js uses (downloadArtifact, force:true), stage it privately, hash
- * it OURSELVES, extract offline, and let the caller verify isElectronUsable().
- * No blind install.js spawn.
+ * api install.js uses, READ IT ONCE into memory, hash THOSE BYTES ourselves,
+ * extract THOSE BYTES offline, and let the caller verify isElectronUsable().
+ * No blind install.js spawn, and no path resolved a second time.
  *
  * C1 — THE PIN. `checksums` is what breaks the attack chain. Supplied, it makes
  * @electron/get write a LOCAL SHASUMS256.txt from this table and never fetch one
@@ -63,15 +64,19 @@ function cacheRootFor(env = process.env) {
  * same cache-dir writer the digest gate exists to stop can swap before amicus
  * opens it. MEASURED before this change: with the swap fired inside amicus's own
  * post-download window, `BYTES EXTRACTED: "POISONED-BYTES"` and
- * `{"repaired":true}`. So the downloaded artifact is staged (copied into a
- * private 0700 directory) and re-hashed THERE against the same anchor the cache
- * route uses, and `pinned` now means what its name says: these exact bytes
- * matched a digest amicus anchored.
+ * `{"repaired":true}`.
  *
- * F#6/F#8 — AND IT FAILS CLOSED. When staging is impossible (a full or
- * unwritable temp directory) this route used to extract the unstaged cache path
- * anyway, while the only line on screen said the bytes would not be extracted.
- * It now refuses, in the same words the cache route already used.
+ * THE SECOND ROUND MOVED WHERE THAT HASH HAPPENS, because the first answer was
+ * not enough. It staged a private COPY and hashed the copy — and seat D1 showed
+ * that copy is discoverable and openable by the same uid, so the race simply
+ * moved onto the staged path. There is no copy now: the downloaded path is read
+ * ONCE into a Buffer, that Buffer is hashed, and that Buffer is extracted. The
+ * identical three steps run on the cache route (./electron-repair-cache), which
+ * is what makes `pinned` mean what its name says.
+ *
+ * F#6/F#8 — AND IT FAILS CLOSED. When the bytes could not be read at all, this
+ * route used to extract the unread path anyway while the only line on screen
+ * said they would not be extracted. It refuses, in the cache route's own words.
  *
  * F3 — AND AN UNPINNED SUCCESS IS MARKED, NOT ONLY LOGGED (seats C1 + B3). Both
  * `CHANGELOG.md` and `docs/troubleshooting.md` promise that an artifact no
@@ -83,7 +88,7 @@ function cacheRootFor(env = process.env) {
  *   shape the caller must return as-is, nothing was extracted.
  */
 async function controlledProvision({
-  electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
+  electronDir, platform, arch, version, anchor, downloadArtifact, extract,
   fs, env = process.env, downloadMs = 480000, policy = {}, log = () => {},
 }) {
   const fileName = artifactFileName({ version, platform, arch });
@@ -101,6 +106,13 @@ async function controlledProvision({
   const zip = await downloadArtifact({
     version,
     artifactName: 'electron',
+    // MEASURED, and stated because the surrounding prose used to claim
+    // otherwise: `force` is DEAD in @electron/get 5.0.0 — `effectiveCacheMode`
+    // never reads it — so this call can return a CACHE PATH with no network
+    // fetch at all. It is left in place because removing it changes nothing
+    // today and a later version may honour it again. What makes this route
+    // sound is not freshness: it is that amicus reads and hashes whatever path
+    // comes back, in its own memory.
     force: true,
     cacheRoot: cacheRootFor(env),
     platform,
@@ -108,24 +120,22 @@ async function controlledProvision({
     ...(digest ? { checksums: { [fileName]: digest } } : {}),
     downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
   });
-  const stage = stageArtifact({ zip, fileName, fs, log });
-  if (!stage) { return { pinned: false, refused: refuseUnstagedArtifact({ fileName, zip, log }) }; }
-  try {
-    // The gate runs on the STAGED copy, whose inode nothing else has a name for
-    // or a handle on — so the bytes it hashes are the bytes extract() opens.
-    const gate = verifyArtifact({ zip: stage.path, anchor, fileName, policy, fs, log });
-    if (!gate.allowed) { return { pinned: false, refused: rejectDownloadedZip({ gate, fileName, log }) }; }
-    await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
-    // BOTH halves, deliberately. `digest` says a `checksums` table went out, so a
-    // hatch-dropped pin still reports unverified even when the anchor happens to
-    // agree; `verdict === 'verified'` says amicus itself hashed these exact bytes
-    // and they matched. Either half alone has been wrong: F3's first cut reported
-    // the table, and the table alone is what seat F#2 showed does not describe the
-    // bytes that reach the extractor.
-    return { pinned: !!digest && gate.verdict === 'verified' };
-  } finally {
-    releaseStage({ stage, fs });
+  // READ THE BYTES ONCE, and never resolve that path again. Everything after
+  // this line acts on a Buffer in amicus's own heap.
+  const held = readArtifactBytes({ zip, fs });
+  if (!held.bytes) {
+    return { pinned: false, refused: refuseUnreadableArtifact({ fileName, zip, why: held.why, detail: held.detail, log }) };
   }
+  const gate = verifyArtifactBytes({ bytes: held.bytes, anchor, fileName, policy, log });
+  if (!gate.allowed) { return { pinned: false, refused: rejectDownloadedZip({ gate, fileName, log }) }; }
+  await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract, fs });
+  // BOTH halves, deliberately. `digest` says a `checksums` table went out, so a
+  // hatch-dropped pin still reports unverified even when the anchor happens to
+  // agree; `verdict === 'verified'` says amicus itself hashed these exact bytes
+  // and they matched. Either half alone has been wrong: F3's first cut reported
+  // the table, and the table alone is what seat F#2 showed does not describe the
+  // bytes that reach the extractor.
+  return { pinned: !!digest && gate.verdict === 'verified' };
 }
 
 /**

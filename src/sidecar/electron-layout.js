@@ -12,12 +12,12 @@
  * `repairElectron` itself. These functions answer "where does the package keep
  * its exe", which is a different question from "how do I heal a broken install".
  *
- * WHAT CHANGED IN THE SECOND ROUND. `extractFromCache({zip, ...})` takes a
- * PATH, which is the whole finding: the bytes that were hashed and the bytes an
- * extractor re-opens at a path are not the same bytes when the attacker shares
- * our uid. Its replacement, `extractBytesToDist`, takes a BUFFER the caller
- * already hashed and writes `dist/` by extract-into-incoming + promote (see
- * `promoteDist`). `extractFromCache` is removed once both routes are wired.
+ * WHAT CHANGED IN THE SECOND ROUND. `extractFromCache({zip, ...})` is GONE. It
+ * took a PATH, which is the whole finding: the bytes that were hashed and the
+ * bytes an extractor re-opens at a path are not the same bytes when the attacker
+ * shares our uid. Its replacement, `extractBytesToDist`, takes a BUFFER the
+ * caller already hashed and writes `dist/` by extract-into-incoming + promote
+ * (see `promoteDist`).
  *
  * TRUE LEAF: `path` only, with `fs` and the extractor injected by the caller —
  * so electron-provision.js requires it too without any risk of a cycle.
@@ -127,21 +127,4 @@ async function extractBytesToDist({ bytes, electronDir, platform, extract, fs })
   }
 }
 
-/**
- * Extract a staged zip into `<electronDir>/dist` offline.
- *
- * SUPERSEDED by `extractBytesToDist`, and removed as soon as both routes are
- * wired to it. It takes a PATH, which is the whole finding: the bytes that were
- * hashed and the bytes an extractor re-opens at a path are not the same bytes
- * when the attacker shares our uid.
- */
-async function extractFromCache({ zip, electronDir, platform, extract, fs }) {
-  const distDir = path.join(electronDir, 'dist');
-  fs.mkdirSync(distDir, { recursive: true });
-  await extract(zip, { dir: distDir });
-  writePathTxt({ electronDir, platform, fs });
-}
-
-module.exports = {
-  platformExe, writePathTxt, promoteDist, extractBytesToDist, extractFromCache,
-};
+module.exports = { platformExe, writePathTxt, promoteDist, extractBytesToDist };

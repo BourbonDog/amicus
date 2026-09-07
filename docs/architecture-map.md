@@ -118,7 +118,7 @@ src/
 │   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and the fence that says
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── electron-refuse.js  # Electron artifact REFUSALS — the four ways amicus declines to turn bytes into
-│   ├── electron-stage.js  # PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the
+│   ├── electron-repair-cache.js  # ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`,
 │   ├── electron-state.js  # Electron install-state probes (#76).
 │   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor and the gate. (The third
 │   ├── fallback-chains.js
@@ -561,14 +561,14 @@ evals/
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and | `isRepoPlantedName()`, `scrubbedChildEnv()`, `REPO_ENV_PREFIXES()`, `ELECTRON_INSTALL_TARGET_KEYS()`, `ELECTRON_INSTALL_TARGET_ENV()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
-| `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `extractFromCache()` |
+| `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `runInstaller()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
-| `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the four ways amicus declines to turn bytes into | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnstagedArtifact()` |
-| `sidecar/electron-stage.js` | PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the | `stageArtifact()`, `releaseStage()`, `sweepStaleStages()`, `isSafeArtifactName()`, `STAGE_PREFIX()` |
+| `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the four ways amicus declines to turn bytes into | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
+| `sidecar/electron-repair-cache.js` | ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`, | `repairFromCache()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
-| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
+| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifactBytes()`, `sha256Bytes()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |

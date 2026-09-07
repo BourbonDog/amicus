@@ -33,7 +33,6 @@ const os = require('os');
 const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
-const { stageArtifact } = require('../src/sidecar/electron-stage');
 const { robustExtract } = require('../src/sidecar/unzip');
 const { fakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
 
@@ -161,14 +160,15 @@ describe('F5 — an attacker-named cache path cannot write the refusal either', 
   test('an UNREADABLE artifact at a hostile path is reported on one clean line', async () => {
     // `cachedZip` builds <root>/<sha>/<name> from a readdir of a directory the
     // attacker writes, so the <sha> component is theirs. It does not exist here,
-    // so staging refuses it before any hash — the `unstaged` refusal, which prints
-    // the same attacker-named path, and must sanitize it the same way.
+    // so the ONE read refuses it before any hash — the `unreadable` refusal,
+    // which prints that same attacker-named path and must sanitize it the same
+    // way. (The intermediate staged-copy cut called this `unstaged`.)
     const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const hostile = path.join(os.tmpdir(), `amicus-${ESC}[31m\n${FORGED_LINE}\u202e`, ZIP_NAME);
 
     const res = await repair({ dir, zip: hostile });
 
-    expect(res.integrity).toBe('unstaged');
+    expect(res.integrity).toBe('unreadable');
     expectSafe(res.reason);
     expect(res.reason).not.toContain('\n');
     const lines = stderr.join('').split('\n');
@@ -176,25 +176,34 @@ describe('F5 — an attacker-named cache path cannot write the refusal either', 
     expectSafe(flatStderr(stderr));
   });
 
-  test('an implausible artifact NAME is quoted without letting it speak', () => {
+  test('an implausible artifact NAME is quoted without letting it speak', async () => {
     // v4.9.6 second round, F#3 x F5. `fileName` is built from a `version` read out
     // of an untrusted <electronDir>/package.json, so the string this refusal quotes
     // back is the attacker's too — and it fires precisely when that string is
-    // malformed, which is when it is most likely to be hostile.
-    const lines = [];
-    const stage = stageArtifact({
-      zip: writeZip(),
-      fileName: `electron-v43.1.1/../../${NASTY}-win32-x64.zip`,
-      fs,
-      log: (m) => lines.push(m),
+    // malformed, which is when it is most likely to be hostile. The check used to
+    // live in the deleted electron-stage.js; it is `repairElectron`'s own
+    // `unsafe-name` refusal now, and nothing downstream is reached at all.
+    const { dir } = fakeElectronDir({
+      withExe: false, platform: PLATFORM, version: `43.1.1/../../${NASTY}`,
+    });
+    const extract = jest.fn();
+
+    const res = await ei.repairElectron({
+      cacheOnly: true,
+      electronDir: dir,
+      platform: PLATFORM,
+      arch: ARCH,                                    // no `version` — read from the dir
+      deps: {
+        ...SELF_ANCHOR_OFF, cachedZip: () => writeZip(), extract, spawn: jest.fn(),
+        acquireLock: () => ({ release: () => {} }),
+      },
     });
 
-    expect(stage).toBeNull();
-    expect(lines.join('\n')).toMatch(/REFUSING an implausible Electron artifact name/);
-    for (const line of lines) {
-      expectSafe(line);
-      expect(line.startsWith(FORGED_LINE)).toBe(false);
-    }
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('unsafe-name');
+    expectSafe(res.reason);
+    expect(res.reason.startsWith(FORGED_LINE)).toBe(false);
+    expect(res.reason).toMatch(/is not a usable artifact name/);
   });
 });
 

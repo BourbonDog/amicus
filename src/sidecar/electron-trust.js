@@ -161,53 +161,48 @@ function expectedDigest(anchor, fileName) {
   return typeof digest === 'string' && HEX64.test(digest) ? digest : null;
 }
 
-/** Chunked sha256 (1 MiB buffer, openSync/readSync). SYNC so it composes with
- *  repairElectron's injected `fs`; chunked so a ~170 MB zip is never buffered whole. */
-function sha256File(file, fs = fsDefault) {
-  const hash = crypto.createHash('sha256');
-  const buffer = Buffer.alloc(1024 * 1024);
-  const fd = fs.openSync(file, 'r');
-  try {
-    let read = fs.readSync(fd, buffer, 0, buffer.length, null);
-    while (read > 0) {
-      hash.update(buffer.subarray(0, read));
-      read = fs.readSync(fd, buffer, 0, buffer.length, null);
-    }
-  } finally {
-    try { fs.closeSync(fd); } catch { /* already closed */ }
-  }
-  return hash.digest('hex');
+/** sha256 of an artifact amicus already holds in its own heap. */
+function sha256Bytes(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 /**
- * THE GATE. NEVER THROWS. `allowed` is the single decision bit callers act on.
+ * THE GATE, OVER BYTES. NEVER THROWS. `allowed` is the single decision bit.
  *
  * @returns {{verdict:'verified',   allowed:true,  actual:string}
  *         | {verdict:'mismatch',   allowed:boolean, expected:string, actual:string}
- *         | {verdict:'no-digest',  allowed:true}
- *         | {verdict:'unreadable', allowed:false, reason:string}}
+ *         | {verdict:'no-digest',  allowed:true}}
+ *
+ * IT TAKES A BUFFER, AND THE PATH FORM IS GONE. `verifyArtifact({zip, ...})` and
+ * `sha256File` were DELETED in the v4.9.6 second council round, not deprecated.
+ * Hashing a path and then handing that path to an extractor is the race three
+ * seats filed against v4.9.5, and hashing a private COPY of it is the race a
+ * fourth seat filed against the remedy — a same-uid attacker opens the copy too
+ * (MEASURED). Leaving a path-hashing gate exported and callable is an invitation
+ * to reintroduce it, and no caller is left that could legitimately want one. The
+ * bytes now arrive from `electron-custody.readArtifactBytes`, which reads them
+ * once through one descriptor, and the SAME Buffer is what `zip-from-buffer`
+ * extracts.
+ *
+ * `unreadable` disappeared with the path form. Unreadability is decided BEFORE
+ * any hashing now, by `readArtifactBytes`, and the caller refuses there — bytes
+ * that could not be read never reach this function, so there is no verdict for
+ * them to carry.
  *
  * `no-digest` is ALLOWED and merely marked. An electron package that predates
  * `checksums.json` has no anchor through no fault of its own, and refusing it
  * would push that machine into a permanent re-download loop for a file no
- * download can improve.
- *
- * `unreadable` is refused whatever the policy says: bytes that cannot be hashed
- * cannot be extracted either, so there is nothing to fail open to.
+ * download can improve. THE NOTE BELOW IS THE CACHE ROUTE'S stderr line, the one
+ * `docs/troubleshooting.md` promises; the download route prints its own.
  */
-function verifyArtifact({ zip, anchor, fileName, policy = {}, fs = fsDefault, log = () => {} }) {
+function verifyArtifactBytes({ bytes, anchor, fileName, policy = {}, log = () => {} }) {
   const expected = expectedDigest(anchor, fileName);
   if (!expected) {
     log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
     log('[amicus]   checksums.json entry for it), so its bytes could not be verified.');
     return { verdict: 'no-digest', allowed: true };
   }
-  let actual;
-  try {
-    actual = sha256File(zip, fs);
-  } catch (e) {
-    return { verdict: 'unreadable', allowed: false, reason: `could not hash ${fileName}: ${(e && e.message) || e}` };
-  }
+  const actual = sha256Bytes(bytes);
   if (actual === expected) { return { verdict: 'verified', allowed: true, actual }; }
   if (policy.allowUnverified) {
     log(`[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — accepting ${fileName} even though`);
@@ -222,8 +217,8 @@ module.exports = {
   electronTrustPolicy,
   resolveAnchor,
   expectedDigest,
-  verifyArtifact,
-  sha256File,
+  verifyArtifactBytes,
+  sha256Bytes,
   artifactFileName,
   normalizeV,
   // RE-EXPORTED from ./electron-env-scrub — the same function objects, not copies.
