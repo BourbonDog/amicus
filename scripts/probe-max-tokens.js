@@ -113,6 +113,7 @@ ensureNodeModulesBinInPath();
 const KIMI = 'moonshotai/kimi-k3';   // live models.dev: effort low|high|max, ceiling 943718
 const QWEN = 'qwen/qwen3.8-max-0902'; // models.dev: effort minimal..xhigh, ceiling 131072. Renamed from the un-dated `qwen/qwen3.8-max` between 2026-09-04 and 2026-09-05; the engine's variant table for the old id is now empty, so F4 reproduced F3's silent no-op against it (PR 2 record).
 const HAIKU = 'claude-haiku-4-5';     // models.dev: budget_tokens (min 1024), ceiling 64000
+const FICTIONAL = 'claude-fictional-9-20990101'; // council #235 r3 (M23): an id no catalogue can ever carry -- its /config/providers row is nothing but the descriptor this config registers
 const OR = (id) => ({ providerID: 'openrouter', modelID: id });
 const AN = (id) => ({ providerID: 'anthropic', modelID: id });
 const CUSTOM = { providerID: 'probe', modelID: 'unknown-model' };
@@ -429,6 +430,25 @@ function descriptorFor(c) {
  * @param {object} c a CASES entry
  * @returns {boolean}
  */
+/**
+ * The WHOLE row `/config/providers` returns for one model -- every cell, not the
+ * provenance-blind subset providersDump keeps. Council #235 r3 (record M23): the
+ * guard in src/utils/engine-variants.js :: engineSourced decides WHOSE row it is
+ * from `name`, `family`, `release_date`, `cost` and `capabilities`, so the canary
+ * has to see all of them, on a row that deliberately carries an amicus descriptor.
+ * @param {object} client SDK client
+ * @param {string} providerID provider half of the executable id
+ * @param {string} modelID model half of the executable id
+ * @returns {Promise<object>} the entry, or {missing: true}
+ */
+async function providersRow(client, providerID, modelID) {
+  const r = await client.config.providers();
+  const list = (r.data && r.data.providers) || [];
+  const p = list.find((x) => x.id === providerID);
+  const m = p && p.models && p.models[modelID];
+  return m || { missing: true, providerIds: list.map((x) => x.id) };
+}
+
 function isBareDescriptor(c) {
   const d = descriptorFor(c);
   return !!d && d.limit === undefined && d.options === undefined;
@@ -607,6 +627,16 @@ const CASES = [
   // instead. Found by this row's first run (Task 2 report).
   { id: 'M20', title: "amicus sendPrompt variant 'high' on direct haiku {} + env 24000 with outputBudget 24000 (bare descriptor + the flag: the catalog-unknown shape)", env: '24000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), viaAmicus: true, variant: 'high', outputBudget: 24000, expect: "refused before any request: VARIANT_OVER_BUDGET — the bare descriptor reads the engine's own 64000 ceiling, and 24000 + 16000 = 40000 would overshoot the budget; no capture", want: { refused: 'VARIANT_OVER_BUDGET' } },
   { id: 'M21', title: "amicus sendPrompt variant 'max' on direct haiku with outputBudget 64000 (the K4 shape)", env: '64000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 64000 } } }, model: AN(HAIKU), viaAmicus: true, variant: 'max', outputBudget: 64000, expect: '64000 — budget at the ceiling, the sum clamped to it (K4), sent', want: W(64000, null, 'any') },
+  // council #235 r3 (C1/B1): the row-provenance canary. The SAME amicus descriptor
+  // goes onto a model the engine's catalogue knows and onto one only this config
+  // registers; the dump must still tell them apart. Keyless, prompt-free, one engine.
+  { id: 'M23', title: 'dump only: whose row is it — the SAME amicus descriptor on a model the engine knows and on one only the config registers (council #235 r3, C1/B1)',
+    dumpOnly: true,
+    anthropic: { [HAIKU]: { limit: { context: HCTX, output: 24000 } }, [FICTIONAL]: { limit: { context: HCTX, output: 24000 } } },
+    dumpRows: [`anthropic/${HAIKU}`, `anthropic/${FICTIONAL}`],
+    model: AN(HAIKU),
+    expect: 'the echo overwrites `limit` and NOTHING else: the engine row keeps its display name, family, release date, prices and variants; the config-only row reads name === id, family "", release_date "", cost 0, variants {} — while carrying capabilities.toolcall true and status "active", the cells that must never be disjuncts',
+    want: { dumpRows: { [`anthropic/${HAIKU}`]: 'engine-sourced', [`anthropic/${FICTIONAL}`]: 'config-only' } } },
 ];
 
 function wireSummary(wire) {
@@ -800,11 +830,22 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
       }
       updates[c.id] = update;
     }
+    // council #235 r3 (M23): rows dumped IN FULL onto this row, not into `providers`.
+    // `providers` is shared across the run and skips a key an earlier case already
+    // filled, so a case that pins its own dump has to keep it locally.
+    let dumpRows = null;
+    if (c.dumpRows) {
+      dumpRows = {};
+      for (const k of c.dumpRows) {
+        const [providerID, ...rest] = k.split('/');
+        try { dumpRows[k] = await providersRow(handle.client, providerID, rest.join('/')); } catch (err) { dumpRows[k] = { error: err.message }; }
+      }
+    }
     const config = buildConfig('<capture>', c).provider;
-    if (c.dumpOnly) { return { ...base, config, prompt: null, status: null, error: null, wire: null, assistant: null, update, refresh }; }
+    if (c.dumpOnly) { return { ...base, config, dumpRows, prompt: null, status: null, error: null, wire: null, assistant: null, update, refresh }; }
     cap.setCase(c);
     const r = await send(handle.client, cap.captures, c);
-    return { ...base, config, prompt: c.viaAmicus ? { viaAmicus: true, variant: c.variant ?? null, outputBudget: c.outputBudget ?? null, reasoning: c.reasoning ?? null } : (c.extra || {}), ...r, update, refresh };
+    return { ...base, config, dumpRows, prompt: c.viaAmicus ? { viaAmicus: true, variant: c.variant ?? null, outputBudget: c.outputBudget ?? null, reasoning: c.reasoning ?? null } : (c.extra || {}), ...r, update, refresh };
   } catch (err) {
     // PR 4 whole-branch review (PR-3): a refusal must be measured against the capture server,
     // not asserted by construction — a sendPrompt that sent and THEN threw would otherwise print
@@ -839,6 +880,14 @@ function checkRow(r) {
   if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
     return (!r.wire && r.capturedAfterRefusal === 0 && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
   }
+  // council #235 r3 (M23): a row that pins WHOSE dump row each model got. Scored on the
+  // cells src/utils/engine-variants.js :: engineSourced reads, and on the negative cells
+  // that must never become disjuncts -- so an engine that starts synthesizing display
+  // metadata for a config-only row turns this job red instead of falsely refusing cold
+  // models in the field.
+  if (r.want && typeof r.want === 'object' && r.want.dumpRows) {
+    return dumpRowsMatch(r) ? 'matched' : 'mismatched';
+  }
   // A row that THREW (runCase's catch) and is not a refusal row never matches: its
   // measured wire, if any, is filed in the JSON for the reader, but a case that died
   // before the assistant read cannot satisfy a wire/assistant pin (the pre-PR-4
@@ -866,6 +915,41 @@ function checkRow(r) {
     if (u.status !== r.want.update.status || touched !== r.want.update.configJson) { return 'mismatched'; }
   }
   return 'matched';
+}
+
+/**
+ * The M23 verdict: for each pinned key, is the row the ENGINE's declaration or nothing
+ * but the descriptor this probe registered? Both rows carry the IDENTICAL amicus
+ * descriptor, so `limit` is asserted equal on both and is never evidence either way.
+ * @param {object} r a runCase() result
+ * @returns {boolean}
+ */
+function dumpRowsMatch(r) {
+  const rows = r.dumpRows || {};
+  for (const [key, kind] of Object.entries(r.want.dumpRows)) {
+    const m = rows[key];
+    if (!m || typeof m !== 'object' || m.missing || m.error) { return false; }
+    const modelID = key.split('/').slice(1).join('/');
+    const cost = (m.cost && typeof m.cost === 'object') ? m.cost : {};
+    const caps = (m.capabilities && typeof m.capabilities === 'object') ? m.capabilities : {};
+    const variants = (m.variants && typeof m.variants === 'object') ? m.variants : {};
+    // The echo, identical on both rows, and the two cells a config-only row also fills.
+    if (!m.limit || m.limit.context !== HCTX || m.limit.output !== 24000) { return false; }
+    if (caps.toolcall !== true || m.status !== 'active') { return false; }
+    if (kind === 'config-only') {
+      if (m.name !== modelID || m.family !== '' || m.release_date !== '') { return false; }
+      if (cost.input !== 0 || cost.output !== 0) { return false; }
+      if (Object.keys(variants).length !== 0) { return false; }
+      if (caps.temperature !== false || caps.reasoning !== false || caps.attachment !== false) { return false; }
+    } else {
+      if (typeof m.release_date !== 'string' || m.release_date.trim() === '') { return false; }
+      if (typeof m.family !== 'string' || m.family.trim() === '') { return false; }
+      if (typeof m.name !== 'string' || m.name.trim() === '' || m.name === modelID) { return false; }
+      if (typeof cost.input !== 'number' || !(cost.input > 0)) { return false; }
+      if (Object.keys(variants).length === 0) { return false; }
+    }
+  }
+  return true;
 }
 
 /**

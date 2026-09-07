@@ -821,7 +821,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       : {};
     if (sent && !sent.verified) {
       const { formatUnverifiedVariantNote } = require('./utils/engine-variants');
-      const note = formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable, ambiguous: sent.ambiguous });
+      const note = formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable });
       logger.warn('Variant sent unverified', { taskId, sessionId, note });
       // council #235 r2 (B2): logger.warn is DROPPED at the shipped default
       // (LOG_LEVEL defaults to 'error', utils/logger.js), so the structured line alone

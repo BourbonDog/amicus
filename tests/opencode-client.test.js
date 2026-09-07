@@ -515,19 +515,38 @@ describe('OpenCode Client Wrapper', () => {
       expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, unreadable: 'read threw: ECONNRESET' });
     });
 
-    it('an ambiguous declaration — the echo shape throughout, under a budget — is sent unverified with ambiguous on sentVariant; with no budget a declared model is unchanged (council #235 r1 D2/B1)', async () => {
-      // Named mutant "AMBIGUOUSKNOWN" (src/utils/engine-variants.js): the echo read stays `known` — sendPrompt refuses VARIANT_UNDECLARED here.
-      const ECHO_ONLY = { data: { providers: [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }] } };
+    it('a row that is nothing but amicus\'s descriptor is unknown and sent unverified — no `ambiguous` key survives (council #235 r3 C1/B1)', async () => {
+      // Named mutant "BUDGETGATE" (src/utils/engine-variants.js): restore the budget-gated echo
+      // path and this row is reported `ambiguous` again — a key no schema, doc or CHANGELOG carries.
+      const ECHO_ONLY = { data: { providers: [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { id: 'qwen/qwen3.8-max-0902', providerID: 'openrouter', name: 'qwen/qwen3.8-max-0902', family: '', release_date: '', cost: { input: 0, output: 0, cache: { read: 0, write: 0 } }, capabilities: { temperature: false, reasoning: false, attachment: false, toolcall: true }, status: 'active', options: {}, headers: {}, limit: { context: 1000000, output: 24000 }, variants: {} } } }] } };
       const mockClient = clientWith(ECHO_ONLY);
       const result = await sendPrompt(mockClient, 'session-123', {
         model: 'openrouter/qwen/qwen3.8-max-0902', parts: [{ type: 'text', text: 'T' }], variant: 'low', outputBudget: 24000, _declaration: { waitMs: 0, catalogCeiling: 131072, readCache: () => null },
       });
       expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
-      expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, ambiguous: true });
+      expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false });
+      expect(result.sentVariant).not.toHaveProperty('ambiguous');
+      const { formatUnverifiedVariantNote } = require('../src/utils/engine-variants');
+      expect(formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'low', waitedMs: result.sentVariant.waitedMs, unreadable: result.sentVariant.unreadable }))
+        .toContain('did not know openrouter/qwen/qwen3.8-max-0902 within');
       const plain = clientWith(KIMI_DUMP);
       const r2 = await sendPrompt(plain, 'session-123', { model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'T' }], variant: 'low', outputBudget: null, _declaration: NO_WAIT });
       expect(r2.sentVariant.verified).toBe(true);
       expect(r2.sentVariant).not.toHaveProperty('ambiguous');
+    });
+
+    it('a budget does not buy an unverified send — a variant-less ENGINE row is refused either way (council #235 r3 C1/B1)', async () => {
+      // Named mutant "BUDGETSTILLSENDS": let a configured outputBudget put this row back on the
+      // unverified-send path — it resolves with `sentVariant.verified === false` instead of
+      // refusing, which IS the blocker. Measured: F3/M7 make that send a certain wire no-op.
+      const ENGINE_NOVARIANTS = { data: { providers: [{ id: 'openai', models: { 'gpt-4o': { id: 'gpt-4o', providerID: 'openai', name: 'GPT-4o', family: 'gpt', release_date: '2024-05-13', cost: { input: 2.5, output: 10, cache: { read: 0, write: 0 } }, capabilities: { temperature: true, reasoning: false, attachment: true, toolcall: true }, status: 'active', options: {}, headers: {}, limit: { context: 128000, output: 16384 }, variants: {} } } }] } };
+      const budgeted = clientWith(ENGINE_NOVARIANTS);
+      const opts = (outputBudget) => ({ model: 'openai/gpt-4o', parts: [{ type: 'text', text: 'T' }], variant: 'high', outputBudget, _declaration: { waitMs: 0, catalogCeiling: 16384, readCache: () => null } });
+      await expect(sendPrompt(budgeted, 'session-123', opts(24000))).rejects.toThrow(/^VARIANT_UNDECLARED: openai\/gpt-4o declares no variants at all/);
+      expect(budgeted.session.promptAsync).not.toHaveBeenCalled();
+      const unbudgeted = clientWith(ENGINE_NOVARIANTS);
+      await expect(sendPrompt(unbudgeted, 'session-123', opts(null))).rejects.toThrow(/^VARIANT_UNDECLARED: openai\/gpt-4o declares no variants at all/);
+      expect(unbudgeted.session.promptAsync).not.toHaveBeenCalled();
     });
 
     it('never sends after the caller abandoned the declaration wait (EP-2)', async () => {

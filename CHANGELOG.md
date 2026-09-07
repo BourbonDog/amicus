@@ -85,10 +85,12 @@ All notable changes to Amicus are documented here. Format follows
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
   unverified, logged and marked `variantUnverified: true` on the leg document. The same note is
   printed as a `Notice:` line on stderr, because the structured warning alone is dropped at the
-  default log level. With a budget set the
-  same applies to a model whose dump reports no variants (an echoed descriptor hides whether the
-  engine knows it — M3); without a budget such a model is refused at once. The wait polls every 500
-  ms. The ceiling that `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
+  default log level. The verdict does not depend on
+  `outputBudget`: `/config/providers` returns a model's row with the catalogue's own release date,
+  family, pricing and capabilities, and Amicus writes only `limit` into it, so a row carrying any of
+  those is the engine's declaration (an empty variants set is a refusal) and a row carrying none of
+  them is Amicus's own descriptor (unknown — the bounded wait, then an unverified send). Measured as
+  record M23 and pinned by a keyless engine canary. The wait polls every 500 ms. The ceiling that `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
   the model — its `maxOutputTokens`, the number a budget-derived descriptor is clamped TO, not the
   value that descriptor carries — because the engine echoes that descriptor back once a budget is
   set (M3); for a model that catalog has no row for it is the dump's own value, the engine's own
@@ -112,6 +114,26 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Changed
 
+- **A configured `outputBudget` no longer weakens the `--thinking` guard (#218 PR 4, council #235
+  round 3 C1/B1).** Earlier on this unreleased branch, a model whose `/config/providers` row
+  reported no variants was, *with a budget set*, polled for five seconds, reported ambiguous and
+  then sent the level unverified — while the same command with no budget refused it at once. What
+  flips: a model the engine's own catalogue supplied that declares no variants (`openai/gpt-4o`, and
+  the shipped aliases `minimax`, `qwen-coder`, `qwen-flash`) is now refused before anything is sent
+  when a budget is set, exactly as it already was without one — and the five-second wait disappears
+  with it, so a 12-leg fanout on such a model no longer burns 12 × 5 s before failing. What stops
+  being sent is a level nobody could ever use: probe F3/M7 measured an undeclared variant as a
+  certain no-op on the wire, echoed back on the assistant message. The no-budget path is unchanged
+  except for four zero-context openai image rows (`chatgpt-image-latest`, `gpt-image-1.5`,
+  `gpt-image-1-mini`, `gpt-image-2`), which are now refused rather than silently no-op'd. A model
+  the engine has NOT learned yet is unchanged bit for bit: the bounded wait, then an unverified send
+  with `variantUnverified: true` and the `Notice:` line. Under a budget, a stale bundled catalogue
+  can now refuse a level the next run accepts — the refusal says so. The `ambiguous` key is gone
+  from `sentVariant` (it existed only on this unreleased branch, in no schema or document). C1 is
+  not fully closed: its second clause — a genuinely cold direct-Anthropic model with an
+  `enabled + budgetTokens` entry still sending `24,000 + 16,000 = 40,000` marked only
+  `variantUnverified: true` — survives, because N exists only in the post-spawn dump; the filed
+  pre-spawn fit (descriptor = budget − N, proven M17) is the answer and is not built here.
 - **`outputBudget` below 32,000 now reaches every leg but a direct `openai` one (#218 PR 2; the
   openai exception measured in PR 4, M5/M13/M22).** On 4.9.3 a budget applied only to routes whose
   ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The engine flag now

@@ -132,17 +132,6 @@ describe('#218 PR 4 — the effort lever through runHeadless', () => {
     expect(notice).toContain('did not know openrouter/moonshotai/kimi-k3 within 5003 ms');
   });
 
-  it('an AMBIGUOUS declaration — the echo shape under a budget — reaches the same warn naming the two states it could not tell apart (council #235 r1 B1)', async () => {
-    // Named mutant "AMBIGUOUSDROPPED": drop `ambiguous:` from headless.js's note call.
-    const { logger } = require('../src/utils/logger');
-    mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'medium', verified: false, waitedMs: 5001, ambiguous: true } });
-    const r = await run({ variant: 'medium' });
-    expect(r.variantUnverified).toBe(true);
-    expect(logger.warn).toHaveBeenCalledWith('Variant sent unverified', expect.objectContaining({
-      note: expect.stringContaining('those two states read alike'),
-    }));
-  });
-
   it('an UNREADABLE /config/providers reaches the same warn with the reason it observed (EP-3)', async () => {
     // Named mutant "UNREADABLEDROPPED": drop `unreadable` from headless.js's note call.
     const { logger } = require('../src/utils/logger');

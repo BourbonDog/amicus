@@ -7407,6 +7407,7 @@ checks: 36 matched, 0 mismatched (none), 1 recorded
 | M19 | amicus sendPrompt variant 'medium' on kimi (undeclared: low, high, max) | refused before any request: VARIANT_UNDECLARED, no capture | — | — | — | — | — | — VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not d | — | — | — | — | — |
 | M20 | amicus sendPrompt variant 'high' on direct haiku {} + env 24000 with outputBudget 24000 (bare descriptor + the flag: the catalog-unknown shape) | refused before any request: VARIANT_OVER_BUDGET — the bare descriptor reads the engine's own 64000 ceiling, and 24000 + 16000 = 40000 would overshoot the budget; no capture | 24000 | — | — | — | — | — VARIANT_OVER_BUDGET: the 'high' variant on anthropic/claude- | — | — | — | — | — |
 | M21 | amicus sendPrompt variant 'max' on direct haiku with outputBudget 64000 (the K4 shape) | 64000 — budget at the ceiling, the sum clamped to it (K4), sent | 64000 | /v1/messages | 64000 | — | {"type":"enabled","budget_tokens":31999} | 204 | length | max | — | 5/1/0 | text |
+| M23 | dump only: whose row is it — the SAME amicus descriptor `{limit:{context:200000,output:24000}}` on a model the engine's catalogue knows and on one only the config registers (council #235 r3, C1/B1) | record: the echo overwrites `limit` and NOTHING else. `anthropic/claude-haiku-4-5-20251001` -> name "Claude Haiku 4.5", family "claude-haiku", release_date "2025-10-15", cost {input:1,output:5,cache{0.1,1.25}}, capabilities {temperature:true,reasoning:true,attachment:true,toolcall:true}, limit {context:200000,output:24000} (the echo), variants {high:{thinking:{enabled,16000}}, max:{...31999}}. `anthropic/claude-fictional-9-20990101` -> name "claude-fictional-9-20990101" (=== the id), family "", release_date "", cost {input:0,output:0,cache{0,0}}, capabilities {temperature:false,reasoning:false,attachment:false,TOOLCALL:TRUE}, limit {context:200000,output:24000}, variants {}, status "active", options {}, headers {}. THE NEGATIVE FINDING no design stated: `id`, `providerID`, `api` (incl. `api.npm`), `status`, `options`, `headers`, `capabilities.toolcall`, `capabilities.input.text` and `capabilities.output.text` are ALL populated on a config-only row and must NEVER be disjuncts of `engineSourced` — any one of them converts every cold model into a false refusal. Cross-checked against a live dump of ~474 rows (anthropic 16, openai 49/50, google 38, deepseek 4, openrouter 360/361, opencode 7; the "411" in an earlier draft was the openai+openrouter subtotal only). Pinned keyless by tests/probe-config-only-row.integration.test.js (probe row M23), which asserts the NEGATIVE cells too. | — | — | — | — | — | — | — | — | — | — | — |
 
 /config/providers per model:
 - openrouter/moonshotai/kimi-k3: {"fromCase":"A","keys":["id","providerID","api","name","family","capabilities","cost","limit","status","options","headers","release_date","variants"],"limit":{"context":1048576,"output":1048576},"variants":{"low":{"reasoning":{"effort":"low"}},"high":{"reasoning":{"effort":"high"}},"max":{"reasoning":{"effort":"max"}}},"options":{}}
@@ -7524,10 +7525,61 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   and re-file. **Council #235 r1 (D2/B1):** separating "the engine knows the model and it declares
   no variants" from "the engine does not know it yet" needs a cell the dump lacks once a descriptor
   is echoed; amicus's own catalog could carry models.dev's `reasoning_options` (fetched already for
-  the ceilings) and settle it at read time — filed. **Council #235 r1 (D6):** `continue`/`resume`
+  the ceilings) and settle it at read time — SUPERSEDED FOR THIS DEFECT by council #235 r3 (the dump
+  lacks no such cell: the echo overwrites `limit` and nothing else, so name/family/release_date/cost/
+  capabilities/variants settle it at read time, with no catalog field, no fetch and no schema change
+  — record M23), and KEPT FILED for the pre-spawn fit, where no dump exists yet. Carry these
+  measured counterexamples so nobody re-proposes the naive models.dev rule:
+  `openrouter/anthropic/claude-haiku-4.5` publishes `[{toggle}]` and the engine declares
+  `low,medium,high`; `openrouter/qwen/qwen3.6-flash` (the SHIPPED `qwen-flash` alias) publishes
+  `[{toggle}]` and the engine declares `{}`; direct `anthropic/claude-haiku-4-5-20251001` publishes
+  `[{budget_tokens, min: 1024}]` and the engine synthesizes `{high, max}`; models.dev never publishes
+  N; and structurally `enrichCeilings` skips the fetch on `needsFillCount === 0` while `fillCeilings`
+  hits `alreadyKnown` and `continue`s before the lookup, so the field would populate for almost
+  nobody without restructuring council #230's loop (and it costs a CATALOG_SCHEMA_VERSION 2->3 bump
+  plus an effectively unconditional 4.5 MB fetch, reversing council #230 D1/C2's deliberate
+  `nothing-to-fill` skip). **Council #235 r3 — CLOSED-REFUTED, do not rebuild:** Design 3's
+  `VARIANT_UNVERIFIABLE` code plus a `--thinking-unverified` opt-in flag. The ambiguity class it
+  manages does not exist (M23, reproduced independently by three judges and the synthesizer on
+  engine 1.18.15); its shipped error text would have told the user "amicus cannot tell which of two
+  states that is", which is provably false. Also filed, NOT built: (i) the models.dev cross-check as
+  a SECOND witness for `engineSourced` (every engine row with `variants []` agrees with models.dev's
+  `reasoning:false` / `reasoning_options:[]` across 464 rows) — sound, but it must never join the
+  decision path, and wiring it into the KEYLESS canary would make that job depend on a
+  `~/.cache/opencode/models.json` a fresh runner may not have; run it outside that job. (ii) an
+  override for a refusal (`--thinking-force`): if one is ever added it must be per-invocation,
+  visible in the command that spends the money — never a persistent config key, because a key that
+  re-permits unverified sends recreates C1's defect one level up, invisible at the call site.
+  (iii) a "log, don't refuse, for one release" soft landing for the stale-bundled-catalogue
+  population — not recommended (the no-budget path already refuses that row today) but the one
+  legitimate alternative to shipping the refusal cold; owner's choice. (iv)
+  `formatUnverifiedVariantNote` emits a paragraph and nobody reads a five-line `Notice:` — this fix
+  REMOVES a branch rather than adding one, so it does not make it worse, but a one-line Notice with
+  the detail on the record is a real improvement someone should own. **Council #235 r1 (D6):** `continue`/`resume`
   now REJECT `--thinking`; letting a continuation carry its own level (validate + send on those
   paths, and what a resumed run should do with the parent's level) is the feature that would replace
-  the rejection — filed.
+  the rejection — filed. **Council #235 r3 (C2, refuted with arithmetic):** the unbudgeted path
+  loses output headroom only when a model's real ceiling is below 32,000 + N; today every shipped
+  alias nets exactly 32,000 and `haiku` at `max` clears the clamp by ONE token (64,000 − 63,999). If
+  Anthropic trims that ceiling, or a direct-Anthropic model ships the `enabled` shape with a ceiling
+  at or below 32,000, the default configuration would silently lose up to N with no guard — the
+  guard cannot exist without a user-declared budget, so this is a watch item, not a fix.
+  **Council #235 r3 (C1/B1, the blocker — FIXED, with residue):** `known` now reads the cells only
+  the engine's catalogue fills (`engineSourced`, record M23) instead of `limit.context`, the one
+  cell amicus writes and the dump echoes, so a configured `outputBudget` can no longer weaken the
+  guard. THE TRIPWIRE: if a future engine fills a display name, date or price for a model only the
+  config registers, `engineSourced` reads it as a declaration and a cold model is FALSELY REFUSED —
+  the keyless M23 canary (tests/probe-config-only-row.integration.test.js) is the alarm, the failure
+  is loud and zero-spend, and the fallback is to require the fabricated fingerprint
+  (`name === modelID && !release_date && !family`) in ADDITION to the OR. C1's SECOND clause
+  survives: on a genuinely cold direct-Anthropic model with an `enabled + budgetTokens` entry the
+  24,000 + 16,000 = 40,000 reservation still goes out marked only `variantUnverified: true`, because
+  N exists only in the post-spawn dump — the filed pre-spawn fit (descriptor = budget − N, proven
+  M17) is the answer and is owner's call. **EP-5 sharpened:** after this fix the 5 s declaration wait
+  serves exactly ONE population — real model ids the engine's catalogue never indexes
+  (`deepseek/deepseek-chat`, local-provider models) — and they pay it every run, forever, and can
+  never be refused; that is now the whole argument for the `providerMissing` stop (and for a
+  same-process memo of "this id was unknown last time").
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi

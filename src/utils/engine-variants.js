@@ -28,7 +28,7 @@
  *     config.json into its cwd (M3/M4/M11). The exact pre-spawn fit (descriptor
  *     = budget − N, proven M17) is filed, not built; this module REFUSES the
  *     over-budget shape with the numbers instead (BACKLOG C1's second clause).
- *   - /config/providers echoes a descriptor amicus wrote (M3: a 24000 limit.output reads back as 24000), so the ceiling a fit judges against comes from amicus's own catalog when it knows the model and from the dump only for a bare descriptor.
+ *   - /config/providers echoes a descriptor amicus wrote (M3: a 24000 limit.output reads back as 24000), so the ceiling a fit judges against comes from amicus's own catalog when it knows the model and from the dump only for a bare descriptor. The echo overwrites `limit` and NOTHING else (M23), so it never hides whose row it is: the engine's own catalogue still fills the name, family, release date, prices, capabilities and variants beside it, and `engineSourced` below reads those.
  */
 'use strict';
 
@@ -63,11 +63,37 @@ class VariantRefusedError extends Error {
   }
 }
 
+/** A non-empty string cell. */
+const filled = (v) => typeof v === 'string' && v.trim() !== '';
+
 /**
- * One read of `/config/providers` for one model. `known` is `limit.context > 0`:
- * a model amicus registered that the engine's catalogue lacks reads 0/0 (J1, M0);
- * a provider or model missing from the dump altogether is unknown too.
- * A descriptor amicus wrote is echoed with `variants {}` (M3), so a positive context alone does not prove the ENGINE knows the model — readModelDeclaration keeps polling on that shape.
+ * Whose row is this — the engine's own catalogue, or nothing but the descriptor amicus registered? Amicus writes exactly ONE cell into a model's entry (`limit`, src/utils/config.js:406) and /config/providers echoes it (M3), so `limit` can never answer that; everything else can. Measured with the IDENTICAL descriptor on both rows (record M23, engine 1.18.15): an engine row keeps its display name, family, release date, prices, capabilities and variants, a config-only row reads `name === modelID`, empty family/release_date, cost 0, `variants {}`.
+ * THE DISJUNCTS ARE EXACTLY THESE EIGHT: `id`, `providerID`, `api`, `status`, `options`, `headers`, `capabilities.toolcall` and `capabilities.input/output.text` are populated on a config-only row TOO (M23), so adding any of them reads every model the engine has not learned yet as a declaration and refuses it falsely — named mutants "TOOLCALLDISJUNCT" and "ECHOSOURCED" (add `limit`); "ONEDISJUNCT" shrinks the OR. Cost is compared `> 0`, never through positiveCount, which FLOORS $0.05 to 0 — mutant "COSTVIAPOSITIVECOUNT".
+ * @param {string} modelID model half of the executable id
+ * @param {object|null} m the dump's entry for it
+ * @returns {boolean}
+ */
+function engineSourced(modelID, m) {
+  if (!m || typeof m !== 'object') { return false; }
+  const cost = (m.cost && typeof m.cost === 'object') ? m.cost : {};
+  const caps = (m.capabilities && typeof m.capabilities === 'object') ? m.capabilities : {};
+  const variants = (m.variants && typeof m.variants === 'object') ? m.variants : {};
+  return filled(m.release_date)
+    || filled(m.family)
+    || (filled(m.name) && m.name !== modelID)
+    || (typeof cost.input === 'number' && cost.input > 0)
+    || (typeof cost.output === 'number' && cost.output > 0)
+    || Object.keys(variants).length > 0
+    || caps.temperature === true || caps.reasoning === true || caps.attachment === true;
+}
+
+/**
+ * One read of `/config/providers` for one model. `known` is "the engine's own
+ * catalogue supplied this row" (engineSourced above, record M23) — NOT
+ * `limit.context > 0`, which reads the one cell amicus itself writes and the
+ * dump echoes back (M3). A model amicus registered that the engine's catalogue
+ * lacks carries nothing but that descriptor (J1, M0); a provider or model
+ * missing from the dump altogether is unknown too. Named mutant "LIMITISKNOWN".
  * `limitOutput` is whatever the dump says — the engine's own ceiling for a bare descriptor, and the ECHO of a descriptor amicus wrote otherwise (M3).
  * @param {object} client SDK client
  * @param {string} providerID provider half of the executable id
@@ -115,7 +141,7 @@ async function readDeclarationOnce(client, providerID, modelID, opts = {}) {
   const m = (p && p.models && Object.prototype.hasOwnProperty.call(p.models, modelID)) ? p.models[modelID] : null;
   const limit = (m && m.limit && typeof m.limit === 'object') ? m.limit : {};
   return {
-    known: positiveCount(limit.context) !== null,
+    known: engineSourced(modelID, m),
     variants: (m && m.variants && typeof m.variants === 'object') ? m.variants : {},
     limitOutput: positiveCount(limit.output),
     unreadable: null,
@@ -145,8 +171,8 @@ function catalogCeilingFor(model, readCache) {
  * the catalogue to know it. Named mutant "NOWAIT" (tests/utils/engine-variants.test.js).
  * @param {object} client SDK client
  * @param {string} model executable id
- * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function, signal?: {aborted: boolean}, outputBudget?: number|null, readTimeoutMs?: number}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`. `outputBudget` (the budget the engine was spawned with; sendPrompt passes it): the echo shape is possible only when a budget-derived descriptor was written, i.e. when it is a positive integer. `readTimeoutMs` — each individual `/config/providers` read's own deadline (council #235 r2 A1).
- * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null, ceiling: number|null, ceilingFrom: string, waitedMs: number, ambiguous: boolean}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`; `ceilingFrom` is `'catalog'` or `'engine'` accordingly, and checkVariant's OVER_BUDGET remedy reads it. `ambiguous` — the wait ended on a read that could still be an echo (budget set, amicus's catalog knows the model, no variants): reported as `known: false` so the level is sent unverified.
+ * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function, signal?: {aborted: boolean}, readTimeoutMs?: number}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`. `readTimeoutMs` — each individual `/config/providers` read's own deadline (council #235 r2 A1).
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null, ceiling: number|null, ceilingFrom: string, waitedMs: number}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`; `ceilingFrom` is `'catalog'` or `'engine'` accordingly, and checkVariant's OVER_BUDGET remedy reads it.
  */
 async function readModelDeclaration(client, model, opts = {}) {
   const idx = typeof model === 'string' ? model.indexOf('/') : -1;
@@ -158,29 +184,19 @@ async function readModelDeclaration(client, model, opts = {}) {
   const now = opts.now || Date.now;
   const catalogCeiling = opts.catalogCeiling !== undefined ? opts.catalogCeiling : catalogCeilingFor(model, opts.readCache);
   const signal = opts.signal || null; // #218 PR 4 whole-branch review (EP-2): the caller's abandon signal
-  // #218 PR 4 whole-branch review (EP-1): with a budget in force amicus wrote a descriptor
-  // for every model its own catalog knows, and /config/providers ECHOES it (M3) — so a
-  // model the ENGINE's catalogue does not know yet reads `limit.context > 0, variants {}`
-  // instead of 0/0 and would count as known on the FIRST read, skipping the wait rule 3
-  // exists for. Keep polling while the read could be that echo: amicus's catalog knows the
-  // model and no variant has appeared. The shape needs a budget-derived descriptor, so with no
-  // budget there is no echo and a variant-less model amicus's catalog knows (M0: gpt-4o) is
-  // refused on the first read; with one, the two states read alike (M0/J1: both `variants {}`)
-  // and a read still ambiguous when the wait ends is reported UNKNOWN — sent unverified with a
-  // note — rather than refused as undeclared (council #235 r1 B1/D2/A4).
-  const budgetInForce = positiveCount(opts.outputBudget) !== null;
-  // Named mutants "ECHOKNOWN" (drop `couldBeEcho(d)` from the loop), "ECHOWITHOUTBUDGET"
-  // (drop `budgetInForce`), "NOCATALOGECHO" (drop `catalogCeiling !== null`) and
-  // "AMBIGUOUSKNOWN" (report the ambiguous read as known) — all in
-  // tests/utils/engine-variants.test.js.
-  const couldBeEcho = (r) => budgetInForce && catalogCeiling !== null && Object.keys(r.variants).length === 0;
+  // council #235 r3 (C1/B1): the wait asks `known` and NOTHING about the budget. `known` is now
+  // "the engine's catalogue supplied this row" (engineSourced, M23), so the row that used to be
+  // indistinguishable from an echo — amicus's descriptor and nothing else — is positively
+  // identified and polled, and an engine row declaring no variants settles on the first read and
+  // is refused; both in EITHER budget state. The deleted `budgetInForce`/`couldBeEcho`/`ambiguous`
+  // machinery managed an ambiguity the response never had. Named mutant "COLDECHOKNOWN": stop
+  // polling once the dump reports any `limit.output` — the echo ends the wait on the first read again.
   const start = now();
   let d = await readDeclarationOnce(client, providerID, modelID, { signal, readTimeoutMs: opts.readTimeoutMs });
-  while (!d.unreadable && (!d.known || couldBeEcho(d)) && !(signal && signal.aborted) && now() - start < waitMs) {
+  while (!d.unreadable && !d.known && !(signal && signal.aborted) && now() - start < waitMs) {
     await sleep(pollMs);
     d = await readDeclarationOnce(client, providerID, modelID, { signal, readTimeoutMs: opts.readTimeoutMs });
   }
-  const ambiguous = !d.unreadable && d.known && couldBeEcho(d);
   // #218 PR 4 (found by probe row M20 in Task 2): /config/providers ECHOES the
   // descriptor amicus wrote -- a budget-derived limit.output 24000 reads back as
   // 24000 (M3's dump-after) -- so with a budget in force the dump cannot tell
@@ -194,7 +210,7 @@ async function readModelDeclaration(client, model, opts = {}) {
   // so the dump IS the engine's ceiling (K5/K12) and the remedy below is provable. 'catalog' =
   // the dump echoes what amicus wrote (M3), so the engine's real ceiling may be HIGHER and
   // raising the budget to it can land inside the unrefused window. Named mutant "CEILINGPROVENANCE".
-  return { ...d, known: d.known && !ambiguous, ambiguous, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, ceilingFrom: catalogCeiling !== null ? 'catalog' : 'engine', waitedMs: now() - start };
+  return { ...d, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, ceilingFrom: catalogCeiling !== null ? 'catalog' : 'engine', waitedMs: now() - start };
 }
 
 /**
@@ -220,11 +236,22 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
   const variants = (declaration.variants && typeof declaration.variants === 'object') ? declaration.variants : {};
   if (!Object.prototype.hasOwnProperty.call(variants, variant)) {
     const names = Object.keys(variants);
+    // council #235 r3 (C1/B1): the EMPTY set is its own answer and gets its own reason. The
+    // row reached this branch because `known` says the engine's own catalogue supplied it
+    // (engineSourced, M23), so "declares no variants" is an observation, not an unfinished
+    // read — and it says so without claiming WHICH cell carried the evidence, because the
+    // predicate is an OR (10 of 50 openai rows have `name === id`; 26 of 361 openrouter
+    // `:free` rows price at zero, and both are engine-sourced through other cells). Named
+    // mutants "EMPTYSETSILENT" (fall back to the listed wording) and "MESSAGEOVERCLAIMS"
+    // (assert the row carries its name, family, release date AND prices).
+    if (names.length === 0) {
+      return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} declares no variants at all — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model often does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run` };
+    }
     // council #235 r2 (B4): the names come from the engine's remote models.dev refresh, so
     // they are defanged before they enter a message that reaches a log and a terminal.
     // `model` is NOT defanged and must not be: it is amicus's own resolved config id, not
     // engine-sourced text.
-    const listed = names.length > 0 ? defang(names.join(', ')) : 'no variants at all';
+    const listed = defang(names.join(', '));
     return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} does not declare a '${variant}' variant — the engine's catalogue lists ${listed} for it (/config/providers); an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Pick one of the listed levels, or omit --thinking to run at the provider's own default effort` };
   }
   const entry = variants[variant];
@@ -251,17 +278,17 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
 
 /**
  * The log line for a variant sent to a model the catalogue did not know in time.
- * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null, ambiguous?: boolean}} a
+ * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null}} a
  * @returns {string}
  */
-function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable, ambiguous }) {
+function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable }) {
   const why = unreadable
     // council #235 r2 (B4): `unreadable` carries an engine/transport error message — defanged
     // before it reaches a log line and a terminal. `model` stays raw: it is amicus's own id.
     ? `the engine's /config/providers could not be read (${defang(unreadable)}; one read, no wait)`
-    : ambiguous
-      ? `the engine's catalogue reported no variants for ${model} within ${waitedMs} ms while the dump echoed the descriptor amicus wrote for it (a budget is set), and those two states read alike — the engine may not know the model yet, or may know it and declare no variants`
-      : `the engine's catalogue did not know ${model} within ${waitedMs} ms (limit.context 0, no variants declared)`;
+    // council #235 r3 (C1/B1): two shapes, not three. The `ambiguous` branch named a state the
+    // dump never had — a row carrying only amicus's descriptor is positively identified now.
+    : `the engine's catalogue did not know ${model} within ${waitedMs} ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump)`;
   return `${why}, so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)`;
 }
 

@@ -19,6 +19,23 @@ const SONNET = { known: true, variants: { high: { thinking: { type: 'adaptive', 
 const GPT4O = { known: true, variants: {}, ceiling: 16384, waitedMs: 0 };
 const UNKNOWN = { known: false, variants: {}, ceiling: null, waitedMs: 5000 };
 
+// The two row shapes `/config/providers` returns, copied from the measurement
+// (record M23, engine 1.18.15) rather than written from memory. Amicus writes
+// exactly ONE cell into a model's entry — `limit`, at src/utils/config.js:406 —
+// and the dump echoes it back (M3); the echo overwrites `limit` and NOTHING
+// else, so the display cells still say whose row it is.
+// `configOnlyRow` MUST keep `toolcall: true` and `status: 'active'`: those are
+// populated on a row only the config registers, and pinning them is what kills
+// the "TOOLCALLDISJUNCT" mutant.
+const configOnlyRow = (id, limit) => ({ id, providerID: 'x', name: id, family: '', release_date: '', cost: { input: 0, output: 0, cache: { read: 0, write: 0 } }, capabilities: { temperature: false, reasoning: false, attachment: false, toolcall: true }, limit, variants: {}, status: 'active', options: {}, headers: {} });
+const engineRow = (over) => ({ name: 'Claude Haiku 4.5', family: 'claude-haiku', release_date: '2025-10-15', cost: { input: 1, output: 5, cache: { read: 0.1, write: 1.25 } }, capabilities: { temperature: true, reasoning: true, attachment: true, toolcall: true }, status: 'active', options: {}, headers: {}, variants: {}, ...over });
+/** A fake SDK client whose /config/providers answers change per call. */
+const clientOf = (answers) => {
+  let i = 0;
+  return { config: { providers: jest.fn(async () => ({ data: { providers: answers[Math.min(i++, answers.length - 1)] } })) } };
+};
+const NO_CATALOG = { readCache: () => null };
+
 describe('VARIANT_LEVELS', () => {
   it('is the seven levels the curated routes declare between them (M0)', () => {
     expect(VARIANT_LEVELS).toEqual(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
@@ -45,10 +62,13 @@ describe('checkVariant — undeclared on a known model', () => {
     expect(v.code).toBe('VARIANT_UNDECLARED');
     expect(v.reason).toBe("VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not declare a 'medium' variant — the engine's catalogue lists low, high, max for it (/config/providers); an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Pick one of the listed levels, or omit --thinking to run at the provider's own default effort");
   });
-  it('refuses on a known model that declares no variants at all (M0: gpt-4o)', () => {
+  it('refuses on a known model that declares no variants at all, with its OWN reason (M0: gpt-4o)', () => {
+    // Named mutant "EMPTYSETSILENT": drop the `names.length === 0` split and let the listed-set
+    // wording ("the engine's catalogue lists no variants at all for it") serve both branches.
     const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: GPT4O, outputBudget: null });
     expect(v.ok).toBe(false);
-    expect(v.reason).toContain("the engine's catalogue lists no variants at all for it");
+    expect(v.code).toBe('VARIANT_UNDECLARED');
+    expect(v.reason).toBe("VARIANT_UNDECLARED: openai/gpt-4o declares no variants at all — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model often does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run");
   });
   it('does not read an inherited property as a declaration', () => {
     // Named mutant "PROTOLOOKUP": `variants[variant] !== undefined` instead of hasOwnProperty — 'constructor' is then "declared".
@@ -135,9 +155,12 @@ describe('checkVariant — the model the catalogue does not know', () => {
     expect(checkVariant({ variant: 'medium', model: 'openrouter/qwen/qwen3.8-max-0902', declaration: UNKNOWN, outputBudget: null }))
       .toEqual({ ok: true, verified: false });
   });
-  it('formats the unverified note with the wait and the rows', () => {
+  it('formats the unverified note with the wait and what the row actually carried', () => {
+    // council #235 r3 (C1/B1): the old parenthetical said "limit.context 0", which is FALSE for
+    // the population that reaches this note under a budget — amicus's descriptor puts a positive
+    // context there (M3). The note names the row's provenance instead (M23).
     expect(formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'medium', waitedMs: 5003 })).toBe(
-      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (limit.context 0, no variants declared), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)");
+      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)");
   });
 });
 
@@ -152,16 +175,9 @@ describe('VariantRefusedError', () => {
 });
 
 describe('readModelDeclaration', () => {
-  const ECHO_COLD = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }];
-  const BARE_NOVARIANTS = [{ id: 'openai', models: { 'gpt-4o': { limit: { context: 128000, output: 16384 }, variants: {} } } }];
-  /** A fake SDK client whose /config/providers answers change per call. */
-  const clientOf = (answers) => {
-    let i = 0;
-    return { config: { providers: jest.fn(async () => ({ data: { providers: answers[Math.min(i++, answers.length - 1)] } })) } };
-  };
+  const ECHO_COLD = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': configOnlyRow('qwen/qwen3.8-max-0902', { context: 1000000, output: 24000 }) } }];
   const KNOWN = [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 1048576, output: 943718 }, variants: KIMI.variants } } }];
   const COLD = [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 0, output: 0 }, variants: {} } } }];
-  const NO_CATALOG = { readCache: () => null };
 
   it('reads a known model once (no wait)', async () => {
     const client = clientOf([KNOWN]);
@@ -223,45 +239,14 @@ describe('readModelDeclaration', () => {
     expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, catalogCeiling: null })).ceiling).toBe(64000);
     expect((await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, readCache: () => { throw new Error('corrupt'); } })).ceiling).toBe(64000);
   });
-  it('keeps waiting when the first read is an ECHOED descriptor with no variants — a cold model amicus registered (EP-1)', async () => {
-    // Named mutant "ECHOKNOWN": drop `couldBeEcho(d)` from the loop condition — providers() is called once and `variants` is {}.
+  it('keeps polling while the row is nothing but the descriptor amicus wrote (M23)', async () => {
+    // Named mutant "CONFIGONLYKNOWN": read `known` off the echoed `limit` again — providers() is called once and `variants` is {}.
     const WARM = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 131072 }, variants: { low: { reasoning: { effort: 'low' } } } } } }];
     const client = clientOf([ECHO_COLD, ECHO_COLD, WARM]);
-    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 131072, outputBudget: 24000 });
+    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 131072 });
     expect(client.config.providers).toHaveBeenCalledTimes(3);
     expect(d.known).toBe(true);
     expect(Object.keys(d.variants)).toEqual(['low']);
-  });
-  it('does not wait on a variant-less model amicus has no catalog row for, even with a budget in force — the read cannot be an echo (M0: gpt-4o, bare)', async () => {
-    // Named mutant "NOCATALOGECHO": drop `catalogCeiling !== null` from couldBeEcho — providers() is polled to the deadline.
-    // The budget is what makes that clause load-bearing: with none, `budgetInForce` short-circuits first and nothing tests it (council #235 r1 repair).
-    const client = clientOf([BARE_NOVARIANTS]);
-    const d = await readModelDeclaration(client, 'openai/gpt-4o', { waitMs: 1000, pollMs: 1, sleep: async () => {}, outputBudget: 24000, ...NO_CATALOG });
-    expect(client.config.providers).toHaveBeenCalledTimes(1);
-    expect(d.known).toBe(true);
-    expect(d.ambiguous).toBe(false);
-  });
-  it('does not wait on a variant-less model with NO budget in force — no descriptor, no echo (council #235 r1 D2/A4)', async () => {
-    // Named mutant "ECHOWITHOUTBUDGET": drop `budgetInForce` from couldBeEcho — providers() is polled to the deadline.
-    const client = clientOf([BARE_NOVARIANTS]);
-    const d = await readModelDeclaration(client, 'openai/gpt-4o', { catalogCeiling: 16384, outputBudget: null, waitMs: 1000, pollMs: 1, sleep: async () => {} });
-    expect(client.config.providers).toHaveBeenCalledTimes(1);
-    expect(d.known).toBe(true);
-    expect(d.ambiguous).toBe(false);
-    expect(checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: d, outputBudget: null }).code).toBe('VARIANT_UNDECLARED');
-  });
-  it('a read still ambiguous when the wait ends is reported UNKNOWN and sent unverified (council #235 r1 B1)', async () => {
-    // Named mutant "AMBIGUOUSKNOWN": report the ambiguous read as known — `known` stays true and checkVariant refuses VARIANT_UNDECLARED.
-    let now = 0;
-    const client = clientOf([ECHO_COLD]);
-    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { catalogCeiling: 131072, outputBudget: 24000, waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now });
-    expect(d.known).toBe(false);
-    expect(d.ambiguous).toBe(true);
-    expect(d.waitedMs).toBeGreaterThanOrEqual(50);
-    expect(checkVariant({ variant: 'low', model: 'openrouter/qwen/qwen3.8-max-0902', declaration: d, outputBudget: 24000 })).toEqual({ ok: true, verified: false });
-    const note = formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'low', waitedMs: d.waitedMs, ambiguous: true });
-    expect(note.startsWith("the engine's catalogue reported no variants for openrouter/qwen/qwen3.8-max-0902 within ")).toBe(true);
-    expect(note).toContain('those two states read alike');
   });
   it('a non-2xx /config/providers is UNREADABLE — one read, no wait, and the note says so (EP-3)', async () => {
     // Named mutant "UNREADABLEISCOLD": treat the error tuple as an empty provider list — providers() is polled to the deadline and `unreadable` is null.
@@ -350,5 +335,148 @@ describe('readModelDeclaration', () => {
     } finally {
       jest.dontMock('../../src/utils/model-catalog');
     }
+  });
+});
+
+describe('readModelDeclaration — whose row is it (council #235 r3, C1/B1)', () => {
+  // SEAM DISCIPLINE (named mutant "SEAMLESSFACTS"): every test below passes an explicit
+  // `catalogCeiling` or the `NO_CATALOG` readCache seam. `catalogCeilingFor` still runs when
+  // neither is given and would read this machine's real ~/.config/amicus/model-catalog.json —
+  // green here, red on a runner that has a different one.
+  const AT = (models) => [{ id: 'anthropic', models }];
+  const OPENAI = (row) => [{ id: 'openai', models: { 'gpt-4o': row } }];
+
+  it('an engine row is known on the FIRST read and the wait never runs', async () => {
+    const client = clientOf([AT({ 'claude-haiku-4-5': engineRow({ limit: { context: 200000, output: 24000 }, variants: HAIKU.variants }) })]);
+    const d = await readModelDeclaration(client, 'anthropic/claude-haiku-4-5', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 64000 });
+    expect(d.known).toBe(true);
+    expect(client.config.providers).toHaveBeenCalledTimes(1);
+    expect('ambiguous' in d).toBe(false);
+  });
+
+  it('a row that is nothing but the descriptor amicus wrote is UNKNOWN and waits, budget in force (M23 vs EP-1)', async () => {
+    // Named mutants "LIMITISKNOWN" (`known: positiveCount(limit.context) !== null` again in
+    // readDeclarationOnce) and "ECHOSOURCED" (add `limit` as a ninth engineSourced disjunct):
+    // either reads this row as the engine's own declaration, so the wait never runs and the
+    // level is REFUSED instead of sent unverified — the blocker, inverted.
+    let now = 0;
+    const client = clientOf([[{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': configOnlyRow('qwen/qwen3.8-max-0902', { context: 1000000, output: 24000 }) } }]]);
+    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', {
+      catalogCeiling: 131072, waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now,
+    });
+    expect(d.known).toBe(false);
+    expect(d.waitedMs).toBeGreaterThanOrEqual(50);
+    expect(client.config.providers.mock.calls.length).toBeGreaterThan(1);
+    expect('ambiguous' in d).toBe(false);
+    expect(checkVariant({ variant: 'low', model: 'openrouter/qwen/qwen3.8-max-0902', declaration: d, outputBudget: 24000 })).toEqual({ ok: true, verified: false });
+    expect(formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'low', waitedMs: d.waitedMs }))
+      .toContain('did not know openrouter/qwen/qwen3.8-max-0902 within');
+  });
+
+  it.each([
+    ['release_date', { release_date: '2024-05-13' }],
+    ['family', { family: 'gpt' }],
+    ['a display name that is not the id', { name: 'GPT-4o' }],
+    ['cost.input', { cost: { input: 2.5, output: 0, cache: { read: 0, write: 0 } } }],
+    ['capabilities.reasoning', { capabilities: { temperature: false, reasoning: true, attachment: false, toolcall: true } }],
+  ])('one engine cell is enough, with variants {}: %s', async (_label, cell) => {
+    // Named mutant "ONEDISJUNCT": shrink the OR to any single cell — every other row here reads unknown.
+    const row = { ...configOnlyRow('gpt-4o', { context: 128000, output: 16384 }), ...cell };
+    const d = await readModelDeclaration(clientOf([OPENAI(row)]), 'openai/gpt-4o', { waitMs: 0, catalogCeiling: 16384 });
+    expect(d.known).toBe(true);
+    expect(d.variants).toEqual({});
+  });
+
+  it('a config-only row is NOT engine-sourced by its universal cells', async () => {
+    // Named mutant "TOOLCALLDISJUNCT": add `caps.toolcall === true` (or `status`, `id`, `providerID`,
+    // `api`, `options`, `headers`, `capabilities.input.text`) as a disjunct — this row reads known,
+    // and every model the engine has not learned yet is then falsely REFUSED.
+    const row = {
+      ...configOnlyRow('gpt-4o', { context: 128000, output: 16384 }),
+      api: { npm: '@ai-sdk/openai' },
+      capabilities: { temperature: false, reasoning: false, attachment: false, toolcall: true, input: { text: true }, output: { text: true } },
+    };
+    const d = await readModelDeclaration(clientOf([OPENAI(row)]), 'openai/gpt-4o', { waitMs: 0, catalogCeiling: 16384 });
+    expect(d.known).toBe(false);
+  });
+
+  it('a fractional price is engine evidence', async () => {
+    // Named mutant "COSTVIAPOSITIVECOUNT": read cost through positiveCount, which FLOORS 0.05 to 0.
+    const row = { ...configOnlyRow('m', { context: 1000, output: 1000 }), cost: { input: 0.05, output: 0, cache: { read: 0, write: 0 } } };
+    const d = await readModelDeclaration(clientOf([AT({ m: row })]), 'anthropic/m', { waitMs: 0, catalogCeiling: 1000 });
+    expect(d.known).toBe(true);
+  });
+
+  it('the config-only shape stays unknown with NO budget too (a bare {} descriptor reads 0/0)', async () => {
+    let now = 0;
+    const client = clientOf([[{ id: 'openrouter', models: { 'moonshotai/kimi-k3': configOnlyRow('moonshotai/kimi-k3', { context: 0, output: 0 }) } }]]);
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', {
+      waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now, ...NO_CATALOG,
+    });
+    expect(d.known).toBe(false);
+    expect(client.config.providers.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('the empty-set refusal states what was OBSERVED, not what the predicate intends', async () => {
+    // Named mutant "MESSAGEOVERCLAIMS": restore Design 1's wording, which asserts the row "carries
+    // its catalogue's own name, family, release date and prices" — `engineSourced` is an OR, and
+    // this row (name === id, cost 0) is engine-sourced through `release_date` alone.
+    const row = { ...configOnlyRow('gpt-4o', { context: 128000, output: 16384 }), release_date: '2024-05-13' };
+    const d = await readModelDeclaration(clientOf([OPENAI(row)]), 'openai/gpt-4o', { waitMs: 0, catalogCeiling: 16384 });
+    const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: d, outputBudget: null });
+    expect(v.code).toBe('VARIANT_UNDECLARED');
+    expect(v.reason).toContain('declares no variants at all');
+    expect(v.reason).toContain("carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities)");
+    expect(v.reason).toContain('Setting an outputBudget does not change this verdict');
+    expect(v.reason).not.toMatch(/name, family, release date and prices/);
+  });
+
+  describe('the budget invariant (council #235 r3, C1)', () => {
+    // Named mutants "BUDGETLOOSENS" (any change that makes a verdict weaker when a budget is added)
+    // and "BUDGETGATE" (reintroduce a `budgetInForce` / `couldBeEcho` gate into the wait): the
+    // table below moves. Scored verified-send 0 < unverified-send 1 < refuse 2.
+    const HAIKU_ROW = engineRow({ limit: { context: 200000, output: 24000 }, variants: { high: { thinking: { type: 'enabled', budgetTokens: 16000 } } } });
+    const GPT4O_ROW = engineRow({ name: 'GPT-4o', family: 'gpt', release_date: '2024-05-13', cost: { input: 2.5, output: 10, cache: { read: 0, write: 0 } }, limit: { context: 128000, output: 16384 }, variants: {} });
+    const UNREADABLE = { unreadableShape: true };
+    const SHAPES = [
+      ['an unreadable dump', UNREADABLE, 64000],
+      ['a config-only row with no descriptor (0/0)', configOnlyRow('m', { context: 0, output: 0 }), null],
+      ["a config-only row carrying amicus's descriptor", configOnlyRow('m', { context: 200000, output: 24000 }), 64000],
+      ['an engine row declaring the level', HAIKU_ROW, 64000],
+      ['an engine row declaring no variants', GPT4O_ROW, 16384],
+      ['an engine row amicus has no catalog row for', GPT4O_ROW, null],
+    ];
+    const score = async (row, catalogCeiling, outputBudget) => {
+      let now = 0;
+      const client = row === UNREADABLE
+        ? { config: { providers: jest.fn(async () => ({ error: { name: 'Internal' }, response: { status: 500 } })) } }
+        : clientOf([AT({ m: row })]);
+      const d = await readModelDeclaration(client, 'anthropic/m', {
+        catalogCeiling, waitMs: 30, pollMs: 10, sleep: async () => { now += 10; }, now: () => now,
+      });
+      const v = checkVariant({ variant: 'high', model: 'anthropic/m', declaration: d, outputBudget });
+      return v.ok ? (v.verified ? 0 : 1) : 2;
+    };
+
+    it('a budget never LOOSENS the verdict, and changes it only on the enabled+budgetTokens shape', async () => {
+      const table = [];
+      for (const [label, row, ceiling] of SHAPES) {
+        const unbudgeted = await score(row, ceiling, null);
+        const budgeted = await score(row, ceiling, 24000);
+        table.push([label, unbudgeted, budgeted]);
+        expect(budgeted).toBeGreaterThanOrEqual(unbudgeted);
+      }
+      // EQUAL on the five shapes whose entry carries no `thinking: {type: 'enabled'}`; the haiku
+      // row is the one axis where a budget legitimately refuses (VARIANT_OVER_BUDGET) — monotone
+      // stricter, and correct.
+      expect(table).toEqual([
+        ['an unreadable dump', 1, 1],
+        ['a config-only row with no descriptor (0/0)', 1, 1],
+        ["a config-only row carrying amicus's descriptor", 1, 1],
+        ['an engine row declaring the level', 0, 2],
+        ['an engine row declaring no variants', 2, 2],
+        ['an engine row amicus has no catalog row for', 2, 2],
+      ]);
+    });
   });
 });

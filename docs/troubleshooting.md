@@ -282,7 +282,11 @@ F3/M7), so it is refused. The declared set is read from the engine's catalogue a
 cold `~/.cache/opencode` (first engine start after an install or a cleared cache) the bundled
 catalogue can declare a different set than the live one for the same model (PR 4 record:
 `openrouter/anthropic/claude-haiku-4.5` `high`/`max` cold, `low`/`medium`/`high` warm), so a level
-refused on one run can be accepted on the next; the reason always lists the set in force. A declared
+refused on one run can be accepted on the next; the reason always lists the set in force. The dump
+says whose row it is: Amicus writes exactly one cell into a model's entry (`limit`, at
+`src/utils/config.js:406`), so a row that also carries the catalogue's release date, family, pricing
+or capabilities is the engine's own declaration, and an empty `variants` there is a real answer
+(record M23). A declared
 level whose entry carries a thinking budget the engine adds on top of the reservation (direct
 Anthropic Haiku 4.5 — M2; Opus 4.5 declares the same shape, M0) is refused when `outputBudget`
 is below the model's ceiling, because the leg would reserve more than the budget promises. The
@@ -306,9 +310,9 @@ model the engine's catalogue does not know yet (a custom or local model, or one 
 engine's bundled list before its startup refresh lands) is never refused: the level is sent after a
 bounded wait, the run logs `Variant sent unverified`, and the same note is printed as a `Notice:`
 line on stderr — the structured log alone is dropped at the shipped default log level, so stderr
-is where you will actually see it. The same applies, with a budget set, to a model whose dump
-reports no variants — the echoed descriptor hides whether the engine knows it (M3); the leg
-document carries `variantUnverified: true`.
+is where you will actually see it. A budget changes none of this: the same command is refused, or
+sent unverified, identically with and without one. A model the engine's catalogue does not know yet
+still waits and is still sent unverified, with `variantUnverified: true` on the leg document.
 
 ---
 

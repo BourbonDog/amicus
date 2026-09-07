@@ -77,6 +77,11 @@ the engine's 32,000. Those legs reserve `min(budget, the ceiling the engine's ow
 (K12: 8,000 on a bare kimi row), or the budget as-is where the engine knows the model no better
 (K13).
 
+Setting `outputBudget` can only make the `--thinking` guard stricter or leave it unchanged, never
+looser: the guard reads the engine's own row for the model, not the descriptor a budget makes Amicus
+write, so the same command is refused — or sent unverified — identically with and without a budget
+(council #235 r3).
+
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling wherever one is known. Unset means no limit is sent and no engine flag is set — OpenCode's 32,000 default applies, exactly as before. |
