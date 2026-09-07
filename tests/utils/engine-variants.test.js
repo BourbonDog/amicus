@@ -68,7 +68,7 @@ describe('checkVariant — undeclared on a known model', () => {
     const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: GPT4O, outputBudget: null });
     expect(v.ok).toBe(false);
     expect(v.code).toBe('VARIANT_UNDECLARED');
-    expect(v.reason).toBe("VARIANT_UNDECLARED: openai/gpt-4o declares no variants at all, so 'high' is not among them — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run");
+    expect(v.reason).toBe("VARIANT_UNDECLARED: openai/gpt-4o declares no variants at all, so 'high' is not among them — the row the engine returned for it (/config/providers, the engine's merged view of its own catalogue and your opencode config) carries catalogue-style metadata (a display name, family, release date, pricing or capabilities), so it reads as a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run");
   });
   it('does not read an inherited property as a declaration', () => {
     // Named mutant "PROTOLOOKUP": `variants[variant] !== undefined` instead of hasOwnProperty — 'constructor' is then "declared".
@@ -128,6 +128,43 @@ describe('checkVariant — whose ceiling the OVER_BUDGET remedy names (council #
     const v = checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: { ...HAIKU, ceilingFrom: 'engine' }, outputBudget: 24000 });
     expect(v.reason).toContain('Raise outputBudget to at least 64000 (the sum is then clamped to the ceiling, K4)');
     expect(v.reason).not.toContain('models --refresh');
+  });
+});
+
+describe('checkVariant — an additive shape with no ceiling anyone declared (council #235 r4, C7)', () => {
+  // Reachable: a model the user declares in their OWN opencode.json with a `variants` block
+  // carrying the direct-Anthropic `enabled + budgetTokens` shape and no `limit`, which amicus's
+  // catalog has no row for either. `budget + N` with N >= 1 always exceeds the budget, so an
+  // unknown ceiling is "no clamp anyone declared", not "no risk" — PR 4's rule R4 says such a row
+  // must refuse loudly rather than overshoot silently. Named mutant "NULLCEILINGSENDS"
+  // (src/utils/engine-variants.js): restore the `ceiling !== null` conjunct in the fit — every
+  // test below sends {ok: true, verified: true} again.
+  const NOCEILING = { known: true, variants: { high: { thinking: { type: 'enabled', budgetTokens: 16000 } } }, ceiling: null, ceilingFrom: 'engine', waitedMs: 0 };
+
+  it('refuses with the unclamped sum, and names the missing ceiling instead of a bigger budget', () => {
+    const v = checkVariant({ variant: 'high', model: 'anthropic/my-haiku', declaration: NOCEILING, outputBudget: 24000 });
+    expect(v.ok).toBe(false);
+    expect(v.code).toBe('VARIANT_OVER_BUDGET');
+    expect(v.reason).toContain('would reserve 40000 (24000 + 16000, with no ceiling declared anywhere to clamp it) — 16000 over the budget');
+    expect(v.reason).toContain('Declare a `limit` for this model in your opencode config');
+    expect(v.reason).toContain('or clear outputBudget');
+    // the one thing this remedy must never say: raise the budget to a ceiling that does not exist
+    expect(v.reason).not.toMatch(/Raise outputBudget to at least/);
+    expect(v.reason).not.toMatch(/null|undefined|NaN/);
+  });
+
+  it('leaves the shapes a null ceiling never endangered alone: no budget, and an entry with no thinking budget', () => {
+    expect(checkVariant({ variant: 'high', model: 'anthropic/my-haiku', declaration: NOCEILING, outputBudget: null }).ok).toBe(true);
+    const effortOnly = { ...NOCEILING, variants: { high: { reasoning: { effort: 'high' } } } };
+    expect(checkVariant({ variant: 'high', model: 'openrouter/moonshotai/kimi-k3', declaration: effortOnly, outputBudget: 24000 }))
+      .toEqual({ ok: true, verified: true, entry: effortOnly.variants.high });
+  });
+
+  it('end to end: an engine row that declares the level and carries no limit at all is refused, not sent verified', async () => {
+    const ROW = [{ id: 'anthropic', models: { 'my-haiku': { name: 'My Haiku', variants: { high: { thinking: { type: 'enabled', budgetTokens: 16000 } } } } } }];
+    const d = await readModelDeclaration(clientOf([ROW]), 'anthropic/my-haiku', { waitMs: 0, ...NO_CATALOG });
+    expect(d).toMatchObject({ known: true, limitOutput: null, ceiling: null, ceilingFrom: 'engine' });
+    expect(checkVariant({ variant: 'high', model: 'anthropic/my-haiku', declaration: d, outputBudget: 24000 }).code).toBe('VARIANT_OVER_BUDGET');
   });
 });
 
@@ -202,7 +239,10 @@ describe('readModelDeclaration', () => {
     expect(d.known).toBe(false);
     expect(d.variants).toEqual({});
     expect(d.ceiling).toBeNull();
-    expect(d.waitedMs).toBeGreaterThanOrEqual(50);
+    // council #235 r4 (A2/C4): the wait ends INSIDE its bound now — the last read starts at 40 ms,
+    // the only point with a full poll interval left, and none is started at 50.
+    expect(d.waitedMs).toBe(40);
+    expect(d.waitedMs).toBeLessThanOrEqual(50);
   });
   it('a model or provider missing from the dump is unknown, not a throw', async () => {
     const client = clientOf([[{ id: 'anthropic', models: {} }]]);
@@ -338,6 +378,62 @@ describe('readModelDeclaration', () => {
   });
 });
 
+describe('readModelDeclaration — the wait keeps the bound it advertises (council #235 r4, A2/C4)', () => {
+  // The bound is the WHOLE wait, not the number of reads. `DECLARATION_WAIT_MS` used to be checked
+  // BEFORE the sleep+read pair that follows it, and the in-loop read always got the FULL
+  // `readTimeoutMs`, so the true worst case was `waitMs + pollMs + readTimeoutMs` — 7.5 s on the
+  // shipped 5000/500/2000, MEASURED at 7,361 ms against an endpoint answering in 1.9 s, against
+  // docs that say "bounded at five seconds" (and a leg died at 6,007 ms with nothing sent under an
+  // `AMICUS_NO_OUTPUT_BACKSTOP_MS=6000` docs/configuration.md presents as safely above the wait).
+  const COLD = [{ id: 'openrouter', models: { 'moonshotai/kimi-k3': { limit: { context: 0, output: 0 }, variants: {} } } }];
+
+  it('starts no read without a poll interval left, so an instant endpoint ends INSIDE waitMs', async () => {
+    // Named mutant "UNCLAMPEDPOLL" (src/utils/engine-variants.js): restore the plain
+    // `now() - start < waitMs` condition with an unclamped in-loop read — the loop then sleeps at
+    // now=40 and reads a SIXTH time, and the wait lands ON the deadline instead of inside it.
+    let now = 0;
+    const client = clientOf([COLD]);
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', {
+      waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now, ...NO_CATALOG,
+    });
+    expect(d.known).toBe(false);
+    expect(client.config.providers).toHaveBeenCalledTimes(5); // reads at 0, 10, 20, 30, 40 — never at 40 + 10
+    expect(d.waitedMs).toBe(40);
+  });
+
+  it('gives a slow-but-answering endpoint only the budget that is LEFT, so the whole wait fits inside waitMs', async () => {
+    // The A2/C4 case end to end, on real timers and scaled down (800 ms reads, a 1000 ms wait,
+    // 100 ms polls — the shape of 1.9 s reads on the shipped 5000/500/2000). New: read (800) ->
+    // 200 ms left > one poll -> sleep (900) -> 100 ms left -> the read gets 100 ms, not 2000, and
+    // the wait ends at ~1000. Mutant "UNCLAMPEDPOLL": read (800) -> 800 < 1000 -> sleep (900) ->
+    // a FULL second read (1700) — the overrun this fix removes.
+    const LATENCY = 800;
+    const providers = jest.fn((o) => new Promise((resolve, reject) => {
+      const t = setTimeout(() => resolve({ data: { providers: COLD } }), LATENCY);
+      if (o && o.signal) { o.signal.addEventListener('abort', () => { clearTimeout(t); reject(o.signal.reason); }); }
+    }));
+    const started = Date.now();
+    const d = await readModelDeclaration({ config: { providers } }, 'openrouter/moonshotai/kimi-k3', { waitMs: 1000, pollMs: 100, ...NO_CATALOG });
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(1250);
+    expect(d.waitedMs).toBeLessThan(1250);
+    expect(d.known).toBe(false);
+    // the last read was cut off by the wait's own remaining budget, not by its 2 s default
+    expect(d.unreadable).toMatch(/aborted/);
+  }, 10000);
+
+  it('the never-answering endpoint still ends on the FIRST read, unreadable (council #235 r2 A1, unchanged)', async () => {
+    const providers = jest.fn((o) => new Promise((_resolve, reject) => {
+      if (o && o.signal) { o.signal.addEventListener('abort', () => reject(o.signal.reason)); }
+    }));
+    const d = await readModelDeclaration({ config: { providers } }, 'openrouter/moonshotai/kimi-k3', {
+      waitMs: 5000, pollMs: 250, sleep: async () => {}, readTimeoutMs: 25, ...NO_CATALOG,
+    });
+    expect(providers).toHaveBeenCalledTimes(1);
+    expect(d.unreadable).toBe('read threw: The operation was aborted due to timeout');
+  }, 4000);
+});
+
 describe('readModelDeclaration — whose row is it (council #235 r3, C1/B1)', () => {
   // SEAM DISCIPLINE (named mutant "SEAMLESSFACTS"): every test below passes an explicit
   // `catalogCeiling` or the `NO_CATALOG` readCache seam. `catalogCeilingFor` still runs when
@@ -365,7 +461,8 @@ describe('readModelDeclaration — whose row is it (council #235 r3, C1/B1)', ()
       catalogCeiling: 131072, waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now,
     });
     expect(d.known).toBe(false);
-    expect(d.waitedMs).toBeGreaterThanOrEqual(50);
+    expect(d.waitedMs).toBeGreaterThan(0); // it WAITED; council #235 r4 (A2/C4) ends that wait inside the 50 ms bound, not on it
+    expect(d.waitedMs).toBeLessThanOrEqual(50);
     expect(client.config.providers.mock.calls.length).toBeGreaterThan(1);
     expect('ambiguous' in d).toBe(false);
     expect(checkVariant({ variant: 'low', model: 'openrouter/qwen/qwen3.8-max-0902', declaration: d, outputBudget: 24000 })).toEqual({ ok: true, verified: false });
@@ -426,7 +523,16 @@ describe('readModelDeclaration — whose row is it (council #235 r3, C1/B1)', ()
     const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: d, outputBudget: null });
     expect(v.code).toBe('VARIANT_UNDECLARED');
     expect(v.reason).toContain('declares no variants at all');
-    expect(v.reason).toContain("carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities)");
+    // council #235 r4 (C3), the message only: `/config/providers` serves the MERGED
+    // config-and-catalogue view, so a user who declares name/release_date/cost/reasoning in their
+    // own opencode.json satisfies `engineSourced` without the engine's catalogue knowing the model
+    // (a config `reasoning: true` even makes the engine synthesize a full `variants` map). The
+    // VERDICT stays — a merged view that declares no variants makes the send a no-op either way —
+    // but the sentence stops asserting a provenance the dump cannot prove. Named mutant
+    // "CATALOGUEPROVENANCE": restore "carries cells only the engine's own catalogue fills".
+    expect(v.reason).toContain('carries catalogue-style metadata (a display name, family, release date, pricing or capabilities)');
+    expect(v.reason).toContain("the engine's merged view of its own catalogue and your opencode config");
+    expect(v.reason).not.toMatch(/only the engine's own catalogue fills/);
     expect(v.reason).toContain('Setting an outputBudget does not change this verdict');
     expect(v.reason).not.toMatch(/name, family, release date and prices/);
     // council #235 r3 wave 4 repair. Three further ways this one string can overclaim or

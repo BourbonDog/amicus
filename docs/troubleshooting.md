@@ -286,7 +286,11 @@ refused on one run can be accepted on the next; the reason lists the set in forc
 declares none at all. The dump says whose row it is: Amicus writes exactly one cell into a model's
 entry (`limit`, at `src/utils/config.js:406`), so a row that also carries the catalogue's release
 date, family, display name, pricing or capabilities is the engine's own declaration, and an empty
-`variants` there is a real answer (record M23). A declared
+`variants` there is a real answer (record M23). That dump is the engine's MERGED view of its own
+catalogue and your `opencode.json`, so declaring model metadata there (a display name, family,
+release date, pricing or capabilities) makes Amicus read the row as declared: a model you add that
+way with no `variants` block is refused rather than waited for — add the block, or omit
+`--thinking`. A declared
 level whose entry carries a thinking budget the engine adds on top of the reservation (direct
 Anthropic Haiku 4.5 — M2; Opus 4.5 declares the same shape, M0) is refused when `outputBudget`
 is below the model's ceiling, because the leg would reserve more than the budget promises. The

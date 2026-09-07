@@ -66,7 +66,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
     // ceiling. Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
     // Named mutant "NOCACHEOPENAI" (tests/doctor-output-budget.test.js): drop the openai clause.
     return {
-      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is; a direct openai route carries no output reservation at all — probe M5/M13/M22)`,
+      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is; an openai/ id carries no output reservation on a leg that resolves DIRECT — the Responses API request has no output-limit field, probe M5/M13/M22 — while the openrouter/openai/… form of the same model does, M1/M9; which gateway a leg takes is a launch-time decision this row cannot read)`,
       status: aboveDefault ? 'warn' : 'ok',
       hint: aboveDefault ? 'amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one' : null,
     };
@@ -80,6 +80,12 @@ function analyseRoutes(d, cache, value, lowerHint) {
   // — with a bare descriptor, with limit.output 8000 and the flag at 8000, for
   // gpt-5.6-terra and gpt-4o alike. Neither lever reaches that route, so it is
   // reported apart, never as clamped. Named mutant "OPENAIGOVERNED".
+  // council #235 r4 (C6): the id prefix partitions the LIST — it does not predict the ROUTE. This
+  // row cannot see a future invocation's `--gateway`, `routing.prefer` or which keys are present,
+  // and the `openrouter/openai/…` form of the same model DOES carry the reservation (M1/M9), so the
+  // clause states the outcome of a leg that resolves DIRECT and says the choice is made at launch.
+  // Named mutant "OPENAIOUTCOMEASSERTED": restore the unconditional "carries no output reservation
+  // at all … so the value does not apply there" in both clauses below.
   const ungoverned = routes.filter((id) => id.startsWith('openai/'));
   const governed = routes.filter((id) => !id.startsWith('openai/'));
   const unclamped = [];
@@ -112,7 +118,7 @@ function analyseRoutes(d, cache, value, lowerHint) {
   if (ungoverned.length > 0) {
     const plural = ungoverned.length === 1 ? '' : 's';
     const carry = ungoverned.length === 1 ? 'carries' : 'carry';
-    clauses += `; ${ungoverned.length} direct openai route${plural} (${shortList(ungoverned)}) ${carry} no output reservation at all — the engine drives that provider through the Responses API, whose request has no output-limit field (probe M5/M13/M22), so the value does not apply there`;
+    clauses += `; ${ungoverned.length} openai/ alias route${plural} (${shortList(ungoverned)}) ${carry} no output reservation on a leg that resolves DIRECT to that provider — the engine drives it through the Responses API, whose request has no output-limit field (probe M5/M13/M22); which gateway a leg takes is a launch-time decision this row cannot read (--gateway, routing.prefer, key presence), and the openrouter/openai/… form of the same model DOES carry the reservation (M1/M9)`;
   }
   return { clauses, status, hint };
 }

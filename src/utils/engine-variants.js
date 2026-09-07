@@ -190,12 +190,14 @@ async function readModelDeclaration(client, model, opts = {}) {
   // identified and polled, and an engine row declaring no variants settles on the first read and
   // is refused; both in EITHER budget state. The deleted `budgetInForce`/`couldBeEcho`/`ambiguous`
   // machinery managed an ambiguity the response never had. Named mutant "COLDECHOKNOWN": stop
-  // polling once the dump reports any `limit.output` — the echo ends the wait on the first read again.
+  // polling once the dump reports any `limit.output` — the echo ends the wait on the first read again. Council #235 r4 (A2/C4): the bound is the WHOLE wait, not the number of reads. The condition is checked BEFORE the sleep+read that follows it, so an unclamped pair used to carry the wait to `waitMs + pollMs + readTimeoutMs` (7.5 s on the shipped 5000/500/2000; measured 7,361 ms against an endpoint answering in 1.9 s, which killed a leg under an `AMICUS_NO_OUTPUT_BACKSTOP_MS=6000` the docs present as safely above the wait). No read now starts without a poll interval left, and each in-loop read gets only the remaining budget. Named mutant "UNCLAMPEDPOLL": restore the plain `now() - start < waitMs` condition with an unclamped in-loop read.
   const start = now();
   let d = await readDeclarationOnce(client, providerID, modelID, { signal, readTimeoutMs: opts.readTimeoutMs });
-  while (!d.unreadable && !d.known && !(signal && signal.aborted) && now() - start < waitMs) {
+  while (!d.unreadable && !d.known && !(signal && signal.aborted) && waitMs - (now() - start) > pollMs) {
     await sleep(pollMs);
-    d = await readDeclarationOnce(client, providerID, modelID, { signal, readTimeoutMs: opts.readTimeoutMs });
+    const left = waitMs - (now() - start);
+    if (left < 1) { break; } // < 1, not <= 0: positiveCount FLOORS a sub-millisecond remainder to null, which would hand the read the full 2 s default back
+    d = await readDeclarationOnce(client, providerID, modelID, { signal, readTimeoutMs: Math.min(positiveCount(opts.readTimeoutMs) || DECLARATION_READ_TIMEOUT_MS, left) });
   }
   // #218 PR 4 (found by probe row M20 in Task 2): /config/providers ECHOES the
   // descriptor amicus wrote -- a budget-derived limit.output 24000 reads back as
@@ -245,9 +247,9 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
     // predicate is an OR (10 of 50 openai rows have `name === id`; 26 of 361 openrouter
     // `:free` rows price at zero, and both are engine-sourced through other cells). Named
     // mutants "EMPTYSETSILENT" (fall back to the listed wording) and "MESSAGEOVERCLAIMS"
-    // (assert the row carries its name, family, release date AND prices). Council #235 r3 wave 4 repair, three more ways one string misleads: the enumeration also names the DISPLAY NAME, since `name !== modelID` is a disjunct too ("NAMECELLUNNAMED"); the reason echoes the level the user typed, which docs/troubleshooting.md promises and a fanout needs ("MESSAGEDROPSLEVEL"); and the mirror hint says "sometimes", not "often" — measured during the wave-4 review on a live dump, 2 of 196 variant-less engine rows had a mirror that declares levels, and gpt-4o's own (openrouter/openai/gpt-4o-2024-08-06) does not ("MIRROROFTEN").
+    // (assert the row carries its name, family, release date AND prices). Council #235 r3 wave 4 repair, three more ways one string misleads: the enumeration also names the DISPLAY NAME, since `name !== modelID` is a disjunct too ("NAMECELLUNNAMED"); the reason echoes the level the user typed, which docs/troubleshooting.md promises and a fanout needs ("MESSAGEDROPSLEVEL"); and the mirror hint says "sometimes", not "often" — measured during the wave-4 review on a live dump, 2 of 196 variant-less engine rows had a mirror that declares levels, and gpt-4o's own (openrouter/openai/gpt-4o-2024-08-06) does not ("MIRROROFTEN"). Council #235 r4 (C3), the message only: `/config/providers` serves the MERGED config-and-catalogue view, so metadata a user declares in their own opencode.json (name, release_date, cost, reasoning) satisfies `engineSourced` without the engine's catalogue knowing the model — the verdict is still honest there (a merged view declaring no variants makes the send a no-op either way), so the sentence stops asserting that the engine's own catalogue is the source and says the row reads as a declaration in that merged view. The second `config.get()` read that would subtract config-set cells is FILED, not built (BACKLOG, #218 PR 4). Named mutant "CATALOGUEPROVENANCE": restore "carries cells only the engine's own catalogue fills".
     if (names.length === 0) {
-      return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} declares no variants at all, so '${variant}' is not among them — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run` };
+      return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} declares no variants at all, so '${variant}' is not among them — the row the engine returned for it (/config/providers, the engine's merged view of its own catalogue and your opencode config) carries catalogue-style metadata (a display name, family, release date, pricing or capabilities), so it reads as a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run` };
     }
     // council #235 r2 (B4): the names come from the engine's remote models.dev refresh, so
     // they are defanged before they enter a message that reaches a log and a terminal.
@@ -261,18 +263,18 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
   const budgetTokens = (thinking && thinking.type === 'enabled') ? positiveCount(thinking.budgetTokens) : null;
   const budget = positiveCount(outputBudget);
   const ceiling = declaration.ceiling;
-  if (budgetTokens !== null && budget !== null && ceiling !== null && budget < ceiling) {
+  if (budgetTokens !== null && budget !== null && (ceiling === null || budget < ceiling)) {
     const sum = budget + budgetTokens;
-    const reservation = Math.min(sum, ceiling);
-    const how = sum > ceiling ? `${budget} + ${budgetTokens}, clamped to the model's ${ceiling} ceiling` : `${budget} + ${budgetTokens}`;
+    const reservation = ceiling === null ? sum : Math.min(sum, ceiling);
+    const how = ceiling === null ? `${budget} + ${budgetTokens}, with no ceiling declared anywhere to clamp it` : (sum > ceiling ? `${budget} + ${budgetTokens}, clamped to the model's ${ceiling} ceiling` : `${budget} + ${budgetTokens}`);
     // council #235 r2 (B1): the remedy must not walk the user into the one unrefused window.
     // With a budget in force the dump ECHOES the descriptor amicus wrote (M3), so `ceiling` is
     // amicus's own catalog number; if the engine's real ceiling is higher, a budget raised to
     // exactly this number sits in [C_catalog, C_engine) — the fit falls silent there and the leg
     // still reserves up to C_catalog + N on the wire. Named mutant "REMEDYALWAYSCATALOG".
-    const raise = declaration.ceilingFrom === 'catalog'
-      ? `Raise outputBudget to at least ${ceiling} — the ceiling amicus's own catalog carries for this model, which is what the fit can read once a budget is set (M3); if the engine's real ceiling is higher, a budget in that gap is not re-checked, so prefer \`amicus models --refresh\` first`
-      : `Raise outputBudget to at least ${ceiling} (the sum is then clamped to the ceiling, K4)`;
+    // council #235 r4 (C7): a NULL ceiling is "no clamp anyone declared", not "no risk" — a row that declares the level with the `enabled + budgetTokens` shape and carries no `limit.output` anywhere (a model declared in the user's own opencode.json with a variants block and no limit, which amicus's catalog has no row for either) used to skip the fit entirely and send verified, while `budget + N` with N >= 1 always exceeds the budget. Its remedy must name the ceiling that is MISSING, never tell the user to raise the budget to a number nothing declares. Named mutant "NULLCEILINGSENDS": restore the `ceiling !== null` conjunct above.
+    const clamped = declaration.ceilingFrom === 'catalog' ? `Raise outputBudget to at least ${ceiling} — the ceiling amicus's own catalog carries for this model, which is what the fit can read once a budget is set (M3); if the engine's real ceiling is higher, a budget in that gap is not re-checked, so prefer \`amicus models --refresh\` first` : `Raise outputBudget to at least ${ceiling} (the sum is then clamped to the ceiling, K4)`;
+    const raise = ceiling === null ? `Declare a \`limit\` for this model in your opencode config — an \`output\` ceiling there is what clamps the sum (K3/K10) and what this fit judges against — or clear outputBudget, which leaves the leg the engine's own default reservation with the ${budgetTokens} tokens added to it` : clamped;
     return { ok: false, code: 'VARIANT_OVER_BUDGET', reason: `VARIANT_OVER_BUDGET: the '${variant}' variant on ${model} carries a ${budgetTokens}-token thinking budget that the engine adds ON TOP of the reservation on this route (probe M2: 24000 + 16000 = 40000; K2), so with outputBudget ${budget} this leg would reserve ${reservation} (${how}) — ${reservation - budget} over the budget; nothing was sent. ${raise}, route the model through OpenRouter (a variant leaves the reservation at the budget there — M1: 8000 stayed 8000 under 'low'; M9: 32000 with 'high' on both of the engine's catalogues), or use an adaptive-thinking model such as claude-sonnet-5 (M10b)` };
   }
   return { ok: true, verified: true, entry };

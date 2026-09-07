@@ -7589,7 +7589,13 @@ line the next time the matrix is run end to end.
   serves exactly ONE population — real model ids the engine's catalogue never indexes
   (`deepseek/deepseek-chat`, local-provider models) — and they pay it every run, forever, and can
   never be refused; that is now the whole argument for the `providerMissing` stop (and for a
-  same-process memo of "this id was unknown last time").
+  same-process memo of "this id was unknown last time"). **Council #235 r4 (C3):**
+  `/config/providers` is the MERGED view, so model metadata a user declares in their own opencode
+  config satisfies `engineSourced` without the engine's catalogue knowing the model; a second
+  `config.get()` read could subtract config-set cells (any key but `limit`) and fall back to the
+  unknown/wait branch, at the cost of one extra read per variant send — filed, not built. Measured
+  alongside: a config `reasoning: true` makes the engine synthesize a full `variants` map, so that
+  disjunct is config-reachable too.
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi
