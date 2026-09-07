@@ -19,11 +19,11 @@
  * #218 PR 4 adds M2 (the direct-Anthropic `enabled` + budgetTokens shape adds
  * its budget on top of the reservation — the fact the VARIANT_OVER_BUDGET
  * refusal stands on) and M17 (the fitted descriptor lands exactly on the budget
- * — the fact the filed exact-fit follow-up stands on), and — council #235
- * round 1, finding A3 — M1 (kimi, budget 8,000 + low → 8,000) and M10b
- * (adaptive Sonnet, budget 8,000 + high → 8,000), which pin that a variant does
- * NOT move the reservation on the shapes the fit check lets through — the other
- * half of the rule M2 pins. Nine engine starts.
+ * — the fact the filed exact-fit follow-up stands on), and — council #235 round
+ * 1, finding A3 — M1 (kimi, budget 8,000 + low → 8,000) and M10b (adaptive
+ * Sonnet, budget 8,000 + high → 8,000), which pin that a variant does NOT move
+ * the reservation on the shapes the fit check lets through — the other half of
+ * the rule M2 pins. Nine engine starts.
  * The nine rows pin max_tokens (and, for M2 and M17, only the presence of a
  * thinking block; for M1 the effort field `reasoning.effort low` and no
  * thinking block; for M10b `output_config.effort high` and a thinking block of

@@ -193,8 +193,11 @@ async function createSession(client, directory) {
  *   or VARIANT_OVER_BUDGET) BEFORE any request when the engine would drop it silently or add
  *   its thinking budget over the budget; sent unverified when the engine's catalogue does not
  *   know the model within the wait. On a send the result carries
- *   `sentVariant: {variant, verified, waitedMs, unreadable?}` (decorated like `providerError`;
- *   `unreadable` names why `/config/providers` could not be read, when that is why the send is unverified).
+ *   `sentVariant: {variant, verified, waitedMs, unreadable?, ambiguous?}` (decorated like
+ *   `providerError`; `unreadable` names why `/config/providers` could not be read, and `ambiguous`
+ *   marks a dump that reported no variants under a budget — where the descriptor amicus wrote is
+ *   echoed back (M3) and "the engine does not know the model yet" cannot be told from "it knows it
+ *   and declares none" — when either is why the send is unverified).
  * @param {number|null} [options.outputBudget] - the budget the engine serving this session
  *   was spawned with (the server handle's `outputBudget`); `null` = unset; omitted = unknown.
  *   Only the fit check reads it.

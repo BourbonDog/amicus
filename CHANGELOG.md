@@ -92,13 +92,14 @@ All notable changes to Amicus are documented here. Format follows
   never read. A backstop window that fires while a leg is still inside its declaration wait (bounded
   at five seconds; one read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before
   anything is sent (an abandon signal stops the orphaned send); an unreadable `/config/providers` (a
-  non-2xx) sends the level unverified after ONE read, and the log line says so. `max` joins the
-  vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the curated
-  routes declare between them, M0). The level SENT rides the run document (`variant`), the
-  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-four probe
-  rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured every shape this
-  ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M2
-  and M17. Council seats have no effort knob in this release (filed as the owner's decision).
+  non-2xx, or a read that throws — a transport error, a dead engine) sends the level unverified
+  after ONE read, and the log line says so. `max` joins the vocabulary (`none`, `minimal`, `low`,
+  `medium`, `high`, `xhigh`, `max` — the levels the curated routes declare between them, M0). The
+  level SENT rides the run document (`variant`), the spend-ledger row (`variant`, present only when
+  one was sent) and the leg patch. Twenty-four probe rows (M0–M17 and M22, plus M18–M21 through
+  amicus's own `sendPrompt`) measured every shape this ships — the full 61-case matrix is filed in
+  the BACKLOG — and CI's keyless job now also runs M1, M2, M10b and M17. Council seats have no
+  effort knob in this release (filed as the owner's decision).
 
 ### Changed
 

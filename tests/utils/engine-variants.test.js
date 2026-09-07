@@ -194,11 +194,14 @@ describe('readModelDeclaration', () => {
     expect(d.known).toBe(true);
     expect(Object.keys(d.variants)).toEqual(['low']);
   });
-  it('does not wait on a variant-less model amicus has no catalog row for — the read cannot be an echo (M0: gpt-4o, bare)', async () => {
+  it('does not wait on a variant-less model amicus has no catalog row for, even with a budget in force — the read cannot be an echo (M0: gpt-4o, bare)', async () => {
+    // Named mutant "NOCATALOGECHO": drop `catalogCeiling !== null` from couldBeEcho — providers() is polled to the deadline.
+    // The budget is what makes that clause load-bearing: with none, `budgetInForce` short-circuits first and nothing tests it (council #235 r1 repair).
     const client = clientOf([BARE_NOVARIANTS]);
-    const d = await readModelDeclaration(client, 'openai/gpt-4o', { waitMs: 1000, pollMs: 1, sleep: async () => {}, ...NO_CATALOG });
+    const d = await readModelDeclaration(client, 'openai/gpt-4o', { waitMs: 1000, pollMs: 1, sleep: async () => {}, outputBudget: 24000, ...NO_CATALOG });
     expect(client.config.providers).toHaveBeenCalledTimes(1);
     expect(d.known).toBe(true);
+    expect(d.ambiguous).toBe(false);
   });
   it('does not wait on a variant-less model with NO budget in force — no descriptor, no echo (council #235 r1 D2/A4)', async () => {
     // Named mutant "ECHOWITHOUTBUDGET": drop `budgetInForce` from couldBeEcho — providers() is polled to the deadline.

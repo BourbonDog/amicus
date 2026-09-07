@@ -136,8 +136,9 @@ async function readModelDeclaration(client, model, opts = {}) {
   // and a read still ambiguous when the wait ends is reported UNKNOWN — sent unverified with a
   // note — rather than refused as undeclared (council #235 r1 B1/D2/A4).
   const budgetInForce = positiveCount(opts.outputBudget) !== null;
-  // Named mutants "ECHOKNOWN" (drop `couldBeEcho(d)` from the loop) and "ECHOWITHOUTBUDGET"
-  // (drop `budgetInForce`) and "AMBIGUOUSKNOWN" (report the ambiguous read as known) — all in
+  // Named mutants "ECHOKNOWN" (drop `couldBeEcho(d)` from the loop), "ECHOWITHOUTBUDGET"
+  // (drop `budgetInForce`), "NOCATALOGECHO" (drop `catalogCeiling !== null`) and
+  // "AMBIGUOUSKNOWN" (report the ambiguous read as known) — all in
   // tests/utils/engine-variants.test.js.
   const couldBeEcho = (r) => budgetInForce && catalogCeiling !== null && Object.keys(r.variants).length === 0;
   const start = now();
