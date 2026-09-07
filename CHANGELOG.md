@@ -7,41 +7,47 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
-- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills `contextLength`
-  / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or `openrouter` row still
-  missing a number, from the keyless [models.dev](https://models.dev) index, and lifts Google's own
-  `outputTokenLimit` first-party. The provider's own number always wins — Google's own ceiling and
-  OpenRouter's own value included; models.dev fills only fields the provider left empty or unusable,
-  never a zero, and `openrouter/openrouter/*` routers and local rows are never filled at all. The
-  models.dev call is keyless, bounded by a 10 s timeout, and its failure is reported on the refresh
-  line rather than hidden — including a 200 that parses but carries no recognised vendor limits,
-  which is a `bad-shape` failure and not a silent no-op. It is also skippable both ways: a refresh
-  where every candidate row already carries both numbers never makes the call at all, and the new
-  top-level `config.json` key **`modelsDevCeilings: false`** opts out of contacting models.dev
-  entirely (the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus
-  catalog and are clamped by the engine's own catalog instead; Google publishes its own ceiling and
-  OpenRouter rows keep OpenRouter's). The refresh prints the outcome (`Ceilings: …`), naming which
-  of those happened, and `--json` carries it as `ceilingEnrichment`. Effect: no request changes with
-  `outputBudget` unset; direct-provider rows now carry context and ceiling numbers (visible in
-  `amicus models`), and `outputBudget` can clamp the direct `openai` / `google` / `deepseek` routes
-  once the catalog is refreshed — which 4.9.3 documented as impossible because those lists "don't
-  publish one". Direct `anthropic/*` was held out of clamping by the council review of PR #230 until
-  the thinking-budget interaction was measured; PR 2 measured it and lifted the hold-out — see the
-  next bullet.
+- **Direct-provider output ceilings (#218 P3).** `amicus models --refresh` now fills
+  `contextLength` / `maxOutputTokens` for any `anthropic`, `openai`, `google`, `deepseek` or
+  `openrouter` row still missing a number, from the keyless [models.dev](https://models.dev)
+  index, and lifts Google's own `outputTokenLimit` first-party. The provider's own number
+  always wins — Google's own ceiling and OpenRouter's own value included; models.dev fills
+  only fields the provider left empty or unusable, never a zero, and `openrouter/openrouter/*`
+  routers and local rows are never filled at all. The models.dev call is keyless, bounded by a
+  10 s timeout, and its failure is reported on the refresh line rather than hidden — including
+  a 200 that parses but carries no recognised vendor limits, which is a `bad-shape` failure
+  and not a silent no-op. It is also skippable both ways: a refresh where every candidate row
+  already carries both numbers never makes the call at all, and the new top-level `config.json`
+  key **`modelsDevCeilings: false`** opts out of contacting models.dev entirely (the anthropic /
+  deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's
+  own catalog instead, and the direct openai rows send no output reservation at all regardless
+  — M5/M13/M22; Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). The
+  refresh prints the outcome (`Ceilings: …`), naming which of those happened, and `--json`
+  carries it as `ceilingEnrichment`. Effect: no request changes with `outputBudget` unset;
+  direct-provider rows now carry context and ceiling numbers (visible in `amicus models`), and
+  `outputBudget` can clamp the direct `google` / `deepseek` routes once the catalog is refreshed
+  — which 4.9.3 documented as impossible because those lists "don't publish one". The direct
+  `openai` route is the exception, measured in PR 4 (probe M5/M13/M22): the engine drives that
+  provider through the Responses API, whose request carries no output-limit field at all, so
+  neither the descriptor nor the flag changes what goes out there and a budget never reaches it;
+  `doctor` lists such routes apart. Direct `anthropic/*` was held out of clamping by the council
+  review of PR #230 until the thinking-budget interaction was measured; PR 2 measured it and
+  lifted the hold-out — see the next bullet.
 - **`outputBudget` now works in both directions (#218 PR 2).** A budget above the engine's 32,000
   default is honoured: Amicus starts every engine with `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to
   the budget — around the spawn only, restored before anything is awaited, never written to the
   caller's shell; a value you exported yourself is honoured untouched when no budget is set — so
-  every leg reserves `min(budget, ceiling)` wherever a ceiling is known, by the Amicus catalog through
-  the per-model descriptor or else by the engine's own, and a model neither knows receives the budget
-  as-is, exactly as it received the raw 32,000 before. Direct `anthropic/*` routes are no longer held
-  out: the probe measured the descriptor lowering the reservation there (K1), a thinking variant's
-  budget added on top (K2: 8,000 + 16,000 = 24,000) and the sum clamped to the model's real ceiling
-  (K3/K4/K10), so no budget can push a thinking leg over it. Thirteen new probe rows (K1–K13) pin
-  every shape this ships, and the full 32-case matrix is filed in the BACKLOG. New `doctor` row
-  **`output-budget`** says what the value reaches — routes the catalog can clamp, routes it cannot,
-  an ambient flag honoured or overridden — and flags the one silent failure the engine has here: a
-  malformed budget or flag, on which it falls back to 32,000 without a word.
+  every leg reserves `min(budget, ceiling)` wherever a ceiling is known (every leg but a direct
+  `openai` one — that route carries no reservation field, see the previous bullet), by the Amicus
+  catalog through the per-model descriptor or else by the engine's own, and a model neither knows
+  receives the budget as-is, exactly as it received the raw 32,000 before. Direct `anthropic/*`
+  routes are no longer held out: the probe measured the descriptor lowering the reservation there
+  (K1), a thinking variant's budget added on top (K2: 8,000 + 16,000 = 24,000) and the sum clamped
+  to the model's real ceiling (K3/K4/K10), so no budget can push a thinking leg over it. Thirteen
+  new probe rows (K1–K13) pin every shape this ships, and the full 32-case matrix is filed in the
+  BACKLOG. New `doctor` row **`output-budget`** says what the value reaches — routes the catalog can
+  clamp, routes it cannot, an ambient flag honoured or overridden — and flags the one silent failure
+  the engine has here: a malformed budget or flag, on which it falls back to 32,000 without a word.
 - **`scripts/probe-max-tokens.js`.** A zero-spend wire probe: a local capture server plays the
   provider so the pinned engine's outbound `max_tokens` / `reasoning` / `thinking` fields can be
   read under every descriptor, env-flag and prompt shape amicus can produce. Re-run after every
@@ -65,16 +71,80 @@ All notable changes to Amicus are documented here. Format follows
   server now answers with a per-case body and speaks the Anthropic messages SSE, so the direct rows
   record the assistant message instead of an APIError; the full 37-case matrix is filed in the
   BACKLOG.
+- **`--thinking` reaches the engine (#218 PR 4).** Every `--thinking <level>` amicus ever sent went
+  out as a `reasoning` object the engine's prompt endpoint does not read — a silent no-op on every
+  run (probe F1). It now goes out as the engine's `variant` field (F2, M1, M12), and it is checked
+  first against what the engine's own catalogue declares for the model (`/config/providers`): a
+  level the model does not declare is refused before anything is sent (`VARIANT_UNDECLARED`, naming
+  the declared set — the engine would have dropped it silently and still echoed it on the message,
+  F3/M7); a declared level whose thinking budget the direct Anthropic route adds on top of the
+  reservation (Haiku 4.5 — M2: 24,000 + 16,000 = 40,000; Opus 4.5 declares the same shape, M0) is
+  refused when `outputBudget` is below the model's ceiling (`VARIANT_OVER_BUDGET`, with the
+  reservation the leg would have made and three remedies); a model the engine's catalogue does not
+  know within a five-second wait — its bundled catalogue predates the model and the models.dev fetch
+  has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
+  unverified, logged and marked `variantUnverified: true` on the leg document. The same note is
+  printed as a `Notice:` line on stderr, because the structured warning alone is dropped at the
+  default log level. Whether a level counts as declared does not depend on `outputBudget` — the
+  `VARIANT_OVER_BUDGET` fit above is the only refusal a budget can add: `/config/providers` returns a
+  model's row with the catalogue's own release date, family, display name, pricing, capabilities and
+  variants, and Amicus writes only `limit` into it, so a row carrying any of those is the engine's
+  declaration (an empty variants set is a refusal) and a row carrying none of them is Amicus's own
+  descriptor (unknown — the bounded wait, then an unverified send). Measured as record M23 and
+  pinned by a keyless engine canary. The wait polls every 500 ms. The ceiling that
+  `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
+  the model — its `maxOutputTokens`, the number a budget-derived descriptor is clamped TO, not the
+  value that descriptor carries — because the engine echoes that descriptor back once a budget is
+  set (M3); for a model that catalog has no row for it is the dump's own value, the engine's own
+  ceiling (K5/K12). `docs/configuration.md` records what a divergence from the engine's own ceiling
+  costs in each direction: a row above it can refuse a leg the engine would have clamped under the
+  budget, and a row below it goes silent on one it never judged. A refusal is a zero-spend leg death
+  through the usual channel (`error` with the reason; a fanout's other legs run; `start --no-ui`
+  exits 1). The MCP `amicus_start` tool's in-process (shared-server) path carries the level too —
+  its `thinking` had been argv-only, which that path never read. A backstop window that fires while
+  a leg is still inside its declaration wait (bounded at five seconds; one read on a warm, declared
+  model) ends the leg `NO_OUTPUT_BACKSTOP` before anything is sent (an abandon signal stops the
+  orphaned send); an unreadable `/config/providers` (a non-2xx, or a read that throws — a transport
+  error, a dead engine) sends the level unverified after ONE read, and the log line says so. `max`
+  joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the
+  curated routes declare between them, M0). The level SENT rides the run document (`variant`), the
+  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-four probe
+  rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured every shape this
+  ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M1,
+  M2, M10b and M17. Council seats have no effort knob in this release (filed as the owner's
+  decision).
 
 ### Changed
 
-- **`outputBudget` below 32,000 now reaches every leg (#218 PR 2).** On 4.9.3 a budget applied only
-  to routes whose ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The
-  engine flag now carries the budget to those rows too — clamped by the engine's own catalog where
-  it knows the model (K5, K12), as-is on a model it does not (J2, K13). A user who set
-  `outputBudget: 8000` on 4.9.3 sees those rows reserve 8,000 after upgrading. A model neither
-  catalog knows receives a raised budget as-is and may be refused by a provider that enforces its
-  ceiling — loudly; `doctor`'s `output-budget` row names such routes.
+- **A configured `outputBudget` no longer weakens the `--thinking` guard (#218 PR 4, council #235
+  round 3 C1/B1).** Earlier on this unreleased branch, a model whose `/config/providers` row
+  reported no variants was, *with a budget set*, polled for five seconds, reported ambiguous and
+  then sent the level unverified — while the same command with no budget refused it at once. What
+  flips: a model the engine's own catalogue supplied that declares no variants (`openai/gpt-4o`, and
+  the shipped aliases `minimax`, `qwen-coder`, `qwen-flash`) is now refused before anything is sent
+  when a budget is set, exactly as it already was without one — and the five-second wait disappears
+  with it, so a 12-leg fanout on such a model no longer burns 12 × 5 s before failing. What stops
+  being sent is a level nobody could ever use: probe F3/M7 measured an undeclared variant as a
+  certain no-op on the wire, echoed back on the assistant message. The no-budget path is unchanged
+  except for four zero-context openai image rows (`chatgpt-image-latest`, `gpt-image-1.5`,
+  `gpt-image-1-mini`, `gpt-image-2`), which are now refused rather than silently no-op'd. A model
+  the engine has NOT learned yet is unchanged bit for bit: the bounded wait, then an unverified send
+  with `variantUnverified: true` and the `Notice:` line. Under a budget, a stale bundled catalogue
+  can now refuse a level the next run accepts — the refusal says so. The `ambiguous` key is gone
+  from `sentVariant` (it existed only on this unreleased branch, in no schema or document). C1 is
+  not fully closed: its second clause — a genuinely cold direct-Anthropic model with an
+  `enabled + budgetTokens` entry still sending `24,000 + 16,000 = 40,000` marked only
+  `variantUnverified: true` — survives, because N exists only in the post-spawn dump; the filed
+  pre-spawn fit (descriptor = budget − N, proven M17) is the answer and is not built here.
+- **`outputBudget` below 32,000 now reaches every leg but a direct `openai` one (#218 PR 2; the
+  openai exception measured in PR 4, M5/M13/M22).** On 4.9.3 a budget applied only to routes whose
+  ceiling the catalog knew; rows it could not clamp kept the engine's 32,000. The engine flag now
+  carries the budget to those rows too — clamped by the engine's own catalog where it knows the
+  model (K5, K12), as-is on a model it does not (J2, K13). A user who set `outputBudget: 8000` on
+  4.9.3 sees those rows reserve 8,000 after upgrading — except a direct `openai` route, which
+  carries no reservation field at all. A model neither catalog knows receives a raised budget as-is
+  and may be refused by a provider that enforces its ceiling — loudly; `doctor`'s `output-budget`
+  row names such routes.
 - **A length-stopped leg with no answer text is an error, not a completion (#218 PR 3).** On 4.9.3
   such a leg ended `complete` with an empty summary (a council dropped it as "ended 'complete' with
   no usable output"; `amicus start --no-ui` exited 0 with "No Output") or, when the provider streamed
@@ -86,6 +156,23 @@ All notable changes to Amicus are documented here. Format follows
   is unchanged from 4.9.3; for the promoted-thinking shape it is new — 4.9.3 counted that leg as a
   review and never retried it, so such a seat now bills one more reservation. `start --no-ui` exits
   1 with the reason. The ledger row for such a leg reads `status: "error"` where it read `complete`.
+- **A `--thinking` level the model does not declare is refused, not adjusted (#218 PR 4).** On 4.9.3
+  the CLI rewrote `minimal` to `low` and any other unsupported level to `medium` from a static
+  per-model table (gpt-5 "without minimal", gemini "with everything") with a warning, then sent the
+  result as a field the engine never read; the table is gone (a static guess that the engine's
+  catalogue confirms on one row and contradicts on the other: both exclude `minimal` for gpt-5,
+  while the table gave gemini `none` and `xhigh` and gemini-3.6-flash declares neither — M0), the
+  CLI checks only the vocabulary, and the model's own declaration decides at send time. Solo session
+  metadata records `thinking` only when one was requested — it used to record `medium` for every
+  run, including runs that sent nothing. A pack saved with `pack save --from-run` on 4.9.3 or
+  earlier copied that `medium` into its `options.thinking`; such a pack now SENDS it — refused on
+  every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated
+  routes) — so delete the key or re-save the pack from a run that requested a level. MCP `thinking`
+  parameters no longer claim "Default: medium": omitted means nothing is sent and the provider's
+  default effort governs (on the direct OpenAI route the engine sends `medium` itself, M13). The one
+  case the removal makes worse is the row the table got right: `--thinking minimal` on a gpt-5 route
+  used to be rewritten to `low`, a level the engine really declares, and is now refused — loudly,
+  before anything is sent, which is the trade this release makes deliberately.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
@@ -103,6 +190,12 @@ All notable changes to Amicus are documented here. Format follows
   (was 1M), input ~$0.05/M and output ~$0.10/M on OpenRouter (was ~$0.69/M and ~$1.38/M), output
   ceiling 131,072 (was 384,000). Bench-only; the shipped alias table is unchanged. The alias-shadow
   notice now names `deepseek` beside `qwen` as a bench pin that differs from the shipped one.
+- **`amicus continue` / `amicus resume` reject `--thinking` instead of ignoring it (#218 PR 4).**
+  The flag parses on every command (the unknown-flag gate is built from the whole usage string), but
+  neither handler ever read it and the vocabulary check runs only on `start` — so a level typed on a
+  continuation, valid or not, used to exit 0 having done nothing. Both now fail with `BAD_ARGS`
+  naming where the level belongs, the same way `--tag` already does. Forwarding a level on
+  `continue` is filed, not built.
 
 ### Fixed
 

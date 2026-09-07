@@ -112,6 +112,11 @@ function updateSessionStatus(sessionDir, status) {
   meta.status = status;
   if (status === 'running') {
     meta.resumedAt = new Date().toISOString();
+    // #218 PR 4 whole-branch review (REC-3): the per-attempt fields are this attempt's to stamp
+    // — an abort or crash of the resumed run must not ship the previous attempt's as its own
+    // (the terminal writers preserve every key they do not set). Named mutant
+    // "RESUMESTALEVARIANT" (tests/sidecar/resume.test.js): drop the three deletes.
+    delete meta.finish; delete meta.variant; delete meta.variantUnverified;
   }
   writeFileAtomic(metaPath, JSON.stringify(meta, null, 2));
   return meta;
@@ -243,11 +248,13 @@ async function resumeSidecar(options) {
       updatedMetadata.status = 'error';
       updatedMetadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
       if (result && typeof result.finish === 'string') { updatedMetadata.finish = result.finish; } else { delete updatedMetadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
+      if (result && typeof result.variant === 'string') { updatedMetadata.variant = result.variant; } else { delete updatedMetadata.variant; } // #218 PR 4: same rule as finish (named mutant "RESUMEERRORNOVARIANT", tests/continue-resume-spend.test.js)
+      if (result && result.variantUnverified === true) { updatedMetadata.variantUnverified = true; } else { delete updatedMetadata.variantUnverified; }
       updatedMetadata.completedAt = new Date().toISOString();
       writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
-      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish });
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified }); // named mutant "RESUMEVARIANTDROPPED" (tests/continue-resume-spend.test.js)
     }
     // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
     // a ledger row (status: statusFromResult, matching start.js — not terminal.status).

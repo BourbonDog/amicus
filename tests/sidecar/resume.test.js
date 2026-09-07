@@ -127,6 +127,18 @@ describe('Resume Operations', () => {
       expect(updated.status).toBe('running');
       expect(updated.resumedAt).toBeDefined();
     });
+
+    it("the running write drops the previous attempt's finish / variant / variantUnverified (#218 PR 4 whole-branch review, REC-3)", () => {
+      // Named mutant "RESUMESTALEVARIANT": drop the three deletes — all three keys survive and an abort of this attempt ships them.
+      fs.writeFileSync(path.join(tmpDir, 'metadata.json'), JSON.stringify({ taskId: 'abc123', status: 'complete', thinking: 'high', finish: 'length', variant: 'low', variantUnverified: true }));
+      updateSessionStatus(tmpDir, 'running');
+      const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'metadata.json'), 'utf-8'));
+      expect(onDisk.status).toBe('running');
+      expect(onDisk.thinking).toBe('high'); // the REQUEST is not per-attempt state
+      expect('finish' in onDisk).toBe(false);
+      expect('variant' in onDisk).toBe(false);
+      expect('variantUnverified' in onDisk).toBe(false);
+    });
   });
 
   describe('buildResumeUserMessage', () => {

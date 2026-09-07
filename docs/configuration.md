@@ -66,19 +66,28 @@ You requested up to 32000 tokens, but can only afford 354
 `outputBudget` sets the reservation, in either direction. Every leg reserves
 `min(outputBudget, that model's real ceiling)` wherever a ceiling is known — by the Amicus catalog
 (a per-model `limit` descriptor) or, failing that, by the engine's own catalog (every engine Amicus
-starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget). A model neither catalog
+starts gets `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` set to the budget) — except on the direct
+`openai` route, which carries no reservation field at all (M5/M13/M22). A model neither catalog
 knows receives the budget itself, exactly as it received the raw 32,000 before.
 
 If you set `outputBudget` on 4.9.3, one thing changes on upgrade: a budget below 32,000 now also
-reaches routes the catalog cannot clamp — an unrefreshed direct row, a local-provider model,
-anything the catalog lacks — which 4.9.3 left at the engine's 32,000. Those legs reserve
-`min(budget, the ceiling the engine's own catalog knows)` (K12: 8,000 on a bare kimi row), or the
-budget as-is where the engine knows the model no better (K13).
+reaches routes the catalog cannot clamp — an unrefreshed direct row (other than `openai`, which no
+budget reaches — M13/M22), a local-provider model, anything the catalog lacks — which 4.9.3 left at
+the engine's 32,000. Those legs reserve `min(budget, the ceiling the engine's own catalog knows)`
+(K12: 8,000 on a bare kimi row), or the budget as-is where the engine knows the model no better
+(K13).
+
+Setting `outputBudget` can only make the `--thinking` guard stricter or leave it unchanged, never
+looser: the guard reads the engine's own row for the model, not the descriptor a budget makes Amicus
+write, so whether a level is declared is decided identically with and without a budget. The one
+refusal a budget can add is `VARIANT_OVER_BUDGET` — a declared level whose own thinking budget would
+push the reservation past the budget — and that check exists only because a budget was set (council
+#235 r3).
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|
 | `outputBudget` (config.json, top-level) | positive integer | *unset* | Per-leg output reservation, clamped to each model's real ceiling wherever one is known. Unset means no limit is sent and no engine flag is set — OpenCode's 32,000 default applies, exactly as before. |
-| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; the openai / anthropic / deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's). |
+| `modelsDevCeilings` (config.json, top-level) | `true` / `false` | `true` | Fill direct-provider context/ceiling numbers from models.dev at refresh. Set `false` to never contact models.dev; the anthropic / deepseek direct rows then carry no ceiling in the Amicus catalog and are clamped by the engine's own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter's); the direct `openai` rows send no output reservation at all regardless (#218 PR 4). |
 
 `modelsDevCeilings` is the opt-out for the one third-party lookup a refresh makes. Only a literal
 `false` turns it off; the key being absent means it runs. Even with it on, the call is **skipped
@@ -99,8 +108,8 @@ back to 32,000 *silently* on those (measured), so the doctor row is where it sur
 
 Five things worth knowing before you set it. Every number below was measured on the wire by
 `scripts/probe-max-tokens.js` against the pinned engine, or read in the pinned binary where it says
-so; the row ids refer to the three probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218
-P1, PR 2 and PR 3).
+so; the row ids refer to the four probe tables filed in `BACKLOG.md` under "v4.9.4 records" (#218
+P1, PR 2, PR 3 and PR 4).
 
 - **Above 32,000 it is the engine flag doing the work.** OpenCode computes
   `Math.min(limit.output, OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX)` with the flag defaulting to
@@ -120,21 +129,39 @@ P1, PR 2 and PR 3).
   fills a field only where the provider gave no usable positive integer (a null, a zero, a negative
   or a malformed number), and never overwrites a usable provider value; the `openrouter/openrouter/*`
   meta-routers and local-provider rows are never filled at all. The refresh output says how many
-  rows were filled or why none could be. A route the Amicus catalog cannot clamp still gets the
-  budget through the engine flag, clamped by the engine's own catalog where it knows the model
-  (K5: 100,000 → 64,000 on a bare haiku row; K12: 8,000 on a bare kimi row, passed through
-  under its ceiling); a model neither knows receives the budget as-is (K13). That is the one way a
-  raised budget can fail where the 32,000 default did not: a custom or local model neither catalog
-  knows is asked for the full budget, and a provider that enforces its ceiling refuses the
-  request — loudly, with the provider's own error on the leg, never silently. `amicus doctor`
-  names such routes; lower the budget if you have one, or give the model a catalog entry.
-- **Direct-Anthropic thinking legs add their thinking budget on top.** On the direct `anthropic/*`
-  route the engine adds a thinking variant's budget to the reservation — 8,000 becomes 24,000 with
-  the 16,000-token `high` variant (K2) — and clamps the sum to the model's real ceiling (K3/K4/K10:
-  64,000 for haiku, whatever the descriptor or the flag said). Amicus sends no thinking variant
-  today (`--thinking` never reached the engine — F1), so this is the number PR 4 inherits, not one
-  you can hit yet — and PR 4, which sends the variant, must fit it under the budget rather than on
-  top. `openrouter/anthropic/*` rows route through OpenRouter's effort mapping and clamp normally.
+  rows were filled or why none could be. One route no budget reaches: the direct `openai` provider —
+  the engine drives it through the Responses API, whose request carries no output-limit field at all
+  (M5 bare; M13 with the descriptor and the flag both at 8,000; M22 for gpt-4o), so neither lever
+  changes what goes out there; `doctor` lists those routes apart from the clamped and unclamped
+  counts. A route the Amicus catalog cannot clamp still gets the budget through the engine flag,
+  clamped by the engine's own catalog where it knows the model (K5: 100,000 → 64,000 on a bare haiku
+  row; K12: 8,000 on a bare kimi row, passed through under its ceiling); a model neither knows
+  receives the budget as-is (K13). That is the one way a raised budget can fail where the 32,000
+  default did not: a custom or local model neither catalog knows is asked for the full budget, and a
+  provider that enforces its ceiling refuses the request — loudly, with the provider's own error on
+  the leg, never silently. `amicus doctor` names such routes; lower the budget if you have one, or
+  give the model a catalog entry.
+- **A thinking variant leaves the budget alone on every route but one.** `--thinking` now reaches
+  the engine (#218 PR 4) as its `variant` field, and the probe measured the reservation with a
+  variant in play on each provider whose request carries one (the direct openai route carries
+  none — M5/M13/M22): OpenRouter (M1: 8,000 stays 8,000 under `low`; M9: OpenRouter's Anthropic
+  row sends 32,000 with `high` on both of the engine's catalogues — a variant adds nothing there),
+  direct Google (M15: 8,000), direct DeepSeek (M16: 8,000) and an adaptive-thinking Anthropic model
+  (M10b: `claude-sonnet-5` at 8,000) all hold it. The one shape that does not is a direct
+  Anthropic variant declared as `thinking: {type: 'enabled', budgetTokens: N}` — today Haiku 4.5
+  (`high` 16,000, `max` 31,999) and Opus 4.5 (16,000 for `low`, `medium` and `high`) — where the
+  engine adds N on top (M2, measured on Haiku: 24,000 + 16,000 = 40,000; K2 — Opus 4.5 declares
+  the same `enabled` + `budgetTokens` shape, M0, and is refused under the same condition) and clamps the sum
+  to the model's ceiling (K3/K4/K10). Amicus cannot lower the descriptor by N before the spawn (N
+  is the engine's own number, read only from a running engine, and nothing changes a descriptor
+  afterwards — a runtime `PATCH /config` is accepted, changes nothing the engine serves, and
+  writes a `config.json` into the engine's working directory, M3/M4/M11), so with a budget below
+  that model's ceiling such a leg is **refused before anything is sent**, with the reservation it
+  would have made and three ways out: raise the budget to at least the ceiling (the sum is then
+  clamped to it, K4), route the model through OpenRouter (M1, M9), or use an adaptive-thinking
+  model (M10b). With no budget set the engine's own behaviour applies (32,000 + N, H3/H4). The
+  exact fit — a descriptor lowered by N lands the sum exactly on the budget (M17: 8,000 + 16,000
+  = 24,000) — is filed in the BACKLOG as the follow-up it would take.
 - **The reservation comes out of the context window.** Input plus `max_tokens` has to fit the
   window, and the engine subtracts this same reservation from the window before it decides to
   compact (read in the pinned binary's `SessionCompaction.isOverflow`, not wire-measured: that is
@@ -162,11 +189,33 @@ P1, PR 2 and PR 3).
   its reservation gets the death name but no Note. Separately, L5 settles the catalog question PR 2
   parked: a descriptor above the engine's own ceiling is clamped to that ceiling with a thinking
   variant (K10: 70,000 + 31,999 → 64,000) and without one (L5: 70,000 + flag 100,000 → 64,000 on
-  haiku), so a catalog row whose ceiling exceeds the engine's is harmless.
+  haiku), so a catalog row whose ceiling exceeds the engine's is harmless on the
+  wire. It is not harmless to #218 PR 4's `VARIANT_OVER_BUDGET` fit, which judges against the
+  ceiling **Amicus's own catalog** carries for the model — its row's `maxOutputTokens`, the
+  number a budget-derived descriptor is clamped TO, not the value that descriptor carries —
+  because once a budget is set `/config/providers` echoes that descriptor back (M3) and the
+  engine's own ceiling is no longer readable there. (With no row for the model the fit falls back
+  to the dump's own value, which is then the engine's own ceiling — the descriptor was bare,
+  K5/K12.) A divergence therefore costs something in BOTH directions. A row ABOVE the engine's
+  ceiling can refuse a leg the engine would have run: a haiku row of 100,000 with `outputBudget`
+  70,000 refuses `high` on an 86,000 reservation it would never have made, where K10 just above
+  measures the engine clamping that same 70,000 descriptor — under a LARGER 31,999-token
+  variant — to 64,000, comfortably under the budget. A row BELOW it goes silent for any budget
+  between the two: the guard is `budget < ceiling`, so no fit runs; the descriptor Amicus writes
+  is the row itself (`min(ceiling, budget)`) and the engine adds N on top of THAT, so the leg
+  overshoots the budget whenever N exceeds the gap. The two catalogs can disagree without either
+  being stale in the ordinary sense: the engine serves its bundled catalogue until its startup
+  models.dev fetch lands, which moved a measured ceiling by 104,858 tokens (kimi 1,048,576 cold
+  vs 943,718 warm), so `amicus models --refresh` can open the gap rather than close it. No
+  `doctor` row detects either direction: `output-budget` compares no ceiling against the engine's
+  (it counts the routes with a known catalog ceiling, and warns only on starvation or a route
+  without one), and `catalog` is an age heuristic that compares no numbers.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning
-effort, which today's `--thinking` never delivers to the engine (PR 4 sends `variant` instead).
+effort — which `--thinking` now delivers to the engine as its `variant` field (#218 PR 4), checked
+against what the model declares before anything is sent, on solo and fanout legs; a council seat has
+no effort knob yet (filed).
 Lowering the budget makes such a leg fail faster and cheaper; raising it gives the reasoning more
 room; neither makes it produce output — but since #218 PR 3 the failure is at least *named*: the leg
 ends `error` with an `OUTPUT_LENGTH:` reason instead of `complete` with nothing, or with its thinking
@@ -279,7 +328,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_STABLE_IDLE_POLLS` | Number of consecutive idle polls required when no explicit completion signal is received (approximately 60 s at the 2 s default). This is the fallback heuristic for models or SDK versions that don't emit a clean completion event. | `30` |
 | `AMICUS_MAX_CONSECUTIVE_POLL_FAILURES` | Consecutive poll failures before the headless runner bails. At the 2 s interval this is approximately 30 s. Prevents a dead server from burning the full session timeout on futile polls. | `15` |
 | `AMICUS_TOOL_CALL_STALL_MS` | How long a tool call may sit pending with **no** result and no output growth before the leg is failed with `Tool call stalled: <tool>` and its OpenCode session aborted. This is the wedge guard: it targets a leg producing nothing at all, and it is skipped while a tool-settle deferral is active (`AMICUS_TOOL_SETTLE_GRACE_MS` owns that decision instead, and ends in a completion rather than a failure). **`0` is ignored** — it falls back to the default rather than disabling the guard, because a `0` threshold would kill every leg on its first poll. There is no way to switch this off; raise it if you legitimately run very long single tool calls. | `180000` |
-| `AMICUS_NO_OUTPUT_BACKSTOP_MS` | Fail a headless leg fast when the model has produced no output, reasoning, or tool calls for this long — the "accepted but not serving" class. Disarms permanently on the first sign of activity, so slow cold-prefill local models are unaffected. **Set `0` (or negative) to disable the backstop entirely** — silent legs then run to the ordinary timeout. | `300000` |
+| `AMICUS_NO_OUTPUT_BACKSTOP_MS` | Fail a headless leg fast when the model has produced no output, reasoning, or tool calls for this long — the "accepted but not serving" class. Disarms permanently on the first sign of activity, so slow cold-prefill local models are unaffected. **Set `0` (or negative) to disable the backstop entirely** — silent legs then run to the ordinary timeout. A window that fires while a `--thinking` leg is still inside its declaration wait (#218 PR 4; bounded at five seconds — one `/config/providers` read on a warm, declared model, the full wait only on a cold or unknown one) cuts that wait short: the leg dies `NO_OUTPUT_BACKSTOP` before the level is validated and nothing is sent. Each individual read carries its own two-second deadline, so a catalogue endpoint that accepts and never answers cannot stretch that wait past it (council #235 r2). A request already in flight when the backstop fires may still reach the provider — the backstop has never been able to recall a send (the v4.6.2 orphaned-promise design) — and the record then omits the `variant` it cannot vouch for. | `300000` |
 | `AMICUS_USAGE_SETTLE_POLLS` | How many extra `getMessages` reads run **after** a leg has already finished, to catch provider usage/cost that lands milliseconds after the completion signal (measured: real paid legs losing their cost by 29 ms and 155 ms). The loop breaks early as soon as every assistant message carries usage, so the common case is one extra read. **Set to `0` to disable the reconciliation entirely** — legs then report whatever usage was present at completion, which can be `$0` on a leg that really did cost money. | `3` |
 | `AMICUS_USAGE_SETTLE_INTERVAL_MS` | Delay between those settle reads. **`0` is honoured and means no delay** — the reads run back to back. It does **not** disable the reconciliation (that is `AMICUS_USAGE_SETTLE_POLLS=0`); it only removes the gap between attempts. | `400` |
 | `AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS` | Per-call deadline for a settle read and for the child-session (subagent) spend walk. Deliberately much tighter than `AMICUS_POLL_CALL_TIMEOUT_MS`: the leg is already finished, so a hung read must not add 30 s × 3 to a run's wall time. The effective value is the **smaller** of this and `AMICUS_POLL_CALL_TIMEOUT_MS`, so raising it above that has no effect. **`0` is honoured and means no timer is armed at all** — a hung settle read or subtree walk would then wait indefinitely. | `5000` |

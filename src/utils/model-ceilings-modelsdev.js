@@ -11,11 +11,16 @@
  *
  * WHAT THIS DOES NOT CHANGE: the engine already resolves every `{}` descriptor's
  * limit from its own models.dev copy. This gives AMICUS the same numbers so it
- * can clamp an outputBudget on direct routes through the descriptor (a route it
- * cannot clamp still gets the budget through the engine flag —
- * engine-output-flag.js) and name a reservation in a dead-leg note. It reads
- * models.dev directly, not the engine's cache file, because that file's path
- * and refresh flags are engine-private.
+ * can clamp an outputBudget on the direct anthropic/deepseek routes through the
+ * descriptor (a route it cannot clamp still gets the budget through the engine
+ * flag — engine-output-flag.js) and name a reservation in a dead-leg note. The
+ * direct openai route is the exception: the engine drives that provider through
+ * the Responses API, whose request carries no output-limit field at all, so the
+ * ceiling filled here shows in `amicus models` but neither the descriptor nor
+ * the flag reaches the wire there — a direct openai row sends no output
+ * reservation at all (#218 PR 4, probe M5/M13/M22). It reads models.dev
+ * directly, not the engine's cache file, because that file's path and refresh
+ * flags are engine-private.
  *
  * RULES (measured 2026-09-04 against live data, see the plan):
  *   - the provider's own value WINS: models.dev fills a field only when the

@@ -68,6 +68,30 @@
  * Anthropic messages SSE too, so the direct rows measure `finish` instead of
  * recording an APIError against an OpenAI-shaped stream. L5 is the K-row gap
  * PR 2 parked: a descriptor above the engine's own ceiling with no variant.
+ *
+ * THE M GROUP (#218 PR 4) measures the effort lever beside the budget: what
+ * every curated route DECLARES as its variants (M0, one engine, every model
+ * dumped -- and the startup-refresh race that leaves a model newer than the
+ * bundle at `limit 0/0, variants {}` on a cold read, M0 vs M12), that a variant
+ * moves the reservation on exactly one shape (M2 vs M1/M9/M10b/M15/M16), the
+ * fitted descriptor (M17), the direct openai route's missing reservation
+ * (M5/M13/M22), and the runtime config update -- accepted, inert for what the
+ * engine serves, and it writes config.json into the engine's cwd (M3/M4/M11;
+ * M8 is refused without harm). M18-M21 go through amicus's own sendPrompt so
+ * the shipped validator is measured against the live engine (two of them are
+ * refused before any request and capture nothing -- `want.refused`). CI runs
+ * M2 and M17 with the flag rows.
+ * THE SANDBOX CACHE IS SHARED WITHIN A RUN (found by Task 7's full-matrix run): the
+ * first engine starts on the engine's bundled catalogue and its models.dev fetch
+ * writes HOME/.cache/opencode/models.json; every later engine starts on that cached
+ * live catalogue. So `--only X` serves X cold and the full matrix serves everything
+ * after A warm; the A dump (always case 1) is the one read that can be cold -- it read
+ * kimi's bundled 1048576 in every PR 4 run, the PR 3 record's run read the live 943718
+ * from the same case, so the first engine is still a race; a partial run's M0 reads
+ * models newer than the bundle as `limit 0/0, variants {}`, and the full run's M0 knows
+ * them -- the "startup-refresh race" the PR 2/PR 3 records describe is this window. A
+ * row's want must pin only what both catalogues agree on (M9: max_tokens; its effort
+ * field is `reasoning: 'any'`).
  */
 
 'use strict';
@@ -89,6 +113,7 @@ ensureNodeModulesBinInPath();
 const KIMI = 'moonshotai/kimi-k3';   // live models.dev: effort low|high|max, ceiling 943718
 const QWEN = 'qwen/qwen3.8-max-0902'; // models.dev: effort minimal..xhigh, ceiling 131072. Renamed from the un-dated `qwen/qwen3.8-max` between 2026-09-04 and 2026-09-05; the engine's variant table for the old id is now empty, so F4 reproduced F3's silent no-op against it (PR 2 record).
 const HAIKU = 'claude-haiku-4-5';     // models.dev: budget_tokens (min 1024), ceiling 64000
+const FICTIONAL = 'claude-fictional-9-20990101'; // council #235 r3 (M23): an id no catalogue can ever carry -- its /config/providers row is nothing but the descriptor this config registers
 const OR = (id) => ({ providerID: 'openrouter', modelID: id });
 const AN = (id) => ({ providerID: 'anthropic', modelID: id });
 const CUSTOM = { providerID: 'probe', modelID: 'unknown-model' };
@@ -120,10 +145,22 @@ function runOuter(args) {
     delete env[FLAG];
     env.OPENCODE_DISABLE_AUTOUPDATE = '1';
 
-    const result = spawnSync(process.execPath, [__filename, INNER, ...args], {
+    // PR 4 (M group): the INNER run's cwd -- the engine's project directory --
+    // is a scratch dir INSIDE the sandbox, not the repo. The engine writes to its
+    // cwd: PATCH /config wrote a merged `config.json` there (M3/M4/M11 landed one
+    // in the repo root before this moved), so the project dir has to be
+    // throwaway too, and listSandboxFiles() lists it whole. `--out` is resolved
+    // against the caller's cwd first so the raw captures still land where asked.
+    const projectDir = path.join(sandboxHome, 'project');
+    try { fs.mkdirSync(projectDir, { recursive: true }); } catch { /* best effort */ }
+    const outIdx = args.indexOf('--out');
+    const innerArgs = [...args];
+    if (outIdx >= 0 && innerArgs[outIdx + 1]) { innerArgs[outIdx + 1] = path.resolve(innerArgs[outIdx + 1]); }
+
+    const result = spawnSync(process.execPath, [__filename, INNER, ...innerArgs], {
       env,
       stdio: 'inherit',
-      cwd: path.join(__dirname, '..'),
+      cwd: projectDir,
     });
     if (result.error) {
       process.stderr.write(`probe: failed to launch inner run: ${result.error.message}\n`);
@@ -170,7 +207,14 @@ function assertSandboxed() {
     process.stderr.write(`probe: REFUSING to start an engine — HOME is not a probe sandbox (${home || '(unset)'}); run without --inner\n`);
     return false;
   }
-  process.stdout.write(`sandbox: HOME=${home} keys-absent=${names.join(',')}\n`);
+  // The engine's project directory (cwd) must be inside the sandbox too: the
+  // engine writes there (PATCH /config -> <cwd>/config.json, measured M3).
+  // council #235 r1 (A6): a separator-bounded prefix — /x/sandbox-evil must not pass for /x/sandbox
+  if (!(path.resolve(process.cwd()) + path.sep).startsWith(path.resolve(home) + path.sep)) {
+    process.stderr.write(`probe: REFUSING to start an engine — cwd ${process.cwd()} is outside the sandbox home; run without --inner\n`);
+    return false;
+  }
+  process.stdout.write(`sandbox: HOME=${home} cwd=${process.cwd()} keys-absent=${names.join(',')}\n`);
   return true;
 }
 
@@ -317,6 +361,13 @@ function buildConfig(origin, c) {
   const cfg = { agent: { chat: chatAgent() }, provider: {} };
   if (c.or) { cfg.provider.openrouter = { options: { baseURL: `${origin}/api/v1`, apiKey: 'probe-key' }, models: c.or }; }
   if (c.anthropic) { cfg.provider.anthropic = { options: { baseURL: `${origin}/v1`, apiKey: 'probe-key' }, models: c.anthropic }; }
+  // PR 4 (M group): the other three direct providers amicus curates, pointed at
+  // the capture server the same way. Their requests are captured (the server
+  // answers 400 to any path it does not speak) so the wire shape is recorded,
+  // and their `/config/providers` entries expose each model's `variants`.
+  if (c.openai) { cfg.provider.openai = { options: { baseURL: `${origin}/v1`, apiKey: 'probe-key' }, models: c.openai }; }
+  if (c.google) { cfg.provider.google = { options: { baseURL: `${origin}/v1beta`, apiKey: 'probe-key' }, models: c.google }; }
+  if (c.deepseek) { cfg.provider.deepseek = { options: { baseURL: `${origin}/v1`, apiKey: 'probe-key' }, models: c.deepseek }; }
   if (c.custom) {
     cfg.provider.probe = { npm: '@ai-sdk/openai-compatible', name: 'probe',
       options: { baseURL: `${origin}/v1`, apiKey: 'probe-key' },
@@ -384,6 +435,25 @@ function isBareDescriptor(c) {
   return !!d && d.limit === undefined && d.options === undefined;
 }
 
+/**
+ * The WHOLE row `/config/providers` returns for one model -- every cell, not the
+ * provenance-blind subset providersDump keeps. Council #235 r3 (record M23): the
+ * guard in src/utils/engine-variants.js :: engineSourced decides WHOSE row it is
+ * from `name`, `family`, `release_date`, `cost` and `capabilities`, so the canary
+ * has to see all of them, on a row that deliberately carries an amicus descriptor.
+ * @param {object} client SDK client
+ * @param {string} providerID provider half of the executable id
+ * @param {string} modelID model half of the executable id
+ * @returns {Promise<object>} the entry, or {missing: true}
+ */
+async function providersRow(client, providerID, modelID) {
+  const r = await client.config.providers();
+  const list = (r.data && r.data.providers) || [];
+  const p = list.find((x) => x.id === providerID);
+  const m = p && p.models && p.models[modelID];
+  return m || { missing: true, providerIds: list.map((x) => x.id) };
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function send(client, captures, c) {
@@ -395,7 +465,7 @@ async function send(client, captures, c) {
   let res;
   if (c.viaAmicus) {
     const { sendPrompt } = require('../src/opencode-client');
-    res = await sendPrompt(client, sessionId, { model: `${c.model.providerID}/${c.model.modelID}`, parts, agent: 'chat', reasoning: c.reasoning });
+    res = await sendPrompt(client, sessionId, { model: `${c.model.providerID}/${c.model.modelID}`, parts, agent: 'chat', variant: c.variant, outputBudget: c.outputBudget, reasoning: c.reasoning });
   } else {
     res = await client.session.promptAsync({ path: { id: sessionId }, body: { model: c.model, agent: 'chat', parts, ...(c.extra || {}) } });
   }
@@ -467,7 +537,7 @@ const CASES = [
   { id: 'D2', title: 'env 0', env: '0', or: { [KIMI]: {} }, model: OR(KIMI), expect: '32000', want: W(32000) },
   { id: 'E1', title: 'options.max_tokens 4096', or: { [KIMI]: { options: { max_tokens: 4096 } } }, model: OR(KIMI), expect: '4096 — options.max_tokens reaches the wire (measured 2026-09-04; the plan predicted "dropped")', want: W(4096) },
   { id: 'E2', title: 'options.reasoning {effort:low}', or: { [KIMI]: { options: { reasoning: { effort: 'low' } } } }, model: OR(KIMI), expect: 'reasoning effort low on the wire', want: W(32000, LOW) },
-  { id: 'F1', title: 'amicus sendPrompt today: body.reasoning {effort:low}', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire', want: W(32000) },
+  { id: 'F1', title: 'amicus sendPrompt with the pre-PR-4 `reasoning` option (never a prompt field; ignored since PR 4)', or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, reasoning: { effort: 'low' }, expect: 'NO reasoning on the wire', want: W(32000) },
   { id: 'F2', title: "prompt variant 'low' (kimi: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), extra: { variant: 'low' }, expect: 'reasoning effort low', want: W(32000, LOW) },
   // F3's expectation — "silent no-op OR error" — is satisfied by either outcome,
   // so it cannot fail. `want: 'record'` says so out loud instead of letting a
@@ -509,16 +579,81 @@ const CASES = [
   { id: 'L3', title: 'kimi {} — length, visible reasoning AND content (usage completion 40 / reasoning 32)', or: { [KIMI]: {} }, model: OR(KIMI), serve: { content: 'ok', reasoning: 'thinking…', usage: { prompt_tokens: 5, completion_tokens: 40, total_tokens: 45, completion_tokens_details: { reasoning_tokens: 32 } } }, expect: 'output 8 = 40 − 32 if the engine subtracts reasoning from completion; both parts', want: { ...W(32000), assistant: WA('length', 8, 32, ['reasoning', 'text']) } },
   { id: 'L4', title: "direct anthropic haiku {} + variant 'high' — thinking block, no text, stop_reason max_tokens (usage output 24000)", anthropic: { [HAIKU]: {} }, model: AN(HAIKU), extra: { variant: 'high' }, serve: { content: '', thinking: 'thinking…', usage: { input_tokens: 5, output_tokens: 24000 } }, expect: "finish 'length', 24000 output / 0 reasoning (Anthropic reports no split), a reasoning part and no text part", want: { ...W(48000, null, 'any'), assistant: WA('length', 24000, 0, ['reasoning']) } },
   { id: 'L5', title: 'direct anthropic haiku limit.output 70000 + env 100000, no variant', env: '100000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 70000 } } }, model: AN(HAIKU), expect: '64000 if the engine clamps a descriptor above its own ceiling with no variant in play; 70000 if only a thinking sum is clamped (K10)', want: W(64000) },
+  // PR 4 (M group): the effort lever (`variant`) beside the budget on every
+  // direct provider amicus curates, what each curated route DECLARES as its
+  // variants, and the engine's runtime config update (PATCH /config, the SDK's
+  // `config.update`) as a way to fit a thinking variant UNDER the budget on the
+  // direct Anthropic route, where the engine adds the variant's budget on top of
+  // the descriptor (K2/K11). Rows marked `record` are measured first and pinned
+  // once the number is known; M0 starts ONE engine and dumps every model.
+  { id: 'M0', title: 'dump only: the variants every curated route declares (bare descriptors, one engine)', dumpOnly: true, dump: 'all',
+    or: { [KIMI]: {}, [QWEN]: {}, 'openai/gpt-5.6-terra': {}, 'google/gemini-3.6-flash': {}, 'google/gemini-3.1-pro-preview': {}, 'deepseek/deepseek-v4-flash-0731': {}, 'deepseek/deepseek-v4-pro': {}, 'z-ai/glm-5.3': {}, 'anthropic/claude-opus-5': {}, 'anthropic/claude-sonnet-5': {}, 'anthropic/claude-haiku-4.5': {}, 'anthropic/claude-fable-5': {}, 'x-ai/grok-4.3': {}, 'minimax/minimax-m2.7': {}, 'qwen/qwen3.8-27b': {}, 'qwen/qwen3-coder-next': {}, 'qwen/qwen3.6-flash': {}, 'mistralai/mistral-medium-3-5': {}, 'bytedance-seed/seed-2.0-lite': {}, 'thinkingmachines/inkling': {}, 'openai/gpt-4o': {} },
+    // claude-sonnet-4-6 (ceiling 128000) and claude-opus-4-5 (64000) are two
+    // more budget_tokens-typed ids (models.dev reasoning_options): the engine's
+    // per-variant budget is measured on them beside haiku's 16000/31999.
+    anthropic: { [HAIKU]: {}, 'claude-opus-5': {}, 'claude-sonnet-5': {}, 'claude-fable-5': {}, 'claude-haiku-4-5-20251001': {}, 'claude-sonnet-4-6': {}, 'claude-opus-4-5': {} },
+    openai: { 'gpt-5.6-terra': {}, 'gpt-5.6-sol-pro': {}, 'gpt-5.3-codex': {}, 'gpt-4o': {} },
+    google: { 'gemini-3.6-flash': {}, 'gemini-3.1-pro-preview': {} },
+    deepseek: { 'deepseek-v4-pro': {} },
+    custom: true, model: OR(KIMI), expect: 'record: each model\'s `variants` map as the engine reports it', want: 'record' },
+  { id: 'M1', title: "kimi limit.output 8000 + env 8000 + variant 'low' (the shipped budget-8000 shape with an effort)", env: '8000', or: { [KIMI]: { limit: { context: CTX, output: 8000 } } }, model: OR(KIMI), extra: { variant: 'low' }, expect: '8000 + reasoning effort low — on OpenRouter an effort does not move the reservation (F2 showed it at 32000)', want: W(8000, LOW) },
+  { id: 'M2', title: "direct anthropic haiku limit.output 24000 + env 24000 + variant 'high' (the shipped budget-24000 shape with a thinking variant, NO fit)", env: '24000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 24000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '40000 = 24000 + 16000 — the budget is overshot by the variant\'s budget (K2/K11 at a different point)', want: W(40000, null, 'any') },
+  { id: 'M3', title: "direct anthropic haiku limit.output 24000 + env 24000, PATCH /config limit.output 8000, then variant 'high'", env: '24000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 24000 } } }, or: { [KIMI]: {} }, model: AN(HAIKU), update: { provider: { anthropic: { models: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } } } } }, dumpAfter: [`anthropic/${HAIKU}`, `openrouter/${KIMI}`], extra: { variant: 'high' }, expect: '40000 — PATCH /config is accepted (200) and changes nothing the engine serves; it wrote config.json into the engine cwd', want: { ...W(40000, null, 'any'), update: { status: 200, configJson: true } } },
+  { id: 'M4', title: 'kimi {} then PATCH /config limit.output 4096, no variant', or: { [KIMI]: {} }, model: OR(KIMI), update: { provider: { openrouter: { models: { [KIMI]: { limit: { context: CTX, output: 4096 } } } } } }, dumpAfter: [`openrouter/${KIMI}`], expect: '32000 — the runtime update is accepted (200) on the OpenRouter provider too and changes nothing the engine serves; config.json in the engine cwd is rewritten', want: { ...W(32000), update: { status: 200, configJson: true } } },
+  { id: 'M5', title: "direct openai gpt-5.6-terra {} + variant 'high'", openai: { 'gpt-5.6-terra': {} }, model: { providerID: 'openai', modelID: 'gpt-5.6-terra' }, extra: { variant: 'high' }, expect: 'no reservation at all on /v1/responses — the Responses body carries no output limit, and reasoning {effort: high, summary: auto} carries the level', want: W(null, { effort: 'high', summary: 'auto' }) },
+  { id: 'M6', title: "direct google gemini-3.6-flash {} + variant 'high'", google: { 'gemini-3.6-flash': {} }, model: { providerID: 'google', modelID: 'gemini-3.6-flash' }, extra: { variant: 'high' }, expect: 'generationConfig.maxOutputTokens 32000 with thinkingConfig {includeThoughts, thinkingLevel: high} — the Google route carries the reservation and the level together', want: W(32000, null, 'any') },
+  { id: 'M7', title: "custom unknown model {} + variant 'high' (declares no variants)", custom: true, model: CUSTOM, extra: { variant: 'high' }, expect: '32000 with nothing added — a model whose variants map is empty takes the variant as a silent no-op, F3 on a model the engine does not know', want: W(32000) },
+  { id: 'M8', title: 'direct anthropic haiku {} then PATCH /config limit {output: 8000} with NO context (the ConfigInvalidError trap, at runtime)', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), update: { provider: { anthropic: { models: { [HAIKU]: { limit: { output: 8000 } } } } } }, dumpAfter: [`anthropic/${HAIKU}`], expect: '32000 — the bad runtime update is refused (400 BadRequest, missing limit.context) and writes or changes no config file; the running engine keeps serving', want: { ...W(32000), update: { status: 400, configJson: false } } },
+  { id: 'M9', title: "openrouter anthropic/claude-haiku-4.5 {} + variant 'high' (the catalogue-dependent effort field is recorded, not pinned)", or: { 'anthropic/claude-haiku-4.5': {} }, model: OR('anthropic/claude-haiku-4.5'), extra: { variant: 'high' }, expect: '32000 on both catalogues — the effort field depends on which catalogue the engine had: the bundled one declares high as reasoning.max_tokens 16000, the live one as reasoning.effort high; either way the reservation is untouched (plan rule 4)', want: W(32000, 'any') },
+  { id: 'M10', title: "direct anthropic claude-sonnet-5 {} + variant 'high' (an ADAPTIVE-thinking variant: effort, no budgetTokens)", anthropic: { 'claude-sonnet-5': {} }, model: AN('claude-sonnet-5'), extra: { variant: 'high' }, expect: '32000 — an adaptive variant adds nothing; thinking {type: adaptive, display: summarized} with the effort carried under output_config', want: W(32000, { output_config: { effort: 'high' } }, 'any') },
+  { id: 'M10b', title: "direct anthropic claude-sonnet-5 limit.output 8000 + env 8000 + variant 'high' (the shipped budget-8000 shape with an adaptive variant)", env: '8000', anthropic: { 'claude-sonnet-5': { limit: { context: 1000000, output: 8000 } } }, model: AN('claude-sonnet-5'), extra: { variant: 'high' }, expect: '8000 — the budget holds under an adaptive variant, which adds nothing to the reservation', want: W(8000, { output_config: { effort: 'high' } }, 'any') },
+  { id: 'M11', title: "direct anthropic haiku limit.output 24000 + env 24000, PATCH /config with the FULL spawn config (limit.output 8000), then variant 'high'", env: '24000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 24000 } } }, model: AN(HAIKU), update: (origin) => buildConfig(origin, { anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } } }), dumpAfter: [`anthropic/${HAIKU}`], extra: { variant: 'high' }, expect: '40000 — a FULL-config PATCH is inert too (200); GET /config still reports the spawn value and config.json in the engine cwd is rewritten', want: { ...W(40000, null, 'any'), update: { status: 200, configJson: true } } },
+  { id: 'M12', title: "openrouter qwen3.8-max-0902 {} — wait for the engine's catalogue to know it, then variant 'medium'", or: { [QWEN]: {} }, model: OR(QWEN), waitKnown: `openrouter/${QWEN}`, extra: { variant: 'medium' }, expect: '32000 with reasoning effort medium — the startup refresh made a model newer than the bundle known within 36 ms on a one-model engine and the variant then landed', want: W(32000, { effort: 'medium' }) },
+  { id: 'M13', title: 'direct openai gpt-5.6-terra limit.output 8000 + env 8000, no variant', env: '8000', openai: { 'gpt-5.6-terra': { limit: { context: 1050000, output: 8000 } } }, model: { providerID: 'openai', modelID: 'gpt-5.6-terra' }, expect: 'no reservation even with a descriptor and the flag — and the engine sends reasoning {effort: medium, summary: auto} by itself when no variant is given', want: W(null, { effort: 'medium', summary: 'auto' }) },
+  { id: 'M14', title: "direct deepseek deepseek-v4-pro {} + variant 'high'", deepseek: { 'deepseek-v4-pro': {} }, model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' }, extra: { variant: 'high' }, expect: '32000 with reasoning_effort high — the direct DeepSeek route carries the reservation and the level on chat/completions', want: W(32000, 'high') },
+  { id: 'M15', title: "direct google gemini-3.6-flash limit.output 8000 + env 8000 + variant 'high'", env: '8000', google: { 'gemini-3.6-flash': { limit: { context: 1048576, output: 8000 } } }, model: { providerID: 'google', modelID: 'gemini-3.6-flash' }, extra: { variant: 'high' }, expect: '8000 — the budget holds on the Google route with a variant in play; thinkingLevel high adds nothing on top', want: W(8000, null, 'any') },
+  { id: 'M16', title: "direct deepseek deepseek-v4-pro limit.output 8000 + env 8000 + variant 'high'", env: '8000', deepseek: { 'deepseek-v4-pro': { limit: { context: 1000000, output: 8000 } } }, model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' }, extra: { variant: 'high' }, expect: '8000 — the budget holds on the direct DeepSeek route with a variant in play; reasoning_effort high adds nothing on top', want: W(8000, 'high') },
+  { id: 'M17', title: "direct anthropic haiku limit.output 8000 (= 24000 − the high variant's 16000) + env 24000 + variant 'high' — the FITTED shape", env: '24000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 8000 } } }, model: AN(HAIKU), extra: { variant: 'high' }, expect: '24000 = min(8000, 24000) + 16000 — a descriptor lowered by the variant\'s budget lands the sum exactly on the budget', want: W(24000, null, 'any') },
+  { id: 'M22', title: 'direct openai gpt-4o limit.output 8000 + env 8000, no variant (a chat-completions-era id: does the reservation appear on THAT path?)', env: '8000', openai: { 'gpt-4o': { limit: { context: 128000, output: 8000 } } }, model: { providerID: 'openai', modelID: 'gpt-4o' }, expect: 'no reservation on a chat-completions-era id either — the whole direct openai provider goes through /v1/responses, which scopes the M5/M13 finding to the provider, not to one id', want: W(null) },
+  // PR 4 rows through amicus's OWN door (opencode-client.js :: sendPrompt), so the
+  // validator runs against the live engine: M18 sends a declared level, M19 is
+  // refused before the wire, M20 is refused for the budget, M21 sends the K4 shape.
+  { id: 'M18', title: "amicus sendPrompt variant 'low' on kimi (declared)", or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, variant: 'low', expect: 'reasoning effort low — F2 through the shipped path', want: W(32000, LOW) },
+  { id: 'M19', title: "amicus sendPrompt variant 'medium' on kimi (undeclared: low, high, max)", or: { [KIMI]: {} }, model: OR(KIMI), viaAmicus: true, variant: 'medium', expect: 'refused before any request: VARIANT_UNDECLARED, no capture', want: { refused: 'VARIANT_UNDECLARED' } },
+  // M20 uses the BARE-descriptor + flag shape (what amicus ships for a model its
+  // catalog does not know, K5/K12): /config/providers echoes a WRITTEN descriptor
+  // (M3), and the sandbox has no amicus catalog, so the catalog-known shape is
+  // pinned in tests/opencode-client.test.js and tests/utils/engine-variants.test.js
+  // instead. Found by this row's first run (Task 2 report).
+  { id: 'M20', title: "amicus sendPrompt variant 'high' on direct haiku {} + env 24000 with outputBudget 24000 (bare descriptor + the flag: the catalog-unknown shape)", env: '24000', anthropic: { [HAIKU]: {} }, model: AN(HAIKU), viaAmicus: true, variant: 'high', outputBudget: 24000, expect: "refused before any request: VARIANT_OVER_BUDGET — the bare descriptor reads the engine's own 64000 ceiling, and 24000 + 16000 = 40000 would overshoot the budget; no capture", want: { refused: 'VARIANT_OVER_BUDGET' } },
+  { id: 'M21', title: "amicus sendPrompt variant 'max' on direct haiku with outputBudget 64000 (the K4 shape)", env: '64000', anthropic: { [HAIKU]: { limit: { context: HCTX, output: 64000 } } }, model: AN(HAIKU), viaAmicus: true, variant: 'max', outputBudget: 64000, expect: '64000 — budget at the ceiling, the sum clamped to it (K4), sent', want: W(64000, null, 'any') },
+  // council #235 r3 (C1/B1): the row-provenance canary. The SAME amicus descriptor
+  // goes onto a model the engine's catalogue knows and onto one only this config
+  // registers; the dump must still tell them apart. Keyless, prompt-free, one engine.
+  { id: 'M23', title: 'dump only: whose row is it — the SAME amicus descriptor on a model the engine knows and on one only the config registers (council #235 r3, C1/B1)',
+    dumpOnly: true,
+    anthropic: { [HAIKU]: { limit: { context: HCTX, output: 24000 } }, [FICTIONAL]: { limit: { context: HCTX, output: 24000 } } },
+    dumpRows: [`anthropic/${HAIKU}`, `anthropic/${FICTIONAL}`],
+    model: AN(HAIKU),
+    expect: 'the echo overwrites `limit` and NOTHING else: the engine row keeps its display name, family, release date, prices and variants; the config-only row reads name === id, family "", release_date "", cost 0, variants {} — while carrying capabilities.toolcall true and status "active", the cells that must never be disjuncts',
+    want: { dumpRows: { [`anthropic/${HAIKU}`]: 'engine-sourced', [`anthropic/${FICTIONAL}`]: 'config-only' } } },
 ];
 
 function wireSummary(wire) {
   if (!wire) { return { path: null, maxTokens: null, reasoning: null, thinking: null, reasoningEffort: null }; }
   const b = (wire.body && typeof wire.body === 'object') ? wire.body : {};
+  // PR 4 (M group): the OpenAI Responses API spells the reservation
+  // `max_output_tokens`; Google's generateContent nests it (and the thinking
+  // config) under `generationConfig`. Read as fallbacks so those rows print a
+  // number instead of an em dash; the existing rows' bodies carry none of them.
+  const gc = (b.generationConfig && typeof b.generationConfig === 'object') ? b.generationConfig : {};
   return {
     path: wire.url,
-    maxTokens: b.max_tokens ?? b.max_completion_tokens ?? b.maxOutputTokens ?? null,
-    reasoning: b.reasoning === undefined ? null : b.reasoning,
-    thinking: b.thinking === undefined ? null : b.thinking,
+    maxTokens: b.max_tokens ?? b.max_completion_tokens ?? b.maxOutputTokens ?? b.max_output_tokens ?? gc.maxOutputTokens ?? null,
+    // Anthropic's adaptive thinking carries the effort under `output_config`;
+    // printed wrapped so the column says which key it came from.
+    reasoning: b.reasoning !== undefined ? b.reasoning : (b.output_config !== undefined ? { output_config: b.output_config } : null),
+    thinking: b.thinking !== undefined ? b.thinking : (gc.thinkingConfig !== undefined ? gc.thinkingConfig : null),
     reasoningEffort: b.reasoning_effort ?? null,
   };
 }
@@ -540,13 +675,130 @@ function cell(v) {
 }
 
 /**
+ * Every (providerID, modelID) a case configured, for a `dump: 'all'` case.
+ * @param {object} c a CASES entry
+ * @returns {Array<[string, string]>}
+ */
+function dumpTargets(c) {
+  const blocks = [['openrouter', c.or], ['anthropic', c.anthropic], ['openai', c.openai], ['google', c.google], ['deepseek', c.deepseek]];
+  const out = [];
+  for (const [providerID, models] of blocks) {
+    for (const modelID of Object.keys(models || {})) { out.push([providerID, modelID]); }
+  }
+  if (c.custom) { out.push([CUSTOM.providerID, CUSTOM.modelID]); }
+  return out;
+}
+
+/**
+ * Every file under the sandbox HOME (the XDG and APPDATA dirs are rooted inside
+ * it by buildKeylessEnv) and under the engine's project directory (the inner
+ * run's cwd, also inside the sandbox -- see runOuter), each with a size@mtime
+ * stamp. Used around a runtime config update so a file the engine WRITES in
+ * response shows up as a new or changed path -- on a user's machine that would
+ * be their own ~/.config/opencode or their project root, not a temp dir. The
+ * whole cwd is listed, not a guessed set of names: the first version of this
+ * check looked for opencode.json / .opencode and missed the `config.json` the
+ * PATCH actually wrote.
+ * @returns {Map<string, string>} relative path -> size@mtimeMs
+ */
+function listSandboxFiles() {
+  const out = new Map();
+  const walk = (dir, rel) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const r = `${rel}/${e.name}`;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(p, r); } else {
+        let stamp = '?';
+        try { const st = fs.statSync(p); stamp = `${st.size}@${Math.round(st.mtimeMs)}`; } catch { /* raced */ }
+        out.set(r, stamp);
+      }
+    }
+  };
+  const home = process.env.HOME ? path.resolve(process.env.HOME) : null;
+  if (home) { walk(home, 'HOME'); }
+  // The project dir is inside HOME by construction (runOuter), so it is already
+  // listed as HOME/project/…; walk it separately only if that ever changes.
+  // council #235 r1 (A6): a separator-bounded prefix — /x/sandbox-evil must not pass for /x/sandbox
+  if (!home || !(path.resolve(process.cwd()) + path.sep).startsWith(home + path.sep)) { walk(process.cwd(), 'cwd'); }
+  return out;
+}
+
+/**
+ * PATCH /config on the running engine (the SDK's `config.update`), recording
+ * the response and every sandbox file the call created.
+ * @param {object} client SDK client
+ * @param {object} body the partial config to send
+ * @returns {Promise<{status: number|null, error: string|null, newFiles: string[]}>}
+ */
+async function applyUpdate(client, body) {
+  const before = listSandboxFiles();
+  let status = null;
+  let error = null;
+  try {
+    const u = await client.config.update({ body });
+    status = (u && u.response && u.response.status) || null;
+    error = u && u.error ? JSON.stringify(u.error).slice(0, 240) : null;
+  } catch (err) { error = err.message; }
+  const after = listSandboxFiles();
+  // What GET /config reports for `provider` afterwards: whether the PATCH was
+  // stored at all, separately from whether the provider registry re-read it.
+  let configAfter = null;
+  try {
+    const g = await client.config.get();
+    configAfter = JSON.stringify((g.data && g.data.provider) ?? null).slice(0, 400);
+  } catch (err) { configAfter = `error: ${err.message}`; }
+  // New paths AND paths whose size/mtime moved: a PATCH that rewrote an
+  // existing config file would show only in the second list.
+  const newFiles = [...after.keys()].filter((f) => !before.has(f));
+  const changedFiles = [...after.entries()].filter(([f, s]) => before.has(f) && before.get(f) !== s).map(([f]) => f);
+  return { status, error, newFiles, changedFiles, sandboxFiles: [...after.keys()], configAfter };
+}
+
+/**
+ * Poll `/config/providers` until the engine's catalogue KNOWS a model (its
+ * `limit.context` is non-zero) or the deadline passes. The engine refreshes its
+ * bundled catalogue from models.dev at startup; a model newer than the bundle
+ * reads `limit 0/0, variants {}` until that lands (PR 2 record: kimi's ceiling
+ * flipping between runs; this run: qwen3.8-max-0902 and glm-5.3 reading 0/0 on
+ * M0). How long that takes is what a validator reading the dump has to know.
+ * @param {object} client SDK client
+ * @param {string} key 'providerID/modelID'
+ * @param {number} deadlineMs
+ * @returns {Promise<{key: string, known: boolean, ms: number, polls: number, dump: object|null}>}
+ */
+async function waitKnown(client, key, deadlineMs) {
+  const [providerID, ...rest] = key.split('/');
+  const modelID = rest.join('/');
+  const start = Date.now();
+  let polls = 0;
+  let dump = null;
+  while (Date.now() - start < deadlineMs) {
+    polls += 1;
+    try { dump = await providersDump(client, providerID, modelID, 'wait'); } catch (err) { dump = { error: err.message }; }
+    if (dump && dump.limit && dump.limit.context > 0) { return { key, known: true, ms: Date.now() - start, polls, dump }; }
+    await sleep(250);
+  }
+  return { key, known: false, ms: Date.now() - start, polls, dump };
+}
+
+/**
  * Run one case end to end against its own engine. Never throws: a failure
  * becomes the row. The providers dump happens HERE, while the engine that
  * serves this case is still alive -- the finally below kills it.
+ *
+ * PR 4 (M group) case fields: `dump: 'all'` dumps every model the case
+ * configured (each must be bare -- the dump is engine-native only then);
+ * `dumpOnly` skips the prompt; `update` is PATCHed to the running engine after
+ * the dump and before the prompt, and `dumpAfter` names the models re-dumped
+ * once it has landed (recorded under `update.after`, never in `providers`,
+ * which stays the spawn-time, engine-native view).
  */
-async function runCase(sdk, cap, c, engines, providers) {
+async function runCase(sdk, cap, c, engines, providers, updates) {
   const base = { id: c.id, title: c.title, expect: c.expect, want: c.want ?? null, env: c.env ?? null };
   let handle = null;
+  const captureStart = cap.captures.length; // PR 4 whole-branch review (PR-3): so the refused-row catch can MEASURE "no capture"
   try {
     handle = await startEngine(sdk, buildConfig(cap.origin, c), c.env);
     engines.started += 1;
@@ -554,11 +806,56 @@ async function runCase(sdk, cap, c, engines, providers) {
     if (!providers[key] && isBareDescriptor(c)) {
       try { providers[key] = await providersDump(handle.client, c.model.providerID, c.model.modelID, c.id); } catch (err) { providers[key] = { fromCase: c.id, error: err.message }; }
     }
+    if (c.dump === 'all') {
+      for (const [providerID, modelID] of dumpTargets(c)) {
+        const k = `${providerID}/${modelID}`;
+        if (providers[k]) { continue; }
+        try { providers[k] = await providersDump(handle.client, providerID, modelID, c.id); } catch (err) { providers[k] = { fromCase: c.id, error: err.message }; }
+      }
+    }
+    let update = null;
+    let refresh = null;
+    if (c.waitKnown) {
+      refresh = await waitKnown(handle.client, c.waitKnown, 20000);
+      updates[`${c.id} (wait for the catalogue to know ${c.waitKnown})`] = refresh;
+    }
+    if (c.update) {
+      // A function receives the capture origin, so a case can PATCH the FULL
+      // spawn-time config with one field changed (M11).
+      update = await applyUpdate(handle.client, typeof c.update === 'function' ? c.update(cap.origin) : c.update);
+      update.after = {};
+      for (const k of (c.dumpAfter || [])) {
+        const [providerID, ...rest] = k.split('/');
+        try { update.after[k] = await providersDump(handle.client, providerID, rest.join('/'), c.id); } catch (err) { update.after[k] = { error: err.message }; }
+      }
+      updates[c.id] = update;
+    }
+    // council #235 r3 (M23): rows dumped IN FULL onto this row, not into `providers`.
+    // `providers` is shared across the run and skips a key an earlier case already
+    // filled, so a case that pins its own dump has to keep it locally.
+    let dumpRows = null;
+    if (c.dumpRows) {
+      dumpRows = {};
+      for (const k of c.dumpRows) {
+        const [providerID, ...rest] = k.split('/');
+        try { dumpRows[k] = await providersRow(handle.client, providerID, rest.join('/')); } catch (err) { dumpRows[k] = { error: err.message }; }
+      }
+    }
+    const config = buildConfig('<capture>', c).provider;
+    if (c.dumpOnly) { return { ...base, config, dumpRows, prompt: null, status: null, error: null, wire: null, assistant: null, update, refresh }; }
     cap.setCase(c);
     const r = await send(handle.client, cap.captures, c);
-    return { ...base, config: buildConfig('<capture>', c).provider, prompt: c.viaAmicus ? { viaAmicus: true, reasoning: c.reasoning } : (c.extra || {}), ...r };
+    return { ...base, config, dumpRows, prompt: c.viaAmicus ? { viaAmicus: true, variant: c.variant ?? null, outputBudget: c.outputBudget ?? null, reasoning: c.reasoning ?? null } : (c.extra || {}), ...r, update, refresh };
   } catch (err) {
-    return { ...base, error: err.message, wire: null, assistant: null };
+    // PR 4 whole-branch review (PR-3): a refusal must be measured against the capture server,
+    // not asserted by construction — a sendPrompt that sent and THEN threw would otherwise print
+    // `wire —` and match. Named mutant "SENTTHENREFUSED" (no unit test — the probe is not
+    // requirable; the refuter's extracted-function repro is the evidence): `wire: null` literal.
+    const posted = cap.captures.slice(captureStart).find((x) => x.method === 'POST') || null;
+    // `threw: true` marks the row as one that never reached the assistant read; checkRow
+    // scores a thrown row only when it is a REFUSAL row (want.refused) -- any other
+    // thrown row is a mismatch whatever its wire says (whole-branch review, Wave A re-review).
+    return { ...base, error: err.message, threw: true, wire: posted, capturedAfterRefusal: cap.captures.length - captureStart, assistant: null };
   } finally {
     if (handle) {
       try { handle.server.close(); engines.closed += 1; } catch (err) { engines.closeErrors.push(`${c.id}: ${err.message}`); }
@@ -578,13 +875,81 @@ async function runCase(sdk, cap, c, engines, providers) {
  */
 function checkRow(r) {
   if (r.want === 'record') { return 'recorded'; }
+  // PR 4: a row whose expectation is a REFUSAL before the wire — no capture at
+  // all (measured: runCase's catch reads the captures taken since the case began), the capture count since the case began is ZERO (council #235 r1 C2), and the thrown reason starts with the code.
+  if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
+    return (!r.wire && r.capturedAfterRefusal === 0 && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
+  }
+  // council #235 r3 (M23): a row that pins WHOSE dump row each model got. Scored on the
+  // cells src/utils/engine-variants.js :: engineSourced reads, and on the negative cells
+  // that must never become disjuncts -- so an engine that starts synthesizing display
+  // metadata for a config-only row turns this job red instead of falsely refusing cold
+  // models in the field.
+  if (r.want && typeof r.want === 'object' && r.want.dumpRows) {
+    return dumpRowsMatch(r) ? 'matched' : 'mismatched';
+  }
+  // A row that THREW (runCase's catch) and is not a refusal row never matches: its
+  // measured wire, if any, is filed in the JSON for the reader, but a case that died
+  // before the assistant read cannot satisfy a wire/assistant pin (the pre-PR-4
+  // scoring, restored after the Wave A re-review noted the measured wire had widened it).
+  if (r.threw) { return 'mismatched'; }
   if (!r.want || typeof r.want !== 'object') { return 'mismatched'; }
   const w = wireSummary(r.wire);
   const reasoning = w.reasoning ?? w.reasoningEffort ?? null;
   const ok = w.maxTokens === r.want.maxTokens
-    && JSON.stringify(reasoning) === JSON.stringify(r.want.reasoning ?? null)
+    // PR 4 (Task 7): `reasoning: 'any'` pins that an effort field is PRESENT, whatever its
+    // shape -- the twin of `thinking: 'any'`. Needed because the sandbox cache is shared
+    // across a run (see the M-group paragraph in the header): a row served by the first
+    // engine reads the bundled catalogue, every later one the cached live catalogue, and
+    // a model whose variant DEFINITION differs between the two (M9: openrouter/anthropic/
+    // claude-haiku-4.5 -- bundled `reasoning.max_tokens 16000`, live `reasoning.effort high`)
+    // must not have its want decided by case order. `max_tokens` is pinned as before.
+    && (r.want.reasoning === 'any' ? reasoning !== null : JSON.stringify(reasoning) === JSON.stringify(r.want.reasoning ?? null))
     && (w.thinking !== null) === (r.want.thinking === 'any');
-  return ok && assistantMatches(r) ? 'matched' : 'mismatched';
+  if (!ok || !assistantMatches(r)) { return 'mismatched'; }
+  // PR 4: a row that PATCHes the running engine also pins what the call did —
+  // its status and whether it wrote/rewrote config.json in the engine's cwd.
+  if (r.want.update) {
+    const u = r.update || {};
+    const touched = [...(u.newFiles || []), ...(u.changedFiles || [])].some((f) => f.endsWith('/config.json'));
+    if (u.status !== r.want.update.status || touched !== r.want.update.configJson) { return 'mismatched'; }
+  }
+  return 'matched';
+}
+
+/**
+ * The M23 verdict: for each pinned key, is the row the ENGINE's declaration or nothing
+ * but the descriptor this probe registered? Both rows carry the IDENTICAL amicus
+ * descriptor, so `limit` is asserted equal on both and is never evidence either way.
+ * @param {object} r a runCase() result
+ * @returns {boolean}
+ */
+function dumpRowsMatch(r) {
+  const rows = r.dumpRows || {};
+  for (const [key, kind] of Object.entries(r.want.dumpRows)) {
+    const m = rows[key];
+    if (!m || typeof m !== 'object' || m.missing || m.error) { return false; }
+    const modelID = key.split('/').slice(1).join('/');
+    const cost = (m.cost && typeof m.cost === 'object') ? m.cost : {};
+    const caps = (m.capabilities && typeof m.capabilities === 'object') ? m.capabilities : {};
+    const variants = (m.variants && typeof m.variants === 'object') ? m.variants : {};
+    // The echo, identical on both rows, and the two cells a config-only row also fills.
+    if (!m.limit || m.limit.context !== HCTX || m.limit.output !== 24000) { return false; }
+    if (caps.toolcall !== true || m.status !== 'active') { return false; }
+    if (kind === 'config-only') {
+      if (m.name !== modelID || m.family !== '' || m.release_date !== '') { return false; }
+      if (cost.input !== 0 || cost.output !== 0) { return false; }
+      if (Object.keys(variants).length !== 0) { return false; }
+      if (caps.temperature !== false || caps.reasoning !== false || caps.attachment !== false) { return false; }
+    } else {
+      if (typeof m.release_date !== 'string' || m.release_date.trim() === '') { return false; }
+      if (typeof m.family !== 'string' || m.family.trim() === '') { return false; }
+      if (typeof m.name !== 'string' || m.name.trim() === '' || m.name === modelID) { return false; }
+      if (typeof cost.input !== 'number' || !(cost.input > 0)) { return false; }
+      if (Object.keys(variants).length === 0) { return false; }
+    }
+  }
+  return true;
 }
 
 /**
@@ -646,9 +1011,10 @@ async function main() {
   const engines = { started: 0, closed: 0, closeErrors: [] };
   const results = [];
   const providers = {};
+  const updates = {};
   for (const c of CASES) {
     if (only && !only.has(c.id)) { continue; }
-    const row = await runCase(sdk, cap, c, engines, providers);
+    const row = await runCase(sdk, cap, c, engines, providers, updates);
     engine.version = engine.version || row.engineVersion || null;
     results.push(row);
   }
@@ -665,12 +1031,16 @@ async function main() {
   }
   process.stdout.write('\n/config/providers per model:\n');
   for (const [k, v] of Object.entries(providers)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
+  if (Object.keys(updates).length > 0) {
+    process.stdout.write('\nPATCH /config per case (status, error, sandbox files the call created, /config/providers afterwards):\n');
+    for (const [k, v] of Object.entries(updates)) { process.stdout.write(`- ${k}: ${JSON.stringify(v)}\n`); }
+  }
   const checks = checksLine(results, onlyArg);
   process.stdout.write(`\n${checks.line}\n`);
   process.stdout.write(`\nengines: ${engines.started} started, ${engines.closed} closed${engines.closeErrors.length ? ` (close errors: ${engines.closeErrors.join('; ')})` : ''}\n`);
   if (outPath) {
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
-    fs.writeFileSync(outPath, JSON.stringify({ engine, engines, providers, checks: checks.line, cases: results }, null, 2));
+    fs.writeFileSync(outPath, JSON.stringify({ engine, engines, providers, updates, checks: checks.line, cases: results }, null, 2));
     process.stdout.write(`\nraw captures: ${outPath}\n`);
   }
   // A moved cell is a FAILED run, not a new table to file.

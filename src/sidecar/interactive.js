@@ -18,6 +18,7 @@ const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
 const { writeProgress } = require('./progress');
 const { getElectronPath, buildElectronEnv, handleElectronProcess } = require('./interactive-process');
+const { readOutputBudgetSafe } = require('../headless');
 
 /** Run sidecar in interactive mode (Electron GUI) */
 async function runInteractive(model, systemPrompt, userMessage, taskId, project, options = {}) {
@@ -33,7 +34,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     };
   }
 
-  const { agent, isResume, conversation, mcp, reasoning, opencodeSessionId, client, foldNonce } = options;
+  const { agent, isResume, conversation, mcp, variant, opencodeSessionId, client, foldNonce } = options;
 
   // F6c: mirror headless's lifecycle stages (best-effort — a write failure must
   // never break the GUI) so the heartbeat/status never read "Starting up...".
@@ -70,6 +71,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     };
   }
 
+  let sent = null; // #218 PR 4 whole-branch review (EP-4): what sendPrompt SENT, for the record
   // Create or reconnect to session
   let sessionId;
   try {
@@ -93,9 +95,29 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
 
       // Always set agent — defaults to 'chat' when not specified
       promptOptions.agent = agentConfig.agent;
-      if (reasoning) { promptOptions.reasoning = reasoning; }
+      // #218 PR 4: the engine's `variant` field, validated in sendPrompt; the
+      // spawn-time budget rides the handle (PR 3). A refusal lands in the catch
+      // below as "Session setup failed: VARIANT_…" — nothing was sent.
+      // Named mutants "GUIBUDGETDROPPED" / "GUIREFUSALPREFIX" (tests/sidecar/interactive-variant.test.js).
+      if (variant) {
+        promptOptions.variant = variant;
+        promptOptions.outputBudget = readOutputBudgetSafe(server); // council #235 r1 (A1): the SAME reader headless uses (src/headless.js :: readOutputBudgetSafe) — the handle's spawn value, else config
+      }
 
-      await sendPromptAsync(ocClient, sessionId, promptOptions);
+      const promptResult = await sendPromptAsync(ocClient, sessionId, promptOptions);
+      sent = promptResult && promptResult.sentVariant;
+      if (sent && !sent.verified) {
+        const { formatUnverifiedVariantNote } = require('../utils/engine-variants');
+        const note = formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable });
+        logger.warn('Variant sent unverified', { taskId, sessionId, note });
+        // council #235 r2 (B2): logger.warn is DROPPED at the shipped default
+        // (LOG_LEVEL defaults to 'error', utils/logger.js), so the structured line alone
+        // told the user nothing — the silent degrade the product principle forbids, and the
+        // same invisibility this release cites against 4.9.3's silent adjustment. stderr
+        // carries it in every mode; stdout keeps the run document intact. Named mutant
+        // "UNVERIFIEDNOTICESILENT": drop the stderr write.
+        process.stderr.write(`Notice: ${note}\n`);
+      }
       progressStage('prompt_sent');
     }
     logger.debug('Interactive session ready', { sessionId, isResume: !!isResume });
@@ -201,6 +223,11 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       } catch (err) { logger.debug('mirror stop failed', { error: err.message }); }
       try { await server.close(); } catch { /* best-effort */ }
       logger.debug('OpenCode server closed after Electron exit');
+      // #218 PR 4 whole-branch review (EP-4/REC-2/PRT-2): the level SENT rides the interactive
+      // result too (emit-when-sent, the derivation headless.js:811-814 makes), so start.js's
+      // writers stamp `variant` / `variantUnverified` for the default GUI mode as well.
+      // Named mutant "INTERACTIVEVARIANTDROPPED" (tests/sidecar/interactive-variant.test.js).
+      if (sent) { result.variant = sent.variant; if (!sent.verified) { result.variantUnverified = true; } }
       result.opencodeSessionId = sessionId;
       resolve(result);
     });

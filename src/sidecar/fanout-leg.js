@@ -76,7 +76,7 @@ function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
  * Adds `.reason` (alias of buildRunResult's `.error`) and `.legId` so the
  * fallback loop reads a stable shape without re-deriving them.
  */
-async function runSingleAttempt({ leg, legId, waveId, project, directory, follow, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, noOutputBackstopMs }) {
+async function runSingleAttempt({ leg, legId, waveId, project, directory, follow, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, variant, quiet, foldNonce, noOutputBackstopMs }) {
   const { IdleWatchdog } = require('../utils/idle-watchdog');
   const { markAborted } = require('../utils/session-abort');
   const { runHeadless } = require('../headless');
@@ -123,7 +123,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     result = await runHeadless(
       leg.model, systemPrompt, userMessage, legId, project,
       timeoutMs, agent || 'build',
-      { client, server, watchdog, summaryLength, reasoning, nonce: foldNonce, directory, noOutputBackstopMs }
+      { client, server, watchdog, summaryLength, variant, nonce: foldNonce, directory, noOutputBackstopMs }
     );
   } catch (err) {
     result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };
@@ -218,6 +218,11 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // #218 PR 3: the engine's `finish` for the leg's last assistant message
     // ('length' = stopped at the reservation), emit-when-set like ttftMs above.
     finish: (result && typeof result.finish === 'string') ? result.finish : undefined,
+    // #218 PR 4: the effort level SENT (emit-when-sent) and whether the engine's
+    // catalogue knew the model when it was sent. Named mutant "LEGVARIANTDROPPED"
+    // (tests/sidecar/fanout.test.js).
+    variant: (result && typeof result.variant === 'string') ? result.variant : undefined,
+    variantUnverified: (result && result.variantUnverified === true) ? true : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

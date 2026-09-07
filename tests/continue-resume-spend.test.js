@@ -206,6 +206,7 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
   const OUTPUT_LENGTH_REASON = "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)";
   const lengthDeath = {
     completed: false, error: OUTPUT_LENGTH_REASON, summary: '', finish: 'length',
+    variant: 'high', variantUnverified: true,
     usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
   };
 
@@ -222,10 +223,13 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(meta.status).toBe('error');
     expect(meta.reason.startsWith('OUTPUT_LENGTH:')).toBe(true);
     expect(meta.finish).toBe('length'); // SOLOERRORNOFINISH
+    expect(meta.variant).toBe('high'); // CONTINUEERRORNOVARIANT
+    expect(meta.variantUnverified).toBe(true);
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('error');
     expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+    expect(rows[0].variant).toBe('high'); // SOLOROWNOVARIANT
   });
 
   it("an OUTPUT_LENGTH resume writes finish 'length' on metadata.json and on its ledger row", async () => {
@@ -239,10 +243,49 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     expect(meta.status).toBe('error');
     expect(meta.reason.startsWith('OUTPUT_LENGTH:')).toBe(true);
     expect(meta.finish).toBe('length'); // SOLOERRORNOFINISH
+    expect(meta.variant).toBe('high'); // RESUMEERRORNOVARIANT
+    expect(meta.variantUnverified).toBe(true);
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('error');
     expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+    expect(rows[0].variant).toBe('high'); // SOLOROWNOVARIANT
+  });
+
+  // #218 PR 4 whole-branch review (§C2 / TM-4, parked m6): the COMPLETE branch's
+  // finalizeSession passthrough was unpinned at both reopen sites too.
+  it('a COMPLETED continue stamps the variant it sent and no unverified flag', async () => {
+    // Named mutant "CONTINUEVARIANTDROPPED": drop the variant args from continue.js's finalizeSession call.
+    seedSession(projectDir, 'old0e2e6');
+    runHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'new0e2e6', variant: 'low', usage,
+    });
+    await continueSidecar({
+      taskId: 'old0e2e6', newTaskId: 'new0e2e6', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'new0e2e6')), 'utf-8'));
+    expect(meta.status).toBe('complete');
+    expect(meta.variant).toBe('low');
+    expect('variantUnverified' in meta).toBe(false);
+  });
+
+  it('a COMPLETED resume stamps the variant it sent and no unverified flag', async () => {
+    // Named mutant "RESUMEVARIANTDROPPED": drop the variant args from resume.js's finalizeSession call.
+    seedSession(projectDir, 'res0e2e6');
+    runHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'res0e2e6', variant: 'low', usage,
+    });
+    await resumeSidecar({
+      taskId: 'res0e2e6', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(
+      SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e6')), 'utf-8'));
+    expect(meta.status).toBe('complete');
+    expect(meta.variant).toBe('low');
+    expect('variantUnverified' in meta).toBe(false);
   });
 
   // Council #232 r1 B1: a resume REUSES the session's own metadata.json, so a
@@ -251,7 +294,7 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
   // Named mutant "STALEFINISH": drop the `else { delete … }` from resume.js's
   // error branch / session-utils.js :: finalizeSession.
   it("a resumed run that errors with no finish REMOVES the prior attempt's (council #232 r1 B1)", async () => {
-    seedSession(projectDir, 'res0e2e4', { finish: 'length' });
+    seedSession(projectDir, 'res0e2e4', { finish: 'length', variant: 'low', variantUnverified: true });
     runHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false,
       taskId: 'res0e2e4', error: 'connection reset', usage,
@@ -263,6 +306,9 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
       SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, 'res0e2e4')), 'utf-8'));
     expect(meta.status).toBe('error');
     expect('finish' in meta).toBe(false); // STALEFINISH
+    // #218 PR 4: variant/variantUnverified follow the same removal rule as finish.
+    expect('variant' in meta).toBe(false);
+    expect('variantUnverified' in meta).toBe(false);
   });
 
   it("a resumed run that completes with no finish also drops the prior attempt's (council #232 r1 B1)", async () => {

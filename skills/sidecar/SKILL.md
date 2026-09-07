@@ -236,14 +236,7 @@ amicus start \
 - `--context-turns <N>`: Max conversation turns to include (default: 50)
 - `--context-since <duration>`: Time filter for context (e.g., `2h`, `30m`, `1d`). Overrides `--context-turns`.
 - `--context-max-tokens <N>`: Max context size (default: 80000)
-- `--thinking <level>`: Model thinking/reasoning effort level:
-  - `none` - No extended thinking
-  - `minimal` - Minimal thinking (may be adjusted if unsupported by model)
-  - `low` - Low thinking effort
-  - `medium` - Medium thinking effort (default)
-  - `high` - High thinking effort
-  - `xhigh` - Extra high thinking effort
-  Note: If the model doesn't support the specified level, it will be automatically adjusted.
+- `--thinking <level>`: Reasoning effort — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` (the levels the curated routes declare between them). Omit it for the provider's own default effort (nothing is sent then). A level the model does not declare is refused before anything is sent (`VARIANT_UNDECLARED`, naming the declared set); a declared level whose thinking budget would push the reservation over `outputBudget` on the direct Anthropic route is refused too (`VARIANT_OVER_BUDGET`); a model the engine's catalogue does not know in time is sent the level unverified (`variantUnverified: true` on the record). Nothing is adjusted.
 - `--summary-length <length>`: Summary verbosity:
   - `brief` - Concise summary
   - `normal` - Standard summary (default)

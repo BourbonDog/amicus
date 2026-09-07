@@ -108,7 +108,7 @@ describe('amicus models', () => {
   it('--refresh says so when models.dev was unreachable', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'timeout', detail: 'no response within 10000ms' }, filled: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev unreachable (timeout: no response within 10000ms); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model');
+    expect(out).toContain('Ceilings: models.dev unreachable (timeout: no response within 10000ms); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model; direct openai rows send no output reservation at all (#218 PR 4, M5/M13/M22)');
   });
 
   // Council #230 D4: 'unreachable' is a claim about models.dev. A parse-error means
@@ -116,7 +116,7 @@ describe('amicus models', () => {
   it('--refresh words a parse-error as answered-but-unusable, not unreachable', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'parse-error', detail: 'Unexpected token <' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev answered but could not be used (parse-error: Unexpected token <); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model');
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (parse-error: Unexpected token <); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model; direct openai rows send no output reservation at all (#218 PR 4, M5/M13/M22)');
     expect(out).not.toContain('unreachable');
   });
 
@@ -126,7 +126,7 @@ describe('amicus models', () => {
   it('--refresh words a bad-shape body as answered-but-unusable, not unreachable', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'bad-shape', detail: 'no recognised vendor limits in api.json' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev answered but could not be used (bad-shape: no recognised vendor limits in api.json); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model');
+    expect(out).toContain('Ceilings: models.dev answered but could not be used (bad-shape: no recognised vendor limits in api.json); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model; direct openai rows send no output reservation at all (#218 PR 4, M5/M13/M22)');
     expect(out).not.toContain('unreachable');
   });
 
@@ -140,7 +140,7 @@ describe('amicus models', () => {
   it('--refresh words an exception neutrally, blaming neither models.dev nor the network', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: { reason: 'exception', detail: 'kaboom' }, skipped: null, filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: ceiling enrichment failed (exception: kaboom); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model');
+    expect(out).toContain('Ceilings: ceiling enrichment failed (exception: kaboom); rows without a ceiling get an outputBudget through the engine flag alone, clamped only where the engine\'s own catalog knows the model; direct openai rows send no output reservation at all (#218 PR 4, M5/M13/M22)');
     expect(out).not.toContain('unreachable');
   });
 
@@ -158,7 +158,7 @@ describe('amicus models', () => {
   it('--refresh says so when models.dev is disabled by config', async () => {
     const { handleModels } = loadHandler({ ceilingEnrichment: { source: 'models.dev', failure: null, skipped: 'disabled', filled: 0, alreadyKnown: 0, unknown: 0, stillMissing: 0, skippedRouters: 0, skippedLocal: 0 } });
     const { out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
-    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); openai/anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)');
+    expect(out).toContain('Ceilings: models.dev lookup disabled (modelsDevCeilings: false); anthropic/deepseek direct rows carry no ceiling here and are clamped by the engine\'s own catalog instead; direct openai rows send no output reservation at all (#218 PR 4) (Google publishes its own ceiling and OpenRouter rows keep OpenRouter\'s)');
     expect(out).not.toContain('rows filled from models.dev');
   });
 

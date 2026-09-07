@@ -365,8 +365,11 @@ async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
  * @param {object} [options] - Additional options
  * @param {object} [options.mcp] - MCP server configurations
  * @param {string} [options.summaryLength='normal'] - Desired summary length
- * @param {object} [options.reasoning] - Reasoning/thinking configuration
- * @param {string} [options.reasoning.effort] - Effort level: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'none'
+ * @param {string} [options.variant] - #218 PR 4: the effort level, sent as the engine's `variant`
+ *   prompt field and validated by sendPrompt against the model's declaration; a refusal is thrown
+ *   before any request and becomes this leg's standard error result through the outer exception
+ *   handler below (zero spend, nothing polled). The result carries `variant` (emit-when-sent) and
+ *   `variantUnverified: true` when the engine's catalogue did not know the model in time.
  * @param {string} [options.nonce] - Per-run fold nonce (15b.3, #BL-7 residual). The
  *   PROMPT the caller built (prompt-builder.js buildPrompts) must have instructed the
  *   model with this SAME nonce — runHeadless only DETECTS, it never re-derives one from
@@ -388,7 +391,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     getSessionStatus
   } = require('./opencode-client');
 
-  const { reasoning } = options;
+  const { variant } = options;
   // 15b.3: never fall back to bare-marker detection — an omitted nonce still
   // gets ONE generated here so findTrailingFoldMarker always has something to
   // match, but since the prompt (built by the caller) never advertised THIS
@@ -651,9 +654,16 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const agentConfig = mapAgentToOpenCode(agent || 'build');
     promptOptions.agent = agentConfig.agent;
 
-    // Add reasoning/thinking configuration if provided
-    if (reasoning) {
-      promptOptions.reasoning = reasoning;
+    // #218 PR 4: the effort level goes out as the engine's `variant` prompt field
+    // (probe F2), validated in sendPrompt against what the model declares; the
+    // budget the engine was spawned with rides the handle (readOutputBudgetSafe,
+    // PR 3) so the direct-Anthropic fit check (M2/M17) judges the same number the
+    // death report names. Named mutant "VARIANTNOTSENT" (tests/headless-variant.test.js).
+    const sendAbort = new AbortController();
+    if (variant) {
+      promptOptions.variant = variant;
+      promptOptions.outputBudget = readOutputBudgetSafe(server, options._readOutputBudget);
+      promptOptions.signal = sendAbort.signal; // #218 PR 4 whole-branch review (EP-2): see the backstop catch below
     }
 
     // v4.6.2 PR2 amendment (controller live smoke, field evidence): arm BEFORE
@@ -776,6 +786,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // internally, so this is defensive belt-and-suspenders, not load-bearing
       // — verified empirically before relying on it).
       sendPromptPromise.catch(() => {});
+      // #218 PR 4 whole-branch review (EP-2): the send may still be INSIDE its declaration
+      // wait (sendPrompt reads /config/providers for up to 5 s when a variant was asked for);
+      // this leg is finalized and its session aborted below, so the orphan must not send.
+      // Named mutant "ORPHANSENDS" (tests/headless-variant.test.js): drop the abort.
+      sendAbort.abort();
       backstopFired = true;
       logger.warn('No-output backstop fired before the prompt send resolved', {
         taskId, sessionId, backstopMs: noOutputBackstopMs,
@@ -794,6 +809,27 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // backstop-abort block further down).
     if (backstopFired) {
       sessionError = await noOutputBackstopReason();
+    }
+
+    // #218 PR 4: what was SENT, for the leg record (emit-when-sent; named mutants
+    // "VARIANTDROPPED" / "UNVERIFIEDHIDDEN" in tests/headless-variant.test.js). A refused
+    // variant never reaches here: sendPrompt throws before the request and the outer
+    // exception handler returns the standard error result.
+    const sent = promptResult && promptResult.sentVariant;
+    const sentVariantFields = sent
+      ? { variant: sent.variant, ...(sent.verified ? {} : { variantUnverified: true }) }
+      : {};
+    if (sent && !sent.verified) {
+      const { formatUnverifiedVariantNote } = require('./utils/engine-variants');
+      const note = formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable });
+      logger.warn('Variant sent unverified', { taskId, sessionId, note });
+      // council #235 r2 (B2): logger.warn is DROPPED at the shipped default
+      // (LOG_LEVEL defaults to 'error', utils/logger.js), so the structured line alone
+      // told the user nothing — the silent degrade the product principle forbids, and the
+      // same invisibility this release cites against 4.9.3's silent adjustment. stderr
+      // carries it in every mode; stdout keeps the run document intact. Named mutant
+      // "UNVERIFIEDNOTICESILENT": drop the stderr write.
+      process.stderr.write(`Notice: ${note}\n`);
     }
 
     // Hard provider failure detected at the client boundary (#37): a non-2xx /
@@ -1653,6 +1689,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         ...settleResult,
         ...subtreeFlags,
         ...subtreeResult,
+        ...sentVariantFields,
         // #133 P1: sessionId was assigned at :413/:417, well before this
         // return — guaranteed set here, same as `taskId` above.
         opencodeSessionId: sessionId,
@@ -1679,6 +1716,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ...settleResult,
       ...subtreeFlags,
       ...subtreeResult,
+      ...sentVariantFields,
       // #133 P1: see the comment on the sibling return above — guaranteed set.
       opencodeSessionId: sessionId,
       // v4.9 W13 Task A: emit-when-set — see the sibling return above.
@@ -1857,6 +1895,7 @@ module.exports = {
   findTrailingFoldMarker,
   formatFoldOutput,
   formatNoOutputBackstopReason,
+  readOutputBudgetSafe,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,
   COMPLETE_MARKER,

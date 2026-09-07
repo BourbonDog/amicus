@@ -332,6 +332,20 @@ const handlers = {
       };
     }
 
+    // #218 PR 4 whole-branch review (VCMD-1): the zod enum closes the TYPED door only — a pack
+    // fills `thinking` onto `input` after zod ran (pack-resolve.js), and the in-process
+    // shared-server branch below never runs validateStartArgs. The same vocabulary check the
+    // CLI runs (cli.js), here for both paths. Named mutant "PACKTHINKINGUNCHECKED"
+    // (tests/pack/mcp-pack-params.test.js): drop this block.
+    {
+      const { validateThinkingLevel } = require('./utils/thinking-validators');
+      const thinkingCheck = validateThinkingLevel(input.thinking);
+      if (!thinkingCheck.valid) {
+        const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({ code: ERROR_CODES.BAD_ARGS, message: thinkingCheck.error, hint: null })) }] };
+      }
+    }
+
     // Model routing (#61 Task 6.2): route through the gateway router for MCP
     // parity with the CLI's resolveLaunchModel (start-helpers.js). Unlike the
     // CLI, this handler must never process.exit — the MCP server is long-lived
@@ -527,6 +541,7 @@ const handlers = {
           // so without them status/list/read show a briefing-less, mode-less run.
           mode: 'headless',
           agent: agent || 'build',
+          ...(input.thinking ? { thinking: input.thinking } : {}), // #218 PR 4 whole-branch review (REC-1): emit-when-requested, as createSessionMetadata does (start-metadata.js)
           // v4.5 HOLD-gate decision 1: the RENDERED prompt (byte-identical to
           // input.prompt when no pack template applied) — parity with the CLI,
           // whose briefing.md on disk is always the rendered text (spec §4).
@@ -598,6 +613,11 @@ const handlers = {
             // moment a consumer (e.g. metadata/fold-output) needs it (12a.1/B02).
             amicusClient: detectedClient,
             nonce: foldNonce,
+            // #218 PR 4 whole-branch review (REC-1/VCMD-1/PRT-1): the level goes to the engine
+            // on THIS path too — it was argv-only (:434), which this branch never reads, so
+            // `thinking` was dropped silently while the tool text promised a refusal.
+            // Named mutant "SHAREDPATHNOVARIANT" (tests/mcp-server-wait-wiring.test.js).
+            variant: input.thinking || undefined,
           }
         ).then((result) => {
           // Session done — route through resolveTerminalState (same single source
@@ -1304,6 +1324,12 @@ const handlers = {
     if (input.timeout !== undefined
         && (typeof input.timeout !== 'number' || !Number.isFinite(input.timeout) || input.timeout <= 0)) {
       return textResult('Error: timeout must be a positive number of minutes.', true);
+    }
+    // #218 PR 4 whole-branch review (VCMD-2): a pack-filled `thinking` bypasses the zod enum here too.
+    {
+      const { validateThinkingLevel } = require('./utils/thinking-validators');
+      const thinkingCheck = validateThinkingLevel(input.thinking);
+      if (!thinkingCheck.valid) { return textResult(thinkingCheck.error, true); }
     }
 
     // Resolve a single effective models list (council OR models), validated

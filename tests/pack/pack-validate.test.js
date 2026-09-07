@@ -151,6 +151,26 @@ describe('validatePack: options allowlist', () => {
     }, { mode: 'save' });
     expect(res).toEqual({ ok: true, warnings: [] });
   });
+
+  // #218 PR 4 whole-branch review (VCMD-2): the key allowlist above never looked at
+  // the VALUE, so a saved out-of-vocabulary level reached sendPrompt.
+  test("a fanout pack's out-of-vocabulary options.thinking is rejected", () => {
+    // Named mutant "PACKTHINKINGVALUE": drop the value check from pack-validate.js.
+    const { validatePack } = load();
+    const res = validatePack({
+      ...FANOUT_PACK(), options: { ...FANOUT_PACK().options, thinking: 'turbo' },
+    }, { mode: 'save' });
+    expect(res.ok).toBe(false);
+    expect(res.errors).toContain('options.thinking must be one of: none, minimal, low, medium, high, xhigh, max');
+  });
+
+  test("a solo pack's in-vocabulary options.thinking still passes", () => {
+    const { validatePack } = load();
+    const res = validatePack({
+      ...SOLO_PACK(), options: { ...SOLO_PACK().options, thinking: 'max' },
+    }, { mode: 'save' });
+    expect(res).toEqual({ ok: true, warnings: [] });
+  });
 });
 
 describe('validatePack: bench member resolution', () => {

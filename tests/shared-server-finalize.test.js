@@ -98,6 +98,25 @@ describe('finalizeHeadlessResult (shared-server path)', () => {
     // Named mutant "STALEFINISH": drop the `else { delete metadata.finish; }`.
     expect('finish' in m).toBe(false);
   });
+
+  it('a completed run carrying variant threads it onto metadata (#218 PR 4)', () => {
+    const sdir = tmpSession();
+    finalizeHeadlessResult(sdir, { completed: true, summary: 'cut', variant: 'low', variantUnverified: true }, os.tmpdir(), readMeta(sdir));
+    const m = readMeta(sdir);
+    expect(m.status).toBe('complete');
+    expect(m.variant).toBe('low');
+    expect(m.variantUnverified).toBe(true);
+  });
+
+  it('a run with no variant REMOVES prior variant keys from metadata', () => {
+    const sdir = tmpSession({ variant: 'low', variantUnverified: true });
+    finalizeHeadlessResult(sdir, { completed: false, error: 'connection reset' }, os.tmpdir(), readMeta(sdir));
+    const m = readMeta(sdir);
+    expect(m.status).toBe('error');
+    // Named mutant "SHAREDNOVARIANT": drop the stamp/delete line in session-finalize.js.
+    expect('variant' in m).toBe(false);
+    expect('variantUnverified' in m).toBe(false);
+  });
 });
 
 describe('finalizeSession defense-in-depth guard (#36)', () => {

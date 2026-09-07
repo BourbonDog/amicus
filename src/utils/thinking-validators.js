@@ -1,92 +1,39 @@
 /**
  * Thinking Level Validators
  *
- * Model-specific thinking level validation.
- * Extracted from validators.js to keep modules under 300 lines.
+ * #218 PR 4: the CLI's `--thinking` check is a VOCABULARY check only — the seven
+ * levels the curated routes declare between them (engine-variants.js ::
+ * VARIANT_LEVELS, measured on the engine's /config/providers dump, probe M0).
+ * Whether a given MODEL declares the level is the engine's call, read from that
+ * same dump at send time (opencode-client.js :: sendPrompt), where a level the
+ * model does not declare is refused before anything is sent. The per-model table
+ * this file carried until PR 4 (gpt-5 "without minimal", gemini "with everything")
+ * was a static guess the dump CONFIRMS on one row and contradicts on the other
+ * (M0: both exclude `minimal` for gpt-5 — gpt-5.6-terra declares none, low, medium,
+ * high, xhigh, max — while the table gave gemini `none` and `xhigh` and
+ * gemini-3.6-flash declares neither, only minimal, low, medium, high), and its "use
+ * medium instead" adjustment sent a level the user never asked for. Both are gone;
+ * nothing is adjusted here — guessing right on one row does not make a guess a
+ * declaration (council #235 r1 wave 2: this docblock had cited the CONFIRMING row
+ * as the contradiction, the same inversion the CHANGELOG carried).
  */
+
+const { VARIANT_LEVELS } = require('./engine-variants');
 
 /**
- * Model-specific thinking level support (static fallback)
- * Maps model patterns to their supported thinking levels.
- *
- * NOTE: For dynamic, up-to-date capabilities, use model-capabilities.js
- * which fetches from OpenRouter API and caches the results.
- * This static map is used as a fast fallback for CLI validation.
+ * @param {string} [thinking] the requested level; omitted (undefined/null) is valid (nothing is sent then)
+ * @returns {{valid: boolean, error?: string}}
  */
-const MODEL_THINKING_SUPPORT = {
-  // OpenAI GPT-5.x does NOT support 'minimal'
-  'gpt-5': ['none', 'low', 'medium', 'high', 'xhigh'],
-  // o3/o3-mini supports all levels
-  'o3': ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
-  // Gemini supports all levels
-  'gemini': ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
-  // Default: all levels supported
-  'default': ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
-};
-
-/**
- * Get supported thinking levels for a model (synchronous, static fallback)
- *
- * For dynamic lookup from OpenRouter API cache, use:
- *   const { getSupportedThinkingLevels } = require('./model-capabilities');
- *
- * @param {string} model - Model identifier
- * @returns {string[]} Array of supported thinking levels
- */
-function getSupportedThinkingLevels(model) {
-  if (!model) {return MODEL_THINKING_SUPPORT.default;}
-
-  const modelLower = model.toLowerCase();
-
-  // Check each known model pattern
-  for (const [pattern, levels] of Object.entries(MODEL_THINKING_SUPPORT)) {
-    if (pattern !== 'default' && modelLower.includes(pattern)) {
-      return levels;
-    }
+function validateThinkingLevel(thinking) {
+  // council #235 r2 (A2): presence, not truthiness. `--thinking=` parses to '' (cli.js's
+  // inline-value branch) and a truthiness test accepted it as "flag omitted", so the level
+  // was silently dropped. An omitted flag is undefined/null; anything else the user typed
+  // must face the vocabulary check. Named mutant "FALSYLEVELACCEPTED": restore `if (!thinking)`.
+  if (thinking === undefined || thinking === null) { return { valid: true }; }
+  if (!VARIANT_LEVELS.includes(thinking)) {
+    return { valid: false, error: `Error: --thinking must be one of: ${VARIANT_LEVELS.join(', ')}` };
   }
-
-  return MODEL_THINKING_SUPPORT.default;
-}
-
-/**
- * Validate thinking level for a specific model (synchronous)
- *
- * For async validation with dynamic API cache, use:
- *   const { validateThinkingForModel } = require('./model-capabilities');
- *
- * @param {string} thinking - Thinking level ('minimal', 'low', 'medium', 'high', 'xhigh', 'none')
- * @param {string} model - Model identifier
- * @returns {{valid: boolean, error?: string, warning?: string, adjustedLevel?: string}}
- */
-function validateThinkingLevel(thinking, model) {
-  if (!thinking) {
-    return { valid: true };
-  }
-
-  const allLevels = MODEL_THINKING_SUPPORT.default;
-  if (!allLevels.includes(thinking)) {
-    return {
-      valid: false,
-      error: `Error: --thinking must be one of: ${allLevels.join(', ')}`
-    };
-  }
-
-  const supportedLevels = getSupportedThinkingLevels(model);
-  if (!supportedLevels.includes(thinking)) {
-    // Map to nearest supported level
-    const fallback = thinking === 'minimal' ? 'low' : 'medium';
-    return {
-      valid: true,
-      warning: `Warning: Model '${model}' does not support thinking level '${thinking}'. Using '${fallback}' instead.`,
-      adjustedLevel: fallback
-    };
-  }
-
   return { valid: true };
 }
 
-module.exports = {
-  MODEL_THINKING_SUPPORT,
-  getSupportedThinkingLevels,
-  validateThinkingLevel
-};
+module.exports = { VARIANT_LEVELS, validateThinkingLevel };
