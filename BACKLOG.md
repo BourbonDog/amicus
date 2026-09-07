@@ -7655,6 +7655,18 @@ line the next time the matrix is run end to end.
   but that the decision was never made anywhere: it fell out of which PR happened to edit
   `CHANGELOG.md`. The recipe needs one step before the version pin: diff `git log <lasttag>..main`
   against the `[Unreleased]` section and rule on every commit the section does not mention.
+- [ ] **Every published tarball ships a `docs/ROADMAP.md` whose status lines name the PREVIOUS
+  release (found 2026-09-07, verified against three tags).** `docs/*.md` has shipped in the npm
+  tarball since v4.4.1, and the roadmap's two status lines are factual claims about the current
+  version — but they are updated in the post-ship pass, which by definition runs after the tag. So
+  `git show v4.9.4:docs/ROADMAP.md` says "Amicus is at **v4.9.3**", and `v4.9.3`'s said
+  "**v4.9.0**" (two releases stale, because v4.9.1/v4.9.2 never got a pass). Every user who reads
+  the roadmap out of an install has been told the wrong current version, every release, for as long
+  as docs have shipped. The fix is a one-line move in the recipe, not code: pin the ROADMAP status
+  lines in the RELEASE commit beside the six version files — they are a version site — and leave the
+  post-ship pass for what genuinely cannot be known until after the publish (channel verification,
+  cut findings). Not corrected in 4.9.4's own tarball: a published version is never re-published,
+  and a doc line does not justify a 4.9.5.
 - [ ] **Three advisories reach the PUBLISHED dependency tree through `@modelcontextprotocol/sdk`
   (found 2026-09-07, `npm audit --omit=dev`).** `fast-uri@3.1.5` (two high: SSRF via malformed IPv6
   normalization and via repeated hostname percent-decoding; plus host confusion via percent-encoded
