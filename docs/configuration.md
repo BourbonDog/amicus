@@ -343,7 +343,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_GUI_LOAD_TIMEOUT_MS` | Maximum wait in milliseconds for the Electron UI to load before the load-failsafe fires. If the OpenCode web UI fails to respond within this window, Amicus shows a load-error page instead of hanging invisibly. | `15000` |
 | `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. Increment (e.g. `9223`) to avoid conflicts with a running Chrome or another Amicus window. | `9222` |
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
-| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal. For one case only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
+| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal. On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For one case only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
 > **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
 > anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`,
@@ -354,8 +354,12 @@ These variables control the polling loop that drives headless sessions. The defa
 > variable is a plain environment variable read under that exact bare spelling
 > only: a repo-planted `npm_config_amicus_allow_unverified_electron` reads back
 > as unset. It also does not change where the download comes from — a real
-> `ELECTRON_MIRROR` environment variable is honoured exactly as before, and the
-> digest is enforced against whatever it serves either way.
+> `ELECTRON_MIRROR` environment variable is honoured exactly as before, set or
+> unset. What it *does* relax, deliberately and on both routes, is the digest:
+> with it set, a cached artifact that contradicts Electron's published sha256 is
+> accepted with a warning, and a download is no longer pinned to that sha256
+> (`@electron/get` then trusts the `SHASUMS256.txt` served alongside the artifact).
+> Leave it unset and the published digest is enforced on both routes.
 
 ---
 

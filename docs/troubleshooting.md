@@ -408,10 +408,18 @@ unverified, with `variantUnverified: true` on the leg document.
 [amicus] Electron artifact REFUSED: electron-v43.1.1-win32-x64.zip
 [amicus]   C:\Users\me\AppData\Local\electron\Cache\<sha>\electron-v43.1.1-win32-x64.zip
 [amicus]   sha256 3f2a... does not match the published b4e9...
-[amicus]   The file has been removed.
+[amicus] This is what a swapped mirror or a planted cache file looks like. It is ALSO
+[amicus] what a truncated download, a failing disk, or a mirror serving a REBUILT
+[amicus] electron looks like — amicus cannot tell them apart.
+[amicus] If you deliberately run a REBUILT electron, set
+[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 BEFORE provisioning again — ...
+[amicus]   The file has been removed: re-copy it from the machine that downloaded it ...
 ```
 
-`amicus doctor` and the `npm install` notice report the same artifact as REFUSED. Nothing is extracted and the GUI is not installed.
+The refused bytes are never extracted, so no Electron is installed *from them*. What you see afterwards depends on which path hit the refusal:
+
+- **`npm install` (offline by design)** repeats the refusal reason in its notice and stops there — it never downloads.
+- **`amicus doctor --fix` and first GUI use** re-download the artifact with the digest pinned, so a one-off bad file self-heals and is reported as installed. Only when that retry cannot rescue it — no network, or the fresh download fails too — does `doctor` repeat the refusal reason instead of its generic "not provisioned".
 
 **Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus hashes a cached zip **before** extracting it, and pins the digest on the download, so unverified bytes never become an Electron install.
 
@@ -419,10 +427,12 @@ That is what a swapped mirror or a planted cache file looks like. It is **also**
 
 **Fix:**
 - **Let it retry.** Online, amicus removes the offending cache entry — only when its filename and its resolved location both say it really is that cache entry — and downloads again with the digest pinned. A one-off truncated download heals itself.
-- **Air-gapped / hand-seeded cache:** re-copy the cache directory from the machine that downloaded it. A partial copy is the usual cause.
-- **You deliberately run a rebuilt Electron:** set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` (see [configuration.md](./configuration.md#gui-and-debug)). It downgrades the refusal to a warning on every use and re-enables nothing else.
+- **Air-gapped / hand-seeded cache:** the refused file is deleted, so re-copy the cache directory from the machine that downloaded it. A partial copy is the usual cause. If the bytes are deliberately different (below), set the variable *before* you re-copy — the next refusal would remove the fresh copy too.
+- **You deliberately run a rebuilt Electron:** set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` (see [configuration.md](./configuration.md#gui-and-debug)). It accepts a cached artifact that contradicts the published digest, and drops the digest pin on a download so a rebuilt artifact can be fetched from your own `ELECTRON_MIRROR` at all. It re-enables nothing else: the Electron installer's environment stays scrubbed of every `npm_config_electron_*` / `npm_package_config_electron_*` name either way.
 - **Otherwise treat it as real.** Check what `ELECTRON_MIRROR` is set to, and whether the directory you ran `npx -y amicus@latest` in is one you trust.
 - Headless runs and the full council work without the GUI in every one of these cases.
+
+**A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it. Report the mirror or cache the archive came from.
 
 ---
 
