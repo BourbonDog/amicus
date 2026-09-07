@@ -300,7 +300,9 @@ then clamped to the ceiling — the number the reason names is Amicus's own cata
 model, which is what the fit can read once a budget is set, M3; for a model Amicus's catalog has no
 row for it is instead the engine's own ceiling, straight from the dump, K5/K12), route the model
 through OpenRouter (a variant leaves the reservation at the budget there — M1, M9), or use an
-adaptive-thinking model such as `claude-sonnet-5`. A model the engine's catalogue does not know yet
+adaptive-thinking model such as `claude-sonnet-5`. When the reason says to refresh first, the
+ceiling it named came from Amicus's catalog rather than the engine, and the two can disagree. A
+model the engine's catalogue does not know yet
 (a custom or local model, or one newer than the engine's bundled list before its startup refresh
 lands) is never refused: the level is sent after a bounded wait and the run logs `Variant sent
 unverified`; the same applies, with a budget set, to a model whose dump reports no variants — the

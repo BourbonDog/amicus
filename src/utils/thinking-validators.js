@@ -21,11 +21,15 @@
 const { VARIANT_LEVELS } = require('./engine-variants');
 
 /**
- * @param {string} [thinking] the requested level; omitted is valid (nothing is sent then)
+ * @param {string} [thinking] the requested level; omitted (undefined/null) is valid (nothing is sent then)
  * @returns {{valid: boolean, error?: string}}
  */
 function validateThinkingLevel(thinking) {
-  if (!thinking) { return { valid: true }; }
+  // council #235 r2 (A2): presence, not truthiness. `--thinking=` parses to '' (cli.js's
+  // inline-value branch) and a truthiness test accepted it as "flag omitted", so the level
+  // was silently dropped. An omitted flag is undefined/null; anything else the user typed
+  // must face the vocabulary check. Named mutant "FALSYLEVELACCEPTED": restore `if (!thinking)`.
+  if (thinking === undefined || thinking === null) { return { valid: true }; }
   if (!VARIANT_LEVELS.includes(thinking)) {
     return { valid: false, error: `Error: --thinking must be one of: ${VARIANT_LEVELS.join(', ')}` };
   }

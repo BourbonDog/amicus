@@ -403,6 +403,16 @@ describe('CLI Argument Parser', () => {
         expect(result.thinking).toBeUndefined();
       });
 
+      it('parses `--thinking=` to the empty string, and validateStartArgs REFUSES it (council #235 r2, A2)', () => {
+        // Named mutant "FALSYLEVELACCEPTED" (src/utils/thinking-validators.js): restore
+        // `if (!thinking)` — '' passes as if the flag were absent and then evaporates at
+        // start.js's `thinking || undefined`, so the level is silently dropped.
+        expect(parseArgs(['start', '--thinking=']).thinking).toBe('');
+        const result = validateStartArgs({ _: ['start'], model: 'google/gemini-2.5', prompt: 'test', thinking: '' });
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('Error: --thinking must be one of: none, minimal, low, medium, high, xhigh, max');
+      });
+
       it('should parse --thinking alongside other options', () => {
         const result = parseArgs([
           'start',

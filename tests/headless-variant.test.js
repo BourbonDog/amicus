@@ -107,6 +107,31 @@ describe('#218 PR 4 — the effort lever through runHeadless', () => {
     }));
   });
 
+  it('TELLS the user on stderr, because logger.warn is dropped at the shipped default log level (council #235 r2, B2)', async () => {
+    // Named mutant "UNVERIFIEDNOTICESILENT": drop the process.stderr.write — LOG_LEVEL
+    // defaults to 'error' (src/utils/logger.js), so the structured warn alone reaches nobody
+    // and `amicus start --thinking high` degrades in silence.
+    const { logger } = require('../src/utils/logger');
+    const priorLevel = process.env.LOG_LEVEL;
+    delete process.env.LOG_LEVEL;
+    const written = [];
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => { written.push(String(chunk)); return true; });
+    try {
+      mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'medium', verified: false, waitedMs: 5003 } });
+      await run({ variant: 'medium' });
+    } finally {
+      spy.mockRestore();
+      if (priorLevel !== undefined) { process.env.LOG_LEVEL = priorLevel; }
+    }
+    const notice = written.find((line) => line.startsWith('Notice: '));
+    expect(notice).toBeDefined();
+    expect(notice.endsWith('\n')).toBe(true);
+    // the SAME text the structured line carries — one note, two destinations
+    const warned = logger.warn.mock.calls.find((c) => c[0] === 'Variant sent unverified');
+    expect(notice).toBe(`Notice: ${warned[1].note}\n`);
+    expect(notice).toContain('did not know openrouter/moonshotai/kimi-k3 within 5003 ms');
+  });
+
   it('an AMBIGUOUS declaration — the echo shape under a budget — reaches the same warn naming the two states it could not tell apart (council #235 r1 B1)', async () => {
     // Named mutant "AMBIGUOUSDROPPED": drop `ambiguous:` from headless.js's note call.
     const { logger } = require('../src/utils/logger');

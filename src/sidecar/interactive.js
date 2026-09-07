@@ -108,7 +108,15 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       sent = promptResult && promptResult.sentVariant;
       if (sent && !sent.verified) {
         const { formatUnverifiedVariantNote } = require('../utils/engine-variants');
-        logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable, ambiguous: sent.ambiguous }) });
+        const note = formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable, ambiguous: sent.ambiguous });
+        logger.warn('Variant sent unverified', { taskId, sessionId, note });
+        // council #235 r2 (B2): logger.warn is DROPPED at the shipped default
+        // (LOG_LEVEL defaults to 'error', utils/logger.js), so the structured line alone
+        // told the user nothing — the silent degrade the product principle forbids, and the
+        // same invisibility this release cites against 4.9.3's silent adjustment. stderr
+        // carries it in every mode; stdout keeps the run document intact. Named mutant
+        // "UNVERIFIEDNOTICESILENT": drop the stderr write.
+        process.stderr.write(`Notice: ${note}\n`);
       }
       progressStage('prompt_sent');
     }

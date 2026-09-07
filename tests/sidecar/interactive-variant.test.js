@@ -103,6 +103,28 @@ describe('#218 PR 4 — what the interactive (GUI) sender records', () => {
     }));
   });
 
+  it('TELLS the user on stderr, because logger.warn is dropped at the shipped default log level (council #235 r2, B2)', async () => {
+    // Named mutant "UNVERIFIEDNOTICESILENT": drop the process.stderr.write — LOG_LEVEL
+    // defaults to 'error' (src/utils/logger.js), so on the DEFAULT `amicus start` path the
+    // user is told nothing at all that the level went out unverified.
+    const priorLevel = process.env.LOG_LEVEL;
+    delete process.env.LOG_LEVEL;
+    const written = [];
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => { written.push(String(chunk)); return true; });
+    try {
+      mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'high', verified: false, waitedMs: 5001 } });
+      await runInteractive(QWEN, 'sys', 'hi', 'ivar0006', project, { variant: 'high', agent: 'chat' });
+    } finally {
+      spy.mockRestore();
+      if (priorLevel !== undefined) { process.env.LOG_LEVEL = priorLevel; }
+    }
+    const notice = written.find((line) => line.startsWith('Notice: '));
+    expect(notice).toBeDefined();
+    const warned = logger.warn.mock.calls.find((c) => c[0] === 'Variant sent unverified');
+    expect(notice).toBe(`Notice: ${warned[1].note}\n`);
+    expect(notice).toContain(`did not know ${QWEN} within 5001 ms`);
+  });
+
   it('a verified send carries variant and no variantUnverified', async () => {
     mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'low', verified: true, waitedMs: 0 } });
     const result = await runInteractive(QWEN, 'sys', 'hi', 'ivar0002', project, { variant: 'low', agent: 'chat' });

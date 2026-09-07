@@ -91,6 +91,44 @@ describe('checkVariant — the direct-Anthropic enabled + budgetTokens shape bes
   });
 });
 
+describe('checkVariant — whose ceiling the OVER_BUDGET remedy names (council #235 r2, B1)', () => {
+  it("splits the remedy when the ceiling came from amicus's own catalog: refresh first, because the engine's real ceiling may be higher (M3)", () => {
+    // Named mutant "REMEDYALWAYSCATALOG": return the catalog wording unconditionally — the
+    // engine-sourced case below then names `models --refresh` for a number the dump proved.
+    const v = checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: { ...HAIKU, ceilingFrom: 'catalog' }, outputBudget: 24000 });
+    expect(v.code).toBe('VARIANT_OVER_BUDGET');
+    expect(v.reason).toContain("Raise outputBudget to at least 64000 — the ceiling amicus's own catalog carries for this model");
+    expect(v.reason).toContain('prefer `amicus models --refresh` first');
+    expect(v.reason).not.toContain('(the sum is then clamped to the ceiling, K4)');
+    // the rest of the reason is untouched in both branches
+    expect(v.reason).toContain('would reserve 40000 (24000 + 16000) — 16000 over the budget');
+    expect(v.reason).toContain('route the model through OpenRouter');
+  });
+  it("keeps the plain remedy when the dump WAS the engine's ceiling — a bare descriptor (K5/K12)", () => {
+    const v = checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: { ...HAIKU, ceilingFrom: 'engine' }, outputBudget: 24000 });
+    expect(v.reason).toContain('Raise outputBudget to at least 64000 (the sum is then clamped to the ceiling, K4)');
+    expect(v.reason).not.toContain('models --refresh');
+  });
+});
+
+describe('checkVariant — engine-sourced text in a message (council #235 r2, B4)', () => {
+  it('defangs the declared-variant enumeration: control characters and fence/tag characters never reach the reason', () => {
+    // Named mutant "RAWENGINETEXT": drop `defang` — the ESC and the backtick survive into the reason.
+    const poisoned = { known: true, ceiling: null, waitedMs: 0, variants: { 'lo\u001bw': {}, '`high`': {}, '<max>': {} } };
+    const v = checkVariant({ variant: 'medium', model: 'openrouter/moonshotai/kimi-k3', declaration: poisoned, outputBudget: null });
+    expect(v.code).toBe('VARIANT_UNDECLARED');
+    // eslint-disable-next-line no-control-regex
+    expect(v.reason).not.toMatch(/[\u0000-\u001F\u007F`<>]/);
+    expect(v.reason).toContain("the engine's catalogue lists low, high, max for it");
+  });
+  it('defangs the unreadable string the note carries (an engine/transport error message)', () => {
+    const note = formatUnverifiedVariantNote({ model: 'openrouter/moonshotai/kimi-k3', variant: 'low', waitedMs: 0, unreadable: 'read threw: <script>\u0007 `oops`' });
+    // eslint-disable-next-line no-control-regex
+    expect(note).not.toMatch(/[\u0000-\u001F\u007F`<>]/);
+    expect(note).toContain('could not be read (read threw: script oops; one read, no wait)');
+  });
+});
+
 describe('checkVariant — the model the catalogue does not know', () => {
   it('sends unverified (M0 cold read; M7 is the silent outcome amicus cannot see)', () => {
     // Named mutant "UNKNOWNREFUSED": refuse an unknown model as undeclared.
@@ -249,6 +287,40 @@ describe('readModelDeclaration', () => {
     expect(reshaped.unreadable).toBe('no providers array in the response');
     const empty = await readModelDeclaration(clientOf([[]]), 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
     expect(empty).toMatchObject({ known: false, unreadable: null });
+  });
+  it('bounds ONE read: a catalogue endpoint that accepts and never answers is unreadable, not a 306 s hang (council #235 r2, A1)', async () => {
+    // Named mutant "UNBOUNDEDREAD": drop `{ signal: readSignal }` from the providers() call —
+    // the fake then never settles and this test dies on jest's own 4 s timeout instead of
+    // resolving, exactly as the real transport ran to undici's ~306 s default.
+    const providers = jest.fn((o) => new Promise((_resolve, reject) => {
+      if (o && o.signal) { o.signal.addEventListener('abort', () => reject(o.signal.reason)); }
+    }));
+    const started = Date.now();
+    const d = await readModelDeclaration({ config: { providers } }, 'openrouter/moonshotai/kimi-k3', {
+      waitMs: 5000, pollMs: 250, sleep: async () => {}, readTimeoutMs: 25, ...NO_CATALOG,
+    });
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(2000);
+    expect(providers).toHaveBeenCalledTimes(1); // unreadable ends the loop: one read, no wait
+    expect(d.known).toBe(false);
+    expect(d.unreadable).toBe('read threw: The operation was aborted due to timeout');
+    expect(d.waitedMs).toBeLessThanOrEqual(5000);
+  }, 4000);
+  it('says whose ceiling it returned so the OVER_BUDGET remedy can tell them apart (council #235 r2, B1)', async () => {
+    // Named mutant "CEILINGPROVENANCE": drop `ceilingFrom` from the return — checkVariant then
+    // reads undefined on both shapes and every remedy falls to the engine wording.
+    const ECHO = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 24000 }, variants: HAIKU.variants } } }];
+    const echoed = await readModelDeclaration(clientOf([ECHO]), 'anthropic/claude-haiku-4-5', {
+      waitMs: 0, readCache: () => ({ models: [{ id: 'anthropic/claude-haiku-4-5', contextLength: 200000, maxOutputTokens: 64000 }] }),
+    });
+    expect(echoed).toMatchObject({ ceiling: 64000, ceilingFrom: 'catalog' });
+    expect(checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: echoed, outputBudget: 24000 }).reason)
+      .toContain('prefer `amicus models --refresh` first');
+    const BARE = [{ id: 'anthropic', models: { 'claude-haiku-4-5': { limit: { context: 200000, output: 64000 }, variants: HAIKU.variants } } }];
+    const bare = await readModelDeclaration(clientOf([BARE]), 'anthropic/claude-haiku-4-5', { waitMs: 0, ...NO_CATALOG });
+    expect(bare).toMatchObject({ ceiling: 64000, ceilingFrom: 'engine' });
+    expect(checkVariant({ variant: 'high', model: 'anthropic/claude-haiku-4-5', declaration: bare, outputBudget: 24000 }).reason)
+      .toContain('Raise outputBudget to at least 64000 (the sum is then clamped to the ceiling, K4)');
   });
   it('stops polling when the caller abandons the wait (EP-2)', async () => {
     // Named mutant "IGNORESIGNAL": drop the `signal.aborted` clause — providers() is called 3 times.

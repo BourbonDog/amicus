@@ -83,7 +83,9 @@ All notable changes to Amicus are documented here. Format follows
   reservation the leg would have made and three remedies); a model the engine's catalogue does not
   know within a five-second wait — its bundled catalogue predates the model and the models.dev fetch
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
-  unverified, logged and marked `variantUnverified: true` on the leg document. With a budget set the
+  unverified, logged and marked `variantUnverified: true` on the leg document. The same note is
+  printed as a `Notice:` line on stderr, because the structured warning alone is dropped at the
+  default log level. With a budget set the
   same applies to a model whose dump reports no variants (an echoed descriptor hides whether the
   engine knows it — M3); without a budget such a model is refused at once. The wait polls every 500
   ms. The ceiling that `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
