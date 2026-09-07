@@ -139,6 +139,7 @@ src/
 │   ├── progress-fields.js  # Derived, agent-facing progress fields shared by the MCP status/list
 │   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
+│   ├── reopen-notices.js  # The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3).
 │   ├── reopen-spend.js  # Spend finalization for a REOPENED session (continue/resume). Split out of
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
 │   ├── session-finalize.js
@@ -578,6 +579,7 @@ evals/
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `searchSessions()`, `listSidecars()` |
+| `sidecar/reopen-notices.js` | The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3). | `formatDroppedLevelNotice()`, `noticeDroppedLevel()` |
 | `sidecar/reopen-spend.js` | Spend finalization for a REOPENED session (continue/resume). Split out of | `finalizeSpendForReopen()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |

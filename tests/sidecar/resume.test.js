@@ -98,6 +98,25 @@ describe('Resume Operations', () => {
       expect(drift.hasChanges).toBe(false);
     });
 
+    it("falls back to resumedAt when the crashed attempt's completedAt is gone (council #235 r5, J2/A4)", () => {
+      // The J2 delete removes `completedAt` on every running write, so the ONE legitimate reader
+      // needs its fallback: after a crashed resume "last activity" is when THAT attempt started
+      // (`resumedAt`, written on the same line as the delete), which is strictly more accurate
+      // than the previous attempt's completion. Named mutant "DRIFTNORESUMEDAT": drop the
+      // `metadata.resumedAt ||` term — lastActivity falls all the way back to createdAt and every
+      // file touched between session creation and this resume is reported as drift.
+      const testFile = path.join(tmpDir, 'test.js');
+      fs.writeFileSync(testFile, 'content');
+      const resumedAt = new Date(Date.now() + 60000).toISOString();
+      const drift = checkFileDrift({
+        filesRead: ['test.js'],
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        resumedAt,
+      }, tmpDir);
+      expect(drift.lastActivityTime).toBe(new Date(resumedAt).getTime());
+      expect(drift.hasChanges).toBe(false); // the file predates THIS attempt's start, so it is not drift
+    });
+
     it('should handle empty filesRead', () => {
       const metadata = {
         filesRead: [],
@@ -138,6 +157,24 @@ describe('Resume Operations', () => {
       expect('finish' in onDisk).toBe(false);
       expect('variant' in onDisk).toBe(false);
       expect('variantUnverified' in onDisk).toBe(false);
+    });
+
+    it("the running write also drops the previous attempt's reason / completedAt (council #235 r5, J2/A4)", () => {
+      // Named mutant "RESUMESTALEREASON": drop the `reason`/`completedAt` deletes — a resume that
+      // crashes mid-attempt leaves metadata reading `status: 'running'` while still carrying the
+      // PREVIOUS attempt's failure reason and completion time, and both are read: the result
+      // schema reports `metadata.reason` as the run's error for every non-complete status and the
+      // MCP server prints it as the Reason for a timed-out or aborted run.
+      fs.writeFileSync(path.join(tmpDir, 'metadata.json'), JSON.stringify({
+        taskId: 'abc123', status: 'error', thinking: 'high',
+        reason: 'OUTPUT_LENGTH: the previous attempt died', completedAt: '2026-01-01T00:00:00.000Z',
+      }));
+      updateSessionStatus(tmpDir, 'running');
+      const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'metadata.json'), 'utf-8'));
+      expect(onDisk.status).toBe('running');
+      expect('reason' in onDisk).toBe(false);
+      expect('completedAt' in onDisk).toBe(false);
+      expect(onDisk.resumedAt).toBeDefined(); // written on the same line as the deletes
     });
   });
 

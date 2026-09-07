@@ -303,7 +303,7 @@ Then invoke it with `--pack <name|path>` on `start` / `fanout` / `council run` �
 | `fanout` | `bench` (a saved council name, or an array of ≥2 members) | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noContext`, `contextTurns`, `contextMaxTokens` |
 | `solo` | `model` | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noUi`, `noContext`, `contextTurns`, `contextMaxTokens` |
 
-`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs. A pack saved with `pack save --from-run` on 4.9.3 or earlier copied the `medium` those releases recorded on every run's metadata (a level nothing ever sent) into its `options.thinking`; such a pack now SENDS it — refused on every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes) — so delete the key or re-save the pack from a run that requested a level.
+`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs. Those releases recorded `medium` on EVERY session's metadata, **a fanout leg's included**, whether or not the flag was typed (a level nothing ever sent), so a pack saved with `pack save --from-run` on 4.9.3 or earlier copied it into `options.thinking` on **fanout packs as well as solo ones** — where it then applies to every seat of the bench at once. Such a pack now SENDS it: refused on every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes), and on a model that DOES declare it the level really goes out — so a pack that was inert can now change a run's cost and behaviour. Delete the key or re-save the pack from a run that requested a level.
 
 Every kind may also carry `description`, `version` (semver, default `1.0.0`), and `briefing.template` (a template **reference**, not rendered text — a pack never captures briefing prose).
 
@@ -519,6 +519,8 @@ comes from the session/wave being reopened rather than a fresh launch, `--tag` i
 usage error when combined with `continue`, `resume`, or `--retry-failed` — there is nothing new to
 set. An untagged parent still leaves the key absent (not `null`) on the new metadata, and its spend
 row still groups under `(unattributed)`, exactly as an untagged `start`/`fanout` would.
+
+**Effort level on a reopen.** Neither `continue` nor `resume` sends an effort level — both reject `--thinking` outright and a level is not carried across a reopen — so when the session being reopened recorded one, each prints a `Notice:` on stderr naming the level it is dropping and saying the leg runs at the provider's default.
 
 **`amicus status <id>` output.** Human-readable:
 

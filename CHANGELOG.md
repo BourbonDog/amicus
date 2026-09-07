@@ -164,11 +164,14 @@ All notable changes to Amicus are documented here. Format follows
   while the table gave gemini `none` and `xhigh` and gemini-3.6-flash declares neither — M0), the
   CLI checks only the vocabulary, and the model's own declaration decides at send time. Solo session
   metadata records `thinking` only when one was requested — it used to record `medium` for every
-  run, including runs that sent nothing. A pack saved with `pack save --from-run` on 4.9.3 or
-  earlier copied that `medium` into its `options.thinking`; such a pack now SENDS it — refused on
-  every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated
-  routes) — so delete the key or re-save the pack from a run that requested a level. MCP `thinking`
-  parameters no longer claim "Default: medium": omitted means nothing is sent and the provider's
+  run, including runs that sent nothing. That stamp landed on EVERY session's metadata, **a fanout
+  leg's included**, so a pack saved with `pack save --from-run` on 4.9.3 or earlier copied that
+  `medium` into its `options.thinking` on **fanout packs as well as solo ones** — where it then
+  applies to every seat of the bench at once. Such a pack now SENDS it: refused on every model that
+  does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes), and on
+  a model that DOES declare it the level really goes out — so a pack that was inert can now change
+  a run's cost and behaviour. Delete the key or re-save the pack from a run that requested a level.
+  MCP `thinking` parameters no longer claim "Default: medium": omitted means nothing is sent and the provider's
   default effort governs (on the direct OpenAI route the engine sends `medium` itself, M13). The one
   case the removal makes worse is the row the table got right: `--thinking minimal` on a gpt-5 route
   used to be rewritten to `low`, a level the engine really declares, and is now refused — loudly,

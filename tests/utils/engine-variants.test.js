@@ -215,8 +215,25 @@ describe('checkVariant — the model the catalogue does not know', () => {
     // council #235 r3 (C1/B1): the old parenthetical said "limit.context 0", which is FALSE for
     // the population that reaches this note under a budget — amicus's descriptor puts a positive
     // context there (M3). The note names the row's provenance instead (M23).
+    // council #235 r5 (J4/A1/B2), a DELIBERATE pin move: this full-string pin gains the
+    // fit clause below. Named mutant "NOTEHIDESFIT": drop the appended sentence — the note
+    // reads as if the declared-set check were the only one that did not run, which is the
+    // first-run-versus-later-run inconsistency the seats described.
     expect(formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'medium', waitedMs: 5003 })).toBe(
-      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)");
+      "the engine's catalogue did not know openrouter/qwen/qwen3.8-max-0902 within 5003 ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump), so 'medium' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7). The over-budget fit did not run for this leg either, so once the engine's catalogue knows the model the same command can refuse with VARIANT_OVER_BUDGET.");
+  });
+
+  it('the UNREADABLE branch has its own tail: neither check ran, and the additive shape has no fit to catch it (council #235 r5, J4/A1/B2)', () => {
+    // Named mutant "NOTEHIDESFIT": give both shapes the cold branch's shared tail again. An
+    // unreadable /config/providers is not a catalogue that has something to learn — the read
+    // failed, so the declared-set check and the over-budget fit BOTH failed to run, and on the
+    // direct-Anthropic `enabled + budgetTokens` shape the engine still adds N on top (M2/K2).
+    const note = formatUnverifiedVariantNote({ model: 'openrouter/moonshotai/kimi-k3', variant: 'high', waitedMs: 0, unreadable: 'HTTP 500' });
+    expect(note).toBe(
+      "the engine's /config/providers could not be read (HTTP 500; one read, no wait), so 'high' was sent unverified: NEITHER check ran for this leg — not the declared-set check and not the over-budget fit — so the level applies if and only if openrouter/moonshotai/kimi-k3 declares it, and on the direct-Anthropic additive shape (a variant entry whose thinking type is 'enabled' with a budgetTokens N) the engine adds that N on top of the output budget (probe M2: 24000 + 16000 = 40000; K2) with nothing here to catch it.");
+    // it must NOT keep implying the engine has something to learn
+    expect(note).not.toContain('applies only if the engine learns the model');
+    expect(note).not.toContain('models.dev refresh');
   });
 });
 

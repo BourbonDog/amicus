@@ -15,6 +15,7 @@ const {
   createHeartbeat
 } = require('./session-utils');
 const { acquireLock, releaseLock } = require('../utils/session-lock');
+const { noticeDroppedLevel } = require('./reopen-notices');
 const { runHeadless } = require('../headless');
 const { buildPrompts } = require('../prompt-builder');
 const { generateFoldNonce } = require('../utils/fold-marker');
@@ -140,6 +141,7 @@ async function continueSidecar(options) {
   // Load previous session data
   const { metadata: oldMetadata, summary: previousSummary, conversation: previousConversation } =
     loadPreviousSession(oldTaskId, project);
+  noticeDroppedLevel(oldMetadata, { taskId: oldTaskId, kind: 'continue' }); // council #235 r5 (J1/A3): read against the PARENT's metadata — a continuation opens a NEW session, sends no variant, and `continue` rejects --thinking, so a level the parent ran with silently becomes the provider's default here. Named mutant "CONTINUELEVELSILENT" (tests/sidecar/reopen-thinking-notice.test.js).
 
   // Lock the previous (EXISTING) session directory to prevent concurrent
   // continue operations — resolve dual-dir so a legacy session is locked too.

@@ -276,18 +276,23 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
 
 /**
  * The log line for a variant sent to a model the catalogue did not know in time.
+ * TWO shapes with TWO tails (council #235 r5, J4/A1/B2): they used to share one, and the shared
+ * tail said the level applies once the engine LEARNS the model — true of a cold catalogue, false
+ * of a read that failed, where nothing was learned or unlearned. Both tails now also say that the
+ * over-budget fit did not run for this leg, because `known === false` entails an empty variants
+ * map (it is one of the disjuncts of `known`), so the fit had no budgetTokens to read and CANNOT
+ * be made to run here -- the refusal the seats asked for is refused; naming what did not run is
+ * the whole remedy for the first-run-versus-later-run inconsistency. Named mutant "NOTEHIDESFIT".
  * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null}} a
  * @returns {string}
  */
 function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable }) {
-  const why = unreadable
-    // council #235 r2 (B4): `unreadable` carries an engine/transport error message — defanged
-    // before it reaches a log line and a terminal. `model` stays raw: it is amicus's own id.
-    ? `the engine's /config/providers could not be read (${defang(unreadable)}; one read, no wait)`
-    // council #235 r3 (C1/B1): two shapes, not three. The `ambiguous` branch named a state the
-    // dump never had — a row carrying only amicus's descriptor is positively identified now.
-    : `the engine's catalogue did not know ${model} within ${waitedMs} ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump)`;
-  return `${why}, so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)`;
+  if (unreadable) {
+    // council #235 r2 (B4): `unreadable` carries an engine/transport error message -- defanged before it reaches a log line and a terminal. `model` stays raw: it is amicus's own id.
+    return `the engine's /config/providers could not be read (${defang(unreadable)}; one read, no wait), so '${variant}' was sent unverified: NEITHER check ran for this leg — not the declared-set check and not the over-budget fit — so the level applies if and only if ${model} declares it, and on the direct-Anthropic additive shape (a variant entry whose thinking type is 'enabled' with a budgetTokens N) the engine adds that N on top of the output budget (probe M2: 24000 + 16000 = 40000; K2) with nothing here to catch it.`;
+  }
+  // council #235 r3 (C1/B1): two shapes, not three. The `ambiguous` branch named a state the dump never had -- a row carrying only amicus's descriptor is positively identified now.
+  return `the engine's catalogue did not know ${model} within ${waitedMs} ms (its /config/providers entry carries nothing but the descriptor amicus registered, or the model is absent from the dump), so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7). The over-budget fit did not run for this leg either, so once the engine's catalogue knows the model the same command can refuse with VARIANT_OVER_BUDGET.`;
 }
 
 module.exports = { VARIANT_LEVELS, VariantRefusedError, readModelDeclaration, checkVariant, formatUnverifiedVariantNote };
