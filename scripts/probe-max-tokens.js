@@ -430,6 +430,11 @@ function descriptorFor(c) {
  * @param {object} c a CASES entry
  * @returns {boolean}
  */
+function isBareDescriptor(c) {
+  const d = descriptorFor(c);
+  return !!d && d.limit === undefined && d.options === undefined;
+}
+
 /**
  * The WHOLE row `/config/providers` returns for one model -- every cell, not the
  * provenance-blind subset providersDump keeps. Council #235 r3 (record M23): the
@@ -447,11 +452,6 @@ async function providersRow(client, providerID, modelID) {
   const p = list.find((x) => x.id === providerID);
   const m = p && p.models && p.models[modelID];
   return m || { missing: true, providerIds: list.map((x) => x.id) };
-}
-
-function isBareDescriptor(c) {
-  const d = descriptorFor(c);
-  return !!d && d.limit === undefined && d.options === undefined;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -216,8 +216,10 @@ async function readModelDeclaration(client, model, opts = {}) {
 /**
  * Pure: send, refuse, or send unverified — in that order of tests.
  *   1. unknown model -> {ok: true, verified: false} (mutant "UNKNOWNREFUSED");
- *   2. known, undeclared -> VARIANT_UNDECLARED naming the declared set
- *      (own properties only — mutant "PROTOLOOKUP");
+ *   2. known, undeclared -> VARIANT_UNDECLARED in one of TWO shapes (own properties only — mutant
+ *      "PROTOLOOKUP"): the declared set named when the row lists one, else the empty-set reason,
+ *      which says whose row it is and that a budget cannot change the verdict (mutants
+ *      "EMPTYSETSILENT", "MESSAGEOVERCLAIMS");
  *   3. declared, entry `thinking: {type: 'enabled', budgetTokens: N}`, a positive
  *      budget B below the ceiling C -> VARIANT_OVER_BUDGET with min(B + N, C)
  *      (mutants "ALWAYSREFUSE": drop `B < C`; "FITWITHOUTBUDGET": default a null
@@ -243,9 +245,9 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
     // predicate is an OR (10 of 50 openai rows have `name === id`; 26 of 361 openrouter
     // `:free` rows price at zero, and both are engine-sourced through other cells). Named
     // mutants "EMPTYSETSILENT" (fall back to the listed wording) and "MESSAGEOVERCLAIMS"
-    // (assert the row carries its name, family, release date AND prices).
+    // (assert the row carries its name, family, release date AND prices). Council #235 r3 wave 4 repair, three more ways one string misleads: the enumeration also names the DISPLAY NAME, since `name !== modelID` is a disjunct too ("NAMECELLUNNAMED"); the reason echoes the level the user typed, which docs/troubleshooting.md promises and a fanout needs ("MESSAGEDROPSLEVEL"); and the mirror hint says "sometimes", not "often" — measured during the wave-4 review on a live dump, 2 of 196 variant-less engine rows had a mirror that declares levels, and gpt-4o's own (openrouter/openai/gpt-4o-2024-08-06) does not ("MIRROROFTEN").
     if (names.length === 0) {
-      return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} declares no variants at all — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model often does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run` };
+      return { ok: false, code: 'VARIANT_UNDECLARED', reason: `VARIANT_UNDECLARED: ${model} declares no variants at all, so '${variant}' is not among them — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run` };
     }
     // council #235 r2 (B4): the names come from the engine's remote models.dev refresh, so
     // they are defanged before they enter a message that reaches a log and a terminal.

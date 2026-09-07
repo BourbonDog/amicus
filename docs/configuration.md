@@ -79,8 +79,10 @@ the engine's 32,000. Those legs reserve `min(budget, the ceiling the engine's ow
 
 Setting `outputBudget` can only make the `--thinking` guard stricter or leave it unchanged, never
 looser: the guard reads the engine's own row for the model, not the descriptor a budget makes Amicus
-write, so the same command is refused — or sent unverified — identically with and without a budget
-(council #235 r3).
+write, so whether a level is declared is decided identically with and without a budget. The one
+refusal a budget can add is `VARIANT_OVER_BUDGET` — a declared level whose own thinking budget would
+push the reservation past the budget — and that check exists only because a budget was set (council
+#235 r3).
 
 | Setting | Values | Default | Effect |
 |---------|--------|---------|--------|

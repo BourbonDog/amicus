@@ -85,12 +85,14 @@ All notable changes to Amicus are documented here. Format follows
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
   unverified, logged and marked `variantUnverified: true` on the leg document. The same note is
   printed as a `Notice:` line on stderr, because the structured warning alone is dropped at the
-  default log level. The verdict does not depend on
-  `outputBudget`: `/config/providers` returns a model's row with the catalogue's own release date,
-  family, pricing and capabilities, and Amicus writes only `limit` into it, so a row carrying any of
-  those is the engine's declaration (an empty variants set is a refusal) and a row carrying none of
-  them is Amicus's own descriptor (unknown — the bounded wait, then an unverified send). Measured as
-  record M23 and pinned by a keyless engine canary. The wait polls every 500 ms. The ceiling that `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
+  default log level. Whether a level counts as declared does not depend on `outputBudget` — the
+  `VARIANT_OVER_BUDGET` fit above is the only refusal a budget can add: `/config/providers` returns a
+  model's row with the catalogue's own release date, family, display name, pricing, capabilities and
+  variants, and Amicus writes only `limit` into it, so a row carrying any of those is the engine's
+  declaration (an empty variants set is a refusal) and a row carrying none of them is Amicus's own
+  descriptor (unknown — the bounded wait, then an unverified send). Measured as record M23 and
+  pinned by a keyless engine canary. The wait polls every 500 ms. The ceiling that
+  `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
   the model — its `maxOutputTokens`, the number a budget-derived descriptor is clamped TO, not the
   value that descriptor carries — because the engine echoes that descriptor back once a budget is
   set (M3); for a model that catalog has no row for it is the dump's own value, the engine's own

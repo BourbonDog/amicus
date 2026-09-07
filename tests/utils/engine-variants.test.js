@@ -68,7 +68,7 @@ describe('checkVariant — undeclared on a known model', () => {
     const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: GPT4O, outputBudget: null });
     expect(v.ok).toBe(false);
     expect(v.code).toBe('VARIANT_UNDECLARED');
-    expect(v.reason).toBe("VARIANT_UNDECLARED: openai/gpt-4o declares no variants at all — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model often does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run");
+    expect(v.reason).toBe("VARIANT_UNDECLARED: openai/gpt-4o declares no variants at all, so 'high' is not among them — the row the engine returned for it (/config/providers) carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities), so this is a declaration and not an unfinished read; an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Omit --thinking to run at the provider's own default effort, or pick a route whose row declares levels (a gateway mirror of the same model sometimes does). Setting an outputBudget does not change this verdict (council #235 r3, C1/B1); on a first engine start the bundled catalogue can declare a smaller set than the live one, so the same level can be accepted on the next run");
   });
   it('does not read an inherited property as a declaration', () => {
     // Named mutant "PROTOLOOKUP": `variants[variant] !== undefined` instead of hasOwnProperty — 'constructor' is then "declared".
@@ -426,9 +426,24 @@ describe('readModelDeclaration — whose row is it (council #235 r3, C1/B1)', ()
     const v = checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: d, outputBudget: null });
     expect(v.code).toBe('VARIANT_UNDECLARED');
     expect(v.reason).toContain('declares no variants at all');
-    expect(v.reason).toContain("carries cells only the engine's own catalogue fills (its release date, family, pricing or capabilities)");
+    expect(v.reason).toContain("carries cells only the engine's own catalogue fills (its release date, family, display name, pricing or capabilities)");
     expect(v.reason).toContain('Setting an outputBudget does not change this verdict');
     expect(v.reason).not.toMatch(/name, family, release date and prices/);
+    // council #235 r3 wave 4 repair. Three further ways this one string can overclaim or
+    // under-inform, each with its own mutant:
+    // "NAMECELLUNNAMED" — drop 'display name' from the enumeration. `engineSourced` accepts
+    //   `filled(m.name) && m.name !== modelID` as evidence, so a row engine-sourced ONLY by its
+    //   display name would be refused by a sentence naming four cells it does not carry.
+    // "MESSAGEDROPSLEVEL" — drop the level. docs/troubleshooting.md promises the reason names
+    //   the level, and on a fanout the model alone does not say which `--thinking` died.
+    // "MIRROROFTEN" — restore "often does". Measured on a live dump during the wave-4 review:
+    //   2 of 196 variant-less engine rows had a same-model row elsewhere that declares levels,
+    //   and the mirrors of this message's own headline case (openrouter/openai/gpt-4o-2024-08-06)
+    //   and of every shipped State-K alias declare nothing either. "often" is not measured.
+    expect(v.reason).toContain("declares no variants at all, so 'high' is not among them");
+    expect(v.reason).toContain('display name');
+    expect(v.reason).toMatch(/a gateway mirror of the same model sometimes does/);
+    expect(v.reason).not.toMatch(/often does/);
   });
 
   describe('the budget invariant (council #235 r3, C1)', () => {
