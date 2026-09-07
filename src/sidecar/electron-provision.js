@@ -12,8 +12,11 @@
 
 'use strict';
 
+const path = require('path');
+
 const { resolveCacheRoots } = require('./electron-cache');
 const { artifactFileName, expectedDigest } = require('./electron-trust');
+const { containsOnDisk } = require('../utils/path-fence');
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
 function cacheRootFor(env = process.env) {
@@ -54,4 +57,57 @@ async function controlledProvision({
   await extractFromCache({ zip, electronDir, platform, extract, fs });
 }
 
-module.exports = { cacheRootFor, controlledProvision };
+/**
+ * May this refused artifact be deleted? STRICTLY NARROWER than the unconditional
+ * `fs.rmSync` on the corrupt-extract path: the basename must be exactly the
+ * artifact we asked for, AND the file must resolve inside a resolved cache root.
+ * `containsOnDisk` realpaths both sides and returns false on any error, so an
+ * unresolvable path is refused rather than trusted — deleting at an
+ * attacker-influenceable path is the one thing a poisoned cache could otherwise
+ * turn into a weapon.
+ *
+ * Cost if it returns a wrong false: the mismatched zip stays and is re-downloaded
+ * once per provision. An availability cost, never a safety one — the gate above
+ * still refuses to extract it.
+ */
+function mayDeleteRejectedZip({ zip, fileName, env = process.env }) {
+  if (path.basename(zip) !== fileName) { return false; }
+  return resolveCacheRoots(env).some((root) => containsOnDisk(root, zip));
+}
+
+/**
+ * Act on a REFUSED cached artifact: remove the poison when it is safe to, say
+ * plainly what happened, and hand back the result shape a cacheOnly caller
+ * returns. Deletion happens ONLY on `mismatch` — a `no-digest` artifact is not
+ * evidence of anything, and an `unreadable` one is a file we could not even hash.
+ * @returns {{repaired:false, integrity:string, reason:string}}
+ */
+function rejectCachedZip({ gate, zip, fileName, env = process.env, fs, log = () => {} }) {
+  let removed = false;
+  if (gate.verdict === 'mismatch' && mayDeleteRejectedZip({ zip, fileName, env })) {
+    try {
+      fs.rmSync(zip, { force: true });
+      removed = true;
+    } catch { /* a cache we cannot write is not a reason to fail the repair */ }
+  }
+  const what = gate.verdict === 'mismatch'
+    ? `sha256 ${gate.actual} does not match the published ${gate.expected}`
+    : gate.reason;
+  log(`[amicus] Electron artifact REFUSED: ${fileName}`);
+  log(`[amicus]   ${zip}`);
+  log(`[amicus]   ${what}`);
+  log(`[amicus]   ${removed ? 'The file has been removed.' : 'The file was left in place.'}`);
+  log('[amicus] This is what a swapped mirror or a planted cache file looks like. It is ALSO');
+  log('[amicus] what a truncated download, a failing disk, or a mirror serving a REBUILT');
+  log('[amicus] electron looks like — amicus cannot tell them apart. If you deliberately run');
+  log('[amicus] a rebuilt electron, set AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 to accept it.');
+  log('[amicus] Headless runs and the council work without the GUI.');
+  return {
+    repaired: false,
+    integrity: gate.verdict,
+    reason: `Cached electron artifact ${fileName} was REFUSED: ${what}.`
+      + `${removed ? ' It has been removed.' : ' It was left in place.'}`,
+  };
+}
+
+module.exports = { cacheRootFor, controlledProvision, mayDeleteRejectedZip, rejectCachedZip };

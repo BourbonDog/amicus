@@ -11,6 +11,12 @@
  *   C1  controlledProvision passes `checksums` to downloadArtifact, so
  *       @electron/get writes a LOCAL SHASUMS256.txt and never fetches one from a
  *       mirror an attacker may have chosen.
+ *   C2  repairElectron HASHES a cached zip against the anchor BEFORE
+ *       extractFromCache can run, deletes a mismatch only through the fence, and
+ *       treats "no anchor" as a mark rather than a refusal.
+ *
+ * Named mutants this suite is the tripwire for: DIGESTNOTCHECKED, POISONKEPT,
+ * FENCEDROPPED, ANCHORFROMTARGET.
  *
  * No network, no real extraction: downloadArtifact, extract, spawn and the lock
  * are injected everywhere.
@@ -23,13 +29,14 @@ const path = require('path');
 const ei = require('../src/sidecar/electron-install');
 const { controlledProvision } = require('../src/sidecar/electron-provision');
 const {
-  fakeElectronDir, fakeChecksums, SELF_ANCHOR_OFF, ZIP_BODY, ZIP_SHA256,
+  fakeElectronDir, seedElectronAnchor, fakeChecksums, SELF_ANCHOR_OFF, ZIP_BODY, ZIP_SHA256,
 } = require('./helpers/fake-electron-dir');
 
 const VERSION = '43.1.1';
 const PLATFORM = 'win32';
 const ARCH = 'x64';
 const ZIP_NAME = `electron-v${VERSION}-${PLATFORM}-${ARCH}.zip`;
+const POISON = 'POISONED-BYTES';
 
 function mkTmp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -122,5 +129,141 @@ describe('C1 — the digest is PINNED on the network path', () => {
     const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
     expect(res.repaired).toBe(true);
     expect(downloadArtifact.mock.calls[0][0].checksums).toEqual({ [ZIP_NAME]: ZIP_SHA256 });
+  });
+});
+
+describe('C2 — the cached zip is hashed BEFORE it is extracted', () => {
+  test('a MATCHING cached zip is extracted, as before (DIGESTNOTCHECKED)', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const { res, extract } = await repair({ dir, exeName, distDir, zip: writeZip(), cacheOnly: true });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(res.repaired).toBe(true);
+    expect(res.unverified).toBeUndefined();
+  });
+
+  test('a MISMATCHING cached zip is NOT extracted (DIGESTNOTCHECKED)', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const { res, extract } = await repair({
+      dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true,
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
+    expect(res.repaired).toBe(false);
+    expect(res.integrity).toBe('mismatch');
+    expect(res.reason).toMatch(/REFUSED/);
+    expect(stderr.join('')).toMatch(/Electron artifact REFUSED/);
+  });
+
+  test('online, a refused cache entry falls through to the controlled download', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => writeZip());
+    const { res, extract } = await repair({
+      dir, exeName, distDir, zip: writeZip({ body: POISON }), deps: { downloadArtifact },
+    });
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(1);       // the DOWNLOADED zip, not the poison
+    expect(res.repaired).toBe(true);
+  });
+
+  test('NO ANCHOR extracts as before and MARKS the result unverified', async () => {
+    // A package predating checksums.json must not be pushed into a permanent
+    // re-download loop — refusing here would break exactly that machine.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    fs.rmSync(path.join(dir, 'checksums.json'));
+    const { res, extract } = await repair({ dir, exeName, distDir, zip: writeZip(), cacheOnly: true });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
+  });
+
+  test('an anchor with no entry for THIS artifact is the same "no anchor" case', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    seedElectronAnchor(dir, { table: { 'electron-v43.1.1-darwin-arm64.zip': ZIP_SHA256 } });
+    const { res, extract } = await repair({ dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true });
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(res.unverified).toBe(true);
+  });
+
+  test('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 downgrades the gate to a warning', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    try {
+      const { res, extract } = await repair({
+        dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true,
+      });
+      expect(extract).toHaveBeenCalledTimes(1);
+      expect(res.repaired).toBe(true);
+      expect(stderr.join('')).toMatch(/AMICUS_ALLOW_UNVERIFIED_ELECTRON=1/);
+    } finally {
+      delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+    }
+  });
+
+  test('the ANCHOR comes from the running amicus, not the scanned target dir (ANCHORFROMTARGET)', async () => {
+    // The `doctor --fix` shape: electronDir was found by a FILESYSTEM SCAN, so its
+    // own checksums.json is as untrusted as the zip. Here it vouches for the poison
+    // and the running amicus's anchor does not — the poison must still be refused.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM, body: POISON });
+    const self = seedElectronAnchor(mkTmp('amicus-self-'), { version: VERSION });
+    const { res, extract } = await repair({
+      dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true,
+      deps: { selfElectronDir: self },
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('mismatch');
+  });
+});
+
+describe('C2 — the poison delete is FENCED', () => {
+  let saved;
+  beforeEach(() => { saved = { ...process.env }; });
+  afterEach(() => {
+    for (const k of ['ELECTRON_CACHE', 'electron_config_cache']) {
+      if (k in saved) { process.env[k] = saved[k]; } else { delete process.env[k]; }
+    }
+  });
+
+  test('a mismatched zip INSIDE a resolved cache root is deleted (POISONKEPT)', async () => {
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip({ body: POISON, root: cacheRoot });
+    const { res } = await repair({ dir, exeName, distDir, zip, cacheOnly: true });
+    expect(fs.existsSync(zip)).toBe(false);
+    expect(res.reason).toMatch(/removed/i);
+  });
+
+  test('a mismatched zip OUTSIDE every cache root is left alone (FENCEDROPPED)', async () => {
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip({ body: POISON, root: mkTmp('amicus-elsewhere-') });   // NOT under any root
+    const { res, extract } = await repair({ dir, exeName, distDir, zip, cacheOnly: true });
+    // Still refused — the fence governs the DELETE, never the gate.
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('mismatch');
+    expect(fs.existsSync(zip)).toBe(true);
+    expect(res.reason).toMatch(/left in place/i);
+  });
+
+  test('a mismatched file whose BASENAME is not the artifact is left alone (FENCEDROPPED)', async () => {
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip({ body: POISON, name: 'something-else.zip', root: cacheRoot });
+    const { res } = await repair({ dir, exeName, distDir, zip, cacheOnly: true });
+    expect(fs.existsSync(zip)).toBe(true);
+    expect(res.integrity).toBe('mismatch');
+  });
+
+  test('an UNREADABLE candidate is refused and never deleted', async () => {
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const { res, extract } = await repair({
+      dir, exeName, distDir, zip: path.join(cacheRoot, 'gone', ZIP_NAME), cacheOnly: true,
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('unreadable');
   });
 });

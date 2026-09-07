@@ -22,24 +22,25 @@ const os = require('os');
 const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
+// The fixture carries a checksums.json anchor (repairElectron hashes a cached zip
+// before extracting); SELF_ANCHOR_OFF pins the anchor to it. See the helper.
+const {
+  fakeElectronDir: sharedFakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY,
+} = require('./helpers/fake-electron-dir');
 
 function mkTmp(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
 function fakeElectronDir({ platform = 'win32' } = {}) {
-  const dir = mkTmp('amicus-electron-q-');
-  const exeName = platform === 'win32' ? 'electron.exe' : 'electron';
-  fs.writeFileSync(path.join(dir, 'path.txt'), exeName);
-  fs.mkdirSync(path.join(dir, 'dist'), { recursive: true });
-  return { dir, exeName };
+  return sharedFakeElectronDir({ platform, prefix: 'amicus-electron-q-' });
 }
 
 describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
   test('cacheOnly: extract does NOT throw but the exe is absent → quarantined:true, repaired:false, allow-list reason', async () => {
     const { dir } = fakeElectronDir({ platform: 'win32' });
     const zipPath = path.join(mkTmp('amicus-qz-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zipPath, 'PKzip');
+    fs.writeFileSync(zipPath, ZIP_BODY);
 
     // Extract "succeeds" (no throw) but the exe never lands — the AV-quarantine
     // signature: electron.exe was written then removed right after.
@@ -52,6 +53,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
       version: '43.1.1',
       arch: 'x64',
       deps: {
+        ...SELF_ANCHOR_OFF,
         cachedZip: () => zipPath,
         extract,
         spawn: jest.fn(),
@@ -87,6 +89,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
       version: '43.1.1',
       arch: 'x64',
       deps: {
+        ...SELF_ANCHOR_OFF,
         cachedZip: () => null,
         downloadArtifact,
         extract,
@@ -104,7 +107,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
   test('does NOT auto-retry the extract in a loop on quarantine (no re-extract)', async () => {
     const { dir } = fakeElectronDir({ platform: 'win32' });
     const zipPath = path.join(mkTmp('amicus-qz2-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zipPath, 'PKzip');
+    fs.writeFileSync(zipPath, ZIP_BODY);
 
     const extract = jest.fn(async () => { /* exe vanished */ });
 
@@ -115,6 +118,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
       version: '43.1.1',
       arch: 'x64',
       deps: {
+        ...SELF_ANCHOR_OFF,
         cachedZip: () => zipPath,
         extract,
         spawn: jest.fn(),
@@ -129,7 +133,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
   test('a CLEAN extract (exe present) is NOT flagged as quarantined', async () => {
     const { dir, exeName } = fakeElectronDir({ platform: 'win32' });
     const zipPath = path.join(mkTmp('amicus-qz3-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zipPath, 'PKzip');
+    fs.writeFileSync(zipPath, ZIP_BODY);
 
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, exeName), 'MZextracted');
@@ -142,6 +146,7 @@ describe('repairElectron detects AV quarantine (#53 B-quarantine)', () => {
       version: '43.1.1',
       arch: 'x64',
       deps: {
+        ...SELF_ANCHOR_OFF,
         cachedZip: () => zipPath,
         extract,
         spawn: jest.fn(),
@@ -163,6 +168,7 @@ describe('ensureElectron surfaces the quarantine reason (#53 B-quarantine)', () 
     const repairElectron = jest.fn(async () => ({ repaired: false, quarantined: true, reason: quarantineReason }));
     const res = await ee.ensureElectron({
       deps: {
+        ...SELF_ANCHOR_OFF,
         isElectronUsable: () => false,
         resolveElectronBinary: () => '/fake/dist/electron.exe',
         repairElectron,

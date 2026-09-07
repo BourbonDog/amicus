@@ -36,6 +36,7 @@ const path = require('path');
 
 const ei = require('../src/sidecar/electron-install');
 const ee = require('../src/sidecar/electron-ensure');
+const { seedElectronAnchor, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
 
 const WIN_EXE = 'electron.exe';
 
@@ -52,7 +53,9 @@ function fakeElectronDir({ withExe } = {}) {
   fs.writeFileSync(path.join(dir, 'path.txt'), WIN_EXE);
   fs.mkdirSync(path.join(dir, 'dist'), { recursive: true });
   if (withExe) { fs.writeFileSync(path.join(dir, 'dist', WIN_EXE), 'MZreal'); }
-  return dir;
+  // repairElectron now hashes a cached zip against this package's checksums.json
+  // BEFORE extracting it, so the fixture has to carry that anchor.
+  return seedElectronAnchor(dir);
 }
 
 /** A no-op single-flight lock so the smoke flows don't touch os.tmpdir lockfiles. */
@@ -119,7 +122,7 @@ describe('#58 repairElectron heals the REAL broken package (cache-only, offline)
   test('cacheOnly extract materializes the exe -> isElectronUsable becomes TRUE', async () => {
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
 
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
@@ -135,7 +138,7 @@ describe('#58 repairElectron heals the REAL broken package (cache-only, offline)
       platform: 'win32',
       version: '43.1.1',
       arch: 'x64',
-      deps: { cachedZip: () => zip, extract, spawn, ...noopLock() },
+      deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn, ...noopLock() },
     });
 
     expect(res.repaired).toBe(true);
@@ -155,7 +158,7 @@ describe('#58 repairElectron heals the REAL broken package (cache-only, offline)
       platform: 'win32',
       version: '43.1.1',
       arch: 'x64',
-      deps: { cachedZip: () => null, extract, spawn, ...noopLock() },
+      deps: { ...SELF_ANCHOR_OFF, cachedZip: () => null, extract, spawn, ...noopLock() },
     });
 
     expect(res.deferred).toBe(true);
@@ -167,7 +170,7 @@ describe('#58 repairElectron heals the REAL broken package (cache-only, offline)
   test('single-flight lock: a concurrent caller backs off — extract runs exactly once', async () => {
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz2-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
 
     let held = false;
     const acquireLock = jest.fn(() => {
@@ -189,7 +192,7 @@ describe('#58 repairElectron heals the REAL broken package (cache-only, offline)
       platform: 'win32',
       version: '43.1.1',
       arch: 'x64',
-      deps: { cachedZip: () => zip, extract, spawn: jest.fn(), acquireLock },
+      deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn: jest.fn(), acquireLock },
     };
 
     const first = ei.repairElectron(common);
@@ -211,7 +214,7 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
   test('lazy provision: broken package -> real repair extracts -> ok:true with the resolved path', async () => {
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz3-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
 
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
@@ -230,7 +233,7 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
           platform: 'win32',
           version: '43.1.1',
           arch: 'x64',
-          deps: { cachedZip: () => zip, extract, spawn: jest.fn(), ...noopLock() },
+          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => zip, extract, spawn: jest.fn(), ...noopLock() },
         }),
         logProgress: () => {},
       },
@@ -269,7 +272,7 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
           platform: 'win32',
           version: '43.1.1',
           arch: 'x64',
-          deps: { cachedZip: () => null, extract: jest.fn(), spawn: jest.fn(), ...noopLock() },
+          deps: { ...SELF_ANCHOR_OFF, cachedZip: () => null, extract: jest.fn(), spawn: jest.fn(), ...noopLock() },
         }),
         logProgress: () => {},
       },
@@ -297,14 +300,14 @@ describe('#58 doctor --fix heals through the REAL repairElectron', () => {
       platform: 'win32',
       version: '43.1.1',
       arch: 'x64',
-      deps: { cachedZip, extract, spawn, downloadArtifact, ...noopLock() },
+      deps: { ...SELF_ANCHOR_OFF, cachedZip, extract, spawn, downloadArtifact, ...noopLock() },
     });
   }
 
   test('--fix with a cache hit: real extract repairs in place -> ok (self-healed)', async () => {
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz4-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
     });
@@ -386,7 +389,7 @@ describe('#58 postinstall provisionElectron over the REAL repairElectron', () =>
       platform: 'win32',
       version: '43.1.1',
       arch: 'x64',
-      deps: { ...noopLock(), spawn: jest.fn(), extract: jest.fn(), cachedZip: () => null, ...deps },
+      deps: { ...SELF_ANCHOR_OFF, ...noopLock(), spawn: jest.fn(), extract: jest.fn(), cachedZip: () => null, ...deps },
     });
   }
 
@@ -394,7 +397,7 @@ describe('#58 postinstall provisionElectron over the REAL repairElectron', () =>
     delete process.env.AMICUS_PREFETCH_ELECTRON;
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz5-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
     });
@@ -454,7 +457,7 @@ describe('#58 postinstall provisionElectron over the REAL repairElectron', () =>
     process.env.AMICUS_PREFETCH_ELECTRON = '1';
     const dir = fakeElectronDir({ withExe: false });
     const zip = path.join(mkTmp('amicus-cz6-'), 'electron-v43.1.1-win32-x64.zip');
-    fs.writeFileSync(zip, 'PKzip');
+    fs.writeFileSync(zip, ZIP_BODY);
     const extract = jest.fn(async (_zip, opts) => {
       fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZextracted');
     });

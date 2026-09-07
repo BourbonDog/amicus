@@ -27,8 +27,8 @@ const { spawnSync } = require('child_process');
 const { resolveCacheRoots } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
-const { controlledProvision } = require('./electron-provision');
-const { resolveAnchor } = require('./electron-trust');
+const { controlledProvision, rejectCachedZip } = require('./electron-provision');
+const { artifactFileName, electronTrustPolicy, resolveAnchor, verifyArtifact } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
@@ -201,7 +201,9 @@ async function repairElectron({
     }
   }
 
-  // The digest anchor that pins the download, resolved once.
+  // The digest anchor and the trust policy, resolved ONCE for both routes.
+  const fileName = artifactFileName({ version, platform, arch });
+  const policy = electronTrustPolicy(process.env);
   const anchor = resolveAnchor({ electronDir, version, fs, selfElectronDir: deps.selfElectronDir });
 
   // Single-flight: bail out gracefully if another caller is already repairing.
@@ -219,21 +221,32 @@ async function repairElectron({
     // Attempt 1: extract from cache (always preferred, fully offline).
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
-      try {
-        await extractFromCache({ zip, electronDir, platform, extract, fs });
-        // Non-throwing extract w/ absent exe = the AV-quarantine signature.
-        return verifyExtractOutcome({ electronDir, platform, fs });
-      } catch (extractErr) {
-        // Corrupt cached artifact: delete the bad zip so it can't poison the
-        // cache, then fall through to a forced fresh download (unless offline).
-        try { fs.rmSync(zip, { force: true }); } catch { /* ignore */ }
-        if (cacheOnly) {
-          return {
-            repaired: false,
-            reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}`,
-          };
-        }
+      // C2: anything that can write the cache dir can swap these bytes, so HASH
+      // BEFORE EXTRACT — extractFromCache must be unreachable for an artifact the
+      // anchor contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
+      const gate = verifyArtifact({ zip, anchor, fileName, policy, fs, log: stderrLog });
+      if (!gate.allowed) {
+        const refusal = rejectCachedZip({ gate, zip, fileName, env: process.env, fs, log: stderrLog });
+        if (cacheOnly) { return refusal; }
         // else: drop into the controlled download below.
+      } else {
+        try {
+          await extractFromCache({ zip, electronDir, platform, extract, fs });
+          // Non-throwing extract w/ absent exe = the AV-quarantine signature.
+          const outcome = verifyExtractOutcome({ electronDir, platform, fs });
+          return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
+        } catch (extractErr) {
+          // Corrupt cached artifact: delete the bad zip so it can't poison the
+          // cache, then fall through to a forced fresh download (unless offline).
+          try { fs.rmSync(zip, { force: true }); } catch { /* ignore */ }
+          if (cacheOnly) {
+            return {
+              repaired: false,
+              reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}`,
+            };
+          }
+          // else: drop into the controlled download below.
+        }
       }
     } else if (cacheOnly) {
       return {
