@@ -6933,6 +6933,21 @@ and top-level `docs/*.md`.
 
 ## v4.9.4 records — dispositions and rulings made in-cycle (2026-09-04)
 
+**✅ v4.9.4 RELEASED 2026-09-07** — tag `v4.9.4` → `c45dfbaa`, main `c45dfbaa` (`--no-ff` merge of
+`release/v4.9.4`, release commit `ab97c6cb`), npm `amicus@4.9.4`, MCP Registry `4.9.4`/`active`,
+GH Release live. Cut gates: 610 suites / 9,568 tests green (8 skipped), run twice — once on the
+release commit and again on the merge commit, because `.test-passed` is keyed to HEAD and the merge
+changes it; lint, citation, size, `validate-docs --full` and `generate-docs --check` all exit 0;
+eight-site version pin re-grepped, not recalled. **#218 stays OPEN on purpose** — council seats have
+no effort knob and Mode 1's reservation default is unchanged because the budget stays opt-in, both
+the owner's decisions. The release commit's subject is `chore(release):`, deliberately clear of the
+`fix: #<issue>` shape that auto-closed #218 on the PR #235 merge earlier the same day.
+
+All three channels were verified independently. "The workflow is green" was not accepted as evidence
+for any of them. The v4.9.3 registry correction held on first use: the entry was on **page 2 of 2**
+again (39 versions), and the version had to be read at `s.server.version` — the old top-level path
+still returns `undefined`, which reads as a successful publish while proving nothing.
+
 Filed past-tense in the same commit as each fix, per the falsified-record rule.
 
 - [x] **#218 P3 — direct-provider ceilings from models.dev (2026-09-04).** The 4.9.3 docs said the
@@ -7628,6 +7643,31 @@ line the next time the matrix is run end to end.
   emitted only over Stage-1 `materialized` reviews. A judge whose ranking was cut mid-JSON fails
   parse today with no length clue on the record; extend the Note to `run-stage2.js` and the chair
   path once the Stage-1 shape has been seen in a real run.
+
+**Found at the v4.9.4 cut (2026-09-07), filed rather than fixed in it:**
+
+- [ ] **The release-notes sweep does not cover CI-only work that landed in the window.** At the cut,
+  `[Unreleased]` documented #234 (the council alias map read from the PR's frozen base sha) but not
+  #220 (a cancelled council run discarding its spend receipt) — two fixes of the same class, one
+  written up and one not, because each PR wrote its own notes and nothing checked the window as a
+  whole. The #220 bullet was added in the cut commit. The gap is not that CI work must always be
+  logged — the site rewrite and the CLAUDE.md/architecture-map split were deliberately left out —
+  but that the decision was never made anywhere: it fell out of which PR happened to edit
+  `CHANGELOG.md`. The recipe needs one step before the version pin: diff `git log <lasttag>..main`
+  against the `[Unreleased]` section and rule on every commit the section does not mention.
+- [ ] **Three advisories reach the PUBLISHED dependency tree through `@modelcontextprotocol/sdk`
+  (found 2026-09-07, `npm audit --omit=dev`).** `fast-uri@3.1.5` (two high: SSRF via malformed IPv6
+  normalization and via repeated hostname percent-decoding; plus host confusion via percent-encoded
+  scheme normalization) arrives as `@modelcontextprotocol/sdk@1.30.0 → ajv@8.20.0 → fast-uri`, and
+  `qs@6.15.2` (moderate: an array-limit bypass via bracket-key comma parsing, and a DoS via
+  attacker-controlled `isBuffer`) as `sdk → express@5.2.1 → qs`, deduped with `body-parser`. These
+  are production dependencies of the published package, not dev-tree noise — the pre-push audit
+  reports seven, but four of those are dev-only (`browserslist`, `extract-zip`/`puppeteer`). npm
+  reports a non-breaking `npm audit fix` for all three. NOT taken during the cut: a lockfile change
+  after the tag is pushed would make the published tarball and the tagged tree disagree. It belongs
+  in its own commit on main, with the suite re-run, before the next release. Whether either
+  advisory is reachable from Amicus's own use of the SDK is unassessed — the filing is about the
+  shipped tree, not a demonstrated exploit path.
 
 ## v4.9.3 records — dispositions and rulings made in-cycle (2026-08-28)
 
