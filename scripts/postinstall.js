@@ -89,6 +89,10 @@ async function provisionElectron(deps = {}) {
       console.warn('[amicus] Headless runs and the council already work without the GUI.');
       return;
     }
+    // A trust REFUSAL is not the same as "no cache yet": the artifact was found,
+    // hashed, and rejected. One line, so the reason is not lost behind the generic
+    // notice below (docs/troubleshooting.md promises this line).
+    if (result && result.integrity) { console.warn(`[amicus] Note: ${result.reason}`); }
     // No cache hit (deferred), contended, or otherwise not provisioned now.
     console.warn('[amicus] Note: the Electron GUI binary is not provisioned yet — it will download on first use of the interactive GUI / setup-wizard.');
     console.warn(`[amicus] Headless runs and the council already work. To provision the GUI now: ${HINTS.doctorFix}`);

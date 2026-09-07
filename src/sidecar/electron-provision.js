@@ -36,14 +36,31 @@ function cacheRootFor(env = process.env) {
  * name fails the download outright — which is why no anchor means no `checksums`
  * key at all rather than an empty one. With no anchor, @electron/get falls back
  * to its own remote SHASUMS256.txt fetch: weaker, but never a re-download loop.
+ *
+ * THE HATCH REACHES THIS ROUTE TOO. `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` used to
+ * be handed only to the cached-artifact gate, so the one case both docs describe
+ * — a machine whose electron bytes legitimately differ (a local rebuild, an
+ * internally-signed build on a corporate mirror) — still had its download pinned
+ * to the official digest and failed. MEASURED before this change: with the hatch
+ * set and nothing in any cache root, `checksums` was still sent and the call
+ * returned `{repaired:false}` with no reason at all. When the hatch is set the
+ * pin is dropped here and @electron/get falls back to the mirror's own
+ * SHASUMS256.txt, which is what a rebuild publishes. That is a real downgrade,
+ * so it is stated out loud on stderr every time rather than happening quietly —
+ * and it is reachable ONLY through a bare env name a repository cannot plant.
  * @returns {Promise<void>}
  */
 async function controlledProvision({
   electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
-  fs, env = process.env, downloadMs = 480000,
+  fs, env = process.env, downloadMs = 480000, policy = {}, log = () => {},
 }) {
   const fileName = artifactFileName({ version, platform, arch });
-  const digest = expectedDigest(anchor, fileName);
+  let digest = expectedDigest(anchor, fileName);
+  if (digest && policy.allowUnverified) {
+    log('[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — downloading without the published');
+    log(`[amicus]   sha256 pin for ${fileName}; its digest comes from the mirror you are using.`);
+    digest = null;
+  }
   const zip = await downloadArtifact({
     version,
     artifactName: 'electron',
@@ -96,11 +113,22 @@ function rejectCachedZip({ gate, zip, fileName, env = process.env, fs, log = () 
   log(`[amicus] Electron artifact REFUSED: ${fileName}`);
   log(`[amicus]   ${zip}`);
   log(`[amicus]   ${what}`);
-  log(`[amicus]   ${removed ? 'The file has been removed.' : 'The file was left in place.'}`);
   log('[amicus] This is what a swapped mirror or a planted cache file looks like. It is ALSO');
   log('[amicus] what a truncated download, a failing disk, or a mirror serving a REBUILT');
-  log('[amicus] electron looks like — amicus cannot tell them apart. If you deliberately run');
-  log('[amicus] a rebuilt electron, set AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 to accept it.');
+  log('[amicus] electron looks like — amicus cannot tell them apart.');
+  // ORDER MATTERS. The advice comes BEFORE the removal notice, and says what to
+  // do about a file that is already gone: a hand-seeded air-gapped cache is the
+  // one place the refused artifact was also the ONLY copy, and being told about
+  // the hatch after "The file has been removed." is being told too late to use
+  // it. The delete itself is required (a poisoned zip must not survive to be
+  // re-offered); the words around it are what make it recoverable.
+  log('[amicus] If you deliberately run a REBUILT electron, set');
+  log('[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 BEFORE provisioning again — it accepts these');
+  log('[amicus] bytes on the cache path and drops the digest pin on the download path.');
+  log(`[amicus]   ${removed
+    ? 'The file has been removed: re-copy it from the machine that downloaded it (or let'
+      + '\n[amicus]   amicus download it again) once that variable is set.'
+    : 'The file was left in place.'}`);
   log('[amicus] Headless runs and the council work without the GUI.');
   return {
     repaired: false,
@@ -110,4 +138,42 @@ function rejectCachedZip({ gate, zip, fileName, env = process.env, fs, log = () 
   };
 }
 
-module.exports = { cacheRootFor, controlledProvision, mayDeleteRejectedZip, rejectCachedZip };
+/** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
+function isUnsafeArchive(err) {
+  return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
+}
+
+/**
+ * C4 AT THE CALL SITE. unzip.js classifies extract-zip's path-traversal refusals
+ * as terminal so the same archive is never handed to an OS extractor that has no
+ * such check. That invariant held only INSIDE unzip.js: both of repairElectron's
+ * catch blocks used to swallow the refusal without reading `err.code` and launder
+ * it back into exactly the retry the control forbids — the network path spawned
+ * `node <electronDir>/install.js`, which re-downloads and re-extracts through
+ * @electron-internal/extract-zip with no amicus supervision (the forbidden move,
+ * one stack frame up), and the cache path deleted the zip through the UNFENCED
+ * `fs.rmSync` and told the user it "was corrupt and removed" — a security refusal
+ * reported as corruption. MEASURED both, before this change.
+ *
+ * So the refusal ends here: no retry, no fallback extractor, and no delete. The
+ * archive is left where it is, because a refused archive is evidence, and
+ * `err.message` already carries the path and extract-zip's own reason.
+ * @returns {{repaired:false, integrity:'unsafe-archive', reason:string}}
+ */
+function refuseUnsafeArchive({ err, fileName, log = () => {} }) {
+  const detail = (err && err.message) || 'the archive tried to write outside its destination';
+  log(`[amicus] Electron artifact REFUSED (unsafe archive): ${fileName}`);
+  log(`[amicus]   ${detail}`);
+  log('[amicus] Entries in that zip tried to write OUTSIDE the destination directory. amicus');
+  log('[amicus] will not retry it with another extractor, and has left the file in place.');
+  log('[amicus] Headless runs and the council work without the GUI.');
+  return {
+    repaired: false,
+    integrity: 'unsafe-archive',
+    reason: `Electron artifact ${fileName} was REFUSED: ${detail}. It was NOT retried and NOT removed.`,
+  };
+}
+
+module.exports = {
+  cacheRootFor, controlledProvision, mayDeleteRejectedZip, rejectCachedZip, isUnsafeArchive, refuseUnsafeArchive,
+};

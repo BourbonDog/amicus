@@ -91,7 +91,7 @@ describe('resolveAnchor + expectedDigest', () => {
     expect(trust.expectedDigest(null, ZIP_NAME)).toBeNull();
   });
 
-  test('prefers the RUNNING amicus\'s electron checksums.json when the versions match (ANCHORFROMTARGET)', () => {
+  test('prefers the RUNNING amicus\'s electron checksums.json (ANCHORFROMTARGET)', () => {
     // `doctor --fix` hands repairElectron an electronDir found by a filesystem
     // scan. Reading the anchor out of THAT tree would let it vouch for itself.
     const scanned = fakePkg({ table: { [ZIP_NAME]: 'b'.repeat(64) } });     // untrusted npx-cache copy
@@ -100,15 +100,38 @@ describe('resolveAnchor + expectedDigest', () => {
     const matched = trust.resolveAnchor({ electronDir: scanned, version: '43.1.1', fs, selfElectronDir: self });
     expect(matched.source).toBe(path.join(self, 'checksums.json'));
     expect(trust.expectedDigest(matched, ZIP_NAME)).toBe(ZIP_SHA256);
+  });
 
-    // versions DISAGREE -> rung 1 does not apply; fall back to the scanned tree's own file
-    const mismatched = trust.resolveAnchor({ electronDir: scanned, version: '42.0.0', fs, selfElectronDir: self });
-    expect(mismatched.source).toBe(path.join(scanned, 'checksums.json'));
+  test('NO version argument can demote the self anchor (ANCHORVERSIONFROMTARGET)', () => {
+    // This assertion replaces one that pinned the DEFECT: it used to require that
+    // a version disagreement fall back to the scanned tree's own checksums.json.
+    // But `version` is read out of <electronDir>/package.json whenever the caller
+    // passes none — which the ONE production caller (doctor --fix) never does — so
+    // that fallback was reachable by DATA: a planted {"version":"99.0.0"} made the
+    // scanned tree the anchor for its own bytes. The self table is keyed by the
+    // FULL artifact filename, so a genuine version disagreement needs no version
+    // check: it simply yields no entry, and the gate's no-digest verdict extracts
+    // and MARKS instead of trusting the target.
+    const scanned = fakePkg({ table: { 'electron-v99.0.0-win32-x64.zip': 'b'.repeat(64) } });
+    const self = fakePkg({ version: '43.1.1', table: { [ZIP_NAME]: ZIP_SHA256 } });
+    const selfSource = path.join(self, 'checksums.json');
 
+    for (const version of ['43.1.1', '99.0.0', 'v99.0.0', undefined]) {
+      const anchor = trust.resolveAnchor({ electronDir: scanned, version, fs, selfElectronDir: self });
+      expect(anchor.source).toBe(selfSource);
+    }
+    // ...and the scanned tree's own row is never consulted for the version it claims
+    const anchor = trust.resolveAnchor({ electronDir: scanned, fs, selfElectronDir: self });
+    expect(trust.expectedDigest(anchor, 'electron-v99.0.0-win32-x64.zip')).toBeNull();
+  });
+
+  test('rung 2 survives ONLY when the running amicus offers no usable table', () => {
+    const scanned = fakePkg({ table: { [ZIP_NAME]: ZIP_SHA256 } });
     // self present but carrying NO usable table -> fall through rather than refuse
-    const emptySelf = fakePkg({ version: '43.1.1', table: {} });
-    const fell = trust.resolveAnchor({ electronDir: scanned, version: '43.1.1', fs, selfElectronDir: emptySelf });
-    expect(fell.source).toBe(path.join(scanned, 'checksums.json'));
+    for (const emptySelf of [fakePkg({ version: '43.1.1', table: {} }), fakePkg({}), null]) {
+      const fell = trust.resolveAnchor({ electronDir: scanned, version: '43.1.1', fs, selfElectronDir: emptySelf });
+      expect(fell.source).toBe(path.join(scanned, 'checksums.json'));
+    }
   });
 });
 
@@ -254,6 +277,37 @@ describe('scrubbedChildEnv — the installer-spawn env (C3)', () => {
     // the source env is untouched
     expect(env.npm_config_electron_mirror).toBe('http://attacker.example/evil/');
     expect(env.ELECTRON_INSTALL_PLATFORM).toBeUndefined();
+  });
+
+  test('removes the UPPER-case spellings too (npm writes them, and @electron/get reads them)', () => {
+    // MEASURED (npm 11.16.0, Windows 11), two routes to an upper-case slot:
+    //  1. `.npmrc electron_mirror=…` while NPM_CONFIG_ELECTRON_MIRROR already
+    //     exists: npm overwrites that slot's VALUE and never renames it.
+    //  2. package.json `"config": {"ELECTRON_MIRROR": …}`: npm PRESERVES the key
+    //     case -> npm_package_config_ELECTRON_MIRROR, nothing pre-existing needed.
+    // @electron/get reads NPM_CONFIG_ELECTRON_<NAME> as its second lookup
+    // (dist/artifact-utils.js, line 26) and npm_package_config_electron_<name> as its
+    // fourth (line 28) — which on Windows resolves case-insensitively to (2).
+    // The scrub deletes from a PLAIN OBJECT copy, which is case-sensitive on
+    // every platform, so folding case here is the whole control.
+    const out = trust.scrubbedChildEnv({
+      env: {
+        NPM_CONFIG_ELECTRON_MIRROR: 'http://attacker.example/evil/',
+        NPM_CONFIG_ELECTRON_USE_REMOTE_CHECKSUMS: '1',
+        npm_package_config_ELECTRON_MIRROR: 'http://attacker.example/evil/',
+        Npm_Config_Electron_Custom_Dir: 'pwned',
+        NPM_CONFIG_PLATFORM: 'linux',
+        NPM_CONFIG_ARCH: 'arm64',
+        ELECTRON_MIRROR: 'https://mirror.corp/electron/',
+        PATH: '/usr/bin',
+      },
+      platform: 'win32',
+      arch: 'x64',
+    });
+    expect(Object.keys(out).filter((k) => /^npm_/i.test(k))).toEqual([]);
+    // the bare owner-controlled names are untouched by the case fold
+    expect(out.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
+    expect(out.PATH).toBe('/usr/bin');
   });
 
   test('omits the pins when platform/arch are not supplied', () => {

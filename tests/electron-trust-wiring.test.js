@@ -41,15 +41,44 @@
 //   basename check with a bare `return true`, dropping the fence.
 //   RED: "a mismatched zip OUTSIDE every cache root is left alone"
 //   (the zip outside every root was deleted).
-// ANCHORFROMTARGET   electron-trust.js :: resolveAnchor — replace the self-anchor
-//   push with the electronDir push, so the SCANNED tree's own checksums.json is
-//   read first and vouches for its own bytes.
+// ANCHORFROMTARGET   electron-trust.js :: resolveAnchor — `for (const dir of
+//   [electronDir])`, so the SCANNED tree's own checksums.json is read and
+//   vouches for its own bytes.
 //   RED: "the ANCHOR comes from the running amicus, not the scanned target dir"
 //   (poison extracted). Also red: electron-trust.test.js "prefers the RUNNING…".
 // INSTALLERENVLEAKED electron-install.js :: runInstaller — `const env = {
 //   ...process.env };` instead of scrubbedChildEnv(...).
 //   RED: "the last-resort install.js spawn gets no repo-plantable electron name"
 //   (npm_config_electron_mirror arrived as "http://attacker.example/evil/").
+//
+// ── ADDED BY THE REVIEW REPAIR (measured 2026-09-07, same method) ───────────
+// ANCHORVERSIONFROMTARGET  electron-trust.js :: resolveAnchor — condition the
+//   self rung on the version read out of <electronDir>/package.json again.
+//   RED: "a planted package.json version cannot make the scanned tree its own
+//   anchor" (res.unverified undefined — the poison came back VERIFIED).
+// SCRUBCASESENSITIVE       electron-trust.js :: isRepoPlantedName — drop the
+//   `.toLowerCase()`.
+//   RED: tests/sidecar/electron-trust.test.js "removes the UPPER-case spellings
+//   too" (NPM_CONFIG_ELECTRON_MIRROR survived into the child env).
+// UNSAFELAUNDERED          electron-install.js — `if (false)` in place of either
+//   `isUnsafeArchive(...)` guard. Measured at BOTH catch sites.
+//   RED: "from the CACHE: not retried, not deleted, not called corrupt" and
+//   "from the DOWNLOAD: install.js is never spawned with the refused archive".
+// HATCHNOTONDOWNLOAD       electron-provision.js :: controlledProvision —
+//   `if (false && digest && policy.allowUnverified)`.
+//   RED: "with the hatch set, the download is NOT pinned to the published digest".
+// REFUSALDROPPED           electron-install.js — delete the line that folds
+//   `refusal` into the returned object.
+//   RED: "online, a REFUSED cache entry plus a failed download reports the
+//   refusal, not 'not provisioned'".
+// ADVICEAFTERDELETE        electron-provision.js :: rejectCachedZip — move the
+//   removal notice back above the hatch advice.
+//   RED: "the refusal tells the user about the hatch BEFORE it tells them the
+//   file is gone".
+// POSTINSTALLREASONDROPPED scripts/postinstall.js — delete the one-line
+//   `result.integrity` notice.
+//   RED: tests/postinstall-provision-electron.test.js "a trust REFUSAL is
+//   surfaced, not flattened into 'not provisioned yet'".
 // ───────────────────────────────────────────────────────────────────────────
 
 const fs = require('fs');
@@ -295,6 +324,171 @@ describe('C2 — the poison delete is FENCED', () => {
     });
     expect(extract).not.toHaveBeenCalled();
     expect(res.integrity).toBe('unreadable');
+  });
+});
+
+describe('C2 — the anchor cannot be demoted by DATA (ANCHORVERSIONFROMTARGET)', () => {
+  // The review finding the four tests below exist for: ANCHORFROMTARGET was
+  // reachable without touching any code. `version` is read out of
+  // <electronDir>/package.json whenever the caller passes none — and the ONE
+  // production caller, src/utils/doctor-electron-mcp-check.js:130-133, passes
+  // {electronDir, timeoutMs} and never a version — so a planted
+  // {"version":"99.0.0"} used to make the self anchor "not the same version",
+  // demote rung 1, and let the scanned tree's own checksums.json vouch for its
+  // own bytes. MEASURED on the tree before the fix: {"repaired":true} over
+  // POISONED-BYTES, reported by doctor as "(self-healed 1 npx-cache copy)".
+  const V99 = 'electron-v99.0.0-win32-x64.zip';
+
+  test('a planted package.json version cannot make the scanned tree its own anchor', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({
+      withExe: false, platform: PLATFORM, version: '99.0.0', body: POISON,   // vouches for the POISON
+    });
+    const self = seedElectronAnchor(mkTmp('amicus-self-'), { version: VERSION });   // 43.1.1, honest
+    const extract = jest.fn(async (_z, o) => { fs.writeFileSync(path.join(o.dir, exeName), 'MZ'); });
+    const res = await ei.repairElectron({
+      cacheOnly: true,
+      electronDir: dir,
+      platform: PLATFORM,
+      arch: ARCH,                                    // NO version: the doctor --fix shape
+      deps: {
+        selfElectronDir: self,
+        cachedZip: () => writeZip({ body: POISON, name: V99 }),
+        extract,
+        spawn: jest.fn(),
+        acquireLock: () => ({ release: () => {} }),
+      },
+    });
+    // The trusted anchor has no row for a version it never shipped, so the bytes
+    // are UNVERIFIED and say so. What must never happen again is the poison being
+    // reported as verified because the directory under audit said so.
+    expect(res.unverified).toBe(true);
+    expect(stderr.join('')).toMatch(/could not be verified/);
+    expect(distDir).toBeDefined();
+  });
+
+  test('when the version is NOT lied about, the same poison is refused', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM, body: POISON });
+    const self = seedElectronAnchor(mkTmp('amicus-self-'), { version: VERSION });
+    const { res, extract } = await repair({
+      dir, exeName, distDir, zip: writeZip({ body: POISON }), cacheOnly: true, deps: { selfElectronDir: self },
+    });
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('mismatch');
+  });
+});
+
+describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERED)', () => {
+  // unzip.js classifies extract-zip's path-traversal refusals as terminal. That
+  // held only inside unzip.js: both catch blocks in repairElectron swallowed the
+  // refusal without reading err.code and laundered it back into the retry the
+  // control forbids. MEASURED before the fix — network path: runInstaller spawned
+  // `node <electronDir>/install.js`; cache path: the zip was deleted through the
+  // UNFENCED fs.rmSync and reported as "corrupt and removed".
+  const unsafe = () => {
+    const e = new Error('refusing to extract cached.zip: invalid relative path: ../../evil');
+    e.code = 'UNZIP_UNSAFE_ARCHIVE';
+    throw e;
+  };
+
+  test('from the CACHE: not retried, not deleted, not called corrupt', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip();
+    const { res, spawn } = await repair({
+      dir, exeName, distDir, zip, cacheOnly: true, deps: { extract: jest.fn(unsafe) },
+    });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(fs.existsSync(zip)).toBe(true);                 // evidence, not swept up
+    expect(res.integrity).toBe('unsafe-archive');
+    expect(res.reason).not.toMatch(/corrupt/i);
+    expect(res.reason).toMatch(/REFUSED/);
+    expect(stderr.join('')).toMatch(/unsafe archive/i);
+  });
+
+  test('from the DOWNLOAD: install.js is never spawned with the refused archive', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => writeZip());
+    const { res, spawn } = await repair({
+      dir, exeName, distDir, zip: null, deps: { downloadArtifact, extract: jest.fn(unsafe) },
+    });
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();                  // the forbidden retry
+    expect(res.integrity).toBe('unsafe-archive');
+  });
+
+  test('an ORDINARY extract failure still deletes and still falls through (the fix stayed narrow)', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip();
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+    const { res, spawn } = await repair({
+      dir, exeName, distDir, zip, deps: { downloadArtifact, extract: jest.fn(async () => { throw new Error('unzip blew up'); }) },
+    });
+    expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
+    expect(spawn).toHaveBeenCalledTimes(1);                // ...and the last-resort installer still runs
+    expect(res.integrity).toBeUndefined();
+  });
+});
+
+describe('the escape hatch REACHES the download path', () => {
+  let saved;
+  beforeEach(() => { saved = process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON; });
+  afterEach(() => {
+    if (saved === undefined) { delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON; } else { process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = saved; }
+  });
+
+  test('with the hatch set, the download is NOT pinned to the published digest', async () => {
+    // Before: policy went only to verifyArtifact, so the one case the docs
+    // describe — a legitimately rebuilt electron, on a machine with no matching
+    // zip in any cache root — still downloaded under the official pin, failed
+    // sumchecker, fell to install.js, failed its bundled pin too, and returned
+    // {repaired:false} with NO reason. The variable did nothing.
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => writeZip());
+    const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+    expect(downloadArtifact.mock.calls[0][0]).not.toHaveProperty('checksums');
+    expect(res.repaired).toBe(true);
+    expect(stderr.join('')).toMatch(/AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — downloading without/);
+  });
+
+  test('unset, the same download IS pinned', async () => {
+    delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => writeZip());
+    await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+    expect(downloadArtifact.mock.calls[0][0].checksums).toEqual({ [ZIP_NAME]: ZIP_SHA256 });
+  });
+});
+
+describe('a refusal the retry could not rescue still reaches the caller', () => {
+  test('online, a REFUSED cache entry plus a failed download reports the refusal, not "not provisioned"', async () => {
+    // doctor calls repairElectron WITHOUT cacheOnly (doctor-electron-mcp-check.js
+    // :130 and :182), and the refusal used to be dropped on the floor there: the
+    // function returned a bare {repaired:false}, so `doctor` printed its generic
+    // "not provisioned — headless still works" for a poisoned artifact.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+    const { res } = await repair({
+      dir, exeName, distDir, zip: writeZip({ body: POISON, root: (() => { const r = mkTmp('amicus-cacheroot-'); process.env.ELECTRON_CACHE = r; return r; })() }),
+      deps: { downloadArtifact },
+    });
+    delete process.env.ELECTRON_CACHE;
+    expect(res.repaired).toBe(false);
+    expect(res.integrity).toBe('mismatch');
+    expect(res.reason).toMatch(/REFUSED/);
+  });
+
+  test('the refusal tells the user about the hatch BEFORE it tells them the file is gone', async () => {
+    // On an air-gapped box the deleted artifact was the only copy, and advice
+    // that arrives after "The file has been removed." arrives too late to use.
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    await repair({ dir, exeName, distDir, zip: writeZip({ body: POISON, root: cacheRoot }), cacheOnly: true });
+    delete process.env.ELECTRON_CACHE;
+    const text = stderr.join('');
+    expect(text).toMatch(/has been removed/);
+    expect(text.indexOf('AMICUS_ALLOW_UNVERIFIED_ELECTRON=1')).toBeLessThan(text.indexOf('has been removed'));
+    expect(text).toMatch(/re-copy it from the machine that downloaded it/);
   });
 });
 

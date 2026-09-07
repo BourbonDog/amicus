@@ -88,6 +88,24 @@ describe('postinstall provisions electron cache-only (#57)', () => {
     expect(warnings).not.toMatch(/npm install -g amicus/i);
   });
 
+  test('a trust REFUSAL is surfaced, not flattened into "not provisioned yet"', async () => {
+    // docs/troubleshooting.md promises the npm-install notice repeats the refusal.
+    // It used to read only .repaired / .quarantined and discard result.reason, so a
+    // poisoned or unsafe artifact printed the same line as an empty cache.
+    const repairElectron = jest.fn().mockResolvedValue({
+      repaired: false,
+      integrity: 'mismatch',
+      reason: 'Cached electron artifact electron-v43.1.1-win32-x64.zip was REFUSED: sha256 3f2a does not match the published b4e9. It has been removed.',
+    });
+    const { warnings, exits } = await runWithSpies({ repairElectron });
+
+    expect(exits).toEqual([0]);
+    expect(warnings).toMatch(/REFUSED/);
+    expect(warnings).toMatch(/does not match the published/);
+    // ...and the reassurance still follows it.
+    expect(warnings).toMatch(/headless/i);
+  });
+
   test('a throwing repairElectron still exits 0 (non-fatal, #29 guard preserved)', async () => {
     const repairElectron = jest.fn().mockRejectedValue(new Error('boom'));
     const { exits } = await runWithSpies({ repairElectron });

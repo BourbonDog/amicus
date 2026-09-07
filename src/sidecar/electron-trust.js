@@ -50,16 +50,34 @@ const path = require('path');
  * lower-case name is not repo-injectable, so it carries the machine owner's
  * intent, exactly like a bare `ELECTRON_MIRROR`.
  *
- * MATCHED CASE-SENSITIVELY, deliberately. These are exactly and only what npm
- * writes. On Windows the environment block is case-insensitive, so deleting the
- * lower-case name also removes the `NPM_CONFIG_ELECTRON_*` view @electron/get
- * reads second (MEASURED). On Linux/macOS `NPM_CONFIG_ELECTRON_*` is a DISTINCT
- * variable that npm never writes and a repo cannot set — it is the machine
- * owner's, and we leave it alone.
+ * MATCHED CASE-INSENSITIVELY. This used to fold no case, on the claim that
+ * because the Windows environment block is case-insensitive, deleting the
+ * lower-case name also removed the `NPM_CONFIG_ELECTRON_*` view @electron/get
+ * reads second. That is true of `process.env` and FALSE of the `{...env}` PLAIN
+ * OBJECT this module actually deletes from — a plain object is case-sensitive on
+ * every platform, so the upper-case key survived and was handed to the child.
+ * RE-MEASURED (npm 11.16.0, Windows 11) — two ways a repository reaches an
+ * upper-case slot:
+ *   1. `.npmrc` `electron_mirror=…` while `NPM_CONFIG_ELECTRON_MIRROR` already
+ *      exists in the environment: npm overwrites that slot's VALUE and never
+ *      renames it, so the child sees the ATTACKER's URL under the upper-case name.
+ *   2. `package.json` `"config": {"ELECTRON_MIRROR": …}`: npm PRESERVES the key's
+ *      case, planting `npm_package_config_ELECTRON_MIRROR` with nothing
+ *      pre-existing at all — and @electron/get's own lookup for
+ *      `npm_package_config_electron_mirror` (dist/artifact-utils.js, line 28) finds it,
+ *      because the Windows lookup is case-insensitive too.
+ * The old docblock's POSIX half (`NPM_CONFIG_ELECTRON_*` is a distinct variable
+ * npm never writes there, so it is the machine owner's) is NOT measurable from
+ * this machine, and it is load-bearing in the fail-OPEN direction: wrong, it
+ * hands the child an attacker's mirror. Wrong the other way it costs one
+ * alternate spelling inside a last-resort spawn, while bare `ELECTRON_MIRROR`
+ * — which @electron/get ranks FIRST — still carries owner intent. So the fold is
+ * unconditional rather than resting on an unverified platform claim.
  */
 const REPO_ENV_PREFIXES = ['npm_config_electron_', 'npm_package_config_electron_'];
 
-/** electron's install.js, lines 20-21 and 99 — these choose WHICH artifact it fetches. */
+/** electron's install.js, lines 20-21 and 99 — these choose WHICH artifact it
+ *  fetches, and `.npmrc` `platform=`/`arch=` plants both. Same case fold. */
 const ELECTRON_INSTALL_TARGET_ENV = ['npm_config_platform', 'npm_config_arch'];
 
 /** A published sha256 is 64 LOWER-case hex characters. Anything else is not an anchor. */
@@ -71,9 +89,11 @@ function normalizeV(version) {
   return v.startsWith('v') ? v : `v${v}`;
 }
 
-/** True for a name a hostile repository could have planted (prefix match, case-sensitive). */
+/** True for a name a hostile repository could have planted, in ANY case (see above). */
 function isRepoPlantedName(name) {
-  return REPO_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
+  const lower = String(name).toLowerCase();
+  return REPO_ENV_PREFIXES.some((prefix) => lower.startsWith(prefix))
+    || ELECTRON_INSTALL_TARGET_ENV.includes(lower);
 }
 
 /**
@@ -126,40 +146,48 @@ function readChecksumTable(file, fs) {
   }
 }
 
-/** True when `dir`'s package.json declares exactly `version`. Never throws. */
-function samePackageVersion(dir, version, fs) {
-  if (!version) { return false; }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
-    return normalizeV(pkg && pkg.version) === normalizeV(version);
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Resolve the digest ANCHOR, offline. Precedence, highest first:
- *   1. <selfElectronDir>/checksums.json   ONLY when that package's version === version
- *   2. <electronDir>/checksums.json
+ *   1. <selfElectronDir>/checksums.json — the RUNNING amicus's own table.
+ *   2. <electronDir>/checksums.json — ONLY when rung 1 offers no usable table.
  *
  * RUNG 1 IS LOAD-BEARING, not a convenience. `doctor --fix`
  * (src/utils/doctor-electron-mcp-check.js:122-137) hands `repairElectron` an
  * electronDir found by a FILESYSTEM SCAN of npx caches, so rung 2 on its own
  * would read the anchor out of the same untrusted directory the bytes came from
- * — the pin would vouch for the attacker's own zip. When the versions agree,
- * rung 1 is the same published data out of a tree npm installed for amicus
- * itself, before any hostile directory was visited.
+ * — the pin would vouch for the attacker's own zip. Rung 1 is the same published
+ * data out of a tree npm installed for amicus itself, before any hostile
+ * directory was visited.
+ *
+ * WHY RUNG 1 NO LONGER TESTS THE VERSION. It used to apply only when the self
+ * package's version equalled the requested one — but the requested `version` is
+ * itself read out of `<electronDir>/package.json` whenever the caller supplies
+ * none (electron-install.js `if (!version)`), and the ONE production caller,
+ * doctor --fix, supplies none. MEASURED on this tree: a planted
+ * `{"version":"99.0.0"}` demoted rung 1 by DATA alone, the scanned tree's own
+ * checksums.json then vouched for its own bytes, and repairElectron returned
+ * `{repaired:true}` after extracting POISONED-BYTES. A rule that reads its own
+ * selector off the surface it exists to distrust is not a rule. No version check
+ * is needed to keep a genuine version disagreement honest, because the table is
+ * keyed by the FULL artifact filename: a self table for 43.1.1 simply holds no
+ * `electron-v99.0.0-…zip` row, `expectedDigest` returns null, and the gate's
+ * `no-digest` verdict extracts-and-MARKS exactly as the brief requires — never a
+ * refusal, never a re-download loop.
+ *
+ * Rung 2 therefore survives for exactly one case: amicus's own electron package
+ * ships no readable checksums.json (an old electron, or the optionalDependency
+ * never installed). There the target's table is all there is, and it is still
+ * better than nothing against a truncated download.
  *
  * Pass `selfElectronDir: null` to disable rung 1.
  * NEVER THROWS. Rejects a table whose values are not 64 lower-case hex.
  * @returns {{ table: Record<string,string>, source: string } | null}
  */
-function resolveAnchor({ electronDir, version, fs = fsDefault, selfElectronDir } = {}) {
+function resolveAnchor({ electronDir, fs = fsDefault, selfElectronDir } = {}) {
   const self = selfElectronDir === undefined ? selfElectronPackageDir() : selfElectronDir;
-  const candidates = [];
-  if (self && samePackageVersion(self, version, fs)) { candidates.push(path.join(self, 'checksums.json')); }
-  if (electronDir) { candidates.push(path.join(electronDir, 'checksums.json')); }
-  for (const source of candidates) {
+  for (const dir of [self, electronDir]) {
+    if (!dir) { continue; }
+    const source = path.join(dir, 'checksums.json');
     const table = readChecksumTable(source, fs);
     if (table) { return { table, source }; }
   }
@@ -252,7 +280,6 @@ function scrubbedChildEnv({ env = process.env, platform, arch } = {}) {
   for (const name of Object.keys(out)) {
     if (isRepoPlantedName(name)) { delete out[name]; }
   }
-  for (const name of ELECTRON_INSTALL_TARGET_ENV) { delete out[name]; }
   if (platform) { out.ELECTRON_INSTALL_PLATFORM = platform; }
   if (arch) { out.ELECTRON_INSTALL_ARCH = arch; }
   return out;
