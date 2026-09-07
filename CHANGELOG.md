@@ -125,9 +125,9 @@ provider, so the pinned engine's outbound fields can be read under each shape Am
   error, a dead engine) sends the level unverified after ONE read, and the log line says so. `max`
   joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the
   curated routes declare between them, M0). The level SENT rides the run document (`variant`), the
-  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-four probe
-  rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured every shape this
-  ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M1,
+  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-five probe
+  rows (the M group; M18-M21 driven through amicus's own `sendPrompt`) measured every shape this
+  ships — the full 62-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M1,
   M2, M10b and M17. Council seats have no effort knob in this release (filed as the owner's
   decision).
 

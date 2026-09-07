@@ -7674,8 +7674,14 @@ line the next time the matrix is run end to end.
   `qs@6.15.2` (moderate: an array-limit bypass via bracket-key comma parsing, and a DoS via
   attacker-controlled `isBuffer`) as `sdk → express@5.2.1 → qs`, deduped with `body-parser`. These
   are production dependencies of the published package, not dev-tree noise — the pre-push audit
-  reports seven, but four of those are dev-only (`browserslist`, `extract-zip`/`puppeteer`). npm
-  reports a non-breaking `npm audit fix` for all three. NOT taken during the cut: a lockfile change
+  reports seven, and that aggregate count is itself the trap: it mixes the tree that ships with the
+  tree that does not. **CORRECTED 2026-09-07:** this entry first recorded `extract-zip` as dev-only
+  "via puppeteer". That was WRONG. `extract-zip@2.0.1` is a DIRECT production dependency of amicus
+  (it is in package.json `dependencies`; puppeteer's copy is deduped onto it), its advisory
+  GHSA-jmr9-qjv8-65gv covers range `*` with no fixed version at any release, and it therefore ships.
+  Only `browserslist` is genuinely dev-only. extract-zip is handled separately by the v4.9.5
+  Electron trust work rather than by a version bump, because no bump exists. npm
+  reports a non-breaking `npm audit fix` for the three SDK-tree advisories. NOT taken during the cut: a lockfile change
   after the tag is pushed would make the published tarball and the tagged tree disagree. It belongs
   in its own commit on main, with the suite re-run, before the next release. Whether either
   advisory is reachable from Amicus's own use of the SDK is unassessed — the filing is about the
