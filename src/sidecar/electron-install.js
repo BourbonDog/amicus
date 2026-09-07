@@ -27,6 +27,8 @@ const { spawnSync } = require('child_process');
 const { resolveCacheRoots } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
+const { controlledProvision } = require('./electron-provision');
+const { resolveAnchor } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
@@ -134,32 +136,6 @@ async function extractFromCache({ zip, electronDir, platform, extract, fs }) {
   writePathTxt({ electronDir, platform, fs });
 }
 
-/** Best-effort cache root for downloadArtifact (first resolved root). */
-function cacheRootFor(env = process.env) {
-  return resolveCacheRoots(env)[0];
-}
-
-/**
- * CONTROLLED provision: fetch the zip ourselves with the SAME @electron/get
- * api install.js uses (downloadArtifact, force:true), extract offline, and let
- * the caller verify isElectronUsable(). No blind install.js spawn.
- * @returns {Promise<void>}
- */
-async function controlledProvision({
-  electronDir, platform, arch, version, downloadArtifact, extract, fs, env = process.env, downloadMs = 480000,
-}) {
-  const zip = await downloadArtifact({
-    version,
-    artifactName: 'electron',
-    force: true,
-    cacheRoot: cacheRootFor(env),
-    platform,
-    arch,
-    downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
-  });
-  await extractFromCache({ zip, electronDir, platform, extract, fs });
-}
-
 /** Bind the fs-aware probes for the post-extract AV-quarantine verify. */
 function verifyExtractOutcome({ electronDir, platform, fs }) {
   return verifyQuarantine({
@@ -187,7 +163,8 @@ function runInstaller({ electronDir, force, spawn }) {
  *   {deferred,reason} when there is no cached zip.
  * @param {boolean} [opts.force] force a fresh (no-cache) installer download.
  * @param {number}  [opts.timeoutMs] best-effort installer timeout.
- * @param {object}  [opts.deps] injected { cachedZip, extract, spawn, acquireLock, fs }.
+ * @param {object}  [opts.deps] injected { cachedZip, extract, spawn, acquireLock, fs,
+ *   selfElectronDir } — the last pins the digest anchor's top rung (null disables it).
  * @returns {Promise<{repaired?:boolean, deferred?:boolean, contended?:boolean, reason?:string}>}
  */
 async function repairElectron({
@@ -223,6 +200,9 @@ async function repairElectron({
       version = undefined;
     }
   }
+
+  // The digest anchor that pins the download, resolved once.
+  const anchor = resolveAnchor({ electronDir, version, fs, selfElectronDir: deps.selfElectronDir });
 
   // Single-flight: bail out gracefully if another caller is already repairing.
   let lock;
@@ -270,7 +250,8 @@ async function repairElectron({
     try {
       const downloadArtifact = await resolveDownloadArtifact();
       await controlledProvision({
-        electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env, downloadMs: timeoutMs,
+        electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
+        fs, env: process.env, downloadMs: timeoutMs,
       });
       controlledExtracted = true; // download + extract returned without throwing
     } catch {
