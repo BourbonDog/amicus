@@ -3,7 +3,21 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.9.4] - 2026-09-07
+
+*The effort level was never on the wire, and the budget stopped at the routes the catalog could clamp.*
+
+Every `--thinking <level>` Amicus has ever sent went out as a `reasoning` object the engine's prompt
+endpoint does not read — a silent no-op on every run since the flag existed, measured on the wire
+(probe F1). It now goes out as the engine's `variant` field, checked first against what the engine's
+own catalogue declares for the model, so a level the model does not declare is refused before
+anything is sent instead of being dropped in silence. Beside it, `outputBudget` becomes
+bidirectional and reaches every route but the direct `openai` one, whose request carries no
+output-limit field at all; direct-provider rows gain real context and ceiling numbers from
+models.dev; and the death that opened #218 — a leg that spends its whole reservation on reasoning
+and finalizes with no answer text — is named `OUTPUT_LENGTH` rather than passing as a completion
+with an empty summary. Every claim here was measured by a zero-spend wire probe that plays the
+provider, so the pinned engine's outbound fields can be read under each shape Amicus can produce.
 
 ### Added
 
@@ -222,6 +236,14 @@ All notable changes to Amicus are documented here. Format follows
   PR creation — so a bench change merged to `main` afterwards never reached an open PR (PR #232's
   round 3 still reviewed with the pre-#233 map). The map is now read from the base branch name,
   which resolves to its current tip on every run; still never the PR head.
+- **A cancelled council run discarded its spend receipt (#220).** The receipt step was gated on
+  `!cancelled()`, so the one path where the cost is least visible — a superseded or hand-cancelled
+  run — recorded nothing at all, though the legs it had launched still billed. The receipt now runs
+  on `always()`, and a ledger-only artifact fires ahead of it on the cancelled path so the smallest
+  upload takes the first claim on the runner's bounded post-cancellation grace; the full evidence
+  upload stays `!cancelled()`, because a truncated artifact is worse than none. It is best-effort by
+  construction and the step now says so rather than promising a record, and a test pins the
+  workflow's ledger path against the engine's own.
 
 ## [4.9.3] - 2026-08-28
 
