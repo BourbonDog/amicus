@@ -37,8 +37,10 @@
  * attempt sweeps any such directory older than a day, and the OS reaps the temp
  * tree besides.
  *
- * LEAF MODULE: `fs` + `os` + `path` and nothing from this repo, so it can be
- * required from either side of the electron-install -> electron-provision arrow.
+ * NEAR-LEAF MODULE: `fs` + `os` + `path`, plus the pure house sanitizer
+ * `utils/text-sanitize`, which requires nothing itself — so this can be required
+ * from either side of the electron-install -> electron-provision arrow without
+ * making a cycle possible.
  *
  * @module sidecar/electron-stage
  */
@@ -48,6 +50,13 @@
 const fsDefault = require('fs');
 const os = require('os');
 const path = require('path');
+
+const { collapseExcerpt } = require('../utils/text-sanitize');
+
+/** F5: `stage.origin` is a cache path whose `<sha>` directory name was read out
+ *  of a directory an attacker can write, so it is sanitized before it is printed.
+ *  A longer cap than an excerpt's: a truncated path cannot be acted on. */
+const PATH_EXCERPT_CHARS = 320;
 
 /** Directory-name prefix, so a stranded staging dir is identifiable and sweepable. */
 const STAGE_PREFIX = 'amicus-electron-stage-';
@@ -143,8 +152,8 @@ function releaseStage({ stage, fs = fsDefault, log = () => {} }) {
       try { fs.copyFileSync(stage.path, stage.origin); restored = true; } catch { /* keep the bytes */ }
     }
     if (!restored) {
-      log(`[amicus] WARNING: could not return the Electron artifact to ${stage.origin}`);
-      log(`[amicus]   It has been LEFT at ${stage.path} — move it back or delete it by hand.`);
+      log(`[amicus] WARNING: could not return the Electron artifact to ${collapseExcerpt(stage.origin, PATH_EXCERPT_CHARS)}`);
+      log(`[amicus]   It has been LEFT at ${collapseExcerpt(stage.path, PATH_EXCERPT_CHARS)} — move it back or delete it by hand.`);
       return;
     }
   }

@@ -30,6 +30,10 @@ const path = require('path');
 const fsDefault = require('fs');
 const { spawnSync } = require('child_process');
 
+// F5: refusals quote the ARCHIVE'S OWN entry name, so every message built from
+// one is sanitized before it reaches stderr or an Error a caller prints.
+const { collapseExcerpt } = require('../utils/text-sanitize');
+
 /**
  * A SECURITY REFUSAL IS A REFUSAL, NOT A RETRY (M9).
  *
@@ -49,16 +53,10 @@ const { spawnSync } = require('child_process');
  * DELIBERATELY NARROW. A stall must still fall back, or the Node-24 workaround
  * this whole module exists for is destroyed.
  *
- * AND THE VERIFICATION NO LONGER DECAYS (v4.9.6 F4, council seat B4). "Verified
- * against the installed versions" was true when it was written and had nothing
- * keeping it true: every test for this control fed robustExtract a hand-typed
- * message, so an upstream bump could reword a refusal and quietly demote it back
- * into the cleanDir + native-retry laundering with no test red.
- * tests/sidecar/unzip-refusal-strings.js now drives the INSTALLED extract-zip and
- * yauzl into producing each of these four for real — over a zip it builds byte by
- * byte, and a real directory symlink for the one extract-zip raises itself — and
- * fails if this list stops recognising what they actually say. It also fails on a
- * pattern no real message produces, which is the STALLTERMINAL shape.
+ * AND THE VERIFICATION NO LONGER DECAYS (v4.9.6 F4). "Verified against the
+ * installed versions" had nothing keeping it true; tests/sidecar/unzip-refusal-strings.js
+ * now drives the INSTALLED libraries into producing all four for real, and fails
+ * both on a reworded refusal and on a pattern no real message produces.
  */
 const UNSAFE_PATTERNS = [
   /^Out of bound path /,
@@ -248,13 +246,13 @@ async function robustExtract(zip, opts = {}) {
   // archive to tar/Expand-Archive would ask a tool with no such check to do what
   // extract-zip just declined to.
   if (!z.ok && UNSAFE_PATTERNS.some((p) => p.test(z.reason || ''))) {
-    const err = new Error(`refusing to extract ${zip}: ${z.reason}`);
+    const err = new Error(`refusing to extract ${zip}: ${collapseExcerpt(z.reason)}`);
     err.code = 'UNZIP_UNSAFE_ARCHIVE';
     throw err;
   }
 
   // extract-zip stalled / threw / produced nothing → clean partial output, go native.
-  const zipReason = z.ok ? 'extract-zip produced no files' : z.reason;
+  const zipReason = z.ok ? 'extract-zip produced no files' : collapseExcerpt(z.reason);
   cleanDir(fs, dir);
   log(`[amicus] extract-zip did not complete (${zipReason}); falling back to native unzip.`);
 

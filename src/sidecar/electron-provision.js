@@ -20,6 +20,22 @@ const { resolveCacheRoots } = require('./electron-cache');
 const { releaseStage, stageArtifact } = require('./electron-stage');
 const { artifactFileName, expectedDigest, scrubbedChildEnv } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
+const { collapseExcerpt } = require('../utils/text-sanitize');
+
+/**
+ * F5 (council seat B5). Everything below that reaches stderr or a returned
+ * `reason` goes through the house sanitizer first, because two of its inputs are
+ * written by the attacker: an unsafe archive's refusal text carries the ARCHIVE'S
+ * OWN entry name, and a cached artifact's path carries a `<sha>` directory name
+ * read out of a cache root anyone can write. Unsanitized, either could embed ANSI
+ * escapes, a newline plus a forged `[amicus] …` line, or a right-to-left override
+ * that renders the rest of the sentence backwards — in the one message a user
+ * reads when amicus is telling them something is wrong.
+ *
+ * A path gets a longer cap than an error excerpt: 200 characters truncates a real
+ * npx-cache path, and a path the user cannot copy is not much use in a refusal.
+ */
+const PATH_EXCERPT_CHARS = 320;
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
 function cacheRootFor(env = process.env) {
@@ -150,11 +166,13 @@ function rejectCachedZip({ gate, zip, fileName, stage = null, mayDelete = false,
       removed = true;
     } catch { /* a cache we cannot write is not a reason to fail the repair */ }
   }
+  // F5: `gate.reason` is an fs error string (an `unreadable` verdict) and `zip` is
+  // an attacker-influenced cache path; the digests are 64-hex by construction.
   const what = gate.verdict === 'mismatch'
     ? `sha256 ${gate.actual} does not match the published ${gate.expected}`
-    : gate.reason;
+    : collapseExcerpt(gate.reason);
   log(`[amicus] Electron artifact REFUSED: ${fileName}`);
-  log(`[amicus]   ${zip}`);
+  log(`[amicus]   ${collapseExcerpt(zip, PATH_EXCERPT_CHARS)}`);
   log(`[amicus]   ${what}`);
   log('[amicus] This is what a swapped mirror or a planted cache file looks like. It is ALSO');
   log('[amicus] what a truncated download, a failing disk, or a mirror serving a REBUILT');
@@ -220,7 +238,9 @@ function isUnsafeArchive(err) {
  * @returns {{repaired:false, integrity:'unsafe-archive', reason:string}}
  */
 function refuseUnsafeArchive({ err, fileName, log = () => {} }) {
-  const detail = (err && err.message) || 'the archive tried to write outside its destination';
+  // F5: this message quotes the ARCHIVE'S OWN entry name back at the user. The
+  // house sanitizer runs before it reaches stderr or the returned reason.
+  const detail = collapseExcerpt((err && err.message) || 'the archive tried to write outside its destination');
   log(`[amicus] Electron artifact REFUSED (unsafe archive): ${fileName}`);
   log(`[amicus]   ${detail}`);
   log('[amicus] Entries in that zip tried to write OUTSIDE the destination directory. amicus');
