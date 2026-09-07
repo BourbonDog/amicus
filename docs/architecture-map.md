@@ -109,6 +109,7 @@ src/
 │   ├── conversation-mirror.js
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
+│   ├── electron-custody.js  # CUSTODY of the Electron artifact: one open, one read, one Buffer.
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
 │   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
@@ -159,7 +160,8 @@ src/
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
 │   ├── wave-progress.js
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
-│   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+│   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+│   └── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
 ├── template/
 │   ├── apply.js
 │   ├── render.js
@@ -555,10 +557,11 @@ evals/
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
+| `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and | `isRepoPlantedName()`, `scrubbedChildEnv()`, `REPO_ENV_PREFIXES()`, `ELECTRON_INSTALL_TARGET_KEYS()`, `ELECTRON_INSTALL_TARGET_ENV()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
-| `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `extractFromCache()` |
+| `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `extractFromCache()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `runInstaller()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
@@ -606,6 +609,7 @@ evals/
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
+| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
 | `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |
