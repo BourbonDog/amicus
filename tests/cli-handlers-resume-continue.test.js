@@ -158,6 +158,30 @@ describe('handleResume rejects --thinking (#218 PR 4, council #235 r1 D6)', () =
     exitSpy.mockRestore();
     jest.dontMock('../src/index');
   });
+
+  test('non-json mode: exits 1 with the same message on stderr', async () => {
+    jest.resetModules();
+    const mockResumeAmicus = jest.fn();
+    jest.doMock('../src/index', () => ({ resumeAmicus: mockResumeAmicus }));
+    const { handleResume } = require('../src/cli-handlers-resume-continue');
+
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(handleResume({
+      _: ['resume', 'sometask'], 'no-ui': true, thinking: 'bogus',
+    })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(mockResumeAmicus).not.toHaveBeenCalled();
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain('--thinking');
+    expect(written).toContain('the run that started the session');
+
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+    jest.dontMock('../src/index');
+  });
 });
 
 describe('handleContinue rejects --thinking (#218 PR 4, council #235 r1 D6)', () => {
@@ -186,6 +210,33 @@ describe('handleContinue rejects --thinking (#218 PR 4, council #235 r1 D6)', ()
     expect(doc.error.message).toContain('the run that starts a session');
 
     outSpy.mockRestore();
+    exitSpy.mockRestore();
+    jest.dontMock('../src/index');
+  });
+
+  test('non-json mode: exits 1 with the same message on stderr, and never requires --prompt first', async () => {
+    jest.resetModules();
+    const mockContinueAmicus = jest.fn();
+    jest.doMock('../src/index', () => ({ continueAmicus: mockContinueAmicus }));
+    const { handleContinue } = require('../src/cli-handlers-resume-continue');
+
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    // Omits --prompt, as the --tag twin above does: the --thinking rejection must
+    // fire before the MISSING_PROMPT check, proving it is checked unconditionally.
+    await expect(handleContinue({
+      _: ['continue', 'sometask'], 'no-ui': true, thinking: 'bogus',
+    })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(mockContinueAmicus).not.toHaveBeenCalled();
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain('--thinking');
+    expect(written).toContain('the run that starts a session');
+    expect(written).not.toContain('--prompt is required');
+
+    errSpy.mockRestore();
     exitSpy.mockRestore();
     jest.dontMock('../src/index');
   });

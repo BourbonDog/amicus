@@ -85,24 +85,28 @@ All notable changes to Amicus are documented here. Format follows
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
   unverified, logged and marked `variantUnverified: true` on the leg document. With a budget set the
   same applies to a model whose dump reports no variants (an echoed descriptor hides whether the
-  engine knows it — M3); without a budget such a model is refused at once. The ceiling the fit
-  judges against is Amicus's own catalog's (the descriptor's), because the engine echoes that
-  descriptor back once a budget is set (M3); `docs/configuration.md` records what a divergence from
-  the engine's own ceiling costs in each direction. The wait polls every 500 ms. A refusal is a
-  zero-spend leg death through the usual channel (`error` with the reason; a fanout's other legs
-  run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process (shared-server) path
-  carries the level too — its `thinking` had been argv-only, which that path never read. A backstop
-  window that fires while a leg is still inside its declaration wait (bounded at five seconds; one
-  read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before anything is sent (an
-  abandon signal stops the orphaned send); an unreadable `/config/providers` (a non-2xx, or a read
-  that throws — a transport error, a dead engine) sends the level unverified after ONE read, and the
-  log line says so. `max` joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`,
-  `max` — the levels the curated routes declare between them, M0). The level SENT rides the run
-  document (`variant`), the spend-ledger row (`variant`, present only when one was sent) and the leg
-  patch. Twenty-four probe rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`)
-  measured every shape this ships — the full 61-case matrix is filed in the BACKLOG — and CI's
-  keyless job now also runs M1, M2, M10b and M17. Council seats have no effort knob in this release
-  (filed as the owner's decision).
+  engine knows it — M3); without a budget such a model is refused at once. The wait polls every 500
+  ms. The ceiling that `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
+  the model — its `maxOutputTokens`, the number a budget-derived descriptor is clamped TO, not the
+  value that descriptor carries — because the engine echoes that descriptor back once a budget is
+  set (M3); for a model that catalog has no row for it is the dump's own value, the engine's own
+  ceiling (K5/K12). `docs/configuration.md` records what a divergence from the engine's own ceiling
+  costs in each direction: a row above it can refuse a leg the engine would have clamped under the
+  budget, and a row below it goes silent on one it never judged. A refusal is a zero-spend leg death
+  through the usual channel (`error` with the reason; a fanout's other legs run; `start --no-ui`
+  exits 1). The MCP `amicus_start` tool's in-process (shared-server) path carries the level too —
+  its `thinking` had been argv-only, which that path never read. A backstop window that fires while
+  a leg is still inside its declaration wait (bounded at five seconds; one read on a warm, declared
+  model) ends the leg `NO_OUTPUT_BACKSTOP` before anything is sent (an abandon signal stops the
+  orphaned send); an unreadable `/config/providers` (a non-2xx, or a read that throws — a transport
+  error, a dead engine) sends the level unverified after ONE read, and the log line says so. `max`
+  joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the
+  curated routes declare between them, M0). The level SENT rides the run document (`variant`), the
+  spend-ledger row (`variant`, present only when one was sent) and the leg patch. Twenty-four probe
+  rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`) measured every shape this
+  ships — the full 61-case matrix is filed in the BACKLOG — and CI's keyless job now also runs M1,
+  M2, M10b and M17. Council seats have no effort knob in this release (filed as the owner's
+  decision).
 
 ### Changed
 
