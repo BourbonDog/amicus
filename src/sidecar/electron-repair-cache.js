@@ -48,6 +48,12 @@ const {
 const { verifyArtifactBytes } = require('./electron-trust');
 
 /**
+ * Extract failures that say nothing about the CACHED ARTIFACT, and must
+ * therefore never evict it. Everything else is read as "the archive is bad".
+ */
+const KEEPS_THE_ARTIFACT = new Set(['UNZIP_DEST_FAILED', 'UNZIP_BUFFER_UNAVAILABLE']);
+
+/**
  * Try to provision from `zip`.
  *
  * @param {object} o
@@ -92,12 +98,15 @@ async function repairFromCache({
     // archive is LEFT IN PLACE, because a refused archive is evidence.
     if (isUnsafeArchive(err)) { return { done: true, result: refuseUnsafeArchive({ err, fileName, log }) }; }
     // D2: only a bad ARCHIVE is evidence that the cached artifact is worthless.
-    // A destination failure says nothing about it, so it keeps its bytes.
-    if (err && err.code === 'UNZIP_DEST_FAILED') {
+    // A full disk, an unwritable dist/ or an extractor that would not load say
+    // nothing about the artifact, so it keeps its bytes. (The v4.5.2 outage is
+    // why the second one is here: an undeclared zip library must not be able to
+    // delete a user's only artifact on its way out.)
+    if (err && KEEPS_THE_ARTIFACT.has(err.code)) {
       const refusal = {
         repaired: false,
         integrity: 'extract-failed',
-        reason: `Cached electron artifact ${fileName} could not be written to disk (${(err.message || '').trim()});`
+        reason: `Cached electron artifact ${fileName} was NOT extracted (${(err.message || '').trim()});`
           + ' it was LEFT IN PLACE because the artifact itself is not what failed.',
       };
       log(`[amicus] ${refusal.reason}`);

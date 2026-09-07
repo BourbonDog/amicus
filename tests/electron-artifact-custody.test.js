@@ -56,9 +56,10 @@
  * CORRUPTNOTEVICTED electron-repair-cache.js — delete the `fs.rmSync(zip, ...)`
  *   on the bad-archive branch.
  *   RED: "a corrupt cached artifact is EVICTED, and the reason says so".
- * DESTFAILUREEVICTS electron-repair-cache.js — treat UNZIP_DEST_FAILED as a bad
- *   archive, i.e. fall through to the eviction.
- *   RED: "a DESTINATION failure leaves the cached artifact alone (D2)".
+ * DESTFAILUREEVICTS electron-repair-cache.js — empty the KEEPS_THE_ARTIFACT set,
+ *   so every extract failure is read as a bad archive and evicts.
+ *   RED: "a DESTINATION failure leaves the cached artifact alone (D2)" AND
+ *   "an extractor that will not LOAD is a refusal, not an eviction".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -449,6 +450,25 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
     expect(res.integrity).toBe('extract-failed');
     expect(res.reason).toMatch(/LEFT IN PLACE/);
     expect(res.reason).not.toMatch(/corrupt/i);
+  });
+
+  test('an extractor that will not LOAD is a refusal, not an eviction (YAUZLUNDECLARED)', async () => {
+    // `yauzl` is a declared dependency, so this should be unreachable — and
+    // unzip.js:215-222 records the v4.5.2 outage that happened the last time a
+    // zip library "should have been" resolvable. What must never happen is that
+    // a hoisting surprise DELETES the user's only artifact on its way out.
+    const { dir } = unanchoredElectronDir();
+    const zip = writeZip();
+    const extract = jest.fn(async () => {
+      const e = new Error('the in-memory zip extractor is unavailable: Cannot find module');
+      e.code = 'UNZIP_BUFFER_UNAVAILABLE';
+      throw e;
+    });
+
+    const res = await repair({ dir, zip, extract });
+
+    expect(fs.readFileSync(zip, 'utf8')).toBe(ZIP_BODY);
+    expect(res.integrity).toBe('extract-failed');
   });
 
   test('a mismatch the FENCE refuses to delete is left in place, bytes intact', async () => {
