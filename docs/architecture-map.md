@@ -111,7 +111,7 @@ src/
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
 │   ├── electron-custody.js  # CUSTODY of the Electron artifact: one open, one read, one Buffer.
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
-│   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and
+│   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant.
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-layout.js  # The on-disk LAYOUT of an installed `electron` package: where the executable
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
@@ -559,11 +559,11 @@ evals/
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
 | `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
-| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and | `isRepoPlantedName()`, `scrubbedChildEnv()`, `REPO_ENV_PREFIXES()`, `ELECTRON_INSTALL_TARGET_KEYS()`, `ELECTRON_INSTALL_TARGET_ENV()` |
+| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `REPO_ENV_PREFIXES()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
-| `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `runInstaller()` |
+| `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the four ways amicus declines to turn bytes into | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
 | `sidecar/electron-repair-cache.js` | ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`, | `repairFromCache()` |

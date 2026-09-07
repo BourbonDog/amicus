@@ -22,7 +22,7 @@ const { resolveCacheRoots } = require('./electron-cache');
 const { readArtifactBytes } = require('./electron-custody');
 const { extractBytesToDist } = require('./electron-layout');
 const { refuseUnreadableArtifact, rejectDownloadedZip } = require('./electron-refuse');
-const { artifactFileName, expectedDigest, scrubbedChildEnv, verifyArtifactBytes } = require('./electron-trust');
+const { artifactFileName, expectedDigest, verifyArtifactBytes } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
@@ -157,21 +157,37 @@ function mayDeleteRejectedZip({ zip, fileName, env = process.env }) {
 }
 
 /**
- * Drive electron's own install.js with force_no_cache semantics. C3: the spawn env
- * is SCRUBBED — install.js honours `npm_config_electron_mirror` AND
- * `npm_config_electron_use_remote_checksums` (which turns its own bundled pin off),
- * so `{...process.env}` here would funnel a blocked attacker into an unpinned
- * downloader and undo the pin on the route above.
+ * THERE IS NO LAST-RESORT INSTALLER ANY MORE (council seat B1, BLOCKER,
+ * confirmed 4 of 4). `runInstaller` spawned `<electronDir>/install.js`, which
+ * did its OWN download and its OWN extraction, outside every control on this
+ * page — and it was reached from `catch (provisionErr)` for ANY throw, so
+ * inducing one failure was enough to route around the whole gate.
+ *
+ * It was worse than "a bypass". install.js pins with
+ * `require('./checksums.json')` — the checksums of `<electronDir>`, the very
+ * directory `doctor --fix` located by SCANNING npx caches. That is the
+ * ANCHORFROMTARGET hole `resolveAnchor`'s rung 1 exists to close, and
+ * electron-trust.js records it as MEASURED-exploitable. It also extracted
+ * unbounded, with no stall protection and no path-traversal classification, and
+ * its success came back as a plain `{repaired: isElectronUsable()}` — bytes
+ * amicus never saw, labelled exactly like bytes it hashed.
+ *
+ * ITS ONE CLAIMED JUSTIFICATION WAS MEASURED FALSE. The case for keeping it was
+ * "amicus's own tree cannot resolve @electron/get but electron's can". On this
+ * machine, both resolve the SAME hoisted copy:
+ *   amicus   require.resolve('@electron/get')                 -> node_modules/@electron/get/dist/index.js
+ *   electron createRequire(electron/package.json).resolve(...) -> node_modules/@electron/get/dist/index.js
+ * Every other trigger — a network failure, a mirror checksum failure, an abort
+ * timeout, an extract failure — makes install.js do the same download the same
+ * way with weaker checks. That is not a fallback; it is a bypass with a retry's
+ * reputation. A failed provision is now reported honestly instead:
+ * `ensureElectron` already turns that into "the GUI is unavailable, headless
+ * runs and the council work", clears its single-flight guard so the next launch
+ * retries, and points at `doctor --fix`.
+ *
+ * `scrubbedChildEnv` died with it (there is no child to build an env for). The
+ * enumeration it encoded survives as `isRepoPlantedName` in electron-env-scrub,
+ * which is what the IN-PROCESS download scrub uses.
  */
-function runInstaller({ electronDir, force, spawn, platform, arch }) {
-  const installScript = path.join(electronDir, 'install.js');
-  const env = scrubbedChildEnv({ env: process.env, platform, arch });
-  if (force) {
-    env.force_no_cache = 'true';
-  }
-  return spawn(process.execPath, [installScript], { env, stdio: 'ignore' });
-}
 
-module.exports = {
-  cacheRootFor, controlledProvision, mayDeleteRejectedZip, runInstaller,
-};
+module.exports = { cacheRootFor, controlledProvision, mayDeleteRejectedZip };

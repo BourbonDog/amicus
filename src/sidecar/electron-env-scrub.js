@@ -1,6 +1,14 @@
 /**
- * The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and
- * what is stripped from the last-resort `install.js` spawn because of it.
+ * The ENV SCRUB — which environment names a hostile REPOSITORY can plant.
+ *
+ * WHAT THIS MODULE LOST, AND WHY (v4.9.6 second round, council seat B1).
+ * It used to build a scrubbed environment for the last-resort `install.js`
+ * SPAWN. That spawn is gone — it bypassed the custody and digest gate entirely
+ * — so `scrubbedChildEnv` and the `ELECTRON_INSTALL_TARGET_*` artifact selectors
+ * went with it: there is no child process left to hand an environment to. The
+ * measured enumeration they encoded is kept below as the record it is.
+ * `isRepoPlantedName` survives and is now used by the IN-PROCESS download scrub
+ * (electron-provision.js), which is the surface seat D5 filed against.
  *
  * SPLIT OUT of electron-trust.js (v4.9.6 F2). That module owns three things —
  * the digest anchor, the gate, and this scrub — and sat at 299 of the repo's
@@ -82,77 +90,38 @@
 const REPO_ENV_PREFIXES = ['npm_config_electron_', 'npm_package_config_electron_'];
 
 /**
- * The ARTIFACT SELECTORS: the npm-config keys that choose WHICH electron build
- * `install.js` fetches, in every shape a repository can plant them.
+ * THE ARTIFACT SELECTORS ARE GONE WITH THE SPAWN, and this is the record of what
+ * they were, because it was measured and a later change may need it.
  *
- * v4.9.6 F2 (council B2). This used to be the literal pair
- * `['npm_config_platform', 'npm_config_arch']`, so a repo `package.json`
- * `"config": {"platform": …}` — which npm turns into `npm_package_config_platform`
- * — survived the scrub into the unpinned last-resort spawn. The `electron_*`
- * knobs above already handled BOTH npm shapes and this pair simply never got the
- * same treatment; deriving both spellings from the KEY removes the asymmetry
- * instead of adding two more strings to a list.
+ * `ELECTRON_INSTALL_TARGET_ENV` held `npm_config_platform` / `npm_config_arch`
+ * and their `npm_package_config_*` spellings (council B2 added the second pair).
+ * They mattered because they chose WHICH artifact `install.js` fetched. Nothing
+ * spawns install.js any more (seat B1), and amicus's own downloader is passed
+ * `platform` and `arch` as ARGUMENTS, so no environment name can choose them.
  *
- * RE-ENUMERATED EXHAUSTIVELY against the installed `node_modules/electron`
- * (43.1.1) `install.js`. Every `process.env` read in that file:
- *   ELECTRON_INSTALL_PLATFORM (20, 99)  bare — amicus SETS it, ranked first
- *   npm_config_platform       (20, 99)  REPO-PLANTABLE  -> scrubbed here
- *   ELECTRON_INSTALL_ARCH     (21)      bare — amicus SETS it, ranked first
- *   npm_config_arch           (21, 27)  REPO-PLANTABLE  -> scrubbed here
- *   force_no_cache            (45)      bare — amicus sets it for `force`
+ * RE-ENUMERATED EXHAUSTIVELY, before the deletion, against the installed
+ * `node_modules/electron` (43.1.1) `install.js`. Every `process.env` read there:
+ *   ELECTRON_INSTALL_PLATFORM (20, 99)  bare — amicus used to SET it
+ *   npm_config_platform       (20, 99)  REPO-PLANTABLE
+ *   ELECTRON_INSTALL_ARCH     (21)      bare — amicus used to SET it
+ *   npm_config_arch           (21, 27)  REPO-PLANTABLE
+ *   force_no_cache            (45)      bare
  *   electron_config_cache     (46)      bare — the machine owner's cache root
  *   electron_use_remote_checksums            (48)  bare — the owner's
  *   npm_config_electron_use_remote_checksums (48)  covered by the prefixes above
  *   ELECTRON_OVERRIDE_DIST_PATH (73, 80) bare
- * MEASURED, and worth stating rather than implying: install.js 43.1.1 does NOT
- * itself read `npm_package_config_platform` / `-arch`, so that spelling is not a
- * live exploit against THIS electron. It is scrubbed anyway because the module's
- * whole model is "npm produces two shapes, remove both", because amicus cannot
- * pin what a future install.js reads, and because removing a name no child of
- * ours has any business reading costs nothing.
+ * install.js 43.1.1 did NOT itself read `npm_package_config_platform` / `-arch`.
+ *
+ * WHAT THE IN-PROCESS SCRUB NEEDS is only the prefixes: `@electron/get` 5.0.0
+ * reads `mirror`, `nightlyMirror`, `customDir`, `customFilename` and
+ * `customVersion` under `npm_config_electron_*` / `npm_package_config_electron_*`
+ * (dist/artifact-utils.js, lines 20-35) and takes platform and arch as call
+ * arguments. So `isRepoPlantedName` covers the download surface exactly.
  */
-const ELECTRON_INSTALL_TARGET_KEYS = ['platform', 'arch'];
-const ELECTRON_INSTALL_TARGET_ENV = ELECTRON_INSTALL_TARGET_KEYS
-  .flatMap((key) => [`npm_config_${key}`, `npm_package_config_${key}`]);
 
 /** True for a name a hostile repository could have planted, in ANY case (see above). */
 function isRepoPlantedName(name) {
-  const lower = String(name).toLowerCase();
-  return REPO_ENV_PREFIXES.some((prefix) => lower.startsWith(prefix))
-    || ELECTRON_INSTALL_TARGET_ENV.includes(lower);
+  return REPO_ENV_PREFIXES.some((prefix) => String(name).toLowerCase().startsWith(prefix));
 }
 
-/**
- * A COPY of env for the runInstaller SPAWN. Never mutates the argument.
- *
- * electron's own install.js honours `npm_config_electron_mirror` (through
- * @electron/get) AND `npm_config_electron_use_remote_checksums` (its lines 47-50,
- * which turns its bundled pin off), so spawning it with an unfiltered
- * `{...process.env}` would funnel a blocked attacker straight into an unpinned
- * downloader. The artifact selectors (its lines 20-21, 27 and 99) choose WHICH
- * artifact it fetches, so they are removed too and amicus's own resolution is
- * pinned through `ELECTRON_INSTALL_PLATFORM`/`_ARCH`, which install.js ranks
- * above them.
- *
- * LEAVES ALONE, deliberately — every one of these is a BARE name a repository
- * cannot plant, so it is the machine owner's: `ELECTRON_MIRROR`,
- * `ELECTRON_CUSTOM_*`, `electron_config_cache`, `ELECTRON_CACHE`,
- * `electron_use_remote_checksums`, `HTTP_PROXY`/`HTTPS_PROXY`/`ELECTRON_GET_USE_PROXY`.
- */
-function scrubbedChildEnv({ env = process.env, platform, arch } = {}) {
-  const out = { ...env };
-  for (const name of Object.keys(out)) {
-    if (isRepoPlantedName(name)) { delete out[name]; }
-  }
-  if (platform) { out.ELECTRON_INSTALL_PLATFORM = platform; }
-  if (arch) { out.ELECTRON_INSTALL_ARCH = arch; }
-  return out;
-}
-
-module.exports = {
-  isRepoPlantedName,
-  scrubbedChildEnv,
-  REPO_ENV_PREFIXES,
-  ELECTRON_INSTALL_TARGET_KEYS,
-  ELECTRON_INSTALL_TARGET_ENV,
-};
+module.exports = { isRepoPlantedName, REPO_ENV_PREFIXES };

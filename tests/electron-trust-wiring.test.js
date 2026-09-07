@@ -14,14 +14,15 @@
  *   C2  repairElectron HASHES the cached artifact's bytes against the anchor
  *       BEFORE anything is extracted, deletes a mismatch only through the fence,
  *       and treats "no anchor" as a mark rather than a refusal.
- *   C3  runInstaller spawns electron's own install.js with a SCRUBBED env, so a
- *       blocked attacker cannot be funnelled into an unpinned downloader.
+ *   B1  a failed controlled provision spawns NOTHING. The last-resort
+ *       install.js fallback is deleted, because it downloaded and extracted
+ *       outside every control above.
  *
  * Named mutants this suite is the tripwire for: DIGESTNOTCHECKED, POISONKEPT,
- * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERENVLEAKED.
+ * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERBACK.
  *
- * No network, no real extraction: downloadArtifact, extract, spawn and the lock
- * are injected everywhere.
+ * No network, no real extraction: downloadArtifact, extract and the lock are
+ * injected everywhere.
  */
 
 // ── NAMED MUTANTS ──────────────────────────────────────────────────────────
@@ -46,10 +47,10 @@
 //   vouches for its own bytes.
 //   RED: "the ANCHOR comes from the running amicus, not the scanned target dir"
 //   (poison extracted). Also red: electron-trust.test.js "prefers the RUNNING…".
-// INSTALLERENVLEAKED electron-install.js :: runInstaller — `const env = {
-//   ...process.env };` instead of scrubbedChildEnv(...).
-//   RED: "the last-resort install.js spawn gets no repo-plantable electron name"
-//   (npm_config_electron_mirror arrived as "http://attacker.example/evil/").
+// INSTALLERBACK      electron-install.js :: repairElectron — restore the
+//   `try { runInstaller(...) } catch {}` fallback in the provision catch (and
+//   the helper it calls).
+//   RED: "a failed controlled download spawns NOTHING".
 //
 // ── ADDED BY THE REVIEW REPAIR (measured 2026-09-07, same method) ───────────
 // ANCHORVERSIONFROMTARGET  electron-trust.js :: resolveAnchor — condition the
@@ -423,8 +424,12 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
       dir, exeName, distDir, zip: null, deps: { downloadArtifact, extract: jest.fn(unsafe) },
     });
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
-    expect(spawn).not.toHaveBeenCalled();                  // the forbidden retry
+    // Nothing is spawned on ANY path now (B1), so this asserts the narrower
+    // thing that still matters: the refusal is returned as itself rather than
+    // being reported as an ordinary provision failure.
+    expect(spawn).not.toHaveBeenCalled();
     expect(res.integrity).toBe('unsafe-archive');
+    expect(res.reason).toMatch(/was REFUSED/);
   });
 
   test('an ORDINARY extract failure still deletes and still falls through (the fix stayed narrow)', async () => {
@@ -439,9 +444,10 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
       dir, exeName, distDir, zip, deps: { downloadArtifact, extract: jest.fn(async () => { throw new Error('unzip blew up'); }) },
     });
     expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
-    expect(spawn).toHaveBeenCalledTimes(1);                // ...and the last-resort installer still runs
+    expect(spawn).not.toHaveBeenCalled();                  // ...and nothing is spawned to rescue it (B1)
     expect(res.integrity).toBe('corrupt-artifact');
     expect(res.reason).toMatch(/was corrupt and removed/);
+    expect(res.reason).toMatch(/The controlled download failed: offline/);
   });
 });
 
@@ -509,13 +515,24 @@ describe('a refusal the retry could not rescue still reaches the caller', () => 
   });
 });
 
-describe('C3 — the installer spawn env is SCRUBBED (INSTALLERENVLEAKED)', () => {
+describe('B1 — there is no last-resort installer to bypass the gate with', () => {
+  // The BLOCKER (council run 34165289952, seat gpt, confirmed 4 of 4): a failed
+  // controlled provision fell through to `node <electronDir>/install.js`, which
+  // did its own download and its own extraction outside every control this file
+  // pins. Inducing one failure was enough to route around all of them. It was
+  // worse than a bypass: install.js pins with `require('./checksums.json')` out
+  // of the SCANNED directory, which is the ANCHORFROMTARGET hole rung 1 exists
+  // to close, and it extracted unbounded with no traversal classification.
+  //
+  // Its one claimed justification — "amicus's tree cannot resolve @electron/get
+  // but electron's can" — was MEASURED FALSE on this machine: both resolve the
+  // same hoisted copy (require.resolve and
+  // createRequire(electron/package.json).resolve return
+  // node_modules/@electron/get/dist/index.js).
   const HOSTILE = {
     npm_config_electron_mirror: 'http://attacker.example/evil/',
     npm_config_electron_use_remote_checksums: '1',
     npm_package_config_electron_mirror: 'http://attacker.example/evil/',
-    npm_config_platform: 'linux',
-    npm_config_arch: 'arm64',
     ELECTRON_MIRROR: 'https://mirror.corp/electron/',
   };
   let saved;
@@ -529,24 +546,39 @@ describe('C3 — the installer spawn env is SCRUBBED (INSTALLERENVLEAKED)', () =
     }
   });
 
-  test('the last-resort install.js spawn gets no repo-plantable electron name', async () => {
+  test('a failed controlled download spawns NOTHING (INSTALLERBACK)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const downloadArtifact = jest.fn(async () => { throw new Error('network blocked'); });
-    const { spawn } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
 
-    expect(spawn).toHaveBeenCalledTimes(1);
-    const env = spawn.mock.calls[0][2].env;
-    expect(env.npm_config_electron_mirror).toBeUndefined();
-    expect(env.npm_config_electron_use_remote_checksums).toBeUndefined();
-    expect(env.npm_package_config_electron_mirror).toBeUndefined();
-    expect(env.npm_config_platform).toBeUndefined();
-    expect(env.npm_config_arch).toBeUndefined();
-    // amicus's own resolution is pinned under the names install.js ranks first...
-    expect(env.ELECTRON_INSTALL_PLATFORM).toBe(PLATFORM);
-    expect(env.ELECTRON_INSTALL_ARCH).toBe(ARCH);
-    // ...and the machine owner's BARE mirror survives, because a repo cannot set it.
-    expect(env.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
-    // process.env itself is never mutated.
-    expect(process.env.npm_config_electron_mirror).toBe(HOSTILE.npm_config_electron_mirror);
+    const { res, spawn } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.repaired).toBe(false);
+    // ...and the failure is REPORTED, not swallowed into a bare {repaired:false}.
+    expect(res.reason).toMatch(/The controlled download failed: network blocked/);
+    expect(stderr.join('')).toMatch(/the controlled Electron download did not complete/);
+  });
+
+  test('the installer entry point is gone from the module surface', () => {
+    // Not "unused" — GONE. An exported spawn-the-installer helper is one call
+    // site away from being a bypass again.
+    // eslint-disable-next-line global-require
+    expect(require('../src/sidecar/electron-provision').runInstaller).toBeUndefined();
+    // eslint-disable-next-line global-require
+    expect(require('../src/sidecar/electron-trust').scrubbedChildEnv).toBeUndefined();
+  });
+
+  test('repairElectron takes no `deps.spawn` to drive a child with', async () => {
+    // The parameter is gone from the signature, so a caller cannot reintroduce
+    // the path by injection either.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const spawn = jest.fn(() => { throw new Error('nothing may be spawned'); });
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+
+    const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact, spawn } });
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.repaired).toBe(false);
   });
 });

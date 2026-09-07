@@ -26,13 +26,14 @@
  * back; src/utils/path-fence.js:11-17 records what a cycle does to a destructured
  * import in exactly this cluster.
  *
- * THE ENV SCRUB LIVES NEXT DOOR (v4.9.6 F2). `isRepoPlantedName`,
- * `scrubbedChildEnv`, `REPO_ENV_PREFIXES` and `ELECTRON_INSTALL_TARGET_ENV` moved
- * to `./electron-env-scrub` when this file hit the 300-line gate with the F2
- * repair still to land, and are RE-EXPORTED here so every existing import path
- * stays valid — the same shape as engine-log-parse.js re-exporting
- * utils/text-sanitize.js. There is ONE implementation; these are the same
- * function objects, not a second copy.
+ * THE ENV SCRUB LIVES NEXT DOOR (v4.9.6 F2). `isRepoPlantedName` and
+ * `REPO_ENV_PREFIXES` moved to `./electron-env-scrub` when this file hit the
+ * 300-line gate with the F2 repair still to land, and are RE-EXPORTED here so
+ * existing import paths stay valid — the same shape as engine-log-parse.js
+ * re-exporting utils/text-sanitize.js. There is ONE implementation; these are
+ * the same function objects, not a second copy. (`scrubbedChildEnv` and
+ * `ELECTRON_INSTALL_TARGET_ENV` were deleted with the install.js spawn they
+ * served; see electron-provision.js for why that spawn is gone.)
  *
  * @module sidecar/electron-trust
  */
@@ -43,9 +44,7 @@ const crypto = require('crypto');
 const fsDefault = require('fs');
 const path = require('path');
 
-const {
-  isRepoPlantedName, scrubbedChildEnv, REPO_ENV_PREFIXES, ELECTRON_INSTALL_TARGET_ENV,
-} = require('./electron-env-scrub');
+const { isRepoPlantedName, REPO_ENV_PREFIXES } = require('./electron-env-scrub');
 
 /** A published sha256 is 64 LOWER-case hex characters. Anything else is not an anchor. */
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -223,7 +222,5 @@ module.exports = {
   normalizeV,
   // RE-EXPORTED from ./electron-env-scrub — the same function objects, not copies.
   isRepoPlantedName,
-  scrubbedChildEnv,
   REPO_ENV_PREFIXES,
-  ELECTRON_INSTALL_TARGET_ENV,
 };

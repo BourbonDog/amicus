@@ -65,7 +65,7 @@ async function provisionElectron(deps = {}) {
     // Opt-in aggressive prewarm (#60): full fetch if needed. Non-fatal.
     if (process.env.AMICUS_PREFETCH_ELECTRON === '1') {
       console.log('[amicus] AMICUS_PREFETCH_ELECTRON=1 — prewarming the Electron GUI binary (may download)...');
-      const forced = await _repair({ force: true });
+      const forced = await _repair();
       if (forced && forced.repaired) {
         console.log('[amicus] Electron GUI binary prewarmed.');
         return;

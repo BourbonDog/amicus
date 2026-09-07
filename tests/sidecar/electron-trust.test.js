@@ -221,90 +221,30 @@ describe('electronTrustPolicy — the ONLY reader of the escape hatch', () => {
   });
 });
 
-describe('scrubbedChildEnv — the installer-spawn env (C3)', () => {
-  const hostile = () => ({
-    PATH: '/usr/bin',
-    ELECTRON_MIRROR: 'https://mirror.corp/electron/',        // BARE: the owner's, kept
-    ELECTRON_CACHE: 'D:\\cache',                             // BARE: kept
-    electron_config_cache: 'D:\\cache2',                     // BARE: kept
-    electron_use_remote_checksums: '1',                      // BARE: kept (owner's)
-    npm_config_electron_mirror: 'http://attacker.example/evil/',
-    npm_config_electron_nightly_mirror: 'http://attacker.example/evil/',
-    npm_config_electron_custom_dir: 'pwned',
-    npm_config_electron_use_remote_checksums: '1',           // would turn electron's pin OFF
-    npm_package_config_electron_mirror: 'http://attacker.example/evil/',
-    npm_package_config_electron_customFilename: 'evil.zip',
-    npm_config_platform: 'linux',                            // chooses WHICH artifact
-    npm_config_arch: 'arm64',
+describe('the installer-spawn env is GONE with the spawn (council seat B1)', () => {
+  test('scrubbedChildEnv is not exported from either module', () => {
+    // It built an environment for `node <electronDir>/install.js`, which did its
+    // own download and its own extraction outside every control on this page,
+    // and pinned with `require('./checksums.json')` out of the SCANNED directory
+    // — the ANCHORFROMTARGET hole rung 1 exists to close. The spawn is deleted,
+    // so there is no child environment to build. The enumeration it encoded
+    // survives as `isRepoPlantedName`, pinned in electron-env-scrub.test.js,
+    // and now serves the IN-PROCESS download scrub instead.
+    expect(trust.scrubbedChildEnv).toBeUndefined();
+    expect(trust.ELECTRON_INSTALL_TARGET_ENV).toBeUndefined();
+    expect(require('../../src/sidecar/electron-provision').runInstaller).toBeUndefined();
   });
 
-  test('removes every repo-plantable electron name and both artifact selectors', () => {
-    const out = trust.scrubbedChildEnv({ env: hostile(), platform: 'win32', arch: 'x64' });
-    for (const name of Object.keys(hostile())) {
-      if (name.startsWith('npm_config_electron_') || name.startsWith('npm_package_config_electron_')) {
-        expect(out[name]).toBeUndefined();
-      }
+  test('isRepoPlantedName still recognises every repo-plantable mirror name', () => {
+    for (const name of [
+      'npm_config_electron_mirror', 'NPM_CONFIG_ELECTRON_MIRROR',
+      'npm_package_config_electron_customFilename',
+      'npm_config_electron_use_remote_checksums',
+    ]) {
+      expect(trust.isRepoPlantedName(name)).toBe(true);
     }
-    expect(out.npm_config_platform).toBeUndefined();
-    expect(out.npm_config_arch).toBeUndefined();
-    expect(Object.keys(out).some((k) => /^npm_(config|package_config)_electron_/.test(k))).toBe(false);
-  });
-
-  test('pins amicus\'s own platform/arch through the names install.js ranks FIRST', () => {
-    // electron's install.js, lines 20-21 and 99: ELECTRON_INSTALL_PLATFORM/_ARCH outrank npm_config_*.
-    const out = trust.scrubbedChildEnv({ env: hostile(), platform: 'win32', arch: 'x64' });
-    expect(out.ELECTRON_INSTALL_PLATFORM).toBe('win32');
-    expect(out.ELECTRON_INSTALL_ARCH).toBe('x64');
-  });
-
-  test('keeps every BARE owner-controlled name, and never mutates the argument', () => {
-    const env = hostile();
-    const out = trust.scrubbedChildEnv({ env, platform: 'win32', arch: 'x64' });
-    expect(out.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
-    expect(out.ELECTRON_CACHE).toBe('D:\\cache');
-    expect(out.electron_config_cache).toBe('D:\\cache2');
-    expect(out.electron_use_remote_checksums).toBe('1');
-    expect(out.PATH).toBe('/usr/bin');
-    // the source env is untouched
-    expect(env.npm_config_electron_mirror).toBe('http://attacker.example/evil/');
-    expect(env.ELECTRON_INSTALL_PLATFORM).toBeUndefined();
-  });
-
-  test('removes the UPPER-case spellings too (npm writes them, and @electron/get reads them)', () => {
-    // MEASURED (npm 11.16.0, Windows 11), two routes to an upper-case slot:
-    //  1. `.npmrc electron_mirror=…` while NPM_CONFIG_ELECTRON_MIRROR already
-    //     exists: npm overwrites that slot's VALUE and never renames it.
-    //  2. package.json `"config": {"ELECTRON_MIRROR": …}`: npm PRESERVES the key
-    //     case -> npm_package_config_ELECTRON_MIRROR, nothing pre-existing needed.
-    // @electron/get reads NPM_CONFIG_ELECTRON_<NAME> as its second lookup
-    // (dist/artifact-utils.js, line 26) and npm_package_config_electron_<name> as its
-    // fourth (line 28) — which on Windows resolves case-insensitively to (2).
-    // The scrub deletes from a PLAIN OBJECT copy, which is case-sensitive on
-    // every platform, so folding case here is the whole control.
-    const out = trust.scrubbedChildEnv({
-      env: {
-        NPM_CONFIG_ELECTRON_MIRROR: 'http://attacker.example/evil/',
-        NPM_CONFIG_ELECTRON_USE_REMOTE_CHECKSUMS: '1',
-        npm_package_config_ELECTRON_MIRROR: 'http://attacker.example/evil/',
-        Npm_Config_Electron_Custom_Dir: 'pwned',
-        NPM_CONFIG_PLATFORM: 'linux',
-        NPM_CONFIG_ARCH: 'arm64',
-        ELECTRON_MIRROR: 'https://mirror.corp/electron/',
-        PATH: '/usr/bin',
-      },
-      platform: 'win32',
-      arch: 'x64',
-    });
-    expect(Object.keys(out).filter((k) => /^npm_/i.test(k))).toEqual([]);
-    // the bare owner-controlled names are untouched by the case fold
-    expect(out.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
-    expect(out.PATH).toBe('/usr/bin');
-  });
-
-  test('omits the pins when platform/arch are not supplied', () => {
-    const out = trust.scrubbedChildEnv({ env: { npm_config_electron_mirror: 'x' } });
-    expect(out.ELECTRON_INSTALL_PLATFORM).toBeUndefined();
-    expect(out.ELECTRON_INSTALL_ARCH).toBeUndefined();
-    expect(out.npm_config_electron_mirror).toBeUndefined();
+    for (const name of ['ELECTRON_MIRROR', 'electron_config_cache', 'PATH']) {
+      expect(trust.isRepoPlantedName(name)).toBe(false);
+    }
   });
 });

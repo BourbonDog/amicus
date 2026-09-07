@@ -74,8 +74,17 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
       logProgress('[amicus] Electron GUI ready.');
       return { ok: true, path: resolve() };
     }
-    const reason = (result && result.reason)
-      || `Electron could not be provisioned; the GUI is unavailable. ${HINTS.doctorFix} (or use --no-ui).`;
+    // THE POINTER IS NOT OPTIONAL. This used to be `result.reason || <the
+    // pointer>`, so the moment `repairElectron` started returning a reason for a
+    // failed controlled download (v4.9.6, when the last-resort installer was
+    // deleted and the failure became something to REPORT), the one line telling
+    // the user what to do next silently disappeared. A more detailed message is
+    // not a reason to stop giving advice.
+    const detail = (result && result.reason) || 'Electron could not be provisioned; the GUI is unavailable.';
+    // Matched on the COMMAND, not on the whole hint string: the AV-quarantine
+    // reason already ends with a bare `amicus doctor --fix` and must not be
+    // given a second, longer copy of the same advice.
+    const reason = detail.includes('doctor --fix') ? detail : `${detail} ${HINTS.doctorFix} (or use --no-ui).`;
     return { ok: false, reason };
   })().then((r) => {
     // Only memoize SUCCESS; a failure clears the guard so a later launch retries.

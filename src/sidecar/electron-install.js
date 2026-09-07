@@ -27,14 +27,13 @@
 
 const fsDefault = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 
 const { cachedZip } = require('./electron-cache');
 const { isSafeArtifactName } = require('./electron-custody');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
 const { platformExe } = require('./electron-layout');
-const { controlledProvision, runInstaller } = require('./electron-provision');
+const { controlledProvision } = require('./electron-provision');
 const { repairFromCache } = require('./electron-repair-cache');
 const { isUnsafeArchive, refuseUnsafeArchive } = require('./electron-refuse');
 const { artifactFileName, electronTrustPolicy, resolveAnchor } = require('./electron-trust');
@@ -107,15 +106,19 @@ function verifyExtractOutcome({ electronDir, platform, fs }) {
  * @param {object} opts
  * @param {boolean} [opts.cacheOnly] never hit the network; return
  *   {deferred,reason} when there is no cached zip.
- * @param {boolean} [opts.force] force a fresh (no-cache) installer download.
- * @param {number}  [opts.timeoutMs] best-effort installer timeout.
- * @param {object}  [opts.deps] injected { cachedZip, extract, spawn, acquireLock, fs,
+ * @param {number}  [opts.timeoutMs] best-effort download timeout.
+ * @param {object}  [opts.deps] injected { cachedZip, extract, acquireLock, fs,
  *   selfElectronDir } — the last pins the digest anchor's top rung (null disables it).
+ *
+ * THERE IS NO `force` OPTION. There was, and it did nothing: it only ever set
+ * `force_no_cache` for the install.js spawn (now deleted), and `force` is DEAD
+ * in @electron/get 5.0.0 anyway — `effectiveCacheMode` never reads it, MEASURED.
+ * An accepted-but-inert flag is worse than no flag, so it is gone rather than
+ * documented.
  * @returns {Promise<{repaired?:boolean, deferred?:boolean, contended?:boolean, reason?:string}>}
  */
 async function repairElectron({
   cacheOnly = false,
-  force = false,
   timeoutMs,
   electronDir = defaultElectronDir(),
   platform = process.platform,
@@ -131,9 +134,6 @@ async function repairElectron({
   // finding is about (see zip-from-buffer.js).
   const extract = deps.extract
     || ((bytes, o) => extractZipBuffer(bytes, { ...o, deps: { fs, log: stderrLog } }));
-  // Default-bound (8 min) so a first-GUI-use provision that reaches runInstaller
-  // without an explicit timeoutMs can't hang the holder; caller's value wins.
-  const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs || 480000 }));
   const findZip = deps.cachedZip || ((o) => cachedZip(o));
   const acquireLock = deps.acquireLock || ((o) => acquireRepairLock({ ...o, fs }));
   // Lazy: import the ESM-only @electron/get only on the network path, so cacheOnly
@@ -201,6 +201,7 @@ async function repairElectron({
     // the pin) or amicus's own hash of the bytes it read did not say `verified`.
     // F3 marks that, as both docs already promise it does.
     let provision = null;
+    let provisionReason = null;
     try {
       const downloadArtifact = await resolveDownloadArtifact();
       provision = await controlledProvision({
@@ -208,13 +209,17 @@ async function repairElectron({
         fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
       }) || { pinned: false };   // an unrecognisable return marks, never claims a pin
     } catch (provisionErr) {
-      // C4 again: an unsafe archive here must NOT reach runInstaller, which would
-      // re-download and re-extract it through an extractor amicus does not drive.
+      // C4: an unsafe archive is terminal — it is never retried through another
+      // extractor, and it is not reported as an ordinary failure.
       if (isUnsafeArchive(provisionErr)) { return refuseUnsafeArchive({ err: provisionErr, fileName, log: stderrLog }); }
-      // Controlled download/extract failed (network, checksum, unzip). Try the
-      // installer as a LAST resort — it can NEVER short-circuit the honest
-      // verify below; we always return isElectronUsable().
-      try { runInstaller({ electronDir, force, spawn, platform, arch }); } catch { /* ignore */ }
+      // B1: this is where the last-resort install.js spawn used to be. It is gone
+      // (see electron-provision.js), so the failure is REPORTED rather than
+      // routed around. `provision` stays null and `out.repaired` is the honest
+      // stat of the exe, but the REASON must survive — a bare {repaired:false}
+      // is what made a failed provision indistinguishable from "not provisioned".
+      provisionReason = collapseExcerpt((provisionErr && provisionErr.message) || String(provisionErr));
+      stderrLog(`[amicus] the controlled Electron download did not complete: ${provisionReason}`);
+      stderrLog('[amicus] Headless runs and the council work without the GUI.');
     }
     // F#2: the download hashed the bytes it read and refused them, or could not
     // read them at all. Nothing was extracted, so there is no outcome to verify —
@@ -237,7 +242,10 @@ async function repairElectron({
     // A refusal the download did not rescue must reach doctor and the postinstall
     // notice; plain {repaired:false} is what made a REFUSED artifact read as an
     // ordinary "not provisioned" everywhere outside the cacheOnly path.
-    if (!out.repaired && refusal) { return { ...out, integrity: refusal.integrity, reason: [refusal.reason, out.reason].filter(Boolean).join(' ') }; }
+    if (!out.repaired && (refusal || provisionReason)) {
+      const parts = [refusal && refusal.reason, provisionReason && `The controlled download failed: ${provisionReason}.`, out.reason];
+      return { ...out, ...(refusal ? { integrity: refusal.integrity } : {}), reason: parts.filter(Boolean).join(' ') };
+    }
     // F3: the SAME mark the cache route already applies, on the route that omitted it.
     if (out.repaired && provision && !provision.pinned) { return { ...out, unverified: true }; }
     return out;
