@@ -421,7 +421,7 @@ The refused bytes are never extracted, so no Electron is installed *from them*. 
 - **`npm install` (offline by design)** repeats the refusal reason in its notice and stops there — it never downloads.
 - **`amicus doctor --fix` and first GUI use** re-download the artifact with the digest pinned, so a one-off bad file self-heals and is reported as installed. Only when that retry cannot rescue it — no network, or the fresh download fails too — does `doctor` repeat the refusal reason instead of its generic "not provisioned".
 
-**Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus hashes a cached zip **before** extracting it, and pins the digest on the download, so bytes that *contradict* a published digest never become an Electron install. Where no published digest covers the artifact at all — an Electron package that ships no `checksums.json`, or one whose own `package.json` names a version amicus holds no entry for — there is nothing to contradict, and nothing to pin a download to: those bytes are extracted and the outcome is marked `unverified` rather than refused, because refusing would strand every older Electron in a re-download loop. Both routes say so on stderr as they do it — a cached artifact reports `no published sha256 for …, so its bytes could not be verified`, and a download reports `… could not be pinned`, meaning the bytes were checked only against the `SHASUMS256.txt` the mirror itself served. The gate is an integrity check against a digest amicus can obtain, not a promise that every artifact was vouched for.
+**Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus copies the artifact into a private directory of its own, hashes it **there**, and extracts **that copy** — on the cached route *and* on the download route, so bytes that *contradict* a published digest never become an Electron install and nothing can swap them between the hash and the extract. Where no published digest covers the artifact at all — an Electron package that ships no `checksums.json`, or one whose own `package.json` names a version amicus holds no entry for — there is nothing to contradict, and nothing to pin a download to: those bytes are extracted and the outcome is marked `unverified` rather than refused, because refusing would strand every older Electron in a re-download loop. Both routes say so on stderr as they do it — a cached artifact reports `no published sha256 for …, so its bytes could not be verified`, and a download reports `… could not be pinned`, meaning the bytes were checked only against the `SHASUMS256.txt` the mirror itself served. The gate is an integrity check against a digest amicus can obtain, not a promise that every artifact was vouched for.
 
 That is what a swapped mirror or a planted cache file looks like. It is **also** what a truncated download, a failing disk, or a corporate mirror serving a *rebuilt* Electron looks like — amicus cannot tell them apart, and says so rather than guessing.
 
@@ -433,6 +433,47 @@ That is what a swapped mirror or a planted cache file looks like. It is **also**
 - Headless runs and the full council work without the GUI in every one of these cases.
 
 **A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it. Report the mirror or cache the archive came from.
+
+---
+
+## Electron artifact NOT extracted (private staging)
+
+**Symptom:** provisioning stops with
+
+```
+[amicus] Electron artifact NOT extracted: electron-v43.1.1-win32-x64.zip
+[amicus]   C:\Users\me\AppData\Local\electron\Cache\<sha>\electron-v43.1.1-win32-x64.zip
+[amicus] Its bytes could not be copied into a private directory, so amicus cannot
+[amicus] promise the bytes it hashed are the bytes it would extract. ...
+```
+
+**Cause:** before hashing an Electron artifact, amicus **copies** it into a fresh private directory
+under the system temp directory, named `amicus-electron-stage-*` (mode `0700` on macOS/Linux, a fresh
+unguessable name every attempt). Everything after that — the sha256, the extract — reads that copy.
+Without the copy, anything that can write the download cache could swap the file between the hash and
+the extract, and the unhashed replacement would be what got installed and launched. When the copy
+cannot be made, amicus refuses rather than falling back to the cache path.
+
+Three things make that copy fail: a temp directory with no room for it (the artifact is roughly
+170 MB, so staging needs that much free space *in addition* to the cache copy and the extracted
+`dist/`), a `TMPDIR` / `%TEMP%` amicus cannot write, and a cache entry that is not a regular file.
+
+**Fix:**
+- Free ~200 MB in the temp directory, or point `TMPDIR` (`%TEMP%` on Windows) at a writable disk with
+  room, and provision again.
+- Headless runs and the full council work without the GUI meanwhile.
+
+**Notes on the staging directory:**
+- **Your cached artifact is never moved.** Staging copies, so the download cache is exactly as it was
+  before the repair, whether the repair succeeded, was refused, or was interrupted. Killing a repair
+  mid-extract cannot leave you with neither a cached zip nor a `dist/` — which matters most on an
+  air-gapped machine whose cache was hand-seeded.
+- **A killed run can leave one `amicus-electron-stage-*` directory behind.** The next provision sweeps
+  any that is more than a day old. They are safe to delete by hand at any time.
+- **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
+  `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
+  builds the artifact filename from it and refuses to use anything that is not a plain filename, since
+  it would otherwise name a path outside the staging directory. Reinstall the `electron` package.
 
 ---
 
