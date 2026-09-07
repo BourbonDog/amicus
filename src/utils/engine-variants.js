@@ -1,6 +1,7 @@
 /**
  * @module engine-variants
- * #218 PR 4: the effort lever. The engine's prompt endpoint selects reasoning
+ * The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration.
+ * The engine's prompt endpoint selects reasoning
  * effort through `variant: string` (probe F2); the `reasoning` object amicus sent
  * for every `--thinking` until now was never a prompt field and reached nothing
  * (F1). A variant the model does not DECLARE is a silent no-op that the engine
@@ -38,7 +39,7 @@ const VARIANT_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
 
 /** How long a read waits for the engine's startup refresh to make a model known (the cold wait is unmeasured — BACKLOG item 3; M12's 36 ms was a warm read). */
 const DECLARATION_WAIT_MS = 5000;
-const DECLARATION_POLL_MS = 250;
+const DECLARATION_POLL_MS = 500; // council #235 r1 (D2): ten reads across the bound, not twenty
 
 /** Thrown by opencode-client.js :: sendPrompt BEFORE any request when a variant is refused. */
 class VariantRefusedError extends Error {
@@ -58,7 +59,15 @@ class VariantRefusedError extends Error {
  * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null}>}
  */
 async function readDeclarationOnce(client, providerID, modelID) {
-  const r = await client.config.providers();
+  let r;
+  try { r = await client.config.providers(); } catch (err) {
+    // council #235 r1 (C1/D1/A2): a THROWN read — a transport error, a dead engine — is
+    // unreadable exactly like the returned non-2xx tuple below: one read, no wait, the level
+    // sent unverified with the note naming the error. Before this the rejection escaped
+    // sendPrompt and the leg died on it. Named mutant "THROWNREADFAILS"
+    // (tests/utils/engine-variants.test.js): drop the try/catch.
+    return { known: false, variants: {}, limitOutput: null, unreadable: `read threw: ${(err && err.message) || String(err)}` };
+  }
   // #218 PR 4 whole-branch review (EP-3): the SDK returns a non-2xx as a VALUE ({error,
   // response}, no data — opencode-client.js :: providerErrorReason keys on the same shape).
   // A response with no providers array is UNREADABLE, not "model unknown": the wait must not
@@ -103,8 +112,8 @@ function catalogCeilingFor(model, readCache) {
  * the catalogue to know it. Named mutant "NOWAIT" (tests/utils/engine-variants.test.js).
  * @param {object} client SDK client
  * @param {string} model executable id
- * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function, signal?: {aborted: boolean}}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`
- * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null, ceiling: number|null, waitedMs: number}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`.
+ * @param {{waitMs?: number, pollMs?: number, sleep?: Function, now?: Function, catalogCeiling?: number|null, readCache?: Function, signal?: {aborted: boolean}, outputBudget?: number|null}} [opts] test seams — `catalogCeiling` (explicit) wins over `readCache`. `outputBudget` (the budget the engine was spawned with; sendPrompt passes it): the echo shape is possible only when a budget-derived descriptor was written, i.e. when it is a positive integer.
+ * @returns {Promise<{known: boolean, variants: object, limitOutput: number|null, unreadable: string|null, ceiling: number|null, waitedMs: number, ambiguous: boolean}>} `ceiling` is what the fit judges against: the amicus catalog's ceiling when it knows the model, else `limitOutput`. `ambiguous` — the wait ended on a read that could still be an echo (budget set, amicus's catalog knows the model, no variants): reported as `known: false` so the level is sent unverified.
  */
 async function readModelDeclaration(client, model, opts = {}) {
   const idx = typeof model === 'string' ? model.indexOf('/') : -1;
@@ -121,16 +130,23 @@ async function readModelDeclaration(client, model, opts = {}) {
   // model the ENGINE's catalogue does not know yet reads `limit.context > 0, variants {}`
   // instead of 0/0 and would count as known on the FIRST read, skipping the wait rule 3
   // exists for. Keep polling while the read could be that echo: amicus's catalog knows the
-  // model and no variant has appeared. A model the engine genuinely knows with no variants
-  // (M0: gpt-4o) then costs the wait once before its VARIANT_UNDECLARED — a refusal path.
-  // Named mutant "ECHOKNOWN" (tests/utils/engine-variants.test.js): drop `couldBeEcho(d)`.
-  const couldBeEcho = (r) => catalogCeiling !== null && Object.keys(r.variants).length === 0;
+  // model and no variant has appeared. The shape needs a budget-derived descriptor, so with no
+  // budget there is no echo and a variant-less model amicus's catalog knows (M0: gpt-4o) is
+  // refused on the first read; with one, the two states read alike (M0/J1: both `variants {}`)
+  // and a read still ambiguous when the wait ends is reported UNKNOWN — sent unverified with a
+  // note — rather than refused as undeclared (council #235 r1 B1/D2/A4).
+  const budgetInForce = positiveCount(opts.outputBudget) !== null;
+  // Named mutants "ECHOKNOWN" (drop `couldBeEcho(d)` from the loop) and "ECHOWITHOUTBUDGET"
+  // (drop `budgetInForce`) and "AMBIGUOUSKNOWN" (report the ambiguous read as known) — all in
+  // tests/utils/engine-variants.test.js.
+  const couldBeEcho = (r) => budgetInForce && catalogCeiling !== null && Object.keys(r.variants).length === 0;
   const start = now();
   let d = await readDeclarationOnce(client, providerID, modelID);
   while (!d.unreadable && (!d.known || couldBeEcho(d)) && !(signal && signal.aborted) && now() - start < waitMs) {
     await sleep(pollMs);
     d = await readDeclarationOnce(client, providerID, modelID);
   }
+  const ambiguous = !d.unreadable && d.known && couldBeEcho(d);
   // #218 PR 4 (found by probe row M20 in Task 2): /config/providers ECHOES the
   // descriptor amicus wrote -- a budget-derived limit.output 24000 reads back as
   // 24000 (M3's dump-after) -- so with a budget in force the dump cannot tell
@@ -140,7 +156,7 @@ async function readModelDeclaration(client, model, opts = {}) {
   // when the catalog has none: then the descriptor was bare and the dump is the
   // engine's own ceiling (K5/K12). Named mutant "ECHOEDCEILING"
   // (tests/utils/engine-variants.test.js): `ceiling: d.limitOutput` unconditionally.
-  return { ...d, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, waitedMs: now() - start };
+  return { ...d, known: d.known && !ambiguous, ambiguous, ceiling: catalogCeiling !== null ? catalogCeiling : d.limitOutput, waitedMs: now() - start };
 }
 
 /**
@@ -180,13 +196,15 @@ function checkVariant({ variant, model, declaration, outputBudget }) {
 
 /**
  * The log line for a variant sent to a model the catalogue did not know in time.
- * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null}} a
+ * @param {{model: string, variant: string, waitedMs: number, unreadable?: string|null, ambiguous?: boolean}} a
  * @returns {string}
  */
-function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable }) {
+function formatUnverifiedVariantNote({ model, variant, waitedMs, unreadable, ambiguous }) {
   const why = unreadable
     ? `the engine's /config/providers could not be read (${unreadable}; one read, no wait)`
-    : `the engine's catalogue did not know ${model} within ${waitedMs} ms (limit.context 0, no variants declared)`;
+    : ambiguous
+      ? `the engine's catalogue reported no variants for ${model} within ${waitedMs} ms while the dump echoed the descriptor amicus wrote for it (a budget is set), and those two states read alike — the engine may not know the model yet, or may know it and declare no variants`
+      : `the engine's catalogue did not know ${model} within ${waitedMs} ms (limit.context 0, no variants declared)`;
   return `${why}, so '${variant}' was sent unverified: it applies only if the engine learns the model before it builds the request (its startup models.dev refresh — probe M12 saw qwen3.8-max-0902 known on the first poll of a warm engine, 36 ms on one run, and unknown at the first read of a cold one, M0) and is a silent no-op otherwise (M7)`;
 }
 

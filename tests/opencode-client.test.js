@@ -504,6 +504,32 @@ describe('OpenCode Client Wrapper', () => {
       expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, unreadable: 'HTTP 500' });
     });
 
+    it('a thrown /config/providers read sends the level unverified with the error on sentVariant (council #235 r1)', async () => {
+      // Named mutant "THROWNREADFAILS" (src/utils/engine-variants.js): drop the try/catch — sendPrompt rejects with ECONNRESET.
+      const mockClient = clientWith(KIMI_DUMP);
+      mockClient.config.providers.mockRejectedValue(new Error('ECONNRESET'));
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'T' }], variant: 'low', _declaration: NO_WAIT,
+      });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
+      expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, unreadable: 'read threw: ECONNRESET' });
+    });
+
+    it('an ambiguous declaration — the echo shape throughout, under a budget — is sent unverified with ambiguous on sentVariant; with no budget a declared model is unchanged (council #235 r1 D2/B1)', async () => {
+      // Named mutant "AMBIGUOUSKNOWN" (src/utils/engine-variants.js): the echo read stays `known` — sendPrompt refuses VARIANT_UNDECLARED here.
+      const ECHO_ONLY = { data: { providers: [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }] } };
+      const mockClient = clientWith(ECHO_ONLY);
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/qwen/qwen3.8-max-0902', parts: [{ type: 'text', text: 'T' }], variant: 'low', outputBudget: 24000, _declaration: { waitMs: 0, catalogCeiling: 131072, readCache: () => null },
+      });
+      expect(mockClient.session.promptAsync.mock.calls[0][0].body.variant).toBe('low');
+      expect(result.sentVariant).toMatchObject({ variant: 'low', verified: false, ambiguous: true });
+      const plain = clientWith(KIMI_DUMP);
+      const r2 = await sendPrompt(plain, 'session-123', { model: 'openrouter/moonshotai/kimi-k3', parts: [{ type: 'text', text: 'T' }], variant: 'low', outputBudget: null, _declaration: NO_WAIT });
+      expect(r2.sentVariant.verified).toBe(true);
+      expect(r2.sentVariant).not.toHaveProperty('ambiguous');
+    });
+
     it('never sends after the caller abandoned the declaration wait (EP-2)', async () => {
       // Named mutant "SENDAFTERABANDON": drop the `options.signal.aborted` check before checkVariant.
       const signal = { aborted: false };

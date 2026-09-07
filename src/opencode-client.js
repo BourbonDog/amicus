@@ -241,7 +241,7 @@ async function sendPrompt(client, sessionId, options) {
   if (variant) {
     const { readModelDeclaration, checkVariant, VariantRefusedError } = require('./utils/engine-variants');
     const modelId = `${modelSpec.providerID}/${modelSpec.modelID}`;
-    const declaration = await readModelDeclaration(client, modelId, { ...(options._declaration || {}), signal: options.signal });
+    const declaration = await readModelDeclaration(client, modelId, { ...(options._declaration || {}), signal: options.signal, outputBudget });
     // #218 PR 4 whole-branch review (EP-2): headless races this call against its no-output
     // backstop; when the window is shorter than the declaration wait the leg is already
     // finalized and its session aborted by the time the wait ends. Never send after that —
@@ -251,7 +251,7 @@ async function sendPrompt(client, sessionId, options) {
     const verdict = checkVariant({ variant, model: modelId, declaration, outputBudget });
     if (!verdict.ok) { throw new VariantRefusedError(verdict.code, verdict.reason); }
     body.variant = variant;
-    sentVariant = { variant, verified: verdict.verified, waitedMs: declaration.waitedMs, ...(declaration.unreadable ? { unreadable: declaration.unreadable } : {}) };
+    sentVariant = { variant, verified: verdict.verified, waitedMs: declaration.waitedMs, ...(declaration.unreadable ? { unreadable: declaration.unreadable } : {}), ...(declaration.ambiguous ? { ambiguous: true } : {}) };
   }
 
   if (watchdog) {

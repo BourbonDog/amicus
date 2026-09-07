@@ -300,8 +300,9 @@ is then clamped to the ceiling), route the model through OpenRouter (a variant l
 reservation at the budget there — M1, M9), or use an adaptive-thinking model such as
 `claude-sonnet-5`. A model the engine's catalogue does not know yet (a custom or local model, or one
 newer than the engine's bundled list before its startup refresh lands) is never refused: the level
-is sent after a bounded wait and the run logs `Variant sent unverified`; the leg document carries
-`variantUnverified: true`.
+is sent after a bounded wait and the run logs `Variant sent unverified`; the same applies, with a
+budget set, to a model whose dump reports no variants — the echoed descriptor hides whether the
+engine knows it (M3); the leg document carries `variantUnverified: true`.
 
 ---
 

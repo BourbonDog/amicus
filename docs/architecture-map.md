@@ -199,7 +199,7 @@ src/
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
 │   ├── engine-skew-records.js  # Server identity and the bounded store of standing engine-skew records.
 │   ├── engine-skew.js  # Runtime detection of an opencode ENGINE version skew: server vs installed.
-│   ├── engine-variants.js  # #218 PR 4: the effort lever. The engine's prompt endpoint selects reasoning
+│   ├── engine-variants.js  # The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration.
 │   ├── env-loader.js  # Credential Loader
 │   ├── env-num.js
 │   ├── env-raw-store.js  # Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6).
@@ -636,7 +636,7 @@ evals/
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
 | `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |
-| `utils/engine-variants.js` | #218 PR 4: the effort lever. The engine's prompt endpoint selects reasoning | `VARIANT_LEVELS()`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
+| `utils/engine-variants.js` | The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration. | `VARIANT_LEVELS()`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
 | `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |

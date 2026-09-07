@@ -46,6 +46,10 @@ jest.mock('../../src/opencode-client', () => ({
   getSessionStatus: jest.fn().mockResolvedValue({}),
   abortSession: jest.fn().mockResolvedValue({}),
 }));
+jest.mock('../../src/utils/config', () => ({
+  ...jest.requireActual('../../src/utils/config'),
+  getOutputBudget: () => 12000, // council #235 r1 (A1): what readOutputBudgetSafe falls back to
+}));
 jest.mock('../../src/sidecar/session-utils', () => ({
   startOpenCodeServer: jest.fn().mockResolvedValue({
     client: {},
@@ -115,6 +119,17 @@ describe('#218 PR 4 — what the interactive (GUI) sender records', () => {
     expect(opts.variant).toBe('high');
     expect(opts.outputBudget).toBe(24000);
     expect(opts).not.toHaveProperty('reasoning');
+  });
+
+  it('a handle WITHOUT the outputBudget key falls back to the config read — the SAME reader headless uses (council #235 r1 A1)', async () => {
+    // src/headless.js :: readOutputBudgetSafe: the handle's spawn value, else config — the
+    // GUI sender used its own hasOwnProperty read, which yielded undefined here.
+    require('../../src/sidecar/session-utils').startOpenCodeServer.mockResolvedValueOnce({
+      client: {}, server: { url: 'http://127.0.0.1:1', close: (...a) => mockServerClose(...a) },
+    });
+    mockSendPromptAsync.mockResolvedValue({ data: {}, sentVariant: { variant: 'high', verified: true, waitedMs: 0 } });
+    await runInteractive(QWEN, 'sys', 'hi', 'ivar0005', project, { variant: 'high', agent: 'chat' });
+    expect(mockSendPromptAsync.mock.calls[0][2].outputBudget).toBe(12000);
   });
 
   it('a refusal becomes "Session setup failed: VARIANT_…" and closes the server (D4)', async () => {

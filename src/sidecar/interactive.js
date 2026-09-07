@@ -18,6 +18,7 @@ const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
 const { writeProgress } = require('./progress');
 const { getElectronPath, buildElectronEnv, handleElectronProcess } = require('./interactive-process');
+const { readOutputBudgetSafe } = require('../headless');
 
 /** Run sidecar in interactive mode (Electron GUI) */
 async function runInteractive(model, systemPrompt, userMessage, taskId, project, options = {}) {
@@ -100,14 +101,14 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       // Named mutants "GUIBUDGETDROPPED" / "GUIREFUSALPREFIX" (tests/sidecar/interactive-variant.test.js).
       if (variant) {
         promptOptions.variant = variant;
-        promptOptions.outputBudget = Object.prototype.hasOwnProperty.call(server, 'outputBudget') ? server.outputBudget : undefined;
+        promptOptions.outputBudget = readOutputBudgetSafe(server); // council #235 r1 (A1): the SAME reader headless uses (src/headless.js :: readOutputBudgetSafe) — the handle's spawn value, else config
       }
 
       const promptResult = await sendPromptAsync(ocClient, sessionId, promptOptions);
       sent = promptResult && promptResult.sentVariant;
       if (sent && !sent.verified) {
         const { formatUnverifiedVariantNote } = require('../utils/engine-variants');
-        logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable }) });
+        logger.warn('Variant sent unverified', { taskId, sessionId, note: formatUnverifiedVariantNote({ model, variant: sent.variant, waitedMs: sent.waitedMs, unreadable: sent.unreadable, ambiguous: sent.ambiguous }) });
       }
       progressStage('prompt_sent');
     }

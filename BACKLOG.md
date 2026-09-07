@@ -7521,7 +7521,10 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   not only the engine cwd's. PR-7: the probe's bare-descriptor dump is taken before `waitKnown`, so
   a dump-seeding case on a cold engine files the bundled view. m10: M12's `expect` prose credits the
   startup refresh for what was a warm read (36 ms) — reword to the invariant on the next probe run
-  and re-file.
+  and re-file. **Council #235 r1 (D2/B1):** separating "the engine knows the model and it declares
+  no variants" from "the engine does not know it yet" needs a cell the dump lacks once a descriptor
+  is echoed; amicus's own catalog could carry models.dev's `reasoning_options` (fetched already for
+  the ceilings) and settle it at read time — filed.
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi

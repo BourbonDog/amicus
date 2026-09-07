@@ -208,7 +208,8 @@ function assertSandboxed() {
   }
   // The engine's project directory (cwd) must be inside the sandbox too: the
   // engine writes there (PATCH /config -> <cwd>/config.json, measured M3).
-  if (!path.resolve(process.cwd()).startsWith(path.resolve(home))) {
+  // council #235 r1 (A6): a separator-bounded prefix — /x/sandbox-evil must not pass for /x/sandbox
+  if (!(path.resolve(process.cwd()) + path.sep).startsWith(path.resolve(home) + path.sep)) {
     process.stderr.write(`probe: REFUSING to start an engine — cwd ${process.cwd()} is outside the sandbox home; run without --inner\n`);
     return false;
   }
@@ -689,7 +690,8 @@ function listSandboxFiles() {
   if (home) { walk(home, 'HOME'); }
   // The project dir is inside HOME by construction (runOuter), so it is already
   // listed as HOME/project/…; walk it separately only if that ever changes.
-  if (!home || !path.resolve(process.cwd()).startsWith(home)) { walk(process.cwd(), 'cwd'); }
+  // council #235 r1 (A6): a separator-bounded prefix — /x/sandbox-evil must not pass for /x/sandbox
+  if (!home || !(path.resolve(process.cwd()) + path.sep).startsWith(home + path.sep)) { walk(process.cwd(), 'cwd'); }
   return out;
 }
 
@@ -833,9 +835,9 @@ async function runCase(sdk, cap, c, engines, providers, updates) {
 function checkRow(r) {
   if (r.want === 'record') { return 'recorded'; }
   // PR 4: a row whose expectation is a REFUSAL before the wire — no capture at
-  // all (measured: runCase's catch reads the captures taken since the case began), and the thrown reason starts with the code.
+  // all (measured: runCase's catch reads the captures taken since the case began), the capture count since the case began is ZERO (council #235 r1 C2), and the thrown reason starts with the code.
   if (r.want && typeof r.want === 'object' && typeof r.want.refused === 'string') {
-    return (!r.wire && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
+    return (!r.wire && r.capturedAfterRefusal === 0 && typeof r.error === 'string' && r.error.startsWith(r.want.refused)) ? 'matched' : 'mismatched';
   }
   // A row that THREW (runCase's catch) and is not a refusal row never matches: its
   // measured wire, if any, is filed in the JSON for the reader, but a case that died

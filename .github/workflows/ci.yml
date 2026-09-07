@@ -249,7 +249,7 @@ jobs:
     # credential and sandboxes the home directory before spawning jest, so the
     # money-spending E2E suites self-skip and only the free assertions execute
     # (~51 assertions plus the engine-flag canary in
-    # tests/probe-flag-canary.integration.test.js — seven real engine starts against a
+    # tests/probe-flag-canary.integration.test.js — nine real engine starts against a
     # local capture server, ~15 s here and up to a minute on a slow runner, $0).
     #
     # DO NOT ADD SECRETS TO THIS JOB. Paid suites belong on the human-initiated

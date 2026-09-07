@@ -83,13 +83,15 @@ All notable changes to Amicus are documented here. Format follows
   reservation the leg would have made and three remedies); a model the engine's catalogue does not
   know within a five-second wait — its bundled catalogue predates the model and the models.dev fetch
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
-  unverified, logged and marked `variantUnverified: true` on the leg document. A refusal is a
-  zero-spend leg death through the usual channel (`error` with the reason; a fanout's other legs
-  run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process (shared-server) path
-  carries the level too — its `thinking` had been argv-only, which that path never read. A backstop
-  window that fires while a leg is still inside its declaration wait (bounded at five seconds; one
-  read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before anything is sent (an
-  abandon signal stops the orphaned send); an unreadable `/config/providers` (a
+  unverified, logged and marked `variantUnverified: true` on the leg document. With a budget set the
+  same applies to a model whose dump reports no variants (an echoed descriptor hides whether the
+  engine knows it — M3); without a budget such a model is refused at once. The wait polls every 500
+  ms. A refusal is a zero-spend leg death through the usual channel (`error` with the reason; a
+  fanout's other legs run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process
+  (shared-server) path carries the level too — its `thinking` had been argv-only, which that path
+  never read. A backstop window that fires while a leg is still inside its declaration wait (bounded
+  at five seconds; one read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before
+  anything is sent (an abandon signal stops the orphaned send); an unreadable `/config/providers` (a
   non-2xx) sends the level unverified after ONE read, and the log line says so. `max` joins the
   vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` — the levels the curated
   routes declare between them, M0). The level SENT rides the run document (`variant`), the

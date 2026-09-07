@@ -114,6 +114,8 @@ describe('VariantRefusedError', () => {
 });
 
 describe('readModelDeclaration', () => {
+  const ECHO_COLD = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }];
+  const BARE_NOVARIANTS = [{ id: 'openai', models: { 'gpt-4o': { limit: { context: 128000, output: 16384 }, variants: {} } } }];
   /** A fake SDK client whose /config/providers answers change per call. */
   const clientOf = (answers) => {
     let i = 0;
@@ -185,20 +187,40 @@ describe('readModelDeclaration', () => {
   });
   it('keeps waiting when the first read is an ECHOED descriptor with no variants — a cold model amicus registered (EP-1)', async () => {
     // Named mutant "ECHOKNOWN": drop `couldBeEcho(d)` from the loop condition — providers() is called once and `variants` is {}.
-    const ECHO_COLD = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 24000 }, variants: {} } } }];
     const WARM = [{ id: 'openrouter', models: { 'qwen/qwen3.8-max-0902': { limit: { context: 1000000, output: 131072 }, variants: { low: { reasoning: { effort: 'low' } } } } } }];
     const client = clientOf([ECHO_COLD, ECHO_COLD, WARM]);
-    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 131072 });
+    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { waitMs: 1000, pollMs: 1, sleep: async () => {}, catalogCeiling: 131072, outputBudget: 24000 });
     expect(client.config.providers).toHaveBeenCalledTimes(3);
     expect(d.known).toBe(true);
     expect(Object.keys(d.variants)).toEqual(['low']);
   });
   it('does not wait on a variant-less model amicus has no catalog row for — the read cannot be an echo (M0: gpt-4o, bare)', async () => {
-    const BARE_NOVARIANTS = [{ id: 'openai', models: { 'gpt-4o': { limit: { context: 128000, output: 16384 }, variants: {} } } }];
     const client = clientOf([BARE_NOVARIANTS]);
     const d = await readModelDeclaration(client, 'openai/gpt-4o', { waitMs: 1000, pollMs: 1, sleep: async () => {}, ...NO_CATALOG });
     expect(client.config.providers).toHaveBeenCalledTimes(1);
     expect(d.known).toBe(true);
+  });
+  it('does not wait on a variant-less model with NO budget in force — no descriptor, no echo (council #235 r1 D2/A4)', async () => {
+    // Named mutant "ECHOWITHOUTBUDGET": drop `budgetInForce` from couldBeEcho — providers() is polled to the deadline.
+    const client = clientOf([BARE_NOVARIANTS]);
+    const d = await readModelDeclaration(client, 'openai/gpt-4o', { catalogCeiling: 16384, outputBudget: null, waitMs: 1000, pollMs: 1, sleep: async () => {} });
+    expect(client.config.providers).toHaveBeenCalledTimes(1);
+    expect(d.known).toBe(true);
+    expect(d.ambiguous).toBe(false);
+    expect(checkVariant({ variant: 'high', model: 'openai/gpt-4o', declaration: d, outputBudget: null }).code).toBe('VARIANT_UNDECLARED');
+  });
+  it('a read still ambiguous when the wait ends is reported UNKNOWN and sent unverified (council #235 r1 B1)', async () => {
+    // Named mutant "AMBIGUOUSKNOWN": report the ambiguous read as known — `known` stays true and checkVariant refuses VARIANT_UNDECLARED.
+    let now = 0;
+    const client = clientOf([ECHO_COLD]);
+    const d = await readModelDeclaration(client, 'openrouter/qwen/qwen3.8-max-0902', { catalogCeiling: 131072, outputBudget: 24000, waitMs: 50, pollMs: 10, sleep: async () => { now += 10; }, now: () => now });
+    expect(d.known).toBe(false);
+    expect(d.ambiguous).toBe(true);
+    expect(d.waitedMs).toBeGreaterThanOrEqual(50);
+    expect(checkVariant({ variant: 'low', model: 'openrouter/qwen/qwen3.8-max-0902', declaration: d, outputBudget: 24000 })).toEqual({ ok: true, verified: false });
+    const note = formatUnverifiedVariantNote({ model: 'openrouter/qwen/qwen3.8-max-0902', variant: 'low', waitedMs: d.waitedMs, ambiguous: true });
+    expect(note.startsWith("the engine's catalogue reported no variants for openrouter/qwen/qwen3.8-max-0902 within ")).toBe(true);
+    expect(note).toContain('those two states read alike');
   });
   it('a non-2xx /config/providers is UNREADABLE — one read, no wait, and the note says so (EP-3)', async () => {
     // Named mutant "UNREADABLEISCOLD": treat the error tuple as an empty provider list — providers() is polled to the deadline and `unreadable` is null.
@@ -210,6 +232,14 @@ describe('readModelDeclaration', () => {
     expect(checkVariant({ variant: 'medium', model: 'openrouter/moonshotai/kimi-k3', declaration: d, outputBudget: null })).toEqual({ ok: true, verified: false });
     expect(formatUnverifiedVariantNote({ model: 'openrouter/moonshotai/kimi-k3', variant: 'medium', waitedMs: d.waitedMs, unreadable: d.unreadable }))
       .toMatch(/^the engine's \/config\/providers could not be read \(HTTP 500; one read, no wait\), so 'medium' was sent unverified: /);
+  });
+  it('a THROWN /config/providers read is unreadable — one read, no wait, the level sent unverified (council #235 r1 C1/D1/A2)', async () => {
+    // Named mutant "THROWNREADFAILS": drop the try/catch — readModelDeclaration rejects with ECONNRESET.
+    const client = { config: { providers: jest.fn(async () => { throw new Error('ECONNRESET'); }) } };
+    const d = await readModelDeclaration(client, 'openrouter/moonshotai/kimi-k3', { waitMs: 5000, pollMs: 250, sleep: async () => {}, ...NO_CATALOG });
+    expect(client.config.providers).toHaveBeenCalledTimes(1);
+    expect(d).toMatchObject({ known: false, unreadable: 'read threw: ECONNRESET' });
+    expect(checkVariant({ variant: 'low', model: 'openrouter/moonshotai/kimi-k3', declaration: d, outputBudget: null })).toEqual({ ok: true, verified: false });
   });
   it('a dump without a providers array is unreadable too (a reshaped response), while an empty list is a readable "unknown"', async () => {
     const reshaped = await readModelDeclaration({ config: { providers: jest.fn(async () => ({ data: [] })) } }, 'openrouter/moonshotai/kimi-k3', { waitMs: 0, ...NO_CATALOG });
