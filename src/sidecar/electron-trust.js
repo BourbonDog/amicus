@@ -1,5 +1,7 @@
 /**
- * Electron artifact TRUST core — the digest anchor, the gate, and the env scrub.
+ * Electron artifact TRUST core — the digest anchor and the gate. (The third
+ * member of the cluster, the installer-spawn env scrub, lives in
+ * ./electron-env-scrub and is re-exported here; see below.)
  *
  * A hostile REPOSITORY (a clone the user opens, an unpacked sample) controls the
  * `.npmrc` and `package.json` of the directory amicus's own docs tell people to
@@ -18,10 +20,19 @@
  * electron's own published sha256. Blocking the URL itself is defence in depth on
  * top of a control that already works, and is deliberately NOT built here.
  *
- * LEAF MODULE: `crypto` + `path` + `fs` and nothing from this repo. The arrow is
- * electron-install -> electron-provision -> electron-trust and must never point
+ * NEAR-LEAF MODULE: `crypto` + `path` + `fs`, plus `./electron-env-scrub`, which
+ * is itself a true leaf (no requires at all). The arrow is electron-install ->
+ * electron-provision -> electron-trust -> electron-env-scrub and must never point
  * back; src/utils/path-fence.js:11-17 records what a cycle does to a destructured
  * import in exactly this cluster.
+ *
+ * THE ENV SCRUB LIVES NEXT DOOR (v4.9.6 F2). `isRepoPlantedName`,
+ * `scrubbedChildEnv`, `REPO_ENV_PREFIXES` and `ELECTRON_INSTALL_TARGET_ENV` moved
+ * to `./electron-env-scrub` when this file hit the 300-line gate with the F2
+ * repair still to land, and are RE-EXPORTED here so every existing import path
+ * stays valid — the same shape as engine-log-parse.js re-exporting
+ * utils/text-sanitize.js. There is ONE implementation; these are the same
+ * function objects, not a second copy.
  *
  * @module sidecar/electron-trust
  */
@@ -32,53 +43,9 @@ const crypto = require('crypto');
 const fsDefault = require('fs');
 const path = require('path');
 
-/**
- * Env-name PREFIXES an untrusted REPOSITORY can plant. MEASURED, npm 11: a repo
- * .npmrc key `k` reaches an `npm run` / `npm exec` child as
- * `npm_config_<k lowercased>`; a repo package.json "config" key `k` reaches it as
- * `npm_package_config_<k>` with case preserved. Nothing else.
- *
- * PREFIXES, not a hand-maintained name list. Two prefixes cover every
- * `@electron/get` mirror knob in each repo-reachable spelling, plus electron's
- * own `npm_config_electron_use_remote_checksums` (electron's install.js, lines
- * 47-50 — that name turns electron's bundled pin OFF), plus any knob a future
- * @electron/get adds in the same namespace. Contrast ENGINE_CREDENTIAL_ENV
- * (scripts/run-integration-keyless.js:101), whose own docblock warns that nothing
- * makes a name list follow an upstream bump.
- *
- * The BARE `electron_use_remote_checksums` is deliberately NOT removed: a bare
- * lower-case name is not repo-injectable, so it carries the machine owner's
- * intent, exactly like a bare `ELECTRON_MIRROR`.
- *
- * MATCHED CASE-INSENSITIVELY. This used to fold no case, on the claim that
- * because the Windows environment block is case-insensitive, deleting the
- * lower-case name also removed the `NPM_CONFIG_ELECTRON_*` view @electron/get
- * reads second. That is true of `process.env` and FALSE of the `{...env}` PLAIN
- * OBJECT this module actually deletes from — a plain object is case-sensitive on
- * every platform, so the upper-case key survived and was handed to the child.
- * RE-MEASURED (npm 11.16.0, Windows 11) — two ways a repository reaches an
- * upper-case slot:
- *   1. `.npmrc` `electron_mirror=…` while `NPM_CONFIG_ELECTRON_MIRROR` already
- *      exists in the environment: npm overwrites that slot's VALUE and never
- *      renames it, so the child sees the ATTACKER's URL under the upper-case name.
- *   2. `package.json` `"config": {"ELECTRON_MIRROR": …}`: npm PRESERVES the key's
- *      case, planting `npm_package_config_ELECTRON_MIRROR` with nothing
- *      pre-existing at all — and @electron/get's own lookup for
- *      `npm_package_config_electron_mirror` (dist/artifact-utils.js, line 28) finds it,
- *      because the Windows lookup is case-insensitive too.
- * The old docblock's POSIX half (`NPM_CONFIG_ELECTRON_*` is a distinct variable
- * npm never writes there, so it is the machine owner's) is NOT measurable from
- * this machine, and it is load-bearing in the fail-OPEN direction: wrong, it
- * hands the child an attacker's mirror. Wrong the other way it costs one
- * alternate spelling inside a last-resort spawn, while bare `ELECTRON_MIRROR`
- * — which @electron/get ranks FIRST — still carries owner intent. So the fold is
- * unconditional rather than resting on an unverified platform claim.
- */
-const REPO_ENV_PREFIXES = ['npm_config_electron_', 'npm_package_config_electron_'];
-
-/** electron's install.js, lines 20-21 and 99 — these choose WHICH artifact it
- *  fetches, and `.npmrc` `platform=`/`arch=` plants both. Same case fold. */
-const ELECTRON_INSTALL_TARGET_ENV = ['npm_config_platform', 'npm_config_arch'];
+const {
+  isRepoPlantedName, scrubbedChildEnv, REPO_ENV_PREFIXES, ELECTRON_INSTALL_TARGET_ENV,
+} = require('./electron-env-scrub');
 
 /** A published sha256 is 64 LOWER-case hex characters. Anything else is not an anchor. */
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -87,13 +54,6 @@ const HEX64 = /^[0-9a-f]{64}$/;
 function normalizeV(version) {
   const v = String(version || '');
   return v.startsWith('v') ? v : `v${v}`;
-}
-
-/** True for a name a hostile repository could have planted, in ANY case (see above). */
-function isRepoPlantedName(name) {
-  const lower = String(name).toLowerCase();
-  return REPO_ENV_PREFIXES.some((prefix) => lower.startsWith(prefix))
-    || ELECTRON_INSTALL_TARGET_ENV.includes(lower);
 }
 
 /**
@@ -258,33 +218,6 @@ function verifyArtifact({ zip, anchor, fileName, policy = {}, fs = fsDefault, lo
   return { verdict: 'mismatch', allowed: false, expected, actual };
 }
 
-/**
- * A COPY of env for the runInstaller SPAWN. Never mutates the argument.
- *
- * electron's own install.js honours `npm_config_electron_mirror` (through
- * @electron/get) AND `npm_config_electron_use_remote_checksums` (its lines 47-50,
- * which turns its bundled pin off), so spawning it with an unfiltered
- * `{...process.env}` would funnel a blocked attacker straight into an unpinned
- * downloader. `npm_config_platform` / `npm_config_arch` (its lines 20-21 and 99)
- * choose WHICH artifact it fetches, so they are removed too and amicus's own
- * resolution is pinned through `ELECTRON_INSTALL_PLATFORM`/`_ARCH`, which
- * install.js ranks above them.
- *
- * LEAVES ALONE, deliberately — every one of these is a BARE name a repository
- * cannot plant, so it is the machine owner's: `ELECTRON_MIRROR`,
- * `ELECTRON_CUSTOM_*`, `electron_config_cache`, `ELECTRON_CACHE`,
- * `electron_use_remote_checksums`, `HTTP_PROXY`/`HTTPS_PROXY`/`ELECTRON_GET_USE_PROXY`.
- */
-function scrubbedChildEnv({ env = process.env, platform, arch } = {}) {
-  const out = { ...env };
-  for (const name of Object.keys(out)) {
-    if (isRepoPlantedName(name)) { delete out[name]; }
-  }
-  if (platform) { out.ELECTRON_INSTALL_PLATFORM = platform; }
-  if (arch) { out.ELECTRON_INSTALL_ARCH = arch; }
-  return out;
-}
-
 module.exports = {
   electronTrustPolicy,
   resolveAnchor,
@@ -292,8 +225,10 @@ module.exports = {
   verifyArtifact,
   sha256File,
   artifactFileName,
-  scrubbedChildEnv,
   normalizeV,
+  // RE-EXPORTED from ./electron-env-scrub — the same function objects, not copies.
+  isRepoPlantedName,
+  scrubbedChildEnv,
   REPO_ENV_PREFIXES,
   ELECTRON_INSTALL_TARGET_ENV,
 };

@@ -110,13 +110,14 @@ src/
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
+│   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
 │   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and what happens to a
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── electron-stage.js  # PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the
 │   ├── electron-state.js  # Electron install-state probes (#76).
-│   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor, the gate, and the env scrub.
+│   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor and the gate. (The third
 │   ├── fallback-chains.js
 │   ├── fanout-budget.js
 │   ├── fanout-leg-fallback.js
@@ -553,13 +554,14 @@ evals/
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
+| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant, and | `isRepoPlantedName()`, `scrubbedChildEnv()`, `REPO_ENV_PREFIXES()`, `ELECTRON_INSTALL_TARGET_KEYS()`, `ELECTRON_INSTALL_TARGET_ENV()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and what happens to a | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `rejectCachedZip()`, `isUnsafeArchive()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/electron-stage.js` | PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the | `stageArtifact()`, `releaseStage()`, `sweepStaleStages()`, `STAGE_PREFIX()`, `STALE_STAGE_MS()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
-| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor, the gate, and the env scrub. | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
+| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
