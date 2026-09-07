@@ -35,7 +35,7 @@
     "variantUnverified": {
       "type": "boolean",
       "enum": [true],
-      "description": "#218 PR 4, optional, emit-when-true. The variant was sent to a model the engine's catalogue did not know within the wait (limit.context 0, no variants declared — a model newer than the engine's bundled catalogue before its startup refresh landed, or a custom/local model): the engine applied it only if it learned the model before building the request, and dropped it silently otherwise; amicus cannot tell which."
+      "description": "#218 PR 4, optional, emit-when-true. The variant was sent to a model the engine's catalogue did not know within the wait (its row carries none of the cells a catalogue fills — no display name, family, release date, pricing or capabilities — only the descriptor amicus registered: a model newer than the engine's bundled catalogue before its startup refresh landed, or a custom/local model): the engine applied it only if it learned the model before building the request, and dropped it silently otherwise; amicus cannot tell which."
     },
     "ttftMs": {
       "type": "integer",

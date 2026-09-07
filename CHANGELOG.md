@@ -79,8 +79,9 @@ All notable changes to Amicus are documented here. Format follows
   the declared set — the engine would have dropped it silently and still echoed it on the message,
   F3/M7); a declared level whose thinking budget the direct Anthropic route adds on top of the
   reservation (Haiku 4.5 — M2: 24,000 + 16,000 = 40,000; Opus 4.5 declares the same shape, M0) is
-  refused when `outputBudget` is below the model's ceiling (`VARIANT_OVER_BUDGET`, with the
-  reservation the leg would have made and three remedies); a model the engine's catalogue does not
+  refused when `outputBudget` is below the model's ceiling, and also when no ceiling is declared
+  anywhere — there the sum has no clamp to land under (`VARIANT_OVER_BUDGET`, with the reservation
+  the leg would have made and the remedies for each case); a model the engine's catalogue does not
   know within a five-second wait — its bundled catalogue predates the model and the models.dev fetch
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
   unverified, logged and marked `variantUnverified: true` on the leg document. The same note is
@@ -88,9 +89,11 @@ All notable changes to Amicus are documented here. Format follows
   default log level. Whether a level counts as declared does not depend on `outputBudget` — the
   `VARIANT_OVER_BUDGET` fit above is the only refusal a budget can add: `/config/providers` returns a
   model's row with the catalogue's own release date, family, display name, pricing, capabilities and
-  variants, and Amicus writes only `limit` into it, so a row carrying any of those is the engine's
+  variants, and Amicus writes only `limit` into it, so a row carrying any of those is a
   declaration (an empty variants set is a refusal) and a row carrying none of them is Amicus's own
-  descriptor (unknown — the bounded wait, then an unverified send). Measured as record M23 and
+  descriptor (unknown — the bounded wait, then an unverified send). That dump is the engine's MERGED
+  view of its own catalogue and your `opencode.json`, so model metadata you declare yourself reads as
+  a declaration too. Measured as record M23 and
   pinned by a keyless engine canary. The wait polls every 500 ms. The ceiling that
   `VARIANT_OVER_BUDGET` fit judges against is Amicus's own catalog's row for
   the model — its `maxOutputTokens`, the number a budget-derived descriptor is clamped TO, not the
