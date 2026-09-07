@@ -32,6 +32,21 @@ async function handleResume(args) {
       message: 'Error: --tag is not supported on resume — the tag is inherited from the parent session',
     }));
   }
+  // #218 PR 4, council #235 r1 (D6): the same silently-ignored-flag shape as --tag
+  // above. `--thinking` parses on every command because getKnownFlags()
+  // (utils/known-flags.js) scrapes the whole usage string and start's block declares
+  // it (cli.js), this handler never reads it, and validateStartArgs — PR 4's
+  // vocabulary check — runs only on `start` (cli-handlers-run.js), so even
+  // `--thinking bogus` used to exit 0 here having done nothing. Before PR 4 the level
+  // reached nothing on any path (probe F1) and the commands behaved alike by accident;
+  // it is the engine's `variant` on start/fanout now. Named mutant
+  // "RESUMETHINKINGSILENT" (tests/cli-handlers-resume-continue.test.js): drop this guard.
+  if (args.thinking !== undefined) {
+    process.exit(failJson(useJson, {
+      code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --thinking is not supported on resume — the level belongs to the run that started the session, and resume reopens that session',
+    }));
+  }
   const taskId = requireValidTaskId(args, useJson, 'resume', 'Usage: amicus resume <task_id>');
   requireNoUiForJson(args, useJson);
 
@@ -69,6 +84,16 @@ async function handleContinue(args) {
     process.exit(failJson(useJson, {
       code: ERROR_CODES.BAD_ARGS,
       message: 'Error: --tag is not supported on continue — the tag is inherited from the parent session',
+    }));
+  }
+  // #218 PR 4, council #235 r1 (D6): same rationale as handleResume above — the flag
+  // parses here, is read by nobody, and is not even vocabulary-checked. A continuation
+  // is a NEW session, so a level for it belongs on the `start` that opens one. Named
+  // mutant "CONTINUETHINKINGSILENT" (tests/cli-handlers-resume-continue.test.js).
+  if (args.thinking !== undefined) {
+    process.exit(failJson(useJson, {
+      code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --thinking is not supported on continue — the level belongs to the run that starts a session; use `amicus start --thinking <level>` to open one with a level',
     }));
   }
   const taskId = requireValidTaskId(args, useJson, 'continue', 'Usage: amicus continue <task_id> --prompt "..."');

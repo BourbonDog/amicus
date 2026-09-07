@@ -85,21 +85,24 @@ All notable changes to Amicus are documented here. Format follows
   has not landed yet, the state of a cold `~/.cache/opencode` (M0 cold vs M12 warm) — gets the level
   unverified, logged and marked `variantUnverified: true` on the leg document. With a budget set the
   same applies to a model whose dump reports no variants (an echoed descriptor hides whether the
-  engine knows it — M3); without a budget such a model is refused at once. The wait polls every 500
-  ms. A refusal is a zero-spend leg death through the usual channel (`error` with the reason; a
-  fanout's other legs run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process
-  (shared-server) path carries the level too — its `thinking` had been argv-only, which that path
-  never read. A backstop window that fires while a leg is still inside its declaration wait (bounded
-  at five seconds; one read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before
-  anything is sent (an abandon signal stops the orphaned send); an unreadable `/config/providers` (a
-  non-2xx, or a read that throws — a transport error, a dead engine) sends the level unverified
-  after ONE read, and the log line says so. `max` joins the vocabulary (`none`, `minimal`, `low`,
-  `medium`, `high`, `xhigh`, `max` — the levels the curated routes declare between them, M0). The
-  level SENT rides the run document (`variant`), the spend-ledger row (`variant`, present only when
-  one was sent) and the leg patch. Twenty-four probe rows (M0–M17 and M22, plus M18–M21 through
-  amicus's own `sendPrompt`) measured every shape this ships — the full 61-case matrix is filed in
-  the BACKLOG — and CI's keyless job now also runs M1, M2, M10b and M17. Council seats have no
-  effort knob in this release (filed as the owner's decision).
+  engine knows it — M3); without a budget such a model is refused at once. The ceiling the fit
+  judges against is Amicus's own catalog's (the descriptor's), because the engine echoes that
+  descriptor back once a budget is set (M3); `docs/configuration.md` records what a divergence from
+  the engine's own ceiling costs in each direction. The wait polls every 500 ms. A refusal is a
+  zero-spend leg death through the usual channel (`error` with the reason; a fanout's other legs
+  run; `start --no-ui` exits 1). The MCP `amicus_start` tool's in-process (shared-server) path
+  carries the level too — its `thinking` had been argv-only, which that path never read. A backstop
+  window that fires while a leg is still inside its declaration wait (bounded at five seconds; one
+  read on a warm, declared model) ends the leg `NO_OUTPUT_BACKSTOP` before anything is sent (an
+  abandon signal stops the orphaned send); an unreadable `/config/providers` (a non-2xx, or a read
+  that throws — a transport error, a dead engine) sends the level unverified after ONE read, and the
+  log line says so. `max` joins the vocabulary (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+  `max` — the levels the curated routes declare between them, M0). The level SENT rides the run
+  document (`variant`), the spend-ledger row (`variant`, present only when one was sent) and the leg
+  patch. Twenty-four probe rows (M0–M17 and M22, plus M18–M21 through amicus's own `sendPrompt`)
+  measured every shape this ships — the full 61-case matrix is filed in the BACKLOG — and CI's
+  keyless job now also runs M1, M2, M10b and M17. Council seats have no effort knob in this release
+  (filed as the owner's decision).
 
 ### Changed
 
@@ -123,19 +126,23 @@ All notable changes to Amicus are documented here. Format follows
   is unchanged from 4.9.3; for the promoted-thinking shape it is new — 4.9.3 counted that leg as a
   review and never retried it, so such a seat now bills one more reservation. `start --no-ui` exits
   1 with the reason. The ledger row for such a leg reads `status: "error"` where it read `complete`.
-- **A `--thinking` level the model does not declare is refused, not adjusted (#218 PR 4).** On
-  4.9.3 the CLI rewrote `minimal` to `low` and any other unsupported level to `medium` from a static
+- **A `--thinking` level the model does not declare is refused, not adjusted (#218 PR 4).** On 4.9.3
+  the CLI rewrote `minimal` to `low` and any other unsupported level to `medium` from a static
   per-model table (gpt-5 "without minimal", gemini "with everything") with a warning, then sent the
-  result as a field the engine never read; the table is gone (the engine's catalogue contradicts it:
-  gpt-5.6-terra declares no `minimal`, gemini-3.6-flash no `none` — M0), the CLI checks only the
-  vocabulary, and the model's own declaration decides at send time. Solo session metadata records
-  `thinking` only when one was requested — it used to record `medium` for every run, including runs
-  that sent nothing. A pack saved with `pack save --from-run` on 4.9.3 or earlier copied that
-  `medium` into its `options.thinking`; such a pack now SENDS it — refused on every model that does
-  not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated routes) — so delete
-  the key or re-save the pack from a run that requested a level. MCP `thinking` parameters no longer
-  claim "Default: medium": omitted means nothing is sent and the provider's default effort governs
-  (on the direct OpenAI route the engine sends `medium` itself, M13).
+  result as a field the engine never read; the table is gone (a static guess that the engine's
+  catalogue confirms on one row and contradicts on the other: both exclude `minimal` for gpt-5,
+  while the table gave gemini `none` and `xhigh` and gemini-3.6-flash declares neither — M0), the
+  CLI checks only the vocabulary, and the model's own declaration decides at send time. Solo session
+  metadata records `thinking` only when one was requested — it used to record `medium` for every
+  run, including runs that sent nothing. A pack saved with `pack save --from-run` on 4.9.3 or
+  earlier copied that `medium` into its `options.thinking`; such a pack now SENDS it — refused on
+  every model that does not declare `medium` (kimi-k3, Haiku 4.5, deepseek-v4-pro among the curated
+  routes) — so delete the key or re-save the pack from a run that requested a level. MCP `thinking`
+  parameters no longer claim "Default: medium": omitted means nothing is sent and the provider's
+  default effort governs (on the direct OpenAI route the engine sends `medium` itself, M13). The one
+  case the removal makes worse is the row the table got right: `--thinking minimal` on a gpt-5 route
+  used to be rewritten to `low`, a level the engine really declares, and is now refused — loudly,
+  before anything is sent, which is the trade this release makes deliberately.
 - `src/utils/http-get.js` now owns the always-resolves HTTPS GET that `model-fetcher.js` carried
   inline; the failure vocabulary (`timeout` / `http-status` / `network-error` / `parse-error`) gains
   one reason, `too-large`. A response-stream error mid-body and a synchronous throw from `https.get`
@@ -153,6 +160,12 @@ All notable changes to Amicus are documented here. Format follows
   (was 1M), input ~$0.05/M and output ~$0.10/M on OpenRouter (was ~$0.69/M and ~$1.38/M), output
   ceiling 131,072 (was 384,000). Bench-only; the shipped alias table is unchanged. The alias-shadow
   notice now names `deepseek` beside `qwen` as a bench pin that differs from the shipped one.
+- **`amicus continue` / `amicus resume` reject `--thinking` instead of ignoring it (#218 PR 4).**
+  The flag parses on every command (the unknown-flag gate is built from the whole usage string), but
+  neither handler ever read it and the vocabulary check runs only on `start` — so a level typed on a
+  continuation, valid or not, used to exit 0 having done nothing. Both now fail with `BAD_ARGS`
+  naming where the level belongs, the same way `--tag` already does. Forwarding a level on
+  `continue` is filed, not built.
 
 ### Fixed
 

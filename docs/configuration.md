@@ -182,7 +182,17 @@ P1, PR 2, PR 3 and PR 4).
   its reservation gets the death name but no Note. Separately, L5 settles the catalog question PR 2
   parked: a descriptor above the engine's own ceiling is clamped to that ceiling with a thinking
   variant (K10: 70,000 + 31,999 → 64,000) and without one (L5: 70,000 + flag 100,000 → 64,000 on
-  haiku), so a catalog row whose ceiling exceeds the engine's is harmless.
+  haiku), so a catalog row whose ceiling exceeds the engine's is harmless. The opposite direction is
+  not harmless, and #218 PR 4's `VARIANT_OVER_BUDGET` fit inherits it: the fit judges against the
+  ceiling **Amicus's own catalog** carries for the model — the number it clamped the descriptor to —
+  because once a budget is set `/config/providers` echoes that descriptor back (M3) and the engine's
+  own ceiling is no longer readable there. The two can disagree without either being stale in the
+  ordinary sense: the engine serves its bundled catalogue until its startup models.dev fetch lands,
+  which moved a measured ceiling by 104,858 tokens (kimi 1,048,576 cold vs 943,718 warm), so
+  `amicus models --refresh` can open the gap rather than close it. Where a catalog row sits BELOW
+  the engine's ceiling and the budget sits between them, the fit stays silent and a variant's
+  `budget + N` reaches the wire unrefused. No `doctor` row detects that: `output-budget` counts any
+  route with a known ceiling as healthy, and `catalog` is an age heuristic that compares no numbers.
 
 This addresses reservation *rejections* and *clips*. It does **not** stop a reasoning-heavy model
 from spending its whole allowance on reasoning and emitting nothing — that is governed by reasoning

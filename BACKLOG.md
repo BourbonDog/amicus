@@ -7511,10 +7511,10 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   (M13). Nothing to build: Mode 1 (the credit pre-check) is an OpenRouter behaviour, and Mode 2's
   lever there is the effort, which PR 4 now sends. The two `[Unreleased]` sentences were corrected in
   PR 4 (Task 6).
-- [ ] **Whole-branch review of #218 PR 4 — six minors deferred, plus m10 (2026-09-06).** EP-5: a provider
-  absent from the `/config/providers` dump waits the full 5 s before the level is sent unverified —
-  fold into a `providerMissing` stop when the wait shape is next touched. REC-4: `pack save
-  --from-run <wave>` reads `legMeta.thinking`, a key no leg document carries — read `variant`
+- [ ] **Whole-branch review of #218 PR 4 — six minors deferred, plus m10 (2026-09-06).** EP-5: a
+  provider absent from the `/config/providers` dump waits the full 5 s before the level is sent
+  unverified — fold into a `providerMissing` stop when the wait shape is next touched. REC-4: `pack
+  save --from-run <wave>` reads `legMeta.thinking`, a key no leg document carries — read `variant`
   instead. VCMD-5 / VCMD-6: the doctor `output-budget` row's default-state wording lacks the
   direct-openai exception, and an alias set made only of direct openai routes prints "0 of 0 alias
   routes". PR-6: the probe's `want.update.configJson` pin matches any path ending `/config.json`,
@@ -7524,7 +7524,10 @@ checks: 59 matched, 0 mismatched (none), 2 recorded
   and re-file. **Council #235 r1 (D2/B1):** separating "the engine knows the model and it declares
   no variants" from "the engine does not know it yet" needs a cell the dump lacks once a descriptor
   is echoed; amicus's own catalog could carry models.dev's `reasoning_options` (fetched already for
-  the ceilings) and settle it at read time — filed.
+  the ceilings) and settle it at read time — filed. **Council #235 r1 (D6):** `continue`/`resume`
+  now REJECT `--thinking`; letting a continuation carry its own level (validate + send on those
+  paths, and what a resumed run should do with the parent's level) is the feature that would replace
+  the rejection — filed.
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi
