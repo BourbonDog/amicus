@@ -48,6 +48,17 @@ const { spawnSync } = require('child_process');
  *
  * DELIBERATELY NARROW. A stall must still fall back, or the Node-24 workaround
  * this whole module exists for is destroyed.
+ *
+ * AND THE VERIFICATION NO LONGER DECAYS (v4.9.6 F4, council seat B4). "Verified
+ * against the installed versions" was true when it was written and had nothing
+ * keeping it true: every test for this control fed robustExtract a hand-typed
+ * message, so an upstream bump could reword a refusal and quietly demote it back
+ * into the cleanDir + native-retry laundering with no test red.
+ * tests/sidecar/unzip-refusal-strings.js now drives the INSTALLED extract-zip and
+ * yauzl into producing each of these four for real — over a zip it builds byte by
+ * byte, and a real directory symlink for the one extract-zip raises itself — and
+ * fails if this list stops recognising what they actually say. It also fails on a
+ * pattern no real message produces, which is the STALLTERMINAL shape.
  */
 const UNSAFE_PATTERNS = [
   /^Out of bound path /,
@@ -283,4 +294,5 @@ async function robustExtract(zip, opts = {}) {
   throw err;
 }
 
-module.exports = { robustExtract, nativeUnzipPlan, IDLE_MS, MAX_MS };
+// UNSAFE_PATTERNS is exported for the F4 upstream-drift probe (see its docblock).
+module.exports = { robustExtract, nativeUnzipPlan, IDLE_MS, MAX_MS, UNSAFE_PATTERNS };
