@@ -6931,6 +6931,62 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.5 records — the Electron trust boundary (2026-09-07)
+
+**✅ v4.9.5 RELEASED 2026-09-07** — tag `v4.9.5` → `62f2e633` (`--no-ff` merge of `release/v4.9.5`,
+release commit `ecc370ed`), npm `amicus@4.9.5`, MCP Registry `4.9.5`/`active` (page 2 of 2, 40
+versions), GH Release live. Gates: 612 suites / 9,616 tests / 8 skipped, exit 0 on the merge commit;
+lint, size, citations, secrets, `validate-docs --full` and `generate-docs --check` all 0. **The
+shipped tarball's `docs/ROADMAP.md` names v4.9.5** — the first release where it does, because the
+status lines moved into the RELEASE commit instead of the post-ship pass (the defect filed at the
+4.9.4 cut, fixed at this one).
+
+**What it closed.** A hostile repository's `.npmrc` reaches any npm-spawned child as
+`npm_config_electron_mirror`; `@electron/get` ranks that above its own default and validates against
+a `SHASUMS256.txt` from the same redirected host; amicus passed no digest. Amicus's own skills, docs
+and Claude Code registration invoke it as `npx -y amicus@latest`, whose npm prefix is the current
+directory, and amicus launches what it extracts. Four controls: the download pins the sha256 from the
+electron package's own `checksums.json`; a cached artifact is hashed before extraction with a fenced
+delete on mismatch; the installer spawn env is scrubbed case-insensitively of every repo-plantable
+name plus `npm_config_platform`/`arch`; a path-traversal refusal is terminal at both call sites.
+
+**Method note worth keeping.** Three adversarial review lenses found THREE bypasses that the
+implementer's own seven green mutants missed, because the mutants tested code sabotage and the
+bypasses were reachable by DATA: (1) `version` was read from the untrusted `<electronDir>/package.json`,
+so an attacker-chosen version string demoted the self-anchor and let the scanned tree vouch for its
+own bytes — reproduced as `{repaired:true}` over `POISONED-BYTES`; (2) the env scrub was
+case-sensitive, and a repo `package.json` `config` key reaches the child with case PRESERVED;
+(3) `UNZIP_UNSAFE_ARCHIVE` was caught bare at both `repairElectron` call sites and laundered back
+into the retry the control forbids. **A mutant proves a control is wired, not that its inputs are
+trusted.**
+
+- [ ] **The `no-digest` verdict is fail-open on an attacker-chosen version (measured 2026-09-07 by
+  the controller's own probe, after the repair).** The gate refuses an artifact that CONTRADICTS the
+  anchor — probe: `extract()` never called, file removed. But an `<electronDir>/package.json` naming
+  a version the anchor holds no entry for yields `no-digest`, and those bytes ARE extracted (marked
+  `unverified`). The rule is deliberate — refusing would strand every Electron predating
+  `checksums.json` in a re-download loop — but nothing distinguishes "old electron, no table" from
+  "directory that just named a version I have no entry for", and only the second is suspicious.
+  Reachable only with local write access to an npx cache (the `doctor --fix` scan), not from the
+  remote `.npmrc` chain. `docs/troubleshooting.md` was corrected in `594522c0` because it claimed the
+  stronger property.
+- [ ] **`registry=` in a repo `.npmrc` dominates every control in this release.** Under
+  `npx -y amicus@latest`, amicus itself, the electron tarball and its `checksums.json` would all come
+  from the attacker, and the pin would faithfully vouch for attacker bytes. amicus cannot close it.
+  Open question for the owner: should `doctor` DETECT an unexpected registry and say so? Nothing
+  currently tells a user their npm is pointed somewhere they did not choose.
+- [ ] **Deferred from the design of record, for a follow-up PR with the council bench on it:**
+  extraction containment (M8) and the weak success signal (M10) — the stage-and-promote rewrite whose
+  own author conceded an unmeasured "no dist at all" branch on Windows; and M11, the `SystemRoot`-derived
+  bsdtar path and bare `powershell` off PATH, whose corrected shape KEEPS the PATH fallback rather than
+  dropping both win32 strategies on a hardened image.
+- [ ] **Upstream, never reported: `@electron/get`'s `mirrorVar()` ranks `npm_config_electron_*` above
+  both `options` and the default,** which makes every consumer of that library redirectable by any
+  repository the user happens to be sitting in. The reproduction is two lines of `.npmrc`.
+- [ ] **These twelve commits went straight to `main`, not through a council-review PR** — this repo's
+  norm for a change of this size. It followed from a fix-and-cut instruction and is recorded here
+  rather than left implicit.
+
 ## v4.9.4 records — dispositions and rulings made in-cycle (2026-09-04)
 
 **✅ v4.9.4 RELEASED 2026-09-07** — tag `v4.9.4` → `c45dfbaa`, main `c45dfbaa` (`--no-ff` merge of
