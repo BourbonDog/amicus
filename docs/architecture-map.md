@@ -114,6 +114,7 @@ src/
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── electron-state.js  # Electron install-state probes (#76).
+│   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor, the gate, and the env scrub.
 │   ├── fallback-chains.js
 │   ├── fanout-budget.js
 │   ├── fanout-leg-fallback.js
@@ -554,6 +555,7 @@ evals/
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
+| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor, the gate, and the env scrub. | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
