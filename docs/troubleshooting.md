@@ -302,12 +302,13 @@ row for it is instead the engine's own ceiling, straight from the dump, K5/K12),
 through OpenRouter (a variant leaves the reservation at the budget there — M1, M9), or use an
 adaptive-thinking model such as `claude-sonnet-5`. When the reason says to refresh first, the
 ceiling it named came from Amicus's catalog rather than the engine, and the two can disagree. A
-model the engine's catalogue does not know yet
-(a custom or local model, or one newer than the engine's bundled list before its startup refresh
-lands) is never refused: the level is sent after a bounded wait and the run logs `Variant sent
-unverified`; the same applies, with a budget set, to a model whose dump reports no variants — the
-echoed descriptor hides whether the engine knows it (M3); the leg document carries
-`variantUnverified: true`.
+model the engine's catalogue does not know yet (a custom or local model, or one newer than the
+engine's bundled list before its startup refresh lands) is never refused: the level is sent after a
+bounded wait, the run logs `Variant sent unverified`, and the same note is printed as a `Notice:`
+line on stderr — the structured log alone is dropped at the shipped default log level, so stderr
+is where you will actually see it. The same applies, with a budget set, to a model whose dump
+reports no variants — the echoed descriptor hides whether the engine knows it (M3); the leg
+document carries `variantUnverified: true`.
 
 ---
 

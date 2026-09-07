@@ -201,7 +201,7 @@ async function createSession(client, directory) {
  * @param {number|null} [options.outputBudget] - the budget the engine serving this session
  *   was spawned with (the server handle's `outputBudget`); `null` = unset; omitted = unknown.
  *   Only the fit check reads it.
- * @param {object} [options._declaration] - test seam: readModelDeclaration's opts (waitMs/pollMs/sleep/now/catalogCeiling/readCache)
+ * @param {object} [options._declaration] - test seam: readModelDeclaration's opts (waitMs/pollMs/sleep/now/catalogCeiling/readCache/readTimeoutMs — the per-read deadline, council #235 r2 A1)
  * @param {{aborted: boolean}} [options.signal] - abandon signal (headless.js): when set before the send, nothing is sent
  * @param {object} [options.watchdog] - IdleWatchdog instance to signal busy/idle around the API call
  * @param {string} [options.directory] - Optional project directory to scope the
