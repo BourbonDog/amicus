@@ -2,11 +2,11 @@
 'use strict';
 
 /**
- * The Electron trust boundary, WIRED (v4.9.5).
+ * The Electron trust boundary, WIRED (v4.9.5 C1-C3).
  *
  * tests/sidecar/electron-trust.test.js pins the primitives. This suite pins the
- * places they are actually load-bearing, because a gate nobody calls is a gate
- * that does not exist:
+ * three places they are actually load-bearing, because a gate nobody calls is a
+ * gate that does not exist:
  *
  *   C1  controlledProvision passes `checksums` to downloadArtifact, so
  *       @electron/get writes a LOCAL SHASUMS256.txt and never fetches one from a
@@ -14,9 +14,11 @@
  *   C2  repairElectron HASHES a cached zip against the anchor BEFORE
  *       extractFromCache can run, deletes a mismatch only through the fence, and
  *       treats "no anchor" as a mark rather than a refusal.
+ *   C3  runInstaller spawns electron's own install.js with a SCRUBBED env, so a
+ *       blocked attacker cannot be funnelled into an unpinned downloader.
  *
  * Named mutants this suite is the tripwire for: DIGESTNOTCHECKED, POISONKEPT,
- * FENCEDROPPED, ANCHORFROMTARGET.
+ * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERENVLEAKED.
  *
  * No network, no real extraction: downloadArtifact, extract, spawn and the lock
  * are injected everywhere.
@@ -265,5 +267,47 @@ describe('C2 — the poison delete is FENCED', () => {
     });
     expect(extract).not.toHaveBeenCalled();
     expect(res.integrity).toBe('unreadable');
+  });
+});
+
+describe('C3 — the installer spawn env is SCRUBBED (INSTALLERENVLEAKED)', () => {
+  const HOSTILE = {
+    npm_config_electron_mirror: 'http://attacker.example/evil/',
+    npm_config_electron_use_remote_checksums: '1',
+    npm_package_config_electron_mirror: 'http://attacker.example/evil/',
+    npm_config_platform: 'linux',
+    npm_config_arch: 'arm64',
+    ELECTRON_MIRROR: 'https://mirror.corp/electron/',
+  };
+  let saved;
+  beforeEach(() => {
+    saved = {};
+    for (const [k, v] of Object.entries(HOSTILE)) { saved[k] = process.env[k]; process.env[k] = v; }
+  });
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) { delete process.env[k]; } else { process.env[k] = v; }
+    }
+  });
+
+  test('the last-resort install.js spawn gets no repo-plantable electron name', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const downloadArtifact = jest.fn(async () => { throw new Error('network blocked'); });
+    const { spawn } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const env = spawn.mock.calls[0][2].env;
+    expect(env.npm_config_electron_mirror).toBeUndefined();
+    expect(env.npm_config_electron_use_remote_checksums).toBeUndefined();
+    expect(env.npm_package_config_electron_mirror).toBeUndefined();
+    expect(env.npm_config_platform).toBeUndefined();
+    expect(env.npm_config_arch).toBeUndefined();
+    // amicus's own resolution is pinned under the names install.js ranks first...
+    expect(env.ELECTRON_INSTALL_PLATFORM).toBe(PLATFORM);
+    expect(env.ELECTRON_INSTALL_ARCH).toBe(ARCH);
+    // ...and the machine owner's BARE mirror survives, because a repo cannot set it.
+    expect(env.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
+    // process.env itself is never mutated.
+    expect(process.env.npm_config_electron_mirror).toBe(HOSTILE.npm_config_electron_mirror);
   });
 });

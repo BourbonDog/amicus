@@ -28,7 +28,7 @@ const { resolveCacheRoots } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
 const { controlledProvision, rejectCachedZip } = require('./electron-provision');
-const { artifactFileName, electronTrustPolicy, resolveAnchor, verifyArtifact } = require('./electron-trust');
+const { artifactFileName, electronTrustPolicy, resolveAnchor, scrubbedChildEnv, verifyArtifact } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
@@ -145,10 +145,16 @@ function verifyExtractOutcome({ electronDir, platform, fs }) {
   });
 }
 
-/** Drive electron's own install.js with force_no_cache semantics. */
-function runInstaller({ electronDir, force, spawn }) {
+/**
+ * Drive electron's own install.js with force_no_cache semantics. C3: the spawn env
+ * is SCRUBBED — install.js honours `npm_config_electron_mirror` AND
+ * `npm_config_electron_use_remote_checksums` (which turns its own bundled pin off),
+ * so `{...process.env}` here would funnel a blocked attacker into an unpinned
+ * downloader and undo the pin on the route above.
+ */
+function runInstaller({ electronDir, force, spawn, platform, arch }) {
   const installScript = path.join(electronDir, 'install.js');
-  const env = { ...process.env };
+  const env = scrubbedChildEnv({ env: process.env, platform, arch });
   if (force) {
     env.force_no_cache = 'true';
   }
@@ -271,7 +277,7 @@ async function repairElectron({
       // Controlled download/extract failed (network, checksum, unzip). Try the
       // installer as a LAST resort — it can NEVER short-circuit the honest
       // verify below; we always return isElectronUsable().
-      try { runInstaller({ electronDir, force, spawn }); } catch { /* ignore */ }
+      try { runInstaller({ electronDir, force, spawn, platform, arch }); } catch { /* ignore */ }
     }
     // A NON-throwing controlled extract that left no usable exe is the
     // AV-quarantine signature — surface it actionably (no false success, no
