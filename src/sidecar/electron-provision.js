@@ -18,7 +18,7 @@ const path = require('path');
 
 const { resolveCacheRoots } = require('./electron-cache');
 const { releaseStage, stageArtifact } = require('./electron-stage');
-const { artifactFileName, expectedDigest } = require('./electron-trust');
+const { artifactFileName, expectedDigest, scrubbedChildEnv } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
@@ -51,7 +51,17 @@ function cacheRootFor(env = process.env) {
  * SHASUMS256.txt, which is what a rebuild publishes. That is a real downgrade,
  * so it is stated out loud on stderr every time rather than happening quietly —
  * and it is reachable ONLY through a bare env name a repository cannot plant.
- * @returns {Promise<void>}
+ *
+ * F3 — AND IT IS MARKED, NOT ONLY LOGGED (council seats C1 + B3). Both
+ * `CHANGELOG.md` and `docs/troubleshooting.md` promise that an artifact no
+ * published digest covers is "extracted and marked `unverified`". v4.9.5 kept
+ * that promise on the CACHE route only: a no-digest DOWNLOAD silently omitted
+ * `checksums`, extracted whatever the mirror served, and returned a plain
+ * `{repaired:true}` with no mark and no line. The returned `pinned` flag is what
+ * makes the promise true on this route too; `repairElectron` folds
+ * `unverified:true` into its result whenever it is false.
+ * @returns {Promise<{pinned:boolean}>} pinned:false = these bytes were vouched
+ *   for only by the mirror that served them.
  */
 async function controlledProvision({
   electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
@@ -63,6 +73,11 @@ async function controlledProvision({
     log('[amicus] WARNING: AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — downloading without the published');
     log(`[amicus]   sha256 pin for ${fileName}; its digest comes from the mirror you are using.`);
     digest = null;
+  } else if (!digest) {
+    log(`[amicus] NOTE: no published sha256 for ${fileName} (this electron package ships no`);
+    log('[amicus]   checksums.json entry for it), so the download could not be pinned: its bytes');
+    log('[amicus]   are checked against the SHASUMS256.txt the mirror itself serves. The result');
+    log('[amicus]   is reported as unverified.');
   }
   const zip = await downloadArtifact({
     version,
@@ -85,6 +100,7 @@ async function controlledProvision({
   } finally {
     releaseStage({ stage, fs, log });
   }
+  return { pinned: !!digest };
 }
 
 /**
@@ -165,6 +181,22 @@ function rejectCachedZip({ gate, zip, fileName, stage = null, mayDelete = false,
   };
 }
 
+/**
+ * Drive electron's own install.js with force_no_cache semantics. C3: the spawn env
+ * is SCRUBBED — install.js honours `npm_config_electron_mirror` AND
+ * `npm_config_electron_use_remote_checksums` (which turns its own bundled pin off),
+ * so `{...process.env}` here would funnel a blocked attacker into an unpinned
+ * downloader and undo the pin on the route above.
+ */
+function runInstaller({ electronDir, force, spawn, platform, arch }) {
+  const installScript = path.join(electronDir, 'install.js');
+  const env = scrubbedChildEnv({ env: process.env, platform, arch });
+  if (force) {
+    env.force_no_cache = 'true';
+  }
+  return spawn(process.execPath, [installScript], { env, stdio: 'ignore' });
+}
+
 /** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
 function isUnsafeArchive(err) {
   return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
@@ -203,4 +235,5 @@ function refuseUnsafeArchive({ err, fileName, log = () => {} }) {
 
 module.exports = {
   cacheRootFor, controlledProvision, mayDeleteRejectedZip, rejectCachedZip, isUnsafeArchive, refuseUnsafeArchive,
+  runInstaller,
 };

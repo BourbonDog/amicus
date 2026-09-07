@@ -25,10 +25,10 @@ const { cachedZip } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
 const {
-  controlledProvision, isUnsafeArchive, mayDeleteRejectedZip, refuseUnsafeArchive, rejectCachedZip,
+  controlledProvision, isUnsafeArchive, mayDeleteRejectedZip, refuseUnsafeArchive, rejectCachedZip, runInstaller,
 } = require('./electron-provision');
 const { releaseStage, stageArtifact } = require('./electron-stage');
-const { artifactFileName, electronTrustPolicy, resolveAnchor, scrubbedChildEnv, verifyArtifact } = require('./electron-trust');
+const { artifactFileName, electronTrustPolicy, resolveAnchor, verifyArtifact } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
@@ -115,22 +115,6 @@ function verifyExtractOutcome({ electronDir, platform, fs }) {
     resolveExe: () => resolveElectronBinary({ electronDir, platform, fs }),
     platform,
   });
-}
-
-/**
- * Drive electron's own install.js with force_no_cache semantics. C3: the spawn env
- * is SCRUBBED — install.js honours `npm_config_electron_mirror` AND
- * `npm_config_electron_use_remote_checksums` (which turns its own bundled pin off),
- * so `{...process.env}` here would funnel a blocked attacker into an unpinned
- * downloader and undo the pin on the route above.
- */
-function runInstaller({ electronDir, force, spawn, platform, arch }) {
-  const installScript = path.join(electronDir, 'install.js');
-  const env = scrubbedChildEnv({ env: process.env, platform, arch });
-  if (force) {
-    env.force_no_cache = 'true';
-  }
-  return spawn(process.execPath, [installScript], { env, stdio: 'ignore' });
 }
 
 /**
@@ -256,14 +240,17 @@ async function repairElectron({
     // Attempt 2 (online): CONTROLLED download+extract instead of a blind install.js
     // spawn — the SAME @electron/get api install.js uses, extracted offline, then the
     // REAL usability reported. A download that produced no usable exe is a FAILURE (#53).
-    let controlledExtracted = false;
+    // A non-null `provision` means download + extract returned without throwing;
+    // its `pinned:false` means no `checksums` went out (no anchor row for this
+    // artifact, or the hatch dropped the pin), so the bytes were vouched for only
+    // by the mirror — F3 marks that, as both docs already promise it does.
+    let provision = null;
     try {
       const downloadArtifact = await resolveDownloadArtifact();
-      await controlledProvision({
+      provision = await controlledProvision({
         electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
         fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
-      });
-      controlledExtracted = true; // download + extract returned without throwing
+      }) || { pinned: true };
     } catch (provisionErr) {
       // C4 again: an unsafe archive here must NOT reach runInstaller, which would
       // re-download and re-extract it through an extractor amicus does not drive.
@@ -275,13 +262,15 @@ async function repairElectron({
     }
     // A NON-throwing controlled extract that left no usable exe is the
     // AV-quarantine signature — surface it actionably (no false success, no loop).
-    const out = controlledExtracted
+    const out = provision
       ? verifyExtractOutcome({ electronDir, platform, fs })
       : { repaired: isElectronUsable({ electronDir, platform, fs }) };
     // A refusal the download did not rescue must reach doctor and the postinstall
     // notice; plain {repaired:false} is what made a REFUSED artifact read as an
     // ordinary "not provisioned" everywhere outside the cacheOnly path.
     if (!out.repaired && refusal) { return { ...out, integrity: refusal.integrity, reason: [refusal.reason, out.reason].filter(Boolean).join(' ') }; }
+    // F3: the SAME mark the cache route already applies, on the route that omitted it.
+    if (out.repaired && provision && !provision.pinned) { return { ...out, unverified: true }; }
     return out;
   } finally {
     try { lock.release(); } catch { /* ignore */ }
