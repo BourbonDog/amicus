@@ -151,6 +151,25 @@ describe('checkVariant — an additive shape with no ceiling anyone declared (co
     // the one thing this remedy must never say: raise the budget to a ceiling that does not exist
     expect(v.reason).not.toMatch(/Raise outputBudget to at least/);
     expect(v.reason).not.toMatch(/null|undefined|NaN/);
+    // council #235 r4 wave 5 repair, two more ways this one remedy misleads. (1) A declared
+    // `limit.output` is a DESCRIPTOR, not a clamp on the sum: K9 measured `limit.output 40000` +
+    // `max` reserving 63999, and K3/K4/K10 record the sum clamped at the model's REAL ceiling
+    // "regardless of what the descriptor or the flag said". Named mutant "DECLAREDLIMITCLAMPS":
+    // restore "an `output` ceiling there is what clamps the sum (K3/K10)". (2) The obvious value
+    // to declare — the budget itself — makes `budget < ceiling` FALSE, so the fit falls silent and
+    // the same 40000 leg sends verified; only `budget - N` fits (M17), and the remedy has to say
+    // so. Named mutant "REMEDYWITHOUTFIT": drop the `at most` clause.
+    expect(v.reason).not.toContain('is what clamps the sum');
+    expect(v.reason).toContain('at most 8000');
+    expect(v.reason).toContain("only the model's real ceiling does that (K3/K9/K10)");
+    expect(v.reason).toContain('silences this fit while the leg still reserves 16000 over the budget');
+  });
+
+  it('says no `output` value fits when the thinking budget alone exceeds the whole budget', () => {
+    const v = checkVariant({ variant: 'high', model: 'anthropic/my-haiku', declaration: NOCEILING, outputBudget: 8000 });
+    expect(v.reason).toContain('would reserve 24000 (8000 + 16000, with no ceiling declared anywhere to clamp it) — 16000 over the budget');
+    expect(v.reason).toContain('no value fits');
+    expect(v.reason).not.toMatch(/at most (0|-\d+)/);
   });
 
   it('leaves the shapes a null ceiling never endangered alone: no budget, and an entry with no thinking budget', () => {
@@ -418,8 +437,30 @@ describe('readModelDeclaration — the wait keeps the bound it advertises (counc
     expect(elapsed).toBeLessThan(1250);
     expect(d.waitedMs).toBeLessThan(1250);
     expect(d.known).toBe(false);
-    // the last read was cut off by the wait's own remaining budget, not by its 2 s default
-    expect(d.unreadable).toMatch(/aborted/);
+    // council #235 r4 wave 5 repair: the last read is cut short by the wait's OWN remainder, and
+    // that is not evidence the endpoint could not be read — this endpoint answered every read it
+    // was given time for. Reporting it `unreadable` routes the leg to the note that says
+    // "/config/providers could not be read (...; one read, no wait)" after several reads and a
+    // full wait, on an engine answering inside the 36-285 ms M12 measured. The cold-catalogue
+    // outcome is the true one here. Named mutant "BUDGETABORTUNREADABLE": drop the `left <
+    // readTimeout` suppression in the loop and this comes back as `read threw: ... aborted`.
+    expect(d.unreadable).toBeNull();
+  }, 10000);
+
+  it('an in-loop read given its FULL deadline and failing is still unreadable (the suppression is scoped to what the wait truncated)', async () => {
+    // The guard on the repair above: only a read the WAIT truncated is suppressed. A read that got
+    // every millisecond of its own deadline and still failed is a real read failure and must reach
+    // the note. Mutant "SUPPRESSALLINLOOP": drop the `left < readTimeout` conjunct — this goes null.
+    let call = 0;
+    const providers = jest.fn((o) => new Promise((resolve, reject) => {
+      if (++call === 1) { resolve({ data: { providers: COLD } }); return; }
+      if (o && o.signal) { o.signal.addEventListener('abort', () => reject(o.signal.reason)); }
+    }));
+    const d = await readModelDeclaration({ config: { providers } }, 'openrouter/moonshotai/kimi-k3', {
+      waitMs: 5000, pollMs: 10, readTimeoutMs: 40, ...NO_CATALOG,
+    });
+    expect(providers).toHaveBeenCalledTimes(2);
+    expect(d.unreadable).toBe('read threw: The operation was aborted due to timeout');
   }, 10000);
 
   it('the never-answering endpoint still ends on the FIRST read, unreadable (council #235 r2 A1, unchanged)', async () => {

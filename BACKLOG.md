@@ -7595,7 +7595,18 @@ line the next time the matrix is run end to end.
   `config.get()` read could subtract config-set cells (any key but `limit`) and fall back to the
   unknown/wait branch, at the cost of one extra read per variant send — filed, not built. Measured
   alongside: a config `reasoning: true` makes the engine synthesize a full `variants` map, so that
-  disjunct is config-reachable too.
+  disjunct is config-reachable too. **Council #235 r4 wave 5 repair, the SIBLING message:** the
+  wave-5 reword covered the empty-set `VARIANT_UNDECLARED` reason only, so the non-empty-set one
+  (`src/utils/engine-variants.js`) still says "the engine's catalogue lists <levels> for it" — the
+  same provenance the merged view cannot prove, and reachable through exactly the synthesized
+  `variants` map measured above. It is message-only and pre-existing (unchanged since before
+  `d1dfdb1d`), and its exact text is pinned byte-for-byte in five test files
+  (`tests/utils/engine-variants.test.js`, `tests/headless-variant.test.js`,
+  `tests/opencode-client.test.js`, `tests/start-json.test.js`,
+  `tests/sidecar/interactive-variant.test.js`) and quoted in `docs/troubleshooting.md`, so it is
+  filed rather than folded into a repair pass: reword it to "the row the engine returned for it
+  lists <levels> (/config/providers, its merged view of its own catalogue and your opencode
+  config)" and update all six pins together.
 - [ ] **Decide whether the once-only Stage-1 retry should fire on an `OUTPUT_LENGTH` death (#218
   PR 3, R5).** The retry relaunches the seat with the same reservation and the same default effort,
   so it likely dies the same way and bills the reservation twice ($0.63 → $1.26 on the #218 kimi

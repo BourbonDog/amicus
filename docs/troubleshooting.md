@@ -284,8 +284,8 @@ catalogue can declare a different set than the live one for the same model (PR 4
 `openrouter/anthropic/claude-haiku-4.5` `high`/`max` cold, `low`/`medium`/`high` warm), so a level
 refused on one run can be accepted on the next; the reason lists the set in force, or says the row
 declares none at all. The dump says whose row it is: Amicus writes exactly one cell into a model's
-entry (`limit`, at `src/utils/config.js:406`), so a row that also carries the catalogue's release
-date, family, display name, pricing or capabilities is the engine's own declaration, and an empty
+entry (`limit`, at `src/utils/config.js:406`), so a row that also carries a release
+date, family, display name, pricing or capabilities reads as a declaration, and an empty
 `variants` there is a real answer (record M23). That dump is the engine's MERGED view of its own
 catalogue and your `opencode.json`, so declaring model metadata there (a display name, family,
 release date, pricing or capabilities) makes Amicus read the row as declared: a model you add that
@@ -293,7 +293,8 @@ way with no `variants` block is refused rather than waited for — add the block
 `--thinking`. A declared
 level whose entry carries a thinking budget the engine adds on top of the reservation (direct
 Anthropic Haiku 4.5 — M2; Opus 4.5 declares the same shape, M0) is refused when `outputBudget`
-is below the model's ceiling, because the leg would reserve more than the budget promises. The
+is below the model's ceiling — or when no ceiling is declared anywhere, since nothing then clamps
+the sum — because the leg would reserve more than the budget promises. The
 reason names the model, the level, what the catalogue lists (or that it lists nothing at all), and
 — for the budget case — the exact reservation, the budget and the ceiling.
 
@@ -306,7 +307,13 @@ not a price). `amicus models` does not list variants; the declared set is in the
 For `VARIANT_OVER_BUDGET`: raise `outputBudget` to at least the ceiling the reason names (the sum is
 then clamped to the ceiling — the number the reason names is Amicus's own catalog's ceiling for the
 model, which is what the fit can read once a budget is set, M3; for a model Amicus's catalog has no
-row for it is instead the engine's own ceiling, straight from the dump, K5/K12), route the model
+row for it is instead the engine's own ceiling, straight from the dump, K5/K12). When neither
+Amicus's catalog nor the dump declares a ceiling, the reason names none and says so: declare a
+`limit` for the model in your `opencode.json` instead — its `output` has to leave room for the
+thinking budget the engine adds on top, so at most `outputBudget` minus that budget (a value at or
+above `outputBudget` silences the check without shrinking what the leg reserves, and declaring one
+never clamps the sum — only the model's real ceiling does that, K3/K9/K10) — or clear
+`outputBudget`. You can also route the model
 through OpenRouter (a variant leaves the reservation at the budget there — M1, M9), or use an
 adaptive-thinking model such as `claude-sonnet-5`. When the reason says to refresh first, the
 ceiling it named came from Amicus's catalog rather than the engine, and the two can disagree. A
