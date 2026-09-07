@@ -21,10 +21,13 @@ const fsDefault = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { resolveCacheRoots } = require('./electron-cache');
+const { cachedZip } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
-const { controlledProvision, isUnsafeArchive, refuseUnsafeArchive, rejectCachedZip } = require('./electron-provision');
+const {
+  controlledProvision, isUnsafeArchive, mayDeleteRejectedZip, refuseUnsafeArchive, rejectCachedZip,
+} = require('./electron-provision');
+const { releaseStage, stageArtifact } = require('./electron-stage');
 const { artifactFileName, electronTrustPolicy, resolveAnchor, scrubbedChildEnv, verifyArtifact } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
 
@@ -90,34 +93,6 @@ function isElectronUsable({ electronDir = defaultElectronDir(), env = process.en
   } catch {
     return false;
   }
-}
-
-/**
- * Locate a previously-downloaded electron zip in the env-configurable cache
- * roots. Walks <root>/<sha>/electron-v<ver>-<platform>-<arch>.zip.
- * @returns {string|null} absolute zip path, or null when no cache hit.
- */
-function cachedZip({ version, platform = process.platform, arch = process.arch, env = process.env, fs = fsDefault } = {}) {
-  const zipName = `electron-v${version}-${platform}-${arch}.zip`;
-  for (const root of resolveCacheRoots(env)) {
-    let shaDirs;
-    try {
-      shaDirs = fs.readdirSync(root);
-    } catch {
-      continue;
-    }
-    for (const sha of shaDirs) {
-      const candidate = path.join(root, sha, zipName);
-      try {
-        if (fs.existsSync(candidate)) {
-          return candidate;
-        }
-      } catch {
-        /* ignore unreadable subdir */
-      }
-    }
-  }
-  return null;
 }
 
 /** Restore path.txt so electron/index.js resolves the freshly-extracted exe. */
@@ -223,32 +198,56 @@ async function repairElectron({
     // Attempt 1: extract from cache (always preferred, fully offline).
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
-      // C2: anything that can write the cache dir can swap these bytes, so HASH
-      // BEFORE EXTRACT — extractFromCache must be unreachable for an artifact the
-      // anchor contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
-      const gate = verifyArtifact({ zip, anchor, fileName, policy, fs, log: stderrLog });
-      if (!gate.allowed) {
-        refusal = rejectCachedZip({ gate, zip, fileName, env: process.env, fs, log: stderrLog });
-        if (cacheOnly) { return refusal; }
-        // else: drop into the controlled download below.
-      } else {
-        try {
-          await extractFromCache({ zip, electronDir, platform, extract, fs });
-          // Non-throwing extract w/ absent exe = the AV-quarantine signature.
-          const outcome = verifyExtractOutcome({ electronDir, platform, fs });
-          return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
-        } catch (extractErr) {
-          // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
-          // deleted-and-retried, nor reported as "corrupt" — it stops here.
-          if (isUnsafeArchive(extractErr)) { return refuseUnsafeArchive({ err: extractErr, fileName, log: stderrLog }); }
-          // Corrupt cached artifact: delete the bad zip so it can't poison the
-          // cache, then fall through to a forced fresh download (unless offline).
-          try { fs.rmSync(zip, { force: true }); } catch { /* ignore */ }
-          if (cacheOnly) {
-            return { repaired: false, reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}` };
-          }
+      // F1: MOVE the artifact into a private staging dir, then hash and extract
+      // THERE. v4.9.5 hashed the cache path and re-opened it for the extract, so a
+      // cache-dir writer — the exact actor C2 exists to stop — could swap the bytes
+      // in between and have the unhashed replacement extracted. releaseStage puts
+      // them back on EVERY exit path, except where a refusal below marks them for
+      // the delete v4.9.5 already performed.
+      // THE FENCE IS TAKEN BEFORE THE MOVE. mayDeleteRejectedZip realpaths the
+      // artifact through containsOnDisk, which FAILS CLOSED on anything it cannot
+      // resolve — and a staged artifact no longer exists at its cache path. Asking
+      // after the move would answer "no" for every artifact and silently switch the
+      // poison delete off, which is the same class of bug as reading a rule off the
+      // surface its own writer just wrote.
+      const mayDelete = mayDeleteRejectedZip({ zip, fileName, env: process.env });
+      const stage = stageArtifact({ zip, fileName, fs, log: stderrLog });
+      try {
+        // C2: extraction must be unreachable for an artifact the anchor
+        // contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
+        const gate = verifyArtifact({ zip: stage ? stage.path : zip, anchor, fileName, policy, fs, log: stderrLog });
+        if (!gate.allowed) {
+          refusal = rejectCachedZip({ gate, zip, stage, mayDelete, fileName, fs, log: stderrLog });
+          if (cacheOnly) { return refusal; }
           // else: drop into the controlled download below.
+        } else if (!stage) {
+          // Bytes amicus could not take private are never extracted: unstaged, the
+          // hash above vouches for a file its writer still controls.
+          if (cacheOnly) { return { deferred: true, reason: `Cached electron zip for v${version} (${platform}-${arch}) could not be staged privately; deferring download.${avHint(platform)}` }; }
+          // else: drop into the controlled download below.
+        } else {
+          try {
+            await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
+            // Non-throwing extract w/ absent exe = the AV-quarantine signature.
+            const outcome = verifyExtractOutcome({ electronDir, platform, fs });
+            return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
+          } catch (extractErr) {
+            // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
+            // deleted-and-retried, nor reported as "corrupt" — it stops here, and the
+            // archive is put BACK, because a refused archive is the evidence.
+            if (isUnsafeArchive(extractErr)) { return refuseUnsafeArchive({ err: extractErr, fileName, log: stderrLog }); }
+            // Corrupt cached artifact: do NOT return it to the cache (this is v4.9.5's
+            // unfenced rmSync, narrowed to a file inside our own temp dir), then fall
+            // through to a forced fresh download (unless offline).
+            stage.discard = true;
+            if (cacheOnly) {
+              return { repaired: false, reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}` };
+            }
+            // else: drop into the controlled download below.
+          }
         }
+      } finally {
+        releaseStage({ stage, fs, log: stderrLog });
       }
     } else if (cacheOnly) {
       return { deferred: true, reason: `No cached electron zip found for v${version} (${platform}-${arch}); deferring download.${avHint(platform)}` };

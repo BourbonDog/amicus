@@ -10,6 +10,7 @@
 
 'use strict';
 
+const fsDefault = require('fs');
 const path = require('path');
 const os = require('os');
 
@@ -39,4 +40,42 @@ function resolveCacheRoots(env = process.env) {
   return [...new Set(roots.filter(Boolean))];
 }
 
-module.exports = { resolveCacheRoots, defaultCacheRoot };
+/**
+ * Locate a previously-downloaded electron zip in the env-configurable cache
+ * roots. Walks <root>/<sha>/electron-v<ver>-<platform>-<arch>.zip.
+ *
+ * MOVED here from electron-install.js (v4.9.6 F1): that file sits at the 300-line
+ * gate with no headroom, and the F1 staging wiring had to go somewhere. Cache
+ * LOOKUP belongs beside cache-root RESOLUTION anyway; electron-install.js
+ * re-exports it so `ei.cachedZip` stays a valid import.
+ *
+ * The `<sha>` directory names come from `readdirSync` on a directory an attacker
+ * may write, so the returned path is attacker-INFLUENCED. Callers must treat it
+ * as such: never extract from it in place (see sidecar/electron-stage.js), and
+ * never print it unsanitized (see utils/text-sanitize.js).
+ * @returns {string|null} absolute zip path, or null when no cache hit.
+ */
+function cachedZip({ version, platform = process.platform, arch = process.arch, env = process.env, fs = fsDefault } = {}) {
+  const zipName = `electron-v${version}-${platform}-${arch}.zip`;
+  for (const root of resolveCacheRoots(env)) {
+    let shaDirs;
+    try {
+      shaDirs = fs.readdirSync(root);
+    } catch {
+      continue;
+    }
+    for (const sha of shaDirs) {
+      const candidate = path.join(root, sha, zipName);
+      try {
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
+      } catch {
+        /* ignore unreadable subdir */
+      }
+    }
+  }
+  return null;
+}
+
+module.exports = { resolveCacheRoots, defaultCacheRoot, cachedZip };

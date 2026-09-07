@@ -114,6 +114,7 @@ src/
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
 │   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and what happens to a
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
+│   ├── electron-stage.js  # PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the
 │   ├── electron-state.js  # Electron install-state probes (#76).
 │   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor, the gate, and the env scrub.
 │   ├── fallback-chains.js
@@ -550,12 +551,13 @@ evals/
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
-| `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
+| `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and what happens to a | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `rejectCachedZip()`, `isUnsafeArchive()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
+| `sidecar/electron-stage.js` | PRIVATE STAGING for an Electron artifact, so the bytes that are hashed are the | `stageArtifact()`, `releaseStage()`, `sweepStaleStages()`, `STAGE_PREFIX()`, `STALE_STAGE_MS()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
 | `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor, the gate, and the env scrub. | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |

@@ -4,8 +4,10 @@
  *
  * Split out of electron-install.js because that file sits at the repo's 300-line
  * gate and cannot grow. The require arrow is
- * electron-install -> electron-provision -> electron-trust and must never point
- * back, so `extractFromCache` arrives as an argument rather than an import.
+ * electron-install -> electron-provision -> {electron-trust, electron-stage} and
+ * must never point back, so `extractFromCache` arrives as an argument rather than
+ * an import. electron-stage is a leaf (fs/os/path only) and is required by both
+ * this module and electron-install.js, which adds no cycle.
  *
  * @module sidecar/electron-provision
  */
@@ -15,6 +17,7 @@
 const path = require('path');
 
 const { resolveCacheRoots } = require('./electron-cache');
+const { releaseStage, stageArtifact } = require('./electron-stage');
 const { artifactFileName, expectedDigest } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
@@ -71,7 +74,17 @@ async function controlledProvision({
     ...(digest ? { checksums: { [fileName]: digest } } : {}),
     downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
   });
-  await extractFromCache({ zip, electronDir, platform, extract, fs });
+  // F1 ON THIS ROUTE TOO. @electron/get validates in its own temp dir and THEN
+  // moves the artifact into the cache root, so the path it hands back is one the
+  // same cache-dir writer can swap before we open it. Without this, an attacker
+  // who simply DELETES the cached zip forces the download route and wins the
+  // identical race — the cache-route fix alone would be trivially side-stepped.
+  const stage = stageArtifact({ zip, fileName, fs, log });
+  try {
+    await extractFromCache({ zip: stage ? stage.path : zip, electronDir, platform, extract, fs });
+  } finally {
+    releaseStage({ stage, fs, log });
+  }
 }
 
 /**
@@ -97,13 +110,27 @@ function mayDeleteRejectedZip({ zip, fileName, env = process.env }) {
  * plainly what happened, and hand back the result shape a cacheOnly caller
  * returns. Deletion happens ONLY on `mismatch` — a `no-digest` artifact is not
  * evidence of anything, and an `unreadable` one is a file we could not even hash.
+ *
+ * `zip` is always the ORIGINAL cache path, never the staged copy: the message
+ * tells the user about the path they can see. With an F1 `stage` in hand the
+ * removal is not a delete at all — the artifact has already been moved out of
+ * the cache, so "removed" means "not put back", and the only `rmSync` left runs
+ * inside amicus's own temp directory. That is strictly NARROWER than v4.9.5's
+ * reach: the fence still gates the outcome, and nothing outside it is unlinked.
+ *
+ * `mayDelete` IS THE FENCE'S ANSWER, PASSED IN, not re-derived here — see the
+ * call site in electron-install.js for why it has to be taken before the move.
  * @returns {{repaired:false, integrity:string, reason:string}}
  */
-function rejectCachedZip({ gate, zip, fileName, env = process.env, fs, log = () => {} }) {
+function rejectCachedZip({ gate, zip, fileName, stage = null, mayDelete = false, fs, log = () => {} }) {
   let removed = false;
-  if (gate.verdict === 'mismatch' && mayDeleteRejectedZip({ zip, fileName, env })) {
+  if (gate.verdict === 'mismatch' && mayDelete) {
     try {
-      fs.rmSync(zip, { force: true });
+      // A MOVED artifact is already gone from the cache; discarding the staging
+      // copy (below, in releaseStage) is the whole delete. A COPIED one — the
+      // cross-volume fallback — still has its original in place.
+      if (!stage || !stage.moved) { fs.rmSync(zip, { force: true }); }
+      if (stage) { stage.discard = true; }
       removed = true;
     } catch { /* a cache we cannot write is not a reason to fail the repair */ }
   }

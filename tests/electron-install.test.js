@@ -280,8 +280,12 @@ describe('repairElectron (#53)', () => {
 
     // downloadArtifact fetches the zip ourselves (the SAME api install.js uses).
     const downloadArtifact = jest.fn(async () => dlZip);
-    // extract materializes the exe in the dist dir.
-    const extract = jest.fn(async (_zip, opts) => {
+    // extract materializes the exe in the dist dir. The bytes it SAW are captured
+    // here rather than re-read afterwards: v4.9.6 F1 stages the artifact into a
+    // private temp dir and puts it back, so the path is gone by the assertions.
+    let sawBytes = null;
+    const extract = jest.fn(async (zip, opts) => {
+      sawBytes = fs.readFileSync(zip, 'utf8');
       fs.writeFileSync(path.join(opts.dir, exeName), 'MZdownloaded');
     });
     // spawn MUST NOT be used as the primary provision path anymore.
@@ -313,7 +317,13 @@ describe('repairElectron (#53)', () => {
     expect(dlOpts.arch).toBe('x64');
     expect(typeof dlOpts.cacheRoot).toBe('string');
     expect(extract).toHaveBeenCalledTimes(1);
-    expect(extract.mock.calls[0][0]).toBe(dlZip);
+    // The DOWNLOADED artifact is the one extracted — but v4.9.6 F1 stages it into
+    // a private temp dir first, so assert the identity by name + bytes rather than
+    // by the cache path (which is exactly what an attacker can still write to).
+    expect(path.basename(extract.mock.calls[0][0])).toBe(path.basename(dlZip));
+    expect(sawBytes).toBe(ZIP_BODY);
+    // ...and the download cache is left holding the artifact it downloaded.
+    expect(fs.readFileSync(dlZip, 'utf8')).toBe(ZIP_BODY);
     expect(spawn).not.toHaveBeenCalled();
     expect(res.repaired).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
@@ -365,9 +375,11 @@ describe('repairElectron (#53)', () => {
     fs.writeFileSync(goodZip, ZIP_BODY);
 
     let extractCalls = 0;
+    // Keyed on the BYTES, not the path: v4.9.6 F1 stages the artifact into a
+    // private temp dir first, so the extractor never sees `badZip` itself.
     const extract = jest.fn(async (zip, opts) => {
       extractCalls += 1;
-      if (zip === badZip) {
+      if (fs.readFileSync(zip, 'utf8') === badBody) {
         const e = new Error('end of central directory record signature not found');
         throw e;
       }
