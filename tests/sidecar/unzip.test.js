@@ -129,6 +129,62 @@ describe('robustExtract', () => {
     expect(res.fallback).toBe(true);
   });
 
+  // ---------------------------------------------------------------------
+  // C4 (M9): a SECURITY REFUSAL is a refusal, not a retry.
+  // ---------------------------------------------------------------------
+
+  it('REFUSAL IS TERMINAL: an "Out of bound path" refusal throws UNZIP_UNSAFE_ARCHIVE — no cleanDir, no native fallback (UNSAFERETRIED)', async () => {
+    const spawn = jest.fn((cmd) => { if (/tar/i.test(cmd)) { writeInto(); } return { status: 0 }; });
+    const extractZip = jest.fn(async () => {
+      // extract-zip@2.0.1's own message, verbatim shape.
+      writeInto('partial.tmp');   // whatever landed before the refusal
+      throw new Error('Out of bound path "C:\\\\evil" found while processing file ../../evil.exe');
+    });
+
+    await expect(robustExtract('z.zip', { dir, platform: 'win32', deps: { extractZip, spawn, fs } }))
+      .rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+    // The archive is NEVER handed to an OS extractor that has no such check.
+    expect(spawn).not.toHaveBeenCalled();
+    // And the partial output is left as evidence rather than tidied away.
+    expect(fs.existsSync(path.join(dir, 'partial.tmp'))).toBe(true);
+  });
+
+  it('REFUSAL IS TERMINAL: each yauzl validateFileName refusal is classified too (UNSAFERETRIED)', async () => {
+    for (const reason of [
+      'absolute path: /etc/passwd',
+      'invalid relative path: ../../../evil',
+      'invalid characters in fileName: a\\u0000b',
+    ]) {
+      const spawn = jest.fn(() => ({ status: 0 }));
+      const extractZip = jest.fn(async () => { throw new Error(reason); });
+      await expect(robustExtract('z.zip', { dir, platform: 'win32', deps: { extractZip, spawn, fs } }))
+        .rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+      expect(spawn).not.toHaveBeenCalled();
+    }
+  });
+
+  it('A STALL IS NOT A REFUSAL: it still falls back to native — the Node-24 workaround survives (STALLTERMINAL)', async () => {
+    const timers = makeTimers();
+    const spawn = jest.fn((cmd) => { if (/tar/i.test(cmd)) { writeInto(); } return { status: 0 }; });
+    const p = robustExtract('z.zip', {
+      dir, platform: 'win32',
+      deps: { extractZip: NEVER, spawn, fs, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+    });
+    timers.fireAll();                       // the silent stall this module exists for
+    const res = await p;
+    expect(res.strategy).toBe('tar');
+    expect(res.fallback).toBe(true);
+
+    // ...and neither does an ordinary corrupt-archive throw become terminal.
+    const spawn2 = jest.fn((cmd) => { if (/tar/i.test(cmd)) { writeInto(); } return { status: 0 }; });
+    const res2 = await robustExtract('z.zip', {
+      dir, platform: 'win32',
+      deps: { extractZip: async () => { throw new Error('end of central directory record signature not found'); }, spawn: spawn2, fs },
+    });
+    expect(res2.strategy).toBe('tar');
+  });
+
   it('EMPTY: extract-zip resolves but leaves the dir empty → native recovers', async () => {
     const spawn = jest.fn((cmd) => { if (/tar/i.test(cmd)) { writeInto(); } return { status: 0 }; });
     const extractZip = jest.fn(async () => { /* resolves, writes nothing */ });

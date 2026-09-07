@@ -17,6 +17,8 @@
  *      the exact electron zip the field box choked on.
  *   3. Only report success when files actually landed on disk. The electron
  *      exe-stat verify stays upstream (electron-quarantine.verifyExtractOutcome).
+ * Layer 2 has ONE exception: a path-traversal REFUSAL is terminal and is never
+ * retried natively (UNSAFE_PATTERNS below).
  *
  * Everything network/spawn/timer-facing is dependency-INJECTABLE so tests never
  * hit the real clock, spawn a real process, or extract a real binary.
@@ -27,6 +29,32 @@
 const path = require('path');
 const fsDefault = require('fs');
 const { spawnSync } = require('child_process');
+
+/**
+ * A SECURITY REFUSAL IS A REFUSAL, NOT A RETRY (M9).
+ *
+ * Strategy 1 used to collapse a stall, a plain throw, and extract-zip's / yauzl's
+ * own path-traversal refusals into ONE branch that cleans the directory and re-runs
+ * the IDENTICAL archive through OS extractors amicus does not control — laundering
+ * a "this archive tried to escape its directory" into an unsupervised retry.
+ *
+ * These four strings are verified against the installed versions:
+ *   extract-zip@2.0.1 raises `Out of bound path "<dir>" found while processing file <n>`
+ *   yauzl@2.10.0 validateFileName returns the other three, raised as new Error(msg).
+ * NOTE: with strictFileNames unset (extract-zip's default) yauzl rewrites
+ * backslashes before validating, so `invalid characters in fileName: ` is not
+ * reachable through extract-zip today. Classified anyway — it costs one line and
+ * yauzl's defaults can change.
+ *
+ * DELIBERATELY NARROW. A stall must still fall back, or the Node-24 workaround
+ * this whole module exists for is destroyed.
+ */
+const UNSAFE_PATTERNS = [
+  /^Out of bound path /,
+  /^absolute path: /,
+  /^invalid relative path: /,
+  /^invalid characters in fileName: /,
+];
 
 // No-progress window: if extract-zip reports no new entry for this long AND has
 // not settled, treat it as the silent stall. Reset on every onEntry so a slow-
@@ -162,6 +190,8 @@ function runExtractZipBounded({ zip, dir, onEntry, extractZip, idleMs, maxMs, se
  * @param {object}   [opts.deps] injected { fs, extractZip, spawn, setTimeout, clearTimeout, log }
  * @returns {Promise<{strategy:string, fallback?:boolean, extractZipReason?:string}>}
  * @throws {Error} code 'UNZIP_ALL_FAILED' when no strategy produced files.
+ * @throws {Error} code 'UNZIP_UNSAFE_ARCHIVE' when the archive was REFUSED for a
+ *   path-traversal attempt — terminal, with no native retry (see UNSAFE_PATTERNS).
  */
 async function robustExtract(zip, opts = {}) {
   const {
@@ -200,6 +230,16 @@ async function robustExtract(zip, opts = {}) {
   const z = await runExtractZipBounded({ zip, dir, onEntry, extractZip, idleMs, maxMs, setTimer, clearTimer });
   if (z.ok && dirNonEmpty(fs, dir)) {
     return { strategy: 'extract-zip' };
+  }
+
+  // TERMINAL: the archive was REFUSED for trying to write outside `dir`. Never
+  // cleanDir (the partial output is evidence), never fall back — handing the same
+  // archive to tar/Expand-Archive would ask a tool with no such check to do what
+  // extract-zip just declined to.
+  if (!z.ok && UNSAFE_PATTERNS.some((p) => p.test(z.reason || ''))) {
+    const err = new Error(`refusing to extract ${zip}: ${z.reason}`);
+    err.code = 'UNZIP_UNSAFE_ARCHIVE';
+    throw err;
   }
 
   // extract-zip stalled / threw / produced nothing → clean partial output, go native.
