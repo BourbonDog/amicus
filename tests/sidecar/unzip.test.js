@@ -20,6 +20,20 @@
 
 'use strict';
 
+// ── NAMED MUTANTS (C4 / M9) ────────────────────────────────────────────────
+// One-line sabotages, applied and reverted by byte copy, MEASURED 2026-09-07
+// via `npx jest tests/sidecar/unzip.test.js -t "<name>"` (exit 1 both times).
+//
+// UNSAFERETRIED  src/sidecar/unzip.js :: robustExtract — `if (false && !z.ok &&
+//   UNSAFE_PATTERNS.some(...))`, so a refusal falls through to the native
+//   extractors again. RED: "REFUSAL IS TERMINAL: an \"Out of bound path\"
+//   refusal throws UNZIP_UNSAFE_ARCHIVE" — it resolved {strategy:'tar'} instead.
+// STALLTERMINAL  src/sidecar/unzip.js — add `/^stalled: /` to UNSAFE_PATTERNS,
+//   misclassifying the silent Node-24 stall as a security refusal. RED:
+//   "A STALL IS NOT A REFUSAL" — threw UNZIP_UNSAFE_ARCHIVE, destroying the
+//   native fallback this whole module exists for.
+// ───────────────────────────────────────────────────────────────────────────
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

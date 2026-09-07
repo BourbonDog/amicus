@@ -24,6 +24,34 @@
  * are injected everywhere.
  */
 
+// ── NAMED MUTANTS ──────────────────────────────────────────────────────────
+// Each is a ONE-LINE sabotage, applied and reverted by byte copy, MEASURED
+// 2026-09-07 against the named test via `npx jest <this file> -t "<name>"`
+// (exit 1 in every case). The red set was not enumerated beyond the named test.
+//
+// DIGESTNOTCHECKED   electron-install.js :: repairElectron — replace the
+//   `const gate = verifyArtifact(...)` line with `{ verdict: 'verified',
+//   allowed: true }`, i.e. extract the cached zip without hashing it.
+//   RED: "a MISMATCHING cached zip is NOT extracted" (extract called 1x, not 0).
+// POISONKEPT         electron-provision.js :: rejectCachedZip — `if (false &&`
+//   before the mismatch/fence condition, so nothing is ever deleted.
+//   RED: "a mismatched zip INSIDE a resolved cache root is deleted"
+//   (existsSync true, expected false).
+// FENCEDROPPED       electron-provision.js :: mayDeleteRejectedZip — replace the
+//   basename check with a bare `return true`, dropping the fence.
+//   RED: "a mismatched zip OUTSIDE every cache root is left alone"
+//   (the zip outside every root was deleted).
+// ANCHORFROMTARGET   electron-trust.js :: resolveAnchor — replace the self-anchor
+//   push with the electronDir push, so the SCANNED tree's own checksums.json is
+//   read first and vouches for its own bytes.
+//   RED: "the ANCHOR comes from the running amicus, not the scanned target dir"
+//   (poison extracted). Also red: electron-trust.test.js "prefers the RUNNING…".
+// INSTALLERENVLEAKED electron-install.js :: runInstaller — `const env = {
+//   ...process.env };` instead of scrubbedChildEnv(...).
+//   RED: "the last-resort install.js spawn gets no repo-plantable electron name"
+//   (npm_config_electron_mirror arrived as "http://attacker.example/evil/").
+// ───────────────────────────────────────────────────────────────────────────
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
