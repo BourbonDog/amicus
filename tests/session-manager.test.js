@@ -146,7 +146,7 @@ describe('Session Manager', () => {
       expect(savedMeta.thinking).toBe('low');
     });
 
-    it('should default thinking level to medium', () => {
+    it('records no thinking level when none was requested (#218 PR 4: nothing is sent then)', () => {
       const taskId = 'thinking-default';
       createSession(projectDir, taskId, {
         model: 'google/gemini-3-pro',
@@ -156,7 +156,7 @@ describe('Session Manager', () => {
       const metaPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'metadata.json');
       const savedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
-      expect(savedMeta.thinking).toBe('medium');
+      expect('thinking' in savedMeta).toBe(false);
     });
   });
 

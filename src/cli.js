@@ -326,15 +326,12 @@ function validateStartArgs(args) {
     return { valid: false, error: `Error: --summary-length must be one of: ${validSummaryLengths.join(', ')}` };
   }
 
-  // Validate thinking effort level (if provided), with model-specific support check
-  const thinkingCheck = validateThinkingLevel(args.thinking, args.model);
+  // Validate the thinking level's VOCABULARY (#218 PR 4). Whether the model
+  // declares it is checked against the engine's own catalogue at send time
+  // (opencode-client.js :: sendPrompt); nothing is adjusted here any more.
+  const thinkingCheck = validateThinkingLevel(args.thinking);
   if (!thinkingCheck.valid) {
     return thinkingCheck;
-  }
-  // If model doesn't support the level, adjust it and warn
-  if (thinkingCheck.warning) {
-    logger.warn('Thinking level adjusted', { warning: thinkingCheck.warning, adjustedLevel: thinkingCheck.adjustedLevel });
-    args.thinking = thinkingCheck.adjustedLevel;
   }
 
   // Validate API key is present for the model's provider
@@ -444,7 +441,7 @@ Options for 'start':
   --context-since <duration>   Time filter (e.g., 2h). Overrides turns.
    --context-max-tokens <N>     Max context tokens (default: 80000)
    --summary-length <length>    Summary verbosity: brief, normal (default), verbose
-   --thinking <level>           Reasoning effort: none, minimal, low, medium, high, xhigh
+   --thinking <level>           Reasoning effort: none, minimal, low, medium, high, xhigh, max (omit for the provider's default)
    --mcp <spec>                 Add MCP server. Formats:
                                 - name=url (remote server)
                                 - name=command (local server)

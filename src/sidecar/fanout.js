@@ -246,7 +246,7 @@ async function runFanout(options) {
         HEARTBEAT_INTERVAL
       );
   const timeoutMs = (options.timeout || 15) * 60 * 1000;
-  const reasoning = options.thinking ? { effort: options.thinking } : undefined;
+  const variant = options.thinking || undefined; // #218 PR 4: one level for every leg, sent as the engine's `variant` field (named mutant "FANOUTVARIANTDROPPED", tests/sidecar/fanout.test.js: drop `variant` from the runLeg args)
   let legDocs;
   try {
     // retryContexts/retryOfWaveId (v4.3 Task 19): absent on a normal wave, so
@@ -261,7 +261,7 @@ async function runFanout(options) {
         systemPrompt: saved ? rc.systemPrompt : systemPrompt,
         userMessage: saved ? rc.userMessage : userMessage,
         timeoutMs, agent: options.agent, client, server,
-        summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+        summaryLength: options.summaryLength, variant, quiet: options.quiet,
         foldNonce, directory: options.directory, follow,
         fallback: options.fallback, catalog: options.catalog, noOutputBackstopMs: options.noOutputBackstopMs,
       });

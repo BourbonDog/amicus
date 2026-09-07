@@ -70,7 +70,7 @@ function saveInitialContext(sessionDir, systemPrompt, userMessage) {
   fs.writeFileSync(SessionPaths.contextFile(sessionDir), content, { mode: 0o600 });
 }
 
-/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
+/** Finalize session - detect conflicts, save summary, update metadata. opts.finish (#218 PR 3) stamps metadata.finish when set and REMOVES a prior one otherwise; opts.variant / opts.variantUnverified (#218 PR 4) follow the same rule — a resumed run reuses the same metadata and must not inherit the last attempt's finish (council #232 r1 B1). */
 function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
 
@@ -103,6 +103,9 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   // shared-server runs behind a 0-byte summary and a false success.
   const hasSummary = typeof summary === 'string' && summary.trim().length > 0;
   if (typeof opts.finish === 'string') { metadata.finish = opts.finish; } else { delete metadata.finish; }
+  // #218 PR 4: the effort level SENT and whether the engine's catalogue knew the model — the same emit-when-set / delete-when-absent rule as finish. Named mutants "SOLOVARIANTDROPPED" / "STALEVARIANT" (tests/sidecar/session-utils.test.js).
+  if (typeof opts.variant === 'string') { metadata.variant = opts.variant; } else { delete metadata.variant; }
+  if (opts.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
   metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });

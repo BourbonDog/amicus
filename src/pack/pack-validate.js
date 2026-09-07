@@ -64,6 +64,9 @@ function validatePack(pack, { mode } = { mode: 'run' }) {
     for (const key of Object.keys(opts)) {
       if (!KIND_OPTIONS[pack.kind].includes(key)) { errors.push(`unknown option '${key}' for kind '${pack.kind}'`); }
     }
+    // #218 PR 4 whole-branch review (VCMD-2): the VALUE too — a saved 'turbo' would reach the wire.
+    const { VARIANT_LEVELS } = require('../utils/thinking-validators');
+    if (opts.thinking !== undefined && !VARIANT_LEVELS.includes(opts.thinking)) { errors.push(`options.thinking must be one of: ${VARIANT_LEVELS.join(', ')}`); }
   }
 
   const { getEffectiveAliases, getCouncilWithSource } = require('../utils/config');

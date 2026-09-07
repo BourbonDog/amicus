@@ -47,7 +47,7 @@ function recordAttemptSpend({ doc, leg, currentModel, legId, waveId, project, at
       project, attempt: leg && leg.attempt, substitutedFor: leg && leg.substitutedFor,
       retryOfWaveId: leg && leg.retryOfWaveId,
       tag: (leg && leg.tag) || null,
-      finish: doc.finish,
+      finish: doc.finish, variant: doc.variant, // #218 PR 3 / PR 4: appendSpend keeps each only when it is a string (named mutant "LEGROWNOVARIANT", tests/sidecar/fanout.test.js)
     };
     if (attempt > 0) { row.attempt = attempt; row.substitutedFor = originalModel; }
     appendSpend(row, deps.spendDir ? { dir: deps.spendDir } : undefined);

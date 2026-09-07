@@ -16,6 +16,7 @@ const {
   checkSessionLiveness
 } = require('./session-utils');
 const { acquireLock, releaseLock } = require('../utils/session-lock');
+const { noticeDroppedLevel } = require('./reopen-notices');
 const { runHeadless } = require('../headless');
 const { extractNonceFromText, generateFoldNonce, stripFoldMarkers } = require('../utils/fold-marker');
 const { logger } = require('../utils/logger');
@@ -41,7 +42,8 @@ function loadInitialContext(sessionDir) {
 /** Check for file drift - files that were read may have changed */
 function checkFileDrift(metadata, project) {
   const filesRead = metadata.filesRead || [];
-  const lastActivity = metadata.completedAt || metadata.createdAt;
+  // council #235 r5 (J2/A4): the previous attempt's terminal timestamps are all deleted on every running write (updateSessionStatus below), so this — their one legitimate reader — falls back through them. `abortedAt` is a terminal stamp of that attempt and later than its start, so it is read first (wave 6 repair); `resumedAt` is when a crashed attempt STARTED, strictly more accurate than the previous attempt's completion. Named mutants "DRIFTNORESUMEDAT" / "DRIFTNOABORTEDAT": drop either middle term.
+  const lastActivity = metadata.completedAt || metadata.abortedAt || metadata.resumedAt || metadata.createdAt;
   const lastActivityTime = new Date(lastActivity).getTime();
   const changedFiles = [];
 
@@ -112,6 +114,13 @@ function updateSessionStatus(sessionDir, status) {
   meta.status = status;
   if (status === 'running') {
     meta.resumedAt = new Date().toISOString();
+    // #218 PR 4 whole-branch review (REC-3): the per-attempt fields are this attempt's to stamp
+    // — an abort or crash of the resumed run must not ship the previous attempt's as its own
+    // (the terminal writers preserve every key they do not set). Named mutant
+    // "RESUMESTALEVARIANT" (tests/sidecar/resume.test.js): drop the three deletes.
+    // council #235 r5 (J2/A4): `reason` and the terminal timestamps are stamped ONLY by a terminal writer, so an attempt that never reaches one must not inherit the previous attempt's — a resume that crashes mid-attempt used to leave `status: 'running'` beside the last failure's reason and completion time, and both are read (src/utils/result-schema.js reports `metadata.reason` for every non-complete status and `completedAt || abortedAt` as the end; the MCP server prints the reason and adds `crashedAt` to that chain). ALL THREE timestamps go (wave 6 repair): `abortedAt` is the one an `amicus abort` writes and `completedAt` is never written on that path, so clearing only `completedAt` left the defect live on the commonest precursor to a resume — and, for an attempt that stamped both, made the reported end fall through to the OLDER one. Named mutants "RESUMESTALEREASON" (drop `reason`/`completedAt`) and "RESUMESTALEABORTEDAT" (drop `abortedAt`/`crashedAt`).
+    delete meta.finish; delete meta.variant; delete meta.variantUnverified;
+    delete meta.reason; delete meta.completedAt; delete meta.abortedAt; delete meta.crashedAt;
   }
   writeFileAtomic(metaPath, JSON.stringify(meta, null, 2));
   return meta;
@@ -135,6 +144,7 @@ async function resumeSidecar(options) {
 
   // Load previous session data
   const metadata = loadSessionMetadata(sessionDir);
+  noticeDroppedLevel(metadata, { taskId, kind: 'resume' }); // council #235 r5 (J1/A3): this leg sends no variant and `resume` rejects --thinking, so a session started with a level silently degrades to the provider's default — the very degrade this release cites against 4.9.3. Inheritance stays filed, not built; the silence does not. Named mutant "RESUMELEVELSILENT" (tests/sidecar/reopen-thinking-notice.test.js).
   const systemPrompt = loadInitialContext(sessionDir);
 
   // Dead-process detection: log if the previous process is no longer alive
@@ -243,11 +253,13 @@ async function resumeSidecar(options) {
       updatedMetadata.status = 'error';
       updatedMetadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
       if (result && typeof result.finish === 'string') { updatedMetadata.finish = result.finish; } else { delete updatedMetadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
+      if (result && typeof result.variant === 'string') { updatedMetadata.variant = result.variant; } else { delete updatedMetadata.variant; } // #218 PR 4: same rule as finish (named mutant "RESUMEERRORNOVARIANT", tests/continue-resume-spend.test.js)
+      if (result && result.variantUnverified === true) { updatedMetadata.variantUnverified = true; } else { delete updatedMetadata.variantUnverified; }
       updatedMetadata.completedAt = new Date().toISOString();
       writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
-      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish });
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified }); // named mutant "RESUMEVARIANTDROPPED" (tests/continue-resume-spend.test.js)
     }
     // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
     // a ledger row (status: statusFromResult, matching start.js — not terminal.status).

@@ -270,6 +270,27 @@ describe('createSessionMetadata PID preservation', () => {
     expect(result.status).toBe('running');
     expect(result.createdAt).toBeDefined();
   });
+
+  it('#218 PR 4: metadata carries `thinking` only when one was requested', () => {
+    const { createSessionMetadata } = require('../../src/sidecar/start');
+    const { SessionPaths } = require('../../src/sidecar/session-utils');
+
+    createSessionMetadata(taskId, tmpDir, {
+      model: 'kimi', prompt: 'p', noUi: true, agent: 'build'
+    });
+    const sessionDir = SessionPaths.sessionDir(tmpDir, taskId);
+    const result = JSON.parse(fs.readFileSync(SessionPaths.metadataFile(sessionDir), 'utf-8'));
+    expect('thinking' in result).toBe(false);
+
+    // Named mutant "MEDIUMDEFAULT": restore `|| 'medium'`.
+    const taskId2 = `${taskId}-2`;
+    createSessionMetadata(taskId2, tmpDir, {
+      model: 'kimi', prompt: 'p', noUi: true, agent: 'build', thinking: 'low'
+    });
+    const sessionDir2 = SessionPaths.sessionDir(tmpDir, taskId2);
+    const result2 = JSON.parse(fs.readFileSync(SessionPaths.metadataFile(sessionDir2), 'utf-8'));
+    expect(result2.thinking).toBe('low');
+  });
 });
 
 describe('startSidecar includeContext option', () => {
@@ -360,6 +381,26 @@ describe('startSidecar includeContext option', () => {
     const contextArg = buildPrompts.mock.calls[0][1];
     expect(contextArg).toContain('Context excluded');
     expect(contextArg).not.toContain(PARENT_MARKER);
+  });
+
+  it('passes --thinking to runHeadless as `variant` and omits the key when none was requested (#218 PR 4 whole-branch review, TM-1)', async () => {
+    // Named mutant "STARTVARIANTDROPPED": drop `variant` from start.js's runHeadless options.
+    const { startSidecar } = require('../../src/sidecar/start');
+    const { runHeadless } = require('../../src/headless');
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: true, includeContext: false, thinking: 'low' });
+    expect(runHeadless.mock.calls[0][7].variant).toBe('low');
+    runHeadless.mockClear();
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: true, includeContext: false });
+    // `variant` is a shorthand key on the options literal, so it is always PRESENT;
+    // what must not survive is a value (start.js: `thinking || undefined`).
+    expect(runHeadless.mock.calls[0][7].variant).toBeUndefined();
+  });
+
+  it('passes --thinking to runInteractive as `variant` (the default mode)', async () => {
+    const { startSidecar } = require('../../src/sidecar/start');
+    const { runInteractive } = require('../../src/sidecar/interactive');
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: false, includeContext: false, thinking: 'low' });
+    expect(runInteractive.mock.calls[0][5].variant).toBe('low');
   });
 
   it('passes parent context to buildPrompts when includeContext is true', async () => {

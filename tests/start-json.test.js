@@ -56,6 +56,20 @@ describe('start --json (F4)', () => {
     expect(doc.sessionDir).toContain('feed0001');
   });
 
+  it('a solo --json run document carries variant when the result did (#218 PR 4)', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'JSON MODE SUMMARY', completed: true, timedOut: false, aborted: false,
+      taskId: 'x', toolCalls: [], exitCode: 0, variant: 'low',
+    });
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, modelInput: 'somealias', taskId: 'feed0006',
+    });
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(doc.status).toBe('complete');
+    expect(doc.variant).toBe('low');
+  });
+
   it('emits a parseable error document when the run errors', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false, error: 'model exploded', taskId: 'x',
@@ -191,7 +205,7 @@ describe('spend ledger append on start finalize (B24)', () => {
   it("an OUTPUT_LENGTH run's ledger row carries finish 'length' beside status 'error'", async () => {
     mockRunHeadless.mockResolvedValue({
       summary: '', completed: false, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
-      finish: 'length',
+      finish: 'length', variant: 'high',
       error: "OUTPUT_LENGTH: the provider stopped at the max_tokens reservation (finish 'length') and no answer text arrived — 32000 reasoning / 0 output tokens; outputBudget is unset — the engine's 32000 default reservation governs — raise outputBudget in config.json (docs/configuration.md, Output budget)",
       usage: { tokens: { input: 5, output: 0, reasoning: 32000, cacheRead: 0, cacheWrite: 0 }, costReported: 0.63 },
     });
@@ -204,6 +218,7 @@ describe('spend ledger append on start finalize (B24)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('error');
     expect(rows[0].finish).toBe('length'); // SOLOROWNOFINISH
+    expect(rows[0].variant).toBe('high'); // SOLOROWNOVARIANT
   });
 
   it('a run with no finish on the result leaves the key off the ledger row', async () => {
@@ -219,6 +234,28 @@ describe('spend ledger append on start finalize (B24)', () => {
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect('finish' in rows[0]).toBe(false);
+    expect('variant' in rows[0]).toBe(false);
+  });
+
+  // #218 PR 4 whole-branch review (PRT-4): docs/troubleshooting.md says a refused
+  // run IS on the ledger — `status: "error"`, zero tokens, no `variant`. A
+  // preservation pin: the behaviour is already right, the doc sentence was not.
+  // Named mutant "REFUSEDROWSKIPPED" (skip appendSpend when every token count is 0).
+  it('a VARIANT_UNDECLARED refusal still appends a zero-token error row with no variant', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: '', completed: false, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      error: "VARIANT_UNDECLARED: openrouter/moonshotai/kimi-k3 does not declare a 'medium' variant — the engine's catalogue lists low, high, max for it (/config/providers); an undeclared variant is a silent no-op on the wire (probe F3/M7), so nothing was sent. Pick one of the listed levels, or omit --thinking to run at the provider's own default effort",
+      usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/moonshotai/kimi-k3', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0008',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1); // REFUSEDROWSKIPPED
+    expect(rows[0].status).toBe('error');
+    expect('variant' in rows[0]).toBe(false);
   });
 
   it('a run with no usage on the result does not append a row', async () => {

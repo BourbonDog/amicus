@@ -78,7 +78,7 @@ function resolveExistingSessionDir(projectDir, taskId) {
  * @param {string} metadata.project - Project path
  * @param {string} [metadata.briefing] - Task briefing
  * @param {string} [metadata.mode] - Mode: 'interactive' or 'headless'
- * @param {string} [metadata.thinking='medium'] - Thinking/reasoning intensity level
+ * @param {string} [metadata.thinking] - Reasoning effort requested; recorded only when one was (#218 PR 4)
  * @throws {Error} If session already exists
  */
 function createSession(projectDir, taskId, metadata) {
@@ -99,7 +99,7 @@ function createSession(projectDir, taskId, metadata) {
     project: metadata.project || projectDir,
     briefing: metadata.briefing || '',
     mode: metadata.mode || 'interactive',
-    thinking: metadata.thinking || 'medium',
+    ...(metadata.thinking ? { thinking: metadata.thinking } : {}), // #218 PR 4: emit-when-requested (see start-metadata.js)
     status: SESSION_STATUS.RUNNING,
     createdAt: new Date().toISOString(),
     completedAt: null,

@@ -391,7 +391,7 @@ describe('CLI Argument Parser', () => {
       });
 
       it('should parse all valid --thinking effort levels', () => {
-        const validLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none'];
+        const validLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none', 'max'];
         validLevels.forEach(level => {
           const result = parseArgs(['start', '--thinking', level]);
           expect(result.thinking).toBe(level);
@@ -401,6 +401,16 @@ describe('CLI Argument Parser', () => {
       it('should default thinking to undefined if not specified', () => {
         const result = parseArgs(['start', '--model', 'x', '--briefing', 'y']);
         expect(result.thinking).toBeUndefined();
+      });
+
+      it('parses `--thinking=` to the empty string, and validateStartArgs REFUSES it (council #235 r2, A2)', () => {
+        // Named mutant "FALSYLEVELACCEPTED" (src/utils/thinking-validators.js): restore
+        // `if (!thinking)` — '' passes as if the flag were absent and then evaporates at
+        // start.js's `thinking || undefined`, so the level is silently dropped.
+        expect(parseArgs(['start', '--thinking=']).thinking).toBe('');
+        const result = validateStartArgs({ _: ['start'], model: 'google/gemini-2.5', prompt: 'test', thinking: '' });
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('Error: --thinking must be one of: none, minimal, low, medium, high, xhigh, max');
       });
 
       it('should parse --thinking alongside other options', () => {
@@ -499,7 +509,7 @@ describe('CLI Argument Parser', () => {
     });
 
     it('should validate --thinking with valid effort levels', () => {
-      const validLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none'];
+      const validLevels = ['minimal', 'low', 'medium', 'high', 'xhigh', 'none', 'max'];
       validLevels.forEach(level => {
         const args = { _: ['start'], model: 'google/gemini-2.5', prompt: 'test', thinking: level };
         const result = validateStartArgs(args);
@@ -518,6 +528,13 @@ describe('CLI Argument Parser', () => {
       const args = { _: ['start'], model: 'google/gemini-2.5', prompt: 'test' };
       const result = validateStartArgs(args);
       expect(result.valid).toBe(true);
+    });
+
+    it('passes --thinking through untouched — no model-specific adjustment (#218 PR 4)', () => {
+      const args = { _: ['start'], model: 'openrouter/openai/gpt-5.2', prompt: 'test', thinking: 'minimal' };
+      const result = validateStartArgs(args);
+      expect(result.valid).toBe(true);
+      expect(args.thinking).toBe('minimal');
     });
 
     it('should validate --timeout is a positive number', () => {

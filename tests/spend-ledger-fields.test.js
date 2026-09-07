@@ -75,6 +75,24 @@ describe('appendSpend additive attribution fields (spec 7.1)', () => {
     expect(row.status).toBe('error');
   });
 
+  test('writes `variant` only when it is a string (#218 PR 4)', () => {
+    const dir = tmp();
+    appendSpend({ taskId: 't6', model: 'kimi', mode: 'headless', usage, op: 'start', variant: 'low' }, { dir });
+    const [row] = readSpendRows(dir);
+    expect(row.variant).toBe('low');
+
+    const dirNoVariant = tmp();
+    appendSpend({ taskId: 't7', model: 'kimi', mode: 'headless', usage, op: 'start' }, { dir: dirNoVariant });
+    const [rowNoVariant] = readSpendRows(dirNoVariant);
+    expect('variant' in rowNoVariant).toBe(false);
+
+    // Named mutant "VARIANTNULLED": `row.variant = variant || null`.
+    const dirBogus = tmp();
+    appendSpend({ taskId: 't8', model: 'kimi', mode: 'headless', usage, op: 'start', variant: 7 }, { dir: dirBogus });
+    const [rowBogus] = readSpendRows(dirBogus);
+    expect('variant' in rowBogus).toBe(false);
+  });
+
   test('a null usage still no-ops (unchanged guarantee)', () => {
     const dir = tmp();
     appendSpend({ taskId: 't4', model: 'gpt', mode: 'headless', usage: null, op: 'start' }, { dir });

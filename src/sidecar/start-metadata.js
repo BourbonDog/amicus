@@ -42,7 +42,7 @@ function createSessionMetadata(taskId, project, options) {
     briefing: effectiveBriefing,
     mode: isHeadless ? 'headless' : 'interactive',
     agent: agent || (isHeadless ? 'build' : 'chat'),
-    thinking: thinking || 'medium',
+    ...(thinking ? { thinking } : {}), // #218 PR 4: emit-when-requested — 'medium' was never sent (probe F1), so a run with no --thinking runs at the provider's default and records none (named mutant "MEDIUMDEFAULT")
     status: 'running',
     pid: existing.pid || process.pid,
     createdAt: existing.createdAt || new Date().toISOString(),

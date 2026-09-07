@@ -15,6 +15,7 @@ const {
   createHeartbeat
 } = require('./session-utils');
 const { acquireLock, releaseLock } = require('../utils/session-lock');
+const { noticeDroppedLevel } = require('./reopen-notices');
 const { runHeadless } = require('../headless');
 const { buildPrompts } = require('../prompt-builder');
 const { generateFoldNonce } = require('../utils/fold-marker');
@@ -140,6 +141,7 @@ async function continueSidecar(options) {
   // Load previous session data
   const { metadata: oldMetadata, summary: previousSummary, conversation: previousConversation } =
     loadPreviousSession(oldTaskId, project);
+  noticeDroppedLevel(oldMetadata, { taskId: oldTaskId, kind: 'continue' }); // council #235 r5 (J1/A3): read against the PARENT's metadata — a continuation opens a NEW session, sends no variant, and `continue` rejects --thinking, so a level the parent ran with silently becomes the provider's default here. Named mutant "CONTINUELEVELSILENT" (tests/sidecar/reopen-thinking-notice.test.js).
 
   // Lock the previous (EXISTING) session directory to prevent concurrent
   // continue operations — resolve dual-dir so a legacy session is locked too.
@@ -246,11 +248,13 @@ async function continueSidecar(options) {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     if (result && typeof result.finish === 'string') { meta.finish = result.finish; } // #218 PR 3: emit-when-set; a fresh session's metadata has no prior finish to remove (resume's does -- resume.js)
+    if (result && typeof result.variant === 'string') { meta.variant = result.variant; } // #218 PR 4: emit-when-set, like finish (named mutant "CONTINUEERRORNOVARIANT", tests/continue-resume-spend.test.js)
+    if (result && result.variantUnverified === true) { meta.variantUnverified = true; }
     meta.completedAt = new Date().toISOString();
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish });
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified }); // named mutant "CONTINUEVARIANTDROPPED" (tests/continue-resume-spend.test.js): drop the variant args
   }
   // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).

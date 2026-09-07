@@ -52,6 +52,8 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
     metadata.status = 'error';
     metadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     if (result && typeof result.finish === 'string') { metadata.finish = result.finish; } else { delete metadata.finish; } // #218 PR 3: emit-when-set; a stale one is removed (council #232 r1 B1)
+    if (result && typeof result.variant === 'string') { metadata.variant = result.variant; } else { delete metadata.variant; } // #218 PR 4: same rule as finish (named mutant "SHAREDNOVARIANT", tests/shared-server-finalize.test.js)
+    if (result && result.variantUnverified === true) { metadata.variantUnverified = true; } else { delete metadata.variantUnverified; }
     metadata.completedAt = new Date().toISOString();
     writeFileAtomic(
       path.join(sessionDir, 'metadata.json'),
@@ -62,7 +64,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
   }
   // complete / timed-out / aborted: persist the (possibly partial) summary with
   // the resolved status. Explicit status means the #36 guard won't re-classify.
-  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish });
+  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status, finish: result && result.finish, variant: result && result.variant, variantUnverified: result && result.variantUnverified });
 }
 
 module.exports = { resolveTerminalState, finalizeHeadlessResult };

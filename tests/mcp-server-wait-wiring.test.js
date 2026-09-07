@@ -159,6 +159,35 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
     });
   });
 
+  test('shared-server path: a requested thinking level reaches runHeadless as `variant` and the record carries both (#218 PR 4 whole-branch review, REC-1)', async () => {
+    // Named mutant "SHAREDPATHNOVARIANT": drop `variant: input.thinking || undefined` from the runHeadless options.
+    let seenOptions = null;
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({ runHeadlessImpl: async (_taskId, ...args) => { seenOptions = args[7]; return { completed: true, summary: 'all done', variant: 'low' }; } });
+      const { handlers } = require('../src/mcp-server');
+      const startResult = await handlers.amicus_start({ prompt: 'p', noUi: true, model: 'google/gemini-test', thinking: 'low' }, tmpDir);
+      const { taskId } = JSON.parse(startResult.content[0].text);
+      const sessionDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
+      expect(readMeta(sessionDir).thinking).toBe('low');
+      await drain();
+      expect(seenOptions.variant).toBe('low');
+      expect(readMeta(sessionDir).variant).toBe('low');
+    });
+  });
+
+  test('shared-server path: no thinking requested — no `variant` option, no `thinking` key', async () => {
+    let seenOptions = null;
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({ runHeadlessImpl: async (_taskId, ...args) => { seenOptions = args[7]; return { completed: true, summary: 'all done' }; } });
+      const { handlers } = require('../src/mcp-server');
+      const startResult = await handlers.amicus_start({ prompt: 'p', noUi: true, model: 'google/gemini-test' }, tmpDir);
+      const { taskId } = JSON.parse(startResult.content[0].text);
+      await drain();
+      expect(seenOptions.variant).toBeUndefined();
+      expect('thinking' in readMeta(path.join(tmpDir, '.claude', 'amicus_sessions', taskId))).toBe(false);
+    });
+  });
+
   test('shared-server path: metadata.json has no tag key when omitted', async () => {
     await jest.isolateModulesAsync(async () => {
       mockCommonSeams({

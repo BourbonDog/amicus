@@ -36,3 +36,22 @@ describe('fanout CLI surface', () => {
     expect(src).toContain('at least one non-empty entry');
   });
 });
+
+describe('handleFanout argument checks', () => {
+  afterEach(() => { jest.resetModules(); });
+
+  it('rejects an out-of-vocabulary --thinking before anything starts, as `start` does (#218 PR 4 whole-branch review, VCMD-2)', async () => {
+    // Named mutant "FANOUTTHINKINGUNCHECKED": drop the check — process.exit is never called and runFanout receives thinking 'turbo'.
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    jest.doMock('../src/pack/pack-cli', () => ({ applyPackOrExit: jest.fn(() => null) }));
+    const runFanout = jest.fn();
+    jest.doMock('../src/sidecar/fanout', () => ({ runFanout }));
+    try {
+      const { handleFanout } = require('../src/cli-handlers-fanout');
+      await expect(handleFanout({ models: 'kimi,haiku', prompt: 'p', thinking: 'turbo', 'no-context': true })).rejects.toThrow(/^exit /);
+      expect(runFanout).not.toHaveBeenCalled();
+      expect(errSpy.mock.calls.map((c) => String(c[0])).join('')).toContain('Error: --thinking must be one of: none, minimal, low, medium, high, xhigh, max');
+    } finally { exitSpy.mockRestore(); errSpy.mockRestore(); jest.dontMock('../src/pack/pack-cli'); jest.dontMock('../src/sidecar/fanout'); }
+  });
+});

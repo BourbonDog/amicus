@@ -24,8 +24,8 @@ function finalizeSpendForReopen({ taskId, model, mode, op, result, status, proje
       const gateway = metadata.gateway || gatewayOf(model);
       // v4.7.1 Task 7 D16: null-not-absent, the OPPOSITE convention from
       // metadata.tag's absent-not-null (D13) — same `|| null` idiom as start.js:240.
-      // #218 PR 3: `finish` is the OPPOSITE — absent-not-null: appendSpend writes the key only when it is a string.
-      appendSpend({ taskId, model, mode, usage, op, status, project, gateway, tag: metadata.tag || null, finish: result && result.finish }, ctx);
+      // #218 PR 3/PR 4: `finish` and `variant` are the OPPOSITE — absent-not-null: appendSpend writes each key only when it is a string. Named mutant "SOLOROWNOVARIANT" (tests/continue-resume-spend.test.js): drop `variant`.
+      appendSpend({ taskId, model, mode, usage, op, status, project, gateway, tag: metadata.tag || null, finish: result && result.finish, variant: result && result.variant }, ctx);
     } catch { /* best-effort */ }
   }
   return { usage };

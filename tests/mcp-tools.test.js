@@ -156,6 +156,17 @@ describe('MCP Tool Definitions', () => {
       expect(startTool.inputSchema).toHaveProperty('thinking');
     });
 
+    test('thinking accepts every declared level incl. max and rejects one outside the vocabulary (#218 PR 4)', () => {
+      const schema = startTool.inputSchema.thinking;
+      expect(schema.parse('max')).toBe('max');
+      expect(() => schema.parse('turbo')).toThrow();
+
+      const fanoutTool = TOOLS.find(t => t.name === 'amicus_fanout');
+      const fanoutSchema = fanoutTool.inputSchema.thinking;
+      expect(fanoutSchema.parse('max')).toBe('max');
+      expect(() => fanoutSchema.parse('turbo')).toThrow();
+    });
+
     test('has timeout in input schema', () => {
       expect(startTool.inputSchema).toHaveProperty('timeout');
     });
@@ -913,7 +924,7 @@ describe('intent on the council MCP schemas (v4.9 W5.2)', () => {
   // only safe when the failure direction is inert; here it is not. The enum
   // matches amicus_council_run's own `z.enum(['review','task'])`, so one input
   // does not mean two things at two doors.
-  test("amicus_council_tally meta.intent REJECTS a near-miss spelling at the boundary", () => {
+  test('amicus_council_tally meta.intent REJECTS a near-miss spelling at the boundary', () => {
     const schema = byName().amicus_council_tally.inputSchema;
     const meta = extra => ({ runId: 'r', models: ['a', 'b'], ...extra });
     expect(() => schema.meta.parse(meta({ intent: 'Task' }))).toThrow();

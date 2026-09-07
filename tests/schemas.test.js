@@ -75,6 +75,16 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('run'), doc);
   });
 
+  // #218 PR 4: additive — present only when a `variant` was sent for the leg.
+  test('run.schema.json accepts buildRunResult output with a recorded variant, rejects a non-true variantUnverified', () => {
+    const doc = buildRunResult({
+      taskId: 'sch-run-2c',
+      metadata: { model: 'openrouter/deepseek/deepseek-v4', status: 'complete', variant: 'low', variantUnverified: true },
+    });
+    expectValid(compile('run'), doc);
+    expect(compile('run')({ ...doc, variantUnverified: 'yes' })).toBe(false);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],

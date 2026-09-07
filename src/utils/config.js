@@ -394,7 +394,12 @@ function buildProviderModels(resolvedRoutes = [], outputBudget) {
     // budget is ADDED on top of it (K2: 8000 + 16000 = 24000); and the sum is
     // clamped to the model's real ceiling whatever the descriptor or flag said
     // (K3/K4/K10: 64000 for haiku). No descriptor can push a thinking leg over
-    // the ceiling. amicus sends no variant today (F1); PR 4 inherits the numbers.
+    // the ceiling. #218 PR 4 now sends `--thinking` to the engine as its `variant`
+    // field, validated against the model's own declaration before any request,
+    // so these are the numbers a thinking leg now reserves: M2 is K2's
+    // arithmetic at the shipped budget (24000 + 16000 = 40000, refused rather
+    // than sent), and M17 is the fit (8000 + 16000 = 24000) that would need the
+    // variant's budget before the spawn.
     // Named mutant "ANTHROPICHELDOUT" in tests/build-provider-models-output-limit.test.js.
     // #218: `{}` unless a budget is set AND the catalog knows both numbers.
     const limit = computeModelLimit(limits.get(fullModel), budget);

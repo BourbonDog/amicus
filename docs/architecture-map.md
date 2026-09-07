@@ -139,6 +139,7 @@ src/
 │   ├── progress-fields.js  # Derived, agent-facing progress fields shared by the MCP status/list
 │   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
+│   ├── reopen-notices.js  # The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3).
 │   ├── reopen-spend.js  # Spend finalization for a REOPENED session (continue/resume). Split out of
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
 │   ├── session-finalize.js
@@ -199,6 +200,7 @@ src/
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
 │   ├── engine-skew-records.js  # Server identity and the bounded store of standing engine-skew records.
 │   ├── engine-skew.js  # Runtime detection of an opencode ENGINE version skew: server vs installed.
+│   ├── engine-variants.js  # The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration.
 │   ├── env-loader.js  # Credential Loader
 │   ├── env-num.js
 │   ├── env-raw-store.js  # Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6).
@@ -577,6 +579,7 @@ evals/
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `searchSessions()`, `listSidecars()` |
+| `sidecar/reopen-notices.js` | The stderr Notice a reopen owes the user for the effort level it does NOT carry (#218 PR 4, council #235 r5 J1/A3). | `formatDroppedLevelNotice()`, `noticeDroppedLevel()` |
 | `sidecar/reopen-spend.js` | Spend finalization for a REOPENED session (continue/resume). Split out of | `finalizeSpendForReopen()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
@@ -635,6 +638,7 @@ evals/
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/engine-skew-records.js` | Server identity and the bounded store of standing engine-skew records. | `serverKeyForClient()`, `currentEngineSkew()`, `skewForKey()`, `rememberSkew()`, `forgetSkew()` |
 | `utils/engine-skew.js` | Runtime detection of an opencode ENGINE version skew: server vs installed. | `noteSessionVersion()`, `currentEngineSkew()`, `serverKeyForClient()`, `formatSkewWarning()`, `formatSkewSuffix()` |
+| `utils/engine-variants.js` | The effort lever (#218 PR 4): --thinking sent as the engine's variant field, validated against the engine's own declaration. | `VARIANT_LEVELS()`, `VariantRefusedError()`, `readModelDeclaration()`, `checkVariant()`, `formatUnverifiedVariantNote()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/env-num.js` |  | `envNumber()` |
 | `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |
@@ -706,13 +710,13 @@ evals/
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
-| `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS()`, `validateThinkingLevel()` |
 | `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |
 | `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
-| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
+| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `VARIANT_LEVELS()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
 | `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `isSeatTable()`, `readRunArtifact()`, `isRealpathContained()`, `FIXED_ARTIFACTS()` |
 | `workspace/artifact-names.js` | Council Workspace — artifact NAME derivation (v4.8 PR5a). | `artifactAllowlist()`, `isSeatTable()`, `orphanExonerations()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()` |

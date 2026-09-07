@@ -229,8 +229,10 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     // Window widened 700->950 (v4.5 HOLD-gate decision 1): the renderedPrompt
     // doc comment above `briefing:` pushed packRecord further into the slice
     // (T15-m4 already flags this fixed-offset idiom as brittle; not
-    // re-litigated here, just re-measured).
-    expect(metaWrite.slice(0, 950)).toContain('packRecord');
+    // re-litigated here, just re-measured). Widened again 950->1150 (#218 PR 4
+    // whole-branch review REC-1): the `thinking` emit-when-requested line and its
+    // comment sit above `briefing:` too — packRecord now starts at offset 1052.
+    expect(metaWrite.slice(0, 1150)).toContain('packRecord');
   });
 
   test('amicus_start records the pack on the spawn-fallback pre-seed metadata write', () => {
@@ -566,7 +568,10 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
       const packName = `solo-w1m67-${optionKey.toLowerCase()}`;
       store().writePack({
         schemaVersion: 1, type: 'pack', name: packName, version: '1.0.0', kind: 'solo',
-        description: 'x', model: 'vendorx/solo-model', options: { [optionKey]: true }, briefing: {},
+        // `true` is a placeholder for every knob but `thinking`, whose VALUE is now
+        // checked by validatePack (#218 PR 4 whole-branch review, VCMD-2) — this walk
+        // is about key ROUTING, so give that one key an in-vocabulary value.
+        description: 'x', model: 'vendorx/solo-model', options: { [optionKey]: optionKey === 'thinking' ? 'high' : true }, briefing: {},
       });
       const input = {};
       const res = applyPackToMcpInput({
@@ -880,6 +885,106 @@ describe('amicus_start spawn-fallback: pre-spend validation of pack-forwarded ma
       { pack: 'solo-review-template-pack', prompt: 'Review this.', model: 'vendorx/solo-model' }, tmp);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/artifact/);
+    expect(spawnCallCount).toBe(0);
+    expect(sessionDirCount(tmp)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #218 PR 4 whole-branch review (VCMD-1 / VCMD-2): the zod enum closes the TYPED
+// door only — validatePack checks option KEY names, never values, so a saved
+// `options.thinking: 'turbo'` reached the handler unchallenged and (on start)
+// the engine. Both handlers now run the same vocabulary check the CLI runs.
+// ---------------------------------------------------------------------------
+
+describe('an out-of-vocabulary thinking level is refused at both MCP doors, typed or pack-filled (#218 PR 4)', () => {
+  const SOLO_TURBO_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'solo-turbo-pack', version: '1.0.0', kind: 'solo',
+    description: 'x', model: 'vendorx/solo-model', options: { thinking: 'turbo' }, briefing: {},
+  });
+  const FANOUT_TURBO_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-turbo-pack', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: { thinking: 'turbo' }, briefing: {},
+  });
+  const VOCAB_ERROR = 'Error: --thinking must be one of: none, minimal, low, medium, high, xhigh, max';
+
+  async function callStartWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      jest.doMock('../../src/utils/route-launch', () => ({
+        resolveRouteForLaunch: jest.fn(async ({ model }) => ({
+          kind: 'resolved', gateway: 'direct', executableId: model, provenance: {},
+        })),
+      }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_start(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  async function callFanoutWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  function sessionDirCount(project) {
+    const sessBase = path.join(project, '.claude', 'amicus_sessions');
+    return fs.existsSync(sessBase) ? fs.readdirSync(sessBase).length : 0;
+  }
+
+  // The handler's OWN check (mcp-server.js). The zod enum runs in the MCP transport, not
+  // in the handler function, so a direct handler call is exactly the door it guards.
+  test("amicus_start: a typed thinking 'turbo' is a BAD_ARGS error doc, NO session dir, NO spawn", async () => {
+    // Named mutant "PACKTHINKINGUNCHECKED": drop the vocabulary block from amicus_start — the handler starts a run.
+    const { result, spawnCallCount } = await callStartWithMockedSpawn(
+      { prompt: 'ok', noUi: true, model: 'vendorx/solo-model', thinking: 'turbo' }, tmp);
+    expect(result.isError).toBe(true);
+    const doc = JSON.parse(result.content[0].text);
+    expect(doc.error.code).toBe(ERROR_CODES.BAD_ARGS);
+    expect(doc.error.message).toBe(VOCAB_ERROR);
+    expect(spawnCallCount).toBe(0);
+    expect(sessionDirCount(tmp)).toBe(0);
+  });
+
+  test("amicus_fanout: a typed thinking 'turbo' is refused before any wave dir or spawn", async () => {
+    // Named mutant "FANOUTPACKTHINKINGUNCHECKED": drop the vocabulary block from amicus_fanout.
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: 'ok', thinking: 'turbo' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(VOCAB_ERROR);
+    expect(spawnCallCount).toBe(0);
+    expect(sessionDirCount(tmp)).toBe(0);
+  });
+
+  // The PACK door closes one step earlier, at validatePack (#218 PR 4 whole-branch review,
+  // VCMD-2): resolution fails PACK_INVALID before the handler's own check is reached.
+  test("amicus_start: a solo pack's options.thinking 'turbo' fails resolution, NO session dir, NO spawn (the PACK door)", async () => {
+    // Named mutant "PACKTHINKINGVALUE": drop the value check from pack-validate.js — the pack resolves.
+    store().writePack(SOLO_TURBO_PACK());
+    const { result, spawnCallCount } = await callStartWithMockedSpawn(
+      { pack: 'solo-turbo-pack', prompt: 'ok', noUi: true }, tmp);
+    expect(result.isError).toBe(true);
+    const doc = JSON.parse(result.content[0].text);
+    expect(doc.error.code).toBe('PACK_INVALID');
+    expect(doc.error.message).toContain('options.thinking must be one of: none, minimal, low, medium, high, xhigh, max');
+    expect(spawnCallCount).toBe(0);
+    expect(sessionDirCount(tmp)).toBe(0);
+  });
+
+  test("amicus_fanout: a fanout pack's options.thinking 'turbo' fails resolution before any wave dir or spawn", async () => {
+    store().writePack(FANOUT_TURBO_PACK());
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-turbo-pack', prompt: 'ok' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('options.thinking must be one of: none, minimal, low, medium, high, xhigh, max');
     expect(spawnCallCount).toBe(0);
     expect(sessionDirCount(tmp)).toBe(0);
   });

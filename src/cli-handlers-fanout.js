@@ -8,7 +8,7 @@
 
 'use strict';
 
-const { validateTaskId, validateTag } = require('./utils/validators');
+const { validateTaskId, validateTag, validateThinkingLevel } = require('./utils/validators');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
 const { applyTemplateForArgs } = require('./cli-template-args');
@@ -52,6 +52,15 @@ async function handleFanout(args) {
   // of failing fast with a clear error.
   if (args.gateway !== undefined && !GATEWAY_MODES.includes(args.gateway)) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` }));
+  }
+
+  // #218 PR 4 whole-branch review (VCMD-2): the same vocabulary check `start` runs in
+  // validateStartArgs (cli.js) — fanout never did, so a typo (or a pack's) reached sendPrompt:
+  // sent unverified to an unknown model, a per-leg VARIANT_UNDECLARED after the spawn on a
+  // known one. Named mutant "FANOUTTHINKINGUNCHECKED" (tests/fanout-cli.test.js): drop this block.
+  const thinkingCheck = validateThinkingLevel(args.thinking);
+  if (!thinkingCheck.valid) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: thinkingCheck.error }));
   }
 
   const { resolvePromptSource } = require('./utils/prompt-source');

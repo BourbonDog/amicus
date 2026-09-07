@@ -18,7 +18,9 @@
  *   - a reservation of at least half a route's context window: input plus
  *     max_tokens has to fit the window, and the engine subtracts the same
  *     reservation from the window before compaction (read in the binary), so
- *     such a value starves the prompt.
+ *     such a value starves the prompt;
+ *   - nothing for a direct openai route: it carries no reservation field at
+ *     all (M5/M13/M22), so it is listed apart from the clamped/unclamped counts.
  * A configured budget and a valid ambient flag get the SAME analysis: they
  * govern the same spawns (council #231 r2 D2). So does a valid ambient flag
  * beside a malformed budget (r4 B1).
@@ -62,8 +64,9 @@ function analyseRoutes(d, cache, value, lowerHint) {
     // out (K12), so a missing cache is informational; above it an unknown model
     // receives the value as-is (J2/K13) and the cache is what would name a
     // ceiling. Named mutant "NOCACHEALWAYSWARN": make this branch warn regardless.
+    // Named mutant "NOCACHEOPENAI" (tests/doctor-output-budget.test.js): drop the openai clause.
     return {
-      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is)`,
+      clauses: `; no catalog cache, so no route has a known ceiling here (the engine clamps routes its own catalog knows; an unknown model receives ${shown} as-is; an openai/ id carries no output reservation on a leg that resolves DIRECT — the Responses API request has no output-limit field, probe M5/M13/M22 — while the openrouter/openai/… form of the same model does, M1/M9; which gateway a leg takes is a launch-time decision this row cannot read)`,
       status: aboveDefault ? 'warn' : 'ok',
       hint: aboveDefault ? 'amicus models --refresh — with no cache nothing can be checked; a model neither catalog knows receives the value unclamped, so lower it if any route is one' : null,
     };
@@ -72,14 +75,27 @@ function analyseRoutes(d, cache, value, lowerHint) {
   const routes = [...new Set(d.collectAliasSources()
     .map((s) => s && s.model)
     .filter((m) => typeof m === 'string' && m.length > 0))];
+  // #218 PR 4 (probe M5/M13/M22): the engine drives the direct `openai` provider
+  // through the Responses API, whose request body carries NO output-limit field
+  // — with a bare descriptor, with limit.output 8000 and the flag at 8000, for
+  // gpt-5.6-terra and gpt-4o alike. Neither lever reaches that route, so it is
+  // reported apart, never as clamped. Named mutant "OPENAIGOVERNED".
+  // council #235 r4 (C6): the id prefix partitions the LIST — it does not predict the ROUTE. This
+  // row cannot see a future invocation's `--gateway`, `routing.prefer` or which keys are present,
+  // and the `openrouter/openai/…` form of the same model DOES carry the reservation (M1/M9), so the
+  // clause states the outcome of a leg that resolves DIRECT and says the choice is made at launch.
+  // Named mutant "OPENAIOUTCOMEASSERTED": restore the unconditional "carries no output reservation
+  // at all … so the value does not apply there" in both clauses below.
+  const ungoverned = routes.filter((id) => id.startsWith('openai/'));
+  const governed = routes.filter((id) => !id.startsWith('openai/'));
   const unclamped = [];
   const starved = [];
-  for (const id of routes) {
+  for (const id of governed) {
     const limit = computeModelLimit(limits.get(id), value);
     if (!limit) { unclamped.push(id); continue; }
     if (limit.output * 2 >= limit.context) { starved.push(`${id} (${limit.output} of ${limit.context})`); }
   }
-  let clauses = `; ${routes.length - unclamped.length} of ${routes.length} alias routes have a known catalog ceiling`;
+  let clauses = `; ${governed.length - unclamped.length} of ${governed.length} alias routes have a known catalog ceiling`;
   let status = 'ok';
   let hint = null;
   if (unclamped.length > 0) {
@@ -98,6 +114,11 @@ function analyseRoutes(d, cache, value, lowerHint) {
     status = 'warn';
     // Starvation leads: a catalog refresh cannot fix it, lowering the value can.
     hint = lowerHint + (hint ? `; ${hint}` : '');
+  }
+  if (ungoverned.length > 0) {
+    const plural = ungoverned.length === 1 ? '' : 's';
+    const carry = ungoverned.length === 1 ? 'carries' : 'carry';
+    clauses += `; ${ungoverned.length} openai/ alias route${plural} (${shortList(ungoverned)}) ${carry} no output reservation on a leg that resolves DIRECT to that provider — the engine drives it through the Responses API, whose request has no output-limit field (probe M5/M13/M22); which gateway a leg takes is a launch-time decision this row cannot read (--gateway, routing.prefer, key presence), and the openrouter/openai/… form of the same model DOES carry the reservation (M1/M9)`;
   }
   return { clauses, status, hint };
 }

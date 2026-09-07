@@ -50,7 +50,7 @@ function durationBetween(createdAt, completedAt) {
  *   metadata.pack was recorded (solo session launched via --pack), sourced straight off
  *   `metadata` like `usage`/`opencodeSessionId` already are (no new function parameter needed).
  *   `tag` (v4.7 F8/D13) is additive the same way — present only when metadata.tag was recorded.
- *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message.
+ *   `finish` (#218 PR 3) likewise — the engine's finish reason for the leg's last assistant message. `variant` / `variantUnverified` (#218 PR 4) likewise — the effort level SENT, and whether the engine's catalogue knew the model when it was sent.
  */
 function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
@@ -82,6 +82,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     // disk, so NaN/±Infinity/negatives/fractions all reach here. See ./ttft.js.
     ...(isMeasuredTtft(metadata.ttftMs) ? { ttftMs: metadata.ttftMs } : {}),
     ...(typeof metadata.finish === 'string' ? { finish: metadata.finish } : {}), // #218 PR 3: emit-when-set (named mutant FINISHCOERCED)
+    ...(typeof metadata.variant === 'string' ? { variant: metadata.variant } : {}), ...(metadata.variantUnverified === true ? { variantUnverified: true } : {}), // #218 PR 4: emit-when-sent (named mutants VARIANTCOERCED / UNVERIFIEDCOERCED)
     usage: usage !== null ? usage : (metadata.usage || null),
     ...(metadata.pack ? { pack: metadata.pack } : {}),
     ...(metadata.tag ? { tag: metadata.tag } : {}),

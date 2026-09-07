@@ -273,6 +273,54 @@ describe('Session Utils', () => {
     });
   });
 
+  describe('finalizeSession opts.variant / variantUnverified (#218 PR 4)', () => {
+    let sessDir;
+
+    beforeEach(() => {
+      detectConflicts.mockReturnValue([]);
+      sessDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'finalize-variant-'));
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
+    });
+
+    afterEach(() => {
+      fs.rmSync(sessDir, { recursive: true, force: true });
+    });
+
+    it('stamps both metadata.variant and metadata.variantUnverified when opts sets them', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', variant: 'low', variantUnverified: true });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      expect(saved.variant).toBe('low');
+      expect(saved.variantUnverified).toBe(true);
+    });
+
+    it('carries neither key when opts.variant / opts.variantUnverified are absent', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      expect('variant' in saved).toBe(false);
+      expect('variantUnverified' in saved).toBe(false);
+    });
+
+    it('REMOVES prior variant keys when opts is absent — a resumed run reuses the same metadata', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [], variant: 'low', variantUnverified: true };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      // Named mutant "STALEVARIANT": drop both `else { delete … }` clauses — both keys survive.
+      expect('variant' in saved).toBe(false);
+      expect('variantUnverified' in saved).toBe(false);
+    });
+
+    it('does not stamp a non-string variant or a non-true variantUnverified', () => {
+      const metadata = { createdAt: new Date().toISOString(), filesWritten: [] };
+      finalizeSession(sessDir, 'summary', '/project', metadata, { status: 'complete', variant: 7, variantUnverified: 'yes' });
+      const saved = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+      // Named mutant "SOLOVARIANTDROPPED": drop the `variant` stamp — the sibling stamp test fails.
+      expect('variant' in saved).toBe(false);
+      expect('variantUnverified' in saved).toBe(false);
+    });
+  });
+
   describe('outputSummary', () => {
     it('wraps the summary in the untrusted_sidecar_output fence (B03)', () => {
       const spy = jest.spyOn(console, 'log').mockImplementation(() => {});

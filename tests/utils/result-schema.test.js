@@ -99,6 +99,21 @@ describe('result-schema', () => {
       const bogus = buildRunResult({ taskId: 'f3', metadata: { ...baseMeta, finish: 7 }, result: { completed: true }, summary: 'ok' });
       expect('finish' in bogus).toBe(false);
     });
+
+    it('carries metadata.variant and variantUnverified emit-when-set (#218 PR 4)', () => {
+      const sent = buildRunResult({ taskId: 'v1', metadata: { ...baseMeta, variant: 'low' }, result: { completed: true }, summary: 's' });
+      expect(sent.variant).toBe('low');
+      expect('variantUnverified' in sent).toBe(false);
+      const unverified = buildRunResult({ taskId: 'v2', metadata: { ...baseMeta, variant: 'medium', variantUnverified: true }, result: { completed: true }, summary: 's' });
+      expect(unverified.variantUnverified).toBe(true);
+      const without = buildRunResult({ taskId: 'v3', metadata: baseMeta, result: { completed: true }, summary: 's' });
+      expect('variant' in without).toBe(false);
+      expect('variantUnverified' in without).toBe(false);
+      // Named mutants "VARIANTCOERCED" (`variant: metadata.variant || null`) and "UNVERIFIEDCOERCED" (`variantUnverified: !!metadata.variantUnverified`).
+      const bogus = buildRunResult({ taskId: 'v4', metadata: { ...baseMeta, variant: 7, variantUnverified: 'yes' }, result: { completed: true }, summary: 's' });
+      expect('variant' in bogus).toBe(false);
+      expect('variantUnverified' in bogus).toBe(false);
+    });
   });
 
   describe('waveStatusFromLegs + waveExitCode', () => {
