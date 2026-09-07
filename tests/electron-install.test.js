@@ -362,12 +362,16 @@ describe('repairElectron (#53)', () => {
   });
 
   test('corrupt cached zip: extract throws → delete bad zip + forced re-download + extract', async () => {
-    // The zip HASHES CORRECTLY and still fails to open — a truncated-but-consistent
-    // artifact, which is a different failure class from a digest disagreement (that
-    // one is refused before extract; see the C2 tests). The anchor is seeded for
-    // this body so the gate passes and the extract-throw path is what runs.
+    // The zip is ALLOWED and still fails to open — a truncated artifact, which is a
+    // different failure class from a digest disagreement (that one is refused before
+    // extract; see the C2 tests). NO anchor covers this artifact, which is the only
+    // shape where "allowed, but corrupt" is physically coherent: with a published
+    // digest in hand, bytes that fail to open would have failed the hash. v4.9.6's
+    // second round hashes the DOWNLOAD too, so a fixture whose anchor vouches for
+    // the corrupt body would now refuse the good re-download instead of extracting it.
     const badBody = 'CORRUPT';
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32', body: badBody });
+    fs.rmSync(path.join(dir, 'checksums.json'));
     const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(badZip, badBody);
     // The re-downloaded zip is good.
@@ -410,8 +414,10 @@ describe('repairElectron (#53)', () => {
     // A forced fresh download was attempted.
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
     expect(downloadArtifact.mock.calls[0][0].force).toBe(true);
-    // Re-extract materialized the exe → repaired true.
+    // Re-extract materialized the exe → repaired true, and marked `unverified`
+    // because no published digest covered either artifact (F3).
     expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
   });
 });

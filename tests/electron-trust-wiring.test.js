@@ -33,7 +33,7 @@
 //   `const gate = verifyArtifact(...)` line with `{ verdict: 'verified',
 //   allowed: true }`, i.e. extract the cached zip without hashing it.
 //   RED: "a MISMATCHING cached zip is NOT extracted" (extract called 1x, not 0).
-// POISONKEPT         electron-provision.js :: rejectCachedZip — `if (false &&`
+// POISONKEPT         electron-refuse.js :: rejectCachedZip — `if (false &&`
 //   before the mismatch/fence condition, so nothing is ever deleted.
 //   RED: "a mismatched zip INSIDE a resolved cache root is deleted"
 //   (existsSync true, expected false).
@@ -71,7 +71,7 @@
 //   `refusal` into the returned object.
 //   RED: "online, a REFUSED cache entry plus a failed download reports the
 //   refusal, not 'not provisioned'".
-// ADVICEAFTERDELETE        electron-provision.js :: rejectCachedZip — move the
+// ADVICEAFTERDELETE        electron-refuse.js :: rejectCachedZip — move the
 //   removal notice back above the hatch advice.
 //   RED: "the refusal tells the user about the hatch BEFORE it tells them the
 //   file is gone".
@@ -145,7 +145,9 @@ afterEach(() => { stderrSpy.mockRestore(); });
 
 describe('C1 — the digest is PINNED on the network path', () => {
   test('controlledProvision passes checksums for exactly the artifact it is fetching', async () => {
-    const downloadArtifact = jest.fn(async () => '/tmp/out.zip');
+    // A REAL file: v4.9.6's second round stages the download and hashes the copy,
+    // so a path that does not exist is refused before extraction is ever reached.
+    const downloadArtifact = jest.fn(async () => writeZip());
     const extractFromCache = jest.fn(async () => {});
     await controlledProvision({
       electronDir: '/tmp/pkg',
@@ -171,7 +173,7 @@ describe('C1 — the digest is PINNED on the network path', () => {
     // An empty object is a hard throw upstream ("cannot generate a valid
     // SHASUMS256.txt"), and a table missing this artifact fails the download —
     // both would turn a legacy package into a permanent provision failure.
-    const downloadArtifact = jest.fn(async () => '/tmp/out.zip');
+    const downloadArtifact = jest.fn(async () => writeZip());
     for (const anchor of [null, { table: { 'electron-v1.0.0-linux-x64.zip': ZIP_SHA256 }, source: '<test>' }]) {
       await controlledProvision({
         electronDir: '/tmp/pkg', platform: PLATFORM, arch: ARCH, version: VERSION, anchor,
@@ -316,6 +318,10 @@ describe('C2 — the poison delete is FENCED', () => {
   });
 
   test('an UNREADABLE candidate is refused and never deleted', async () => {
+    // v4.9.6 (second round): an artifact amicus cannot even copy into a private
+    // directory is refused THERE, one step earlier than the hash — `unstaged`
+    // rather than `unreadable`. Both set `integrity`, so postinstall still prints
+    // the reason; what matters is unchanged: nothing extracted, nothing deleted.
     const cacheRoot = mkTmp('amicus-cacheroot-');
     process.env.ELECTRON_CACHE = cacheRoot;
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
@@ -323,7 +329,8 @@ describe('C2 — the poison delete is FENCED', () => {
       dir, exeName, distDir, zip: path.join(cacheRoot, 'gone', ZIP_NAME), cacheOnly: true,
     });
     expect(extract).not.toHaveBeenCalled();
-    expect(res.integrity).toBe('unreadable');
+    expect(res.integrity).toBe('unstaged');
+    expect(res.repaired).toBe(false);
   });
 });
 

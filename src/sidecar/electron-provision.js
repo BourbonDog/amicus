@@ -1,13 +1,15 @@
 /**
- * Electron CONTROLLED provision — the pinned download, and what happens to a
- * cached artifact the digest gate refuses.
+ * Electron CONTROLLED provision — the pinned download, and the fence that says
+ * whether a refused cache artifact may be deleted.
  *
  * Split out of electron-install.js because that file sits at the repo's 300-line
- * gate and cannot grow. The require arrow is
- * electron-install -> electron-provision -> {electron-trust, electron-stage} and
- * must never point back, so `extractFromCache` arrives as an argument rather than
- * an import. electron-stage is a leaf (fs/os/path only) and is required by both
- * this module and electron-install.js, which adds no cycle.
+ * gate and cannot grow; the refusal MESSAGES were split out of this file, into
+ * ./electron-refuse, for the same reason. The require arrow is
+ * electron-install -> electron-provision -> {electron-trust, electron-stage,
+ * electron-refuse} and must never point back, so `extractFromCache` arrives as
+ * an argument rather than an import. electron-stage and electron-refuse are
+ * near-leaves required by both this module and electron-install.js, which adds
+ * no cycle.
  *
  * @module sidecar/electron-provision
  */
@@ -17,25 +19,10 @@
 const path = require('path');
 
 const { resolveCacheRoots } = require('./electron-cache');
+const { refuseUnstagedArtifact, rejectDownloadedZip } = require('./electron-refuse');
 const { releaseStage, stageArtifact } = require('./electron-stage');
-const { artifactFileName, expectedDigest, scrubbedChildEnv } = require('./electron-trust');
+const { artifactFileName, expectedDigest, scrubbedChildEnv, verifyArtifact } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
-const { collapseExcerpt } = require('../utils/text-sanitize');
-
-/**
- * F5 (council seat B5). Everything below that reaches stderr or a returned
- * `reason` goes through the house sanitizer first, because two of its inputs are
- * written by the attacker: an unsafe archive's refusal text carries the ARCHIVE'S
- * OWN entry name, and a cached artifact's path carries a `<sha>` directory name
- * read out of a cache root anyone can write. Unsanitized, either could embed ANSI
- * escapes, a newline plus a forged `[amicus] …` line, or a right-to-left override
- * that renders the rest of the sentence backwards — in the one message a user
- * reads when amicus is telling them something is wrong.
- *
- * A path gets a longer cap than an error excerpt: 200 characters truncates a real
- * npx-cache path, and a path the user cannot copy is not much use in a refusal.
- */
-const PATH_EXCERPT_CHARS = 320;
 
 /** Best-effort cache root for downloadArtifact (first resolved root). */
 function cacheRootFor(env = process.env) {
@@ -44,8 +31,9 @@ function cacheRootFor(env = process.env) {
 
 /**
  * CONTROLLED provision: fetch the zip ourselves with the SAME @electron/get
- * api install.js uses (downloadArtifact, force:true), extract offline, and let
- * the caller verify isElectronUsable(). No blind install.js spawn.
+ * api install.js uses (downloadArtifact, force:true), stage it privately, hash
+ * it OURSELVES, extract offline, and let the caller verify isElectronUsable().
+ * No blind install.js spawn.
  *
  * C1 — THE PIN. `checksums` is what breaks the attack chain. Supplied, it makes
  * @electron/get write a LOCAL SHASUMS256.txt from this table and never fetch one
@@ -68,16 +56,31 @@ function cacheRootFor(env = process.env) {
  * so it is stated out loud on stderr every time rather than happening quietly —
  * and it is reachable ONLY through a bare env name a repository cannot plant.
  *
- * F3 — AND IT IS MARKED, NOT ONLY LOGGED (council seats C1 + B3). Both
+ * F#2 — AMICUS HASHES WHAT IT DOWNLOADED, ITSELF. Sending `checksums` records
+ * that a table went out; it does not record that the bytes reaching the
+ * extractor matched it. @electron/get validates in its own temp dir and then
+ * RENAMES the artifact into the cache root, handing back THAT path — a path the
+ * same cache-dir writer the digest gate exists to stop can swap before amicus
+ * opens it. MEASURED before this change: with the swap fired inside amicus's own
+ * post-download window, `BYTES EXTRACTED: "POISONED-BYTES"` and
+ * `{"repaired":true}`. So the downloaded artifact is staged (copied into a
+ * private 0700 directory) and re-hashed THERE against the same anchor the cache
+ * route uses, and `pinned` now means what its name says: these exact bytes
+ * matched a digest amicus anchored.
+ *
+ * F#6/F#8 — AND IT FAILS CLOSED. When staging is impossible (a full or
+ * unwritable temp directory) this route used to extract the unstaged cache path
+ * anyway, while the only line on screen said the bytes would not be extracted.
+ * It now refuses, in the same words the cache route already used.
+ *
+ * F3 — AND AN UNPINNED SUCCESS IS MARKED, NOT ONLY LOGGED (seats C1 + B3). Both
  * `CHANGELOG.md` and `docs/troubleshooting.md` promise that an artifact no
  * published digest covers is "extracted and marked `unverified`". v4.9.5 kept
- * that promise on the CACHE route only: a no-digest DOWNLOAD silently omitted
- * `checksums`, extracted whatever the mirror served, and returned a plain
- * `{repaired:true}` with no mark and no line. The returned `pinned` flag is what
- * makes the promise true on this route too; `repairElectron` folds
- * `unverified:true` into its result whenever it is false.
- * @returns {Promise<{pinned:boolean}>} pinned:false = these bytes were vouched
- *   for only by the mirror that served them.
+ * that promise on the CACHE route only. `repairElectron` folds `unverified:true`
+ * into its result whenever `pinned` is false.
+ * @returns {Promise<{pinned:boolean, refused?:object}>} pinned:false = these bytes
+ *   were vouched for only by the mirror that served them; `refused` = a result
+ *   shape the caller must return as-is, nothing was extracted.
  */
 async function controlledProvision({
   electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
@@ -105,18 +108,24 @@ async function controlledProvision({
     ...(digest ? { checksums: { [fileName]: digest } } : {}),
     downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
   });
-  // F1 ON THIS ROUTE TOO. @electron/get validates in its own temp dir and THEN
-  // moves the artifact into the cache root, so the path it hands back is one the
-  // same cache-dir writer can swap before we open it. Without this, an attacker
-  // who simply DELETES the cached zip forces the download route and wins the
-  // identical race — the cache-route fix alone would be trivially side-stepped.
   const stage = stageArtifact({ zip, fileName, fs, log });
+  if (!stage) { return { pinned: false, refused: refuseUnstagedArtifact({ fileName, zip, log }) }; }
   try {
-    await extractFromCache({ zip: stage ? stage.path : zip, electronDir, platform, extract, fs });
+    // The gate runs on the STAGED copy, whose inode nothing else has a name for
+    // or a handle on — so the bytes it hashes are the bytes extract() opens.
+    const gate = verifyArtifact({ zip: stage.path, anchor, fileName, policy, fs, log });
+    if (!gate.allowed) { return { pinned: false, refused: rejectDownloadedZip({ gate, fileName, log }) }; }
+    await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
+    // BOTH halves, deliberately. `digest` says a `checksums` table went out, so a
+    // hatch-dropped pin still reports unverified even when the anchor happens to
+    // agree; `verdict === 'verified'` says amicus itself hashed these exact bytes
+    // and they matched. Either half alone has been wrong: F3's first cut reported
+    // the table, and the table alone is what seat F#2 showed does not describe the
+    // bytes that reach the extractor.
+    return { pinned: !!digest && gate.verdict === 'verified' };
   } finally {
-    releaseStage({ stage, fs, log });
+    releaseStage({ stage, fs });
   }
-  return { pinned: !!digest };
 }
 
 /**
@@ -138,68 +147,6 @@ function mayDeleteRejectedZip({ zip, fileName, env = process.env }) {
 }
 
 /**
- * Act on a REFUSED cached artifact: remove the poison when it is safe to, say
- * plainly what happened, and hand back the result shape a cacheOnly caller
- * returns. Deletion happens ONLY on `mismatch` — a `no-digest` artifact is not
- * evidence of anything, and an `unreadable` one is a file we could not even hash.
- *
- * `zip` is always the ORIGINAL cache path, never the staged copy: the message
- * tells the user about the path they can see. With an F1 `stage` in hand the
- * removal is not a delete at all — the artifact has already been moved out of
- * the cache, so "removed" means "not put back", and the only `rmSync` left runs
- * inside amicus's own temp directory. That is strictly NARROWER than v4.9.5's
- * reach: the fence still gates the outcome, and nothing outside it is unlinked.
- *
- * `mayDelete` IS THE FENCE'S ANSWER, PASSED IN, not re-derived here — see the
- * call site in electron-install.js for why it has to be taken before the move.
- * @returns {{repaired:false, integrity:string, reason:string}}
- */
-function rejectCachedZip({ gate, zip, fileName, stage = null, mayDelete = false, fs, log = () => {} }) {
-  let removed = false;
-  if (gate.verdict === 'mismatch' && mayDelete) {
-    try {
-      // A MOVED artifact is already gone from the cache; discarding the staging
-      // copy (below, in releaseStage) is the whole delete. A COPIED one — the
-      // cross-volume fallback — still has its original in place.
-      if (!stage || !stage.moved) { fs.rmSync(zip, { force: true }); }
-      if (stage) { stage.discard = true; }
-      removed = true;
-    } catch { /* a cache we cannot write is not a reason to fail the repair */ }
-  }
-  // F5: `gate.reason` is an fs error string (an `unreadable` verdict) and `zip` is
-  // an attacker-influenced cache path; the digests are 64-hex by construction.
-  const what = gate.verdict === 'mismatch'
-    ? `sha256 ${gate.actual} does not match the published ${gate.expected}`
-    : collapseExcerpt(gate.reason);
-  log(`[amicus] Electron artifact REFUSED: ${fileName}`);
-  log(`[amicus]   ${collapseExcerpt(zip, PATH_EXCERPT_CHARS)}`);
-  log(`[amicus]   ${what}`);
-  log('[amicus] This is what a swapped mirror or a planted cache file looks like. It is ALSO');
-  log('[amicus] what a truncated download, a failing disk, or a mirror serving a REBUILT');
-  log('[amicus] electron looks like — amicus cannot tell them apart.');
-  // ORDER MATTERS. The advice comes BEFORE the removal notice, and says what to
-  // do about a file that is already gone: a hand-seeded air-gapped cache is the
-  // one place the refused artifact was also the ONLY copy, and being told about
-  // the hatch after "The file has been removed." is being told too late to use
-  // it. The delete itself is required (a poisoned zip must not survive to be
-  // re-offered); the words around it are what make it recoverable.
-  log('[amicus] If you deliberately run a REBUILT electron, set');
-  log('[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 BEFORE provisioning again — it accepts these');
-  log('[amicus] bytes on the cache path and drops the digest pin on the download path.');
-  log(`[amicus]   ${removed
-    ? 'The file has been removed: re-copy it from the machine that downloaded it (or let'
-      + '\n[amicus]   amicus download it again) once that variable is set.'
-    : 'The file was left in place.'}`);
-  log('[amicus] Headless runs and the council work without the GUI.');
-  return {
-    repaired: false,
-    integrity: gate.verdict,
-    reason: `Cached electron artifact ${fileName} was REFUSED: ${what}.`
-      + `${removed ? ' It has been removed.' : ' It was left in place.'}`,
-  };
-}
-
-/**
  * Drive electron's own install.js with force_no_cache semantics. C3: the spawn env
  * is SCRUBBED — install.js honours `npm_config_electron_mirror` AND
  * `npm_config_electron_use_remote_checksums` (which turns its own bundled pin off),
@@ -215,45 +162,6 @@ function runInstaller({ electronDir, force, spawn, platform, arch }) {
   return spawn(process.execPath, [installScript], { env, stdio: 'ignore' });
 }
 
-/** The terminal path-traversal refusal `robustExtract` throws (unzip.js C4). */
-function isUnsafeArchive(err) {
-  return !!err && err.code === 'UNZIP_UNSAFE_ARCHIVE';
-}
-
-/**
- * C4 AT THE CALL SITE. unzip.js classifies extract-zip's path-traversal refusals
- * as terminal so the same archive is never handed to an OS extractor that has no
- * such check. That invariant held only INSIDE unzip.js: both of repairElectron's
- * catch blocks used to swallow the refusal without reading `err.code` and launder
- * it back into exactly the retry the control forbids — the network path spawned
- * `node <electronDir>/install.js`, which re-downloads and re-extracts through
- * @electron-internal/extract-zip with no amicus supervision (the forbidden move,
- * one stack frame up), and the cache path deleted the zip through the UNFENCED
- * `fs.rmSync` and told the user it "was corrupt and removed" — a security refusal
- * reported as corruption. MEASURED both, before this change.
- *
- * So the refusal ends here: no retry, no fallback extractor, and no delete. The
- * archive is left where it is, because a refused archive is evidence, and
- * `err.message` already carries the path and extract-zip's own reason.
- * @returns {{repaired:false, integrity:'unsafe-archive', reason:string}}
- */
-function refuseUnsafeArchive({ err, fileName, log = () => {} }) {
-  // F5: this message quotes the ARCHIVE'S OWN entry name back at the user. The
-  // house sanitizer runs before it reaches stderr or the returned reason.
-  const detail = collapseExcerpt((err && err.message) || 'the archive tried to write outside its destination');
-  log(`[amicus] Electron artifact REFUSED (unsafe archive): ${fileName}`);
-  log(`[amicus]   ${detail}`);
-  log('[amicus] Entries in that zip tried to write OUTSIDE the destination directory. amicus');
-  log('[amicus] will not retry it with another extractor, and has left the file in place.');
-  log('[amicus] Headless runs and the council work without the GUI.');
-  return {
-    repaired: false,
-    integrity: 'unsafe-archive',
-    reason: `Electron artifact ${fileName} was REFUSED: ${detail}. It was NOT retried and NOT removed.`,
-  };
-}
-
 module.exports = {
-  cacheRootFor, controlledProvision, mayDeleteRejectedZip, rejectCachedZip, isUnsafeArchive, refuseUnsafeArchive,
-  runInstaller,
+  cacheRootFor, controlledProvision, mayDeleteRejectedZip, runInstaller,
 };

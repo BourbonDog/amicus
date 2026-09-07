@@ -13,6 +13,12 @@
  * #59: ELECTRON_OVERRIDE_DIST_PATH moves the exe to <override>/<exe> (mirrors
  * electron/index.js + install.js semantics). Cache layout (@electron/get):
  * <cacheRoot>/<sha256>/electron-v<ver>-<platform>-<arch>.zip
+ *
+ * AT THE SIZE GATE, so pieces live next door: `./electron-layout` holds
+ * `platformExe`/`writePathTxt`/`extractFromCache` (re-exported here for
+ * `ei.platformExe`), `./electron-refuse` holds the refusal messages,
+ * `./electron-stage` the private staging, `./electron-provision` the pinned
+ * download. The arrow points one way out of this file and never back.
  */
 
 'use strict';
@@ -24,12 +30,17 @@ const { spawnSync } = require('child_process');
 const { cachedZip } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
+const { extractFromCache, platformExe } = require('./electron-layout');
+const { controlledProvision, mayDeleteRejectedZip, runInstaller } = require('./electron-provision');
 const {
-  controlledProvision, isUnsafeArchive, mayDeleteRejectedZip, refuseUnsafeArchive, rejectCachedZip, runInstaller,
-} = require('./electron-provision');
-const { releaseStage, stageArtifact } = require('./electron-stage');
+  isUnsafeArchive, refuseUnsafeArchive, refuseUnstagedArtifact, rejectCachedZip,
+} = require('./electron-refuse');
+const {
+  isSafeArtifactName, releaseStage, stageArtifact, sweepStaleStages,
+} = require('./electron-stage');
 const { artifactFileName, electronTrustPolicy, resolveAnchor, verifyArtifact } = require('./electron-trust');
 const { robustExtract } = require('./unzip');
+const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** Self-heal progress line to stderr (visible during first-GUI provision). */
 function stderrLog(msg) {
@@ -42,19 +53,6 @@ function defaultElectronDir() {
     return path.dirname(require.resolve('electron/package.json'));
   } catch {
     return path.join(__dirname, '..', '..', 'node_modules', 'electron');
-  }
-}
-
-/** Platform exe basename, matching electron's getPlatformPath(). */
-function platformExe(platform) {
-  switch (platform) {
-    case 'mas':
-    case 'darwin':
-      return path.join('Electron.app', 'Contents', 'MacOS', 'Electron');
-    case 'win32':
-      return 'electron.exe';
-    default:
-      return 'electron';
   }
 }
 
@@ -93,19 +91,6 @@ function isElectronUsable({ electronDir = defaultElectronDir(), env = process.en
   } catch {
     return false;
   }
-}
-
-/** Restore path.txt so electron/index.js resolves the freshly-extracted exe. */
-function writePathTxt({ electronDir, platform, fs }) {
-  fs.writeFileSync(path.join(electronDir, 'path.txt'), platformExe(platform));
-}
-
-/** Extract a cached zip into <electronDir>/dist offline. */
-async function extractFromCache({ zip, electronDir, platform, extract, fs }) {
-  const distDir = path.join(electronDir, 'dist');
-  fs.mkdirSync(distDir, { recursive: true });
-  await extract(zip, { dir: distDir });
-  writePathTxt({ electronDir, platform, fs });
 }
 
 /** Bind the fs-aware probes for the post-extract AV-quarantine verify. */
@@ -163,6 +148,14 @@ async function repairElectron({
   // read out of electronDir's own package.json above, and letting an untrusted
   // directory pick which anchor judges its bytes is the ANCHORFROMTARGET hole.
   const fileName = artifactFileName({ version, platform, arch });
+  // F#3: `version` may have just been read out of an UNTRUSTED <electronDir>/
+  // package.json (doctor --fix supplies none, for a dir it found by scanning npx
+  // caches), and `fileName` becomes a path component in stageArtifact. A `..` in
+  // it escaped the private staging directory — MEASURED. Nothing downstream ever
+  // sees a name that is not a plain filename.
+  if (!isSafeArtifactName(fileName)) {
+    return { repaired: false, integrity: 'unsafe-name', reason: `Refusing to provision electron: ${collapseExcerpt(fileName, 160)} is not a usable artifact name.` };
+  }
   const policy = electronTrustPolicy(process.env);
   const anchor = resolveAnchor({ electronDir, fs, selfElectronDir: deps.selfElectronDir });
 
@@ -182,58 +175,62 @@ async function repairElectron({
     // Attempt 1: extract from cache (always preferred, fully offline).
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
-      // F1: MOVE the artifact into a private staging dir, then hash and extract
+      // F1: COPY the artifact into a private staging dir, then hash and extract
       // THERE. v4.9.5 hashed the cache path and re-opened it for the extract, so a
       // cache-dir writer — the exact actor C2 exists to stop — could swap the bytes
-      // in between and have the unhashed replacement extracted. releaseStage puts
-      // them back on EVERY exit path, except where a refusal below marks them for
-      // the delete v4.9.5 already performed.
-      // THE FENCE IS TAKEN BEFORE THE MOVE. mayDeleteRejectedZip realpaths the
-      // artifact through containsOnDisk, which FAILS CLOSED on anything it cannot
-      // resolve — and a staged artifact no longer exists at its cache path. Asking
-      // after the move would answer "no" for every artifact and silently switch the
-      // poison delete off, which is the same class of bug as reading a rule off the
-      // surface its own writer just wrote.
-      const mayDelete = mayDeleteRejectedZip({ zip, fileName, env: process.env });
+      // in between and have the unhashed replacement extracted. A copy makes an
+      // inode nothing else has a name for or a handle on; the original stays put,
+      // so no exit path can leave the user without it (electron-stage.js).
       const stage = stageArtifact({ zip, fileName, fs, log: stderrLog });
       try {
-        // C2: extraction must be unreachable for an artifact the anchor
-        // contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
-        const gate = verifyArtifact({ zip: stage ? stage.path : zip, anchor, fileName, policy, fs, log: stderrLog });
-        if (!gate.allowed) {
-          refusal = rejectCachedZip({ gate, zip, stage, mayDelete, fileName, fs, log: stderrLog });
+        // Unstaged bytes are never HASHED either: a verdict on a file its writer
+        // still controls would only license an extract it cannot vouch for. This is
+        // a REFUSAL, not a `deferred` — the download route stages too, so "try the
+        // network" is not a fix for it, and postinstall must print the reason.
+        if (!stage) {
+          refusal = refuseUnstagedArtifact({ fileName, zip, log: stderrLog });
           if (cacheOnly) { return refusal; }
-          // else: drop into the controlled download below.
-        } else if (!stage) {
-          // Bytes amicus could not take private are never extracted: unstaged, the
-          // hash above vouches for a file its writer still controls.
-          if (cacheOnly) { return { deferred: true, reason: `Cached electron zip for v${version} (${platform}-${arch}) could not be staged privately; deferring download.${avHint(platform)}` }; }
-          // else: drop into the controlled download below.
         } else {
-          try {
-            await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
-            // Non-throwing extract w/ absent exe = the AV-quarantine signature.
-            const outcome = verifyExtractOutcome({ electronDir, platform, fs });
-            return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
-          } catch (extractErr) {
-            // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
-            // deleted-and-retried, nor reported as "corrupt" — it stops here, and the
-            // archive is put BACK, because a refused archive is the evidence.
-            if (isUnsafeArchive(extractErr)) { return refuseUnsafeArchive({ err: extractErr, fileName, log: stderrLog }); }
-            // Corrupt cached artifact: do NOT return it to the cache (this is v4.9.5's
-            // unfenced rmSync, narrowed to a file inside our own temp dir), then fall
-            // through to a forced fresh download (unless offline).
-            stage.discard = true;
-            if (cacheOnly) {
-              return { repaired: false, reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}` };
+          // C2: extraction must be unreachable for an artifact the anchor
+          // contradicts. A missing anchor is NOT a refusal (see verifyArtifact).
+          const gate = verifyArtifact({ zip: stage.path, anchor, fileName, policy, fs, log: stderrLog });
+          if (!gate.allowed) {
+            const mayDelete = mayDeleteRejectedZip({ zip, fileName, env: process.env });
+            refusal = rejectCachedZip({ gate, zip, mayDelete, fileName, fs, log: stderrLog });
+            if (cacheOnly) { return refusal; }
+          } else {
+            try {
+              await extractFromCache({ zip: stage.path, electronDir, platform, extract, fs });
+              // Non-throwing extract w/ absent exe = the AV-quarantine signature.
+              const outcome = verifyExtractOutcome({ electronDir, platform, fs });
+              return gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome;
+            } catch (extractErr) {
+              // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
+              // deleted-and-retried, nor reported as "corrupt" — it stops here, and
+              // the archive is LEFT IN PLACE, because a refused archive is evidence.
+              if (isUnsafeArchive(extractErr)) { return refuseUnsafeArchive({ err: extractErr, fileName, log: stderrLog }); }
+              // F#4/F#5: EVICT THE CORRUPT ORIGINAL, and claim only what happened.
+              // The first cut set `stage.discard`, which dropped the private COPY and
+              // left the cache entry in place on the branch that copied — turning a
+              // corrupt artifact into a permanent cacheOnly loop while the reason
+              // asserted a removal. v4.9.5's own unconditional rmSync, restored.
+              let removed = false;
+              try { fs.rmSync(zip, { force: true }); removed = true; } catch { /* an unwritable cache is not a repair failure */ }
+              if (cacheOnly) {
+                return { repaired: false, reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and ${removed ? 'removed' : 'left in place'}; deferring re-download.${avHint(platform)}` };
+              }
             }
-            // else: drop into the controlled download below.
           }
         }
+        // Every branch that did not return drops into the controlled download below.
       } finally {
-        releaseStage({ stage, fs, log: stderrLog });
+        releaseStage({ stage, fs });
       }
     } else if (cacheOnly) {
+      // F#7: the ONE path that reaches no stageArtifact, and so no sweep — an
+      // offline run with an empty cache. Anything a killed run left under
+      // os.tmpdir() would otherwise wait for a cache hit that may never come.
+      sweepStaleStages({ fs });
       return { deferred: true, reason: `No cached electron zip found for v${version} (${platform}-${arch}); deferring download.${avHint(platform)}` };
     }
 
@@ -241,16 +238,17 @@ async function repairElectron({
     // spawn — the SAME @electron/get api install.js uses, extracted offline, then the
     // REAL usability reported. A download that produced no usable exe is a FAILURE (#53).
     // A non-null `provision` means download + extract returned without throwing;
-    // its `pinned:false` means no `checksums` went out (no anchor row for this
-    // artifact, or the hatch dropped the pin), so the bytes were vouched for only
-    // by the mirror — F3 marks that, as both docs already promise it does.
+    // its `pinned:false` means the extracted bytes were vouched for only by the
+    // mirror — either no `checksums` went out (no anchor row, or the hatch dropped
+    // the pin) or amicus's own hash of the staged copy did not say `verified`.
+    // F3 marks that, as both docs already promise it does.
     let provision = null;
     try {
       const downloadArtifact = await resolveDownloadArtifact();
       provision = await controlledProvision({
         electronDir, platform, arch, version, anchor, downloadArtifact, extract, extractFromCache,
         fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
-      }) || { pinned: true };
+      }) || { pinned: false };   // an unrecognisable return marks, never claims a pin
     } catch (provisionErr) {
       // C4 again: an unsafe archive here must NOT reach runInstaller, which would
       // re-download and re-extract it through an extractor amicus does not drive.
@@ -259,6 +257,16 @@ async function repairElectron({
       // installer as a LAST resort — it can NEVER short-circuit the honest
       // verify below; we always return isElectronUsable().
       try { runInstaller({ electronDir, force, spawn, platform, arch }); } catch { /* ignore */ }
+    }
+    // F#2/F#6/F#8: the download hashed its own staged bytes and refused them, or
+    // could not stage them at all. Nothing was extracted, so there is no outcome to
+    // verify — return the refusal, carrying any cache refusal that preceded it.
+    if (provision && provision.refused) {
+      // Carry a cache refusal only when it says something DIFFERENT. Both routes
+      // stage, so "temp is full" refuses twice; repeating the same sentence with a
+      // second path is noise in the one message the user actually reads.
+      const carried = refusal && refusal.integrity !== provision.refused.integrity ? refusal.reason : null;
+      return { ...provision.refused, reason: [carried, provision.refused.reason].filter(Boolean).join(' ') };
     }
     // A NON-throwing controlled extract that left no usable exe is the
     // AV-quarantine signature — surface it actionably (no false success, no loop).
