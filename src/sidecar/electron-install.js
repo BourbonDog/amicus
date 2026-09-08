@@ -128,10 +128,17 @@ async function repairElectron({
 } = {}) {
   const fs = deps.fs || fsDefault;
   // Default extract: from the BUFFER amicus already hashed, never from a name.
-  // `unzip.js`'s bounded extract-zip + native-unzip fallback is byte-for-byte
-  // unchanged and still exported; it is simply no longer on this path, because
-  // every one of its strategies takes a PATH and a path is what the custody
-  // finding is about (see zip-from-buffer.js).
+  // `unzip.js` is byte-for-byte unchanged and still exported; it is simply no
+  // longer on this path, because every one of its strategies takes a PATH and a
+  // path is what the custody finding is about (see zip-from-buffer.js).
+  //
+  // WHAT CAME WITH IT AND WHAT DID NOT. Its idle + hard-cap STALL BOUND is
+  // reimplemented in `zip-from-buffer.js` with the same numbers, so this path is
+  // bounded again (it was not, for three commits). Its NATIVE OS unzip fallback
+  // is not, and cannot be: `tar`/`Expand-Archive`/`ditto`/`unzip` all take a
+  // path, and feeding one either the artifact or a temp copy of our Buffer would
+  // undo the custody property outright. The cost of that trade is named in
+  // zip-from-buffer.js's docblock.
   const extract = deps.extract
     || ((bytes, o) => extractZipBuffer(bytes, { ...o, deps: { fs, log: stderrLog } }));
   const findZip = deps.cachedZip || ((o) => cachedZip(o));

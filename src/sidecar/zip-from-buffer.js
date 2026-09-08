@@ -57,10 +57,12 @@
  * ── ERROR CODES ARE A CAUSAL CLAIM ───────────────────────────────────────
  * `UNZIP_BUFFER_FAILED` = the ARCHIVE is bad. `UNZIP_DEST_FAILED` = the
  * DESTINATION is (no space, a read-only dist, a path too long).
- * `UNZIP_BUFFER_UNAVAILABLE` = neither, yauzl would not load. The caller evicts
- * the cached artifact on the first ONLY — council finding D2 was a full disk
- * deleting a pristine cache entry. The constructors, and the per-entry writers
- * that raise them, live in `./zip-entry-write`.
+ * `UNZIP_BUFFER_UNAVAILABLE` = neither, yauzl would not load.
+ * `UNZIP_BUFFER_STALLED` = no progress inside the bound; nobody learned anything
+ * about the archive OR the disk. The caller evicts the cached artifact on
+ * `UNZIP_BUFFER_FAILED` ONLY — council finding D2 was a full disk deleting a
+ * pristine cache entry. The constructors, and the per-entry writers that raise
+ * them, live in `./zip-entry-write`.
  *
  * @module sidecar/zip-from-buffer
  */
@@ -84,6 +86,55 @@ const IFMT = 61440;
 const IFDIR = 16384;
 const IFLNK = 40960;
 
+/**
+ * THE STALL BOUND, and what did and did not come back with it.
+ *
+ * unzip.js exists for a field bug that was never root-caused: "on some Node 24
+ * boxes extract-zip@2.0.1 STALLS mid-extract — its promise never resolves AND
+ * never rejects", so the awaiting self-heal let the event loop drain and Node
+ * exited 0 with a partial extract and no message. It answered that with three
+ * layers: (1) an idle timer + a hard cap, whose LIVE handle is what stops the
+ * process exiting mid-stall, (2) a native OS unzip fallback, (3) a
+ * files-actually-landed check.
+ *
+ * When the electron artifact moved onto this module those three went with
+ * unzip.js, and nothing replaced them: `extractZipBuffer` had no timer of any
+ * kind, so a write that stalled (a network volume, a hung AV filter, an
+ * `openReadStream` callback that never arrives) hung `ensureElectron` forever —
+ * and in `scripts/postinstall.js`, where the awaited provision left no timer and
+ * no handle, the loop drained and Node exited 0 silently. That is the ORIGINAL
+ * field bug's shape, reintroduced.
+ *
+ * LAYER 1 IS BACK, HERE, with unzip.js's own numbers (30 s idle, 240 s hard) and
+ * unzip.js itself untouched: `IDLE_MS`/`MAX_MS` below, re-armed after every entry
+ * lands. Resolving on 'end' addresses only the close-event theory of the Node-24
+ * stall; a bound is what covers the theories nobody has.
+ *
+ * LAYER 2 IS DELIBERATELY NOT BACK, and this is a real loss, stated rather than
+ * papered over. Every native strategy (`tar`, `Expand-Archive`, `ditto`,
+ * `unzip`) takes a PATH, and a path is exactly what the custody finding is
+ * about: handing one an artifact would mean extracting bytes amicus did not
+ * hash, and writing our hashed Buffer to a temp file for it to read would
+ * rebuild the staged copy the council deleted. So an archive that yauzl cannot
+ * parse but a native extractor could is now a failed repair plus a re-download,
+ * where it used to be a silent rescue. What is NOT lost to that trade is the
+ * stall — a stall is `UNZIP_BUFFER_STALLED`, which is not a verdict about the
+ * artifact and never evicts it (see `electron-repair-cache.js`).
+ *
+ * LAYER 3 lives upstream and always did: `electron-quarantine.verifyExtractOutcome`
+ * stats the exe after a non-throwing extract.
+ */
+/** No-progress window, then the hard cap. unzip.js's IDLE_MS / MAX_MS, to the ms. */
+const IDLE_MS = 30_000;
+const MAX_MS = 240_000;
+
+/**
+ * @returns {Error} the extraction made no progress. NOT an archive verdict and
+ * NOT a destination verdict — nobody learned anything about either — so it must
+ * never be the code that evicts a user's cached artifact.
+ */
+const stalled = (message) => failure('UNZIP_BUFFER_STALLED', `the in-memory extraction stalled: ${message}`);
+
 /** extract-zip's getExtractedMode, with its 0755/0644 defaults. */
 function extractedMode(entryMode, isDir) {
   if (entryMode !== 0) { return entryMode; }
@@ -103,18 +154,31 @@ function openBuffer(yauzl, bytes) {
 /**
  * Extract `bytes` into `dir`. The caller has ALREADY hashed `bytes`.
  *
+ * BOUNDED. See the module docblock's stall section: an idle timer (re-armed
+ * after every entry lands) and a hard cap, both live `setTimeout` handles, so a
+ * write that never completes becomes a catchable rejection instead of a promise
+ * that never settles — and the live handle keeps the event loop alive, which is
+ * what stops Node exiting 0 mid-stall with a partial extract and no message.
+ *
  * @param {Buffer} bytes  the whole archive, in this process's heap
  * @param {object} o
  * @param {string} o.dir  absolute destination (created if absent)
- * @param {object} [o.deps] { fs, yauzl, log }
+ * @param {number} [o.idleMs] no-progress window before the extract is stalled
+ * @param {number} [o.maxMs]  hard cap on the whole extraction
+ * @param {object} [o.deps] { fs, yauzl, log, setTimeout, clearTimeout }
  * @returns {Promise<{strategy:'buffer', entries:number}>}
  * @throws {Error} code 'UNZIP_UNSAFE_ARCHIVE' — terminal; never retried
  * @throws {Error} code 'UNZIP_BUFFER_FAILED'  — the archive is bad
  * @throws {Error} code 'UNZIP_DEST_FAILED'    — the destination is bad
  * @throws {Error} code 'UNZIP_BUFFER_UNAVAILABLE' — yauzl could not be loaded
+ * @throws {Error} code 'UNZIP_BUFFER_STALLED' — no progress; NOT an artifact verdict
  */
-async function extractZipBuffer(bytes, { dir, deps = {} } = {}) {
+async function extractZipBuffer(bytes, {
+  dir, idleMs = IDLE_MS, maxMs = MAX_MS, deps = {},
+} = {}) {
   const fs = deps.fs || fsDefault;
+  const setTimer = deps.setTimeout || setTimeout;
+  const clearTimer = deps.clearTimeout || clearTimeout;
   // GUARDED (the v4.5.2 lesson). `yauzl` IS declared in package.json; the guard
   // keeps a broken install a refusal rather than a deleted cache entry.
   let yauzl = deps.yauzl;
@@ -132,26 +196,49 @@ async function extractZipBuffer(bytes, { dir, deps = {} } = {}) {
 
   const zipfile = await openBuffer(yauzl, bytes);
   let entries = 0;
+  let idleTimer = null;
+  let maxTimer = null;
+  const cancelTimers = () => {
+    if (idleTimer !== null) { clearTimer(idleTimer); idleTimer = null; }
+    if (maxTimer !== null) { clearTimer(maxTimer); maxTimer = null; }
+  };
   try {
     await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) { return; }
+        settled = true;
+        cancelTimers();
+        fn(value);
+      };
+      const fail = (e) => finish(reject, e);
+      const armIdle = () => {
+        if (idleTimer !== null) { clearTimer(idleTimer); }
+        idleTimer = setTimer(() => fail(stalled(`no extract progress for ${idleMs}ms`)), idleMs);
+      };
+      maxTimer = setTimer(() => fail(stalled(`extraction exceeded ${maxMs}ms`)), maxMs);
+      armIdle();
       // yauzl's own validateFileName refusals ('absolute path: ', 'invalid
       // relative path: ', 'invalid characters in fileName: ') arrive here.
-      zipfile.on('error', (e) => reject(failure(
+      zipfile.on('error', (e) => fail(failure(
         NAME_REFUSAL.test((e && e.message) || '') ? 'UNZIP_UNSAFE_ARCHIVE' : 'UNZIP_BUFFER_FAILED',
         (e && e.message) || 'the archive could not be read',
       )));
       // RESOLVE ON 'end', NEVER ON 'close' — see the docblock. `close` is
       // unreachable under fromBuffer, so waiting for it hangs forever.
-      zipfile.on('end', () => resolve());
+      zipfile.on('end', () => finish(resolve));
       zipfile.on('entry', (entry) => {
         placeEntry({ zipfile, entry, root, fs }).then((placed) => {
+          if (settled) { return; }        // the bound already fired; stop driving
           if (placed) { entries += 1; }
+          armIdle();                      // progress -> restart the idle window
           zipfile.readEntry();
-        }, reject);
+        }, fail);
       });
       zipfile.readEntry();
     });
   } finally {
+    cancelTimers();
     try { zipfile.close(); } catch { /* the buffer reader holds no fd */ }
   }
   return { strategy: 'buffer', entries };

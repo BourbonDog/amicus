@@ -52,6 +52,11 @@
  *   `stream.on('error', reject)`, so a read error reaches the caller with no
  *   `code` and is read as "the archive is bad".
  *   RED: "a read error on the symlink TARGET is CLASSIFIED, never raw".
+ * STALLUNBOUNDED  zip-from-buffer.js :: extractZipBuffer — delete the idle and
+ *   hard-cap timers, restoring the unbounded promise the electron path had.
+ *   RED: "an extract that makes no progress rejects on the IDLE bound", "an
+ *   extract that never ends rejects on the HARD cap", and "the default bounds
+ *   are unzip.js's own numbers".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -362,6 +367,130 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
 
     expect(err.code).toBe('UNZIP_BUFFER_FAILED');
     expect(err.message).toMatch(/crc32 mismatch/);
+  });
+});
+
+describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALLUNBOUNDED)', () => {
+  // THE LOSS THIS CLOSES. unzip.js exists for a field bug that was never
+  // root-caused: extract-zip@2.0.1 stalls mid-extract on some Node 24 boxes, its
+  // promise never resolving and never rejecting, so the awaiting self-heal let
+  // the event loop drain and Node exited 0 with a partial extract and NO
+  // message. Its layer 1 was an idle timer plus a hard cap, whose LIVE handle is
+  // what stops the process exiting mid-stall. When the electron artifact moved
+  // onto extractZipBuffer that bound went with unzip.js and nothing replaced
+  // it — grep for stall/idle/timeout across the new modules and their tests
+  // returned nothing on the subject. It is back, with unzip.js's own numbers,
+  // and unzip.js itself is untouched.
+
+  /** Injectable timers: nothing here waits on a real clock. */
+  function fakeTimers() {
+    const pending = new Map();
+    let id = 0;
+    return {
+      pending,
+      setTimeout: (fn, ms) => { id += 1; pending.set(id, { fn, ms }); return id; },
+      clearTimeout: (t) => { pending.delete(t); },
+      fireByMs: (ms) => {
+        for (const [key, entry] of [...pending]) {
+          if (entry.ms === ms) { pending.delete(key); entry.fn(); return true; }
+        }
+        return false;
+      },
+    };
+  }
+
+  /** A yauzl whose openReadStream NEVER calls back: the entry never settles. */
+  function wedgedYauzl() {
+    // eslint-disable-next-line global-require
+    const yauzl = require('yauzl');
+    return {
+      fromBuffer: (b, o, cb) => yauzl.fromBuffer(b, o, (e, zf) => {
+        if (zf) { zf.openReadStream = () => { /* the callback that never arrives */ }; }
+        cb(e, zf);
+      }),
+    };
+  }
+
+  test('an extract that makes no progress rejects on the IDLE bound', async () => {
+    const timers = fakeTimers();
+    const dir = mkTmp();
+
+    const p = extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
+      dir,
+      idleMs: 1234,
+      maxMs: 5678,
+      deps: { yauzl: wedgedYauzl(), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(timers.fireByMs(1234)).toBe(true);
+
+    const err = await p.catch((e) => e);
+    expect(err.code).toBe('UNZIP_BUFFER_STALLED');
+    expect(err.message).toMatch(/no extract progress for 1234ms/);
+    // ...and NOT a verdict about the artifact, which is what evicts it.
+    expect(err.code).not.toBe('UNZIP_BUFFER_FAILED');
+  });
+
+  test('an extract that never ends rejects on the HARD cap', async () => {
+    const timers = fakeTimers();
+    const dir = mkTmp();
+
+    const p = extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
+      dir,
+      idleMs: 1234,
+      maxMs: 5678,
+      deps: { yauzl: wedgedYauzl(), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(timers.fireByMs(5678)).toBe(true);
+
+    const err = await p.catch((e) => e);
+    expect(err.code).toBe('UNZIP_BUFFER_STALLED');
+    expect(err.message).toMatch(/exceeded 5678ms/);
+  });
+
+  test('a normal extraction leaves NO timer behind, and re-arms the idle window per entry', async () => {
+    const timers = fakeTimers();
+    const dir = mkTmp();
+
+    const res = await extractZipBuffer(buildZip([
+      { name: 'a.txt', body: 'one' },
+      { name: 'b.txt', body: 'two' },
+      { name: 'c.txt', body: 'three' },
+    ]), {
+      dir,
+      idleMs: 1234,
+      maxMs: 5678,
+      deps: { setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+    });
+
+    expect(res).toEqual({ strategy: 'buffer', entries: 3 });
+    // No live handle survives a completed extraction, so nothing here can hold
+    // the event loop open after the repair returns.
+    expect(timers.pending.size).toBe(0);
+  });
+
+  test('the default bounds are unzip.js\'s own numbers, so the electron path is bounded again', async () => {
+    // The production call site (electron-install.js) passes no idleMs/maxMs, so
+    // what matters is that the DEFAULTS arm real timers. Measured through the
+    // injected clock: two timers, 30 s and 240 s.
+    const timers = fakeTimers();
+    const dir = mkTmp();
+    const armed = [];
+
+    const p = extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
+      dir,
+      deps: {
+        yauzl: wedgedYauzl(),
+        setTimeout: (fn, ms) => { armed.push(ms); return timers.setTimeout(fn, ms); },
+        clearTimeout: timers.clearTimeout,
+      },
+    });
+    await new Promise((r) => setImmediate(r));
+
+    expect(armed).toEqual([240_000, 30_000]);
+    timers.fireByMs(30_000);
+    await p.catch(() => {});
   });
 });
 
