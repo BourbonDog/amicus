@@ -58,6 +58,13 @@ const PROVISION_TIMEOUT_MS = 15000;
  * @param {object} deps - { repairElectron } override for testing.
  * @returns {Promise<void>}
  */
+function warnIfUnverified(result) {
+  if (!result || !result.unverified) { return; }
+  console.warn('[amicus] Note: the Electron GUI binary was installed UNVERIFIED — no published sha256');
+  console.warn('[amicus]   covered this artifact, so its bytes were checked only against whatever the');
+  console.warn('[amicus]   mirror served. See docs/troubleshooting.md (Electron artifact REFUSED).');
+}
+
 async function provisionElectron(deps = {}) {
   try {
     const _repair = deps.repairElectron || repairElectron;
@@ -68,6 +75,7 @@ async function provisionElectron(deps = {}) {
       const forced = await _repair();
       if (forced && forced.repaired) {
         console.log('[amicus] Electron GUI binary prewarmed.');
+        warnIfUnverified(forced);
         return;
       }
       if (forced && forced.quarantined) {
@@ -80,7 +88,7 @@ async function provisionElectron(deps = {}) {
     }
 
     const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
-    if (result && result.repaired) { return; }
+    if (result && result.repaired) { warnIfUnverified(result); return; }
     // AV quarantine (electron.exe deleted right after extract) needs ACTION, not
     // a generic "provisions on first use" notice — re-extracting can never win,
     // so print the allow-list instruction verbatim instead. (No retry loop.)

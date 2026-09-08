@@ -45,7 +45,7 @@ function _resetEnsureElectron() {
  * @param {object} [opts.deps] injected
  *   { isElectronUsable, resolveElectronBinary, repairElectron, logProgress }.
  * @param {object} [opts.repairOptions] forwarded to repairElectron (electronDir, etc.).
- * @returns {Promise<{ok:boolean, path?:string, reason?:string}>}
+ * @returns {Promise<{ok:boolean, path?:string, reason?:string, unverified?:boolean}>}
  */
 function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
   const usable = deps.isElectronUsable || defaultIsUsable;
@@ -71,8 +71,19 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
       return { ok: false, reason: `Electron provisioning failed: ${err && err.message}` };
     }
     if (usable()) {
+      // A2/B3 (council, confirmed 4 of 4): `unverified` was WRITTEN on both
+      // provision routes and read by nothing in src/ or scripts/, while the docs
+      // said the outcome was "marked unverified". A flag no code and no human
+      // ever sees establishes no property at all. This is the launch-time
+      // reader; scripts/postinstall.js is the install-time one and
+      // doctor-electron-mcp-check.js reports it from `--fix`.
+      if (result && result.unverified) {
+        logProgress('[amicus] NOTE: this Electron binary is UNVERIFIED — no published sha256 covered');
+        logProgress('[amicus]   the artifact it came from, so its bytes were vouched for only by the');
+        logProgress('[amicus]   mirror that served them.');
+      }
       logProgress('[amicus] Electron GUI ready.');
-      return { ok: true, path: resolve() };
+      return { ok: true, path: resolve(), ...(result && result.unverified ? { unverified: true } : {}) };
     }
     // THE POINTER IS NOT OPTIONAL. This used to be `result.reason || <the
     // pointer>`, so the moment `repairElectron` started returning a reason for a

@@ -346,14 +346,16 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal. On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For one case only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
 > **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
-> anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`,
-> `npm_config_electron_use_remote_checksums`, `npm_config_platform` and
-> `npm_config_arch` stay stripped from the Electron installer's environment
-> whether it is set or not — those are the names a *repository* can plant in a
-> child process through its own `.npmrc` or `package.json`, which is why this
-> variable is a plain environment variable read under that exact bare spelling
-> only: a repo-planted `npm_config_amicus_allow_unverified_electron` reads back
-> as unset. It also does not change where the download comes from — a real
+> anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`
+> and `npm_config_electron_use_remote_checksums` stay stripped from the
+> environment for the length of amicus's own download call whether it is set or
+> not — those are the names a *repository* can plant through its own `.npmrc` or
+> `package.json`, which is why this variable is a plain environment variable read
+> under that exact bare spelling only: a repo-planted
+> `npm_config_amicus_allow_unverified_electron` reads back as unset. (`platform`
+> and `arch` are no longer scrubbed anywhere, because there is no longer a child
+> installer to hand an environment to: amicus's downloader takes them as
+> arguments, so no environment name can choose which artifact is fetched.) It also does not change where the download comes from — a real
 > `ELECTRON_MIRROR` environment variable is honoured exactly as before, set or
 > unset. What it *does* relax, deliberately and on both routes, is the digest:
 > with it set, a cached artifact that contradicts Electron's published sha256 is

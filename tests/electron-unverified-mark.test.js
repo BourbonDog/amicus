@@ -58,7 +58,7 @@ function unanchoredElectronDir() {
 }
 
 async function repair({ dir, exeName, zip = null, deps = {}, cacheOnly = false }) {
-  const extract = jest.fn(async (_zip, opts) => {
+  const extract = jest.fn(async (_bytes, opts) => {
     fs.writeFileSync(path.join(opts.dir, exeName), 'MZextracted');
   });
   const res = await ei.repairElectron({
@@ -179,20 +179,21 @@ describe('F3 — the download route marks what it could not pin (DOWNLOADUNMARKE
 
 describe('F3 — controlledProvision reports whether it pinned', () => {
   const base = {
-    electronDir: '/tmp/pkg',
     platform: PLATFORM,
     arch: ARCH,
     version: VERSION,
     extract: jest.fn(),
-    extractFromCache: jest.fn(async () => {}),
     fs,
     env: {},
   };
+  // A REAL directory: extraction lands in `<electronDir>/.amicus-incoming-<hex>`
+  // and is promoted by rename, so a fictional path cannot stand in for one.
+  const withDir = () => ({ ...base, electronDir: mkTmp('amicus-pkg-') });
 
   test('pinned:true when the anchor names this artifact', async () => {
     const digest = require('crypto').createHash('sha256').update(ZIP_BODY).digest('hex');
     const out = await controlledProvision({
-      ...base,
+      ...withDir(),
       anchor: { table: { [ZIP_NAME]: digest }, source: '<test>' },
       downloadArtifact: jest.fn(async () => writeZip()),
     });
@@ -202,7 +203,7 @@ describe('F3 — controlledProvision reports whether it pinned', () => {
   test('pinned:false, with a stderr NOTE, when it does not', async () => {
     const lines = [];
     const out = await controlledProvision({
-      ...base,
+      ...withDir(),
       anchor: null,
       downloadArtifact: jest.fn(async () => writeZip()),
       log: (m) => lines.push(m),
@@ -210,5 +211,117 @@ describe('F3 — controlledProvision reports whether it pinned', () => {
     expect(out).toEqual({ pinned: false });
     expect(lines.join('\n')).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip/);
     expect(lines.join('\n')).toMatch(/could not be pinned/);
+  });
+});
+
+describe('A2/B3 — the mark is READ, not merely written (MARKUNREAD)', () => {
+  // The council finding, from three seats at once: "`unverified` is written on
+  // both routes but nothing in the changed src/ or scripts/ reads it — it is a
+  // write-only field", while docs/troubleshooting.md said the outcome "is marked
+  // `unverified`". A flag no code and no human ever sees establishes no
+  // property. There are three readers now, one per surface the user meets.
+  //
+  // MUTANT MARKUNREAD: delete any one of the three consumers below (the
+  // `warnIfUnverified` call in scripts/postinstall.js, the `result.unverified`
+  // block in electron-ensure.js, or the `unverified` tally in
+  // doctor-electron-mcp-check.js). RED: the matching test here.
+
+  test('INSTALL TIME: postinstall says so on a successful but unverified repair', async () => {
+    // eslint-disable-next-line global-require
+    const postinstall = require('../scripts/postinstall');
+    const warns = [];
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation((m) => warns.push(String(m)));
+    try {
+      await postinstall.provisionElectron({
+        repairElectron: async () => ({ repaired: true, unverified: true }),
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect(warns.join('\n')).toMatch(/installed UNVERIFIED/);
+    expect(warns.join('\n')).toMatch(/no published sha256/);
+  });
+
+  test('INSTALL TIME: a VERIFIED repair says nothing extra', async () => {
+    // eslint-disable-next-line global-require
+    const postinstall = require('../scripts/postinstall');
+    const warns = [];
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation((m) => warns.push(String(m)));
+    try {
+      await postinstall.provisionElectron({ repairElectron: async () => ({ repaired: true }) });
+    } finally {
+      warnSpy.mockRestore();
+    }
+    expect(warns.join('\n')).not.toMatch(/UNVERIFIED/);
+  });
+
+  test('LAUNCH TIME: ensureElectron announces it and carries it in its result', async () => {
+    // eslint-disable-next-line global-require
+    const ee = require('../src/sidecar/electron-ensure');
+    ee._resetEnsureElectron();
+    const { dir, exeName } = fakeElectronDir({ withExe: true, platform: PLATFORM });
+    const lines = [];
+
+    let provisioned = false;
+    const out = await ee.ensureElectron({
+      deps: {
+        // false first (so the provision runs), true afterwards — the SUCCESS
+        // branch is the one that reads the mark, so it is the branch under test.
+        isElectronUsable: () => provisioned,
+        resolveElectronBinary: () => path.join(dir, 'dist', exeName),
+        repairElectron: async () => { provisioned = true; return { repaired: true, unverified: true }; },
+        logProgress: (m) => lines.push(String(m)),
+      },
+    });
+    ee._resetEnsureElectron();
+
+    expect(out.ok).toBe(true);
+    expect(out.unverified).toBe(true);
+    expect(lines.join('\n')).toMatch(/UNVERIFIED/);
+    expect(lines.join('\n')).toMatch(/vouched for only by the/);
+  });
+
+  test('REPORT TIME: doctor --fix names an unverified self-heal', async () => {
+    // eslint-disable-next-line global-require
+    const { evaluateElectronMcp } = require('../src/utils/doctor-electron-mcp-check');
+    let healed = false;
+    const scan = () => ({
+      installs: [{
+        kind: 'npx', electronDir: '/npx/electron', state: healed ? 'ok' : 'binary-missing',
+      }],
+    });
+    const out = await evaluateElectronMcp({
+      fix: true,
+      scanElectronInstalls: scan,
+      repairElectron: async () => { healed = true; return { repaired: true, unverified: true }; },
+    });
+
+    expect(out.fixed).toBe(true);
+    expect(`${out.message} ${out.fixDetail}`).toMatch(/UNVERIFIED/);
+  });
+});
+
+describe('D3 — the stderr half of the docs claim, checked rather than assumed', () => {
+  test('the CACHE route DOES print the no-digest NOTE the docs promise', async () => {
+    // The finding said: "the 'no published sha256 … could not be pinned' NOTE
+    // exists only in controlledProvision (download route); the cache route's
+    // no-digest success sets unverified:true with no stderr line."
+    //
+    // REFUTED on the first half, and this test is the evidence. The cache route
+    // prints its own sentence — `no published sha256 for …, so its bytes could
+    // not be verified` — from the gate itself (electron-trust.js ::
+    // verifyArtifactBytes), which is exactly the wording docs/troubleshooting.md
+    // attributes to it. The docs distinguish the two sentences correctly; the
+    // download's is `… could not be pinned`. What WAS true is the second half —
+    // the mark was write-only — and that is fixed above.
+    const { dir, exeName } = unanchoredElectronDir();
+    const { res } = await repair({ dir, exeName, zip: writeZip(), cacheOnly: true });
+
+    expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
+    const text = stderr.join('');
+    expect(text).toMatch(/no published sha256 for electron-v43\.1\.1-win32-x64\.zip/);
+    expect(text).toMatch(/so its bytes could not be verified/);
+    expect(text).not.toMatch(/could not be pinned/);      // that is the DOWNLOAD's sentence
   });
 });
