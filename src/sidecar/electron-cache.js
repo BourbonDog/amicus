@@ -51,8 +51,9 @@ function resolveCacheRoots(env = process.env) {
  *
  * The `<sha>` directory names come from `readdirSync` on a directory an attacker
  * may write, so the returned path is attacker-INFLUENCED. Callers must treat it
- * as such: never extract from it in place (see sidecar/electron-stage.js), and
- * never print it unsanitized (see utils/text-sanitize.js).
+ * as such: read it ONCE into memory and hash and extract THOSE bytes, never
+ * resolving the name a second time (sidecar/electron-custody.js), and never
+ * print it unsanitized (utils/text-sanitize.js).
  * @returns {string|null} absolute zip path, or null when no cache hit.
  */
 function cachedZip({ version, platform = process.platform, arch = process.arch, env = process.env, fs = fsDefault } = {}) {

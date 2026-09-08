@@ -46,6 +46,7 @@ const {
   isUnsafeArchive, refuseUnsafeArchive, refuseUnreadableArtifact, rejectCachedZip,
 } = require('./electron-refuse');
 const { verifyArtifactBytes } = require('./electron-trust');
+const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /**
  * Extract failures that say nothing about the CACHED ARTIFACT, and must
@@ -106,7 +107,9 @@ async function repairFromCache({
       const refusal = {
         repaired: false,
         integrity: 'extract-failed',
-        reason: `Cached electron artifact ${fileName} was NOT extracted (${(err.message || '').trim()});`
+        // F5: the extractor's message can quote the ARCHIVE'S OWN entry name and
+        // an fs error string built from an attacker-influenced path.
+        reason: `Cached electron artifact ${fileName} was NOT extracted (${collapseExcerpt(err.message || '')});`
           + ' it was LEFT IN PLACE because the artifact itself is not what failed.',
       };
       log(`[amicus] ${refusal.reason}`);

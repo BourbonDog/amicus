@@ -58,8 +58,13 @@
  *   RED: "a corrupt cached artifact is EVICTED, and the reason says so".
  * DESTFAILUREEVICTS electron-repair-cache.js — empty the KEEPS_THE_ARTIFACT set,
  *   so every extract failure is read as a bad archive and evicts.
- *   RED: "a DESTINATION failure leaves the cached artifact alone (D2)" AND
- *   "an extractor that will not LOAD is a refusal, not an eviction".
+ *   RED: "a DESTINATION failure leaves the cached artifact alone (D2)", "an
+ *   extractor that will not LOAD is a refusal, not an eviction", and "a PROMOTE
+ *   failure does not evict the cached artifact either".
+ * PROMOTEEVICTS   electron-layout.js :: extractBytesToDist — drop the
+ *   `destinationFailure` wrapper around `promoteDist`, so a raw EPERM reaches
+ *   the caller untagged and is read as a corrupt archive.
+ *   RED: "a PROMOTE failure does not evict the cached artifact either".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -449,6 +454,31 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
     expect(res.repaired).toBe(false);
     expect(res.integrity).toBe('extract-failed');
     expect(res.reason).toMatch(/LEFT IN PLACE/);
+    expect(res.reason).not.toMatch(/corrupt/i);
+  });
+
+  test('a PROMOTE failure does not evict the cached artifact either (PROMOTEEVICTS)', async () => {
+    // FOUND BY PROBING MY OWN CHANGE, not by the council. The extraction now
+    // lands in `.amicus-incoming-<hex>` and is promoted into `dist/` by rename —
+    // and a rename can fail (a Windows handle held on the live dist/). MEASURED
+    // before this fix: the raw EPERM propagated out untagged, repairFromCache
+    // read "an extract failure I cannot classify" as "the archive is bad", and
+    // DELETED the cache entry while saying it "was corrupt and removed". Same
+    // shape as D2, one function further along.
+    const { dir } = unanchoredElectronDir();
+    const zip = writeZip();
+    const brokenRename = {
+      ...fs,
+      renameSync: () => { const e = new Error('EPERM: operation not permitted, rename'); e.code = 'EPERM'; throw e; },
+    };
+    const extract = jest.fn(async (_b, o) => { fs.writeFileSync(path.join(o.dir, 'electron.exe'), 'MZ'); });
+
+    const res = await repair({ dir, zip, extract, deps: { fs: brokenRename } });
+
+    expect(extract).toHaveBeenCalledTimes(1);              // the archive was FINE
+    expect(fs.readFileSync(zip, 'utf8')).toBe(ZIP_BODY);   // ...so it is still there
+    expect(res.integrity).toBe('extract-failed');
+    expect(res.reason).toMatch(/could not promote the extracted tree into dist/);
     expect(res.reason).not.toMatch(/corrupt/i);
   });
 

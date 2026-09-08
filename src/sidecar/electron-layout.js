@@ -104,6 +104,23 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
 }
 
 /**
+ * A failure that is about the DESTINATION, not the archive.
+ *
+ * The distinction is load-bearing, and getting it wrong here was MEASURED on
+ * this very function: an EPERM from `renameSync` (a Windows handle held on the
+ * live `dist/`) propagated out untagged, `repairFromCache` read "an extract
+ * failure I cannot classify" as "the archive is bad", and DELETED the user's
+ * cached artifact while telling them it "was corrupt and removed". The archive
+ * was fine; the promote was not. Council finding D2 is the same shape one
+ * function away, and this is the second place it could bite.
+ */
+function destinationFailure(e, what) {
+  const err = new Error(`could not ${what}: ${(e && e.message) || e}`);
+  err.code = 'UNZIP_DEST_FAILED';
+  return err;
+}
+
+/**
  * Turn VERIFIED BYTES into `<electronDir>/dist`, offline.
  *
  * `bytes` is a Buffer whose sha256 the caller has ALREADY matched against the
@@ -119,9 +136,19 @@ async function extractBytesToDist({ bytes, electronDir, platform, extract, fs })
   const incoming = path.join(electronDir, `.amicus-incoming-${crypto.randomBytes(6).toString('hex')}`);
   const incomingDist = path.join(incoming, 'dist');
   try {
-    fs.mkdirSync(incomingDist, { recursive: true });
+    try {
+      fs.mkdirSync(incomingDist, { recursive: true });
+    } catch (e) {
+      throw destinationFailure(e, `create ${incomingDist}`);
+    }
+    // NOT wrapped: the extractor classifies its own failures, and an archive
+    // failure must keep saying so — it is the one thing that may evict.
     await extract(bytes, { dir: incomingDist });
-    promoteDist({ electronDir, incomingDist, platform, fs });
+    try {
+      promoteDist({ electronDir, incomingDist, platform, fs });
+    } catch (e) {
+      throw destinationFailure(e, 'promote the extracted tree into dist/');
+    }
   } finally {
     try { fs.rmSync(incoming, { recursive: true, force: true }); } catch { /* litter, not a failure */ }
   }
