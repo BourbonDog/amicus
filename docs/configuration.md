@@ -343,23 +343,103 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_GUI_LOAD_TIMEOUT_MS` | Maximum wait in milliseconds for the Electron UI to load before the load-failsafe fires. If the OpenCode web UI fails to respond within this window, Amicus shows a load-error page instead of hanging invisibly. | `15000` |
 | `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. Increment (e.g. `9223`) to avoid conflicts with a running Chrome or another Amicus window. | `9222` |
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
-| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal. On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For one case only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
+| `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal, **and** arm the native-extractor rescue for an archive amicus cannot read (below). On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For two cases only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ, or amicus cannot read an archive at all and you have no other copy of it. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
-> **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
-> anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`,
-> `npm_config_electron_use_remote_checksums`, `npm_config_platform` and
-> `npm_config_arch` stay stripped from the Electron installer's environment
-> whether it is set or not — those are the names a *repository* can plant in a
-> child process through its own `.npmrc` or `package.json`, which is why this
-> variable is a plain environment variable read under that exact bare spelling
-> only: a repo-planted `npm_config_amicus_allow_unverified_electron` reads back
-> as unset. It also does not change where the download comes from — a real
+> **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It arms exactly the two
+> things this page describes — the digest relaxation in the table above, and the
+> native-extractor rescue in the blockquote below — and re-enables nothing beyond
+> them. `npm_config_electron_mirror`, `npm_package_config_electron_*`
+> and `npm_config_electron_use_remote_checksums` are stripped from the
+> environment while amicus works out **where the artifact comes from**, whether
+> this variable is set or not — those are the names a *repository* can plant
+> through its own `.npmrc` or `package.json`, which is why this variable is a
+> plain environment variable read
+> under that exact bare spelling only: a repo-planted
+> `npm_config_amicus_allow_unverified_electron` reads back as unset. (`platform`
+> and `arch` are no longer scrubbed anywhere, because there is no longer a child
+> installer to hand an environment to: amicus's downloader takes them as
+> arguments, so no environment name can choose which artifact is fetched.) It also does not change where the download comes from — a real
 > `ELECTRON_MIRROR` environment variable is honoured exactly as before, set or
 > unset. What it *does* relax, deliberately and on both routes, is the digest:
 > with it set, a cached artifact that contradicts Electron's published sha256 is
 > accepted with a warning, and a download is no longer pinned to that sha256
 > (`@electron/get` then trusts the `SHASUMS256.txt` served alongside the artifact).
 > Leave it unset and the published digest is enforced on both routes.
+
+> **The second thing it arms: the native-extractor rescue, and the window that
+> opens.** Amicus extracts the Electron archive **in memory**, from the buffer it
+> hashed — nothing is written to a path and handed to anything else, which is what
+> makes "amicus only ever writes bytes it hashed" true. The cost is that an
+> archive its own extractor cannot read has nowhere else to go: normally that is a
+> failed repair and a re-download, and on an air-gapped machine there is no
+> re-download, so it is the end of the road. With this variable set, that one
+> failure gets a rescue: amicus writes the bytes it hashed into a private
+> directory inside the Electron package and hands **that path** to a native
+> extractor (`tar` / `Expand-Archive` on Windows, `ditto` / `unzip` on macOS,
+> `unzip` / `tar` on Linux). **Between amicus writing that file and the child
+> process opening it, anything running as your user can replace it, and whatever
+> the child extracts is promoted into `dist/` without being hashed again.** That
+> is not a safe operation; it is the trade this variable buys, and amicus prints
+> the whole of it on stderr before it spawns anything. A rescued install is always
+> reported `unverified`, even when the artifact's own sha256 matched, because what
+> reached `dist/` is no longer what amicus hashed.
+>
+> The rescue is deliberately narrow. It fires **only** when amicus's extractor
+> positively identified the archive as unreadable — the same verdict that lets it
+> discard a corrupt cached artifact, which is why that discard now waits: with
+> this variable unset, amicus prints the offer of this rescue and **keeps** the
+> cached archive, and only discards it once the rescue has run and every native
+> extractor has failed on it too. A **path-traversal refusal** (`REFUSED
+> (unsafe archive)`) is terminal and this variable does not apply to it, a
+> **stall** is not a rescue trigger (the timeout exists to stop work, not to hand
+> it to a child process), a **digest mismatch** is not one either (the bytes are
+> known wrong, so there is nothing to rescue — even though this same variable let
+> them reach the extractor), and neither is a destination failure such as a full
+> disk. With the variable unset, an unreadable archive fails with a message that
+> names this variable and says what it would do, so you do not have to read the
+> source to find it.
+>
+> **What "path-traversal refusals are excluded" does and does not buy you.** That
+> exclusion keys on the refusal amicus's extractor *formed*, and an archive can
+> stop it forming one: yauzl checks an entry's size before its name, so one bad
+> entry early in the archive ends the walk before any later name is looked at.
+> Measured — the same three-entry archive, one flag bit apart — that moves it out
+> of the terminal class and into the rescuable one. Amicus therefore also **reads
+> the archive's central directory and refuses any entry name yauzl would have
+> refused**, before it hands anything to a native extractor. Two residuals
+> survive, and neither is engineered away:
+>
+> - An archive whose **central directory cannot be read at all** — a truncated
+>   zip, which is the commonest thing this rescue exists for — declares no names
+>   amicus can see, and it still goes to the native extractor. The only remaining
+>   check is that extractor's own. `tar` and `Expand-Archive` were measured to
+>   refuse a `..` entry themselves (`tar.exe`: `Path contains '..'`, exit 1;
+>   `Expand-Archive`: `Can not process invalid archive entry '…'`; nothing written
+>   outside the destination in either case). **`ditto` and Info-ZIP `unzip`, the
+>   macOS and Linux strategies, are unmeasured.**
+> - A **symlink whose target escapes** the extraction root is a payload, not a
+>   name, so no name scan can see it. Amicus's own in-memory extractor refuses
+>   those; a native extractor is not asked to.
+>
+> Amicus cleans up only *inside* the directory it asked the extractor to write to,
+> so anything a native tool wrote outside it would survive a failed strategy. This
+> is the concrete shape of "not a safe operation": if the archive came from
+> somewhere you do not trust, do not set this variable — get another copy.
+>
+> **The one thing the strip does not cover, stated precisely** (measured against
+> `@electron/get` 5.0.0, and re-measured by
+> `tests/electron-env-scrub-get5-contract.test.js` on every test run). Every read
+> that decides the artifact's URL happens while those names are stripped — with a
+> mirror planted, the download still goes to the official
+> `github.com/electron/electron/releases/download/…`. But when **no digest is
+> pinned** — either this variable is set, or your Electron package ships no
+> `checksums.json` entry — `@electron/get` fetches a `SHASUMS256.txt` of its own,
+> *after* the names have been restored, and a planted mirror is read again for
+> that one fetch. It cannot change which bytes you get, because the artifact's
+> URL was already settled: it can only serve a checksum file that disagrees with
+> the official artifact, which makes the download **fail**. Unset the planted
+> names (or the variable) if an unpinned download fails checksum validation on a
+> machine whose `.npmrc` names an Electron mirror.
 
 ---
 

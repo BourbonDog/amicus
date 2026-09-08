@@ -42,7 +42,18 @@ const PROVISION_TIMEOUT_MS = 15000;
  * there is no cache (or the repair defers/contends), we emit a clear notice that
  * the GUI provisions on first use and that headless runs + the council already
  * work, then point at `amicus doctor --fix` (#56) — NOT a reinstall, which can
- * loop. A short timeout keeps a slow disk from ever hanging the install.
+ * loop.
+ *
+ * WHAT IS ACTUALLY BOUNDED HERE, stated precisely because the old sentence
+ * ("a short timeout keeps a slow disk from ever hanging the install") named a
+ * bound that does not exist on the default path. `PROVISION_TIMEOUT_MS` reaches
+ * `repairElectron` as `timeoutMs`, and `timeoutMs` becomes the DOWNLOAD budget
+ * (`electron-provision.js`'s `downloadMs`) — which the cache-only default path
+ * never uses, because it never downloads. The extract is what could hang here,
+ * and it is bounded by the extractor's own idle and hard caps
+ * (`zip-from-buffer.js`: 30 s with no progress, 240 s total), whose live timer
+ * handle is also what stops Node exiting 0 in the middle of a stall. Both
+ * bounds are real; neither is the other.
  *
  * This MUST never throw out of postinstall — the whole body (sync setup, the
  * awaited repair, and a synchronous-throw resolver) is guarded so nothing here
@@ -58,6 +69,15 @@ const PROVISION_TIMEOUT_MS = 15000;
  * @param {object} deps - { repairElectron } override for testing.
  * @returns {Promise<void>}
  */
+function warnIfUnverified(result) {
+  if (!result || !result.unverified) { return; }
+  console.warn('[amicus] Note: the Electron GUI binary was installed UNVERIFIED — either no published sha256');
+  console.warn('[amicus]   covered this artifact, so its bytes were checked only against whatever the mirror');
+  console.warn('[amicus]   served, or its sha256 CONTRADICTED the published one and');
+  console.warn('[amicus]   AMICUS_ALLOW_UNVERIFIED_ELECTRON accepted it anyway.');
+  console.warn('[amicus]   See docs/troubleshooting.md (Electron artifact REFUSED).');
+}
+
 async function provisionElectron(deps = {}) {
   try {
     const _repair = deps.repairElectron || repairElectron;
@@ -65,9 +85,10 @@ async function provisionElectron(deps = {}) {
     // Opt-in aggressive prewarm (#60): full fetch if needed. Non-fatal.
     if (process.env.AMICUS_PREFETCH_ELECTRON === '1') {
       console.log('[amicus] AMICUS_PREFETCH_ELECTRON=1 — prewarming the Electron GUI binary (may download)...');
-      const forced = await _repair({ force: true });
+      const forced = await _repair();
       if (forced && forced.repaired) {
         console.log('[amicus] Electron GUI binary prewarmed.');
+        warnIfUnverified(forced);
         return;
       }
       if (forced && forced.quarantined) {
@@ -80,7 +101,7 @@ async function provisionElectron(deps = {}) {
     }
 
     const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
-    if (result && result.repaired) { return; }
+    if (result && result.repaired) { warnIfUnverified(result); return; }
     // AV quarantine (electron.exe deleted right after extract) needs ACTION, not
     // a generic "provisions on first use" notice — re-extracting can never win,
     // so print the allow-list instruction verbatim instead. (No retry loop.)

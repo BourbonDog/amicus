@@ -11,17 +11,18 @@
  *   C1  controlledProvision passes `checksums` to downloadArtifact, so
  *       @electron/get writes a LOCAL SHASUMS256.txt and never fetches one from a
  *       mirror an attacker may have chosen.
- *   C2  repairElectron HASHES a cached zip against the anchor BEFORE
- *       extractFromCache can run, deletes a mismatch only through the fence, and
- *       treats "no anchor" as a mark rather than a refusal.
- *   C3  runInstaller spawns electron's own install.js with a SCRUBBED env, so a
- *       blocked attacker cannot be funnelled into an unpinned downloader.
+ *   C2  repairElectron HASHES the cached artifact's bytes against the anchor
+ *       BEFORE anything is extracted, deletes a mismatch only through the fence,
+ *       and treats "no anchor" as a mark rather than a refusal.
+ *   B1  a failed controlled provision spawns NOTHING. The last-resort
+ *       install.js fallback is deleted, because it downloaded and extracted
+ *       outside every control above.
  *
  * Named mutants this suite is the tripwire for: DIGESTNOTCHECKED, POISONKEPT,
- * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERENVLEAKED.
+ * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERBACK, INPROCESSUNSCRUBBED.
  *
- * No network, no real extraction: downloadArtifact, extract, spawn and the lock
- * are injected everywhere.
+ * No network, no real extraction: downloadArtifact, extract and the lock are
+ * injected everywhere.
  */
 
 // ── NAMED MUTANTS ──────────────────────────────────────────────────────────
@@ -29,11 +30,11 @@
 // 2026-09-07 against the named test via `npx jest <this file> -t "<name>"`
 // (exit 1 in every case). The red set was not enumerated beyond the named test.
 //
-// DIGESTNOTCHECKED   electron-install.js :: repairElectron — replace the
-//   `const gate = verifyArtifact(...)` line with `{ verdict: 'verified',
-//   allowed: true }`, i.e. extract the cached zip without hashing it.
+// DIGESTNOTCHECKED   electron-repair-cache.js :: repairFromCache — replace the
+//   `const gate = verifyArtifactBytes(...)` line with `{ verdict: 'verified',
+//   allowed: true }`, i.e. extract the cached artifact without hashing it.
 //   RED: "a MISMATCHING cached zip is NOT extracted" (extract called 1x, not 0).
-// POISONKEPT         electron-provision.js :: rejectCachedZip — `if (false &&`
+// POISONKEPT         electron-refuse.js :: rejectCachedZip — `if (false &&`
 //   before the mismatch/fence condition, so nothing is ever deleted.
 //   RED: "a mismatched zip INSIDE a resolved cache root is deleted"
 //   (existsSync true, expected false).
@@ -46,10 +47,10 @@
 //   vouches for its own bytes.
 //   RED: "the ANCHOR comes from the running amicus, not the scanned target dir"
 //   (poison extracted). Also red: electron-trust.test.js "prefers the RUNNING…".
-// INSTALLERENVLEAKED electron-install.js :: runInstaller — `const env = {
-//   ...process.env };` instead of scrubbedChildEnv(...).
-//   RED: "the last-resort install.js spawn gets no repo-plantable electron name"
-//   (npm_config_electron_mirror arrived as "http://attacker.example/evil/").
+// INSTALLERBACK      electron-install.js :: repairElectron — restore the
+//   `try { runInstaller(...) } catch {}` fallback in the provision catch (and
+//   the helper it calls).
+//   RED: "a failed controlled download spawns NOTHING".
 //
 // ── ADDED BY THE REVIEW REPAIR (measured 2026-09-07, same method) ───────────
 // ANCHORVERSIONFROMTARGET  electron-trust.js :: resolveAnchor — condition the
@@ -71,7 +72,7 @@
 //   `refusal` into the returned object.
 //   RED: "online, a REFUSED cache entry plus a failed download reports the
 //   refusal, not 'not provisioned'".
-// ADVICEAFTERDELETE        electron-provision.js :: rejectCachedZip — move the
+// ADVICEAFTERDELETE        electron-refuse.js :: rejectCachedZip — move the
 //   removal notice back above the hatch advice.
 //   RED: "the refusal tells the user about the hatch BEFORE it tells them the
 //   file is gone".
@@ -145,17 +146,18 @@ afterEach(() => { stderrSpy.mockRestore(); });
 
 describe('C1 — the digest is PINNED on the network path', () => {
   test('controlledProvision passes checksums for exactly the artifact it is fetching', async () => {
-    const downloadArtifact = jest.fn(async () => '/tmp/out.zip');
-    const extractFromCache = jest.fn(async () => {});
+    // A REAL file: v4.9.6's second round stages the download and hashes the copy,
+    // so a path that does not exist is refused before extraction is ever reached.
+    const downloadArtifact = jest.fn(async () => writeZip());
+    const extract = jest.fn(async () => {});
     await controlledProvision({
-      electronDir: '/tmp/pkg',
+      electronDir: mkTmp('amicus-pkg-'),
       platform: PLATFORM,
       arch: ARCH,
       version: VERSION,
       anchor: { table: fakeChecksums({ version: VERSION, platform: PLATFORM, arch: ARCH }), source: '<test>' },
       downloadArtifact,
-      extract: jest.fn(),
-      extractFromCache,
+      extract,
       fs,
       env: {},
       downloadMs: 1000,
@@ -164,18 +166,21 @@ describe('C1 — the digest is PINNED on the network path', () => {
     // THE control: with `checksums` supplied, @electron/get writes SHASUMS256.txt
     // locally and never fetches one from the mirror.
     expect(opts.checksums).toEqual({ [ZIP_NAME]: ZIP_SHA256 });
-    expect(extractFromCache).toHaveBeenCalledTimes(1);
+    expect(extract).toHaveBeenCalledTimes(1);
+    // ...and what it was handed is the BUFFER amicus read and hashed, not a name.
+    expect(Buffer.isBuffer(extract.mock.calls[0][0])).toBe(true);
+    expect(extract.mock.calls[0][0].toString('utf8')).toBe(ZIP_BODY);
   });
 
   test('with NO anchor entry the `checksums` key is ABSENT, never an empty table', async () => {
     // An empty object is a hard throw upstream ("cannot generate a valid
     // SHASUMS256.txt"), and a table missing this artifact fails the download —
     // both would turn a legacy package into a permanent provision failure.
-    const downloadArtifact = jest.fn(async () => '/tmp/out.zip');
+    const downloadArtifact = jest.fn(async () => writeZip());
     for (const anchor of [null, { table: { 'electron-v1.0.0-linux-x64.zip': ZIP_SHA256 }, source: '<test>' }]) {
       await controlledProvision({
         electronDir: '/tmp/pkg', platform: PLATFORM, arch: ARCH, version: VERSION, anchor,
-        downloadArtifact, extract: jest.fn(), extractFromCache: jest.fn(async () => {}), fs, env: {},
+        downloadArtifact, extract: jest.fn(), fs, env: {},
       });
     }
     expect(downloadArtifact.mock.calls[0][0]).not.toHaveProperty('checksums');
@@ -316,6 +321,12 @@ describe('C2 — the poison delete is FENCED', () => {
   });
 
   test('an UNREADABLE candidate is refused and never deleted', async () => {
+    // v4.9.6 (second round): an artifact amicus cannot READ is refused by
+    // readArtifactBytes, one step earlier than the hash. `integrity` is set, so
+    // postinstall still prints the reason; what matters is unchanged: nothing
+    // extracted, nothing deleted. (The intermediate staged-copy cut called this
+    // `unstaged` and blamed the temp directory — there is no temp copy now, and
+    // council finding A3 was exactly that misdiagnosis.)
     const cacheRoot = mkTmp('amicus-cacheroot-');
     process.env.ELECTRON_CACHE = cacheRoot;
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
@@ -324,6 +335,8 @@ describe('C2 — the poison delete is FENCED', () => {
     });
     expect(extract).not.toHaveBeenCalled();
     expect(res.integrity).toBe('unreadable');
+    expect(res.repaired).toBe(false);
+    expect(res.reason).toMatch(/could not be opened or read at all/);
   });
 });
 
@@ -411,20 +424,74 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
       dir, exeName, distDir, zip: null, deps: { downloadArtifact, extract: jest.fn(unsafe) },
     });
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
-    expect(spawn).not.toHaveBeenCalled();                  // the forbidden retry
+    // Nothing is spawned on ANY path now (B1), so this asserts the narrower
+    // thing that still matters: the refusal is returned as itself rather than
+    // being reported as an ordinary provision failure.
+    expect(spawn).not.toHaveBeenCalled();
     expect(res.integrity).toBe('unsafe-archive');
+    expect(res.reason).toMatch(/was REFUSED/);
   });
 
-  test('an ORDINARY extract failure still deletes and still falls through (the fix stayed narrow)', async () => {
+  test('a CLASSIFIED bad archive falls through, with a reason, and is KEPT for the offer', async () => {
+    // A1 (council, confirmed 4 of 4): this branch used to delete the user's cache
+    // entry and then, when the re-download also failed, return a bare
+    // {repaired:false} with NO reason — the one message that would have explained
+    // where their artifact went. The silence is what A1 fixed, and it is what
+    // this test measures.
+    //
+    // C2 round 4 then took the delete off this run entirely: the same
+    // `UNZIP_BUFFER_FAILED` prints the offer of the native-extractor rescue, and
+    // an offer that says "set the variable and provision again" must not destroy
+    // the copy that re-run would act on. The eviction still happens once the
+    // rescue has been ARMED and every native extractor has failed on the archive
+    // too (tests/electron-native-rescue.test.js pins both halves).
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    // INSIDE a cache root: round 3's C2 put the corrupt eviction behind the same
+    // `mayDeleteRejectedZip` fence the mismatch eviction always used, so a zip
+    // sitting nowhere a cache root resolves is now left in place on purpose
+    // (tests/electron-artifact-custody.test.js pins that half as UNFENCEDEVICT).
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    const savedRoot = process.env.ELECTRON_CACHE;
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const zip = writeZip({ root: cacheRoot });
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+    const badArchive = jest.fn(async () => {
+      const e = new Error('end of central directory record signature not found');
+      e.code = 'UNZIP_BUFFER_FAILED';
+      throw e;
+    });
+    const { res, spawn } = await repair({
+      dir, exeName, distDir, zip, deps: { downloadArtifact, extract: badArchive },
+    });
+    if (savedRoot === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedRoot; }
+    expect(fs.existsSync(zip)).toBe(true);                 // kept: the offer above needs it
+    expect(spawn).not.toHaveBeenCalled();                  // hatch unset, so no rescue and no child (B1)
+    expect(res.integrity).toBe('corrupt-artifact');
+    expect(res.reason).toMatch(/LEFT IN PLACE/);
+    expect(res.reason).toMatch(/The controlled download failed: offline/);
+  });
+
+  test('an UNCLASSIFIED extract failure KEEPS the artifact, and still falls through with a reason', async () => {
+    // THE SAME TEST AS ABOVE USED TO ASSERT THE OPPOSITE, with an uncoded
+    // `new Error('unzip blew up')`, and that assertion was the defect: D2's
+    // protection was an allow-list of codes that KEEP, so every failure shape
+    // nobody enumerated — an internal bug in the extractor, a raw Node errno —
+    // deleted the user's cached artifact and told them it "was corrupt". On an
+    // air-gapped, hand-seeded cache that destroys the only copy on a guess.
+    // The A1 property the old test existed for is preserved below: the reason
+    // still survives the fall-through to a failed download.
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const zip = writeZip();
     const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
     const { res, spawn } = await repair({
       dir, exeName, distDir, zip, deps: { downloadArtifact, extract: jest.fn(async () => { throw new Error('unzip blew up'); }) },
     });
-    expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
-    expect(spawn).toHaveBeenCalledTimes(1);                // ...and the last-resort installer still runs
-    expect(res.integrity).toBeUndefined();
+    expect(fs.existsSync(zip)).toBe(true);                 // KEPT — nothing said the archive was bad
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('extract-failed');
+    expect(res.reason).toMatch(/LEFT IN PLACE/);
+    expect(res.reason).not.toMatch(/corrupt/i);
+    expect(res.reason).toMatch(/The controlled download failed: offline/);
   });
 });
 
@@ -492,13 +559,24 @@ describe('a refusal the retry could not rescue still reaches the caller', () => 
   });
 });
 
-describe('C3 — the installer spawn env is SCRUBBED (INSTALLERENVLEAKED)', () => {
+describe('B1 — there is no last-resort installer to bypass the gate with', () => {
+  // The BLOCKER (council run 34165289952, seat gpt, confirmed 4 of 4): a failed
+  // controlled provision fell through to `node <electronDir>/install.js`, which
+  // did its own download and its own extraction outside every control this file
+  // pins. Inducing one failure was enough to route around all of them. It was
+  // worse than a bypass: install.js pins with `require('./checksums.json')` out
+  // of the SCANNED directory, which is the ANCHORFROMTARGET hole rung 1 exists
+  // to close, and it extracted unbounded with no traversal classification.
+  //
+  // Its one claimed justification — "amicus's tree cannot resolve @electron/get
+  // but electron's can" — was MEASURED FALSE on this machine: both resolve the
+  // same hoisted copy (require.resolve and
+  // createRequire(electron/package.json).resolve return
+  // node_modules/@electron/get/dist/index.js).
   const HOSTILE = {
     npm_config_electron_mirror: 'http://attacker.example/evil/',
     npm_config_electron_use_remote_checksums: '1',
     npm_package_config_electron_mirror: 'http://attacker.example/evil/',
-    npm_config_platform: 'linux',
-    npm_config_arch: 'arm64',
     ELECTRON_MIRROR: 'https://mirror.corp/electron/',
   };
   let saved;
@@ -512,24 +590,69 @@ describe('C3 — the installer spawn env is SCRUBBED (INSTALLERENVLEAKED)', () =
     }
   });
 
-  test('the last-resort install.js spawn gets no repo-plantable electron name', async () => {
+  test('a failed controlled download spawns NOTHING (INSTALLERBACK)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const downloadArtifact = jest.fn(async () => { throw new Error('network blocked'); });
-    const { spawn } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
 
-    expect(spawn).toHaveBeenCalledTimes(1);
-    const env = spawn.mock.calls[0][2].env;
-    expect(env.npm_config_electron_mirror).toBeUndefined();
-    expect(env.npm_config_electron_use_remote_checksums).toBeUndefined();
-    expect(env.npm_package_config_electron_mirror).toBeUndefined();
-    expect(env.npm_config_platform).toBeUndefined();
-    expect(env.npm_config_arch).toBeUndefined();
-    // amicus's own resolution is pinned under the names install.js ranks first...
-    expect(env.ELECTRON_INSTALL_PLATFORM).toBe(PLATFORM);
-    expect(env.ELECTRON_INSTALL_ARCH).toBe(ARCH);
-    // ...and the machine owner's BARE mirror survives, because a repo cannot set it.
-    expect(env.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
-    // process.env itself is never mutated.
+    const { res, spawn } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.repaired).toBe(false);
+    // ...and the failure is REPORTED, not swallowed into a bare {repaired:false}.
+    expect(res.reason).toMatch(/The controlled download failed: network blocked/);
+    expect(stderr.join('')).toMatch(/the controlled Electron download did not complete/);
+  });
+
+  test("the IN-PROCESS download runs with a SCRUBBED process.env (D5) (INPROCESSUNSCRUBBED)", async () => {
+    // Seat D5: the v4.9.6 scrub covered only the deleted install.js SPAWN, while
+    // amicus's own controlled download runs @electron/get IN THIS PROCESS off
+    // `process.env` and reads the very same names. Filed as a nit because the
+    // digest pin refuses redirected bytes anyway — a wasted download, not a
+    // compromise — but a stated threat model wider than the code is its own bug.
+    // MEASURED against the real @electron/get 5.0.0 with an injected downloader:
+    //   UNSCRUBBED -> https://hostile.example/attacker/v43.1.1/electron-...zip
+    //   SCRUBBED   -> https://github.com/electron/electron/releases/download/...
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    let envAtCallTime = null;
+    const downloadArtifact = jest.fn(async () => {
+      envAtCallTime = { ...process.env };
+      return writeZip();
+    });
+
+    const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+
+    expect(res.repaired).toBe(true);
+    // Every repo-plantable name is gone WHILE @electron/get resolves its URL...
+    expect(envAtCallTime.npm_config_electron_mirror).toBeUndefined();
+    expect(envAtCallTime.npm_config_electron_use_remote_checksums).toBeUndefined();
+    expect(envAtCallTime.npm_package_config_electron_mirror).toBeUndefined();
+    // ...the machine owner's BARE mirror is untouched, because a repo cannot set it...
+    expect(envAtCallTime.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
+    // ...and process.env is whole again afterwards.
     expect(process.env.npm_config_electron_mirror).toBe(HOSTILE.npm_config_electron_mirror);
+    expect(process.env.npm_package_config_electron_mirror).toBe(HOSTILE.npm_package_config_electron_mirror);
+  });
+
+  test('the installer entry point is gone from the module surface', () => {
+    // Not "unused" — GONE. An exported spawn-the-installer helper is one call
+    // site away from being a bypass again.
+    // eslint-disable-next-line global-require
+    expect(require('../src/sidecar/electron-provision').runInstaller).toBeUndefined();
+    // eslint-disable-next-line global-require
+    expect(require('../src/sidecar/electron-trust').scrubbedChildEnv).toBeUndefined();
+  });
+
+  test('repairElectron takes no `deps.spawn` to drive a child with', async () => {
+    // The parameter is gone from the signature, so a caller cannot reintroduce
+    // the path by injection either.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const spawn = jest.fn(() => { throw new Error('nothing may be spawned'); });
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+
+    const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact, spawn } });
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.repaired).toBe(false);
   });
 });

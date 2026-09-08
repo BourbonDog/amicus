@@ -421,18 +421,111 @@ The refused bytes are never extracted, so no Electron is installed *from them*. 
 - **`npm install` (offline by design)** repeats the refusal reason in its notice and stops there — it never downloads.
 - **`amicus doctor --fix` and first GUI use** re-download the artifact with the digest pinned, so a one-off bad file self-heals and is reported as installed. Only when that retry cannot rescue it — no network, or the fresh download fails too — does `doctor` repeat the refusal reason instead of its generic "not provisioned".
 
-**Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus hashes a cached zip **before** extracting it, and pins the digest on the download, so bytes that *contradict* a published digest never become an Electron install. Where no published digest covers the artifact at all — an Electron package that ships no `checksums.json`, or one whose own `package.json` names a version amicus holds no entry for — there is nothing to contradict: those bytes are extracted and the outcome is marked `unverified` rather than refused, because refusing would strand every older Electron in a re-download loop. The gate is an integrity check against a digest amicus can obtain, not a promise that every artifact was vouched for.
+**Cause:** the bytes do not match the sha256 Electron itself publishes for that artifact (`node_modules/electron/checksums.json`). Amicus reads the artifact **once**, into its own memory, and everything after that — the sha256, the extraction — acts on those bytes and never on the file again: one `open`, one buffer, no second look at any path. So bytes that *contradict* a published digest never become an Electron install, and nothing on disk can be swapped between the hash and the extract, because after the read there is no path in play at all. Both routes work this way, the cached artifact and the fresh download. Where no published digest covers the artifact at all — an Electron package that ships no `checksums.json`, or one whose own `package.json` names a version amicus holds no entry for — there is nothing to contradict, and nothing to pin a download to: those bytes are extracted and the outcome is marked `unverified` rather than refused, because refusing would strand every older Electron in a re-download loop. That mark is not decorative: `npm install` prints a note when it installs one, the GUI says so on the launch that provisions it, and `amicus doctor --fix` names it in its self-heal line. **The mark covers the other unverified case too** — an artifact whose sha256 *contradicts* the published one and was installed anyway because `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` is set. That is the more alarming of the two, and both provision routes mark it: the only verdict that reports a clean repair is one where amicus's own hash matched a digest it anchored. Both routes say so on stderr as they do it — a cached artifact reports `no published sha256 for …, so its bytes could not be verified`, and a download reports `… could not be pinned`, meaning the bytes were checked only against the `SHASUMS256.txt` the mirror itself served. The gate is an integrity check against a digest amicus can obtain, not a promise that every artifact was vouched for.
 
 That is what a swapped mirror or a planted cache file looks like. It is **also** what a truncated download, a failing disk, or a corporate mirror serving a *rebuilt* Electron looks like — amicus cannot tell them apart, and says so rather than guessing.
 
 **Fix:**
 - **Let it retry.** Online, amicus removes the offending cache entry — only when its filename and its resolved location both say it really is that cache entry — and downloads again with the digest pinned. A one-off truncated download heals itself.
 - **Air-gapped / hand-seeded cache:** the refused file is deleted, so re-copy the cache directory from the machine that downloaded it. A partial copy is the usual cause. If the bytes are deliberately different (below), set the variable *before* you re-copy — the next refusal would remove the fresh copy too.
-- **You deliberately run a rebuilt Electron:** set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` (see [configuration.md](./configuration.md#gui-and-debug)). It accepts a cached artifact that contradicts the published digest, and drops the digest pin on a download so a rebuilt artifact can be fetched from your own `ELECTRON_MIRROR` at all. It re-enables nothing else: the Electron installer's environment stays scrubbed of every `npm_config_electron_*` / `npm_package_config_electron_*` name either way.
+- **You deliberately run a rebuilt Electron:** set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` (see [configuration.md](./configuration.md#gui-and-debug)). It accepts a cached artifact that contradicts the published digest, and drops the digest pin on a download so a rebuilt artifact can be fetched from your own `ELECTRON_MIRROR` at all. Everything it lets through is marked `unverified`, on both routes, and reported everywhere that mark is read. It widens **two** further things, and both are worth knowing before you set it. The first is the [native-extractor rescue](#amicus-could-not-read-this-electron-archive): with this variable set, an archive amicus's own extractor cannot read is written to a path and handed to your OS's extractor — which spends the custody property everything else on this page rests on, that amicus only ever writes bytes it hashed. The second is a residual on the environment strip. Every `npm_config_electron_*` / `npm_package_config_electron_*` name is stripped from the environment while amicus works out **where the artifact comes from**, so the zip still comes from the official `github.com/electron/electron/releases/download/…` even in a repository whose `.npmrc` names a mirror. But an unpinned download is exactly what this variable produces, and an unpinned download makes `@electron/get` fetch a `SHASUMS256.txt` of its own *after* those names are restored — so a repo-planted mirror **is** read again for that one fetch (measured on every test run by `tests/electron-env-scrub-get5-contract.test.js`). It cannot change which bytes you get, because the artifact's URL was already settled; it can only serve a checksum file that disagrees with the official artifact, which makes the download **fail**. If an unpinned download fails checksum validation on a machine whose `.npmrc` names an Electron mirror, unset the planted names. [configuration.md](./configuration.md#gui-and-debug) states the same residual with the measurement behind it.
 - **Otherwise treat it as real.** Check what `ELECTRON_MIRROR` is set to, and whether the directory you ran `npx -y amicus@latest` in is one you trust.
 - Headless runs and the full council work without the GUI in every one of these cases.
 
-**A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it. Report the mirror or cache the archive came from.
+**A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it, nor does the native-extractor rescue below. Report the mirror or cache the archive came from.
+
+---
+
+## amicus could not read this Electron archive
+
+**Symptom:** provisioning stops with
+
+```
+[amicus] amicus could not read this Electron archive: could not read the archive: ...
+[amicus] There is ONE rescue for that, and it is OFF. With
+[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 set BEFORE provisioning, amicus writes the bytes
+[amicus] it hashed into a private directory inside the electron package and hands that PATH
+[amicus] to a native extractor (tar / Expand-Archive / ditto / unzip) — ...
+```
+
+**Cause:** amicus extracts the artifact **in memory**, from the buffer it hashed, so that the bytes it writes are always the bytes it verified. This message means that extractor could not read the archive at all — a truncated or malformed zip, or a shape it does not handle. The bytes are not written anywhere and no Electron is installed from them. A *cached* artifact identified this way is normally discarded, because a positively-unreadable archive is the one failure that says the cached file is worthless — but **not on the run that prints this message**, which leaves it exactly where it is. The rescue below is the reason: an offer that tells you to set a variable and provision again cannot delete the only copy that re-run could act on. Amicus discards the artifact once the rescue has actually been tried and every native extractor has failed on it too.
+
+**Fix, in order:**
+
+- **Online, do nothing.** Amicus downloads the artifact again with the digest pinned. A truncated download heals itself.
+- **Air-gapped, re-copy first.** Copy the cache directory again from the machine that downloaded it. A partial copy is the usual cause, and a fresh copy costs you nothing.
+- **Only if you cannot obtain another copy: the native-extractor rescue.** Set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` and provision again. You do not have to have set it in advance: the run that printed the message above left the archive in place precisely so this one has something to work on. Amicus then writes the bytes it hashed to a path inside the Electron package and hands that path to your OS's own extractor (`tar` / `Expand-Archive` / `ditto` / `unzip`) — the same tools that handled the archive before amicus extracted in memory at all. **This is not a safe operation, and it is not described as one.** Between amicus writing the file and the child process opening it, anything running as your user can substitute it, and what that child extracts is promoted into `dist/` without being hashed again. Amicus prints the whole trade on stderr before it spawns anything, and the result is reported `unverified` even when the artifact's own sha256 matched. Unset the variable afterwards: it also downgrades a digest-mismatch refusal to a warning ([configuration.md](./configuration.md#gui-and-debug)).
+- **What the rescue will *not* do,** whatever this variable is set to: retry an archive refused for path traversal (`REFUSED (unsafe archive)` — terminal by design), retry an extraction that *stalled* (the timeout exists to stop work, not to hand it to a child process), rescue bytes that contradict the published digest (they are known wrong), or paper over a full or unwritable disk. Each of those says something different from "this archive cannot be read", and only the last of those is a rescue amicus was given. Before it hands anything over, amicus also reads the archive's *entry names* and refuses any that would write outside the destination — because an archive can break the extractor early enough that its own traversal check never ran. That name check cannot see inside an archive whose central directory is unreadable, and cannot see a symlink target at all; [configuration.md](./configuration.md#gui-and-debug) states both residuals and names which extractors were measured to refuse a `..` entry themselves.
+- Headless runs and the full council work without the GUI throughout.
+
+---
+
+## Electron artifact NOT extracted (could not be read)
+
+**Symptom:** provisioning stops with
+
+```
+[amicus] Electron artifact NOT extracted: electron-v43.1.1-win32-x64.zip
+[amicus]   C:\Users\me\AppData\Local\electron\Cache\<sha>\electron-v43.1.1-win32-x64.zip
+[amicus]   could not be opened or read at all (EACCES: permission denied, open '...')
+[amicus] amicus reads an artifact ONCE, into memory, and hashes and extracts THOSE
+[amicus] bytes. It could not read these, so it has nothing it could vouch for and
+[amicus] has extracted nothing. The file was left exactly where it is.
+```
+
+**Cause:** amicus reads an Electron artifact exactly once, through a single file descriptor, into a
+buffer of its own. The sha256 and the extraction both act on that buffer. Anything that can write the
+download cache — which, on your own machine, includes anything running as you — can change the file
+afterwards, and it changes nothing: the bytes amicus hashed are already the bytes it is going to
+write. When the read itself cannot be completed there is nothing to vouch for, so amicus refuses
+rather than extracting something it never saw whole.
+
+The third line names which way the read failed:
+
+| line | what happened |
+|---|---|
+| `could not be opened or read at all` | permissions, a broken path, a disconnected drive — the fs error is quoted |
+| `is not a regular file` | the cache entry is a directory, a fifo, or a device node |
+| `is empty` | a zero-byte file, usually an interrupted download |
+| `is far larger than any electron artifact` | above the 1 GiB ceiling; a real artifact is ~140–160 MB |
+| `ended early while amicus was reading it` | the file is shorter than it said it was |
+| `changed size while amicus was reading it` | it grew under the read — what an active swap looks like |
+
+**Fix:**
+- Delete the cache entry the message names and provision again; amicus re-downloads it.
+- Check the permissions on the cache root (`ELECTRON_CACHE`, or `%LOCALAPPDATA%\electron\Cache` /
+  `~/Library/Caches/electron` / `~/.cache/electron`).
+- Headless runs and the full council work without the GUI meanwhile.
+
+**Notes:**
+- **Your cached artifact is never moved, copied, or deleted by this refusal.** The download cache is
+  exactly as it was, whether the repair succeeded, was refused, or was interrupted — which matters
+  most on an air-gapped machine whose cache was hand-seeded. Nothing is written to the temp directory
+  either: earlier versions staged a ~170 MB copy there, and no longer do.
+- **A killed run can leave one directory behind, and the next provision sweeps it.** Extraction
+  happens in `<electron package>/.amicus-incoming-<hex>/`, which is promoted into `dist/` by a single
+  rename at the end and removed afterwards — but that removal is an in-process `finally`, and a kill
+  does not run it. Ctrl-C during `npm install`, a lid close or an AV kill can therefore leave one
+  behind, as can the sibling `.amicus-retired-<hex>` when an Electron is running off the tree being
+  replaced (Windows refuses to delete it). Both live inside the Electron package directory, where no
+  OS temp cleaner reaches them, so **amicus sweeps them itself: every provision removes any
+  `.amicus-incoming-*` or `.amicus-retired-*` in that directory that is more than a day old.** The
+  age rule is deliberate — it cannot take a tree another run may still be writing. What is still
+  guaranteed either way: a half-written tree is never what `dist/` contains, and a kill mid-extract
+  leaves the previous `dist/` exactly where it was.
+- **A promote never removes a working `dist/` to make room.** If the old tree cannot be renamed out of
+  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable,
+  the repair refuses and leaves it untouched rather than deleting it with no way back. If it holds no
+  executable it is not an install, and it is replaced. In the one case where the tree was renamed away
+  and neither the swap nor the rollback could run, the previous `dist/` is intact at
+  `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
+- **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
+  `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
+  builds the artifact filename from it and refuses to use anything that is not a plain filename, since
+  it would otherwise be joined into a path. Reinstall the `electron` package.
+- **`Cached electron artifact … was NOT extracted (…); it was LEFT IN PLACE`** is the other half of
+  the same rule: the archive was fine and the *destination* was not (no space, an unwritable `dist/`,
+  a path too long). A cached artifact is only ever evicted when the archive itself is bad.
 
 ---
 

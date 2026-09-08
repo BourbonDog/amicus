@@ -6931,6 +6931,44 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.7 candidates — deferred from the v4.9.6 cut (2026-09-08)
+
+Filed from council run 34239260931 on PR #237, verdict "Fix these first" at **2 of 4 seats — a
+DEGRADED run**, so these carry the weight of two seats, not four. `deepseek` died
+`NO_OUTPUT_BACKSTOP` at 912 s and `glm` died `OUTPUT_LENGTH`; `deepseek` is the seat that found both
+the D1 race and the C2 entry-ordering hole, so the sharpest reviewer on this branch was absent.
+Shipped anyway on the owner's call: none is a regression, none says a shipped control is ineffective,
+and the branch is strictly better than v4.9.5 with all three open.
+
+- [ ] **A1 [major] — a failed `dist` retirement can delete a WORKING install whose `path.txt` names
+  another platform's exe.** `promoteDist`'s step-1 fallback tests for `platformExe(platform)` and, not
+  finding it, `rmSync`s `dist/` in place as "not an install". A package cross-installed through
+  `npm_config_platform` holds a different basename, so a whole working tree is destroyed on a promote
+  that FAILED. **Verified NOT a regression** — the guard is at `electron-layout.js:189` in
+  `4eb8e1d0`, before the B2 work. But it is the same insight B2 found and handled for the ROLLBACK
+  path (capture the replaced `path.txt` value, put it back) and did not carry one function over to
+  the retirement guard. The fix is to judge "is this an install" by what `path.txt` actually names,
+  falling back to `platformExe` only when it is absent or unreadable — the rule
+  `resolveElectronBinary` already uses.
+- [ ] **B3 [minor, but the boundary failing OPEN] — a TRUNCATED archive slips past the entry scan.**
+  The `hostileName` scan added in `524ea7be` enumerates entry names to refuse a hostile entry the
+  parse failure would otherwise launder into the native rescue. When a zip's central directory is
+  unreadable, it yields NO names — so nothing is found, nothing is refused, and the archive reaches
+  the native extractor under the hatch. **This is the C2 trigger boundary being wrong a second time,
+  from a third direction** (first: excluding the refusal yauzl formed rather than the hostile entry;
+  now: an archive whose names cannot be read at all). The rule to apply is the one this branch keeps
+  re-learning: an enumeration that returns nothing must fail CLOSED, not silently pass.
+- [ ] **B2 [minor] — the rescue's cleanup only reaches inside the incoming directory.** `cleanDir`
+  cleans `<incoming>/dist`, so a native extractor that writes OUTSIDE it leaves those writes behind
+  after a failed rescue. Bounded by the hatch (this path is unreachable without
+  `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`) and by the native tools' own traversal guards, which is why
+  it is a minor rather than a hole — but the rescue should not depend on tools amicus does not
+  control for its own cleanup.
+- [ ] **NOT a defect, do not "fix" it: B1** was the seat restating the rescue's write→child-open
+  window, which v4.9.6 documents deliberately and prints to the user before the spawn. It is the
+  trade the hatch buys. Recorded here so a later reader does not mistake a disclosed cost for an
+  open finding.
+
 ## v4.9.5 records — the Electron trust boundary (2026-09-07)
 
 **✅ v4.9.5 RELEASED 2026-09-07** — tag `v4.9.5` → `62f2e633` (`--no-ff` merge of `release/v4.9.5`,

@@ -109,13 +109,21 @@ src/
 │   ├── conversation-mirror.js
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
+│   ├── electron-custody.js  # CUSTODY of the Electron artifact: one open, one read, one Buffer.
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
+│   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant.
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
+│   ├── electron-layout.js  # The on-disk LAYOUT of an installed `electron` package: where the executable
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
-│   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and what happens to a
+│   ├── electron-native-plan.js  # THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's
+│   ├── electron-native-rescue.js  # THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor
+│   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and the fence that says
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
+│   ├── electron-refuse.js  # Electron artifact REFUSALS — the ways amicus declines to turn bytes into an
+│   ├── electron-repair-cache.js  # ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`,
+│   ├── electron-rescue-notice.js  # THE TWO NOTICES the native-extractor rescue speaks — the offer a parse failure
 │   ├── electron-state.js  # Electron install-state probes (#76).
-│   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor, the gate, and the env scrub.
+│   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor and the gate. (The third
 │   ├── fallback-chains.js
 │   ├── fanout-budget.js
 │   ├── fanout-leg-fallback.js
@@ -155,7 +163,11 @@ src/
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
 │   ├── wave-progress.js
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
-│   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+│   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+│   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
+│   ├── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   ├── zip-name-scan.js  # WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central
+│   └── zip-stall-bound.js  # WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work.
 ├── template/
 │   ├── apply.js
 │   ├── render.js
@@ -550,14 +562,22 @@ evals/
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
-| `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
+| `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
+| `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
+| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
+| `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
-| `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and what happens to a | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()`, `rejectCachedZip()`, `isUnsafeArchive()` |
+| `sidecar/electron-native-plan.js` | THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's | `nativeRescue()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
+| `sidecar/electron-native-rescue.js` | THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor | `withNativeRescue()`, `isRescuableFailure()`, `RESCUE_TRIGGER()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
+| `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
+| `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the ways amicus declines to turn bytes into an | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
+| `sidecar/electron-repair-cache.js` | ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`, | `repairFromCache()` |
+| `sidecar/electron-rescue-notice.js` | THE TWO NOTICES the native-extractor rescue speaks — the offer a parse failure | `offerNativeRescue()`, `announceNativeRescue()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
-| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor, the gate, and the env scrub. | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifact()`, `sha256File()` |
+| `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifactBytes()`, `sha256Bytes()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-budget.js` |  | `preflightBudget()` |
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
@@ -594,10 +614,14 @@ evals/
 | `sidecar/start-metadata.js` |  | `createSessionMetadata()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
-| `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
+| `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()`, `UNSAFE_PATTERNS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
+| `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
+| `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
+| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
+| `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
 | `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |

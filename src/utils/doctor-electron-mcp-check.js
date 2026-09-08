@@ -138,11 +138,18 @@ async function evaluateElectronMcp(d) {
   const after = evaluateElectronInstalls(d); // fresh scan reflects the repairs
   if (after.status === 'ok') {
     const n = results.length;
+    // A2/B3: `unverified` used to be written by repairElectron and read by
+    // NOTHING. A repair that no published digest could vouch for is exactly the
+    // thing a `doctor --fix` report exists to say out loud.
+    const unverified = results.filter((r) => r.repaired && r.unverified).length;
+    const mark = unverified > 0
+      ? `, ${unverified} UNVERIFIED (no published sha256 covered the artifact, or its sha256`
+        + ' contradicted the published one and the hatch accepted it)' : '';
     return {
       ...after,
-      message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')})`,
+      message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark})`,
       fixed: true,
-      fixDetail: `self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}`,
+      fixDetail: `self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark}`,
     };
   }
   const failed = results.filter((r) => !r.repaired)

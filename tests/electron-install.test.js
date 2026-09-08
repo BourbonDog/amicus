@@ -141,7 +141,10 @@ describe('repairElectron (#53)', () => {
     });
 
     expect(extract).toHaveBeenCalledTimes(1);
-    expect(extract.mock.calls[0][1].dir).toBe(distDir);
+    // Extraction lands in a private incoming directory and is PROMOTED into
+    // dist/ by rename, so a half-written tree is never what anything reads.
+    expect(extract.mock.calls[0][1].dir).not.toBe(distDir);
+    expect(path.dirname(extract.mock.calls[0][1].dir).startsWith(path.join(dir, '.amicus-incoming-'))).toBe(true);
     expect(spawn).not.toHaveBeenCalled();
     // path.txt restored + exe present => repaired.
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
@@ -280,8 +283,11 @@ describe('repairElectron (#53)', () => {
 
     // downloadArtifact fetches the zip ourselves (the SAME api install.js uses).
     const downloadArtifact = jest.fn(async () => dlZip);
-    // extract materializes the exe in the dist dir.
-    const extract = jest.fn(async (_zip, opts) => {
+    // extract materializes the exe. It is handed the BUFFER amicus read and
+    // hashed — there is no path here at all, which is the whole point.
+    let sawBytes = null;
+    const extract = jest.fn(async (bytes, opts) => {
+      sawBytes = bytes.toString('utf8');
       fs.writeFileSync(path.join(opts.dir, exeName), 'MZdownloaded');
     });
     // spawn MUST NOT be used as the primary provision path anymore.
@@ -313,7 +319,12 @@ describe('repairElectron (#53)', () => {
     expect(dlOpts.arch).toBe('x64');
     expect(typeof dlOpts.cacheRoot).toBe('string');
     expect(extract).toHaveBeenCalledTimes(1);
-    expect(extract.mock.calls[0][0]).toBe(dlZip);
+    // The DOWNLOADED artifact is the one extracted — as BYTES amicus already
+    // hashed, never as a path something else could still write to.
+    expect(Buffer.isBuffer(extract.mock.calls[0][0])).toBe(true);
+    expect(sawBytes).toBe(ZIP_BODY);
+    // ...and the download cache is left holding the artifact it downloaded.
+    expect(fs.readFileSync(dlZip, 'utf8')).toBe(ZIP_BODY);
     expect(spawn).not.toHaveBeenCalled();
     expect(res.repaired).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
@@ -352,23 +363,41 @@ describe('repairElectron (#53)', () => {
   });
 
   test('corrupt cached zip: extract throws → delete bad zip + forced re-download + extract', async () => {
-    // The zip HASHES CORRECTLY and still fails to open — a truncated-but-consistent
-    // artifact, which is a different failure class from a digest disagreement (that
-    // one is refused before extract; see the C2 tests). The anchor is seeded for
-    // this body so the gate passes and the extract-throw path is what runs.
+    // The zip is ALLOWED and still fails to open — a truncated artifact, which is a
+    // different failure class from a digest disagreement (that one is refused before
+    // extract; see the C2 tests). NO anchor covers this artifact, which is the only
+    // shape where "allowed, but corrupt" is physically coherent: with a published
+    // digest in hand, bytes that fail to open would have failed the hash. v4.9.6's
+    // second round hashes the DOWNLOAD too, so a fixture whose anchor vouches for
+    // the corrupt body would now refuse the good re-download instead of extracting it.
     const badBody = 'CORRUPT';
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32', body: badBody });
-    const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v43.1.1-win32-x64.zip');
+    fs.rmSync(path.join(dir, 'checksums.json'));
+    // INSIDE a cache root. Round 3's C2 put the corrupt-artifact eviction behind
+    // the same `mayDeleteRejectedZip` fence the mismatch eviction always used, so
+    // a "cached" zip sitting where no cache root resolves is now deliberately
+    // left in place (tests/electron-artifact-custody.test.js pins that as
+    // UNFENCEDEVICT). This test is about the corrupt-and-re-download flow, so it
+    // puts the artifact where a real cache hit would have found it.
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    const savedRoot = process.env.ELECTRON_CACHE;
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const badZip = path.join(cacheRoot, 'a'.repeat(16), 'electron-v43.1.1-win32-x64.zip');
+    fs.mkdirSync(path.dirname(badZip), { recursive: true });
     fs.writeFileSync(badZip, badBody);
     // The re-downloaded zip is good.
     const goodZip = path.join(mkTmp('amicus-good-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(goodZip, ZIP_BODY);
 
     let extractCalls = 0;
-    const extract = jest.fn(async (zip, opts) => {
+    // Keyed on the BYTES, because bytes are all the extractor is given now. The
+    // thrown error carries UNZIP_BUFFER_FAILED: only an ARCHIVE failure evicts a
+    // cache entry, and a destination failure must not (council finding D2).
+    const extract = jest.fn(async (bytes, opts) => {
       extractCalls += 1;
-      if (zip === badZip) {
+      if (bytes.toString('utf8') === badBody) {
         const e = new Error('end of central directory record signature not found');
+        e.code = 'UNZIP_BUFFER_FAILED';
         throw e;
       }
       fs.writeFileSync(path.join(opts.dir, exeName), 'MZredownloaded');
@@ -391,15 +420,25 @@ describe('repairElectron (#53)', () => {
       },
     });
 
+    if (savedRoot === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedRoot; }
+
     // First extract attempt was on the corrupt cached zip and threw.
     expect(extractCalls).toBe(2);
-    // The bad cached zip was DELETED.
-    expect(fs.existsSync(badZip)).toBe(false);
+    // The bad cached zip was KEPT (C2, round 4). With the hatch unset, a parse
+    // failure prints the offer of the native-extractor rescue and telling a user
+    // to set a variable and provision again cannot delete the copy that re-run
+    // would act on. It is discarded once the rescue has run and every native
+    // extractor has failed too — pinned in tests/electron-native-rescue.test.js
+    // as OFFEREDANDEVICTED and its armed-and-failed sibling. Nothing here
+    // depends on the eviction: the fall-through is what this test is about.
+    expect(fs.existsSync(badZip)).toBe(true);
     // A forced fresh download was attempted.
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
     expect(downloadArtifact.mock.calls[0][0].force).toBe(true);
-    // Re-extract materialized the exe → repaired true.
+    // Re-extract materialized the exe → repaired true, and marked `unverified`
+    // because no published digest covered either artifact (F3).
     expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
   });
 });
