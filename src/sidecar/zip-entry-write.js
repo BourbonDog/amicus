@@ -57,12 +57,21 @@ const outOfBound = (where, fileName) => failure('UNZIP_UNSAFE_ARCHIVE', `Out of 
  */
 const extractorUnavailable = (message) => failure('UNZIP_BUFFER_UNAVAILABLE', `the in-memory zip extractor is unavailable: ${message}`);
 
-/** Collect a readable fully into one Buffer (a symlink target is a few bytes). */
-function collect(stream) {
+/**
+ * Collect a readable fully into one Buffer (a symlink target is a few bytes).
+ *
+ * CLASSIFIED, like every other throw here. This was the ONE throw site that
+ * rejected with the RAW yauzl/stream error, which carries no `code` — and
+ * `electron-repair-cache` read an unclassified extract failure as "the archive
+ * is bad" and DELETED the user's cached artifact. A read error on a symlink
+ * target IS an archive-side failure, so it is named as one rather than left to
+ * be guessed at.
+ */
+function collect(stream, what) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     stream.on('data', (c) => chunks.push(c));
-    stream.on('error', reject);
+    stream.on('error', (e) => reject(badArchive(`could not read ${what}: ${(e && e.message) || e}`)));
     stream.on('end', () => resolve(Buffer.concat(chunks)));
   });
 }
@@ -142,7 +151,7 @@ async function writeEntry({ zipfile, entry, dest, mode, fs }) {
  * `placeEntry`, which re-runs after every earlier entry has been written.
  */
 async function writeSymlink({ zipfile, entry, canonical, root, fs }) {
-  const target = (await collect(await entryStream(zipfile, entry))).toString('utf8');
+  const target = (await collect(await entryStream(zipfile, entry), `the symlink target for ${entry.fileName}`)).toString('utf8');
   const dest = path.join(canonical, path.basename(entry.fileName));
   const resolved = path.resolve(canonical, target);
   const rel = path.relative(root, resolved);

@@ -40,9 +40,13 @@
  * PROMOTEPARTIAL   electron-layout.js :: extractBytesToDist — extract straight
  *   into `<electronDir>/dist` instead of into `.amicus-incoming-<hex>/dist`.
  *   RED: "a failed extraction never becomes dist/".
- * DESTERRORISARCHIVE zip-from-buffer.js :: writeEntry — tag a write failure
+ * DESTERRORISARCHIVE zip-entry-write.js :: writeEntry — tag a write failure
  *   `UNZIP_BUFFER_FAILED` instead of `UNZIP_DEST_FAILED`.
  *   RED: "a DESTINATION failure is not reported as a bad archive (D2)".
+ * COLLECTUNCLASSIFIED zip-entry-write.js :: collect — restore the bare
+ *   `stream.on('error', reject)`, so a read error reaches the caller with no
+ *   `code` and is read as "the archive is bad".
+ *   RED: "a read error on the symlink TARGET is CLASSIFIED, never raw".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -456,6 +460,40 @@ describe('symlinks — the darwin .app shape, which cannot be run here', () => {
 
     expect(links).toHaveLength(1);
     expect(links[0].target).toBe('../Resources/x');
+  });
+
+  test('a read error on the symlink TARGET is CLASSIFIED, never raw (COLLECTUNCLASSIFIED)', async () => {
+    // `collect()` was the ONLY throw site in the extractor that did not go
+    // through a classified constructor: it rejected with the raw yauzl/stream
+    // error, which carries no `code`. `electron-repair-cache` reads an
+    // unclassified extract failure as "the archive is bad" and DELETES the
+    // user's cached artifact, so this one un-tagged rejection was a live path
+    // from an internal read error to a destroyed air-gapped cache.
+    const yauzl = require('yauzl');
+    const { Readable } = require('stream');
+    const spy = {
+      fromBuffer: (bytes, opts, cb) => yauzl.fromBuffer(bytes, opts, (err, zf) => {
+        if (zf) {
+          const real = zf.openReadStream.bind(zf);
+          zf.openReadStream = (entry, ecb) => real(entry, (e, stream) => {
+            if (e) { ecb(e); return; }
+            stream.destroy();
+            // Raised from `read()`, so it lands AFTER the consumer has attached
+            // its listeners — which is what a real mid-read I/O error looks like.
+            ecb(null, new Readable({ read() { this.destroy(new Error('EIO: a raw stream error')); } }));
+          });
+        }
+        cb(err, zf);
+      }),
+    };
+    const dir = mkTmp();
+
+    const err = await extractZipBuffer(buildZip([
+      { name: 'app/link', body: 'target', mode: MODE_SYMLINK },
+    ]), { dir, deps: { yauzl: spy, fs: { ...fs, symlinkSync: () => {} } } }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_BUFFER_FAILED');
+    expect(err.message).toMatch(/could not read the symlink target for app\/link/);
   });
 
   test('a symlink amicus cannot create is a DESTINATION failure, not a bad archive', async () => {

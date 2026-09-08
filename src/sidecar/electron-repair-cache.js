@@ -49,10 +49,26 @@ const { verifyArtifactBytes } = require('./electron-trust');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /**
- * Extract failures that say nothing about the CACHED ARTIFACT, and must
- * therefore never evict it. Everything else is read as "the archive is bad".
+ * The ONE extract failure that is evidence the CACHED ARTIFACT is worthless,
+ * and therefore the only one that may delete it.
+ *
+ * IT IS A ONE-ENTRY ALLOW-LIST BECAUSE THE RULE HAS TO FAIL CLOSED. The first
+ * answer to D2 was a two-entry list of codes that KEEP the artifact, with
+ * everything else evicting — which failed OPEN toward deletion on every failure
+ * shape nobody had enumerated. MEASURED: an extractor throwing a plain `Error`
+ * with no `code` (an internal bug) and one throwing a raw Node `ENOSPC` BOTH
+ * deleted the artifact and told the user it "was corrupt and removed", which is
+ * D2's own shape one classification gap to the left — and D2's stated worst case
+ * is an air-gapped run with no network to re-fetch from.
+ *
+ * So the test is inverted: an extract failure removes the artifact only when the
+ * extractor positively identified the ARCHIVE as bad. Everything else — a full
+ * disk, an unwritable dist/, a promote that could not rename, an extractor that
+ * would not load, a stall, and any error a future extractor forgets to classify
+ * — keeps it. `zip-entry-write.js` is the other half of the contract: every
+ * throw there goes through one of its three constructors.
  */
-const KEEPS_THE_ARTIFACT = new Set(['UNZIP_DEST_FAILED', 'UNZIP_BUFFER_UNAVAILABLE']);
+const EVICTS_THE_ARTIFACT = 'UNZIP_BUFFER_FAILED';
 
 /**
  * Try to provision from `zip`.
@@ -109,18 +125,19 @@ async function repairFromCache({
     // archive is LEFT IN PLACE, because a refused archive is evidence.
     if (isUnsafeArchive(err)) { return { done: true, result: refuseUnsafeArchive({ err, fileName, log }) }; }
     // D2: only a bad ARCHIVE is evidence that the cached artifact is worthless.
-    // A full disk, an unwritable dist/ or an extractor that would not load say
+    // A full disk, an unwritable dist/, a promote that could not rename, an
+    // extractor that would not load and an error nobody classified all say
     // nothing about the artifact, so it keeps its bytes. (The v4.5.2 outage is
-    // why the second one is here: an undeclared zip library must not be able to
-    // delete a user's only artifact on its way out.)
-    if (err && KEEPS_THE_ARTIFACT.has(err.code)) {
+    // why an unloadable extractor is in here: an undeclared zip library must not
+    // be able to delete a user's only artifact on its way out.)
+    if (!err || err.code !== EVICTS_THE_ARTIFACT) {
       const refusal = {
         repaired: false,
         integrity: 'extract-failed',
         // F5: the extractor's message can quote the ARCHIVE'S OWN entry name and
         // an fs error string built from an attacker-influenced path.
-        reason: `Cached electron artifact ${fileName} was NOT extracted (${collapseExcerpt(err.message || '')});`
-          + ' it was LEFT IN PLACE because the artifact itself is not what failed.',
+        reason: `Cached electron artifact ${fileName} was NOT extracted (${collapseExcerpt((err && err.message) || '')});`
+          + ' it was LEFT IN PLACE: only an archive amicus positively identified as bad is removed.',
       };
       log(`[amicus] ${refusal.reason}`);
       return cacheOnly ? { done: true, result: refusal } : { done: false, refusal };

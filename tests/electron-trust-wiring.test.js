@@ -432,21 +432,50 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
     expect(res.reason).toMatch(/was REFUSED/);
   });
 
-  test('an ORDINARY extract failure still deletes and still falls through (the fix stayed narrow)', async () => {
+  test('a CLASSIFIED bad archive still deletes and still falls through, with a reason', async () => {
     // A1 (council, confirmed 4 of 4): this branch used to delete the user's cache
     // entry and then, when the re-download also failed, return a bare
     // {repaired:false} with NO reason — the one message that would have explained
-    // where their artifact went. The eviction is unchanged; the silence is not.
+    // where their artifact went. The eviction is unchanged for an archive the
+    // extractor positively identified as bad; the silence is not.
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip();
+    const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
+    const badArchive = jest.fn(async () => {
+      const e = new Error('end of central directory record signature not found');
+      e.code = 'UNZIP_BUFFER_FAILED';
+      throw e;
+    });
+    const { res, spawn } = await repair({
+      dir, exeName, distDir, zip, deps: { downloadArtifact, extract: badArchive },
+    });
+    expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
+    expect(spawn).not.toHaveBeenCalled();                  // ...and nothing is spawned to rescue it (B1)
+    expect(res.integrity).toBe('corrupt-artifact');
+    expect(res.reason).toMatch(/was corrupt and removed/);
+    expect(res.reason).toMatch(/The controlled download failed: offline/);
+  });
+
+  test('an UNCLASSIFIED extract failure KEEPS the artifact, and still falls through with a reason', async () => {
+    // THE SAME TEST AS ABOVE USED TO ASSERT THE OPPOSITE, with an uncoded
+    // `new Error('unzip blew up')`, and that assertion was the defect: D2's
+    // protection was an allow-list of codes that KEEP, so every failure shape
+    // nobody enumerated — an internal bug in the extractor, a raw Node errno —
+    // deleted the user's cached artifact and told them it "was corrupt". On an
+    // air-gapped, hand-seeded cache that destroys the only copy on a guess.
+    // The A1 property the old test existed for is preserved below: the reason
+    // still survives the fall-through to a failed download.
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     const zip = writeZip();
     const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
     const { res, spawn } = await repair({
       dir, exeName, distDir, zip, deps: { downloadArtifact, extract: jest.fn(async () => { throw new Error('unzip blew up'); }) },
     });
-    expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
-    expect(spawn).not.toHaveBeenCalled();                  // ...and nothing is spawned to rescue it (B1)
-    expect(res.integrity).toBe('corrupt-artifact');
-    expect(res.reason).toMatch(/was corrupt and removed/);
+    expect(fs.existsSync(zip)).toBe(true);                 // KEPT — nothing said the archive was bad
+    expect(spawn).not.toHaveBeenCalled();
+    expect(res.integrity).toBe('extract-failed');
+    expect(res.reason).toMatch(/LEFT IN PLACE/);
+    expect(res.reason).not.toMatch(/corrupt/i);
     expect(res.reason).toMatch(/The controlled download failed: offline/);
   });
 });

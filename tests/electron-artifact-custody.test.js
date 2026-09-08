@@ -56,11 +56,13 @@
  * CORRUPTNOTEVICTED electron-repair-cache.js — delete the `fs.rmSync(zip, ...)`
  *   on the bad-archive branch.
  *   RED: "a corrupt cached artifact is EVICTED, and the reason says so".
- * DESTFAILUREEVICTS electron-repair-cache.js — empty the KEEPS_THE_ARTIFACT set,
- *   so every extract failure is read as a bad archive and evicts.
+ * DESTFAILUREEVICTS electron-repair-cache.js — invert the eviction rule back to
+ *   an allow-list of codes that KEEP (`UNZIP_DEST_FAILED`,
+ *   `UNZIP_BUFFER_UNAVAILABLE`), so anything unclassified evicts.
  *   RED: "a DESTINATION failure leaves the cached artifact alone (D2)", "an
- *   extractor that will not LOAD is a refusal, not an eviction", and "a PROMOTE
- *   failure does not evict the cached artifact either".
+ *   extractor that will not LOAD is a refusal, not an eviction", "a PROMOTE
+ *   failure does not evict the cached artifact either", and "an extract failure
+ *   amicus cannot CLASSIFY keeps the artifact (D2, fail-closed)".
  * PROMOTEEVICTS   electron-layout.js :: extractBytesToDist — drop the
  *   `destinationFailure` wrapper around `promoteDist`, so a raw EPERM reaches
  *   the caller untagged and is read as a corrupt archive.
@@ -480,6 +482,31 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
     expect(res.integrity).toBe('extract-failed');
     expect(res.reason).toMatch(/could not promote the extracted tree into dist/);
     expect(res.reason).not.toMatch(/corrupt/i);
+  });
+
+  test('an extract failure amicus cannot CLASSIFY keeps the artifact (D2, fail-closed)', async () => {
+    // MEASURED on the first answer to D2: its protection was a two-entry
+    // allow-list of codes that KEEP, so every shape nobody enumerated fell open
+    // toward deletion. An extractor throwing a plain `Error` with no `code` (an
+    // internal bug) and one throwing a raw Node `ENOSPC` BOTH ended with the
+    // artifact DELETED and the user told it "was corrupt and removed". The rule
+    // is now inverted: only a positively-identified bad archive is removed.
+    for (const thrown of [
+      new Error('an internal bug with no code at all'),
+      Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' }),
+      Object.assign(new Error('no progress for 30000ms'), { code: 'UNZIP_BUFFER_STALLED' }),
+    ]) {
+      const { dir } = unanchoredElectronDir();
+      const zip = writeZip();
+      const extract = jest.fn(async () => { throw thrown; });
+
+      const res = await repair({ dir, zip, extract });
+
+      expect(fs.readFileSync(zip, 'utf8')).toBe(ZIP_BODY);   // still there, byte for byte
+      expect(res.integrity).toBe('extract-failed');
+      expect(res.reason).toMatch(/LEFT IN PLACE/);
+      expect(res.reason).not.toMatch(/corrupt/i);
+    }
   });
 
   test('an extractor that will not LOAD is a refusal, not an eviction (YAUZLUNDECLARED)', async () => {
