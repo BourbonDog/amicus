@@ -78,9 +78,10 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
       // reader; scripts/postinstall.js is the install-time one and
       // doctor-electron-mcp-check.js reports it from `--fix`.
       if (result && result.unverified) {
-        logProgress('[amicus] NOTE: this Electron binary is UNVERIFIED — no published sha256 covered');
+        logProgress('[amicus] NOTE: this Electron binary is UNVERIFIED — either no published sha256 covered');
         logProgress('[amicus]   the artifact it came from, so its bytes were vouched for only by the');
-        logProgress('[amicus]   mirror that served them.');
+        logProgress('[amicus]   mirror that served them, or its sha256 CONTRADICTED the published one and');
+        logProgress('[amicus]   AMICUS_ALLOW_UNVERIFIED_ELECTRON accepted it anyway.');
       }
       logProgress('[amicus] Electron GUI ready.');
       return { ok: true, path: resolve(), ...(result && result.unverified ? { unverified: true } : {}) };

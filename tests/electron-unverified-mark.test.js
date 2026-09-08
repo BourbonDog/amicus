@@ -18,10 +18,21 @@
  * that went out with no `checksums` key, whether because there was no anchor row
  * or because `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` dropped the pin.
  *
+ * THIRD ROUND: that rule was implemented one verdict too narrowly on the CACHE
+ * route (`verdict === 'no-digest'`), so the strictly more alarming case — amicus
+ * hashed the bytes and they CONTRADICT the published sha256, accepted only
+ * because the hatch is on — was the one case that reported a clean repair, on
+ * the route the download route already marked. Both routes now mark everything
+ * that is not `verified`.
+ *
  * ── NAMED MUTANT ──────────────────────────────────────────────────────────
  * DOWNLOADUNMARKED  electron-install.js :: repairElectron — delete the line that
  *   folds `unverified: true` in when `provision.pinned` is false.
  *   RED: "a no-digest DOWNLOAD is MARKED unverified, not silently accepted".
+ * CACHEMISMATCHUNMARKED  electron-repair-cache.js :: repairFromCache — narrow
+ *   the mark back to `gate.verdict === 'no-digest'`, so a hatch-accepted
+ *   MISMATCH reports a clean repair.
+ *   RED: "a hatch-accepted MISMATCH on the CACHE route is marked unverified too".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -166,6 +177,40 @@ describe('F3 — the download route marks what it could not pin (DOWNLOADUNMARKE
 
     expect(res.repaired).toBe(false);
     expect(res.unverified).toBeUndefined();
+  });
+
+  test('a hatch-accepted MISMATCH on the CACHE route is marked unverified too (CACHEMISMATCHUNMARKED)', async () => {
+    // MEASURED before the fix: same bytes, same contradicting anchor, hatch on.
+    // The DOWNLOAD route returned {pinned:false} -> unverified:true; this route
+    // returned a bare {repaired:true}, so postinstall printed nothing,
+    // ensureElectron announced nothing, and `doctor --fix` reported a clean
+    // "self-healed 1 npx-cache copy" for an artifact whose sha256 amicus itself
+    // had just measured to contradict electron's published digest.
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    const { dir, exeName } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+
+    const { res, extract } = await repair({
+      dir, exeName, zip: writeZip({ body: 'POISONEDBYTES' }), cacheOnly: true,
+    });
+
+    expect(extract).toHaveBeenCalledTimes(1);        // the hatch did let it through
+    expect(res.repaired).toBe(true);
+    expect(res.unverified).toBe(true);
+    expect(stderr.join('')).toMatch(/does not match the published/);
+  });
+
+  test('the SAME bytes with the hatch OFF are refused, never marked-and-installed', async () => {
+    // The control for the test above: `unverified` is a mark on an accepted
+    // artifact, not a substitute for refusing one.
+    const { dir, exeName } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+
+    const { res, extract } = await repair({
+      dir, exeName, zip: writeZip({ body: 'POISONEDBYTES' }), cacheOnly: true,
+    });
+
+    expect(extract).not.toHaveBeenCalled();
+    expect(res.repaired).toBe(false);
+    expect(res.integrity).toBe('mismatch');
   });
 
   test('the cache route still marks a no-digest artifact, exactly as v4.9.5 did', async () => {

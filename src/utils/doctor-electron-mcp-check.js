@@ -143,7 +143,8 @@ async function evaluateElectronMcp(d) {
     // thing a `doctor --fix` report exists to say out loud.
     const unverified = results.filter((r) => r.repaired && r.unverified).length;
     const mark = unverified > 0
-      ? `, ${unverified} UNVERIFIED (no published sha256 covered the artifact)` : '';
+      ? `, ${unverified} UNVERIFIED (no published sha256 covered the artifact, or its sha256`
+        + ' contradicted the published one and the hatch accepted it)' : '';
     return {
       ...after,
       message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')}${mark})`,

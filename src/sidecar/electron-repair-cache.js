@@ -92,7 +92,17 @@ async function repairFromCache({
     await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract, fs });
     // A non-throwing extract with no exe is the AV-quarantine signature.
     const outcome = verifyOutcome();
-    return { done: true, result: gate.verdict === 'no-digest' ? { ...outcome, unverified: true } : outcome };
+    // A2/B3, and the gap the third round found in the first answer to them: the
+    // mark is `verdict !== 'verified'`, NOT `verdict === 'no-digest'`. The
+    // strictly more alarming case is the hatch-accepted MISMATCH — amicus
+    // hashed the bytes and they CONTRADICT the published sha256 — and under the
+    // narrow test that was the one case that reported a clean repair, with
+    // postinstall's warning, ensureElectron's launch NOTE and `doctor --fix`'s
+    // UNVERIFIED count all silent. MEASURED: same bytes, same contradicting
+    // anchor, AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — the DOWNLOAD route marked it
+    // (it drops the pin and requires `verified`) and this one did not. The two
+    // routes now agree: `verified` is the only verdict that reports clean.
+    return { done: true, result: gate.verdict === 'verified' ? outcome : { ...outcome, unverified: true } };
   } catch (err) {
     // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
     // deleted-and-retried, nor reported as "corrupt" — it stops here, and the

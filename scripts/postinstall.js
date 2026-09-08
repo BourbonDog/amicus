@@ -60,9 +60,11 @@ const PROVISION_TIMEOUT_MS = 15000;
  */
 function warnIfUnverified(result) {
   if (!result || !result.unverified) { return; }
-  console.warn('[amicus] Note: the Electron GUI binary was installed UNVERIFIED — no published sha256');
-  console.warn('[amicus]   covered this artifact, so its bytes were checked only against whatever the');
-  console.warn('[amicus]   mirror served. See docs/troubleshooting.md (Electron artifact REFUSED).');
+  console.warn('[amicus] Note: the Electron GUI binary was installed UNVERIFIED — either no published sha256');
+  console.warn('[amicus]   covered this artifact, so its bytes were checked only against whatever the mirror');
+  console.warn('[amicus]   served, or its sha256 CONTRADICTED the published one and');
+  console.warn('[amicus]   AMICUS_ALLOW_UNVERIFIED_ELECTRON accepted it anyway.');
+  console.warn('[amicus]   See docs/troubleshooting.md (Electron artifact REFUSED).');
 }
 
 async function provisionElectron(deps = {}) {
