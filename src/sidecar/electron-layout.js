@@ -3,9 +3,8 @@
  * lives, and how VERIFIED BYTES become a `dist/`.
  *
  * Layout (npm `electron`): `path.txt` -> the exe basename, `dist/<exe>` -> the
- * binary. Extraction restores `path.txt` afterwards, because a half-healed
- * package with a `dist/` and no `path.txt` is a shape `electron/index.js` cannot
- * resolve.
+ * binary. A promote writes `path.txt` FIRST, while `dist/` is still whole, so no
+ * failure of that write costs the user the `dist/` they had (see `promoteDist`).
  *
  * SPLIT OUT of electron-install.js (v4.9.6, second council round): that file is
  * at the repo's 300-line gate, and the round's repairs had to land inside
@@ -43,7 +42,7 @@ function platformExe(platform) {
   }
 }
 
-/** Restore path.txt so electron/index.js resolves the freshly-extracted exe. */
+/** Write path.txt: the basename `electron/index.js` joins onto `dist/`. */
 function writePathTxt({ electronDir, platform, fs }) {
   fs.writeFileSync(path.join(electronDir, 'path.txt'), platformExe(platform));
 }
@@ -132,6 +131,7 @@ function sweepPromoteLitter({
  * place anything looks, and `dist/` changes in ONE rename.
  *
  * ORDER, and what survives each failure:
+ *   0. write `path.txt` unless already right — nothing has moved; a throw REFUSES
  *   1. rename `dist` -> `.amicus-retired-<hex>`   — old tree still whole, elsewhere
  *   2. rename `<incoming>/dist` -> `dist`         — the swap
  *   3. on a step-2 failure, rename the retired tree BACK                (rollback)
@@ -167,8 +167,18 @@ function sweepPromoteLitter({
  * undeleted at `.amicus-retired-<hex>`, and the thrown message names it so the
  * user can rename it back.
  *
- * `path.txt` is written LAST, after `dist/` is in place, so the "dist but no
- * path.txt" shape `electron/index.js` cannot resolve is never observable.
+ * `path.txt` IS WRITTEN FIRST (B2). The claim that stood here — writing it LAST
+ * makes "dist but no path.txt" unobservable — was right about ORDER and wrong
+ * about FAILURE: it held only while the write SUCCEEDED, and it ran after the old
+ * tree was retired AND deleted, so one ENOSPC/EPERM/AV-locked 12-byte write left
+ * the user a new `dist/` that `electron/index.js` cannot resolve — amicus's own
+ * `resolveElectronBinary` falls back to `platformExe`, that entry point does not.
+ * Its value is known before anything moves, so step 0 writes it while `dist/` is
+ * still whole, reading back nothing it wrote. RULING on undoing a pre-write:
+ * usually nothing to undo — the OLD tree resolved through that same string, and
+ * an absent `path.txt` resolves through it too — but it BREAKS on one naming a
+ * DIFFERENT basename (`npm_config_platform` cross-installs one), so a replaced
+ * different value is put back on every failure exit, best-effort.
  * @param {object} o
  * @param {string} o.electronDir
  * @param {string} o.incomingDist the extracted tree to promote
@@ -177,40 +187,53 @@ function sweepPromoteLitter({
  */
 function promoteDist({ electronDir, incomingDist, platform, fs }) {
   const distDir = path.join(electronDir, 'dist');
-  const retired = path.join(electronDir, `.amicus-retired-${crypto.randomBytes(6).toString('hex')}`);
-  let retiredExists = false;
-  if (fs.existsSync(distDir)) {
-    try {
-      fs.renameSync(distDir, retired);
-      retiredExists = true;
-    } catch (e) {
-      // The old tree cannot be moved. Removing it in place is irreversible, so
-      // it is allowed only when the tree is not an install anyway.
-      if (fs.existsSync(path.join(distDir, platformExe(platform)))) {
-        throw new Error(`${(e && e.message) || e} — the existing dist/ holds a usable `
-          + `${platformExe(platform)} and was left exactly as it was`);
-      }
-      fs.rmSync(distDir, { recursive: true, force: true });
+  const pathFile = path.join(electronDir, 'path.txt');
+  let replaced = null;                    // step 0's overwritten DIFFERENT value
+  try { replaced = fs.readFileSync(pathFile, 'utf8'); } catch { /* absent or unreadable */ }
+  if (replaced === platformExe(platform)) { replaced = null; } else {
+    try { writePathTxt({ electronDir, platform, fs }); } catch (e) {
+      throw new Error(`${(e && e.message) || e} — path.txt could not be written, so the promote was refused and dist/ is exactly as it was`);
     }
   }
   try {
-    fs.renameSync(incomingDist, distDir);
-  } catch (e) {
-    if (retiredExists) {
+    const retired = path.join(electronDir, `.amicus-retired-${crypto.randomBytes(6).toString('hex')}`);
+    let retiredExists = false;
+    if (fs.existsSync(distDir)) {
       try {
-        fs.renameSync(retired, distDir);
-      } catch {
-        // Both renames failed. The retired tree is WHOLE and is NOT deleted —
-        // say where it is, because this is the only exit that leaves a user
-        // without the dist/ they had.
-        throw new Error(`${(e && e.message) || e} — the previous dist/ is intact at `
-          + `${path.basename(retired)}; rename it back to dist/ to restore it`);
+        fs.renameSync(distDir, retired);
+        retiredExists = true;
+      } catch (e) {
+        // The old tree cannot be moved. Removing it in place is irreversible, so
+        // it is allowed only when the tree is not an install anyway.
+        if (fs.existsSync(path.join(distDir, platformExe(platform)))) {
+          throw new Error(`${(e && e.message) || e} — the existing dist/ holds a usable `
+            + `${platformExe(platform)} and was left exactly as it was`);
+        }
+        fs.rmSync(distDir, { recursive: true, force: true });
       }
     }
+    try {
+      fs.renameSync(incomingDist, distDir);
+    } catch (e) {
+      if (retiredExists) {
+        try {
+          fs.renameSync(retired, distDir);
+        } catch {
+          // Both renames failed. The retired tree is WHOLE and is NOT deleted —
+          // say where it is, because this is the only exit that leaves a user
+          // without the dist/ they had.
+          throw new Error(`${(e && e.message) || e} — the previous dist/ is intact at `
+            + `${path.basename(retired)}; rename it back to dist/ to restore it`);
+        }
+      }
+      throw e;
+    }
+    if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* sweepPromoteLitter takes it */ } }
+  } catch (e) {
+    // Undo step 0's overwrite (see the RULING above): best-effort, never `e`.
+    if (replaced !== null) { try { fs.writeFileSync(pathFile, replaced); } catch { /* the tree is what matters */ } }
     throw e;
   }
-  if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* sweepPromoteLitter takes it */ } }
-  writePathTxt({ electronDir, platform, fs });
 }
 
 /**

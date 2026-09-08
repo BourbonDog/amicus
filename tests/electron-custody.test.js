@@ -75,6 +75,19 @@
  *   SOURCE, i.e. they substituted the one component whose destroy semantics the
  *   halt depends on, so the evidence quoted in their own commit was measured
  *   against the substitute. The pace is now applied to the SINK (`pacingFs`).
+ * PATHTXTLAST     electron-layout.js :: promoteDist — write `path.txt` LAST
+ *   again (delete step 0, restore the trailing `writePathTxt` call), which is
+ *   the v4.9.6 order finding B2 is about.
+ *   RED: "a path.txt write that THROWS leaves the user the dist/ they had", and
+ *   "path.txt is written BEFORE anything is moved".
+ * PROMOTEDESPITEPATHTXT electron-layout.js :: promoteDist — swallow step 0's
+ *   write failure and retire/swap anyway.
+ *   RED: the same "leaves the user the dist/ they had" test.
+ * PATHTXTNORESTORE electron-layout.js :: promoteDist — drop the failure-exit
+ *   restore, so a pre-write that REPLACED another basename stands after a
+ *   rollback.
+ *   RED: "a path.txt naming a DIFFERENT exe is PUT BACK when the swap rolls
+ *   back".
  * UNWINDUNBOUNDED zip-from-buffer.js :: extractZipBuffer — restore the round-3
  *   `await inFlight.catch(() => {})` in place of the bounded `awaitUnwind`, so
  *   the extractor waits forever for a write that can never come apart (yauzl's
@@ -91,6 +104,9 @@ const path = require('path');
 const { Writable } = require('stream');
 
 const { readArtifactBytes, isSafeArtifactName, MAX_ARTIFACT_BYTES } = require('../src/sidecar/electron-custody');
+// The PRODUCTION resolver, so "the user still holds a usable dist/" is measured
+// the way amicus itself measures it, against the real disk — not restated.
+const { isElectronUsable } = require('../src/sidecar/electron-install');
 const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
 const {
   extractBytesToDist, promoteDist, sweepPromoteLitter,
@@ -1197,7 +1213,9 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
       .toEqual(['.amicus-repair.lock', 'dist', 'package.json', 'path.txt']);
   });
 
-  test('path.txt is written only AFTER dist/ is in place', async () => {
+  test('path.txt is written BEFORE anything is moved (PATHTXTLAST)', async () => {
+    // The inverse of what this test asserted through v4.9.6. Ordering was never
+    // the finding; the FAILURE of the last write was — see the test below.
     const electronDir = mkTmp('amicus-electron-');
     const order = [];
     const orderedFs = {
@@ -1209,6 +1227,89 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
 
     await extractBytesToDist({ bytes: Buffer.from('x'), electronDir, platform: 'linux', extract, fs: orderedFs });
 
-    expect(order).toEqual(['rename', 'path.txt']);
+    expect(order).toEqual(['path.txt', 'rename']);
+    expect(fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')).toBe('electron');
+  });
+
+  test('a path.txt write that THROWS leaves the user the dist/ they had (PATHTXTLAST, PROMOTEDESPITEPATHTXT)', () => {
+    // B2 (council run 34182994208, gpt seat). MEASURED on the v4.9.6 order: the
+    // 12-byte path.txt write ran AFTER the old tree was retired and DELETED, so
+    // an ENOSPC / EPERM / read-only volume / AV lock on it left the user with no
+    // old tree and a replacement package whose exe `electron/index.js` cannot
+    // resolve. Nothing about the value needs the new tree — it is
+    // `platformExe(platform)` — so the write now happens while dist/ is whole.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron.exe'), 'MZ-OLD-BUT-WORKING');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noPathTxtFs = {
+      ...fs,
+      writeFileSync: (p, d) => {
+        if (String(p).endsWith('path.txt')) {
+          const e = new Error('ENOSPC: no space left on device, write'); e.code = 'ENOSPC'; throw e;
+        }
+        return fs.writeFileSync(p, d);
+      },
+    };
+
+    expect(() => promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noPathTxtFs }))
+      .toThrow(/ENOSPC[\s\S]*promote was refused and dist\/ is exactly as it was/);
+
+    // What the user is left holding: the tree they had, still RESOLVING through
+    // the production resolver (an absent path.txt is its documented fallback).
+    expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+    expect(isElectronUsable({ electronDir, platform: 'win32', env: {}, fs })).toBe(true);
+    expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-retired-'))).toEqual([]);
+  });
+
+  test('an already-correct path.txt is not rewritten, so an unwritable one cannot refuse a promote', () => {
+    // The reason step 0 compares before writing: on a read-only volume the value
+    // is usually ALREADY right, and refusing there would break the self-heal for
+    // a write that changes nothing.
+    const electronDir = mkTmp('amicus-electron-');
+    fs.writeFileSync(path.join(electronDir, 'path.txt'), 'electron.exe');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noWriteFs = { ...fs, writeFileSync: () => { throw new Error('EROFS: read-only file system'); } };
+
+    promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noWriteFs });
+
+    expect(fs.readFileSync(path.join(electronDir, 'dist', 'electron.exe'), 'utf8')).toBe('MZ-NEW');
+  });
+
+  test('a path.txt naming a DIFFERENT exe is PUT BACK when the swap rolls back (PATHTXTNORESTORE)', () => {
+    // The one value the "it is the same string anyway" argument breaks on: npm
+    // honours `npm_config_platform`, so a cross-installed package's path.txt
+    // names another platform's exe and the tree we roll back to resolves through
+    // THAT. Overwriting it and rolling back would leave a whole intact tree
+    // unresolvable — a working install turned broken by a promote that failed.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron'), 'ELF-OLD-BUT-WORKING');
+    fs.writeFileSync(path.join(electronDir, 'path.txt'), 'electron');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    let renames = 0;
+    const failingSwapFs = {
+      ...fs,
+      renameSync: (from, to) => {
+        renames += 1;
+        if (renames === 2) { const e = new Error('EPERM'); e.code = 'EPERM'; throw e; }
+        return fs.renameSync(from, to);
+      },
+    };
+
+    expect(() => promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: failingSwapFs }))
+      .toThrow(/EPERM/);
+
+    expect(fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')).toBe('electron');
+    expect(fs.readFileSync(path.join(distDir, 'electron'), 'utf8')).toBe('ELF-OLD-BUT-WORKING');
+    expect(isElectronUsable({ electronDir, platform: 'win32', env: {}, fs })).toBe(true);
   });
 });
