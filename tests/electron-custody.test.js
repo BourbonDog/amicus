@@ -40,6 +40,11 @@
  * PROMOTEPARTIAL   electron-layout.js :: extractBytesToDist — extract straight
  *   into `<electronDir>/dist` instead of into `.amicus-incoming-<hex>/dist`.
  *   RED: "a failed extraction never becomes dist/".
+ * PROMOTEDESTROYSOLD electron-layout.js :: promoteDist — drop the
+ *   holds-an-executable guard, so a step-1 rename failure removes the old tree
+ *   in place with nothing to roll back to.
+ *   RED: "a promote that cannot retire a WORKING dist/ REFUSES rather than
+ *   destroying it".
  * DESTERRORISARCHIVE zip-entry-write.js :: writeEntry — tag a write failure
  *   `UNZIP_BUFFER_FAILED` instead of `UNZIP_DEST_FAILED`.
  *   RED: "a DESTINATION failure is not reported as a bad archive (D2)".
@@ -587,6 +592,96 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
 
     expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-OLD');
     expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-retired-'))).toEqual([]);
+  });
+
+  test('a promote that cannot retire a WORKING dist/ REFUSES rather than destroying it (PROMOTEDESTROYSOLD)', () => {
+    // MEASURED on the code as shipped in this branch: with every `renameSync`
+    // throwing EPERM and real deletes (a Windows AV filter driver denying
+    // MoveFile on a tree holding a freshly written electron.exe — this module's
+    // most-documented field failure), the step-1 catch deleted the working tree,
+    // `retiredExists` stayed false, the step-2 rename then failed with NO
+    // rollback, and extractBytesToDist's `finally` deleted the new tree too:
+    //   {"threw":"EPERM","distExists":false,"userHasOldTree":false}
+    // The docblock certified that could not happen. A user who had a working GUI
+    // was left with an electron package holding no dist/ at all.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron.exe'), 'MZ-OLD-BUT-WORKING');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noRenameFs = {
+      ...fs,
+      renameSync: () => { const e = new Error('EPERM: operation not permitted, rename'); e.code = 'EPERM'; throw e; },
+    };
+
+    expect(() => promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noRenameFs }))
+      .toThrow(/EPERM/);
+
+    // The guarantee: a dist/ that held an executable is never removed unless the
+    // new tree is already in its place.
+    expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+  });
+
+  test('a promote that cannot retire a BROKEN dist/ still lands the new tree', () => {
+    // The control for the test above, and the reason the guard is "holds an
+    // executable" rather than "refuse whenever the rename fails": repairElectron
+    // runs precisely when dist/ is broken, so refusing there would make the
+    // self-heal unable to fix the case it exists for. A dist/ with no exe is not
+    // an install, and removing it costs the user nothing they had.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'quarantined-leftovers.dll'), 'JUNK');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noRetireFs = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (from === distDir) { const e = new Error('EPERM: rename'); e.code = 'EPERM'; throw e; }
+        return fs.renameSync(from, to);
+      },
+    };
+
+    promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noRetireFs });
+
+    expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-NEW');
+    expect(fs.existsSync(path.join(distDir, 'quarantined-leftovers.dll'))).toBe(false);
+  });
+
+  test('when the ROLLBACK also fails, the old tree survives and the message names where', () => {
+    // The one exit that can still leave a user without the dist/ they had. It is
+    // not silent: the retired tree is whole, is NOT deleted, and the thrown
+    // message tells the user which directory to rename back.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron.exe'), 'MZ-OLD');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    let renames = 0;
+    const failAfterRetire = {
+      ...fs,
+      renameSync: (from, to) => {
+        renames += 1;
+        if (renames === 1) { return fs.renameSync(from, to); }
+        const e = new Error('EPERM: rename'); e.code = 'EPERM'; throw e;
+      },
+    };
+
+    let thrown = null;
+    try {
+      promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: failAfterRetire });
+    } catch (e) { thrown = e; }
+
+    const retired = fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-retired-'));
+    expect(retired).toHaveLength(1);
+    expect(fs.readFileSync(path.join(electronDir, retired[0], 'electron.exe'), 'utf8')).toBe('MZ-OLD');
+    expect(thrown.message).toContain(retired[0]);
+    expect(thrown.message).toMatch(/rename it back to dist/);
   });
 
   test('path.txt is written only AFTER dist/ is in place', async () => {

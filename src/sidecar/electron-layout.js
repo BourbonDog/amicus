@@ -66,10 +66,36 @@ function writePathTxt({ electronDir, platform, fs }) {
  *   2. rename `<incoming>/dist` -> `dist`         — the swap
  *   3. on a step-2 failure, rename the retired tree BACK                (rollback)
  *   4. delete the retired tree, then the incoming directory       (best-effort)
- * A step-1 failure (Windows, a handle held on the live tree) falls back to
- * `rmSync(dist)` — which is what the old code effectively did by overwriting —
- * and if THAT fails too the promote refuses with the previous `dist/` untouched.
- * No exit path can leave the user with neither the old tree nor the new one.
+ *
+ * WHAT A STEP-1 FAILURE MAY DO, AND THE CLAIM THAT WAS MEASURED FALSE. Step 1
+ * failing means the old tree cannot be MOVED (a Windows handle held on the live
+ * tree; an AV filter driver denying MoveFile on a tree holding a freshly written
+ * electron.exe — this module's most-documented field failure). This used to fall
+ * back to `rmSync(distDir)`, which is IRREVERSIBLE and has no rollback, while
+ * the docblock asserted "No exit path can leave the user with neither the old
+ * tree nor the new one".
+ *
+ * MEASURED FALSE (injected fs, every `renameSync` throwing EPERM, real
+ * `rmSync`): the catch deleted the working tree, `retiredExists` stayed false,
+ * the step-2 rename then failed with NO rollback, and `extractBytesToDist`'s
+ * `finally` deleted the new tree immediately afterwards —
+ * `{"threw":"EPERM","distExists":false,"userHasOldTree":false}`. A user who had
+ * a working GUI was left with an electron package holding no `dist/` at all,
+ * and the caller then downloaded 138 MB and repeated the same promote.
+ *
+ * So the in-place removal now happens ONLY when there is nothing to lose: a
+ * `dist/` that holds no `platformExe` is not an install, and destroying it costs
+ * the user nothing they had. When the old tree DOES hold an executable, the
+ * promote REFUSES and that tree is untouched — the repair fails, which is
+ * strictly better than a working GUI becoming no GUI.
+ *
+ * THE GUARANTEE, stated so it is checkable:
+ *   **A promote never removes a `dist/` that held an executable unless the new
+ *   tree is already in its place.**
+ * The one exit that can still leave a user without a usable `dist/` is both
+ * renames failing after step 1 SUCCEEDED. The old tree is then whole and
+ * undeleted at `.amicus-retired-<hex>`, and the thrown message names it so the
+ * user can rename it back.
  *
  * `path.txt` is written LAST, after `dist/` is in place, so the "dist but no
  * path.txt" shape `electron/index.js` cannot resolve is never observable.
@@ -87,16 +113,30 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
     try {
       fs.renameSync(distDir, retired);
       retiredExists = true;
-    } catch {
-      // A live handle on the old tree (Windows) — remove it in place instead.
-      // If this throws, the promote fails with the old dist/ still there.
+    } catch (e) {
+      // The old tree cannot be moved. Removing it in place is irreversible, so
+      // it is allowed only when the tree is not an install anyway.
+      if (fs.existsSync(path.join(distDir, platformExe(platform)))) {
+        throw new Error(`${(e && e.message) || e} — the existing dist/ holds a usable `
+          + `${platformExe(platform)} and was left exactly as it was`);
+      }
       fs.rmSync(distDir, { recursive: true, force: true });
     }
   }
   try {
     fs.renameSync(incomingDist, distDir);
   } catch (e) {
-    if (retiredExists) { try { fs.renameSync(retired, distDir); } catch { /* nothing left to restore */ } }
+    if (retiredExists) {
+      try {
+        fs.renameSync(retired, distDir);
+      } catch {
+        // Both renames failed. The retired tree is WHOLE and is NOT deleted —
+        // say where it is, because this is the only exit that leaves a user
+        // without the dist/ they had.
+        throw new Error(`${(e && e.message) || e} — the previous dist/ is intact at `
+          + `${path.basename(retired)}; rename it back to dist/ to restore it`);
+      }
+    }
     throw e;
   }
   if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* swept next time */ } }
