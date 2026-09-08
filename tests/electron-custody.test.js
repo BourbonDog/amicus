@@ -30,10 +30,10 @@
  * YAUZLHANG        zip-from-buffer.js :: extractZipBuffer — resolve on the
  *   zipfile's 'close' event, as extract-zip does, instead of 'end'.
  *   RED: "extraction resolves on 'end' — 'close' NEVER fires under fromBuffer".
- * SYMLINKESCAPE    zip-from-buffer.js :: writeSymlink — drop the resolved-target
+ * SYMLINKESCAPE    zip-entry-write.js :: writeSymlink — drop the resolved-target
  *   bounds check, so a symlink may point anywhere.
  *   RED: "a symlink whose target leaves the extraction root is REFUSED".
- * SYMLINKCHAIN     zip-from-buffer.js :: writeSymlink — resolve the target
+ * SYMLINKCHAIN     zip-entry-write.js :: writeSymlink — resolve the target
  *   against the LEXICAL `path.dirname(dest)` instead of the realpath'd
  *   `canonical` the caller already computed.
  *   RED: "the target is resolved against the REAL directory, not the lexical one".
@@ -61,6 +61,15 @@
  *   RED: "an extract that makes no progress rejects on the IDLE bound", "an
  *   extract that never ends rejects on the HARD cap", and "the default bounds
  *   are unzip.js's own numbers".
+ * IDLEONENTRIES   zip-from-buffer.js :: extractZipBuffer — arm the idle watchdog
+ *   against ENTRY COMPLETION instead of bytes written (drop the
+ *   `written !== atBytes` term), which is what the first cut of the bound did.
+ *   RED: "ONE big entry writing steadily is progress, not a stall".
+ * FIREDBUTRAN     zip-from-buffer.js :: extractZipBuffer — let `fail()` reject
+ *   without aborting, so the bound REPORTS a stall while the write it was
+ *   supposed to stop carries on.
+ *   RED: "when the bound FIRES nothing further is written, and no incoming tree
+ *   is left".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -68,6 +77,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { Readable, Writable } = require('stream');
 
 const { readArtifactBytes, isSafeArtifactName, MAX_ARTIFACT_BYTES } = require('../src/sidecar/electron-custody');
 const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
@@ -497,6 +507,156 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     expect(armed).toEqual([240_000, 30_000]);
     timers.fireByMs(30_000);
     await p.catch(() => {});
+  });
+
+  // ── ROUND 3: the bound above was armed against the wrong signal, and did not
+  // stop anything when it fired. Seat A1 and seat B2 filed opposite halves of
+  // the same defect. These two tests are the halves.
+
+  /** Let the microtask/immediate queues drain so a stream stage can run. */
+  const settleIo = async (turns = 6) => {
+    for (let i = 0; i < turns; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setImmediate(r));
+    }
+  };
+
+  /**
+   * A yauzl whose entry stream is driven BY THE TEST. Everything else about the
+   * entry is the real library's — attributes, mode, crc32 — so only the PACE is
+   * synthetic. `feed(n)` releases the next n bytes of `body`.
+   */
+  function pacedYauzl(body) {
+    // eslint-disable-next-line global-require
+    const yauzl = require('yauzl');
+    let source = null;
+    let at = 0;
+    return {
+      deps: {
+        fromBuffer: (b, o, cb) => yauzl.fromBuffer(b, o, (e, zf) => {
+          if (zf) {
+            zf.openReadStream = (_entry, callback) => {
+              source = new Readable({ read() {} });
+              callback(null, source);
+            };
+          }
+          cb(e, zf);
+        }),
+      },
+      feed(n) {
+        source.push(body.subarray(at, Math.min(at + n, body.length)));
+        at = Math.min(at + n, body.length);
+        if (at >= body.length) { source.push(null); }
+      },
+    };
+  }
+
+  /** An fs whose write stream RECORDS every chunk it is handed and accepts it. */
+  function recordingFs(writes) {
+    return {
+      ...fs,
+      createWriteStream: () => new Writable({
+        write(chunk, _enc, cb) { writes.push(chunk.length); cb(); },
+      }),
+    };
+  }
+
+  test('ONE big entry writing steadily is progress, not a stall (IDLEONENTRIES)', async () => {
+    // Seat B2. The real artifact contains a 225 MB electron.exe — ONE entry. The
+    // first bound re-armed on ENTRY COMPLETION, so on storage slower than
+    // 7.5 MB/s that single entry blew a 30 s window while writing perfectly
+    // well, and a VALID repair was failed. Here the idle window expires FIVE
+    // times while one entry is mid-write and never completes; each time bytes
+    // have moved, so each is progress. The body is deliberately larger than the
+    // five 64 KiB feeds, so the entry is still unfinished at every expiry.
+    const body = Buffer.alloc(640 * 1024, 7);
+    const paced = pacedYauzl(body);
+    const timers = fakeTimers();
+    const writes = [];
+    const dir = mkTmp();
+
+    const p = extractZipBuffer(buildZip([{ name: 'big.bin', body: body.toString('latin1') }]), {
+      dir,
+      idleMs: 1234,
+      maxMs: 999_999,
+      deps: {
+        fs: recordingFs(writes),
+        yauzl: paced.deps,
+        setTimeout: timers.setTimeout,
+        clearTimeout: timers.clearTimeout,
+      },
+    });
+    await settleIo();
+    for (let i = 0; i < 5; i += 1) {
+      paced.feed(64 * 1024);
+      // eslint-disable-next-line no-await-in-loop
+      await settleIo();
+      expect(timers.fireByMs(1234)).toBe(true);   // the window expires...
+      // eslint-disable-next-line no-await-in-loop
+      await settleIo();                           // ...and re-arms, because BYTES moved
+    }
+    paced.feed(body.length);                      // finish the entry
+    await settleIo();
+
+    // Zero entries had completed at every one of those five expiries, so a bound
+    // armed against entries would have failed this repair five times over.
+    expect(await p).toEqual({ strategy: 'buffer', entries: 1 });
+    expect(writes.reduce((a, b) => a + b, 0)).toBe(body.length);
+  });
+
+  test('when the bound FIRES nothing further is written, and no incoming tree is left (FIREDBUTRAN)', async () => {
+    // Seat A1: the bound "does not actually stop extraction". It rejected the
+    // outer promise and left the write in flight, so bytes kept landing in a
+    // directory the caller was already deleting. Driven end to end through
+    // extractBytesToDist, which is the caller that does the deleting.
+    const body = Buffer.alloc(320 * 1024, 3);
+    const paced = pacedYauzl(body);
+    const timers = fakeTimers();
+    const writes = [];
+    const rfs = recordingFs(writes);
+    const electronDir = mkTmp('amicus-firedbutran-');
+
+    const p = extractBytesToDist({
+      bytes: buildZip([{ name: 'big.bin', body: body.toString('latin1') }]),
+      electronDir,
+      platform: 'win32',
+      fs: rfs,
+      extract: (bytes, o) => extractZipBuffer(bytes, {
+        ...o,
+        idleMs: 1234,
+        maxMs: 999_999,
+        deps: {
+          fs: rfs,
+          yauzl: paced.deps,
+          setTimeout: timers.setTimeout,
+          clearTimeout: timers.clearTimeout,
+        },
+      }),
+    }).then(() => ({ ok: true }), (e) => ({ err: e }));
+
+    await settleIo();
+    paced.feed(64 * 1024);                        // one chunk of real progress
+    await settleIo();
+    expect(timers.fireByMs(1234)).toBe(true);     // progress seen -> re-armed
+    await settleIo();
+    expect(writes.length).toBeGreaterThan(0);
+    expect(timers.fireByMs(1234)).toBe(true);     // nothing moved -> THE BOUND FIRES
+    const atFire = writes.length;
+
+    // The archive still has 256 KiB to give. A bound that only REPORTS would let
+    // every byte of it land; this asserts the work stopped, not that a rejection
+    // happened.
+    paced.feed(body.length);
+    await settleIo(12);
+    expect(writes.length).toBe(atFire);
+
+    const out = await p;
+    expect(out.err.code).toBe('UNZIP_BUFFER_STALLED');
+    expect(out.err.code).not.toBe('UNZIP_BUFFER_FAILED');   // never an artifact verdict
+    // ...and the half-written tree is gone, which is only safe because the
+    // extractor waits for the aborted write to unwind before it throws.
+    expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-incoming-'))).toEqual([]);
+    expect(fs.existsSync(path.join(electronDir, 'dist'))).toBe(false);
   });
 });
 

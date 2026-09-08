@@ -8,12 +8,12 @@
  * attacker to race. `electron-custody.js` carries the measured refutations of
  * the two remedies this replaces.
  *
- * NO HAND-WRITTEN ZIP PARSING. A council judge killed a design that sliced
- * local file headers by hand — "a terminal path with no rescue", since it would
- * have had to re-derive ZIP64 local headers, data descriptors and the
+ * NO HAND-WRITTEN ZIP PARSING. A council judge killed a design that sliced local
+ * file headers by hand — "a terminal path with no rescue", since it would have
+ * had to re-derive ZIP64 local headers, data descriptors and the
  * central-vs-local size disagreement `openReadStream` already handles. Every
- * byte offset here comes from `yauzl.openReadStream`, exactly as it does under
- * extract-zip; what changes is only WHERE yauzl reads from.
+ * byte offset comes from `yauzl.openReadStream`, exactly as under extract-zip;
+ * only WHERE yauzl reads from changes.
  *
  * ── THE `autoClose` TRAP, MEASURED ────────────────────────────────────────
  * `yauzl.fromBuffer` sets `options.autoClose = false` UNCONDITIONALLY
@@ -27,42 +27,41 @@
  * `reader.unref()`, and `fd_slicer`'s BufferSlicer has no close and emits
  * nothing on unref (fd-slicer index.js, lines 282-288) — where FdSlicer closes
  * the fd and emits `'close'`. So under `fromBuffer` that event is UNREACHABLE
- * even if you call `close()` yourself: `autoClose` came back false after an
- * explicit `{autoClose:true}`, and 500 ms after END fired, close had not.
+ * even if you call `close()`: `autoClose` came back false after an explicit
+ * `{autoClose:true}`, and 500 ms after END fired, close had not.
  *
  * THE FIX, stated so nobody "tidies" it: this module resolves on `'end'`, which
  * yauzl emits once the central directory is exhausted, and it drives
  * `readEntry()` only after the previous entry has been fully written — so
  * `'end'` cannot arrive before the last write lands. `close()` is still called,
- * for the reader refcount, but NOTHING waits on it. Pinned by the YAUZLHANG
- * mutant in tests/electron-custody.test.js.
+ * for the reader refcount, but NOTHING waits on it. Pinned by YAUZLHANG.
  *
  * ── PARITY WITH extract-zip, AND THE ONE DELIBERATE DIFFERENCE ────────────
- * The `__MACOSX/` skip, the `IFMT`/`IFDIR`/`IFLNK` mode decode, both directory
- * failsafes, the `getExtractedMode` 0755/0644 defaults and the per-entry
- * `realpath(destDir)` out-of-bound check with its message VERBATIM are copied
- * from extract-zip@2.0.1 index.js, lines 48-160, so `UNSAFE_PATTERNS` and
- * `electron-refuse.isUnsafeArchive` classify exactly what they classified.
+ * The per-entry decisions all live in `./zip-entry-write :: placeEntry` now, and
+ * the `__MACOSX/` skip, the mode decode, both directory failsafes, the 0755/0644
+ * defaults and the per-entry `realpath(destDir)` out-of-bound check with its
+ * message VERBATIM are copied from extract-zip@2.0.1 index.js, lines 48-160, so
+ * `UNSAFE_PATTERNS` and `electron-refuse.isUnsafeArchive` classify exactly what
+ * they classified.
  *
  * The difference: a SYMLINK whose target resolves outside the extraction root
  * is REFUSED here and is not refused by extract-zip. The target is resolved
  * against the REALPATH of the directory the link lands in, because the lexical
  * `path.dirname` was measured to be defeated outright by a chain of
- * directory-symlink entries earlier in the same archive. That is a behaviour change
- * on a shape amicus cannot test on this machine (the darwin `.app` bundle is
- * the only electron artifact with real symlinks), so it is refused in the same
- * `Out of bound path` wording, exercised against synthetic archives carrying
- * the shapes a real `.app` uses, and named in the report as unverified on macOS.
+ * directory-symlink entries earlier in the same archive. That is a behaviour
+ * change on a shape amicus cannot test on this machine (the darwin `.app` bundle
+ * is the only electron artifact with real symlinks), so it is refused in the
+ * same `Out of bound path` wording, exercised against synthetic archives, and
+ * named in the report as unverified on macOS.
  *
  * ── ERROR CODES ARE A CAUSAL CLAIM ───────────────────────────────────────
  * `UNZIP_BUFFER_FAILED` = the ARCHIVE is bad. `UNZIP_DEST_FAILED` = the
  * DESTINATION is (no space, a read-only dist, a path too long).
  * `UNZIP_BUFFER_UNAVAILABLE` = neither, yauzl would not load.
  * `UNZIP_BUFFER_STALLED` = no progress inside the bound; nobody learned anything
- * about the archive OR the disk. The caller evicts the cached artifact on
- * `UNZIP_BUFFER_FAILED` ONLY — council finding D2 was a full disk deleting a
- * pristine cache entry. The constructors, and the per-entry writers that raise
- * them, live in `./zip-entry-write`.
+ * about the archive OR the disk. The caller evicts on `UNZIP_BUFFER_FAILED`
+ * ONLY (finding D2: a full disk deleting a pristine cache entry). The
+ * constructors and the writers that raise them live in `./zip-entry-write`.
  *
  * @module sidecar/zip-from-buffer
  */
@@ -72,19 +71,18 @@
 const fsDefault = require('fs');
 const path = require('path');
 
-// The classified failures and the per-entry writers. THE ONE-WAY ARROW:
-// zip-from-buffer -> zip-entry-write, never back.
+// The classified failures, and `placeEntry` — everything that decides what ONE
+// entry becomes on disk. THE ONE-WAY ARROW: zip-from-buffer -> zip-entry-write,
+// never back. `placeEntry` moved across that seam in the third council round,
+// when this file hit the 300-line gate again: it answers "what does one entry
+// become on disk", which is the neighbouring module's whole subject, while what
+// stays here is "how is the archive DRIVEN, and when do we give up on it".
 const {
-  failure, badArchive, badDestination, outOfBound, extractorUnavailable, writeEntry, writeSymlink,
+  failure, badArchive, badDestination, extractorUnavailable, placeEntry,
 } = require('./zip-entry-write');
 
 /** yauzl's own validateFileName refusals — three of unzip.js's UNSAFE_PATTERNS. */
 const NAME_REFUSAL = /^(absolute path|invalid relative path|invalid characters in fileName): /;
-
-/** stat mode constants, as extract-zip decodes them from externalFileAttributes. */
-const IFMT = 61440;
-const IFDIR = 16384;
-const IFLNK = 40960;
 
 /**
  * THE STALL BOUND, and what did and did not come back with it.
@@ -105,10 +103,42 @@ const IFLNK = 40960;
  * no handle, the loop drained and Node exited 0 silently. That is the ORIGINAL
  * field bug's shape, reintroduced.
  *
- * LAYER 1 IS BACK, HERE, with unzip.js's own numbers (30 s idle, 240 s hard) and
- * unzip.js itself untouched: `IDLE_MS`/`MAX_MS` below, re-armed after every entry
- * lands. Resolving on 'end' addresses only the close-event theory of the Node-24
- * stall; a bound is what covers the theories nobody has.
+ * LAYER 1 IS BACK, with unzip.js's own numbers (30 s idle, 240 s hard) and
+ * unzip.js itself untouched: `IDLE_MS`/`MAX_MS` below.
+ *
+ * ── THE FIRST CUT OF IT WAS WRONG IN BOTH DIRECTIONS (round 3) ────────────
+ * Seat A1: "the advertised idle timeout fires during legitimate active writes
+ * and does not actually stop extraction." Seat B2: "can false-fire on a single
+ * slow entry write, failing a valid repair on slow storage." Two seats, opposite
+ * directions, both true of the same code, because it re-armed on ENTRY
+ * COMPLETION and settled its promise without stopping anything.
+ *
+ *   ARMED AGAINST BYTES, NOT ENTRIES. The real artifact contains a 225 MB
+ *   `electron.exe`, which is ONE entry: on storage slower than 7.5 MB/s that
+ *   entry alone exceeds a 30 s window while writing perfectly well, and the
+ *   old bound called it a stall. Progress is now `bytesWritten` — reported by
+ *   `zip-entry-write.writeEntry`'s CRC transform, the stage immediately
+ *   upstream of the sink, so it counts bytes the DESTINATION accepted. The
+ *   entry count is kept only as a SECOND progress term, because an archive of
+ *   empty files and directories legitimately writes zero bytes.
+ *
+ *   AND IT STOPS THE WORK. `fail()` aborts an `AbortController` BEFORE it
+ *   rejects; `writeEntry` hands that signal to `pipeline`, which destroys the
+ *   source and the sink. MEASURED (Node 24.18.0): after the abort, not one
+ *   further byte is accepted by the sink, and both streams report `destroyed`.
+ *   `placeEntry` also refuses to start a new entry once the signal is aborted,
+ *   and `writeSymlink` re-checks it before `symlinkSync` (a link target is read
+ *   through `collect`, not a pipeline, so the abort does not destroy it). Then
+ *   the extractor AWAITS the aborted write's unwind before it throws, so the
+ *   caller's `finally` — `electron-layout.extractBytesToDist` deleting the
+ *   incoming tree — never races a live descriptor.
+ *
+ *   A WATCHDOG, NOT A RE-ARM PER CHUNK. The idle timer re-arms ITSELF: when it
+ *   fires it compares bytes and entries against the mark it took, and only
+ *   fails when neither moved. One timer per window instead of one per 64 KiB
+ *   chunk, at the cost of detecting a stall somewhere between one and two idle
+ *   windows after it starts — irrelevant at 30 s, and stated rather than left
+ *   to be discovered.
  *
  * LAYER 2 IS DELIBERATELY NOT BACK, and this is a real loss, stated rather than
  * papered over. Every native strategy (`tar`, `Expand-Archive`, `ditto`,
@@ -135,12 +165,6 @@ const MAX_MS = 240_000;
  */
 const stalled = (message) => failure('UNZIP_BUFFER_STALLED', `the in-memory extraction stalled: ${message}`);
 
-/** extract-zip's getExtractedMode, with its 0755/0644 defaults. */
-function extractedMode(entryMode, isDir) {
-  if (entryMode !== 0) { return entryMode; }
-  return isDir ? 0o755 : 0o644;
-}
-
 /** yauzl's callback API as a promise, with `fromBuffer`'s options pinned here. */
 function openBuffer(yauzl, bytes) {
   return new Promise((resolve, reject) => {
@@ -154,11 +178,14 @@ function openBuffer(yauzl, bytes) {
 /**
  * Extract `bytes` into `dir`. The caller has ALREADY hashed `bytes`.
  *
- * BOUNDED. See the module docblock's stall section: an idle timer (re-armed
- * after every entry lands) and a hard cap, both live `setTimeout` handles, so a
- * write that never completes becomes a catchable rejection instead of a promise
- * that never settles — and the live handle keeps the event loop alive, which is
- * what stops Node exiting 0 mid-stall with a partial extract and no message.
+ * BOUNDED, AND THE BOUND HALTS. See the module docblock's stall section: an idle
+ * watchdog armed against BYTES WRITTEN (not entries completed) and a hard cap,
+ * both live `setTimeout` handles, so a write that never completes becomes a
+ * catchable rejection instead of a promise that never settles — and the live
+ * handle keeps the event loop alive, which is what stops Node exiting 0
+ * mid-stall with a partial extract and no message. When either fires it ABORTS
+ * the in-flight write and waits for it to unwind, so no byte is written after
+ * the failure is returned.
  *
  * @param {Buffer} bytes  the whole archive, in this process's heap
  * @param {object} o
@@ -196,12 +223,16 @@ async function extractZipBuffer(bytes, {
 
   const zipfile = await openBuffer(yauzl, bytes);
   let entries = 0;
+  let written = 0;                  // BYTES the destination accepted — the progress signal
   let idleTimer = null;
   let maxTimer = null;
+  let inFlight = null;              // the entry being written when the bound fires
+  const halt = new AbortController();
   const cancelTimers = () => {
     if (idleTimer !== null) { clearTimer(idleTimer); idleTimer = null; }
     if (maxTimer !== null) { clearTimer(maxTimer); maxTimer = null; }
   };
+  let thrown = null;
   try {
     await new Promise((resolve, reject) => {
       let settled = false;
@@ -211,10 +242,23 @@ async function extractZipBuffer(bytes, {
         cancelTimers();
         fn(value);
       };
-      const fail = (e) => finish(reject, e);
+      // STOP THE WORK FIRST, THEN REPORT IT. A control that reports a failure
+      // while the work continues is not a control (round 3, seat A1): the abort
+      // destroys the in-flight pipeline, and `placeEntry`/`writeSymlink` refuse
+      // to start or finish anything once the signal is set.
+      const fail = (e) => {
+        if (!halt.signal.aborted) { halt.abort(e); }
+        finish(reject, e);
+      };
+      // The idle WATCHDOG re-arms itself from the marks it took, so a single
+      // huge entry that is writing steadily is progress and never a stall.
       const armIdle = () => {
-        if (idleTimer !== null) { clearTimer(idleTimer); }
-        idleTimer = setTimer(() => fail(stalled(`no extract progress for ${idleMs}ms`)), idleMs);
+        const atBytes = written;
+        const atEntries = entries;
+        idleTimer = setTimer(() => {
+          if (written !== atBytes || entries !== atEntries) { armIdle(); return; }
+          fail(stalled(`no extract progress for ${idleMs}ms`));
+        }, idleMs);
       };
       maxTimer = setTimer(() => fail(stalled(`extraction exceeded ${maxMs}ms`)), maxMs);
       armIdle();
@@ -228,55 +272,29 @@ async function extractZipBuffer(bytes, {
       // unreachable under fromBuffer, so waiting for it hangs forever.
       zipfile.on('end', () => finish(resolve));
       zipfile.on('entry', (entry) => {
-        placeEntry({ zipfile, entry, root, fs }).then((placed) => {
+        inFlight = placeEntry({
+          zipfile, entry, root, fs, signal: halt.signal, onBytes: (n) => { written += n; },
+        });
+        inFlight.then((placed) => {
           if (settled) { return; }        // the bound already fired; stop driving
           if (placed) { entries += 1; }
-          armIdle();                      // progress -> restart the idle window
           zipfile.readEntry();
         }, fail);
       });
       zipfile.readEntry();
     });
+  } catch (e) {
+    thrown = e;
   } finally {
     cancelTimers();
+    // The abort has been issued; wait for the destroyed pipeline to unwind
+    // before the caller's cleanup (extractBytesToDist deletes the incoming tree
+    // in its own `finally`) can race a descriptor that is still open.
+    if (inFlight) { await inFlight.catch(() => { /* the classified failure is `thrown` */ }); }
     try { zipfile.close(); } catch { /* the buffer reader holds no fd */ }
   }
+  if (thrown) { throw thrown; }
   return { strategy: 'buffer', entries };
-}
-
-/** One entry, mirroring extract-zip's Extractor.extractEntry decision order. */
-async function placeEntry({ zipfile, entry, root, fs }) {
-  if (entry.fileName.startsWith('__MACOSX/')) { return false; }
-  if (entry.isEncrypted()) { throw badArchive(`${entry.fileName} is encrypted`); }
-  const dest = path.join(root, entry.fileName);
-  const mode = (entry.externalFileAttributes >> 16) & 0xFFFF;
-  const symlink = (mode & IFMT) === IFLNK;
-  let isDir = (mode & IFMT) === IFDIR;
-  if (!isDir && entry.fileName.endsWith('/')) { isDir = true; }
-  if (!isDir) { isDir = ((entry.versionMadeBy >> 8) === 0 && entry.externalFileAttributes === 16); }
-  const procMode = extractedMode(mode, isDir) & 0o777;
-  const destDir = isDir ? dest : path.dirname(dest);
-  let canonical;
-  try {
-    fs.mkdirSync(destDir, isDir ? { recursive: true, mode: procMode } : { recursive: true });
-    canonical = fs.realpathSync(destDir);
-  } catch (e) {
-    throw badDestination(`could not create ${destDir}: ${(e && e.message) || e}`);
-  }
-  // extract-zip's check, VERBATIM — re-run per entry, AFTER earlier entries were
-  // written, so a symlink an earlier entry created cannot redirect a later one.
-  if (path.relative(root, canonical).split(path.sep).includes('..')) {
-    throw outOfBound(canonical, entry.fileName);
-  }
-  if (isDir) { return true; }
-  if (symlink) {
-    // `canonical`, NEVER `dest`: the link's target is resolved against the
-    // directory realpath says it is created in (see writeSymlink).
-    await writeSymlink({ zipfile, entry, canonical, root, fs });
-  } else {
-    await writeEntry({ zipfile, entry, dest, mode: procMode, fs });
-  }
-  return true;
 }
 
 module.exports = { extractZipBuffer };

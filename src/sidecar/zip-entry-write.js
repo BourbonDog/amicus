@@ -92,14 +92,40 @@ function entryStream(zipfile, entry) {
  * it catches a broken zlib or bad RAM, and is meaningful only because the
  * whole-buffer sha256 already ran on these exact bytes. yauzl checks no CRC at
  * all; `validateEntrySizes: true` covers the length half.
+ *
+ * `onBytes` AND `signal` ARE THE STALL BOUND'S TWO HALVES (round 3, seat A1 +
+ * B2), and both live here because this is the only function that writes.
+ *
+ * `onBytes(n)` reports WRITE PROGRESS, which is what the bound is armed against
+ * — the caller re-arms on bytes, never on entries, so a single 225 MB
+ * `electron.exe` on slow storage cannot look idle. It fires from the CRC
+ * transform, the stage immediately upstream of the sink, so it reports bytes the
+ * DESTINATION has accepted rather than bytes read out of the buffer. MEASURED
+ * (Node 24.18.0) against a sink whose `_write` never calls back: the counter
+ * stops, overshooting the sink by exactly one 64 KiB readable-side highWaterMark
+ * and no more, whether the wedge happens after 64 KiB or after 640 KiB. A hung
+ * destination therefore still stops the counter, which is what makes a genuine
+ * stall catchable.
+ *
+ * `signal` is what makes the bound STOP the work rather than merely report it.
+ * `pipeline` destroys every stream on abort — MEASURED: source and sink both
+ * `destroyed`, not one further byte counted or accepted — so no write can land
+ * after the caller has given up and started cleaning the incoming tree. The
+ * rejection it produces is a plain `AbortError` (`pipeline` does not carry the
+ * abort reason), which is why the caller keeps its own classified failure and
+ * discards this one.
  */
-async function writeEntry({ zipfile, entry, dest, mode, fs }) {
+async function writeEntry({ zipfile, entry, dest, mode, fs, onBytes, signal }) {
   const source = await entryStream(zipfile, entry);
   let crc = 0;
   // Accumulated by a TRANSFORM in the pipeline, never by a `data` listener:
   // attaching one starts the flow before `pipeline` has piped it, losing bytes.
   const crcThrough = new Transform({
-    transform(chunk, _enc, cb) { crc = zlib.crc32(chunk, crc); cb(null, chunk); },
+    transform(chunk, _enc, cb) {
+      crc = zlib.crc32(chunk, crc);
+      if (onBytes) { onBytes(chunk.length); }
+      cb(null, chunk);
+    },
   });
   let sink;
   try {
@@ -116,7 +142,7 @@ async function writeEntry({ zipfile, entry, dest, mode, fs }) {
   source.on('error', note('archive'));
   sink.on('error', note('dest'));
   try {
-    await pipeline(source, crcThrough, sink);
+    await pipeline(source, crcThrough, sink, ...(signal ? [{ signal }] : []));
   } catch (e) {
     const cause = first ? first.e : e;
     const detail = `${entry.fileName}: ${(cause && cause.message) || cause}`;
@@ -149,8 +175,13 @@ async function writeEntry({ zipfile, entry, dest, mode, fs }) {
  * at an in-root path that some LATER entry turns into a link elsewhere is not
  * caught here — that shape is caught by the per-entry `realpath` bound check in
  * `placeEntry`, which re-runs after every earlier entry has been written.
+ *
+ * `signal` is checked immediately before the `symlinkSync`. A link target is a
+ * handful of bytes read through `collect`, which is not a `pipeline` and so is
+ * not destroyed by the abort — without this check the stall bound could fire and
+ * a symlink still appear in the tree the caller is about to delete.
  */
-async function writeSymlink({ zipfile, entry, canonical, root, fs }) {
+async function writeSymlink({ zipfile, entry, canonical, root, fs, signal }) {
   const target = (await collect(await entryStream(zipfile, entry), `the symlink target for ${entry.fileName}`)).toString('utf8');
   const dest = path.join(canonical, path.basename(entry.fileName));
   const resolved = path.resolve(canonical, target);
@@ -160,6 +191,7 @@ async function writeSymlink({ zipfile, entry, canonical, root, fs }) {
   if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
     throw outOfBound(resolved, entry.fileName);
   }
+  if (signal && signal.aborted) { return; }
   try {
     fs.symlinkSync(target, dest);
   } catch (e) {
@@ -167,7 +199,70 @@ async function writeSymlink({ zipfile, entry, canonical, root, fs }) {
   }
 }
 
+/** stat mode constants, as extract-zip decodes them from externalFileAttributes. */
+const IFMT = 61440;
+const IFDIR = 16384;
+const IFLNK = 40960;
+
+/** extract-zip's getExtractedMode, with its 0755/0644 defaults. */
+function extractedMode(entryMode, isDir) {
+  if (entryMode !== 0) { return entryMode; }
+  return isDir ? 0o755 : 0o644;
+}
+
+/**
+ * One entry, mirroring extract-zip's Extractor.extractEntry decision order.
+ *
+ * MOVED HERE from zip-from-buffer.js in the third council round, when the stall
+ * bound's repair pushed that file back over the 300-line gate. It is not a
+ * convenience move: this function answers "what does one archive entry become on
+ * disk, and whose fault is it when that fails", which is this module's whole
+ * subject, and it calls nothing but this module's own writers. What stays next
+ * door is the archive DRIVER — yauzl's event loop, the bound, and the decision
+ * to give up.
+ *
+ * `signal` is the stall bound's halt: an entry that arrives after the bound
+ * fired creates NOTHING — not the directory, not the file — because the caller
+ * is already deleting the incoming tree.
+ * @returns {Promise<boolean>} true if the entry was placed (false = skipped)
+ */
+async function placeEntry({ zipfile, entry, root, fs, signal, onBytes }) {
+  // Nothing is created for an entry that arrives after the bound fired.
+  if (signal && signal.aborted) { return false; }
+  if (entry.fileName.startsWith('__MACOSX/')) { return false; }
+  if (entry.isEncrypted()) { throw badArchive(`${entry.fileName} is encrypted`); }
+  const dest = path.join(root, entry.fileName);
+  const mode = (entry.externalFileAttributes >> 16) & 0xFFFF;
+  const symlink = (mode & IFMT) === IFLNK;
+  let isDir = (mode & IFMT) === IFDIR;
+  if (!isDir && entry.fileName.endsWith('/')) { isDir = true; }
+  if (!isDir) { isDir = ((entry.versionMadeBy >> 8) === 0 && entry.externalFileAttributes === 16); }
+  const procMode = extractedMode(mode, isDir) & 0o777;
+  const destDir = isDir ? dest : path.dirname(dest);
+  let canonical;
+  try {
+    fs.mkdirSync(destDir, isDir ? { recursive: true, mode: procMode } : { recursive: true });
+    canonical = fs.realpathSync(destDir);
+  } catch (e) {
+    throw badDestination(`could not create ${destDir}: ${(e && e.message) || e}`);
+  }
+  // extract-zip's check, VERBATIM — re-run per entry, AFTER earlier entries were
+  // written, so a symlink an earlier entry created cannot redirect a later one.
+  if (path.relative(root, canonical).split(path.sep).includes('..')) {
+    throw outOfBound(canonical, entry.fileName);
+  }
+  if (isDir) { return true; }
+  if (symlink) {
+    // `canonical`, NEVER `dest`: the link's target is resolved against the
+    // directory realpath says it is created in (see writeSymlink).
+    await writeSymlink({ zipfile, entry, canonical, root, fs, signal });
+  } else {
+    await writeEntry({ zipfile, entry, dest, mode: procMode, fs, onBytes, signal });
+  }
+  return true;
+}
+
 module.exports = {
   failure, badArchive, badDestination, outOfBound, extractorUnavailable,
-  collect, entryStream, writeEntry, writeSymlink,
+  collect, entryStream, writeEntry, writeSymlink, placeEntry,
 };
