@@ -345,8 +345,10 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_MOCK_UPDATE` | Mock the update-notification state for UI development. Values: `available` \| `updating` \| `success` \| `error`. Has no effect outside development. | *(unset)* |
 | `AMICUS_ALLOW_UNVERIFIED_ELECTRON` | Accept an Electron artifact whose sha256 does **not** match the digest Electron publishes for it, with a loud warning on every use instead of a refusal, **and** arm the native-extractor rescue for an archive amicus cannot read (below). On a **cached** artifact it downgrades the refusal to a warning; on a **download** it also drops the published-digest pin, so `@electron/get` falls back to the `SHASUMS256.txt` of whatever mirror you pointed it at — without that, a legitimately rebuilt Electron could never be fetched at all, only accepted if it was already in a cache root. For two cases only: you deliberately run a **rebuilt** Electron whose bytes legitimately differ, or amicus cannot read an archive at all and you have no other copy of it. True for the exact string `1` — `true`, `yes` and ` 1` are all false, because a hatch that fails open on a typo is not a hatch. | *(unset)* |
 
-> **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
-> anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`
+> **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It arms exactly the two
+> things this page describes — the digest relaxation in the table above, and the
+> native-extractor rescue in the blockquote below — and re-enables nothing beyond
+> them. `npm_config_electron_mirror`, `npm_package_config_electron_*`
 > and `npm_config_electron_use_remote_checksums` are stripped from the
 > environment while amicus works out **where the artifact comes from**, whether
 > this variable is set or not — those are the names a *repository* can plant

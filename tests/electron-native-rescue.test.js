@@ -612,3 +612,49 @@ describe('C2 — wired into BOTH provision routes', () => {
     expect(stderr.join('')).toMatch(/will not retry it with another extractor/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// WHAT THE TWO PAGES CLAIM ABOUT THE HATCH — pinned, because the contradiction
+// below actually shipped
+// ---------------------------------------------------------------------------
+
+/**
+ * C2 widened `AMICUS_ALLOW_UNVERIFIED_ELECTRON` a second time, and the commit
+ * that documented it APPENDED a section to each page instead of fixing the
+ * sentence that had become false. Both pages therefore said, above their own new
+ * text, that the variable "re-enables nothing else" / "does not re-enable
+ * anything else" — the flat opposite, in the bullet written to warn a user
+ * BEFORE they set it. Nothing pinned the claim, so nothing caught it.
+ *
+ * MUTANT HATCHDOCSSTALE — put either sentence back on either page.
+ *   RED: 'neither page claims the hatch widens nothing else'.
+ */
+describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
+  /** Markdown as a reader meets it: blockquote markers and wrapping removed. */
+  function prose(name) {
+    return fs.readFileSync(path.join(__dirname, '..', 'docs', name), 'utf8')
+      .split('\n').map((l) => l.replace(/^>\s?/, '')).join(' ')
+      .replace(/\s+/g, ' ');
+  }
+  const PAGES = ['troubleshooting.md', 'configuration.md'];
+
+  test('neither page claims the hatch widens nothing else', () => {
+    for (const name of PAGES) {
+      // The exact two sentences that shipped, and the shape of either of them.
+      expect(prose(name)).not.toMatch(/re-enables nothing else/);
+      expect(prose(name)).not.toMatch(/does not re-enable anything else/);
+      expect(prose(name)).not.toMatch(/the one thing it \*does\* widen/);
+    }
+  });
+
+  test('both pages name the rescue as a thing this variable arms', () => {
+    for (const name of PAGES) {
+      const text = prose(name);
+      expect(text).toMatch(/native-extractor rescue/);
+      // ...and say what it costs, in the same page, because an arming notice
+      // that hides the custody spend is the reason the false sentence mattered.
+      expect(text).toMatch(/hands that PATH|hands that path|handed to your OS|hands \*\*that path\*\*/);
+      expect(text).toMatch(/without (?:ever )?being hashed again/);
+    }
+  });
+});
