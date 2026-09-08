@@ -725,3 +725,139 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// REAL ARCHIVES THROUGH THE BOUNDARY — the classification, not a synthetic code
+// ---------------------------------------------------------------------------
+
+/**
+ * Every exclusion above is asserted against `boom(code)`, a hand-made error. That
+ * measures the RULE and not the CLASSIFICATION, and the classification is where
+ * C2's boundary was wrong: it excluded the security refusal yauzl HAPPENED TO
+ * FORM, not the hostile ENTRY. yauzl validates an entry's size before its name
+ * (yauzl@2.10.0 index.js lines 407-426), so one bad entry earlier in the same
+ * archive ends the walk before any later name is looked at, and the archive
+ * arrives as `UNZIP_BUFFER_FAILED` — the one class a rescue acts on.
+ *
+ * MEASURED before the fix, real `extractZipBuffer` + real `spawnSync` on Windows
+ * 11 / Node 24: `[first.bin (encrypted flag), ../../../PWNED-BY-NATIVE.txt,
+ * electron.exe]` gave `code=UNZIP_BUFFER_FAILED  msg=compressed/uncompressed size
+ * mismatch for stored file: 4 != 4`, `spawn calls: ["tar.exe","powershell"]` and
+ * `recovered via the native extractor (Expand-Archive)`. Nothing escaped only
+ * because each Windows tool refuses `..` itself — `tar.exe: ../../../PWNED-BY-
+ * NATIVE.txt: Path contains '..'` (exit 1), `Expand-Archive: Can not process
+ * invalid archive entry '…'` (exit 0) — which is the reliance unzip.js says
+ * amicus will not make.
+ *
+ * So these run REAL archives, built in front of the reader, through the REAL
+ * extractor and the real boundary.
+ *
+ * MUTANT ENTRYORDERTRAVERSAL — delete the `hostileName` call in
+ *   electron-native-rescue.js :: withNativeRescue.
+ *   RED: 'an archive that breaks yauzl BEFORE its traversal entry is refused too'.
+ */
+describe('C2 — REAL archives, and the entry-ordering hole (ENTRYORDERTRAVERSAL)', () => {
+  // eslint-disable-next-line global-require
+  const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
+  // eslint-disable-next-line global-require
+  const { buildZip, FLAG_ENCRYPTED } = require('./helpers/zip-fixture');
+
+  const TRAVERSAL = '../../../PWNED-BY-NATIVE.txt';
+  /** The entry that breaks yauzl's walk before it ever validates a name. */
+  const BREAKS_THE_WALK = { name: 'first.bin', body: 'DATA', flags: FLAG_ENCRYPTED };
+
+  /** The REAL extractor behind the REAL boundary, hatch armed, spawn watched. */
+  function realBoundary({ hatch = true } = {}) {
+    const { dir } = incomingTree();
+    const lines = [];
+    const spawn = nativeSpawn();
+    const wrapped = withNativeRescue({
+      extract: (bytes, o) => extractZipBuffer(bytes, { dir: o.dir }),
+      gate: { verdict: 'verified' },
+      policy: { allowUnverified: hatch },
+      rescue: {},
+      platform: PLATFORM,
+      fs,
+      spawn,
+      log: (m) => lines.push(m),
+    });
+    return { wrapped, dir, spawn, said: () => lines.join('\n') };
+  }
+
+  test('a traversal entry ALONE is terminal, silent, and never spawns anything', async () => {
+    const { wrapped, dir, spawn, said } = realBoundary();
+    const bytes = buildZip([{ name: TRAVERSAL, body: 'pwn' }, { name: 'electron.exe', body: 'MZ' }]);
+
+    await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+    expect(spawn).not.toHaveBeenCalled();
+    // The hatch is not even mentioned on a security refusal: C4 with a human in
+    // the loop is still C4.
+    expect(said()).toBe('');
+  });
+
+  test('an archive that breaks yauzl BEFORE its traversal entry is refused too', async () => {
+    const { wrapped, dir, spawn, said } = realBoundary();
+    const bytes = buildZip([BREAKS_THE_WALK, { name: TRAVERSAL, body: 'pwn' }, { name: 'electron.exe', body: 'MZ' }]);
+
+    // The extractor's own verdict on this archive is the RESCUABLE one...
+    await expect(extractZipBuffer(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_BUFFER_FAILED' });
+    // ...and the boundary refuses it anyway, in yauzl's own wording, terminally.
+    await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(said()).toMatch(/REFUSING to rescue this archive/);
+    expect(said()).toMatch(/invalid relative path: \.\.\/\.\.\/\.\.\/PWNED-BY-NATIVE\.txt/);
+    // Never an invitation to set the flag and try again.
+    expect(said()).not.toMatch(/AMICUS_ALLOW_UNVERIFIED_ELECTRON/);
+  });
+
+  test('the same trick with a BACKSLASH or an ABSOLUTE name is refused as well', async () => {
+    for (const hostile of ['..\\..\\PWNED.txt', '/etc/cron.d/pwn', 'C:/Windows/System32/pwn.dll']) {
+      const { wrapped, dir, spawn } = realBoundary();
+      const bytes = buildZip([BREAKS_THE_WALK, { name: hostile, body: 'pwn' }]);
+
+      await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+      expect(spawn).not.toHaveBeenCalled();
+    }
+  });
+
+  test('a REAL archive with clean names and a broken entry IS still rescued', async () => {
+    // The scan may only ever NARROW. An archive whose names are all fine is the
+    // case the whole rescue exists for, and it still runs.
+    const { wrapped, dir, spawn } = realBoundary();
+    const bytes = buildZip([BREAKS_THE_WALK, { name: 'electron.exe', body: 'MZ' }]);
+
+    expect(await wrapped(bytes, { dir })).toEqual({ strategy: 'tar', rescued: true });
+
+    expect(spawn).toHaveBeenCalled();
+  });
+
+  test('an archive with NO readable central directory is still rescued — the stated residual', async () => {
+    // THE HONEST LIMIT, pinned so it stays deliberate. A truncated zip — the
+    // commonest thing this rescue exists for — declares no names anyone can
+    // read, so the scan proves nothing and the archive goes to the native
+    // extractor with only that tool's own `..` check between it and the disk.
+    // electron-native-rescue.js :: hostileName and docs/configuration.md both
+    // say so; this is the test that stops it being discovered by accident.
+    const { wrapped, dir, spawn } = realBoundary();
+    const whole = buildZip([{ name: 'electron.exe', body: 'MZ' }]);
+
+    expect(await wrapped(whole.subarray(0, whole.length - 8), { dir })).toEqual({ strategy: 'tar', rescued: true });
+
+    expect(spawn).toHaveBeenCalled();
+  });
+
+  test('with the hatch UNSET a hostile-named archive is refused, not OFFERED', async () => {
+    // The refusal comes before the offer, so the archive that must never be
+    // handed to a native extractor is never advertised as rescuable either.
+    const { wrapped, dir, spawn, said } = realBoundary({ hatch: false });
+    const bytes = buildZip([BREAKS_THE_WALK, { name: TRAVERSAL, body: 'pwn' }]);
+
+    await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(said()).not.toMatch(/AMICUS_ALLOW_UNVERIFIED_ELECTRON/);
+  });
+});

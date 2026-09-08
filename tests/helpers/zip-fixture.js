@@ -31,6 +31,8 @@ const zlib = require('zlib');
 
 /** `versionMadeBy` high byte 3 = unix, so the high word of externalFileAttributes is a st_mode. */
 const MADE_BY_UNIX = 0x0314;
+/** General-purpose bit 0: "this entry is encrypted". See `buildZip`'s `flags`. */
+const FLAG_ENCRYPTED = 0x0001;
 /** External-attribute helpers: what `(externalFileAttributes >> 16) & 0xFFFF` must decode to. */
 const MODE_FILE = 0o100644;
 const MODE_DIR = 0o040755;
@@ -38,9 +40,15 @@ const MODE_SYMLINK = 0o120777;
 
 /**
  * Build a zip from `entries`.
- * @param {Array<{name:string, body?:string, mode?:number}>} entries
+ * @param {Array<{name:string, body?:string, mode?:number, flags?:number}>} entries
  *   `mode` is a full st_mode (use MODE_FILE / MODE_DIR / MODE_SYMLINK).
  *   For a symlink, `body` is the link TARGET.
+ *   `flags` is the general-purpose bit flag. `FLAG_ENCRYPTED` (bit 0) is the one
+ *   shape that matters here: yauzl adds 12 bytes to the expected compressed size
+ *   of an encrypted stored entry, so the size check in `_readEntry` fails and
+ *   ENDS THE WALK — before it validates any later entry's NAME. That is the
+ *   entry-ordering case the C2 boundary is measured against; nothing else in
+ *   this file needed a flag word.
  * @returns {Buffer}
  */
 function buildZip(entries) {
@@ -52,9 +60,11 @@ function buildZip(entries) {
     const data = Buffer.from(e.body === undefined ? '' : e.body, 'utf8');
     const crc = zlib.crc32(data) >>> 0;
     const mode = e.mode === undefined ? MODE_FILE : e.mode;
+    const flags = e.flags === undefined ? 0 : e.flags;
     const lfh = Buffer.alloc(30);
     lfh.writeUInt32LE(0x04034b50, 0);
     lfh.writeUInt16LE(20, 4);
+    lfh.writeUInt16LE(flags, 6);
     lfh.writeUInt32LE(crc, 14);
     lfh.writeUInt32LE(data.length, 18);
     lfh.writeUInt32LE(data.length, 22);
@@ -64,6 +74,7 @@ function buildZip(entries) {
     cdh.writeUInt32LE(0x02014b50, 0);
     cdh.writeUInt16LE(MADE_BY_UNIX, 4);
     cdh.writeUInt16LE(20, 6);
+    cdh.writeUInt16LE(flags, 8);
     cdh.writeUInt32LE(crc, 16);
     cdh.writeUInt32LE(data.length, 20);
     cdh.writeUInt32LE(data.length, 24);
@@ -123,4 +134,4 @@ function realZip(files = { 'a.txt': 'hello from a\n', 'sub/b.txt': 'nested\n' })
   }
 }
 
-module.exports = { buildZip, zipFile, realZip, MODE_FILE, MODE_DIR, MODE_SYMLINK };
+module.exports = { buildZip, zipFile, realZip, MODE_FILE, MODE_DIR, MODE_SYMLINK, FLAG_ENCRYPTED };

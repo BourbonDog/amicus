@@ -115,6 +115,7 @@ src/
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-layout.js  # The on-disk LAYOUT of an installed `electron` package: where the executable
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
+│   ├── electron-native-plan.js  # THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's
 │   ├── electron-native-rescue.js  # THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor
 │   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and the fence that says
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
@@ -165,6 +166,7 @@ src/
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 │   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
 │   ├── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   ├── zip-name-scan.js  # WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central
 │   └── zip-stall-bound.js  # WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work.
 ├── template/
 │   ├── apply.js
@@ -567,6 +569,7 @@ evals/
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
+| `sidecar/electron-native-plan.js` | THE MECHANICS OF A RESCUE: write the verified buffer down, walk the platform's | `nativeRescue()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
 | `sidecar/electron-native-rescue.js` | THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor | `withNativeRescue()`, `isRescuableFailure()`, `RESCUE_TRIGGER()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
@@ -617,6 +620,7 @@ evals/
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
 | `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
+| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
 | `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |

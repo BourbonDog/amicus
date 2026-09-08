@@ -399,6 +399,33 @@ These variables control the polling loop that drives headless sessions. The defa
 > names this variable and says what it would do, so you do not have to read the
 > source to find it.
 >
+> **What "path-traversal refusals are excluded" does and does not buy you.** That
+> exclusion keys on the refusal amicus's extractor *formed*, and an archive can
+> stop it forming one: yauzl checks an entry's size before its name, so one bad
+> entry early in the archive ends the walk before any later name is looked at.
+> Measured — the same three-entry archive, one flag bit apart — that moves it out
+> of the terminal class and into the rescuable one. Amicus therefore also **reads
+> the archive's central directory and refuses any entry name yauzl would have
+> refused**, before it hands anything to a native extractor. Two residuals
+> survive, and neither is engineered away:
+>
+> - An archive whose **central directory cannot be read at all** — a truncated
+>   zip, which is the commonest thing this rescue exists for — declares no names
+>   amicus can see, and it still goes to the native extractor. The only remaining
+>   check is that extractor's own. `tar` and `Expand-Archive` were measured to
+>   refuse a `..` entry themselves (`tar.exe`: `Path contains '..'`, exit 1;
+>   `Expand-Archive`: `Can not process invalid archive entry '…'`; nothing written
+>   outside the destination in either case). **`ditto` and Info-ZIP `unzip`, the
+>   macOS and Linux strategies, are unmeasured.**
+> - A **symlink whose target escapes** the extraction root is a payload, not a
+>   name, so no name scan can see it. Amicus's own in-memory extractor refuses
+>   those; a native extractor is not asked to.
+>
+> Amicus cleans up only *inside* the directory it asked the extractor to write to,
+> so anything a native tool wrote outside it would survive a failed strategy. This
+> is the concrete shape of "not a safe operation": if the archive came from
+> somewhere you do not trust, do not set this variable — get another copy.
+>
 > **The one thing the strip does not cover, stated precisely** (measured against
 > `@electron/get` 5.0.0, and re-measured by
 > `tests/electron-env-scrub-get5-contract.test.js` on every test run). Every read

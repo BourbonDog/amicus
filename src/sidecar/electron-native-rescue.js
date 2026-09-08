@@ -58,6 +58,15 @@
  *        Neither is a parse failure, and a rule that fails OPEN on the shapes
  *        nobody enumerated is the shape D2 was filed against. Fail closed.
  *
+ * AND A VERDICT IS NOT THE WHOLE QUESTION. Every line above keys on the refusal
+ * yauzl FORMED, and yauzl checks an entry's size before its name — so an archive
+ * whose first entry breaks the extraction arrives as `UNZIP_BUFFER_FAILED` with
+ * its traversal entry never looked at. One flag bit, MEASURED, moves the same
+ * archive from the terminal class into the rescuable one. So the boundary also
+ * asks what names the archive DECLARES (`hostileName`), and a name yauzl would
+ * have refused is treated as the refusal it would have raised. What that scan
+ * cannot see is written down there rather than papered over.
+ *
  * ── AND `no-digest` IS ALLOWED, DELIBERATELY ──────────────────────────────
  * Only `mismatch` is excluded. `no-digest` means nobody ever published a digest
  * for this artifact — an Electron package predating `checksums.json` — which is
@@ -94,145 +103,70 @@
 
 'use strict';
 
-const path = require('path');
 const { spawnSync } = require('child_process');
 
-// The plan and the cap come from `unzip.js`, which is byte-for-byte unchanged:
-// this is a re-wiring of a caller, not a change to that module.
-const { nativeUnzipPlan, MAX_MS } = require('./unzip');
-// The two multi-line notices live where every other user-facing sentence in this
-// subsystem is written; this module decides, those two speak.
-const { PATH_EXCERPT_CHARS } = require('./electron-refuse');
-const { offerNativeRescue, announceNativeRescue } = require('./electron-rescue-notice');
+// The cap comes from `unzip.js`, which is byte-for-byte unchanged: this is a
+// re-wiring of a caller, not a change to that module.
+const { MAX_MS } = require('./unzip');
+// The mechanism this file decides about: writing the buffer down, walking the
+// platform's plan, sweeping up. `RESCUE_ZIP` and `INCOMING_PREFIX` are re-exported
+// below because they name what a rescue leaves on disk, which is this module's
+// subject even though the code that writes them is next door.
+const { nativeRescue, RESCUE_ZIP, INCOMING_PREFIX } = require('./electron-native-plan');
+// The offer a parse failure gets when the hatch is off. Every other user-facing
+// sentence in this subsystem is written in the same two files.
+const { offerNativeRescue } = require('./electron-rescue-notice');
+// The read-only name walk the boundary consults before it trusts a verdict.
+const { scanEntryNames } = require('./zip-name-scan');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** The ONE extractor verdict a rescue may act on. See the docblock's boundary. */
 const RESCUE_TRIGGER = 'UNZIP_BUFFER_FAILED';
-
-/**
- * The directory `electron-layout.js :: extractBytesToDist` extracts into is
- * `<electronDir>/.amicus-incoming-<hex>/dist`, so its PARENT is the private
- * incoming tree that the promote renames out of and the `finally` deletes. The
- * rescue writes its zip there — beside `dist`, never inside it, because
- * `promoteDist` renames the whole `dist` directory into place and would carry a
- * 138 MB stray zip with it.
- *
- * CHECKED, NOT ASSUMED. Deriving a write location from a caller's argument is
- * how a stray file lands somewhere nobody expected, so the prefix is verified
- * before a byte is written and the rescue refuses otherwise. The coupling is
- * also pinned end-to-end by tests/electron-native-rescue.test.js, which runs a
- * real `extractBytesToDist` and asserts the zip landed in the incoming tree.
- */
-const INCOMING_PREFIX = '.amicus-incoming-';
-
-/** The name the rescue writes the verified buffer under, inside that tree. */
-const RESCUE_ZIP = 'rescue-artifact.zip';
 
 /** True for the ONE failure class the owner authorised a rescue for. */
 function isRescuableFailure(err) {
   return !!err && err.code === RESCUE_TRIGGER;
 }
 
-/** True if `dir` exists and holds at least one entry (unzip.js's layer 3). */
-function dirNonEmpty(fs, dir) {
-  try {
-    return fs.readdirSync(dir).length > 0;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Remove everything inside `dir` (best-effort).
+ * A parse failure's archive, asked what ENTRY NAMES it declares.
  *
- * LOAD-BEARING, not tidiness: the extractor that just failed may have left a
- * PARTIAL tree there, and `dirNonEmpty` would then read those leftovers as a
- * successful rescue and promote them into `dist/`. unzip.js cleans for the same
- * reason before its own native strategies.
- */
-function cleanDir(fs, dir) {
-  try {
-    for (const entry of fs.readdirSync(dir)) {
-      fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
-    }
-  } catch { /* best-effort */ }
-}
-
-/**
- * Walk the platform's native plan until one strategy leaves files in `dir`.
+ * THE EXCLUSION ABOVE KEYS ON A REFUSAL, AND A REFUSAL HAS TO BE FORMED. yauzl
+ * checks an entry's size before its name, so an archive whose FIRST entry breaks
+ * the extraction never reaches the traversal entry behind it and arrives here as
+ * `UNZIP_BUFFER_FAILED` — the one class a rescue acts on. MEASURED: one flag bit
+ * moves the same archive from `UNZIP_UNSAFE_ARCHIVE` into the rescue, traversal
+ * entry and all (`zip-name-scan.js` carries both measurements and the two
+ * Windows tools' own refusals, which are what stopped the escape that run).
  *
- * The verdicts are unzip.js's, because they were right there: a spawn error or
- * an external signal-kill (`status: null` — SIGKILL, an OOM) is a FAILURE even
- * if files landed, a non-zero exit is a failure, and a clean exit that produced
- * nothing is a failure. Every failure cleans up after itself so the next
- * strategy starts from an empty directory.
- * @returns {string|null} the strategy name that worked, or null
- */
-function runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log }) {
-  const failures = [];
-  for (const strat of nativeUnzipPlan(zip, dir, platform)) {
-    let res;
-    try {
-      res = spawn(strat.cmd, strat.args, { stdio: 'ignore', windowsHide: true, timeout: maxMs });
-    } catch (e) {
-      failures.push(`${strat.name}: spawn ${(e && e.code) || (e && e.message) || 'threw'}`);
-      continue;
-    }
-    if (res && (res.error || res.signal)) {
-      failures.push(`${strat.name}: ${res.error ? (res.error.code || res.error.message) : `killed by ${res.signal}`}`);
-    } else if (res && typeof res.status === 'number' && res.status !== 0) {
-      failures.push(`${strat.name}: exit ${res.status}`);
-    } else if (dirNonEmpty(fs, dir)) {
-      return strat.name;
-    } else {
-      failures.push(`${strat.name}: produced no files`);
-    }
-    cleanDir(fs, dir);
-  }
-  log(`[amicus] the native-extractor rescue did not recover this archive (${collapseExcerpt(failures.join('; ') || 'no native strategy available')}).`);
-  return null;
-}
-
-/**
- * Write the verified buffer beside the incoming `dist`, hand that path to the
- * native plan, and leave the extracted tree where the existing promote sequence
- * will find it — so a rescue lands in `dist/` by the SAME single rename, with the
- * same litter sweep, and this module never touches the promote at all.
+ * So the boundary asks about the ENTRIES, not only the verdict, and a name yauzl
+ * would have refused becomes the refusal yauzl would have raised: terminal,
+ * unadvertised, left in place, exactly as if the archive had had nothing wrong
+ * with it but that entry.
  *
- * `flag: 'wx'` is a real control and a small one: `O_EXCL` refuses to write
- * through a name that already exists, INCLUDING a symlink someone pre-planted at
- * it. It does nothing about a substitution AFTER the write — that window is the
- * whole cost of the rescue and is stated in the notice, not engineered away.
- * The copy is deleted as soon as the child is done; the `finally` in
- * `extractBytesToDist` removes the whole incoming tree regardless.
- * @returns {string|null} the strategy name that recovered the archive, or null
+ * THE RESIDUAL, STATED RATHER THAN ENGINEERED AWAY. The scan reads the central
+ * directory; an archive whose central directory is unreadable — a truncated zip,
+ * the commonest thing this rescue exists for — declares no names it can see, and
+ * that archive still reaches the native extractor. Nothing here covers a SYMLINK
+ * whose target escapes either: that is a payload, not a name. In both cases the
+ * only remaining check is the extractor's own, which `tar` and `Expand-Archive`
+ * were MEASURED to have (`ditto` and Info-ZIP `unzip` are unmeasured), and
+ * `cleanDir` sweeps only inside `dir` — anything a native tool wrote outside it
+ * would survive a failed strategy. `docs/configuration.md` says the same thing to
+ * the user who has to decide whether to set the flag.
+ * @returns {Error|null} a terminal UNZIP_UNSAFE_ARCHIVE, or null
  */
-function nativeRescue({ bytes, dir, reason, platform, fs, spawn, maxMs, log }) {
-  const incoming = path.dirname(dir);
-  if (!path.basename(incoming).startsWith(INCOMING_PREFIX)) {
-    log(`[amicus] the native-extractor rescue was NOT attempted: ${collapseExcerpt(dir, PATH_EXCERPT_CHARS)} is not inside an amicus incoming directory.`);
-    return null;
-  }
-  const zip = path.join(incoming, RESCUE_ZIP);
-  announceNativeRescue({ zip, reason, log });
-  try {
-    fs.writeFileSync(zip, bytes, { flag: 'wx', mode: 0o600 });
-  } catch (e) {
-    log(`[amicus] the native-extractor rescue could not write the archive out: ${collapseExcerpt((e && e.message) || String(e))}`);
-    return null;
-  }
-  try {
-    // The failed extractor's partial tree is evidence of nothing and would be
-    // promoted as if it were a rescue. It goes before the child runs.
-    cleanDir(fs, dir);
-    const strategy = runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log });
-    if (strategy) {
-      log(`[amicus] recovered via the native extractor (${strategy}). These bytes were NOT re-hashed; the result is marked unverified.`);
-    }
-    return strategy;
-  } finally {
-    try { fs.rmSync(zip, { force: true }); } catch { /* the incoming tree is removed anyway */ }
-  }
+async function hostileName(bytes, log) {
+  const seen = await scanEntryNames(bytes);
+  if (!seen.refusal) { return null; }
+  log('[amicus] REFUSING to rescue this archive: amicus could not read it, and while asking what');
+  log('[amicus] it contains it found an entry that tries to write OUTSIDE the destination:');
+  log(`[amicus]   ${collapseExcerpt(seen.refusal)}`);
+  log('[amicus] A native extractor may have no such check, so it is not offered this archive.');
+  return Object.assign(
+    new Error(`refusing to extract this archive: ${collapseExcerpt(seen.refusal)}`),
+    { code: 'UNZIP_UNSAFE_ARCHIVE' },
+  );
 }
 
 /**
@@ -263,6 +197,11 @@ function withNativeRescue({
     } catch (err) {
       // Every class but one leaves through here untouched and unadvertised.
       if (!isRescuableFailure(err)) { throw err; }
+      // ...and the one class that IS rescuable is asked what names it declares
+      // first, because the exclusion above keys on the refusal yauzl FORMED and
+      // an earlier bad entry stops it forming one. See `hostileName`.
+      const hostile = await hostileName(bytes, log);
+      if (hostile) { throw hostile; }
       if (!policy.allowUnverified) {
         // `offered` IS THE OFFER'S RECEIPT, and the cache route is required to
         // honour it: see the docblock's OFFERED-BUT-UNARMED section.
