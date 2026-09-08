@@ -56,6 +56,12 @@
  * CORRUPTNOTEVICTED electron-repair-cache.js — delete the `fs.rmSync(zip, ...)`
  *   on the bad-archive branch.
  *   RED: "a corrupt cached artifact is EVICTED, and the reason says so".
+ * UNFENCEDEVICT   electron-repair-cache.js :: repairFromCache — drop the
+ *   `mayDeleteRejectedZip` guard from the corrupt-artifact eviction, restoring
+ *   the bare `fs.rmSync(zip, { force: true })` that deleted at an
+ *   attacker-influenced path the mismatch eviction has always fenced.
+ *   RED: "the corrupt eviction goes through the SAME FENCE as the mismatch one"
+ *   and "a BASENAME that is not the artifact amicus asked for is refused too".
  * DESTFAILUREEVICTS electron-repair-cache.js — invert the eviction rule back to
  *   an allow-list of codes that KEEP (`UNZIP_DEST_FAILED`,
  *   `UNZIP_BUFFER_UNAVAILABLE`), so anything unclassified evicts.
@@ -556,16 +562,25 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
 });
 
 describe('F#4/F#5 — a corrupt cached artifact is actually evicted', () => {
+  /** The extractor's positive "this ARCHIVE is bad" verdict — the ONE code that evicts. */
+  const badArchive = () => jest.fn(async () => {
+    const e = new Error('end of central directory record signature not found');
+    e.code = 'UNZIP_BUFFER_FAILED';
+    throw e;
+  });
+
+  /** A cached artifact INSIDE a resolved cache root, which is what the fence requires. */
+  function zipInCacheRoot(body = 'CORRUPT') {
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    return writeZip({ body, root: cacheRoot });
+  }
+
   test('a corrupt cached artifact is EVICTED, and the reason says so (CORRUPTNOTEVICTED)', async () => {
     const { dir } = unanchoredElectronDir();
-    const zip = writeZip({ body: 'CORRUPT' });
-    const extract = jest.fn(async () => {
-      const e = new Error('end of central directory record signature not found');
-      e.code = 'UNZIP_BUFFER_FAILED';
-      throw e;
-    });
+    const zip = zipInCacheRoot();
 
-    const res = await repair({ dir, zip, extract });
+    const res = await repair({ dir, zip, extract: badArchive() });
 
     expect(res.repaired).toBe(false);
     expect(res.reason).toMatch(/was corrupt and removed/);
@@ -574,18 +589,46 @@ describe('F#4/F#5 — a corrupt cached artifact is actually evicted', () => {
 
   test('when the eviction FAILS, the reason says "left in place" rather than lying', async () => {
     const { dir } = unanchoredElectronDir();
-    const zip = writeZip({ body: 'CORRUPT' });
+    const zip = zipInCacheRoot();
     const readOnlyFs = { ...fs, rmSync: (p, o) => { if (p === zip) { throw new Error('EPERM'); } return fs.rmSync(p, o); } };
-    const extract = jest.fn(async () => {
-      const e = new Error('end of central directory record signature not found');
-      e.code = 'UNZIP_BUFFER_FAILED';
-      throw e;
-    });
 
-    const res = await repair({ dir, zip, extract, deps: { fs: readOnlyFs } });
+    const res = await repair({ dir, zip, extract: badArchive(), deps: { fs: readOnlyFs } });
 
     expect(res.reason).toMatch(/was corrupt and left in place/);
     expect(fs.existsSync(zip)).toBe(true);
+  });
+
+  test('the corrupt eviction goes through the SAME FENCE as the mismatch one (UNFENCEDEVICT)', async () => {
+    // C2 (round 3): two deletes of the same attacker-influenced path lived in
+    // this module, one fenced through mayDeleteRejectedZip and one a bare
+    // `fs.rmSync(zip, { force: true })`. `zip` comes out of a readdirSync of a
+    // directory anyone can write, and `cachedZip` will follow a `<sha>` entry
+    // that resolves anywhere. Same artifact, same corrupt verdict, sitting
+    // OUTSIDE every cache root: the fence refuses, exactly as it already did for
+    // a mismatching artifact three branches up.
+    process.env.ELECTRON_CACHE = mkTmp('amicus-cacheroot-');
+    const zip = writeZip({ body: 'CORRUPT', root: mkTmp('amicus-elsewhere-') });
+    const { dir } = unanchoredElectronDir();
+
+    const res = await repair({ dir, zip, extract: badArchive() });
+
+    expect(fs.readFileSync(zip, 'utf8')).toBe('CORRUPT');   // untouched, byte for byte
+    expect(res.reason).toMatch(/was corrupt and left in place/);
+  });
+
+  test('a BASENAME that is not the artifact amicus asked for is refused too (UNFENCEDEVICT)', async () => {
+    // The fence's other half. `cachedZip` matches on the artifact name, but the
+    // path reaches this branch from a caller that may not have, and deleting at
+    // an attacker-chosen basename is the shape the fence exists to stop.
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const zip = writeZip({ body: 'CORRUPT', name: 'something-else.zip', root: cacheRoot });
+    const { dir } = unanchoredElectronDir();
+
+    const res = await repair({ dir, zip, extract: badArchive() });
+
+    expect(fs.readFileSync(zip, 'utf8')).toBe('CORRUPT');
+    expect(res.reason).toMatch(/was corrupt and left in place/);
   });
 });
 

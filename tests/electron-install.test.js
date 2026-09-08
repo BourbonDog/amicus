@@ -373,7 +373,17 @@ describe('repairElectron (#53)', () => {
     const badBody = 'CORRUPT';
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32', body: badBody });
     fs.rmSync(path.join(dir, 'checksums.json'));
-    const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v43.1.1-win32-x64.zip');
+    // INSIDE a cache root. Round 3's C2 put the corrupt-artifact eviction behind
+    // the same `mayDeleteRejectedZip` fence the mismatch eviction always used, so
+    // a "cached" zip sitting where no cache root resolves is now deliberately
+    // left in place (tests/electron-artifact-custody.test.js pins that as
+    // UNFENCEDEVICT). This test is about the corrupt-and-re-download flow, so it
+    // puts the artifact where a real cache hit would have found it.
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    const savedRoot = process.env.ELECTRON_CACHE;
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const badZip = path.join(cacheRoot, 'a'.repeat(16), 'electron-v43.1.1-win32-x64.zip');
+    fs.mkdirSync(path.dirname(badZip), { recursive: true });
     fs.writeFileSync(badZip, badBody);
     // The re-downloaded zip is good.
     const goodZip = path.join(mkTmp('amicus-good-'), 'electron-v43.1.1-win32-x64.zip');
@@ -409,6 +419,8 @@ describe('repairElectron (#53)', () => {
         acquireLock: () => ({ release: () => {} }),
       },
     });
+
+    if (savedRoot === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedRoot; }
 
     // First extract attempt was on the corrupt cached zip and threw.
     expect(extractCalls).toBe(2);

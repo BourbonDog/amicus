@@ -439,7 +439,14 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
     // where their artifact went. The eviction is unchanged for an archive the
     // extractor positively identified as bad; the silence is not.
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
-    const zip = writeZip();
+    // INSIDE a cache root: round 3's C2 put the corrupt eviction behind the same
+    // `mayDeleteRejectedZip` fence the mismatch eviction always used, so a zip
+    // sitting nowhere a cache root resolves is now left in place on purpose
+    // (tests/electron-artifact-custody.test.js pins that half as UNFENCEDEVICT).
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    const savedRoot = process.env.ELECTRON_CACHE;
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const zip = writeZip({ root: cacheRoot });
     const downloadArtifact = jest.fn(async () => { throw new Error('offline'); });
     const badArchive = jest.fn(async () => {
       const e = new Error('end of central directory record signature not found');
@@ -449,6 +456,7 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
     const { res, spawn } = await repair({
       dir, exeName, distDir, zip, deps: { downloadArtifact, extract: badArchive },
     });
+    if (savedRoot === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedRoot; }
     expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
     expect(spawn).not.toHaveBeenCalled();                  // ...and nothing is spawned to rescue it (B1)
     expect(res.integrity).toBe('corrupt-artifact');

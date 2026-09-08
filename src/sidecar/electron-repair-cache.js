@@ -142,9 +142,27 @@ async function repairFromCache({
       log(`[amicus] ${refusal.reason}`);
       return cacheOnly ? { done: true, result: refusal } : { done: false, refusal };
     }
-    // The archive really is bad: evict it, and claim only what happened.
+    // The archive really is bad: evict it — THROUGH THE SAME FENCE the mismatch
+    // eviction uses — and claim only what happened.
+    //
+    // C2 (round 3): this was a bare `fs.rmSync(zip, { force: true })`. Two
+    // deletes of the same attacker-influenced path lived in this one module, one
+    // fenced and one not, and `mayDeleteRejectedZip`'s own docblock had already
+    // written the reason down — it called itself "STRICTLY NARROWER than the
+    // unconditional `fs.rmSync` on the corrupt-extract path" and left that path
+    // unconditional. `zip` comes out of a `readdirSync` of a directory anyone can
+    // write, so the fence realpaths it, requires the basename to be exactly the
+    // artifact amicus asked for, and requires it to resolve inside a resolved
+    // cache root; `containsOnDisk` returns false on any error, so an
+    // unresolvable path is refused rather than trusted.
+    //
+    // COST OF A WRONG `false`: a corrupt zip survives and is re-downloaded once
+    // per provision, and the reason below says "left in place" — the same
+    // availability cost the mismatch fence already accepts, never a safety one.
     let removed = false;
-    try { fs.rmSync(zip, { force: true }); removed = true; } catch { /* an unwritable cache is not a repair failure */ }
+    if (mayDeleteRejectedZip({ zip, fileName, env })) {
+      try { fs.rmSync(zip, { force: true }); removed = true; } catch { /* an unwritable cache is not a repair failure */ }
+    }
     const reason = `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and `
       + `${removed ? 'removed' : 'left in place'}; ${cacheOnly ? 'deferring re-download' : 'trying a fresh download'}.`
       + avHint(platform);
