@@ -19,7 +19,7 @@
  *       outside every control above.
  *
  * Named mutants this suite is the tripwire for: DIGESTNOTCHECKED, POISONKEPT,
- * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERBACK.
+ * FENCEDROPPED, ANCHORFROMTARGET, INSTALLERBACK, INPROCESSUNSCRUBBED.
  *
  * No network, no real extraction: downloadArtifact, extract and the lock are
  * injected everywhere.
@@ -558,6 +558,36 @@ describe('B1 — there is no last-resort installer to bypass the gate with', () 
     // ...and the failure is REPORTED, not swallowed into a bare {repaired:false}.
     expect(res.reason).toMatch(/The controlled download failed: network blocked/);
     expect(stderr.join('')).toMatch(/the controlled Electron download did not complete/);
+  });
+
+  test("the IN-PROCESS download runs with a SCRUBBED process.env (D5) (INPROCESSUNSCRUBBED)", async () => {
+    // Seat D5: the v4.9.6 scrub covered only the deleted install.js SPAWN, while
+    // amicus's own controlled download runs @electron/get IN THIS PROCESS off
+    // `process.env` and reads the very same names. Filed as a nit because the
+    // digest pin refuses redirected bytes anyway — a wasted download, not a
+    // compromise — but a stated threat model wider than the code is its own bug.
+    // MEASURED against the real @electron/get 5.0.0 with an injected downloader:
+    //   UNSCRUBBED -> https://hostile.example/attacker/v43.1.1/electron-...zip
+    //   SCRUBBED   -> https://github.com/electron/electron/releases/download/...
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    let envAtCallTime = null;
+    const downloadArtifact = jest.fn(async () => {
+      envAtCallTime = { ...process.env };
+      return writeZip();
+    });
+
+    const { res } = await repair({ dir, exeName, distDir, zip: null, deps: { downloadArtifact } });
+
+    expect(res.repaired).toBe(true);
+    // Every repo-plantable name is gone WHILE @electron/get resolves its URL...
+    expect(envAtCallTime.npm_config_electron_mirror).toBeUndefined();
+    expect(envAtCallTime.npm_config_electron_use_remote_checksums).toBeUndefined();
+    expect(envAtCallTime.npm_package_config_electron_mirror).toBeUndefined();
+    // ...the machine owner's BARE mirror is untouched, because a repo cannot set it...
+    expect(envAtCallTime.ELECTRON_MIRROR).toBe('https://mirror.corp/electron/');
+    // ...and process.env is whole again afterwards.
+    expect(process.env.npm_config_electron_mirror).toBe(HOSTILE.npm_config_electron_mirror);
+    expect(process.env.npm_package_config_electron_mirror).toBe(HOSTILE.npm_package_config_electron_mirror);
   });
 
   test('the installer entry point is gone from the module surface', () => {

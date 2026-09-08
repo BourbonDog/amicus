@@ -124,4 +124,56 @@ function isRepoPlantedName(name) {
   return REPO_ENV_PREFIXES.some((prefix) => String(name).toLowerCase().startsWith(prefix));
 }
 
-module.exports = { isRepoPlantedName, REPO_ENV_PREFIXES };
+/**
+ * Run `fn` with every repo-plantable electron name DELETED from `env`, restoring
+ * each one before returning — whether `fn` returned a value, returned a promise,
+ * or threw (council seat D5).
+ *
+ * THE HOLE THIS CLOSES. The v4.9.6 mirror-knob scrub covered only the
+ * last-resort `install.js` SPAWN, and amicus's own controlled download runs
+ * `@electron/get` IN THIS PROCESS, reading `process.env` directly. So a hostile
+ * repository could still point amicus's own download at its mirror. It was filed
+ * as a nit because the digest pin refuses the redirected bytes anyway — this is
+ * a wasted download, not a compromise — but a stated threat model that is wider
+ * than the code is its own defect.
+ *
+ * AROUND THE SYNCHRONOUS CALL ONLY, and that is enough. MEASURED in the
+ * installed @electron/get 5.0.0: `downloadArtifact` reads every repo-plantable
+ * name in its SYNCHRONOUS PREFIX — `getArtifactVersion` then
+ * `getArtifactRemoteURL`, whose five `mirrorVar` calls (dist/artifact-utils.js,
+ * lines 20-35) all run before that function reaches any `await`, and nothing in
+ * `downloadArtifact` awaits before them. The promise is returned UNAWAITED, so a
+ * long-lived MCP process never sees a scrubbed env across an await. This is the
+ * contract `utils/engine-output-flag.js :: withOutputTokenFlag` already ships,
+ * copied deliberately rather than reinvented.
+ *
+ * NAMED LIMIT, because the scrub does not cover it: `validateArtifact`'s
+ * recursive `SHASUMS256.txt` fetch happens AFTER awaits, with the environment
+ * restored. It is reachable only when no `checksums` table went out — i.e. on
+ * the already-unpinned, already-`unverified` path, where the mirror is what
+ * vouches for the bytes in the first place.
+ *
+ * `delete` and restore, not `= undefined`: assigning undefined to a process.env
+ * key stores the STRING 'undefined', which `mirrorVar` would read as a truthy
+ * mirror URL and use.
+ * @template T
+ * @param {() => T} fn called synchronously, exactly once
+ * @param {NodeJS.ProcessEnv} [env] defaults to process.env
+ * @returns {T} whatever fn returned (a promise is returned, never awaited here)
+ */
+function withScrubbedRepoEnv(fn, env = process.env) {
+  const removed = [];
+  for (const name of Object.keys(env)) {
+    if (isRepoPlantedName(name)) {
+      removed.push([name, env[name]]);
+      delete env[name];
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [name, value] of removed) { env[name] = value; }
+  }
+}
+
+module.exports = { isRepoPlantedName, withScrubbedRepoEnv, REPO_ENV_PREFIXES };

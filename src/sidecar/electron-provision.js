@@ -22,6 +22,7 @@ const { resolveCacheRoots } = require('./electron-cache');
 const { readArtifactBytes } = require('./electron-custody');
 const { extractBytesToDist } = require('./electron-layout');
 const { refuseUnreadableArtifact, rejectDownloadedZip } = require('./electron-refuse');
+const { withScrubbedRepoEnv } = require('./electron-env-scrub');
 const { artifactFileName, expectedDigest, verifyArtifactBytes } = require('./electron-trust');
 const { containsOnDisk } = require('../utils/path-fence');
 
@@ -103,7 +104,18 @@ async function controlledProvision({
     log('[amicus]   are checked against the SHASUMS256.txt the mirror itself serves. The result');
     log('[amicus]   is reported as unverified.');
   }
-  const zip = await downloadArtifact({
+  // D5: @electron/get runs IN THIS PROCESS and reads the same repo-plantable
+  // npm_config_electron_* / npm_package_config_electron_* names install.js does.
+  // The scrub is held only across the synchronous prefix, where every one of
+  // those reads happens; the promise is returned unawaited.
+  //
+  // IT SCRUBS `process.env`, NOT THIS FUNCTION'S `env` ARGUMENT, and that is the
+  // point. `env` is an injectable input to cache-root RESOLUTION; the env
+  // @electron/get actually reads is `process.env`, and the library offers no way
+  // to change that. Threading `env` here would make the control silently do
+  // nothing for any caller that passed a synthetic one — a guard aimed at a
+  // surface its target never reads.
+  const zip = await withScrubbedRepoEnv(() => downloadArtifact({
     version,
     artifactName: 'electron',
     // MEASURED, and stated because the surrounding prose used to claim
@@ -119,7 +131,7 @@ async function controlledProvision({
     arch,
     ...(digest ? { checksums: { [fileName]: digest } } : {}),
     downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
-  });
+  }));
   // READ THE BYTES ONCE, and never resolve that path again. Everything after
   // this line acts on a Buffer in amicus's own heap.
   const held = readArtifactBytes({ zip, fs });

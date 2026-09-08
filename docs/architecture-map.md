@@ -559,7 +559,7 @@ evals/
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()`, `cachedZip()` |
 | `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
-| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `REPO_ENV_PREFIXES()` |
+| `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |

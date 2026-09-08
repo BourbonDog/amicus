@@ -65,6 +65,69 @@ describe('the split is a RE-EXPORT, not a second copy', () => {
   });
 });
 
+describe('withScrubbedRepoEnv — the IN-PROCESS download scrub (D5) (INPROCESSUNSCRUBBED)', () => {
+  // Seat D5: the v4.9.6 scrub covered only the last-resort install.js SPAWN, and
+  // amicus's own controlled download runs @electron/get IN THIS PROCESS off
+  // `process.env`. MEASURED against the installed @electron/get 5.0.0 with an
+  // injected downloader and no network:
+  //   UNSCRUBBED -> https://hostile.example/attacker/v43.1.1/electron-v43.1.1-win32-x64.zip
+  //   SCRUBBED   -> https://github.com/electron/electron/releases/download/v43.1.1/...
+  const HOSTILE = {
+    npm_config_electron_mirror: 'http://attacker.example/evil/',
+    NPM_CONFIG_ELECTRON_MIRROR: 'http://attacker.example/evil/',
+    npm_package_config_electron_customFilename: 'evil.zip',
+    npm_config_electron_use_remote_checksums: '1',
+  };
+  const KEPT = {
+    ELECTRON_MIRROR: 'https://mirror.corp/electron/',
+    electron_config_cache: '/var/cache/electron',
+    PATH: '/usr/bin',
+  };
+
+  test('every repo-plantable name is gone DURING the call, and back after it', () => {
+    const env = { ...HOSTILE, ...KEPT };
+    let during = null;
+    const out = scrub.withScrubbedRepoEnv(() => { during = { ...env }; return 'result'; }, env);
+
+    expect(out).toBe('result');
+    for (const name of Object.keys(HOSTILE)) { expect(during[name]).toBeUndefined(); }
+    for (const [name, value] of Object.entries(KEPT)) { expect(during[name]).toBe(value); }
+    expect(env).toEqual({ ...HOSTILE, ...KEPT });        // restored, byte for byte
+  });
+
+  test('the promise is returned UNAWAITED, so the env is back before it settles', async () => {
+    // The contract engine-output-flag.js already ships. A long-lived MCP process
+    // must never see a scrubbed environment across an await — every other child
+    // it spawns in that window would inherit it.
+    const env = { ...HOSTILE };
+    let seenInsideTheAwait = null;
+    await scrub.withScrubbedRepoEnv(() => (async () => {
+      await Promise.resolve();
+      seenInsideTheAwait = env.npm_config_electron_mirror;
+    })(), env);
+
+    expect(seenInsideTheAwait).toBe(HOSTILE.npm_config_electron_mirror);
+    expect(env).toEqual(HOSTILE);
+  });
+
+  test('a throw restores just as completely as a return', () => {
+    const env = { ...HOSTILE, ...KEPT };
+    expect(() => scrub.withScrubbedRepoEnv(() => { throw new Error('boom'); }, env)).toThrow('boom');
+    expect(env).toEqual({ ...HOSTILE, ...KEPT });
+  });
+
+  test('a name is RESTORED, never re-added as the string "undefined"', () => {
+    // `env[name] = undefined` stores the STRING 'undefined', which mirrorVar
+    // would read as a truthy mirror URL and use.
+    const env = { npm_config_electron_mirror: 'http://attacker.example/evil/' };
+    scrub.withScrubbedRepoEnv(() => {}, env);
+    expect(env.npm_config_electron_mirror).toBe('http://attacker.example/evil/');
+    const empty = {};
+    scrub.withScrubbedRepoEnv(() => {}, empty);
+    expect(Object.keys(empty)).toEqual([]);
+  });
+});
+
 describe('the mirror-knob prefixes cover every name @electron/get can read', () => {
   // Re-enumerated from @electron/get 5.0.0, dist/artifact-utils.js lines 20-35.
   // mirrorVar(name) is called for exactly these five names, and reads six
