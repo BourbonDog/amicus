@@ -588,3 +588,65 @@ describe('F#4/F#5 — a corrupt cached artifact is actually evicted', () => {
     expect(fs.existsSync(zip)).toBe(true);
   });
 });
+
+describe('the REFUSAL text may only claim what this design still does (STAGINGCLAIMBACK)', () => {
+  // The blocker: `rejectDownloadedZip` still told the user "amicus hashes what
+  // it downloaded, in a directory only it can write, before extracting it" — a
+  // containment control DELETED in this same PR, because the council MEASURED
+  // its privacy claim false (mkdtempSync yields mode 666 on Windows and
+  // electron-stage.js skipped its chmod(0o700) on win32; a spinner found the
+  // fixed `amicus-electron-stage-` prefix on its FIRST readdir). The commit that
+  // set out to "stop the docs describing a copy" fixed the .md files and missed
+  // this string, which is what a user actually reads on the one screen amicus
+  // prints when it is telling them something is wrong. Nothing pinned it, so
+  // nothing caught it.
+  //
+  // This is the exact overclaim class the certified property exists to stop —
+  //   **Amicus never itself writes, or reports as verified, bytes it did not hash.**
+  // — printed by the refusal path itself.
+  // eslint-disable-next-line global-require
+  const { rejectDownloadedZip } = require('../src/sidecar/electron-refuse');
+
+  test('the DOWNLOAD refusal describes the buffer, and claims no private directory', () => {
+    const lines = [];
+    const out = rejectDownloadedZip({
+      gate: { verdict: 'mismatch', actual: 'a'.repeat(64), expected: 'b'.repeat(64) },
+      fileName: ZIP_NAME,
+      log: (m) => lines.push(String(m)),
+    });
+    const text = lines.join(' ');
+
+    expect(text).toMatch(/DOWNLOADED electron artifact REFUSED/);
+    expect(text).toMatch(/read these bytes ONCE, into its own memory/);
+    expect(text).toMatch(/no copy on disk and no path in play/);
+    expect(text).toMatch(/NOT extracted/);
+    // The retracted claims, in the words that were on screen.
+    expect(text).not.toMatch(/directory only it can write/);
+    expect(text).not.toMatch(/private directory/i);
+    expect(out.reason).toMatch(/was REFUSED/);
+  });
+
+  test('NOTHING amicus ships still claims the deleted private staging directory', () => {
+    // The generic guard, because the specific string above is the SECOND place
+    // this claim survived the deletion of the thing it described. Anything
+    // shipped — code, scripts, docs — that still promises a directory only
+    // amicus can write is describing a design that is gone.
+    const roots = ['src', 'scripts', 'bin', 'docs', 'electron'];
+    const RETRACTED = [/directory only it can write/i, /in a private directory/i];
+    const offenders = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) { walk(full); continue; }
+        if (!/[.](js|md|cjs|mjs)$/.test(e.name)) { continue; }
+        if (RETRACTED.some((r) => r.test(fs.readFileSync(full, 'utf8')))) { offenders.push(full); }
+      }
+    };
+    for (const r of roots) {
+      const full = path.join(__dirname, '..', r);
+      if (fs.existsSync(full)) { walk(full); }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});

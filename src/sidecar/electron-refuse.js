@@ -156,7 +156,10 @@ function rejectCachedZip({ gate, zip, fileName, mayDelete = false, fs, log = () 
  * dead in 5.0.0 (the only read guard is `shouldTryReadCache(effectiveCacheMode(...))`,
  * and amicus sends no `cacheMode`), so it validates a file AT ITS CACHE PATH and
  * hands that back. Either way the vouching happened somewhere amicus does not
- * control, which is the whole reason the bytes are staged and re-hashed here.
+ * control, which is the whole reason the bytes are read into memory and
+ * re-hashed here. (They are not COPIED anywhere: the private staging directory
+ * that used to hold them was deleted in this change, its privacy claim having
+ * been measured false.)
  *
  * NOTHING IS DELETED. The refused artifact stays where @electron/get put it, and
  * the CACHE route removes it on the next run through the fence that was written
@@ -171,9 +174,18 @@ function rejectDownloadedZip({ gate, fileName, log = () => {} }) {
     : collapseExcerpt(gate.reason);
   log(`[amicus] DOWNLOADED electron artifact REFUSED: ${fileName}`);
   log(`[amicus]   ${what}`);
-  log('[amicus] amicus hashes what it downloaded, in a directory only it can write, before');
-  log('[amicus] extracting it. These bytes were NOT extracted and no Electron was installed');
-  log('[amicus] from them. Check what ELECTRON_MIRROR points at.');
+  // WHAT THIS LINE MAY CLAIM. It used to promise the download was hashed inside
+  // a PRIVATE staging directory — a containment property that was DELETED in
+  // this same change, because the council measured it false (mkdtempSync yields
+  // mode 666 on Windows and the chmod(0o700) was skipped on win32, and a spinner
+  // found the fixed `amicus-electron-stage-` prefix on its FIRST readdir). The
+  // docs describing that copy were fixed and this string was missed; nothing
+  // pinned it, so nothing caught it. It now states the property that is
+  // actually true, and it is pinned by a test.
+  log('[amicus] amicus read these bytes ONCE, into its own memory, and hashed THAT buffer — the');
+  log('[amicus] same buffer it would have extracted. There is no copy on disk and no path in play');
+  log('[amicus] after the read. These bytes were NOT extracted and no Electron was installed from');
+  log('[amicus] them. Check what ELECTRON_MIRROR points at.');
   log('[amicus] Headless runs and the council work without the GUI.');
   return {
     repaired: false,
