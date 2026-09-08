@@ -6931,6 +6931,55 @@ and top-level `docs/*.md`.
   and `saveConfig` rejects `__proto__`) — see also `BACKLOG.md:5295`. v4.8.0's changelog scopes the
   "all are now seeded" claim to the config and resolution path because of this.
 
+## v4.9.6 records — artifact custody (2026-09-08)
+
+**✅ v4.9.6 RELEASED 2026-09-08** — tag `v4.9.6` → `0bc71091` (`--no-ff` merge of `release/v4.9.6`,
+release commit `51e66d43`, on top of PR #237's merge `0fcc5585`), npm `amicus@4.9.6`, MCP Registry
+`4.9.6`/`active` (page 2 of 2, 41 versions), GH Release live. Gates: 622 suites / 9,787 tests /
+8 skipped, exit 0 on the merge commit; lint, sizes, citations, `validate-docs --full` and
+`generate-docs --check` all 0. Tarball verified: roadmap names v4.9.6, `runInstaller` absent (0 hits),
+`yauzl ^2.10.0` declared, LF shebang, `.superpowers`/`BACKLOG.md`/`docs/superpowers` all excluded.
+
+**ONE RACE, THREE REMEDIES, TWO DEFEATED BY MEASUREMENT — this is the durable lesson.**
+v4.9.5 hashed the artifact at a PATH and handed that path to an extractor that re-opened it.
+1. **Rename** into a private dir → defeated: a rename moves a directory ENTRY, not an inode; an
+   attacker's hard link keeps a name for the same bytes.
+2. **Copy** into a `0700` dir under `os.tmpdir()` → defeated: `0700` excludes OTHER users, not the
+   same-uid attacker the threat model assumes. Measured worse — the prefix was fixed and found on a
+   first `readdir`, and on Windows the `chmod` was skipped so the mode was never attempted.
+3. **A retained file descriptor** → also not custody: a same-user `writeFileSync` truncates and
+   rewrites the SAME inode, and the held fd reads the substitution.
+4. **Read once into a Buffer** → holds. No second path resolution exists to race. Controller-verified:
+   instrumenting every path-taking `fs` call across a full repair records exactly ONE `openSync` of
+   the artifact, and poisoning the file afterwards cannot alter the hashed bytes.
+
+**Process record.** FOUR council runs across two PRs (#236 the review record for the already-shipped
+v4.9.5, #237 the fix). They found: 8 findings / 4 major; 13 findings / 1 blocker; 7 findings /
+4 major; 4 findings / 1 major. Between them they caught a blocker, the D1 race that killed remedy 2,
+the C2 trigger boundary being wrong TWICE in different ways, and — repeatedly — RECORDS that
+described behaviour the code no longer had (a PR description narrating a deleted remedy for two
+rounds, a CHANGELOG promising "unverified bytes never become an install", a backlog entry calling a
+production dependency dev-only). Internal review lenses plus controller probes did NOT substitute for
+the bench: three bypasses survived seven green named mutants because mutants sabotage CODE while all
+three attacks fed the control hostile INPUT.
+
+**Deferred to 4.9.7** — see the `v4.9.7 candidates` section above: A1 (a failed `dist` retirement can
+delete a working install whose `path.txt` names another platform's exe — verified NOT a regression),
+B3 (a truncated archive whose entry names cannot be read reaches the native rescue — the boundary
+failing OPEN), B2 (the rescue's cleanup does not reach writes a native tool makes outside its dir).
+The run that raised them reviewed at **2 of 4 seats**.
+
+- [ ] **macOS and Linux symlink handling is UNVERIFIED and no council run can close it.** The darwin
+  artifact is an `.app` bundle with real symlinks and the target-escape check added in v4.9.6 is a
+  behaviour `extract-zip` does not have — it could reject a layout that previously worked. Needs a
+  real darwin machine or a CI job on the actual artifact. Stated in the v4.9.6 release notes rather
+  than waited on.
+- [ ] **The council bench is degrading and it is now affecting verdicts.** Across the four runs the
+  seat counts were 3/4, 4/4, 3/4, 2/4. `qwen` and `glm` repeatedly died `OUTPUT_LENGTH` (the whole
+  reservation spent on reasoning, zero output — issue #218's own motivating failure) and `deepseek`
+  died `NO_OUTPUT_BACKSTOP` at 912 s on the final run. The last verdict therefore carries two seats.
+  The `outputBudget` lever shipped in v4.9.4 is the obvious thing to try on the CI bench.
+
 ## v4.9.7 candidates — deferred from the v4.9.6 cut (2026-09-08)
 
 Filed from council run 34239260931 on PR #237, verdict "Fix these first" at **2 of 4 seats — a
