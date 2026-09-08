@@ -128,19 +128,21 @@ async function repairElectron({
 } = {}) {
   const fs = deps.fs || fsDefault;
   // Default extract: from the BUFFER amicus already hashed, never from a name.
-  // `unzip.js` is byte-for-byte unchanged and still exported; it is simply no
-  // longer on this path, because every one of its strategies takes a PATH and a
-  // path is what the custody finding is about (see zip-from-buffer.js).
+  // `unzip.js` is byte-for-byte unchanged; the one thing still taken from it is
+  // its native PLAN, and only behind the hatch (see ./electron-native-rescue).
   //
   // WHAT CAME WITH IT AND WHAT DID NOT. Its idle + hard-cap STALL BOUND is
   // reimplemented in `zip-from-buffer.js` with the same numbers, so this path is
   // bounded again (it was not, for three commits). Its NATIVE OS unzip fallback
-  // is not, and cannot be: `tar`/`Expand-Archive`/`ditto`/`unzip` all take a
-  // path, and feeding one either the artifact or a temp copy of our Buffer would
-  // undo the custody property outright. The cost of that trade is named in
-  // zip-from-buffer.js's docblock.
+  // is NOT the default and never can be: `tar`/`Expand-Archive`/`ditto`/`unzip`
+  // all take a path, and feeding one either the artifact or a temp copy of our
+  // Buffer undoes the custody property outright. C2 re-wires it as a RESCUE for
+  // ONE failure class, reachable only with AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 —
+  // the flag whose documented meaning is already "I accept bytes amicus cannot
+  // vouch for". `spawn` is threaded for it, and stays injectable for tests.
   const extract = deps.extract
     || ((bytes, o) => extractZipBuffer(bytes, { ...o, deps: { fs, log: stderrLog } }));
+  const spawn = deps.spawn;
   const findZip = deps.cachedZip || ((o) => cachedZip(o));
   const acquireLock = deps.acquireLock || ((o) => acquireRepairLock({ ...o, fs }));
   // Lazy: import the ESM-only @electron/get only on the network path, so cacheOnly
@@ -191,7 +193,7 @@ async function repairElectron({
       const attempt = await repairFromCache({
         zip, fileName, anchor, policy, electronDir, platform, arch, version, cacheOnly,
         extract, verifyOutcome: () => verifyExtractOutcome({ electronDir, platform, fs }),
-        fs, env: process.env, log: stderrLog,
+        fs, spawn, env: process.env, log: stderrLog,
       });
       if (attempt.done) { return attempt.result; }
       refusal = attempt.refusal;
@@ -213,7 +215,7 @@ async function repairElectron({
       const downloadArtifact = await resolveDownloadArtifact();
       const result = await controlledProvision({
         electronDir, platform, arch, version, anchor, downloadArtifact, extract,
-        fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
+        fs, spawn, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
       });
       // F3 (seat B4) — FAIL CLOSED ON A SHAPE NOBODY RECOGNISES. This used to be
       // `|| { pinned: false }`, described as "an unrecognisable return marks,

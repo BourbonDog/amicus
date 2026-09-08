@@ -21,6 +21,7 @@ const path = require('path');
 const { resolveCacheRoots } = require('./electron-cache');
 const { readArtifactBytes } = require('./electron-custody');
 const { extractBytesToDist } = require('./electron-layout');
+const { withNativeRescue } = require('./electron-native-rescue');
 const { refuseUnreadableArtifact, rejectDownloadedZip } = require('./electron-refuse');
 const { withScrubbedRepoEnv } = require('./electron-env-scrub');
 const { artifactFileName, expectedDigest, verifyArtifactBytes } = require('./electron-trust');
@@ -90,7 +91,7 @@ function cacheRootFor(env = process.env) {
  */
 async function controlledProvision({
   electronDir, platform, arch, version, anchor, downloadArtifact, extract,
-  fs, env = process.env, downloadMs = 480000, policy = {}, log = () => {},
+  fs, spawn, env = process.env, downloadMs = 480000, policy = {}, log = () => {},
 }) {
   const fileName = artifactFileName({ version, platform, arch });
   let digest = expectedDigest(anchor, fileName);
@@ -152,14 +153,28 @@ async function controlledProvision({
   }
   const gate = verifyArtifactBytes({ bytes: held.bytes, anchor, fileName, policy, log });
   if (!gate.allowed) { return { pinned: false, refused: rejectDownloadedZip({ gate, fileName, log }) }; }
-  await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract, fs });
+  // C2, on BOTH routes — F3 is the standing reminder of what a rule wired to one
+  // provision route and not the other costs. See ./electron-native-rescue for the
+  // trigger boundary; `rescue.used` is folded into `pinned` below.
+  const rescue = {};
+  const extractOrRescue = withNativeRescue({ extract, gate, policy, rescue, platform, fs, spawn, log });
+  await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract: extractOrRescue, fs });
   // BOTH halves, deliberately. `digest` says a `checksums` table went out, so a
   // hatch-dropped pin still reports unverified even when the anchor happens to
   // agree; `verdict === 'verified'` says amicus itself hashed these exact bytes
   // and they matched. Either half alone has been wrong: F3's first cut reported
   // the table, and the table alone is what seat F#2 showed does not describe the
   // bytes that reach the extractor.
-  return { pinned: !!digest && gate.verdict === 'verified' };
+  //
+  // `!rescue.used` IS IMPLIED TODAY, AND IS STATED ANYWAY — said out loud so it
+  // is not mistaken for a measured control. A rescue requires the hatch, and the
+  // hatch has already set `digest` to null above, so `pinned` is false on every
+  // hatch-on provision whether or not a rescue ran: on THIS route the term
+  // changes no observable result. It is here because the property it encodes —
+  // a tree a child process extracted from a path was never pinned — must not
+  // depend on that coupling holding. On the CACHE route the same term is
+  // load-bearing and observable (electron-repair-cache.js :: repairFromCache).
+  return { pinned: !!digest && gate.verdict === 'verified' && !rescue.used };
 }
 
 /**

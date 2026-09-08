@@ -115,9 +115,10 @@ src/
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-layout.js  # The on-disk LAYOUT of an installed `electron` package: where the executable
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
+│   ├── electron-native-rescue.js  # THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor
 │   ├── electron-provision.js  # Electron CONTROLLED provision — the pinned download, and the fence that says
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
-│   ├── electron-refuse.js  # Electron artifact REFUSALS — the four ways amicus declines to turn bytes into
+│   ├── electron-refuse.js  # Electron artifact REFUSALS — the ways amicus declines to turn bytes into an
 │   ├── electron-repair-cache.js  # ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`,
 │   ├── electron-state.js  # Electron install-state probes (#76).
 │   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor and the gate. (The third
@@ -565,9 +566,10 @@ evals/
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
+| `sidecar/electron-native-rescue.js` | THE NATIVE-EXTRACTOR RESCUE — the one way an archive amicus's own extractor | `withNativeRescue()`, `isRescuableFailure()`, `RESCUE_TRIGGER()`, `RESCUE_ZIP()`, `INCOMING_PREFIX()` |
 | `sidecar/electron-provision.js` | Electron CONTROLLED provision — the pinned download, and the fence that says | `cacheRootFor()`, `controlledProvision()`, `mayDeleteRejectedZip()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
-| `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the four ways amicus declines to turn bytes into | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
+| `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the ways amicus declines to turn bytes into an | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
 | `sidecar/electron-repair-cache.js` | ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`, | `repairFromCache()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
 | `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifactBytes()`, `sha256Bytes()` |

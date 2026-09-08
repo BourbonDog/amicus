@@ -40,6 +40,7 @@
 
 const { readArtifactBytes } = require('./electron-custody');
 const { extractBytesToDist } = require('./electron-layout');
+const { withNativeRescue } = require('./electron-native-rescue');
 const { mayDeleteRejectedZip } = require('./electron-provision');
 const { avHint } = require('./electron-quarantine');
 const {
@@ -87,7 +88,7 @@ const EVICTS_THE_ARTIFACT = 'UNZIP_BUFFER_FAILED';
  */
 async function repairFromCache({
   zip, fileName, anchor, policy, electronDir, platform, arch, version,
-  cacheOnly, extract, verifyOutcome, fs, env = process.env, log = () => {},
+  cacheOnly, extract, verifyOutcome, fs, spawn, env = process.env, log = () => {},
 }) {
   const held = readArtifactBytes({ zip, fs });
   if (!held.bytes) {
@@ -104,8 +105,15 @@ async function repairFromCache({
     return cacheOnly ? { done: true, result: refusal } : { done: false, refusal };
   }
 
+  // C2: a PARSE FAILURE — and nothing else — may be answered by the native
+  // extractor, and only when the hatch this route's own gate already honours is
+  // set. `./electron-native-rescue` owns that boundary and the custody it spends;
+  // `rescue.used` is what stops a rescued install ever reporting a clean repair,
+  // because the bytes in dist/ were then placed by a child process from a path.
+  const rescue = {};
+  const extractOrRescue = withNativeRescue({ extract, gate, policy, rescue, platform, fs, spawn, log });
   try {
-    await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract, fs });
+    await extractBytesToDist({ bytes: held.bytes, electronDir, platform, extract: extractOrRescue, fs });
     // A non-throwing extract with no exe is the AV-quarantine signature.
     const outcome = verifyOutcome();
     // A2/B3, and the gap the third round found in the first answer to them: the
@@ -118,7 +126,12 @@ async function repairFromCache({
     // anchor, AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — the DOWNLOAD route marked it
     // (it drops the pin and requires `verified`) and this one did not. The two
     // routes now agree: `verified` is the only verdict that reports clean.
-    return { done: true, result: gate.verdict === 'verified' ? outcome : { ...outcome, unverified: true } };
+    //
+    // C2 ADDS A SECOND WAY TO LOSE `verified`, for the same reason the first
+    // exists: a NATIVE RESCUE extracted a path through a child process, so
+    // whatever landed in dist/ is not what amicus hashed, whatever the artifact's
+    // own digest said.
+    return { done: true, result: gate.verdict === 'verified' && !rescue.used ? outcome : { ...outcome, unverified: true } };
   } catch (err) {
     // C4 IS A CALL-SITE INVARIANT. A path-traversal refusal must not be
     // deleted-and-retried, nor reported as "corrupt" — it stops here, and the

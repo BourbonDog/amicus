@@ -1,6 +1,9 @@
 /**
- * Electron artifact REFUSALS — the four ways amicus declines to turn bytes into
- * an Electron install, and the exact words it uses each time.
+ * Electron artifact REFUSALS — the ways amicus declines to turn bytes into an
+ * Electron install, and the exact words it uses each time. (Since C2 it also
+ * holds the two NOTICES the native-extractor rescue speaks: the offer a parse
+ * failure gets when the hatch is off, and the window disclosure it prints when
+ * the hatch is on. Same seam — the words live here, the policy does not.)
  *
  * SPLIT OUT of electron-provision.js (v4.9.6, second council round) because that
  * file sits under the repo's 300-line gate and the round added two more
@@ -243,7 +246,49 @@ function refuseUnreadableArtifact({ fileName, zip, why, detail = '', log = () =>
   };
 }
 
+/**
+ * THE OFFER a parse failure gets when the native-extractor rescue is NOT armed.
+ *
+ * It NAMES `AMICUS_ALLOW_UNVERIFIED_ELECTRON` and says what setting it would do,
+ * so an air-gapped user whose archive amicus cannot read can find the escape
+ * hatch without reading the source — the whole point of the C2 finding. It is
+ * printed for a PARSE FAILURE and nothing else: a security refusal must never be
+ * answered with an offer to retry, which is C4 with a human in the loop.
+ * `electron-native-rescue.js` owns which failures reach here.
+ */
+function offerNativeRescue({ reason, log = () => {} }) {
+  log(`[amicus] amicus could not read this Electron archive: ${collapseExcerpt(reason)}`);
+  log('[amicus] There is ONE rescue for that, and it is OFF. With');
+  log('[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 set BEFORE provisioning, amicus writes the bytes');
+  log('[amicus] it hashed into a private directory inside the electron package and hands that PATH');
+  log('[amicus] to a native extractor (tar / Expand-Archive / ditto / unzip) — the only way an');
+  log('[amicus] archive amicus cannot parse becomes an install on a machine with no network to');
+  log('[amicus] re-download from. It COSTS custody: between amicus writing that file and the child');
+  log('[amicus] process opening it, anything running as your user can substitute it, and what the');
+  log('[amicus] child extracts is promoted into dist/ without ever being hashed again. That is not');
+  log('[amicus] safe — it is the trade the flag buys. Prefer a different copy of the artifact.');
+}
+
+/**
+ * THE NOTICE a user sees when the rescue actually runs. Printed BEFORE the child
+ * is spawned, because the window opens at the write, and it DESCRIBES that window
+ * instead of reassuring anyone about it — the rescue is not safe, and the words a
+ * user reads while it happens have to say so.
+ */
+function announceNativeRescue({ zip, reason, log = () => {} }) {
+  log('[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — running the NATIVE-EXTRACTOR RESCUE.');
+  log(`[amicus]   amicus could not read the archive itself: ${collapseExcerpt(reason)}`);
+  log('[amicus] THE WINDOW THIS OPENS, stated plainly. amicus has written the bytes it hashed to');
+  log(`[amicus]   ${collapseExcerpt(zip, PATH_EXCERPT_CHARS)}`);
+  log('[amicus] and is about to hand that PATH to a native extractor it does not control. Between');
+  log('[amicus] the write and the child opening the file, anything running as your user can');
+  log('[amicus] replace it, and whatever the child extracts is promoted into dist/ WITHOUT being');
+  log('[amicus] hashed again. So this run is not covered by the property the rest of the');
+  log('[amicus] provisioning holds to — that amicus only ever writes bytes it hashed. It is NOT');
+  log('[amicus] safe; it is what the flag buys, and the result is reported as unverified.');
+}
+
 module.exports = {
   isUnsafeArchive, refuseUnsafeArchive, rejectCachedZip, rejectDownloadedZip, refuseUnreadableArtifact,
-  PATH_EXCERPT_CHARS,
+  offerNativeRescue, announceNativeRescue, PATH_EXCERPT_CHARS,
 };

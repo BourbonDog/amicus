@@ -86,17 +86,26 @@ const { failure } = require('./zip-entry-write');
  *   (`try { rmSync } catch {}`) and `sweepPromoteLitter` takes what an EPERM
  *   leaves. A bound that cannot end is not a bound.
  *
- * LAYER 2 IS DELIBERATELY NOT BACK, and this is a real loss. Every native
- * strategy (`tar`, `Expand-Archive`, `ditto`, `unzip`) takes a PATH, and a path
- * is what the custody finding is about: handing one an artifact would extract
- * bytes amicus did not hash, and writing our hashed Buffer to a temp file for it
- * would rebuild the staged copy the council deleted. So an archive yauzl cannot
- * parse but a native extractor could is a failed repair plus a re-download,
- * where it used to be a silent rescue. NOT lost to that trade is the stall — a
- * stall is `UNZIP_BUFFER_STALLED`, never a verdict about the artifact and never
- * an eviction (see `electron-repair-cache.js`). LAYER 3 lives upstream and
- * always did: `electron-quarantine.verifyExtractOutcome` stats the exe after a
- * non-throwing extract.
+ * LAYER 2 IS NOT THE DEFAULT AND NEVER CAN BE. Every native strategy (`tar`,
+ * `Expand-Archive`, `ditto`, `unzip`) takes a PATH, and a path is what the
+ * custody finding is about: handing one an artifact would extract bytes amicus
+ * did not hash, and writing our hashed Buffer to a temp file for it would
+ * rebuild the staged copy the council deleted. The two properties cannot both
+ * hold on one run.
+ *
+ * WHAT THAT COST, AND WHAT C2 BOUGHT BACK. This paragraph used to end "an archive
+ * yauzl cannot parse but a native extractor could is a failed repair plus a
+ * re-download" — which on an air-gapped machine is a permanent no-rescue failure,
+ * and a council seat filed it as such. Layer 2 is now reachable again as a
+ * RESCUE, for that ONE failure class (`UNZIP_BUFFER_FAILED`) and only when
+ * `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` was already set. `electron-native-rescue.js`
+ * owns the whole boundary and the custody it spends; nothing here changed, and a
+ * stall in particular is still NOT a rescue trigger — `UNZIP_BUFFER_STALLED` is
+ * a verdict about nothing, this bound exists to STOP work rather than hand it to
+ * someone else, and it is still never an eviction (see `electron-repair-cache.js`).
+ * LAYER 3 lives upstream and always did:
+ * `electron-quarantine.verifyExtractOutcome` stats the exe after a non-throwing
+ * extract.
  */
 /** No-progress window, then the hard cap. unzip.js's IDLE_MS / MAX_MS, to the ms. */
 const IDLE_MS = 30_000;
