@@ -32,7 +32,7 @@
  *   `UNZIP_BUFFER_STALLED` as well, so the bound hands its work to a child
  *   process instead of stopping it.
  *   RED: "a STALL never reaches the rescue".
- * RESCUENOTOFFERED     electron-refuse.js :: offerNativeRescue — drop the line
+ * RESCUENOTOFFERED     electron-rescue-notice.js :: offerNativeRescue — drop the line
  *   naming AMICUS_ALLOW_UNVERIFIED_ELECTRON, so an air-gapped user cannot find
  *   the escape hatch without reading the source.
  *   RED: "the no-hatch refusal NAMES the flag and says what it would do".
@@ -48,6 +48,11 @@
  * RESCUEREPORTSCLEAN   electron-repair-cache.js :: repairFromCache — drop
  *   `&& !rescue.used`, so a rescued install reports a clean, verified repair.
  *   RED: "the CACHE route marks a rescued repair unverified".
+ * OFFEREDANDEVICTED    electron-repair-cache.js :: repairFromCache — drop the
+ *   `if (rescue.offered)` branch, so the run that OFFERS the rescue deletes the
+ *   artifact the offer tells the user to re-run against (equivalently: drop
+ *   `rescue.offered = true` in electron-native-rescue.js :: withNativeRescue).
+ *   RED: "the offered rescue still has something to act on".
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -58,6 +63,7 @@ const path = require('path');
 const ei = require('../src/sidecar/electron-install');
 const { withNativeRescue, RESCUE_ZIP } = require('../src/sidecar/electron-native-rescue');
 const { extractBytesToDist } = require('../src/sidecar/electron-layout');
+const { mayDeleteRejectedZip } = require('../src/sidecar/electron-provision');
 const { fakeElectronDir, SELF_ANCHOR_OFF, ZIP_BODY } = require('./helpers/fake-electron-dir');
 
 const VERSION = '43.1.1';
@@ -497,15 +503,18 @@ describe('C2 — wired into BOTH provision routes', () => {
   let stderr;
   let stderrSpy;
   let savedHatch;
+  let savedCache;
   beforeEach(() => {
     stderr = [];
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => { stderr.push(String(chunk)); return true; });
     savedHatch = process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+    savedCache = process.env.ELECTRON_CACHE;
     delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
   });
   afterEach(() => {
     stderrSpy.mockRestore();
     if (savedHatch === undefined) { delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON; } else { process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = savedHatch; }
+    if (savedCache === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedCache; }
   });
 
   /** repairElectron with a parse-failing extractor and a working native plan. */
@@ -578,12 +587,61 @@ describe('C2 — wired into BOTH provision routes', () => {
     expect(spawn).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
     expect(res.repaired).toBe(false);
-    // The artifact is EVICTED, exactly as before C2 — a parse failure is still
-    // the one verdict that says the archive is worthless.
-    expect(res.reason).toMatch(/corrupt/);
-    // ...and the user is told, in the same output, that there is a way through.
+    // The user is told, in the same output, that there is a way through.
     expect(stderr.join('')).toMatch(/AMICUS_ALLOW_UNVERIFIED_ELECTRON=1/);
     expect(stderr.join('')).toMatch(/native extractor/);
+  });
+
+  test('the offered rescue still has something to act on (OFFEREDANDEVICTED)', async () => {
+    // THE OFFER WAS A PROMISE THE SAME RUN BROKE. The ten-line offer above and
+    // the corrupt-artifact eviction hang on the IDENTICAL `UNZIP_BUFFER_FAILED`,
+    // so the first cut printed "set AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 BEFORE
+    // provisioning ... the only way an archive amicus cannot parse becomes an
+    // install on a machine with no network to re-download from" and then DELETED
+    // the archive on the way out. MEASURED end to end before the fix: the full
+    // offer on stderr, `was corrupt and removed`, `existsSync(zip) === false`,
+    // and the promised re-run answering `No cached electron zip found`.
+    //
+    // The test the eviction slipped past asserted only that the reason matched
+    // /corrupt/ — true whether the file was removed or kept — with its fixture
+    // zip in a bare tmpdir, where `mayDeleteRejectedZip` returns false and the
+    // delete never ran at all. This one puts the artifact where the fence really
+    // resolves it and asserts its FATE.
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip({ root: cacheRoot });
+
+    const { res } = await repair({ dir, zip });
+
+    // The fence would have allowed this delete: same basename, inside a resolved
+    // cache root. What stops it is the offer, not the fence.
+    expect(mayDeleteRejectedZip({ zip, fileName: ZIP_NAME, env: process.env })).toBe(true);
+    expect(fs.existsSync(zip)).toBe(true);
+    expect(fs.readFileSync(zip, 'utf8')).toBe(ZIP_BODY);
+    expect(res.reason).toMatch(/LEFT IN PLACE/);
+    expect(res.reason).toMatch(/rescue was offered on this run/);
+    // ...and the offer says so, so the user is not left guessing whether the
+    // copy the re-run needs is still there.
+    expect(stderr.join('')).toMatch(/has NOT discarded the archive it could not read/);
+  });
+
+  test('a rescue that was ARMED and failed still evicts (the offer is what holds it)', async () => {
+    // The other side of the same rule, so the fix cannot be read as "parse
+    // failures never evict". With the hatch set the rescue really is attempted;
+    // when every native strategy fails, nothing can read this archive and D2's
+    // eviction is exactly right.
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+    const cacheRoot = mkTmp('amicus-cacheroot-');
+    process.env.ELECTRON_CACHE = cacheRoot;
+    const { dir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
+    const zip = writeZip({ root: cacheRoot });
+
+    const { res, spawn } = await repair({ dir, zip, spawn: nativeSpawn({ lands: {} }) });
+
+    expect(spawn).toHaveBeenCalled();
+    expect(res.reason).toMatch(/was corrupt and removed/);
+    expect(fs.existsSync(zip)).toBe(false);
   });
 
   test('with the hatch set, an UNSAFE archive is still terminal on the wired route', async () => {
@@ -645,6 +703,15 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
       expect(prose(name)).not.toMatch(/does not re-enable anything else/);
       expect(prose(name)).not.toMatch(/the one thing it \*does\* widen/);
     }
+  });
+
+  test('both pages say the offering run KEEPS the archive (OFFEREDANDEVICTED)', () => {
+    // The other half of the same bug: troubleshooting.md said a cached artifact
+    // identified this way "is discarded" full stop, two lines above telling the
+    // reader to set the variable and provision again. Whichever half a reader
+    // believed, one of them was wrong.
+    expect(prose('troubleshooting.md')).toMatch(/not on the run that prints this message/);
+    expect(prose('configuration.md')).toMatch(/keeps\*\* the cached archive|that discard now waits/);
   });
 
   test('both pages name the rescue as a thing this variable arms', () => {

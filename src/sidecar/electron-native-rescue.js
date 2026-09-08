@@ -72,6 +72,23 @@
  * hashed. Reporting that as verified is the exact overclaim the custody property
  * forbids.
  *
+ * ── OFFERED-BUT-UNARMED: THE OFFER IS A PROMISE ──────────────────────────
+ * With the hatch OFF, a parse failure prints an offer naming the flag and telling
+ * an air-gapped user to set it and provision again. The FIRST cut of C2 printed
+ * that and then let the same `UNZIP_BUFFER_FAILED` reach the cache route's
+ * eviction, which DELETED the artifact on the way out — MEASURED end to end: the
+ * ten-line offer on stderr, `reason: "… was corrupt and removed"`, the zip gone,
+ * and the re-run the message asks for ending in `No cached electron zip found`.
+ * On the machine the whole finding is about, the offer named a rescue that its
+ * own run had just made impossible.
+ *
+ * So `rescue.offered` is set HERE, where the promise is made, and
+ * `electron-repair-cache.js` keeps the artifact when it is set. The cost is the
+ * availability cost that module already accepts wherever its delete fence says
+ * no: an unreadable zip survives and is re-downloaded once per provision. That
+ * is the right way round — a copy nobody can read costs one download; a copy
+ * that is gone costs the only rescue there was.
+ *
  * @module sidecar/electron-native-rescue
  */
 
@@ -84,8 +101,9 @@ const { spawnSync } = require('child_process');
 // this is a re-wiring of a caller, not a change to that module.
 const { nativeUnzipPlan, MAX_MS } = require('./unzip');
 // The two multi-line notices live where every other user-facing sentence in this
-// subsystem is written; this module decides, that one speaks.
-const { PATH_EXCERPT_CHARS, offerNativeRescue, announceNativeRescue } = require('./electron-refuse');
+// subsystem is written; this module decides, those two speak.
+const { PATH_EXCERPT_CHARS } = require('./electron-refuse');
+const { offerNativeRescue, announceNativeRescue } = require('./electron-rescue-notice');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** The ONE extractor verdict a rescue may act on. See the docblock's boundary. */
@@ -230,7 +248,9 @@ function nativeRescue({ bytes, dir, reason, platform, fs, spawn, maxMs, log }) {
  * @param {function} o.extract  the buffer extractor being wrapped
  * @param {object}   o.gate     verifyArtifactBytes's result (its `verdict` is read)
  * @param {object}   o.policy   electronTrustPolicy's result (the hatch)
- * @param {object}   o.rescue   OUT: `{used, strategy}` is set when a rescue ran
+ * @param {object}   o.rescue   OUT: `{used, strategy}` when a rescue ran, and
+ *   `{offered:true}` when one was named but not armed — the caller must not then
+ *   discard the artifact the offer points at
  * @returns {function} an extractor with the same (bytes, {dir}) signature
  */
 function withNativeRescue({
@@ -244,6 +264,9 @@ function withNativeRescue({
       // Every class but one leaves through here untouched and unadvertised.
       if (!isRescuableFailure(err)) { throw err; }
       if (!policy.allowUnverified) {
+        // `offered` IS THE OFFER'S RECEIPT, and the cache route is required to
+        // honour it: see the docblock's OFFERED-BUT-UNARMED section.
+        rescue.offered = true;
         offerNativeRescue({ reason: (err && err.message) || '', log });
         throw err;
       }

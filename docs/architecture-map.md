@@ -120,6 +120,7 @@ src/
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── electron-refuse.js  # Electron artifact REFUSALS — the ways amicus declines to turn bytes into an
 │   ├── electron-repair-cache.js  # ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`,
+│   ├── electron-rescue-notice.js  # THE TWO NOTICES the native-extractor rescue speaks — the offer a parse failure
 │   ├── electron-state.js  # Electron install-state probes (#76).
 │   ├── electron-trust.js  # Electron artifact TRUST core — the digest anchor and the gate. (The third
 │   ├── fallback-chains.js
@@ -571,6 +572,7 @@ evals/
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/electron-refuse.js` | Electron artifact REFUSALS — the ways amicus declines to turn bytes into an | `isUnsafeArchive()`, `refuseUnsafeArchive()`, `rejectCachedZip()`, `rejectDownloadedZip()`, `refuseUnreadableArtifact()` |
 | `sidecar/electron-repair-cache.js` | ATTEMPT 1 of the electron self-heal: turn a CACHED artifact into a `dist/`, | `repairFromCache()` |
+| `sidecar/electron-rescue-notice.js` | THE TWO NOTICES the native-extractor rescue speaks — the offer a parse failure | `offerNativeRescue()`, `announceNativeRescue()` |
 | `sidecar/electron-state.js` | Electron install-state probes (#76). | `electronDirFor()`, `probeElectronState()` |
 | `sidecar/electron-trust.js` | Electron artifact TRUST core — the digest anchor and the gate. (The third | `electronTrustPolicy()`, `resolveAnchor()`, `expectedDigest()`, `verifyArtifactBytes()`, `sha256Bytes()` |
 | `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |

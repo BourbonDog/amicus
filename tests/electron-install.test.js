@@ -424,8 +424,14 @@ describe('repairElectron (#53)', () => {
 
     // First extract attempt was on the corrupt cached zip and threw.
     expect(extractCalls).toBe(2);
-    // The bad cached zip was DELETED.
-    expect(fs.existsSync(badZip)).toBe(false);
+    // The bad cached zip was KEPT (C2, round 4). With the hatch unset, a parse
+    // failure prints the offer of the native-extractor rescue and telling a user
+    // to set a variable and provision again cannot delete the copy that re-run
+    // would act on. It is discarded once the rescue has run and every native
+    // extractor has failed too — pinned in tests/electron-native-rescue.test.js
+    // as OFFEREDANDEVICTED and its armed-and-failed sibling. Nothing here
+    // depends on the eviction: the fall-through is what this test is about.
+    expect(fs.existsSync(badZip)).toBe(true);
     // A forced fresh download was attempted.
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
     expect(downloadArtifact.mock.calls[0][0].force).toBe(true);

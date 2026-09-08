@@ -432,12 +432,19 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
     expect(res.reason).toMatch(/was REFUSED/);
   });
 
-  test('a CLASSIFIED bad archive still deletes and still falls through, with a reason', async () => {
+  test('a CLASSIFIED bad archive falls through, with a reason, and is KEPT for the offer', async () => {
     // A1 (council, confirmed 4 of 4): this branch used to delete the user's cache
     // entry and then, when the re-download also failed, return a bare
     // {repaired:false} with NO reason — the one message that would have explained
-    // where their artifact went. The eviction is unchanged for an archive the
-    // extractor positively identified as bad; the silence is not.
+    // where their artifact went. The silence is what A1 fixed, and it is what
+    // this test measures.
+    //
+    // C2 round 4 then took the delete off this run entirely: the same
+    // `UNZIP_BUFFER_FAILED` prints the offer of the native-extractor rescue, and
+    // an offer that says "set the variable and provision again" must not destroy
+    // the copy that re-run would act on. The eviction still happens once the
+    // rescue has been ARMED and every native extractor has failed on the archive
+    // too (tests/electron-native-rescue.test.js pins both halves).
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: PLATFORM });
     // INSIDE a cache root: round 3's C2 put the corrupt eviction behind the same
     // `mayDeleteRejectedZip` fence the mismatch eviction always used, so a zip
@@ -457,10 +464,10 @@ describe('C4 — a security refusal is terminal AT THE CALL SITE (UNSAFELAUNDERE
       dir, exeName, distDir, zip, deps: { downloadArtifact, extract: badArchive },
     });
     if (savedRoot === undefined) { delete process.env.ELECTRON_CACHE; } else { process.env.ELECTRON_CACHE = savedRoot; }
-    expect(fs.existsSync(zip)).toBe(false);                // the corrupt-artifact delete still happens
-    expect(spawn).not.toHaveBeenCalled();                  // ...and nothing is spawned to rescue it (B1)
+    expect(fs.existsSync(zip)).toBe(true);                 // kept: the offer above needs it
+    expect(spawn).not.toHaveBeenCalled();                  // hatch unset, so no rescue and no child (B1)
     expect(res.integrity).toBe('corrupt-artifact');
-    expect(res.reason).toMatch(/was corrupt and removed/);
+    expect(res.reason).toMatch(/LEFT IN PLACE/);
     expect(res.reason).toMatch(/The controlled download failed: offline/);
   });
 

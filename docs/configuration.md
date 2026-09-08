@@ -386,7 +386,10 @@ These variables control the polling loop that drives headless sessions. The defa
 >
 > The rescue is deliberately narrow. It fires **only** when amicus's extractor
 > positively identified the archive as unreadable — the same verdict that lets it
-> discard a corrupt cached artifact. A **path-traversal refusal** (`REFUSED
+> discard a corrupt cached artifact, which is why that discard now waits: with
+> this variable unset, amicus prints the offer of this rescue and **keeps** the
+> cached archive, and only discards it once the rescue has run and every native
+> extractor has failed on it too. A **path-traversal refusal** (`REFUSED
 > (unsafe archive)`) is terminal and this variable does not apply to it, a
 > **stall** is not a rescue trigger (the timeout exists to stop work, not to hand
 > it to a child process), a **digest mismatch** is not one either (the bytes are

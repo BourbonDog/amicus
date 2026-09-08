@@ -25,8 +25,10 @@
  * `dist/`. A full disk therefore destroyed a pristine cache entry — worst case
  * on an air-gapped run with no network to re-fetch from. `zip-from-buffer`
  * distinguishes the two: `UNZIP_BUFFER_FAILED` says the ARCHIVE is bad and is
- * the only failure that evicts anything; `UNZIP_DEST_FAILED` says the
- * DESTINATION is bad and never evicts.
+ * the only failure that CAN evict anything; `UNZIP_DEST_FAILED` says the
+ * DESTINATION is bad and never evicts. Since C2 even that one holds its fire on
+ * a run that OFFERED the native-extractor rescue: an offer whose own run
+ * destroys the artifact it points at is not an offer.
  *
  * NEAR-LEAF: requires the custody, trust, refusal, layout and provision-fence
  * modules, and is required only by electron-install.js. The arrow is
@@ -154,6 +156,25 @@ async function repairFromCache({
       };
       log(`[amicus] ${refusal.reason}`);
       return cacheOnly ? { done: true, result: refusal } : { done: false, refusal };
+    }
+    // C2 (round 4): AN OFFER IS A PROMISE, AND THIS IS WHERE IT IS KEPT. With the
+    // hatch off, the wrapper above has just printed a ten-line offer telling an
+    // air-gapped user to set AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 and provision
+    // again — and the eviction below hangs on the IDENTICAL code, so the first
+    // cut deleted the artifact on the way out and the promised re-run found
+    // nothing to rescue (MEASURED: the full offer on stderr, `was corrupt and
+    // removed`, `existsSync(zip) === false`, then `No cached electron zip found`).
+    // The cost of keeping it is the availability cost the fence below already
+    // accepts on a wrong `false`: it survives and is re-downloaded once per
+    // provision. A rescue that was named must still exist to be taken.
+    if (rescue.offered) {
+      const kept = `Cached electron zip for v${version} (${platform}-${arch}) could not be read and was `
+        + 'LEFT IN PLACE: the native-extractor rescue was offered on this run and needs this copy; '
+        + `${cacheOnly ? 'deferring re-download' : 'trying a fresh download'}.` + avHint(platform);
+      log(`[amicus] ${kept}`);
+      return cacheOnly
+        ? { done: true, result: { repaired: false, reason: kept } }
+        : { done: false, refusal: { repaired: false, integrity: 'corrupt-artifact', reason: kept } };
     }
     // The archive really is bad: evict it — THROUGH THE SAME FENCE the mismatch
     // eviction uses — and claim only what happened.

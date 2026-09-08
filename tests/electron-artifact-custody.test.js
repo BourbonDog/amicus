@@ -56,6 +56,10 @@
  * CORRUPTNOTEVICTED electron-repair-cache.js — delete the `fs.rmSync(zip, ...)`
  *   on the bad-archive branch.
  *   RED: "a corrupt cached artifact is EVICTED, and the reason says so".
+ *   NOTE: every test in that block arms `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`.
+ *   Since C2 the eviction waits for the native-extractor rescue to be attempted
+ *   and fail; with the hatch off the archive is offered a rescue and kept. The
+ *   block's own docblock has the reasoning.
  * UNFENCEDEVICT   electron-repair-cache.js :: repairFromCache — drop the
  *   `mayDeleteRejectedZip` guard from the corrupt-artifact eviction, restoring
  *   the bare `fs.rmSync(zip, { force: true })` that deleted at an
@@ -562,6 +566,32 @@ describe('nobody ends up with neither a cached artifact nor a dist', () => {
 });
 
 describe('F#4/F#5 — a corrupt cached artifact is actually evicted', () => {
+  /**
+   * WHY EVERY TEST IN THIS BLOCK NOW ARMS THE HATCH (C2, round 4).
+   *
+   * `UNZIP_BUFFER_FAILED` is still the one verdict that MAY evict, and every
+   * property below is unchanged — the delete happens, it goes through the fence,
+   * and the reason says which. What changed is WHEN amicus has finished with the
+   * archive. With the hatch OFF, that same verdict now prints the offer of the
+   * native-extractor rescue and the artifact is deliberately KEPT, because an
+   * offer that tells an air-gapped user to set a variable and provision again
+   * cannot delete the only thing that re-run could act on (the case is pinned in
+   * tests/electron-native-rescue.test.js :: OFFEREDANDEVICTED). With the hatch
+   * ON the rescue really is attempted — `spawn` below produces nothing, so every
+   * native strategy fails — and only THEN is the archive worthless and evicted.
+   *
+   * So this block measures the eviction on the run that has actually exhausted
+   * every way of reading the archive, which is the run it was always describing.
+   */
+  let savedHatch;
+  beforeEach(() => {
+    savedHatch = process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON;
+    process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = '1';
+  });
+  afterEach(() => {
+    if (savedHatch === undefined) { delete process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON; } else { process.env.AMICUS_ALLOW_UNVERIFIED_ELECTRON = savedHatch; }
+  });
+
   /** The extractor's positive "this ARCHIVE is bad" verdict — the ONE code that evicts. */
   const badArchive = () => jest.fn(async () => {
     const e = new Error('end of central directory record signature not found');
@@ -579,9 +609,15 @@ describe('F#4/F#5 — a corrupt cached artifact is actually evicted', () => {
   test('a corrupt cached artifact is EVICTED, and the reason says so (CORRUPTNOTEVICTED)', async () => {
     const { dir } = unanchoredElectronDir();
     const zip = zipInCacheRoot();
+    // Every native strategy is tried and produces nothing, so by the time the
+    // eviction runs there is genuinely no way left to read this archive. The
+    // assertion is here so the block cannot silently start measuring an
+    // eviction that fired BEFORE the rescue it now waits for.
+    const spawn = jest.fn(() => ({ status: 0 }));
 
-    const res = await repair({ dir, zip, extract: badArchive() });
+    const res = await repair({ dir, zip, extract: badArchive(), deps: { spawn } });
 
+    expect(spawn).toHaveBeenCalled();
     expect(res.repaired).toBe(false);
     expect(res.reason).toMatch(/was corrupt and removed/);
     expect(fs.existsSync(zip)).toBe(false);
