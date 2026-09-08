@@ -347,10 +347,11 @@ These variables control the polling loop that drives headless sessions. The defa
 
 > **What `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not do.** It does not re-enable
 > anything else. `npm_config_electron_mirror`, `npm_package_config_electron_*`
-> and `npm_config_electron_use_remote_checksums` stay stripped from the
-> environment for the length of amicus's own download call whether it is set or
-> not — those are the names a *repository* can plant through its own `.npmrc` or
-> `package.json`, which is why this variable is a plain environment variable read
+> and `npm_config_electron_use_remote_checksums` are stripped from the
+> environment while amicus works out **where the artifact comes from**, whether
+> this variable is set or not — those are the names a *repository* can plant
+> through its own `.npmrc` or `package.json`, which is why this variable is a
+> plain environment variable read
 > under that exact bare spelling only: a repo-planted
 > `npm_config_amicus_allow_unverified_electron` reads back as unset. (`platform`
 > and `arch` are no longer scrubbed anywhere, because there is no longer a child
@@ -362,6 +363,21 @@ These variables control the polling loop that drives headless sessions. The defa
 > accepted with a warning, and a download is no longer pinned to that sha256
 > (`@electron/get` then trusts the `SHASUMS256.txt` served alongside the artifact).
 > Leave it unset and the published digest is enforced on both routes.
+>
+> **The one thing the strip does not cover, stated precisely** (measured against
+> `@electron/get` 5.0.0, and re-measured by
+> `tests/electron-env-scrub-get5-contract.test.js` on every test run). Every read
+> that decides the artifact's URL happens while those names are stripped — with a
+> mirror planted, the download still goes to the official
+> `github.com/electron/electron/releases/download/…`. But when **no digest is
+> pinned** — either this variable is set, or your Electron package ships no
+> `checksums.json` entry — `@electron/get` fetches a `SHASUMS256.txt` of its own,
+> *after* the names have been restored, and a planted mirror is read again for
+> that one fetch. It cannot change which bytes you get, because the artifact's
+> URL was already settled: it can only serve a checksum file that disagrees with
+> the official artifact, which makes the download **fail**. Unset the planted
+> names (or the variable) if an unpinned download fails checksum validation on a
+> machine whose `.npmrc` names an Electron mirror.
 
 ---
 

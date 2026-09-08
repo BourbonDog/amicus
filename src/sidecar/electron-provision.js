@@ -106,8 +106,20 @@ async function controlledProvision({
   }
   // D5: @electron/get runs IN THIS PROCESS and reads the same repo-plantable
   // npm_config_electron_* / npm_package_config_electron_* names install.js does.
-  // The scrub is held only across the synchronous prefix, where every one of
-  // those reads happens; the promise is returned unawaited.
+  // The scrub is held across the synchronous prefix ONLY, and the promise is
+  // returned unawaited so no unrelated caller ever sees a scrubbed environment.
+  //
+  // WHAT THAT DOES AND DOES NOT COVER, MEASURED against the installed 5.0.0 and
+  // re-measured by tests/electron-env-scrub-get5-contract.test.js on every run
+  // (round 3, seat B1 — the previous claim here was reasoned, never run):
+  // every read that decides the ARTIFACT's URL lands inside the window on BOTH
+  // routes (20 of 20, 0 after the restore), so a planted mirror cannot move this
+  // download. When `digest` is null there is no `checksums` table, and
+  // @electron/get then recursively downloads SHASUMS256.txt AFTER awaits with
+  // the environment restored — 13 planted reads, measured. That is
+  // availability-only: the zip's URL is already fixed, so the planted mirror can
+  // only serve a checksum file that disagrees with official bytes and FAIL the
+  // download. See electron-env-scrub.js for the three closures rejected and why.
   //
   // IT SCRUBS `process.env`, NOT THIS FUNCTION'S `env` ARGUMENT, and that is the
   // point. `env` is an injectable input to cache-root RESOLUTION; the env

