@@ -211,10 +211,26 @@ async function repairElectron({
     let provisionReason = null;
     try {
       const downloadArtifact = await resolveDownloadArtifact();
-      provision = await controlledProvision({
+      const result = await controlledProvision({
         electronDir, platform, arch, version, anchor, downloadArtifact, extract,
         fs, env: process.env, downloadMs: timeoutMs, policy, log: stderrLog,
-      }) || { pinned: false };   // an unrecognisable return marks, never claims a pin
+      });
+      // F3 (seat B4) — FAIL CLOSED ON A SHAPE NOBODY RECOGNISES. This used to be
+      // `|| { pinned: false }`, described as "an unrecognisable return marks,
+      // never claims a pin". It did worse than that: a function that returned
+      // NOTHING became a successful unpinned provision, so `verifyExtractOutcome`
+      // ran on a directory nothing had written and reported the missing exe as
+      // the AV-QUARANTINE signature — "electron.exe was removed right after it
+      // was extracted", advice about an extraction that never happened. An
+      // unrecognised return is a FAILURE, reported through the same path a throw
+      // takes, because that path already says the true thing.
+      if (!result || typeof result !== 'object' || typeof result.pinned !== 'boolean') {
+        throw Object.assign(
+          new Error(`the controlled provision returned no usable result (${result === undefined ? 'undefined' : typeof result})`),
+          { code: 'PROVISION_NO_RESULT' },
+        );
+      }
+      provision = result;
     } catch (provisionErr) {
       // C4: an unsafe archive is terminal — it is never retried through another
       // extractor, and it is not reported as an ordinary failure.
