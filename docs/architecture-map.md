@@ -162,7 +162,8 @@ src/
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 │   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
-│   └── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   ├── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   └── zip-stall-bound.js  # WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work.
 ├── template/
 │   ├── apply.js
 │   ├── render.js
@@ -612,6 +613,7 @@ evals/
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
 | `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
+| `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
 | `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |

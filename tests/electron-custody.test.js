@@ -70,6 +70,12 @@
  *   supposed to stop carries on.
  *   RED: "when the bound FIRES nothing further is written, and no incoming tree
  *   is left".
+ * UNWINDUNBOUNDED zip-from-buffer.js :: extractZipBuffer — restore the round-3
+ *   `await inFlight.catch(() => {})` in place of the bounded `awaitUnwind`, so
+ *   the extractor waits forever for a write that can never come apart (yauzl's
+ *   endpoint `destroy` emits nothing, so `pipeline` never settles).
+ *   RED: "the bound SETTLES even when the aborted write can NEVER come apart",
+ *   and both fake-timer bound tests, which now fire with an entry in flight.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -415,30 +421,61 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     };
   }
 
-  /** A yauzl whose openReadStream NEVER calls back: the entry never settles. */
-  function wedgedYauzl() {
+  /**
+   * A yauzl whose openReadStream NEVER calls back: the entry never settles.
+   * `reached.hit` records that the driver actually got that far — round 4, where
+   * firing the bound BEFORE yauzl's first 'entry' was measured to skip the whole
+   * in-flight path and hide a blocker inside it.
+   */
+  function wedgedYauzl(reached = {}) {
     // eslint-disable-next-line global-require
     const yauzl = require('yauzl');
     return {
       fromBuffer: (b, o, cb) => yauzl.fromBuffer(b, o, (e, zf) => {
-        if (zf) { zf.openReadStream = () => { /* the callback that never arrives */ }; }
+        if (zf) { zf.openReadStream = () => { reached.hit = true; }; }
         cb(e, zf);
       }),
     };
   }
 
+  /** Let the microtask/immediate queues drain so a stream stage can run. */
+  const settleIo = async (turns = 6) => {
+    for (let i = 0; i < turns; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setImmediate(r));
+    }
+  };
+
+  // ROUND 4 — BOTH OF THESE FIRED THE BOUND TOO EARLY TO REACH THE BUG.
+  // They ran ONE `setImmediate` before firing, which is before yauzl has emitted
+  // its first 'entry', so `inFlight` was still null and the extractor's wait for
+  // the aborted write was skipped entirely. MEASURED by varying only the number
+  // of turns, everything else identical: turns=1 rejected, turns=2 rejected,
+  // turns=4 STILL PENDING. So they passed on a timing accident while the code
+  // they cover could not settle at all. Both now wait for `openReadStream` to be
+  // REACHED, and assert it.
+
   test('an extract that makes no progress rejects on the IDLE bound', async () => {
     const timers = fakeTimers();
     const dir = mkTmp();
+    const reached = {};
 
     const p = extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
       dir,
       idleMs: 1234,
       maxMs: 5678,
-      deps: { yauzl: wedgedYauzl(), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+      unwindMs: 4321,
+      deps: {
+        yauzl: wedgedYauzl(reached), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+      },
     });
-    await new Promise((r) => setImmediate(r));
+    await settleIo();
+    expect(reached.hit).toBe(true);              // an entry really is in flight
     expect(timers.fireByMs(1234)).toBe(true);
+    await settleIo();
+    // That entry can NEVER come apart — its openReadStream callback never
+    // arrives — so the UNWIND bound is what ends the wait for it.
+    expect(timers.fireByMs(4321)).toBe(true);
 
     const err = await p.catch((e) => e);
     expect(err.code).toBe('UNZIP_BUFFER_STALLED');
@@ -450,15 +487,22 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   test('an extract that never ends rejects on the HARD cap', async () => {
     const timers = fakeTimers();
     const dir = mkTmp();
+    const reached = {};
 
     const p = extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
       dir,
       idleMs: 1234,
       maxMs: 5678,
-      deps: { yauzl: wedgedYauzl(), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout },
+      unwindMs: 4321,
+      deps: {
+        yauzl: wedgedYauzl(reached), setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+      },
     });
-    await new Promise((r) => setImmediate(r));
+    await settleIo();
+    expect(reached.hit).toBe(true);
     expect(timers.fireByMs(5678)).toBe(true);
+    await settleIo();
+    expect(timers.fireByMs(4321)).toBe(true);
 
     const err = await p.catch((e) => e);
     expect(err.code).toBe('UNZIP_BUFFER_STALLED');
@@ -502,24 +546,22 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
         clearTimeout: timers.clearTimeout,
       },
     });
-    await new Promise((r) => setImmediate(r));
+    await settleIo();
 
     expect(armed).toEqual([240_000, 30_000]);
-    timers.fireByMs(30_000);
-    await p.catch(() => {});
+    expect(timers.fireByMs(30_000)).toBe(true);
+    await settleIo();
+    // ...and the THIRD default, armed only once there is an aborted write to
+    // wait for: `zip-stall-bound.UNWIND_MS`. Without it this call never settles.
+    expect(armed).toEqual([240_000, 30_000, 5_000]);
+    expect(timers.fireByMs(5_000)).toBe(true);
+
+    await expect(p).rejects.toMatchObject({ code: 'UNZIP_BUFFER_STALLED' });
   });
 
   // ── ROUND 3: the bound above was armed against the wrong signal, and did not
   // stop anything when it fired. Seat A1 and seat B2 filed opposite halves of
   // the same defect. These two tests are the halves.
-
-  /** Let the microtask/immediate queues drain so a stream stage can run. */
-  const settleIo = async (turns = 6) => {
-    for (let i = 0; i < turns; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setImmediate(r));
-    }
-  };
 
   /**
    * A yauzl whose entry stream is driven BY THE TEST. Everything else about the
@@ -658,6 +700,57 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-incoming-'))).toEqual([]);
     expect(fs.existsSync(path.join(electronDir, 'dist'))).toBe(false);
   });
+
+  // ── ROUND 4: the round-3 remedy above reintroduced the hang it removed. To
+  // keep the caller's cleanup off a live descriptor it made the extractor's
+  // `finally` `await inFlight` — AFTER `cancelTimers()` had cleared both live
+  // handles — so on the one shape the bound exists for, `extractZipBuffer`
+  // never settled and nothing was left alive to keep Node running.
+
+  test('the bound SETTLES even when the aborted write can NEVER come apart (UNWINDUNBOUNDED)', async () => {
+    // REAL timers and REAL `yauzl.openReadStream` on both shapes: nothing here
+    // replaces the component whose destroy semantics the halt depends on.
+    // yauzl@2.10.0 overrides its endpoint stream's `destroy` with a no-arg
+    // function that emits neither 'error' nor 'close' (node_modules/yauzl/
+    // index.js, lines 566-573 and 698-713), so `pipeline` — which waits for
+    // every stream to close — never settles after the abort.
+    //
+    // MEASURED on the parent commit, Node 24.18.0: shape (B) was still PENDING
+    // at 6 s with the sink accepting nothing further, and in a bare process
+    // with no other handle the loop drained and Node exited 0 having printed
+    // nothing. That is the ORIGINAL field bug's shape. Nothing external fires a
+    // timer here — if the extractor does not end its own wait, this test hangs
+    // until jest kills it.
+    const bounds = { idleMs: 250, maxMs: 120_000, unwindMs: 250 };
+
+    // (A) `openReadStream`'s callback never arrives, with an entry IN FLIGHT.
+    const reached = {};
+    const a = await extractZipBuffer(buildZip([{ name: 'a.txt', body: 'x' }]), {
+      ...bounds, dir: mkTmp(), deps: { yauzl: wedgedYauzl(reached) },
+    }).catch((e) => e);
+
+    expect(reached.hit).toBe(true);
+    expect(a.code).toBe('UNZIP_BUFFER_STALLED');
+
+    // (B) the SINK wedges mid-entry under a real `pipeline` over yauzl's own
+    // endpoint stream — a hung AV filter, or a network volume that stops
+    // acknowledging writes. This is the shape a stub Readable cannot model.
+    const accepted = [];
+    const wedgingFs = {
+      ...fs,
+      createWriteStream: () => new Writable({
+        write(chunk, _enc, cb) { accepted.push(chunk.length); if (accepted.length === 1) { cb(); } },
+      }),
+    };
+    const body = Buffer.alloc(1024 * 1024, 7);
+    const b = await extractZipBuffer(buildZip([{ name: 'big.bin', body: body.toString('latin1') }]), {
+      ...bounds, dir: mkTmp(), deps: { fs: wedgingFs },
+    }).catch((e) => e);
+
+    expect(b.code).toBe('UNZIP_BUFFER_STALLED');
+    expect(accepted.length).toBeGreaterThan(0);     // it really was mid-write
+    expect(accepted.reduce((x, y) => x + y, 0)).toBeLessThan(body.length);
+  }, 20_000);
 });
 
 describe('symlinks — the darwin .app shape, which cannot be run here', () => {
