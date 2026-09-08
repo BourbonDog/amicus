@@ -52,6 +52,10 @@
  *   `stream.on('error', reject)`, so a read error reaches the caller with no
  *   `code` and is read as "the archive is bad".
  *   RED: "a read error on the symlink TARGET is CLASSIFIED, never raw".
+ * SWEEPMISSING    electron-layout.js :: extractBytesToDist — delete the
+ *   `sweepPromoteLitter` call, restoring the state where nothing in src/,
+ *   scripts/ or bin/ ever removed `.amicus-incoming-*` or `.amicus-retired-*`.
+ *   RED: "abandoned incoming and retired trees are SWEPT by the next provision".
  * STALLUNBOUNDED  zip-from-buffer.js :: extractZipBuffer — delete the idle and
  *   hard-cap timers, restoring the unbounded promise the electron path had.
  *   RED: "an extract that makes no progress rejects on the IDLE bound", "an
@@ -67,7 +71,9 @@ const path = require('path');
 
 const { readArtifactBytes, isSafeArtifactName, MAX_ARTIFACT_BYTES } = require('../src/sidecar/electron-custody');
 const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
-const { extractBytesToDist, promoteDist } = require('../src/sidecar/electron-layout');
+const {
+  extractBytesToDist, promoteDist, sweepPromoteLitter,
+} = require('../src/sidecar/electron-layout');
 const {
   buildZip, zipFile, realZip, MODE_DIR, MODE_SYMLINK,
 } = require('./helpers/zip-fixture');
@@ -811,6 +817,87 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
     expect(fs.readFileSync(path.join(electronDir, retired[0], 'electron.exe'), 'utf8')).toBe('MZ-OLD');
     expect(thrown.message).toContain(retired[0]);
     expect(thrown.message).toMatch(/rename it back to dist/);
+  });
+
+  test('abandoned incoming and retired trees are SWEPT by the next provision (SWEEPMISSING)', async () => {
+    // MEASURED before the sweeper existed: a week-old `.amicus-incoming-<hex>`
+    // and a week-old `.amicus-retired-<hex>` both survived a full provision on
+    // the same electronDir. The docs said "a killed run leaves nothing to sweep
+    // up" — but the incoming tree's removal is a `finally`, which a SIGKILL, a
+    // Ctrl-C during `npm install`, a lid close or an AV kill does not run; and
+    // the retired tree's removal fails EPERM whenever an Electron is live off
+    // it. Both are inside the electron package directory, where no OS temp
+    // cleaner reaches them, and each is up to a full extracted dist (~350 MB).
+    const electronDir = mkTmp('amicus-electron-');
+    const orphanIn = path.join(electronDir, '.amicus-incoming-6684f2a1df92');
+    fs.mkdirSync(path.join(orphanIn, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(orphanIn, 'dist', 'electron.exe'), 'PARTIAL');
+    const orphanRetired = path.join(electronDir, '.amicus-retired-deadbeefcafe');
+    fs.mkdirSync(orphanRetired, { recursive: true });
+    fs.writeFileSync(path.join(orphanRetired, 'electron.exe'), 'THE-WHOLE-PREVIOUS-DIST');
+    const old = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    fs.utimesSync(orphanIn, old, old);
+    fs.utimesSync(orphanRetired, old, old);
+    const extract = async (_b, o) => { fs.writeFileSync(path.join(o.dir, 'electron.exe'), 'MZ-NEW'); };
+
+    await extractBytesToDist({ bytes: Buffer.from('x'), electronDir, platform: 'win32', extract, fs });
+
+    expect(fs.readdirSync(electronDir).sort()).toEqual(['dist', 'path.txt']);
+  });
+
+  test('a FRESH tree is LEFT ALONE, and so is this run\'s own incoming directory', async () => {
+    // The age rule is not zero on purpose. A provision holds the per-electronDir
+    // repair lock, but promoteDist/extractBytesToDist are callable without it,
+    // and deleting a tree another process is actively writing is a worse failure
+    // than leaving one behind. This is the rule the deleted `sweepStaleStages`
+    // used and the one the old docs stated honestly.
+    const electronDir = mkTmp('amicus-electron-');
+    const fresh = path.join(electronDir, '.amicus-incoming-freshfreshfre');
+    fs.mkdirSync(fresh, { recursive: true });
+    let sawOwnIncoming = null;
+    const extract = async (_b, o) => {
+      sawOwnIncoming = path.dirname(o.dir);
+      // ...and the sweep already ran, before this extractor was called.
+      expect(fs.existsSync(sawOwnIncoming)).toBe(true);
+      fs.writeFileSync(path.join(o.dir, 'electron.exe'), 'MZ-NEW');
+    };
+
+    await extractBytesToDist({ bytes: Buffer.from('x'), electronDir, platform: 'win32', extract, fs });
+
+    expect(fs.existsSync(fresh)).toBe(true);
+    expect(path.basename(sawOwnIncoming)).not.toBe(path.basename(fresh));
+  });
+
+  test('the sweep can never fail a provision', () => {
+    // Best-effort by contract: an unreadable directory, an unstattable entry and
+    // an undeletable tree all leave the provision alone.
+    const electronDir = mkTmp('amicus-electron-');
+    expect(sweepPromoteLitter({ electronDir, fs: { ...fs, readdirSync: () => { throw new Error('EACCES'); } } }))
+      .toEqual([]);
+
+    const stuck = path.join(electronDir, '.amicus-retired-cannotremove');
+    fs.mkdirSync(stuck, { recursive: true });
+    const old = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    fs.utimesSync(stuck, old, old);
+    const lockedFs = { ...fs, rmSync: () => { const e = new Error('EPERM'); e.code = 'EPERM'; throw e; } };
+
+    expect(sweepPromoteLitter({ electronDir, fs: lockedFs })).toEqual([]);
+    expect(fs.existsSync(stuck)).toBe(true);                 // left for the next run
+    expect(sweepPromoteLitter({ electronDir, fs })).toEqual(['.amicus-retired-cannotremove']);
+  });
+
+  test('the sweep touches ONLY the two promote prefixes', () => {
+    const electronDir = mkTmp('amicus-electron-');
+    const old = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    for (const name of ['dist', 'path.txt', 'package.json', '.amicus-repair.lock', '.amicus-incoming-aaaaaaaaaaaa']) {
+      const full = path.join(electronDir, name);
+      if (name.includes('.') && !name.startsWith('.amicus-incoming')) { fs.writeFileSync(full, 'x'); } else { fs.mkdirSync(full, { recursive: true }); }
+      fs.utimesSync(full, old, old);
+    }
+
+    expect(sweepPromoteLitter({ electronDir, fs })).toEqual(['.amicus-incoming-aaaaaaaaaaaa']);
+    expect(fs.readdirSync(electronDir).sort())
+      .toEqual(['.amicus-repair.lock', 'dist', 'package.json', 'path.txt']);
   });
 
   test('path.txt is written only AFTER dist/ is in place', async () => {

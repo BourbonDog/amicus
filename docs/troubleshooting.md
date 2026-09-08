@@ -478,10 +478,23 @@ The third line names which way the read failed:
   exactly as it was, whether the repair succeeded, was refused, or was interrupted — which matters
   most on an air-gapped machine whose cache was hand-seeded. Nothing is written to the temp directory
   either: earlier versions staged a ~170 MB copy there, and no longer do.
-- **A killed run leaves nothing to sweep up.** Extraction happens in
-  `<electron package>/.amicus-incoming-<hex>/`, which is promoted into `dist/` by a single rename at
-  the end and removed either way. A half-written tree is never what `dist/` contains, and a kill
-  mid-extract leaves the previous `dist/` exactly where it was.
+- **A killed run can leave one directory behind, and the next provision sweeps it.** Extraction
+  happens in `<electron package>/.amicus-incoming-<hex>/`, which is promoted into `dist/` by a single
+  rename at the end and removed afterwards — but that removal is an in-process `finally`, and a kill
+  does not run it. Ctrl-C during `npm install`, a lid close or an AV kill can therefore leave one
+  behind, as can the sibling `.amicus-retired-<hex>` when an Electron is running off the tree being
+  replaced (Windows refuses to delete it). Both live inside the Electron package directory, where no
+  OS temp cleaner reaches them, so **amicus sweeps them itself: every provision removes any
+  `.amicus-incoming-*` or `.amicus-retired-*` in that directory that is more than a day old.** The
+  age rule is deliberate — it cannot take a tree another run may still be writing. What is still
+  guaranteed either way: a half-written tree is never what `dist/` contains, and a kill mid-extract
+  leaves the previous `dist/` exactly where it was.
+- **A promote never removes a working `dist/` to make room.** If the old tree cannot be renamed out of
+  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable,
+  the repair refuses and leaves it untouched rather than deleting it with no way back. If it holds no
+  executable it is not an install, and it is replaced. In the one case where the tree was renamed away
+  and neither the swap nor the rollback could run, the previous `dist/` is intact at
+  `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
 - **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
   `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
   builds the artifact filename from it and refuses to use anything that is not a plain filename, since

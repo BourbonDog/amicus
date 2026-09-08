@@ -49,6 +49,76 @@ function writePathTxt({ electronDir, platform, fs }) {
 }
 
 /**
+ * The two litter prefixes this module creates, and how long one may survive.
+ *
+ * WHY A SWEEPER EXISTS AT ALL. Both trees are removed in the happy path — the
+ * retired one right after the swap, the incoming one in `extractBytesToDist`'s
+ * `finally` — and the docs said "a killed run leaves nothing to sweep up". That
+ * was MEASURED FALSE twice. A `finally` does not run for a SIGKILL, a Ctrl-C
+ * during `npm install`, a laptop lid close or an AV kill: a child SIGKILLed
+ * mid-extract left `.amicus-incoming-<hex>` holding a partial tree, and a
+ * subsequent `extractBytesToDist` on the same electronDir did not remove it. And
+ * the retired tree leaks on its own path: on Windows 11 / NTFS with a process
+ * running from `dist\\electron.exe`, `renameSync(dist, retired)` SUCCEEDS and the
+ * follow-up `rmSync(retired)` fails EPERM with every entry still present — so
+ * any repair that runs while an Electron is live off that tree strands the whole
+ * previous ~350 MB dist, and the code comment said "swept next time" naming a
+ * sweep that did not exist.
+ *
+ * Unlike the `amicus-electron-stage-*` litter this design replaced, these live
+ * INSIDE the electron package directory, where no OS temp cleaner ever reaches
+ * them. Ten interrupted provisions on a CI box was ten abandoned trees with no
+ * code path that would ever remove them.
+ *
+ * THE AGE RULE, and why it is not zero. A provision holds the per-electronDir
+ * repair lock, so in production nothing else is mid-extract in this directory —
+ * but `promoteDist` and `extractBytesToDist` are callable without that lock, and
+ * deleting a tree another process is actively writing is a worse failure than
+ * leaving one behind. So the sweep takes only what is older than
+ * `LITTER_MAX_AGE_MS`, which is the rule the deleted `sweepStaleStages` used and
+ * the rule the docs stated honestly before this design replaced them: the next
+ * provision sweeps any that is more than a day old.
+ */
+const LITTER_PREFIXES = ['.amicus-incoming-', '.amicus-retired-'];
+const LITTER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Remove abandoned incoming/retired trees from `electronDir`. BEST-EFFORT: a
+ * tree that cannot be stat'ed or removed is left for the next run, and nothing
+ * here can fail a provision.
+ *
+ * @param {object} o
+ * @param {string} o.electronDir
+ * @param {object} o.fs
+ * @param {number} [o.maxAgeMs]
+ * @param {number} [o.now]
+ * @param {string} [o.keep] an absolute path never to remove (this run's own)
+ * @returns {string[]} the names actually removed
+ */
+function sweepPromoteLitter({
+  electronDir, fs, maxAgeMs = LITTER_MAX_AGE_MS, now = Date.now(), keep = null,
+}) {
+  let names;
+  try {
+    names = fs.readdirSync(electronDir);
+  } catch {
+    return [];
+  }
+  const swept = [];
+  for (const name of names) {
+    if (!LITTER_PREFIXES.some((p) => name.startsWith(p))) { continue; }
+    const full = path.join(electronDir, name);
+    if (keep && full === keep) { continue; }
+    try {
+      if (now - fs.statSync(full).mtimeMs < maxAgeMs) { continue; }
+      fs.rmSync(full, { recursive: true, force: true });
+      swept.push(name);
+    } catch { /* a tree we cannot stat or remove waits for the next run */ }
+  }
+  return swept;
+}
+
+/**
  * RETIRE AND SWAP. Move a freshly-extracted tree into place as `dist/`, and
  * leave the previous one recoverable until the swap has actually happened.
  *
@@ -139,7 +209,7 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
     }
     throw e;
   }
-  if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* swept next time */ } }
+  if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* sweepPromoteLitter takes it */ } }
   writePathTxt({ electronDir, platform, fs });
 }
 
@@ -170,11 +240,19 @@ function destinationFailure(e, what) {
  *
  * `extract` is injected — `zip-from-buffer.extractZipBuffer` in production —
  * and receives the Buffer, never a name.
+ *
+ * It also SWEEPS, first: the incoming tree is removed in a `finally`, which a
+ * kill does not run, and the retired tree's removal can fail EPERM while an
+ * Electron is live off it. Both leak inside the electron package directory,
+ * where no OS temp cleaner reaches them. See `sweepPromoteLitter`.
  * @returns {Promise<void>}
  */
 async function extractBytesToDist({ bytes, electronDir, platform, extract, fs }) {
   const incoming = path.join(electronDir, `.amicus-incoming-${crypto.randomBytes(6).toString('hex')}`);
   const incomingDist = path.join(incoming, 'dist');
+  // A killed run's `finally` never ran, and an EPERM `rmSync` of a retired tree
+  // never finished. Take what they left before adding one more.
+  sweepPromoteLitter({ electronDir, fs, keep: incoming });
   try {
     try {
       fs.mkdirSync(incomingDist, { recursive: true });
@@ -194,4 +272,6 @@ async function extractBytesToDist({ bytes, electronDir, platform, extract, fs })
   }
 }
 
-module.exports = { platformExe, writePathTxt, promoteDist, extractBytesToDist };
+module.exports = {
+  platformExe, writePathTxt, promoteDist, extractBytesToDist, sweepPromoteLitter, LITTER_MAX_AGE_MS,
+};
