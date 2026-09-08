@@ -3,8 +3,8 @@
  * lives, and how VERIFIED BYTES become a `dist/`.
  *
  * Layout (npm `electron`): `path.txt` -> the exe basename, `dist/<exe>` -> the
- * binary. A promote writes `path.txt` FIRST, while `dist/` is still whole, so no
- * failure of that write costs the user the `dist/` they had (see `promoteDist`).
+ * binary. A promote writes `path.txt` FIRST and puts back what it overwrote on
+ * every failure exit, so one that fails breaks nothing that resolved (`promoteDist`).
  *
  * SPLIT OUT of electron-install.js (v4.9.6, second council round): that file is
  * at the repo's 300-line gate, and the round's repairs had to land inside
@@ -131,7 +131,7 @@ function sweepPromoteLitter({
  * place anything looks, and `dist/` changes in ONE rename.
  *
  * ORDER, and what survives each failure:
- *   0. write `path.txt` unless already right — nothing has moved; a throw REFUSES
+ *   0. write `path.txt` unless already right — a throw REFUSES, and puts it back
  *   1. rename `dist` -> `.amicus-retired-<hex>`   — old tree still whole, elsewhere
  *   2. rename `<incoming>/dist` -> `dist`         — the swap
  *   3. on a step-2 failure, rename the retired tree BACK                (rollback)
@@ -167,18 +167,19 @@ function sweepPromoteLitter({
  * undeleted at `.amicus-retired-<hex>`, and the thrown message names it so the
  * user can rename it back.
  *
- * `path.txt` IS WRITTEN FIRST (B2). The claim that stood here — writing it LAST
- * makes "dist but no path.txt" unobservable — was right about ORDER and wrong
- * about FAILURE: it held only while the write SUCCEEDED, and it ran after the old
- * tree was retired AND deleted, so one ENOSPC/EPERM/AV-locked 12-byte write left
- * the user a new `dist/` that `electron/index.js` cannot resolve — amicus's own
- * `resolveElectronBinary` falls back to `platformExe`, that entry point does not.
- * Its value is known before anything moves, so step 0 writes it while `dist/` is
- * still whole, reading back nothing it wrote. RULING on undoing a pre-write:
- * usually nothing to undo — the OLD tree resolved through that same string, and
- * an absent `path.txt` resolves through it too — but it BREAKS on one naming a
- * DIFFERENT basename (`npm_config_platform` cross-installs one), so a replaced
- * different value is put back on every failure exit, best-effort.
+ * `path.txt` IS WRITTEN FIRST (B2). Writing it LAST made "dist but no path.txt"
+ * unobservable only while that write SUCCEEDED, and it ran after the old tree was
+ * retired AND DELETED, so one ENOSPC/EPERM/AV-locked 12-byte write left a `dist/`
+ * that `electron/index.js` cannot resolve — amicus's own resolver falls back to
+ * `platformExe`, that entry point does not. RULING on undoing the pre-write:
+ * usually nothing to undo — the old tree resolved through that same string, and an
+ * absent or EMPTY `path.txt` resolves through it in both resolvers — but it BREAKS
+ * on one naming a DIFFERENT basename (`npm_config_platform` cross-installs one).
+ * So step 0 sits INSIDE the same `try` as the swap, and its own refusal puts the
+ * value back too: the write TRUNCATES at open (MEASURED — a real 12-byte path.txt
+ * is 0 bytes after `openSync(p,'w')`, before any write can fail), so a refusal
+ * that skipped the put-back destroyed the value it existed to keep. Best-effort:
+ * a put-back that itself fails, or an UNREADABLE path.txt, loses the old basename.
  * @param {object} o
  * @param {string} o.electronDir
  * @param {string} o.incomingDist the extracted tree to promote
@@ -190,12 +191,12 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
   const pathFile = path.join(electronDir, 'path.txt');
   let replaced = null;                    // step 0's overwritten DIFFERENT value
   try { replaced = fs.readFileSync(pathFile, 'utf8'); } catch { /* absent or unreadable */ }
-  if (replaced === platformExe(platform)) { replaced = null; } else {
-    try { writePathTxt({ electronDir, platform, fs }); } catch (e) {
-      throw new Error(`${(e && e.message) || e} — path.txt could not be written, so the promote was refused and dist/ is exactly as it was`);
-    }
-  }
   try {
+    if (replaced === platformExe(platform)) { replaced = null; } else {
+      try { writePathTxt({ electronDir, platform, fs }); } catch (e) {
+        throw new Error(`${(e && e.message) || e} — path.txt could not be written, so the promote was refused and dist/ is exactly as it was`);
+      }
+    }
     const retired = path.join(electronDir, `.amicus-retired-${crypto.randomBytes(6).toString('hex')}`);
     let retiredExists = false;
     if (fs.existsSync(distDir)) {
@@ -229,9 +230,8 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
       throw e;
     }
     if (retiredExists) { try { fs.rmSync(retired, { recursive: true, force: true }); } catch { /* sweepPromoteLitter takes it */ } }
-  } catch (e) {
-    // Undo step 0's overwrite (see the RULING above): best-effort, never `e`.
-    if (replaced !== null) { try { fs.writeFileSync(pathFile, replaced); } catch { /* the tree is what matters */ } }
+  } catch (e) {                           // EVERY exit undoes step 0 (see the RULING)
+    if (replaced !== null) { try { fs.writeFileSync(pathFile, replaced); } catch { /* best-effort; the tree is what matters */ } }
     throw e;
   }
 }

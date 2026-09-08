@@ -88,6 +88,12 @@
  *   rollback.
  *   RED: "a path.txt naming a DIFFERENT exe is PUT BACK when the swap rolls
  *   back".
+ * PATHTXTREFUSENORESTORE electron-layout.js :: promoteDist — move step 0 back
+ *   OUTSIDE the try that puts the overwritten basename back, so its own refusal
+ *   is the one exit the restore skips. This is what the first B2 fix shipped,
+ *   and node's writeFileSync truncates at open, so the refusal destroyed the
+ *   value it was refusing to protect.
+ *   RED: "step 0's own REFUSAL puts back the basename its write truncated".
  * UNWINDUNBOUNDED zip-from-buffer.js :: extractZipBuffer — restore the round-3
  *   `await inFlight.catch(() => {})` in place of the bounded `awaitUnwind`, so
  *   the extractor waits forever for a write that can never come apart (yauzl's
@@ -1249,6 +1255,10 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
       ...fs,
       writeFileSync: (p, d) => {
         if (String(p).endsWith('path.txt')) {
+          // node's OWN truncating open runs first: a write-phase failure never
+          // leaves the previous bytes behind. Here there were none, and an
+          // EMPTY path.txt resolves exactly as an absent one does.
+          fs.closeSync(fs.openSync(p, 'w'));
           const e = new Error('ENOSPC: no space left on device, write'); e.code = 'ENOSPC'; throw e;
         }
         return fs.writeFileSync(p, d);
@@ -1311,5 +1321,85 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
     expect(fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')).toBe('electron');
     expect(fs.readFileSync(path.join(distDir, 'electron'), 'utf8')).toBe('ELF-OLD-BUT-WORKING');
     expect(isElectronUsable({ electronDir, platform: 'win32', env: {}, fs })).toBe(true);
+  });
+
+  test("step 0's own REFUSAL puts back the basename its write truncated (PATHTXTREFUSENORESTORE)", () => {
+    // The exit the first B2 fix did not cover: its refusal threw from OUTSIDE
+    // the try that puts `replaced` back. node TRUNCATES at open — MEASURED on
+    // v24.18.0: a real 12-byte path.txt is 0 bytes straight after
+    // `openSync(p,'w')`, before any write can fail — so refusing over an ENOSPC
+    // destroyed the cross-install basename the refusal existed to protect,
+    // while the message said dist/ was untouched. True of dist/, false of the
+    // install: this package RESOLVED before the promote and did not after.
+    // Only the write is injected; the truncating open below is node's own, and
+    // it fails ONCE — the put-back's 8 bytes go into the cluster the truncation
+    // just freed, which is the shape ENOSPC takes on a 12-byte file. The volume
+    // that refuses BOTH writes is the next test.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron'), 'ELF-OLD-BUT-WORKING');
+    fs.writeFileSync(path.join(electronDir, 'path.txt'), 'electron');   // npm_config_platform cross-install
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    let pathTxtWrites = 0;
+    const oneEnospcFs = {
+      ...fs,
+      writeFileSync: (p, d) => {
+        if (String(p).endsWith('path.txt') && (pathTxtWrites += 1) === 1) {
+          fs.closeSync(fs.openSync(p, 'w'));                            // node's own O_TRUNC
+          const e = new Error('ENOSPC: no space left on device, write'); e.code = 'ENOSPC'; throw e;
+        }
+        return fs.writeFileSync(p, d);
+      },
+    };
+
+    expect(() => promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: oneEnospcFs }))
+      .toThrow(/ENOSPC[\s\S]*promote was refused and dist\/ is exactly as it was/);
+
+    expect(fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')).toBe('electron');
+    expect(fs.readFileSync(path.join(distDir, 'electron'), 'utf8')).toBe('ELF-OLD-BUT-WORKING');
+    expect(isElectronUsable({ electronDir, platform: 'win32', env: {}, fs })).toBe(true);
+    // `electron/index.js`'s OWN resolution — path.txt joined onto dist/ — which
+    // is the half amicus's platformExe fallback does not cover.
+    expect(fs.existsSync(path.join(distDir, fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')))).toBe(true);
+    expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-retired-'))).toEqual([]);
+    expect(fs.readFileSync(path.join(incoming, 'electron.exe'), 'utf8')).toBe('MZ-NEW');
+  });
+
+  test('a volume that refuses EVERY path.txt write still leaves dist/ exactly as it was', () => {
+    // The limit the docblock STATES rather than hides: the put-back is
+    // best-effort, so a volume that fails the retry too keeps the truncated
+    // file. What survives that is the tree — nothing is retired, swapped or
+    // deleted — which is the half a user cannot recreate offline.
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'electron'), 'ELF-OLD-BUT-WORKING');
+    fs.writeFileSync(path.join(electronDir, 'path.txt'), 'electron');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const fullVolumeFs = {
+      ...fs,
+      writeFileSync: (p, d) => {
+        if (String(p).endsWith('path.txt')) {
+          fs.closeSync(fs.openSync(p, 'w'));
+          const e = new Error('ENOSPC: no space left on device, write'); e.code = 'ENOSPC'; throw e;
+        }
+        return fs.writeFileSync(p, d);
+      },
+    };
+
+    expect(() => promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: fullVolumeFs }))
+      .toThrow(/ENOSPC[\s\S]*promote was refused and dist\/ is exactly as it was/);
+
+    expect(fs.readFileSync(path.join(distDir, 'electron'), 'utf8')).toBe('ELF-OLD-BUT-WORKING');
+    expect(fs.readdirSync(distDir)).toEqual(['electron']);
+    expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-retired-'))).toEqual([]);
+    // The residue, recorded so the "best-effort" in the docblock is checkable:
+    // the basename is gone, and only a put-back that CANNOT run leaves it so.
+    expect(fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8')).toBe('');
   });
 });
