@@ -45,7 +45,10 @@
  * `electron-refuse.isUnsafeArchive` classify exactly what they classified.
  *
  * The difference: a SYMLINK whose target resolves outside the extraction root
- * is REFUSED here and is not refused by extract-zip. That is a behaviour change
+ * is REFUSED here and is not refused by extract-zip. The target is resolved
+ * against the REALPATH of the directory the link lands in, because the lexical
+ * `path.dirname` was measured to be defeated outright by a chain of
+ * directory-symlink entries earlier in the same archive. That is a behaviour change
  * on a shape amicus cannot test on this machine (the darwin `.app` bundle is
  * the only electron artifact with real symlinks), so it is refused in the same
  * `Out of bound path` wording, exercised against synthetic archives carrying
@@ -56,7 +59,8 @@
  * DESTINATION is (no space, a read-only dist, a path too long).
  * `UNZIP_BUFFER_UNAVAILABLE` = neither, yauzl would not load. The caller evicts
  * the cached artifact on the first ONLY — council finding D2 was a full disk
- * deleting a pristine cache entry.
+ * deleting a pristine cache entry. The constructors, and the per-entry writers
+ * that raise them, live in `./zip-entry-write`.
  *
  * @module sidecar/zip-from-buffer
  */
@@ -65,11 +69,12 @@
 
 const fsDefault = require('fs');
 const path = require('path');
-const zlib = require('zlib');
-const { pipeline } = require('stream/promises');
-const { Transform } = require('stream');
 
-const { collapseExcerpt } = require('../utils/text-sanitize');
+// The classified failures and the per-entry writers. THE ONE-WAY ARROW:
+// zip-from-buffer -> zip-entry-write, never back.
+const {
+  failure, badArchive, badDestination, outOfBound, extractorUnavailable, writeEntry, writeSymlink,
+} = require('./zip-entry-write');
 
 /** yauzl's own validateFileName refusals — three of unzip.js's UNSAFE_PATTERNS. */
 const NAME_REFUSAL = /^(absolute path|invalid relative path|invalid characters in fileName): /;
@@ -79,45 +84,10 @@ const IFMT = 61440;
 const IFDIR = 16384;
 const IFLNK = 40960;
 
-/**
- * @returns {Error} yauzl would not load. NOT an archive failure and NOT a
- * destination failure: the artifact is fine and so is the disk. unzip.js
- * records the v4.5.2 outage where an undeclared `extract-zip` threw
- * MODULE_NOT_FOUND out of a bare `require` and took a whole function with it;
- * `yauzl` is declared for that reason, and this guard is what stops a hoisting
- * surprise from turning into a DELETED cache entry.
- */
-const extractorUnavailable = (message) => failure('UNZIP_BUFFER_UNAVAILABLE', `the in-memory zip extractor is unavailable: ${message}`);
-
-/** @returns {Error} tagged with `code`, sanitized: every throw here is classified. */
-function failure(code, message) {
-  return Object.assign(new Error(collapseExcerpt(message)), { code });
-}
-
-/** @returns {Error} an archive-is-bad failure: the caller MAY evict the artifact. */
-const badArchive = (message) => failure('UNZIP_BUFFER_FAILED', message);
-
-/** @returns {Error} a destination-is-bad failure: the caller must NOT evict anything. */
-const badDestination = (message) => failure('UNZIP_DEST_FAILED', message);
-
-/** @returns {Error} the TERMINAL path-traversal refusal, in extract-zip's own
- *  `Out of bound path ` wording so unzip.js's UNSAFE_PATTERNS still classifies it. */
-const outOfBound = (where, fileName) => failure('UNZIP_UNSAFE_ARCHIVE', `Out of bound path "${where}" found while processing file ${fileName}`);
-
 /** extract-zip's getExtractedMode, with its 0755/0644 defaults. */
 function extractedMode(entryMode, isDir) {
   if (entryMode !== 0) { return entryMode; }
   return isDir ? 0o755 : 0o644;
-}
-
-/** Collect a readable fully into one Buffer (a symlink target is a few bytes). */
-function collect(stream) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    stream.on('data', (c) => chunks.push(c));
-    stream.on('error', reject);
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-  });
 }
 
 /** yauzl's callback API as a promise, with `fromBuffer`'s options pinned here. */
@@ -128,76 +98,6 @@ function openBuffer(yauzl, bytes) {
       resolve(zipfile);
     });
   });
-}
-
-/** One entry's payload stream, decompressed by yauzl exactly as extract-zip gets it. */
-function entryStream(zipfile, entry) {
-  return new Promise((resolve, reject) => {
-    zipfile.openReadStream(entry, (err, stream) => {
-      if (err) { reject(badArchive(`${entry.fileName}: ${(err && err.message) || err}`)); return; }
-      resolve(stream);
-    });
-  });
-}
-
-/**
- * Write one entry, checking its CRC-32 against the archive's own declaration.
- * An INTEGRITY check, not a security control (CRC-32 is linear and forgeable):
- * it catches a broken zlib or bad RAM, and is meaningful only because the
- * whole-buffer sha256 already ran on these exact bytes. yauzl checks no CRC at
- * all; `validateEntrySizes: true` covers the length half.
- */
-async function writeEntry({ zipfile, entry, dest, mode, fs }) {
-  const source = await entryStream(zipfile, entry);
-  let crc = 0;
-  // Accumulated by a TRANSFORM in the pipeline, never by a `data` listener:
-  // attaching one starts the flow before `pipeline` has piped it, losing bytes.
-  const crcThrough = new Transform({
-    transform(chunk, _enc, cb) { crc = zlib.crc32(chunk, crc); cb(null, chunk); },
-  });
-  let sink;
-  try {
-    sink = fs.createWriteStream(dest, { mode });
-  } catch (e) {
-    throw badDestination(`could not write ${entry.fileName}: ${(e && e.message) || e}`);
-  }
-  // WHICH SIDE FAILED FIRST is the causal claim the caller acts on (D2): a bad
-  // archive may be evicted, a full disk must never be. `pipeline` destroys the
-  // other half after the first error, so both ends usually end up emitting —
-  // only the FIRST one recorded says what actually happened.
-  let first = null;
-  const note = (from) => (e) => { if (!first) { first = { from, e }; } };
-  source.on('error', note('archive'));
-  sink.on('error', note('dest'));
-  try {
-    await pipeline(source, crcThrough, sink);
-  } catch (e) {
-    const cause = first ? first.e : e;
-    const detail = `${entry.fileName}: ${(cause && cause.message) || cause}`;
-    throw first && first.from === 'dest'
-      ? badDestination(`could not write ${detail}`)
-      : badArchive(`could not inflate ${detail}`);
-  }
-  if ((crc >>> 0) !== (entry.crc32 >>> 0)) {
-    throw badArchive(`crc32 mismatch for ${entry.fileName}`);
-  }
-}
-
-/** Create one symlink, refusing a target that resolves outside `root`. */
-async function writeSymlink({ zipfile, entry, dest, root, fs }) {
-  const target = (await collect(await entryStream(zipfile, entry))).toString('utf8');
-  const resolved = path.resolve(path.dirname(dest), target);
-  const rel = path.relative(root, resolved);
-  // SYMLINKESCAPE: `..` at the head, or an absolute answer (a different Windows
-  // drive), means the link points out of the tree amicus is allowed to write.
-  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
-    throw outOfBound(resolved, entry.fileName);
-  }
-  try {
-    fs.symlinkSync(target, dest);
-  } catch (e) {
-    throw badDestination(`could not create the symlink ${entry.fileName}: ${(e && e.message) || e}`);
-  }
 }
 
 /**
@@ -283,7 +183,9 @@ async function placeEntry({ zipfile, entry, root, fs }) {
   }
   if (isDir) { return true; }
   if (symlink) {
-    await writeSymlink({ zipfile, entry, dest, root, fs });
+    // `canonical`, NEVER `dest`: the link's target is resolved against the
+    // directory realpath says it is created in (see writeSymlink).
+    await writeSymlink({ zipfile, entry, canonical, root, fs });
   } else {
     await writeEntry({ zipfile, entry, dest, mode: procMode, fs });
   }

@@ -161,6 +161,7 @@ src/
 │   ├── wave-progress.js
 │   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+│   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
 │   └── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
 ├── template/
 │   ├── apply.js
@@ -609,6 +610,7 @@ evals/
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
+| `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
 | `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |

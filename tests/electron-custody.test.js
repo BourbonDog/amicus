@@ -33,6 +33,10 @@
  * SYMLINKESCAPE    zip-from-buffer.js :: writeSymlink — drop the resolved-target
  *   bounds check, so a symlink may point anywhere.
  *   RED: "a symlink whose target leaves the extraction root is REFUSED".
+ * SYMLINKCHAIN     zip-from-buffer.js :: writeSymlink — resolve the target
+ *   against the LEXICAL `path.dirname(dest)` instead of the realpath'd
+ *   `canonical` the caller already computed.
+ *   RED: "the target is resolved against the REAL directory, not the lexical one".
  * PROMOTEPARTIAL   electron-layout.js :: extractBytesToDist — extract straight
  *   into `<electronDir>/dist` instead of into `.amicus-incoming-<hex>/dist`.
  *   RED: "a failed extraction never becomes dist/".
@@ -394,6 +398,50 @@ describe('symlinks — the darwin .app shape, which cannot be run here', () => {
       expect(err.message).toMatch(/^Out of bound path /);
       expect(links).toEqual([]);            // nothing was created before the refusal
     }
+  });
+
+  test('the target is resolved against the REAL directory, not the lexical one (SYMLINKCHAIN)', async () => {
+    // MEASURED on the code as shipped in this branch, twice: with the check
+    // resolving against `path.dirname(dest)`, ONE archive of four ordinary
+    // entries — `L0`, `L0/L1`, `L0/L1/L2` each a symlink to `.`, then
+    // `L0/L1/L2/x -> ../../../victim.txt` — extracted with NO error at all
+    // ({strategy:'buffer',entries:4}) and planted a link outside the root.
+    // Escape depth tracked chain length 1:1. Every name passes yauzl's
+    // validateFileName: all relative, no `..` component, no backslash.
+    //
+    // The chain is planted in the injected fs's realpathSync rather than on
+    // disk because `symlinkSync` is EPERM on Windows without Developer Mode —
+    // and `realpath` returning the root for a three-deep lexical path is
+    // EXACTLY what a real chain of `.` links makes it return (measured on
+    // POSIX by the reviewer, with junctions here).
+    const dir = mkTmp();
+    const root = fs.realpathSync(dir);
+    const links = [];
+    const chainFs = {
+      ...fs,
+      symlinkSync: (target, dest) => links.push({ target, dest }),
+      realpathSync: (p) => {
+        const rel = path.relative(root, String(p));
+        return rel !== '' && rel.split(path.sep).every((seg) => /^L[0-9]$/.test(seg))
+          ? root
+          : fs.realpathSync(p);
+      },
+    };
+
+    const err = await extractZipBuffer(buildZip([
+      { name: 'L0', body: '.', mode: MODE_SYMLINK },
+      { name: 'L0/L1', body: '.', mode: MODE_SYMLINK },
+      { name: 'L0/L1/L2', body: '.', mode: MODE_SYMLINK },
+      { name: 'L0/L1/L2/x', body: '../../../victim.txt', mode: MODE_SYMLINK },
+    ]), { dir, deps: { fs: chainFs } }).catch((e) => e);
+
+    expect(err.code).toBe('UNZIP_UNSAFE_ARCHIVE');
+    expect(err.message).toMatch(/^Out of bound path /);
+    expect(err.message).toMatch(/L0\/L1\/L2\/x$/);
+    // The three `.` links are legitimate (they resolve to the root itself); the
+    // escaping fourth is the only one refused, and it was never created.
+    expect(links).toHaveLength(3);
+    expect(links.every((l) => l.target === '.')).toBe(true);
   });
 
   test('a symlink that walks UP and back DOWN inside the root is allowed', async () => {
