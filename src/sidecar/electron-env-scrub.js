@@ -170,10 +170,15 @@ function isRepoPlantedName(name) {
  * THE RESIDUAL IS AVAILABILITY-ONLY, and that is why it is documented rather
  * than closed. The zip's URL was already fixed inside the scrub, so a planted
  * mirror cannot substitute the bytes — it can only serve a checksum file that
- * disagrees with the official artifact, which FAILS the download. Stated in
- * `docs/configuration.md` in those terms; that page used to say these names stay
- * stripped "for the length of amicus's own download call", which is wider than
- * the code and is corrected.
+ * disagrees with the official artifact, which FAILS the download.
+ *
+ * IT IS STATED IN BOTH PLACES A USER READS IT, which took two rounds. Round 3
+ * narrowed `docs/configuration.md` and left the SAME overclaim standing at
+ * `docs/troubleshooting.md`, on the very bullet that tells a user to set
+ * `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` — i.e. on the page a user in exactly the
+ * UNPINNED configuration is sent to. Round 4 corrected it there too. When a
+ * claim about this module is narrowed, grep the docs for the phrasing rather
+ * than the file that suggested it.
  *
  * ── NOTHING OUTSIDE CAN OBSERVE IT (seat B3, REFUTED BY MEASUREMENT) ───────
  * B3 read this as mutating shared `process.env` "while the download is still in
