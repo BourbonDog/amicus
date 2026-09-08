@@ -3,6 +3,92 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.9.6] - 2026-09-08
+
+*Amicus never itself writes, or reports as verified, bytes it did not hash.*
+
+v4.9.5 hashed the Electron artifact **at a path** and then handed **that path** to an extractor,
+which re-opened it. Anyone able to write the Electron cache directory — running as the same user —
+could substitute the bytes in between, and the swapped archive was extracted and launched. Three
+remedies were tried and two were defeated by measurement before one held; the failures are recorded
+below because they are the useful part.
+
+### Security
+
+- **The artifact is read once, into memory, and never re-opened (#237).** One `open`, `fstat` on the
+  descriptor rather than `stat` on the name, positional reads into a single Buffer, sha256 over
+  **that Buffer**, extraction from **that Buffer**. There is no second path resolution left to race:
+  instrumenting every path-taking call across a full repair records exactly one `openSync` of the
+  artifact, and poisoning the file on disk afterwards cannot alter the hashed bytes. Both the cached
+  and the downloaded routes go through it.
+
+  **What was tried first, and why it failed** — because "we staged it privately" is the intuition
+  this release exists to correct:
+  - *Rename into a private directory.* A rename moves a directory **entry**, not an inode. An
+    attacker who hard-links the cache entry keeps a name for the same bytes and writes through it
+    after the rename.
+  - *Copy into a `0700` directory under the system temp.* `0700` excludes **other** users, not the
+    one the threat model actually assumes. Worse in practice: the directory prefix was fixed and
+    discoverable on a first `readdir`, and on Windows the `chmod` was skipped entirely, so the mode
+    was never even attempted.
+  - *A retained file descriptor.* Not custody either: a same-user `writeFileSync` truncates and
+    rewrites the **same inode**, and the held descriptor then reads the substituted bytes.
+
+- **The last-resort Electron installer is deleted.** It performed its own download and extraction,
+  bypassing every control this release adds; it pinned checksums out of the **scanned** directory,
+  reopening the anchor hole v4.9.5 closed; and it extracted with no stall bound at all. Its one
+  claimed justification — that amicus's dependency tree might fail to resolve `@electron/get` where
+  Electron's own tree succeeds — was measured false from both resolution paths.
+
+- **A native-extractor rescue exists, but only behind `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`.** Every
+  OS extractor takes a **path**, so using one means writing bytes down and letting a child process
+  open them — the exact custody the rest of this release establishes. That trade is available only
+  under a flag whose documented meaning is already "I accept Electron bytes amicus cannot vouch
+  for", it is announced on stderr **before** the child is spawned in the terms above rather than as
+  a safe operation, and its result is always marked `unverified` even when the artifact's own sha256
+  matched. It fires on one classified failure — the extractor's positive "this archive is bad"
+  verdict — and on nothing else: a path-traversal refusal stays terminal and does not even mention
+  the flag, because inviting a retry would be laundering a security refusal through a human.
+
+- **`yauzl` is now a declared dependency.** It previously resolved only through `extract-zip`, which
+  is the shape of the v4.5.2 outage this project already recorded.
+
+- **The repo-plantable Electron mirror names are scrubbed around amicus's own in-process download**,
+  not only the (now removed) child spawn. Measured against the installed library rather than
+  assumed: on the pinned route all twenty reads land inside the scrub window and none after. A
+  contract test re-runs that measurement on every suite run, so a library that moves a read past an
+  `await` fails here rather than in the field.
+
+### Fixed
+
+- **A promote can no longer cost you a working install.** `path.txt` is written **first**, while
+  `dist/` is still whole — its value never depended on the new tree — and a failure there refuses
+  the promote instead of leaving a replacement Electron the npm entry point cannot resolve. A
+  `path.txt` naming another platform's executable (an `npm_config_platform` cross-install) is
+  captured and restored on every failure exit.
+- **The in-memory extraction is bounded and actually stops.** The idle bound arms on **bytes the
+  destination accepted**, so a single large file on slow storage is not mistaken for a stall, and
+  firing it aborts the pipeline rather than merely reporting a failure while the work continues.
+- **Extraction litter is swept.** Incoming and retired trees from an interrupted promote no longer
+  accrete in the Electron package.
+
+### Known limits, stated rather than implied
+
+- **The symlink handling is unverified on macOS and Linux.** The darwin artifact is an `.app` bundle
+  containing real symlinks, and the target-escape check added here is a behaviour `extract-zip` does
+  not have — it could reject a layout that previously worked. It could not be exercised on the
+  machine this was built on.
+- Peak memory during a repair rises to roughly 210–260 MB, floored at the artifact size.
+- Unchanged from v4.9.5: `registry=` in a hostile `.npmrc` dominates every control here and amicus
+  cannot close it; Electron's own npm postinstall runs before any amicus code; nothing verifies the
+  binary at launch — this closes acquisition, not custody of what is already installed; and where no
+  published digest covers an artifact at all, those bytes are extracted and marked `unverified`
+  rather than refused.
+- Three findings from the final review are deferred to 4.9.7 and filed in `BACKLOG.md`: a failed
+  `dist` retirement can still delete a working install whose `path.txt` names another platform's
+  executable; a truncated archive whose entry names cannot be read reaches the native rescue; and
+  the rescue's cleanup does not reach writes a native tool makes outside its own directory.
+
 ## [4.9.5] - 2026-09-07
 
 *A repository you cloned could choose which bytes became your Electron.*
