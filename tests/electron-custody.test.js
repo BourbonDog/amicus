@@ -773,6 +773,27 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     expect(b.code).toBe('UNZIP_BUFFER_STALLED');
     expect(accepted.length).toBeGreaterThan(0);     // it really was mid-write
     expect(accepted.reduce((x, y) => x + y, 0)).toBeLessThan(body.length);
+
+    // (C) a SYMLINK entry whose target stream never ends. `collect` is not a
+    // `pipeline` and has no abort wiring, so nothing destroys this stream at
+    // all — the extractor's own bounded wait is the ONLY thing that ends it.
+    // The source is a stub here for the one reason a stub is legitimate: this
+    // path has no pipeline and so no dependence on any destroy semantics, and
+    // real yauzl cannot be made to hand back a stream that simply never ends.
+    // eslint-disable-next-line global-require
+    const { Readable } = require('stream');
+    const endlessTarget = {
+      // eslint-disable-next-line global-require
+      fromBuffer: (buf, o, cb) => require('yauzl').fromBuffer(buf, o, (e, zf) => {
+        if (zf) { zf.openReadStream = (_entry, done) => done(null, new Readable({ read() {} })); }
+        cb(e, zf);
+      }),
+    };
+    const c = await extractZipBuffer(buildZip([{ name: 'app/link', body: 'A', mode: MODE_SYMLINK }]), {
+      ...bounds, dir: mkTmp(), deps: { yauzl: endlessTarget, fs: { ...fs, symlinkSync: () => {} } },
+    }).catch((e) => e);
+
+    expect(c.code).toBe('UNZIP_BUFFER_STALLED');
   }, 20_000);
 });
 
