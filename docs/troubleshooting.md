@@ -432,7 +432,31 @@ That is what a swapped mirror or a planted cache file looks like. It is **also**
 - **Otherwise treat it as real.** Check what `ELECTRON_MIRROR` is set to, and whether the directory you ran `npx -y amicus@latest` in is one you trust.
 - Headless runs and the full council work without the GUI in every one of these cases.
 
-**A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it. Report the mirror or cache the archive came from.
+**A second, rarer refusal:** `Electron artifact REFUSED (unsafe archive)` means entries inside the zip tried to write *outside* the destination directory. That one is terminal by design — amicus does not retry it with a different extractor, does not delete the file (it is the evidence), and `AMICUS_ALLOW_UNVERIFIED_ELECTRON` does not apply to it, nor does the native-extractor rescue below. Report the mirror or cache the archive came from.
+
+---
+
+## amicus could not read this Electron archive
+
+**Symptom:** provisioning stops with
+
+```
+[amicus] amicus could not read this Electron archive: could not read the archive: ...
+[amicus] There is ONE rescue for that, and it is OFF. With
+[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 set BEFORE provisioning, amicus writes the bytes
+[amicus] it hashed into a private directory inside the electron package and hands that PATH
+[amicus] to a native extractor (tar / Expand-Archive / ditto / unzip) — ...
+```
+
+**Cause:** amicus extracts the artifact **in memory**, from the buffer it hashed, so that the bytes it writes are always the bytes it verified. This message means that extractor could not read the archive at all — a truncated or malformed zip, or a shape it does not handle. The bytes are not written anywhere and no Electron is installed from them; a *cached* artifact identified this way is discarded, because a positively-unreadable archive is the one failure that says the cached file is worthless.
+
+**Fix, in order:**
+
+- **Online, do nothing.** Amicus downloads the artifact again with the digest pinned. A truncated download heals itself.
+- **Air-gapped, re-copy first.** Copy the cache directory again from the machine that downloaded it. A partial copy is the usual cause, and a fresh copy costs you nothing.
+- **Only if you cannot obtain another copy: the native-extractor rescue.** Set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` before provisioning. Amicus then writes the bytes it hashed to a path inside the Electron package and hands that path to your OS's own extractor (`tar` / `Expand-Archive` / `ditto` / `unzip`) — the same tools that handled the archive before amicus extracted in memory at all. **This is not a safe operation, and it is not described as one.** Between amicus writing the file and the child process opening it, anything running as your user can substitute it, and what that child extracts is promoted into `dist/` without being hashed again. Amicus prints the whole trade on stderr before it spawns anything, and the result is reported `unverified` even when the artifact's own sha256 matched. Unset the variable afterwards: it also downgrades a digest-mismatch refusal to a warning ([configuration.md](./configuration.md#gui-and-debug)).
+- **What the rescue will *not* do,** whatever this variable is set to: retry an archive refused for path traversal (`REFUSED (unsafe archive)` — terminal by design), retry an extraction that *stalled* (the timeout exists to stop work, not to hand it to a child process), rescue bytes that contradict the published digest (they are known wrong), or paper over a full or unwritable disk. Each of those says something different from "this archive cannot be read", and only the last of those is a rescue amicus was given.
+- Headless runs and the full council work without the GUI throughout.
 
 ---
 
