@@ -174,7 +174,10 @@ describe('C2 — which failure reaches the rescue, and which cannot', () => {
   });
 
   test('a SECURITY refusal never reaches the rescue, hatch or no hatch (RESCUEONUNSAFE)', async () => {
-    for (const hatch of [false, true]) {
+    // HATCH-ON FIRST: the strongest form of the exclusion is "even with the
+      // rescue armed, this class does not reach it", so that is the case that
+      // fires first when the boundary is widened.
+      for (const hatch of [true, false]) {
       const { dir, incoming } = incomingTree();
       const err = boom('UNZIP_UNSAFE_ARCHIVE', 'Out of bound path "C:\\victim" found while processing file ../../x');
       const extract = jest.fn(async () => { throw err; });
@@ -193,7 +196,10 @@ describe('C2 — which failure reaches the rescue, and which cannot', () => {
   });
 
   test('a STALL never reaches the rescue (RESCUEONSTALL)', async () => {
-    for (const hatch of [false, true]) {
+    // HATCH-ON FIRST: the strongest form of the exclusion is "even with the
+      // rescue armed, this class does not reach it", so that is the case that
+      // fires first when the boundary is widened.
+      for (const hatch of [true, false]) {
       const { dir, incoming } = incomingTree();
       const err = boom('UNZIP_BUFFER_STALLED', 'the in-memory extraction stalled: no extract progress for 30000ms');
       const extract = jest.fn(async () => { throw err; });
