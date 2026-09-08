@@ -70,6 +70,11 @@
  *   supposed to stop carries on.
  *   RED: "when the bound FIRES nothing further is written, and no incoming tree
  *   is left".
+ *   BOTH re-measured in round 4 against the REAL `yauzl.openReadStream`: the
+ *   round-3 versions replaced it with `new Readable({read(){}})` and paced the
+ *   SOURCE, i.e. they substituted the one component whose destroy semantics the
+ *   halt depends on, so the evidence quoted in their own commit was measured
+ *   against the substitute. The pace is now applied to the SINK (`pacingFs`).
  * UNWINDUNBOUNDED zip-from-buffer.js :: extractZipBuffer — restore the round-3
  *   `await inFlight.catch(() => {})` in place of the bounded `awaitUnwind`, so
  *   the extractor waits forever for a write that can never come apart (yauzl's
@@ -83,7 +88,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Readable, Writable } = require('stream');
+const { Writable } = require('stream');
 
 const { readArtifactBytes, isSafeArtifactName, MAX_ARTIFACT_BYTES } = require('../src/sidecar/electron-custody');
 const { extractZipBuffer } = require('../src/sidecar/zip-from-buffer');
@@ -564,42 +569,45 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   // the same defect. These two tests are the halves.
 
   /**
-   * A yauzl whose entry stream is driven BY THE TEST. Everything else about the
-   * entry is the real library's — attributes, mode, crc32 — so only the PACE is
-   * synthetic. `feed(n)` releases the next n bytes of `body`.
+   * An fs whose write stream accepts a chunk only when the TEST releases it —
+   * so the extraction is paced from the SINK and `zipfile.openReadStream` stays
+   * the real library's.
+   *
+   * ROUND 4, and this is the whole point of the helper. It replaces a
+   * `pacedYauzl` that swapped `openReadStream` for `new Readable({read(){}})`,
+   * i.e. it substituted the exact component the halt's behaviour depends on: a
+   * modern Readable emits 'close' when it is destroyed, and yauzl@2.10.0's
+   * endpoint stream — whose `destroy` it overrides with a no-arg function —
+   * emits neither 'close' nor 'error'. So FIREDBUTRAN could not fail on the
+   * real path, and the mutant evidence in its own commit was measured against
+   * the substitute rather than against the library.
+   *
+   * MEASURED for a store-only entry (Node 24.18.0, real yauzl): the sink is
+   * handed exactly one 64 KiB chunk per `release()`, deterministically.
    */
-  function pacedYauzl(body) {
-    // eslint-disable-next-line global-require
-    const yauzl = require('yauzl');
-    let source = null;
-    let at = 0;
+  function pacingFs(writes) {
+    let held = null;
+    let auto = false;
+    const release = () => {
+      const cb = held;
+      held = null;
+      if (cb) { cb(); }
+      return Boolean(cb);
+    };
     return {
-      deps: {
-        fromBuffer: (b, o, cb) => yauzl.fromBuffer(b, o, (e, zf) => {
-          if (zf) {
-            zf.openReadStream = (_entry, callback) => {
-              source = new Readable({ read() {} });
-              callback(null, source);
-            };
-          }
-          cb(e, zf);
+      fs: {
+        ...fs,
+        createWriteStream: () => new Writable({
+          write(chunk, _enc, cb) {
+            writes.push(chunk.length);
+            if (auto) { cb(); return; }
+            held = cb;
+          },
         }),
       },
-      feed(n) {
-        source.push(body.subarray(at, Math.min(at + n, body.length)));
-        at = Math.min(at + n, body.length);
-        if (at >= body.length) { source.push(null); }
-      },
-    };
-  }
-
-  /** An fs whose write stream RECORDS every chunk it is handed and accepts it. */
-  function recordingFs(writes) {
-    return {
-      ...fs,
-      createWriteStream: () => new Writable({
-        write(chunk, _enc, cb) { writes.push(chunk.length); cb(); },
-      }),
+      release,
+      /** Stop pacing: this write and every one after it is accepted at once. */
+      openTheTap: () => { auto = true; release(); },
     };
   }
 
@@ -612,38 +620,44 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     // have moved, so each is progress. The body is deliberately larger than the
     // five 64 KiB feeds, so the entry is still unfinished at every expiry.
     const body = Buffer.alloc(640 * 1024, 7);
-    const paced = pacedYauzl(body);
     const timers = fakeTimers();
     const writes = [];
+    const paced = pacingFs(writes);
     const dir = mkTmp();
 
     const p = extractZipBuffer(buildZip([{ name: 'big.bin', body: body.toString('latin1') }]), {
       dir,
       idleMs: 1234,
       maxMs: 999_999,
+      unwindMs: 4321,
       deps: {
-        fs: recordingFs(writes),
-        yauzl: paced.deps,
+        fs: paced.fs,
         setTimeout: timers.setTimeout,
         clearTimeout: timers.clearTimeout,
       },
     });
     await settleIo();
     for (let i = 0; i < 5; i += 1) {
-      paced.feed(64 * 1024);
-      // eslint-disable-next-line no-await-in-loop
-      await settleIo();
+      expect(writes.length).toBe(i + 1);          // the sink is holding a chunk
       expect(timers.fireByMs(1234)).toBe(true);   // the window expires...
       // eslint-disable-next-line no-await-in-loop
       await settleIo();                           // ...and re-arms, because BYTES moved
+      // RE-ARMED, not fired: the idle window is live again and no UNWIND window
+      // exists — an abort is exactly what would have created one.
+      expect([...timers.pending.values()].map((t) => t.ms).sort((x, y) => x - y))
+        .toEqual([1234, 999_999]);
+      expect(paced.release()).toBe(true);         // one more 64 KiB is accepted
+      // eslint-disable-next-line no-await-in-loop
+      await settleIo();
     }
-    paced.feed(body.length);                      // finish the entry
-    await settleIo();
+    paced.openTheTap();                           // finish the entry
+    await settleIo(20);
 
     // Zero entries had completed at every one of those five expiries, so a bound
     // armed against entries would have failed this repair five times over.
     expect(await p).toEqual({ strategy: 'buffer', entries: 1 });
     expect(writes.reduce((a, b) => a + b, 0)).toBe(body.length);
+    expect(timers.pending.size).toBe(0);          // and nothing is left armed
   });
 
   test('when the bound FIRES nothing further is written, and no incoming tree is left (FIREDBUTRAN)', async () => {
@@ -651,25 +665,30 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     // outer promise and left the write in flight, so bytes kept landing in a
     // directory the caller was already deleting. Driven end to end through
     // extractBytesToDist, which is the caller that does the deleting.
+    //
+    // ROUND 4: the pace is now on the SINK, so the abort has to destroy YAUZL'S
+    // OWN endpoint stream. The previous version replaced that stream with a
+    // modern `Readable`, whose destroy emits 'close' where yauzl's emits
+    // nothing — it swapped out the very component the halt depends on, so this
+    // assertion could not fail on the real path.
     const body = Buffer.alloc(320 * 1024, 3);
-    const paced = pacedYauzl(body);
     const timers = fakeTimers();
     const writes = [];
-    const rfs = recordingFs(writes);
+    const paced = pacingFs(writes);
     const electronDir = mkTmp('amicus-firedbutran-');
 
     const p = extractBytesToDist({
       bytes: buildZip([{ name: 'big.bin', body: body.toString('latin1') }]),
       electronDir,
       platform: 'win32',
-      fs: rfs,
+      fs: paced.fs,
       extract: (bytes, o) => extractZipBuffer(bytes, {
         ...o,
         idleMs: 1234,
         maxMs: 999_999,
+        unwindMs: 4321,
         deps: {
-          fs: rfs,
-          yauzl: paced.deps,
+          fs: paced.fs,
           setTimeout: timers.setTimeout,
           clearTimeout: timers.clearTimeout,
         },
@@ -677,26 +696,30 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
     }).then(() => ({ ok: true }), (e) => ({ err: e }));
 
     await settleIo();
-    paced.feed(64 * 1024);                        // one chunk of real progress
+    expect(paced.release()).toBe(true);           // one chunk of real progress
     await settleIo();
     expect(timers.fireByMs(1234)).toBe(true);     // progress seen -> re-armed
     await settleIo();
-    expect(writes.length).toBeGreaterThan(0);
+    expect(writes.length).toBeGreaterThan(1);
     expect(timers.fireByMs(1234)).toBe(true);     // nothing moved -> THE BOUND FIRES
     const atFire = writes.length;
 
-    // The archive still has 256 KiB to give. A bound that only REPORTS would let
-    // every byte of it land; this asserts the work stopped, not that a rejection
-    // happened.
-    paced.feed(body.length);
+    // The archive still has most of itself to give. A bound that only REPORTS
+    // would let every byte of it land; this asserts the work stopped, not that a
+    // rejection happened.
+    paced.openTheTap();
     await settleIo(12);
     expect(writes.length).toBe(atFire);
+
+    // yauzl's endpoint stream emits nothing when it is destroyed, so `pipeline`
+    // never settles and the UNWIND window is what ends the extractor's wait.
+    expect(timers.fireByMs(4321)).toBe(true);
 
     const out = await p;
     expect(out.err.code).toBe('UNZIP_BUFFER_STALLED');
     expect(out.err.code).not.toBe('UNZIP_BUFFER_FAILED');   // never an artifact verdict
-    // ...and the half-written tree is gone, which is only safe because the
-    // extractor waits for the aborted write to unwind before it throws.
+    // ...and the half-written tree is gone, which the extractor's BOUNDED wait
+    // for the aborted write is what makes safe.
     expect(fs.readdirSync(electronDir).filter((n) => n.startsWith('.amicus-incoming-'))).toEqual([]);
     expect(fs.existsSync(path.join(electronDir, 'dist'))).toBe(false);
   });
