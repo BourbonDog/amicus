@@ -71,6 +71,59 @@ describe('resolveElectronBinary + isElectronUsable (#53, #59)', () => {
   });
 });
 
+describe('resolveElectronBinary and the promote guard read path.txt by ONE rule (A1)', () => {
+  // THE ANTI-DRIFT TEST, and the thing whose absence let the two copies of this
+  // rule diverge until v4.9.7: `resolveElectronBinary` trimmed and fell back on
+  // blank, `promoteDist`'s retirement guard did neither and asked only about
+  // this host's default name -- so a failed promote deleted a cross-installed
+  // tree that resolved perfectly well (A1).
+  //
+  // NAMED MUTANTS
+  //   HELDEXENOTRIM     electron-exe-rel.js :: heldExeRel -- drop the `.trim()`.
+  //     RED: the 'electron.exe' + LF and '  electron.exe  ' rows.
+  //   HELDEXENOFALLBACK electron-exe-rel.js :: heldExeRel -- return the raw
+  //     value instead of falling back to platformExe when it is blank, so a
+  //     zero-byte path.txt resolves to dist/ ITSELF rather than to the exe.
+  //     RED: the '' and whitespace-only rows. This is the mutant's REAL site --
+  //     inside distHeldExe it is equivalent, because the containment bound
+  //     already rejects a blank name, so no promote test can kill it.
+  //   RESOLVERDRIFT     electron-install.js :: resolveElectronBinary -- restore
+  //     the private inline read/trim/fallback instead of calling heldExeRel.
+  //     Survives alone; goes RED the moment either copy is changed and the
+  //     other is not, which is the drift this test exists to catch.
+  const SHAPES = [
+    { raw: null, expect: null },                    // absent -> platformExe
+    { raw: '', expect: null },                      // zero-byte -> platformExe
+    { raw: '   \n', expect: null },                 // whitespace-only -> platformExe
+    { raw: 'electron.exe\n', expect: 'electron.exe' },
+    { raw: '  electron.exe  ', expect: 'electron.exe' },
+    { raw: 'electron', expect: 'electron' },        // an npm_config_platform cross-install
+    { raw: 'Electron.app/Contents/MacOS/Electron', expect: 'Electron.app/Contents/MacOS/Electron' },
+  ];
+
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    for (const shape of SHAPES) {
+      const label = shape.raw === null ? '<absent>' : JSON.stringify(shape.raw);
+      test(`${platform}: path.txt ${label} resolves by the shared rule`, () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-resolve-'));
+        // The expected value is derived from the fixture THIS TEST WROTE, never
+        // from a value the code under test produced (an echoed read-back proves
+        // nothing). `platformExe` is the constant; the rule is what is on trial.
+        if (shape.raw !== null) { fs.writeFileSync(path.join(dir, 'path.txt'), shape.raw); }
+        const exeRel = shape.expect === null ? ei.platformExe(platform) : shape.expect;
+
+        expect(ei.resolveElectronBinary({ electronDir: dir, env: {}, platform }))
+          .toBe(path.join(dir, 'dist', exeRel));
+        expect(ei.resolveElectronBinary({
+          electronDir: dir, env: { ELECTRON_OVERRIDE_DIST_PATH: path.join(dir, 'OVR') }, platform,
+        })).toBe(path.join(dir, 'OVR', exeRel));
+
+        fs.rmSync(dir, { recursive: true, force: true });
+      });
+    }
+  }
+});
+
 describe('cachedZip (#53)', () => {
   test('locates a fixtured electron-v<ver>-<platform>-<arch>.zip under a cache root', () => {
     const cacheRoot = mkTmp('amicus-electron-cache-');

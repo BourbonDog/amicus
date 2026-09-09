@@ -514,11 +514,15 @@ The third line names which way the read failed:
   guaranteed either way: a half-written tree is never what `dist/` contains, and a kill mid-extract
   leaves the previous `dist/` exactly where it was.
 - **A promote never removes a working `dist/` to make room.** If the old tree cannot be renamed out of
-  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable,
-  the repair refuses and leaves it untouched rather than deleting it with no way back. If it holds no
-  executable it is not an install, and it is replaced. In the one case where the tree was renamed away
-  and neither the swap nor the rollback could run, the previous `dist/` is intact at
-  `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
+  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable —
+  the one `path.txt` names, or this platform's default when `path.txt` is absent, unreadable or blank
+  — the repair refuses and leaves it untouched rather than deleting it with no way back. That covers
+  a package cross-installed for another platform through `npm_config_platform`, whose `path.txt` names
+  an executable this platform never looks for; through v4.9.6 the guard asked only about this
+  platform's default name, so such a tree was read as "not an install" and a promote that FAILED
+  deleted it. If it holds neither, it is not an install, and it is replaced. In the one case where the
+  tree was renamed away and neither the swap nor the rollback could run, the previous `dist/` is
+  intact at `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
 - **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
   `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
   builds the artifact filename from it and refuses to use anything that is not a plain filename, since

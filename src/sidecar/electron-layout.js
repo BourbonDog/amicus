@@ -18,8 +18,11 @@
  * caller already hashed and writes `dist/` by extract-into-incoming + promote
  * (see `promoteDist`).
  *
- * TRUE LEAF: `path` only, with `fs` and the extractor injected by the caller —
- * so electron-provision.js requires it too without any risk of a cycle.
+ * NEAR-LEAF: `path` and `crypto`, plus the true leaf `./electron-exe-rel` (the
+ * one `path.txt` rule, shared with `resolveElectronBinary` since v4.9.7 — A1),
+ * with `fs` and the extractor injected by the caller — so electron-provision.js
+ * requires it too without any risk of a cycle. `platformExe` is re-exported
+ * from here because it was defined here through v4.9.6.
  *
  * @module sidecar/electron-layout
  */
@@ -28,24 +31,7 @@
 
 const crypto = require('crypto');
 const path = require('path');
-
-/** Platform exe basename, matching electron's getPlatformPath(). */
-function platformExe(platform) {
-  switch (platform) {
-    case 'mas':
-    case 'darwin':
-      return path.join('Electron.app', 'Contents', 'MacOS', 'Electron');
-    case 'win32':
-      return 'electron.exe';
-    default:
-      return 'electron';
-  }
-}
-
-/** Write path.txt: the basename `electron/index.js` joins onto `dist/`. */
-function writePathTxt({ electronDir, platform, fs }) {
-  fs.writeFileSync(path.join(electronDir, 'path.txt'), platformExe(platform));
-}
+const { platformExe, writePathTxt, distHeldExe } = require('./electron-exe-rel');
 
 /**
  * The two litter prefixes this module creates, and how long one may survive.
@@ -154,18 +140,25 @@ function sweepPromoteLitter({
  * and the caller then downloaded 138 MB and repeated the same promote.
  *
  * So the in-place removal now happens ONLY when there is nothing to lose: a
- * `dist/` that holds no `platformExe` is not an install, and destroying it costs
- * the user nothing they had. When the old tree DOES hold an executable, the
- * promote REFUSES and that tree is untouched — the repair fails, which is
- * strictly better than a working GUI becoming no GUI.
+ * `dist/` that holds NEITHER the exe `path.txt` names NOR `platformExe` is not
+ * an install, and destroying it costs the user nothing they had. When the old
+ * tree DOES hold an executable, the promote REFUSES and that tree is untouched —
+ * the repair fails, which is strictly better than a working GUI becoming no GUI.
  *
  * THE GUARANTEE, stated so it is checkable:
- *   **A promote never removes a `dist/` that held an executable unless the new
- *   tree is already in its place.**
+ *   **A promote never removes a `dist/` that HELD an executable — under the name
+ *   `path.txt` gives it, or `platformExe` when `path.txt` is absent, unreadable
+ *   or blank — unless the new tree is already in its place.**
+ * "HELD" means a FILE INSIDE `dist/`; `electron-exe-rel.js :: distHeldExe` owns
+ * that rule and carries what each of its bounds was measured to cost (A1).
  * The one exit that can still leave a user without a usable `dist/` is both
  * renames failing after step 1 SUCCEEDED. The old tree is then whole and
  * undeleted at `.amicus-retired-<hex>`, and the thrown message names it so the
  * user can rename it back.
+ *
+ * WHICH VALUE THE GUARD READS (A1): `raw`, captured BEFORE step 0 — not
+ * `replaced`, and never a re-read. `electron-exe-rel.js` carries why, the
+ * `ELECTRON_OVERRIDE_DIST_PATH` ruling, and the measurements behind both.
  *
  * `path.txt` IS WRITTEN FIRST (B2). Writing it LAST made "dist but no path.txt"
  * unobservable only while that write SUCCEEDED, and it ran after the old tree was
@@ -189,8 +182,10 @@ function sweepPromoteLitter({
 function promoteDist({ electronDir, incomingDist, platform, fs }) {
   const distDir = path.join(electronDir, 'dist');
   const pathFile = path.join(electronDir, 'path.txt');
-  let replaced = null;                    // step 0's overwritten DIFFERENT value
-  try { replaced = fs.readFileSync(pathFile, 'utf8'); } catch { /* absent or unreadable */ }
+  let raw = null;                         // path.txt BEFORE step 0 overwrites it
+  let unreadable = false;                 // a read that failed for a reason other than ENOENT
+  try { raw = fs.readFileSync(pathFile, 'utf8'); } catch (e) { unreadable = !e || e.code !== 'ENOENT'; }
+  let replaced = raw;                     // step 0's overwritten DIFFERENT value
   try {
     if (replaced === platformExe(platform)) { replaced = null; } else {
       try { writePathTxt({ electronDir, platform, fs }); } catch (e) {
@@ -205,10 +200,15 @@ function promoteDist({ electronDir, incomingDist, platform, fs }) {
         retiredExists = true;
       } catch (e) {
         // The old tree cannot be moved. Removing it in place is irreversible, so
-        // it is allowed only when the tree is not an install anyway.
-        if (fs.existsSync(path.join(distDir, platformExe(platform)))) {
+        // it is allowed only when the tree is an install under NEITHER name (A1).
+        if (unreadable) {
+          throw new Error(`${(e && e.message) || e} — path.txt could not be read, so which exe `
+            + 'dist/ holds is unknown and it was left exactly as it was');
+        }
+        const held = distHeldExe({ distDir, raw, platform, fs });
+        if (held) {
           throw new Error(`${(e && e.message) || e} — the existing dist/ holds a usable `
-            + `${platformExe(platform)} and was left exactly as it was`);
+            + `${held} and was left exactly as it was`);
         }
         fs.rmSync(distDir, { recursive: true, force: true });
       }
