@@ -111,7 +111,11 @@ wrong about the fix.
   now also runs with that directory as its working directory — measured neutral, and it costs a line.
 
 - **The CI council bench reserves 64,000 output tokens per leg instead of the engine's 32,000
-  default.** Across the five paid council runs on the v4.9.6 branch the bench averaged **2.8 of 4
+  default** — for every PR whose base carries the change. The alias map is fetched from the BASE
+  REF, so a branch cannot change the reviewers of its own PR; the config therefore lands on `main`
+  separately and takes effect for runs opened after it, never for the branch carrying it. Measured:
+  the run on the PR that first carried this reported `outputBudget is unset` and lost a seat at the
+  32,000 default exactly as before. Across the five paid council runs on the v4.9.6 branch the bench averaged **2.8 of 4
   seats**, and four of the six lost seats died at the reservation with `finish: 'length'` and
   0–651 usable output tokens.
 

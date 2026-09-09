@@ -7016,7 +7016,16 @@ The run that raised them reviewed at **2 of 4 seats**.
   `node_modules/electron/{dist,path.txt}` first, so the reference tree's provenance is true by
   construction.
 - [x] **The council bench is degrading and it is now affecting verdicts — `outputBudget: 64000`
-  shipped on the CI bench (v4.9.7).** There were **FIVE** paid runs on `fix/v496-council-findings`,
+  shipped on the CI bench (v4.9.7).**
+  ⚠️ **IT IS READ FROM THE BASE REF, so it is INERT on the branch that carries it.**
+  `council-review.yml` fetches the alias map with
+  `gh api ...contents/.github/amicus-ci-aliases.json?ref=${BASE_REF}` — a deliberate control, so a
+  branch cannot change the reviewers of its own PR. MEASURED on run 34376584500 (PR #239, which
+  carried this change): `outputBudget is unset`, and a seat died at the 32,000 default exactly as
+  before. The fix for a degrading bench therefore cannot improve the review of its own PR. It was
+  landed separately on `main` for that reason; every PR opened after that merge gets the
+  reservation. This is the config-skew family in a new dress: a config change VERIFIED ON THE
+  BRANCH that cannot take effect FROM the branch. There were **FIVE** paid runs on `fix/v496-council-findings`,
   not four: 34158075329 (2/4), 34165289952 (4/4), 34175671859 (3/4), 34182994208 (3/4), 34239260931
   (2/4) — mean **2.8 of 4**. The earlier "3/4, 4/4, 3/4, 2/4" dropped the first run.
   - **THE FILED CAUSE WAS HALF THE STORY.** Every one of the six lost seats lost its FIRST attempt
