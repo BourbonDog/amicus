@@ -714,6 +714,24 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
     expect(prose('configuration.md')).toMatch(/keeps\*\* the cached archive|that discard now waits/);
   });
 
+  test('the pages do not claim a write inside the incoming tree survives (B2)', () => {
+    // MEASURED FALSE and shipped in two places: `extractBytesToDist`'s `finally`
+    // removes the WHOLE incoming tree, so only a write OUTSIDE it survives. The
+    // old sentence made a narrow residual sound like a wide one.
+    expect(prose('configuration.md')).not.toMatch(/cleans up only \*?inside\*? the directory it asked/);
+    expect(prose('configuration.md')).toMatch(/absolute path outside that tree|write a native tool makes to an\s+absolute path/);
+  });
+
+  test('the pages name the ONE strategy still unmeasured, and do not call the measured ones unmeasured (B2)', () => {
+    // `ditto` is the last unmeasured strategy in nativeUnzipPlan. Info-ZIP
+    // `unzip` and GNU `tar` are measured now, so a page still calling them
+    // unmeasured is stale in the direction that matters -- it overstates the risk
+    // and hides which one is real.
+    const text = prose('configuration.md');
+    expect(text).toMatch(/`ditto`, the first macOS strategy, is the one that\s+remains unmeasured/);
+    expect(text).not.toMatch(/`ditto` and Info-ZIP `unzip`, the\s+macOS and Linux strategies, are unmeasured/);
+  });
+
   test('the pages say BOTH name tables are read (B3)', () => {
     // The whole of B3 in one sentence a user can act on: cutting the tail off an
     // archive no longer hides its names.

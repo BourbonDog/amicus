@@ -79,7 +79,17 @@ function cleanDir(fs, dir) {
 
 /**
  * Walk the platform's native plan until one strategy leaves files in `dir`.
-
+ *
+ * `cwd` IS THE INCOMING TREE, and it is a containment measure with an honest
+ * label: MEASURED NEUTRAL, not measured needed. Across 18 paired runs no shipped
+ * strategy wrote anything cwd-relative, so this changes no observed behaviour.
+ * It costs one line and adds no decision surface, and it converts a hypothetical
+ * cwd-relative write from "the user's own repo, under npx, forever" into "the
+ * incoming tree, which `extractBytesToDist`'s `finally` deletes unconditionally
+ * and `sweepPromoteLitter` takes if a kill skipped that". `unzip.js ::
+ * robustExtract`'s native loop deliberately does NOT get the same treatment: its
+ * `dir` is not inside a tree amicus deletes unconditionally, so binding a cwd
+ * there would point a child's working directory at the user's install.
  *
  * The verdicts are unzip.js's, because they were right there: a spawn error or
  * an external signal-kill (`status: null` — SIGKILL, an OOM) is a FAILURE even
@@ -88,12 +98,14 @@ function cleanDir(fs, dir) {
  * strategy starts from an empty directory.
  * @returns {string|null} the strategy name that worked, or null
  */
-function runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log }) {
+function runNativePlan({ zip, dir, cwd, platform, fs, spawn, maxMs, log }) {
   const failures = [];
   for (const strat of nativeUnzipPlan(zip, dir, platform)) {
     let res;
     try {
-      res = spawn(strat.cmd, strat.args, { stdio: 'ignore', windowsHide: true, timeout: maxMs });
+      res = spawn(strat.cmd, strat.args, {
+        stdio: 'ignore', windowsHide: true, timeout: maxMs, cwd,
+      });
     } catch (e) {
       failures.push(`${strat.name}: spawn ${(e && e.code) || (e && e.message) || 'threw'}`);
       continue;
@@ -150,7 +162,7 @@ function nativeRescue({ bytes, dir, reason, namesComplete, namesChecked, platfor
     // The failed extractor's partial tree is evidence of nothing and would be
     // promoted as if it were a rescue. It goes before the child runs.
     cleanDir(fs, dir);
-    const strategy = runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log });
+    const strategy = runNativePlan({ zip, dir, cwd: incoming, platform, fs, spawn, maxMs, log });
     if (strategy) {
       log(`[amicus] recovered via the native extractor (${strategy}). These bytes were NOT re-hashed; the result is marked unverified.`);
     }

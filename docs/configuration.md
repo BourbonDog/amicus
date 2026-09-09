@@ -432,11 +432,25 @@ These variables control the polling loop that drives headless sessions. The defa
 >   a wrong size is a property of exactly the corrupt archives this rescue is for.
 >   A desynchronised walk can read a "name" out of payload bytes. It fails toward
 >   **refusing**, so it can cost a rescue and never grant one.
-
 >
-> Amicus cleans up only *inside* the directory it asked the extractor to write to,
-> so anything a native tool wrote outside it would survive a failed strategy. This
-> is the concrete shape of "not a safe
+> When a name check cannot see it, the remaining check is the extractor's own, and
+> those are measured on every CI run rather than asserted here
+> (`tests/sidecar/native-extractor-containment.test.js`, 12 escape shapes per
+> strategy). At the time of writing: `tar.exe` refuses `..` (`Path contains '..'`,
+> exit 1) and strips absolute and drive-letter names into the destination;
+> `Expand-Archive` refuses `..` (`Can not process invalid archive entry '…'`) and
+> errors out on drive-letter and `\\?\` shapes with an empty destination; Info-ZIP
+> `unzip` contains by stripping the escaping components and writing the entry
+> inside the destination under a mangled name (its own `-hh` text documents this
+> as the default, with `-:` as the opt-out, which amicus does not pass); GNU `tar`
+> cannot read a zip at all. **`ditto`, the first macOS strategy, is the one that
+> remains unmeasured.**
+>
+> Everything amicus writes for a rescue goes under a private incoming directory
+> that is deleted unconditionally afterwards, and the child is run with that
+> directory as its working directory, so a relative write lands where the cleanup
+> reaches. What amicus cannot clean up is a write a native tool makes to an
+> absolute path outside that tree. This is the concrete shape of "not a safe
 > operation": if the archive came from somewhere you do not trust, do not set this
 > variable — get another copy.
 >

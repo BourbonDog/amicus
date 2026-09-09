@@ -162,6 +162,16 @@ function isRescuableFailure(err) {
  * printed before the spawn now says WHICH names were checked, rather than letting
  * the user assume they all were. `docs/configuration.md` says the same thing to
  * the user who has to decide whether to set the flag.
+ *
+ * WHEN A NAME CHECK CANNOT SEE IT, the only check left is the extractor's own —
+ * and that claim is now RE-MEASURED on every CI run rather than asserted once
+ * (`tests/sidecar/native-extractor-containment.test.js`, 12 escape shapes per
+ * strategy). `tar.exe`, `Expand-Archive` and Info-ZIP `unzip` all contain their
+ * own escapes; GNU `tar` cannot read a zip at all; `ditto` is the one strategy
+ * still unmeasured, and that suite measures it the first time it runs on a Mac.
+ * What a failed strategy can still leave behind is ONLY a write to an ABSOLUTE
+ * path outside the incoming tree: everything else the rescue writes lives under
+ * that tree, which `extractBytesToDist`'s `finally` deletes unconditionally (B2).
  * @param {{central:object, local:object}} seen the two walks' results
  * @returns {Error|null} a terminal UNZIP_UNSAFE_ARCHIVE, or null
  */
