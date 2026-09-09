@@ -241,18 +241,41 @@ jobs:
           # run.json note, so the council would quietly review with a smaller
           # bench. Stop instead. The JS only prints; the shell writes the summary,
           # so no newline escapes have to survive the YAML block scalar.
+          #
+          # The SAME charter covers the map's `outputBudget` (v4.9.7): a value
+          # amicus rejects (a string, a zero, anything non-numeric) makes
+          # getOutputBudget() return null, no engine flag is set, and every leg
+          # silently reserves the engine's 32000 default with no message anywhere
+          # — the identical silent substitution, one key over. `validate-map.js`
+          # in the provisioning step above inspects `map.aliases` ONLY, so a
+          # malformed budget passes it. A budget ABOVE the ceiling degrades the
+          # other way: it lands in full on the rows the engine has no ceiling for
+          # and is clamped on the rows that have one, so the run stops reserving
+          # one number.
+          # ⚠️ NAMED HONESTLY: the budget line is an ECHOED READ-BACK — it reports
+          # what amicus read from the file this job's own previous step wrote. It
+          # catches a typo in the map. It does NOT prove what went on the wire;
+          # spend-ledger.jsonl and run.json :: degrades[].data.reason do that.
           cat > preflight.js <<'PREFLIGHT'
           const { execSync } = require('child_process');
           const path = require('path');
           const root = execSync('npm root -g', { encoding: 'utf8' }).trim();
           const cfg = require(path.join(root, 'amicus', 'src', 'utils', 'config.js'));
+          // The LOWEST COLD engine ceiling on this bench, and cold it is shared by
+          // TWO rows — the chair (google/gemini-3.1-pro-preview) and
+          // deepseek/deepseek-v4-flash-0731 — not by the chair alone. MEASURED on
+          // the wire against opencode-ai 1.18.15 with the bare {} descriptors CI
+          // registers: the flag at 100000 arrives as max_tokens 65536 on both.
+          // A static bound on purpose: a runner has no model-catalog.json, so a
+          // check that consulted one would test something CI never sees.
+          const COLD_CEILING = 65536;
           const seats = []
             .concat(String(process.env.MODELS || '').split(','))
             .concat([String(process.env.CHAIR || '')])
             .map((s) => s.trim())
             .filter(Boolean);
           const aliases = cfg.getEffectiveAliases();
-          let missing = 0;
+          let problems = 0;
           for (const seat of Array.from(new Set(seats))) {
             if (seat.indexOf('/') !== -1) {
               console.log(seat + ' -> (full id, no alias lookup)');
@@ -261,12 +284,37 @@ jobs:
             const resolved = aliases[seat];
             if (resolved === undefined) {
               console.error("::error::seat '" + seat + "' is not a known alias here — it would be dropped from the bench");
-              missing++;
+              problems++;
             } else {
               console.log(seat + ' -> ' + resolved);
             }
           }
-          process.exit(missing ? 1 : 0);
+          const declared = (cfg.loadConfig() || {}).outputBudget;
+          const budget = cfg.getOutputBudget();
+          if (declared === undefined) {
+            // No config.json at all (the tolerated 404 path: a workflow_call
+            // caller whose base ref carries no map), or a map that predates the
+            // key. Unchanged behaviour, said out loud rather than left blank.
+            console.log('outputBudget -> unset (the engine default 32000 governs every leg)');
+          } else if (budget === null) {
+            console.error('::error::outputBudget ' + JSON.stringify(declared)
+              + ' is not a positive number — amicus would set no engine flag and every leg'
+              + ' would silently reserve the engine 32000 default');
+            problems++;
+          } else if (budget > COLD_CEILING) {
+            console.error('::error::outputBudget ' + budget + ' is above ' + COLD_CEILING
+              + ', the lowest COLD engine ceiling on this bench (shared by the chair'
+              + ' google/gemini-3.1-pro-preview and deepseek/deepseek-v4-flash-0731) — those'
+              + ' rows would be silently clamped while the others reserve in full');
+            problems++;
+          } else if (budget !== declared) {
+            // normalizeOutputBudget FLOORS a fractional number, so the declared
+            // and effective values can differ. Print the one that reaches the wire.
+            console.log('outputBudget -> ' + budget + ' (declared ' + JSON.stringify(declared) + ', floored)');
+          } else {
+            console.log('outputBudget -> ' + budget);
+          }
+          process.exit(problems ? 1 : 0);
           PREFLIGHT
           set +e
           node preflight.js > bindings.txt
