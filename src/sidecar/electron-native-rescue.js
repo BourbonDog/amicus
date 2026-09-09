@@ -117,7 +117,8 @@ const { nativeRescue, RESCUE_ZIP, INCOMING_PREFIX } = require('./electron-native
 // sentence in this subsystem is written in the same two files.
 const { offerNativeRescue } = require('./electron-rescue-notice');
 // The read-only name walk the boundary consults before it trusts a verdict.
-const { scanEntryNames, scanLocalNames } = require('./zip-name-scan');
+const { scanEntryNames } = require('./zip-name-scan');
+const { scanLocalNames } = require('./zip-local-name-scan');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** The ONE extractor verdict a rescue may act on. See the docblock's boundary. */

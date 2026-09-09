@@ -24,7 +24,8 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-const { scanEntryNames, nameRefusal, scanLocalNames } = require('../../src/sidecar/zip-name-scan');
+const { scanEntryNames, nameRefusal} = require('../../src/sidecar/zip-name-scan');
+const { scanLocalNames } = require('../../src/sidecar/zip-local-name-scan');
 const { buildZip, FLAG_ENCRYPTED } = require('../helpers/zip-fixture');
 
 /** The entry that ends yauzl's walk before it validates any later name. */
@@ -387,6 +388,55 @@ describe('scanLocalNames reads the OTHER table an archive declares its names in 
 
     expect(local.complete).toBe(false);
     expect(local.why).toMatch(/declares its directory begins/);
+  });
+
+  // -- COUNCIL #239 ROUND 2, BLOCKER: every early exit left the bytes AHEAD of it
+  // unexamined, and an entry the walk never reached cannot be refused. bit 3 with
+  // a ZERO size is a STANDARD data-descriptor encoding, not an exotic shape, so
+  // one such entry in front of a traversal name restored the whole bypass.
+  //
+  // SWEEPUNREACHED  zip-local-name-scan.js :: the `stopped` helper -- return
+  //   `refusal: null` instead of `sweepUnreached(bytes, from)`, restoring the
+  //   blind stop.
+  //   RED: 'a standard data-descriptor entry cannot hide what is behind it'.
+  test('a standard data-descriptor entry cannot hide what is behind it (SWEEPUNREACHED)', () => {
+    // The chain genuinely cannot be followed past a deferred size -- so the
+    // region it could not reach is SWEPT for local signatures instead of trusted.
+    const bytes = concatZip([
+      zipEntry('first.bin', 'AAAA', { flags: 0x08, size: 0 }),
+      zipEntry(HOSTILE, 'PWNED'),
+      zipEntry('electron.exe', 'MZ'),
+    ]);
+
+    const local = scanLocalNames(bytes);
+
+    expect(local.refusal).toContain(HOSTILE);
+  });
+
+  test('the zip64 sentinel cannot hide what is behind it either (SWEEPUNREACHED)', () => {
+    const bytes = concatZip([
+      zipEntry('first.bin', 'AAAA', { size: 0xFFFFFFFF }),
+      zipEntry(HOSTILE, 'PWNED'),
+      zipEntry('electron.exe', 'MZ'),
+    ]);
+
+    expect(scanLocalNames(bytes).refusal).toContain(HOSTILE);
+  });
+
+  test('sweeping ADDS refusals and never removes a rescue (SWEEPUNREACHED)', () => {
+    // THE AVAILABILITY HALF, and the reason the remedy is a sweep rather than the
+    // blanket fail-closed this cluster already rejected: a truncated zip is the
+    // case the whole rescue exists for, and its walk cannot finish either. Both
+    // of these stop early with names the sweep reads as CLEAN, and both must
+    // still reach the extractor.
+    const streamed = concatZip([
+      zipEntry('first.bin', 'AAAA', { flags: 0x08, size: 0 }),
+      zipEntry('electron.exe', 'MZ'),
+    ]);
+    expect(scanLocalNames(streamed).refusal).toBeNull();
+
+    const whole = concatZip([zipEntry('first.bin', 'AAAA'), zipEntry('electron.exe', 'MZ')]);
+    expect(scanLocalNames(whole.subarray(0, whole.length - 8)).refusal).toBeNull();
   });
 
   test('a CLEAN archive still reports a clean bill, or the notice over-warns forever', () => {

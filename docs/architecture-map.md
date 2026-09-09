@@ -167,6 +167,7 @@ src/
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 │   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
 │   ├── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   ├── zip-local-name-scan.js  # THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers.
 │   ├── zip-name-scan.js  # WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central
 │   └── zip-stall-bound.js  # WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work.
 ├── template/
@@ -623,7 +624,8 @@ evals/
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
 | `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
-| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `scanLocalNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
+| `sidecar/zip-local-name-scan.js` | THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers. | `scanLocalNames()`, `declaredCentralOffset()` |
+| `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
 | `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
