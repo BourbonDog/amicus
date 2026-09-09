@@ -857,8 +857,12 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   }, 20_000);
 });
 
-describe('symlinks — the darwin .app shape, which cannot be run here', () => {
-  // MEASURED-UNVERIFIABLE ON THIS MACHINE. The only electron artifact that
+describe('symlinks — the darwin .app shape, pinned here and EXERCISED in .github/workflows/darwin-bundle.yml', () => {
+  // NOT VERIFIABLE ON THIS MACHINE, AND NO LONGER UNVERIFIED ANYWHERE. Since
+  // v4.9.7 `.github/workflows/darwin-bundle.yml` runs the real extract path over
+  // the real artifact on a real Mac; these tests remain the platform-independent
+  // pin of the DECISION, which is what a mutant needs to go RED on every push.
+  // The only electron artifact that
   // contains symlinks is the darwin `.app` bundle (`Versions/Current` and the
   // framework chains); the win32 artifact has ZERO symlink entries, measured on
   // the real 138 MiB file. So these tests build the SHAPES a real `.app` uses

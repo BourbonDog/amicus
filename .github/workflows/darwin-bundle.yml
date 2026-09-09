@@ -1,0 +1,132 @@
+name: Darwin bundle extract
+
+# THE ONE PLACE amicus's extract path meets a real `.app` bundle, a real POSIX
+# `fs.symlinkSync`, a real `fs.realpathSync` and a real dyld. The assertions and
+# the mutant each one kills live in `scripts/probe-darwin-extract.js`, not here.
+#
+# WHAT IT DOES *NOT* EXIST TO PROVE. The v4.9.7 filing — that the v4.9.6
+# target-escape check in `src/sidecar/zip-entry-write.js :: writeSymlink` could
+# REJECT a real darwin layout — is already REFUTED by measurement on the real
+# bytes: electron-v43.1.1-darwin-arm64.zip (122,054,683 bytes, sha256
+# d6d0598d…6169) declares 585 central-directory records, 14 of them symlinks,
+# every target RELATIVE, none carrying a `..` component, none absolute, and 0 of
+# the 585 entry names traverse a symlinked component. The check is lexical, so it
+# cannot fire on that shape. linux is settled outright and gets no job: both
+# linux-x64 (124,861,804 bytes) and linux-arm64 (124,456,257 bytes) hold 74
+# entries and ZERO symlinks, so `writeSymlink` is unreachable there.
+#
+# WHAT IT DOES PROVE: (1) a real symlinkSync creating those 14 links and the
+# result being a bundle dyld can load; (2) the SYMLINKCHAIN control against a
+# REAL filesystem — the jest suite pins it with a `realpathSync` the test itself
+# injects; (3) the ABSOLUTE-target branch on POSIX arithmetic, which the Windows
+# suite proves on the wrong platform; (4) a standing guard against a FUTURE
+# electron whose bundle layout changes.
+#
+# WHAT IT COSTS — stated, not waved away. This job owns a ~122 MB artifact
+# download plus TWO extractions of ~600 MB each (the reference tree, then
+# amicus's own) on a 3-vCPU / 8 GB macOS runner. Budget 4-6 minutes. That is why
+# it is path-filtered and weekly rather than per-push: ci.yml already burns two
+# macOS legs on every push, and macOS concurrency — not minutes — is the binding
+# constraint on a public repo. A `~/Library/Caches/electron` action cache would
+# shave the download; it is deliberately NOT used, because a cache the job itself
+# populated is one more surface between the release asset and the assertion.
+
+on:
+  pull_request:
+    paths:
+      - 'src/sidecar/zip-*.js'
+      - 'src/sidecar/electron-*.js'
+      - 'tests/helpers/zip-fixture.js'
+      - 'scripts/probe-darwin-extract.js'
+      # A dependabot/manual electron bump changes the BUNDLE without touching one
+      # source path above. This is the filter entry that catches it.
+      - 'package-lock.json'
+      - '.github/workflows/darwin-bundle.yml'
+  # Same filter on the merge, so a bump is proven AT merge time rather than up to
+  # a week later. (`paths` makes this job report SKIPPED when nothing matches, so
+  # it cannot be a required status check as written — see docs/electron-testing.md.)
+  push:
+    branches: [main]
+    paths:
+      - 'src/sidecar/zip-*.js'
+      - 'src/sidecar/electron-*.js'
+      - 'tests/helpers/zip-fixture.js'
+      - 'scripts/probe-darwin-extract.js'
+      - 'package-lock.json'
+      - '.github/workflows/darwin-bundle.yml'
+  # The cron re-proves the PINNED version against the live release asset and the
+  # current runner image — the two inputs no path filter can see. It does NOT
+  # cover version bumps (push/pull_request do), and a schedule GitHub delays or
+  # drops is silent, so it is the weakest of the four triggers on purpose.
+  schedule:
+    - cron: '0 7 * * 1' # Mondays 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  darwin-bundle:
+    name: real darwin .app extract + exec
+    runs-on: macos-latest # arm64; 3 vCPU / 8 GB per ci.yml's own Runner capacity step
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # --foreground-scripts so a DEPENDENCY's install-script output reaches the
+      # log at all. Without it npm swallows it, which is how the belief that
+      # `npm ci` provisions Electron survived unchallenged (see ci.yml's
+      # tarball-install step).
+      - run: npm ci --foreground-scripts
+      # `npm ci` does NOT provision the Electron binary. MEASURED on run
+      # 34246117877, job 102128420249 (`test (macos-latest / node 22)`): npm ci
+      # finished in 17s and amicus's own postinstall printed "[amicus] Note: the
+      # Electron GUI binary is not provisioned yet". The mechanism:
+      # electron@43.1.1's package.json has NO `scripts` field at all — it ships
+      # install.js only as the `install-electron` BIN — and package-lock.json
+      # carries no `hasInstallScript` for it. So npm never runs it, on any
+      # platform. Ask for the artifact explicitly, in its own step, so a fetch
+      # failure is an attributable red.
+      #
+      # NOT `AMICUS_PREFETCH_ELECTRON=1 npm ci`: scripts/postinstall.js routes
+      # that through amicus's OWN repairElectron, and the A4 parity assertion
+      # would then diff amicus against amicus — the echoed read-back this job
+      # exists to escape.
+      - name: Provision the real darwin artifact (electron's OWN installer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f node_modules/electron/install.js ]; then
+            echo "::error::the electron package is missing from node_modules — it is an optionalDependency and npm dropped it. Nothing below can run."
+            exit 1
+          fi
+          # install.js short-circuits on an already-populated dist/. On a runner
+          # there is none; removing it anyway makes the A4 reference tree's
+          # provenance true BY CONSTRUCTION when this script is run by hand on a
+          # dev Mac, where dist/ may well be amicus's own self-heal output.
+          rm -rf node_modules/electron/dist node_modules/electron/path.txt
+          # One retry: this repo has a MEASURED precedent of runner egress
+          # truncating a release-asset download twice in a row (run 31622335985,
+          # 107 bytes instead of ~2.3 MB) while the same asset fetched fine
+          # off-runner. An infra flake must not wear the same red as "the extract
+          # produced the wrong tree".
+          obtained=0
+          for attempt in 1 2; do
+            if node node_modules/electron/install.js; then
+              obtained=1
+              break
+            fi
+            echo "::warning::attempt ${attempt} to fetch the Electron artifact failed; retrying in 20s"
+            sleep 20
+          done
+          if [ "${obtained}" -ne 1 ]; then
+            echo "::error::the Electron ARTIFACT could not be obtained from the release host. This is a FETCH failure, not a finding about the extractor."
+            exit 1
+          fi
+      # Fail loudly if a precondition is gone: a skipped assertion reads as a pass.
+      - name: Preconditions (cached artifact + reference tree)
+        run: node scripts/probe-darwin-extract.js --preflight
+      - name: Extract the real artifact through the real path, and run it
+        run: node scripts/probe-darwin-extract.js

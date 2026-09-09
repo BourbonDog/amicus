@@ -418,6 +418,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── probe-darwin-extract.js
 ├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
 ├── run-integration-keyless.js
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.

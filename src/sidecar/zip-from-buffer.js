@@ -40,11 +40,22 @@
  * extraction root is REFUSED here and is not by extract-zip, and it is resolved
  * against the REALPATH of the directory the link lands in because the lexical
  * `path.dirname` was measured to be defeated outright by a chain of
- * directory-symlink entries earlier in the same archive. That is a behaviour
- * change on a shape amicus cannot test on this machine (the darwin `.app` bundle
- * is the only electron artifact with real symlinks), so it is refused in the
- * same `Out of bound path` wording, exercised against synthetic archives, and
- * named in the report as unverified on macOS.
+ * directory-symlink entries earlier in the same archive. It is refused in the
+ * same `Out of bound path` wording and exercised against synthetic archives
+ * here; the darwin `.app` bundle is the only electron artifact with real
+ * symlinks, and since v4.9.7 `.github/workflows/darwin-bundle.yml` runs this
+ * path over the REAL artifact on a real Mac. The v4.9.6 worry that the check
+ * might REJECT a working layout is refuted by measurement: the real
+ * `electron-v43.1.1-darwin-arm64.zip` declares 585 records and 14 symlinks,
+ * every target relative, none carrying a `..` component, none absolute, and 0
+ * of the 585 entry names traversing a symlinked component. The linux artifacts
+ * hold ZERO symlink entries, so `writeSymlink` is unreachable there at all.
+ *
+ * `root = fs.realpathSync(dir)` below is load-bearing for that answer and no
+ * Windows probe would ever show it: on macOS the extraction root usually sits
+ * under `/var`, which is itself a symlink to `/private/var`, so comparing a
+ * resolved target against an UNRESOLVED root would read every link in a real
+ * `.app` as an escape.
  *
  * ── ERROR CODES ARE A CAUSAL CLAIM ───────────────────────────────────────
  * `UNZIP_BUFFER_FAILED` = the ARCHIVE is bad. `UNZIP_DEST_FAILED` = the

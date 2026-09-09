@@ -469,3 +469,136 @@ setTimeout(() => { ws.close(); process.exit(0); }, 3000);
 ```
 
 **Note:** `window.sidecar` is `undefined` in the toolbar (see Known Limitations above). The toolbar communicates with the main process via `window.__amicusUpdateAction` polling, not IPC.
+
+---
+
+## The darwin `.app` bundle — what CI proves, and what it still does not
+
+`.github/workflows/darwin-bundle.yml` drives `scripts/probe-darwin-extract.js` on
+`macos-latest`. It is the only place amicus's real extract path meets a real `.app`
+bundle, a real POSIX `fs.symlinkSync`, a real `fs.realpathSync` and a real dyld.
+
+### The filing it closes, and the way it closes it
+
+v4.9.6 added a symlink target-escape check (`src/sidecar/zip-entry-write.js ::
+writeSymlink`) that `extract-zip` does not have. The v4.9.7 filing was that it could
+**reject** a real darwin layout. That is **refuted by measurement on the real bytes**,
+not by this job:
+
+| artifact | bytes | records | symlinks | dir entries |
+| --- | --- | --- | --- | --- |
+| `electron-v43.1.1-darwin-arm64.zip` | 122,054,683 | 585 | 14 | 310 |
+| `electron-v43.1.1-darwin-x64.zip` | 123,952,132 | 585 | 14 | 310 |
+| `electron-v43.1.1-linux-x64.zip` | 124,861,804 | 74 | **0** | 0 |
+| `electron-v43.1.1-linux-arm64.zip` | 124,456,257 | 74 | **0** | 0 |
+
+All 14 darwin targets are relative (`A`, `Versions/Current/Resources`, …); none carries a
+`..` component; none is absolute; **0 of the 585 entry names traverse a symlinked
+component**. The check is purely lexical (`path.resolve` then `path.relative`), so on that
+shape it cannot fire. The extraction root is itself realpath'd
+(`src/sidecar/zip-from-buffer.js :: extractZipBuffer`), which is why macOS's
+`/var` -> `/private/var` does not turn every link into an escape — the one mechanism that
+could have made the filing correct.
+
+**Linux is settled outright and gets no job**: both linux artifacts hold 74 entries and
+zero symlinks, so `writeSymlink` is unreachable there. The filing's "darwin/linux" narrows
+to "darwin".
+
+### What each assertion pins, and the mutant it kills
+
+| id | assertion | mutant it kills |
+| --- | --- | --- |
+| A1a | `resolveAnchor({selfElectronDir: null})` reads the `checksums.json` under test | dropping the `selfElectronDir` override, which silently re-anchors on the repo's own `node_modules` |
+| A1b | `repairElectron({cacheOnly:true})` repairs **and** the gate says `verified` | any change that stops a byte-exact artifact verifying — extract and exec both stay green |
+| A1c | with **no** anchor the same bytes extract but are marked `unverified` | dropping the `verdict !== 'verified'` mark, i.e. a silent degrade of the trust route |
+| A2 | `resolveElectronBinary` names the real launcher and its exec bit survived | a wrong `platformExe` darwin arm, or a `path.txt` naming a different basename |
+| A3a | all 14 archive symlinks are symlinks on disk with byte-identical targets | deleting the `if (symlink)` branch in `placeEntry` — links become regular files |
+| A3b | the five structural framework links exist with their exact targets | writing the **resolved absolute** path instead of the archive's relative target (still runs on the runner; breaks when the tree moves) |
+| A4 | parity vs the tree `@electron-internal/extract-zip` produced | a flat file mode, or a `continue` that silently drops entries — **report-only on its first cut** |
+| A5 | `Electron --version` runs | the same mutant as A3a, observed through dyld: the launcher's Mach-O carries `LC_RPATH @executable_path/../Frameworks` and `LC_LOAD_DYLIB @rpath/Electron Framework.framework/Electron Framework`, so it loads the ~192 MB framework **through two of the fourteen links** |
+| A6i | an escaping relative target is refused, nothing planted | dropping the `..`-prefix limbs of the three-limb test |
+| A6ii | an **absolute POSIX** target is refused | dropping the `startsWith('..' + sep)` limb — on win32 `/etc/passwd` becomes `C:\etc\passwd` and a *different* limb catches it, so the Windows suite proves the wrong arithmetic |
+| A6iii | SYMLINKCHAIN refused by a **real** `realpath`: 3 links made, no victim | reverting the target resolution to `path.dirname(dest)` — the lexical-dirname bug that extracts with no error at all |
+
+A4 is deliberately **report-only, exit 0, full diff printed** on its first cut: nothing has
+ever measured that the two extractors agree on directory modes under the runner's umask, so
+making an unmeasured comparison a blocking gate buys a red for reasons unrelated to
+symlinks. Promote it once one clean run exists. Everything else gates from day one.
+
+A6iii is the assertion that matters most: in the jest suite the same archive is pinned by a
+`realpathSync` **the test itself injects** (`tests/electron-custody.test.js`, describe
+`symlinks — the darwin .app shape, which cannot be run here`). That is a rule read off the
+surface its own writer wrote. On the runner the three `.` links exist on disk and the kernel
+answers.
+
+### `npm ci` does NOT provision Electron — the job asks for it explicitly
+
+`electron@43.1.1` ships **no install script at all**: its `package.json` has no `scripts`
+field (it exposes `install.js` only as the `install-electron` bin), and `package-lock.json`
+carries no `hasInstallScript` for it. So npm never fetches the ~122 MB binary, on any
+platform or any install path. Measured on run `34246117877`: plain `npm ci` on ubuntu,
+macos and windows alike finished in 15-38 s and left amicus's own postinstall reporting
+`the Electron GUI binary is not provisioned yet` — an empty electron cache. The lockfile's
+per-platform installable counts (588 / 588 / 587) match the observed `added N packages`
+exactly **with `electron` included**, so the package is present and only the binary is
+missing.
+
+The job therefore runs `node node_modules/electron/install.js` in its own step, with one
+retry. It deliberately does **not** use `AMICUS_PREFETCH_ELECTRON=1`, which
+`scripts/postinstall.js` routes through amicus's own `repairElectron` — the A4 diff would
+then compare amicus against amicus.
+
+### What it does not prove
+
+- **darwin x64.** `macos-latest` is arm64. The x64 artifact was measured at an identical
+  shape (585 / 14 / 310), so the residual is small, but no x64 leg exists. Intel runner
+  labels changed during 2025 — check GitHub's current list before adding one.
+- **`mas`.** Unreachable in production; no caller passes `platform: 'mas'`.
+- **A case-sensitive APFS volume.** Runners default to case-insensitive; 0 case-insensitive
+  name collisions were measured across the 585 entries, but "low exposure" there is
+  inference, not measurement.
+- **Future electron layouts, between bumps.** The job proves the version pinned in
+  `package-lock.json` at run time. A bump is caught by the `package-lock.json` path filter on
+  `pull_request`/`push`, not by the cron.
+- **The native-rescue hatch.** `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`, `ditto` and Info-ZIP
+  `unzip` symlink behaviour on darwin stay unmeasured — that is the B2 lane, not this one.
+- **`codesign`.** The archive carries **zero** `_CodeSignature` entries, so
+  `codesign --verify` on the extracted bundle would assert nothing. Only the embedded ad-hoc
+  Mach-O signature exists, and A5 succeeding is the only evidence it survived byte-exact
+  extraction. Do not add a codesign step and call it coverage.
+- **Destination-failure classification on darwin** (ENOSPC, read-only `dist/`, EACCES) and
+  **`promoteDist` on APFS** — the job calls the promote once, on a happy path.
+- **A trailing-slash symlink entry.** An entry whose *name* ends with `/` while its mode bits
+  say `IFLNK` is turned into a real directory before the symlink branch is reached, so the
+  escape check never runs. The real artifact has zero such entries, so no darwin job will
+  ever exercise it; it belongs in the platform-independent suite.
+
+### Triggers, cost, and the required-check caveat
+
+Paths-filtered `pull_request` **and** `push: [main]` (so a bump is proven at merge time),
+plus a weekly cron and `workflow_dispatch`. The cron re-proves the pinned version against the
+live release asset and the current runner image — the two inputs no path filter can see — and
+is the weakest trigger on purpose: a schedule GitHub delays or drops is silent.
+
+The job owns a ~122 MB download plus two ~600 MB extractions on a 3-vCPU / 8 GB runner;
+budget 4-6 minutes. It is not free, and macOS *concurrency* rather than minutes is the
+binding constraint on a public repo — `ci.yml` already burns two macOS legs per push.
+
+Because both event triggers carry a `paths:` filter, the job reports **skipped** when nothing
+matches, so **it cannot be a required status check as written**. Making it required means
+dropping `paths:` and moving the guard inside the job (a `git diff --name-only` early exit) —
+a pattern this repo does not currently use.
+
+### Running it by hand on a Mac
+
+```bash
+npm ci --foreground-scripts
+rm -rf node_modules/electron/dist node_modules/electron/path.txt
+node node_modules/electron/install.js          # the artifact + the A4 reference tree
+node scripts/probe-darwin-extract.js --preflight
+node scripts/probe-darwin-extract.js
+```
+
+The `rm -rf` is not cosmetic: `install.js` short-circuits on a populated `dist/`, and on a dev
+Mac that `dist/` may well be amicus's own self-heal output — which would make A4 compare
+amicus against amicus. The workflow does the same removal for the same reason.
