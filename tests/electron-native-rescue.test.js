@@ -978,6 +978,25 @@ describe('C2 — REAL archives, and the entry-ordering hole (ENTRYORDERTRAVERSAL
     expect(blind).toMatch(/NOTHING checked its/);
   });
 
+  test('the notice warns when only ONE table was fully read (NAMESCOMPLETEDISJUNCTION)', async () => {
+    // The two tables carry DIFFERENT names and the two strategies read different
+    // ones, so "every name was checked" is a CONJUNCTION. MEASURED on the
+    // disjunction: a local walk that stopped at entry 1 with a readable, benign
+    // central directory reported TRUE and printed nothing, while `tar.exe`
+    // reached a `../../../` entry that only the local table carried.
+    // Entry 1 sets bit 3 with a ZERO size, which is the one shape where the walk
+    // genuinely has no next offset -- so local.complete is false while the
+    // central directory is perfectly readable and clean.
+    const stop = buildZip([{ name: 'first.bin', body: 'AAAA', flags: 0x08 }, { name: 'electron.exe', body: 'MZ' }]);
+    stop.writeUInt32LE(0, 18);            // no size declared in the local header
+    const { wrapped, said } = wrap({ extract: () => { throw boom('UNZIP_BUFFER_FAILED'); }, hatch: true });
+    const { dir } = incomingTree();
+
+    await wrapped(stop, { dir });
+
+    expect(said()).toMatch(/COULD NOT CONFIRM IT SAW THEM ALL|COULD NOT READ THE ENTRY NAMES EITHER/);
+  });
+
   test('with the hatch UNSET a hostile-named archive is refused, not OFFERED', async () => {
     // The refusal comes before the offer, so the archive that must never be
     // handed to a native extractor is never advertised as rescuable either.

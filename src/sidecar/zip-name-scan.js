@@ -149,6 +149,29 @@ const CENTRAL_SIG = 0x02014b50;
 const EOCD_SIG = 0x06054b50;
 /** Bit 3: the sizes are BEHIND the payload, in a data descriptor. */
 const FLAG_SIZES_DEFERRED = 0x08;
+/** The same local signature as bytes, for scanning a span the walk would jump. */
+const LOCAL_SIG_BYTES = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+/**
+ * Where this archive's END-OF-CENTRAL-DIRECTORY record says its directory begins,
+ * or -1 when no such record can be found.
+ *
+ * THE TERMINUS HAS TO BE ANCHORED TO SOMETHING THE ARCHIVE DECLARES. A walk that
+ * stops the moment it lands on `PK\x01\x02` believes four bytes it has not
+ * earned: MEASURED, planting that signature where an honest advance lands ends
+ * the chain with every local header in the archive untouched and no field lying,
+ * so neither the deferred-size demotion nor the span check fires -- and the walk
+ * reports it saw everything while `tar.exe` went on to reach a `../../../` entry
+ * sitting behind it.
+ */
+function declaredCentralOffset(bytes) {
+  if (bytes.length < 22) { return -1; }
+  const floor = Math.max(0, bytes.length - 22 - 0xFFFF);
+  for (let i = bytes.length - 22; i >= floor; i -= 1) {
+    if (bytes.readUInt32LE(i) === EOCD_SIG) { return bytes.readUInt32LE(i + 16); }
+  }
+  return -1;
+}
 
 /**
  * THE SAME QUESTION, ASKED OF THE LOCAL FILE HEADERS.
@@ -182,14 +205,23 @@ const FLAG_SIZES_DEFERRED = 0x08;
  * equal the central names entry for entry. Truncated, the central walk goes blind
  * and this one still enumerates all 73-75.
  *
- * THE RESIDUAL, STATED RATHER THAN ENGINEERED AWAY: the walk trusts a LOCAL size
- * field to find the next header, and a wrong local size is a property of exactly
- * the corrupt archives this rescue exists for. A desynchronised walk reads a
- * "name" out of payload bytes, so a forged local header planted there produces a
- * refusal for a name that is not an entry. MEASURED constructible; MEASURED to
- * need deliberate construction — zero spurious `PK\x03\x04` signatures across
- * 777 MB of six real Electron artifacts. It fails toward REFUSING, which costs a
- * rescue and never grants one.
+ * WHAT `complete` MEANS, AND WHY IT IS A VARIABLE. It is the claim "I saw every
+ * local header", it starts true, and it may only ever be turned OFF. Three things
+ * turn it off: an entry declaring bit 3 (its stated size is not authoritative),
+ * a declared size whose span HIDES another local signature, and a chain that ends
+ * anywhere but the offset this archive's own EOCD names. All three DEMOTE and
+ * keep walking. That distinction is the whole design: a name the walk can still
+ * read is a name it can still REFUSE, and MEASURED, turning any of these into an
+ * early `return` forfeits the refusal for every entry behind it — an archive
+ * with bit 3, an honest size and `../../../PWNED.txt` at entry 2 went from a
+ * terminal refusal to a completed rescue on 5.7% of forged shapes.
+ *
+ * THE RESIDUAL: the walk still trusts a local size to FIND the next header, so a
+ * desynchronised walk can read a "name" out of payload bytes and refuse a name
+ * that is not an entry. MEASURED constructible; MEASURED to need deliberate
+ * construction — zero spurious `PK\x03\x04` signatures across 777 MB of six real
+ * Electron artifacts. It fails toward REFUSING, which costs a rescue and never
+ * grants one.
  *
  * @param {Buffer} bytes the archive, in this process's heap
  * @returns {{refusal:string|null, complete:boolean, names:number, why:string}}
@@ -200,29 +232,62 @@ const FLAG_SIZES_DEFERRED = 0x08;
 function scanLocalNames(bytes) {
   let at = 0;
   let names = 0;
+  // `complete` MAY ONLY EVER BE TURNED OFF, and the walk is never SHORTENED by
+  // anything but a refusal or a genuinely unknowable next offset. Turning a
+  // doubt into an early `return` was MEASURED to destroy the refusal for every
+  // entry behind it -- an archive with bit 3, an HONEST size and
+  // `../../../PWNED.txt` at entry 2 went from a terminal UNZIP_UNSAFE_ARCHIVE to
+  // a completed rescue. Deleting the one control-flow-changing power this module
+  // has IS the control-flow change; demoting a claim is not.
+  let complete = true;
+  let why = '';
+  const demote = (m) => { if (complete) { complete = false; why = m; } };
+  const cdOffset = declaredCentralOffset(bytes);
   try {
     for (;;) {
-      if (at + 4 > bytes.length) { return { refusal: null, complete: false, names, why: `the local-header chain ran off the end at ${at}` }; }
+      if (at + 4 > bytes.length) { return { refusal: null, complete: false, names, why: why || `the local-header chain ran off the end at ${at}` }; }
       const sig = bytes.readUInt32LE(at);
-      // The chain reached the directory: every local header was enumerated.
-      if (sig === CENTRAL_SIG || sig === EOCD_SIG) { return { refusal: null, complete: true, names, why: '' }; }
-      if (sig !== LOCAL_SIG || at + 30 > bytes.length) { return { refusal: null, complete: false, names, why: `no local file header at ${at}` }; }
+      if (sig === CENTRAL_SIG || sig === EOCD_SIG) {
+        // ANCHORED: the chain may claim it reached the directory only where this
+        // archive says its directory begins. See `declaredCentralOffset`.
+        if (at !== cdOffset) { demote(`the chain ended at ${at}, not where this archive declares its directory begins (${cdOffset})`); }
+        return { refusal: null, complete, names, why };
+      }
+      if (sig !== LOCAL_SIG || at + 30 > bytes.length) { return { refusal: null, complete: false, names, why: why || `no local file header at ${at}` }; }
       const flags = bytes.readUInt16LE(at + 6);
       const compressed = bytes.readUInt32LE(at + 18);
       const nameLen = bytes.readUInt16LE(at + 26);
       const extraLen = bytes.readUInt16LE(at + 28);
-      if (at + 30 + nameLen > bytes.length) { return { refusal: null, complete: false, names, why: `a local file name was cut off at ${at}` }; }
+      if (at + 30 + nameLen > bytes.length) { return { refusal: null, complete: false, names, why: why || `a local file name was cut off at ${at}` }; }
       names += 1;
       // Latin-1 for the reason the central walk gives: bytes to characters 1:1.
       const refusal = nameRefusal(bytes.subarray(at + 30, at + 30 + nameLen).toString('latin1'));
       if (refusal) { return { refusal, complete: false, names, why: '' }; }
-      // A size not declared HERE makes the next offset unknowable without
-      // decompressing. Stop; a guess would resynchronise on payload bytes.
+      // NO NEXT OFFSET AT ALL. These two are the only genuine stops: a zero size
+      // under bit 3 would advance by nothing and resynchronise on payload, and
+      // the zip64 sentinel names a size that is not here.
       if (((flags & FLAG_SIZES_DEFERRED) && compressed === 0) || compressed === 0xFFFFFFFF) {
-        return { refusal: null, complete: false, names, why: `entry ${names} does not declare its size here` };
+        return { refusal: null, complete: false, names, why: why || `entry ${names} does not declare its size here` };
       }
-      if (names >= MAX_ENTRIES) { return { refusal: null, complete: false, names, why: `stopped after ${MAX_ENTRIES} entries` }; }
-      at += 30 + nameLen + extraLen + compressed;
+      // BIT 3 SAYS THIS SIZE IS NOT AUTHORITATIVE. APPNOTE 4.4.4 has the writer
+      // set it to ZERO, so a nonzero value beside the flag is malformed by
+      // construction and `complete` may not rest on it -- but it is still the
+      // only lead to the next header, and a name the walk can still read is a
+      // name it can still REFUSE. Follow it; just stop claiming to have proved
+      // anything (the filed blocker: a lying nonzero size jumped a hostile entry
+      // and the walk reported it had seen them all).
+      if (flags & FLAG_SIZES_DEFERRED) { demote(`entry ${names} declares bit 3, so the size it states here is not authoritative`); }
+      const next = at + 30 + nameLen + extraLen + compressed;
+      // THE SPAN THE WALK NEVER LOOKS AT -- name, extra field and payload, every
+      // length the archive's to choose. A span holding a local signature may be
+      // hiding an entry, so the claim is demoted; the walk still follows the
+      // offset, because stopping here would forfeit the refusals behind it.
+      if (next <= bytes.length && next > at + 30) {
+        const hidden = bytes.indexOf(LOCAL_SIG_BYTES, at + 30);
+        if (hidden !== -1 && hidden < next) { demote(`entry ${names}'s declared size jumps over a local file header at ${hidden}`); }
+      }
+      if (names >= MAX_ENTRIES) { return { refusal: null, complete: false, names, why: why || `stopped after ${MAX_ENTRIES} entries` }; }
+      at = next;
     }
   } catch (e) {
     return { refusal: null, complete: false, names, why: `the local-header chain could not be walked: ${(e && e.message) || e}` };

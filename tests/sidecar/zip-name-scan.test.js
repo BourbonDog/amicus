@@ -251,6 +251,150 @@ describe('scanLocalNames reads the OTHER table an archive declares its names in 
     expect(local.why).toMatch(/does not declare its size here/);
   });
 
+  // -- COUNCIL #239 ROUND 1, BLOCKER A1 AND WHAT IT TURNED OUT TO BE --
+  // Filed as "bit 3 with a nonzero size lets the walk skip a hostile entry". True,
+  // and the narrow half: the advance is `30 + nameLen + extraLen + compressed` and
+  // THREE of those four terms are attacker-chosen, so bit 3 is one route to a
+  // desync and not the route. The root cause is that `complete: true` rested on
+  // where the walk LANDED, never on what it JUMPED.
+  //
+  // -- NAMED MUTANTS --
+  // LOCALDEFERREDTRUSTED  scanLocalNames -- delete the `flags & FLAG_SIZES_DEFERRED`
+  //   demotion, restoring the state where a nonzero size beside bit 3 is trusted.
+  //   RED: 'a bit-3 entry whose stated size is a lie cannot report a clean bill'.
+  // LOCALSPANUNPROVEN     scanLocalNames -- delete the `hidden` span scan, so a
+  //   declared size may jump a local header with no demotion.
+  //   RED: 'an inflated extraLen or size cannot report a clean bill'.
+  // LOCALTERMINUSUNANCHORED scanLocalNames -- return `complete: true` on any
+  //   central/EOCD signature without comparing `at` to `declaredCentralOffset`.
+  //   RED: 'four planted bytes cannot end the walk with a clean bill'.
+  // LOCALDEMOTESTOPS      scanLocalNames -- turn either demotion into an early
+  //   `return`, which is the remedy three adversarial lenses measured as WORSE
+  //   than the defect: it forfeits the refusal for every entry behind it.
+  //   RED: 'a doubt DEMOTES the claim and keeps walking, so refusals still form'.
+  // A LOW-LEVEL builder, because `buildZip` writes HONEST headers and every shape
+  // here is a lie about a length. Fields not named are correct.
+  const LOCAL_SIG = 0x04034b50;
+  const CENTRAL_SIG = 0x02014b50;
+  const EOCD_SIG = 0x06054b50;
+  function zipEntry(name, body, { flags = 0, size = null, extraLen = 0 } = {}) {
+    const n = Buffer.from(name, 'latin1');
+    const d = Buffer.from(body, 'latin1');
+    const h = Buffer.alloc(30);
+    h.writeUInt32LE(LOCAL_SIG, 0);
+    h.writeUInt16LE(flags, 6);
+    h.writeUInt32LE(size === null ? d.length : size, 18);
+    h.writeUInt32LE(d.length, 22);
+    h.writeUInt16LE(n.length, 26);
+    h.writeUInt16LE(extraLen, 28);
+    return Buffer.concat([h, n, d]);
+  }
+  function concatZip(entries) {
+    const locals = Buffer.concat(entries);
+    const names = ['first.bin', HOSTILE, 'electron.exe'].slice(0, entries.length);
+    const central = Buffer.concat(names.map((nm) => {
+      const n = Buffer.from(nm, 'latin1');
+      const c = Buffer.alloc(46);
+      c.writeUInt32LE(CENTRAL_SIG, 0);
+      c.writeUInt16LE(n.length, 28);
+      return Buffer.concat([c, n]);
+    }));
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(EOCD_SIG, 0);
+    eocd.writeUInt16LE(names.length, 8);
+    eocd.writeUInt16LE(names.length, 10);
+    eocd.writeUInt32LE(central.length, 12);
+    eocd.writeUInt32LE(locals.length, 16);   // the DECLARED directory offset
+    return Buffer.concat([locals, central, eocd]);
+  }
+
+  const jumpFixture = (opts) => {
+    const first = zipEntry('first.bin', opts.body || 'AAAA', opts);
+    return concatZip([first, zipEntry(HOSTILE, 'PWNED'), zipEntry('electron.exe', 'MZ')]);
+  };
+
+  test('a bit-3 entry whose stated size is a lie cannot report a clean bill (LOCALDEFERREDTRUSTED)', () => {
+    // THE FILED BLOCKER, reproduced: entry 1 sets bit 3 and declares a nonzero
+    // size aimed exactly past entry 2. APPNOTE 4.4.4 has the writer set that
+    // field to ZERO under bit 3, so a nonzero value beside the flag is malformed
+    // by construction and nothing may rest on it.
+    const hostile = zipEntry(HOSTILE, 'PWNED');
+    const bytes = jumpFixture({ flags: 0x08, size: 4 + hostile.length });
+
+    const local = scanLocalNames(bytes);
+
+    expect(local.complete).toBe(false);
+    expect(local.why).toMatch(/bit 3|not authoritative|jumps over/);
+  });
+
+  test('an inflated extraLen cannot report a clean bill (LOCALSPANUNPROVEN)', () => {
+    // No bit 3 anywhere: the same skip through a different attacker-chosen term.
+    const hostile = zipEntry(HOSTILE, 'PWNED');
+    const local = scanLocalNames(jumpFixture({ extraLen: hostile.length }));
+
+    expect(local.complete).toBe(false);
+  });
+
+  test('a doubt DEMOTES the claim and keeps walking, so refusals still form (LOCALDEMOTESTOPS)', () => {
+    // THE REGRESSION THREE ADVERSARIAL LENSES PREDICTED, and the reason the
+    // remedy is a flag and not a return. Bit 3 with an HONEST size, hostile entry
+    // BEHIND it: stopping at the doubt forfeits the refusal and the archive goes
+    // to a native extractor. MEASURED on the rejected remedy: a terminal
+    // UNZIP_UNSAFE_ARCHIVE became a completed `tar` rescue.
+    const local = scanLocalNames(jumpFixture({ flags: 0x08 }));
+
+    expect(local.refusal).toContain(HOSTILE);
+    expect(local.complete).toBe(false);
+  });
+
+  test('an incidental local signature in a payload still refuses what is behind it (LOCALDEMOTESTOPS)', () => {
+    // A 140 MB artifact carries these by chance. Demotion costs a disclosure
+    // sentence; a return would cost the refusal.
+    const local = scanLocalNames(jumpFixture({ body: 'PKxx' }));
+
+    expect(local.refusal).toContain(HOSTILE);
+  });
+
+  test('bit 3 alone demotes the claim, even when nothing is skipped (LOCALDEFERREDTRUSTED)', () => {
+    // ISOLATING FIXTURE. On an archive where an entry is JUMPED, the span check
+    // fires too, so both controls are satisfied and neither is pinned. Here the
+    // declared size is HONEST and the chain lands exactly on the declared
+    // directory -- nothing is skipped, and the ONLY reason the claim may not
+    // stand is that bit 3 says this size was never authoritative in the first
+    // place (a real writer puts the true sizes in a trailing data descriptor).
+    const bytes = concatZip([zipEntry('first.bin', 'AAAA', { flags: 0x08 }), zipEntry('electron.exe', 'MZ')]);
+
+    const local = scanLocalNames(bytes);
+
+    expect(local.refusal).toBeNull();
+    expect(local.complete).toBe(false);
+    expect(local.why).toMatch(/bit 3|not authoritative/);
+  });
+
+  test('four planted bytes cannot end the walk with a clean bill (LOCALTERMINUSUNANCHORED)', () => {
+    // THE ZERO-FORGERY SHAPE. Every local header is honest and no length lies:
+    // the attacker appends `PK` where an honest advance lands, and a walk
+    // that stops on any central signature declares victory with the hostile entry
+    // still ahead of it. The terminus must be anchored to the offset the archive
+    // ITSELF declares its directory begins at.
+    const first = Buffer.concat([
+      zipEntry('first.bin', 'AAAA'),
+      Buffer.from([0x50, 0x4b, 0x01, 0x02]),
+    ]);
+    const bytes = concatZip([first, zipEntry(HOSTILE, 'PWNED'), zipEntry('electron.exe', 'MZ')]);
+
+    const local = scanLocalNames(bytes);
+
+    expect(local.complete).toBe(false);
+    expect(local.why).toMatch(/declares its directory begins/);
+  });
+
+  test('a CLEAN archive still reports a clean bill, or the notice over-warns forever', () => {
+    const local = scanLocalNames(concatZip([zipEntry('first.bin', 'AAAA'), zipEntry('electron.exe', 'MZ')]));
+
+    expect(local).toMatchObject({ refusal: null, complete: true });
+  });
+
   test('it never throws, whatever it is handed', () => {
     for (const b of [Buffer.alloc(0), Buffer.from('not a zip at all'), Buffer.alloc(3),
       Buffer.from([0x50, 0x4b, 0x03, 0x04])]) {

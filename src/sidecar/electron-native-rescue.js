@@ -241,7 +241,12 @@ function withNativeRescue({
         // truncated by a few KB has BOTH walks incomplete while the local walk
         // read and cleared every name it found, so `central.read || local.complete`
         // would print "nothing checked its entries" over 73 checked entries.
-        namesComplete: seen.central.read || seen.local.complete,
+        // BOTH, NOT EITHER. The two tables carry DIFFERENT names and the two
+        // strategies read different ones, so a disjunction cannot mean "every
+        // name was checked". MEASURED: a local walk stopped at entry 1 with a
+        // readable, benign central directory reported TRUE and printed nothing,
+        // while `tar.exe` reached a `../../../` entry only the local table had.
+        namesComplete: seen.central.read && seen.local.complete,
         namesChecked: seen.local.names,
         platform,
         fs,
