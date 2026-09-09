@@ -24,7 +24,7 @@
  * ──────────────────────────────────────────────────────────────────────────
  */
 
-const { scanEntryNames, nameRefusal } = require('../../src/sidecar/zip-name-scan');
+const { scanEntryNames, nameRefusal, scanLocalNames } = require('../../src/sidecar/zip-name-scan');
 const { buildZip, FLAG_ENCRYPTED } = require('../helpers/zip-fixture');
 
 /** The entry that ends yauzl's walk before it validates any later name. */
@@ -136,5 +136,126 @@ describe('scanEntryNames reads the central directory past the broken entry', () 
     fired[0]();
 
     await expect(pending).resolves.toEqual({ read: false, refusal: null, why: expect.stringMatching(/exceeded/) });
+  });
+});
+
+describe('scanLocalNames reads the OTHER table an archive declares its names in (B3)', () => {
+  // WHY A SECOND WALK. `scanEntryNames` reads the central directory, and an
+  // archive can blind yauzl there while leaving every local header whole -- a
+  // truncation does it by accident, and four ONE-FIELD edits to a COMPLETE
+  // end-of-central-directory record do it on purpose. MEASURED before this
+  // shipped: seven such archives carrying `../../../PWNED-BY-NATIVE.txt` reached
+  // a real spawn; with the local walk, zero do. The end-to-end rows live in
+  // tests/electron-native-rescue.test.js; this pins the primitive.
+  //
+  // -- NAMED MUTANTS --
+  // LOCALSCANIGNORED   zip-name-scan.js :: scanLocalNames -- return
+  //   `{refusal:null, complete:false, names:0}` unconditionally, restoring the
+  //   v4.9.6 state where only the central directory was read.
+  //   RED: 'a hostile LOCAL name is found when the central directory is blinded'.
+  // LOCALNAMERULEDRIFT zip-name-scan.js :: scanLocalNames -- inline a second
+  //   lexical rule instead of calling `nameRefusal`, so the two tables can start
+  //   disagreeing about what yauzl would refuse.
+  //   RED: 'both tables refuse by the SAME rule'.
+  // LOCALSIZETRUST     zip-name-scan.js :: scanLocalNames -- drop the
+  //   deferred-size guard, so an entry whose size lives in a data descriptor is
+  //   skipped by 0 bytes and the walk resynchronises on payload.
+  //   RED: 'an entry that does not declare its size here STOPS the walk'.
+  // LOCALCOMPLETEONREFUSAL zip-name-scan.js :: scanLocalNames -- return
+  //   `complete: true` on the refusal path, contradicting the field's own JSDoc.
+  //   RED: 'a refusal reports complete:false -- it did not see them all'.
+  const HOSTILE = '../../../PWNED-BY-NATIVE.txt';
+  // Entry 1 carries the encrypted bit, which is what breaks yauzl BEFORE it ever
+  // looks at entry 2's name -- the measured shape that lands in the ONE class a
+  // rescue may act on.
+  const hostileArchive = () => buildZip([
+    { name: 'first.bin', body: 'AAAA', flags: FLAG_ENCRYPTED },
+    { name: HOSTILE, body: 'PWNED' },
+    { name: 'electron.exe', body: 'MZ' },
+  ]);
+
+  test('a hostile LOCAL name is found when the central directory is blinded (LOCALSCANIGNORED)', () => {
+    // Blind the central walk by lying about the EOCD comment length -- one field,
+    // on an archive whose every local header is untouched.
+    const bytes = hostileArchive();
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= 0; i -= 1) { if (bytes.readUInt32LE(i) === 0x06054b50) { eocd = i; break; } }
+    expect(eocd).toBeGreaterThan(-1);
+    bytes.writeUInt16LE(500, eocd + 20);
+
+    const local = scanLocalNames(bytes);
+
+    expect(local.refusal).toMatch(/invalid relative path/);
+    expect(local.refusal).toContain(HOSTILE);
+  });
+
+  test('both tables refuse by the SAME rule (LOCALNAMERULEDRIFT)', () => {
+    // A second lexical rule free to drift from yauzl's starts costing the rescue
+    // archives yauzl ACCEPTS, which is the failure this module was written to
+    // avoid. Names yauzl allows must stay allowed in both walks.
+    for (const name of ['a..b/c.txt', '...leading/x', 'sub/..hidden.txt']) {
+      const local = scanLocalNames(buildZip([{ name, body: 'x' }]));
+      expect(local.refusal).toBeNull();
+    }
+    // A '..' that is a whole path COMPONENT is refused wherever it sits -- yauzl
+    // splits on '/' and asks `includes('..')`, so an interior one counts too.
+    for (const name of ['../out.txt', '/abs.txt', 'C:/drive.txt', 'deep/../inside/ok.txt']) {
+      const local = scanLocalNames(buildZip([{ name, body: 'x' }]));
+      expect(local.refusal).not.toBeNull();
+    }
+  });
+
+  test('a refusal reports complete:false -- it did not see them all (LOCALCOMPLETEONREFUSAL)', () => {
+    // The walk stops at the refusal, so it did NOT reach the directory. A field
+    // whose JSDoc says "EVERY local header was seen" must not claim otherwise on
+    // one of its own return sites, even where nothing reads it today.
+    const local = scanLocalNames(buildZip([
+      { name: HOSTILE, body: 'PWNED' },
+      { name: 'electron.exe', body: 'MZ' },
+    ]));
+
+    expect(local.refusal).not.toBeNull();
+    expect(local.complete).toBe(false);
+  });
+
+  test('a clean archive is walked to the directory, and reports it', () => {
+    const local = scanLocalNames(buildZip([
+      { name: 'first.bin', body: 'AAAA', flags: FLAG_ENCRYPTED },
+      { name: 'electron.exe', body: 'MZ' },
+    ]));
+
+    expect(local).toMatchObject({ refusal: null, complete: true, names: 2 });
+  });
+
+  test('a TRUNCATED archive still yields its names, which is the whole point', () => {
+    // The central walk goes blind here; this one does not. Cut inside the central
+    // directory, so every local header survives -- the shape a partial copy of a
+    // real artifact produces, and the case the rescue exists for.
+    const whole = hostileArchive();
+    const local = scanLocalNames(whole.subarray(0, whole.length - 8));
+
+    expect(local.refusal).toContain(HOSTILE);
+  });
+
+  test('an entry that does not declare its size here STOPS the walk (LOCALSIZETRUST)', () => {
+    // Bit 3 puts the sizes BEHIND the payload, so the next offset is unknowable
+    // without decompressing. Guessing would resynchronise the walk on payload
+    // bytes; it stops instead, and says why.
+    const bytes = buildZip([{ name: 'a.bin', body: 'AAAA' }, { name: 'b.bin', body: 'BB' }]);
+    bytes.writeUInt16LE(0x08, 6);      // flags on the FIRST local header
+    bytes.writeUInt32LE(0, 18);        // and no size declared here
+
+    const local = scanLocalNames(bytes);
+
+    expect(local).toMatchObject({ refusal: null, complete: false, names: 1 });
+    expect(local.why).toMatch(/does not declare its size here/);
+  });
+
+  test('it never throws, whatever it is handed', () => {
+    for (const b of [Buffer.alloc(0), Buffer.from('not a zip at all'), Buffer.alloc(3),
+      Buffer.from([0x50, 0x4b, 0x03, 0x04])]) {
+      expect(() => scanLocalNames(b)).not.toThrow();
+      expect(scanLocalNames(b).refusal).toBeNull();
+    }
   });
 });

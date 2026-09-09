@@ -79,6 +79,7 @@ function cleanDir(fs, dir) {
 
 /**
  * Walk the platform's native plan until one strategy leaves files in `dir`.
+
  *
  * The verdicts are unzip.js's, because they were right there: a spawn error or
  * an external signal-kill (`status: null` — SIGKILL, an OOM) is a FAILURE even
@@ -118,6 +119,11 @@ function runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log }) {
  * will find it — so a rescue lands in `dist/` by the SAME single rename, with the
  * same litter sweep, and this module never touches the promote at all.
  *
+ * `namesComplete`/`namesChecked` are REQUIRED and deliberately have no defaults:
+ * they drive a disclosure, and a caller that forgot to thread them must not get
+ * the reassuring branch by omission. `announceNativeRescue` treats `undefined` as
+ * "not complete" for the same reason.
+ *
  * `flag: 'wx'` is a real control and a small one: `O_EXCL` refuses to write
  * through a name that already exists, INCLUDING a symlink someone pre-planted at
  * it. It does nothing about a substitution AFTER the write — that window is the
@@ -126,14 +132,14 @@ function runNativePlan({ zip, dir, platform, fs, spawn, maxMs, log }) {
  * `extractBytesToDist` removes the whole incoming tree regardless.
  * @returns {string|null} the strategy name that recovered the archive, or null
  */
-function nativeRescue({ bytes, dir, reason, platform, fs, spawn, maxMs, log }) {
+function nativeRescue({ bytes, dir, reason, namesComplete, namesChecked, platform, fs, spawn, maxMs, log }) {
   const incoming = path.dirname(dir);
   if (!path.basename(incoming).startsWith(INCOMING_PREFIX)) {
     log(`[amicus] the native-extractor rescue was NOT attempted: ${collapseExcerpt(dir, PATH_EXCERPT_CHARS)} is not inside an amicus incoming directory.`);
     return null;
   }
   const zip = path.join(incoming, RESCUE_ZIP);
-  announceNativeRescue({ zip, reason, log });
+  announceNativeRescue({ zip, reason, namesComplete, namesChecked, log });
   try {
     fs.writeFileSync(zip, bytes, { flag: 'wx', mode: 0o600 });
   } catch (e) {

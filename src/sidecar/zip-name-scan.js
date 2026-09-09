@@ -38,6 +38,11 @@
  * It also cannot see a SYMLINK whose TARGET escapes the root: that is bytes, not
  * a name, and `zip-from-buffer.js` refuses it only because it reads the payload.
  *
+ * THE BLINDNESS IN THE FIRST PARAGRAPH IS WHY `scanLocalNames` EXISTS (v4.9.7,
+ * B3). An archive carries its names TWICE, and an unreadable central directory
+ * says nothing about the local file headers — which is the table `tar` was
+ * MEASURED to act on. The caller asks both.
+ *
  * ── AND IT IS ONLY EVER A NARROWING ───────────────────────────────────────
  * Nothing here can make a rescue happen. A refusal it forms turns a
  * `UNZIP_BUFFER_FAILED` into the TERMINAL `UNZIP_UNSAFE_ARCHIVE` its caller
@@ -138,4 +143,90 @@ function scanEntryNames(bytes, { deps = {} } = {}) {
   });
 }
 
-module.exports = { scanEntryNames, nameRefusal, SCAN_MS, MAX_ENTRIES };
+/** The three signatures the local-header chain walks between. */
+const LOCAL_SIG = 0x04034b50;
+const CENTRAL_SIG = 0x02014b50;
+const EOCD_SIG = 0x06054b50;
+/** Bit 3: the sizes are BEHIND the payload, in a data descriptor. */
+const FLAG_SIZES_DEFERRED = 0x08;
+
+/**
+ * THE SAME QUESTION, ASKED OF THE LOCAL FILE HEADERS.
+ *
+ * WHY A SECOND WALK EXISTS. `scanEntryNames` reads the CENTRAL directory, and an
+ * archive can make that unreadable while leaving every local header whole.
+ * MEASURED: four ONE-FIELD edits to a COMPLETE end-of-central-directory record —
+ * entry count `0xFFFF`, cd offset `0xFFFFFFFF`, a lying comment length, a
+ * multi-disk marker — each blind yauzl on an archive whose `../../../` entry
+ * `tar` and `Expand-Archive` then read perfectly. On the comment-length one the
+ * rescue RAN TO COMPLETION and promoted the result. Cutting the tail off the file
+ * does the same thing by accident.
+ *
+ * AND IT IS THE TABLE ONE OF THE STRATEGIES ACTUALLY USES. MEASURED on an archive
+ * declaring one name locally and another centrally: `tar.exe` (bsdtar 3.8.4) wrote
+ * the LOCAL name; `Expand-Archive` wrote the CENTRAL one. Neither table is the
+ * right one to read. Both are. That is the whole ruling — the earlier candidates
+ * argued about which BLINDNESS to tolerate while looking in one table.
+ *
+ * ONE NAME RULE, NOT TWO. It calls `nameRefusal` above, deliberately: a second
+ * lexical rule free to drift from yauzl's would start costing the rescue archives
+ * yauzl accepts, which is the failure this module was written to avoid.
+ *
+ * ONLY `refusal` MAY CHANGE CONTROL FLOW. `complete` and `names` exist for the
+ * notice printed before a spawn and decide nothing, so the module's NARROWING
+ * invariant above holds verbatim: nothing here can make a rescue HAPPEN.
+ *
+ * NEVER THROWS, and synchronous: it reads headers and SKIPS payloads, so it never
+ * decompresses. MEASURED on six real electron artifacts (v28.0.0-v43.6.0,
+ * 107-151 MB): 73-75 names in 0-1 ms, no data descriptors, and the local names
+ * equal the central names entry for entry. Truncated, the central walk goes blind
+ * and this one still enumerates all 73-75.
+ *
+ * THE RESIDUAL, STATED RATHER THAN ENGINEERED AWAY: the walk trusts a LOCAL size
+ * field to find the next header, and a wrong local size is a property of exactly
+ * the corrupt archives this rescue exists for. A desynchronised walk reads a
+ * "name" out of payload bytes, so a forged local header planted there produces a
+ * refusal for a name that is not an entry. MEASURED constructible; MEASURED to
+ * need deliberate construction — zero spurious `PK\x03\x04` signatures across
+ * 777 MB of six real Electron artifacts. It fails toward REFUSING, which costs a
+ * rescue and never grants one.
+ *
+ * @param {Buffer} bytes the archive, in this process's heap
+ * @returns {{refusal:string|null, complete:boolean, names:number, why:string}}
+ *   `complete` = the chain reached the directory, so EVERY local header was seen.
+ *   A refusal stops the walk early, so it reports `complete:false` too: it did not
+ *   see them all, and a field must not claim otherwise on any of its return sites.
+ */
+function scanLocalNames(bytes) {
+  let at = 0;
+  let names = 0;
+  try {
+    for (;;) {
+      if (at + 4 > bytes.length) { return { refusal: null, complete: false, names, why: `the local-header chain ran off the end at ${at}` }; }
+      const sig = bytes.readUInt32LE(at);
+      // The chain reached the directory: every local header was enumerated.
+      if (sig === CENTRAL_SIG || sig === EOCD_SIG) { return { refusal: null, complete: true, names, why: '' }; }
+      if (sig !== LOCAL_SIG || at + 30 > bytes.length) { return { refusal: null, complete: false, names, why: `no local file header at ${at}` }; }
+      const flags = bytes.readUInt16LE(at + 6);
+      const compressed = bytes.readUInt32LE(at + 18);
+      const nameLen = bytes.readUInt16LE(at + 26);
+      const extraLen = bytes.readUInt16LE(at + 28);
+      if (at + 30 + nameLen > bytes.length) { return { refusal: null, complete: false, names, why: `a local file name was cut off at ${at}` }; }
+      names += 1;
+      // Latin-1 for the reason the central walk gives: bytes to characters 1:1.
+      const refusal = nameRefusal(bytes.subarray(at + 30, at + 30 + nameLen).toString('latin1'));
+      if (refusal) { return { refusal, complete: false, names, why: '' }; }
+      // A size not declared HERE makes the next offset unknowable without
+      // decompressing. Stop; a guess would resynchronise on payload bytes.
+      if (((flags & FLAG_SIZES_DEFERRED) && compressed === 0) || compressed === 0xFFFFFFFF) {
+        return { refusal: null, complete: false, names, why: `entry ${names} does not declare its size here` };
+      }
+      if (names >= MAX_ENTRIES) { return { refusal: null, complete: false, names, why: `stopped after ${MAX_ENTRIES} entries` }; }
+      at += 30 + nameLen + extraLen + compressed;
+    }
+  } catch (e) {
+    return { refusal: null, complete: false, names, why: `the local-header chain could not be walked: ${(e && e.message) || e}` };
+  }
+}
+
+module.exports = { scanEntryNames, scanLocalNames, nameRefusal, SCAN_MS, MAX_ENTRIES };

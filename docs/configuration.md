@@ -405,26 +405,40 @@ These variables control the polling loop that drives headless sessions. The defa
 > entry early in the archive ends the walk before any later name is looked at.
 > Measured — the same three-entry archive, one flag bit apart — that moves it out
 > of the terminal class and into the rescuable one. Amicus therefore also **reads
-> the archive's central directory and refuses any entry name yauzl would have
-> refused**, before it hands anything to a native extractor. Two residuals
-> survive, and neither is engineered away:
+> the entry names the archive declares and refuses any that yauzl would have
+> refused**, before it hands anything to a native extractor — and it reads them in
+> **both of the tables a zip declares them in**, the central directory and the
+> local file headers. That second walk is not belt-and-braces. An archive can
+> blind the central directory while leaving every local header whole — a
+> truncation does it by accident, and four one-field edits to a complete
+> end-of-central-directory record do it on purpose — and measured, seven such
+> archives carrying a `../../../` entry reached a native extractor before this
+> was added, two of them running to completion. The tables can also **disagree**,
+> and the tools do not agree on which one to believe: measured, `tar.exe` wrote
+> the name from the LOCAL header and `Expand-Archive` the one from the CENTRAL
+> directory. A refusal in either table refuses the archive.
 >
-> - An archive whose **central directory cannot be read at all** — a truncated
->   zip, which is the commonest thing this rescue exists for — declares no names
->   amicus can see, and it still goes to the native extractor. The only remaining
->   check is that extractor's own. `tar` and `Expand-Archive` were measured to
->   refuse a `..` entry themselves (`tar.exe`: `Path contains '..'`, exit 1;
->   `Expand-Archive`: `Can not process invalid archive entry '…'`; nothing written
->   outside the destination in either case). **`ditto` and Info-ZIP `unzip`, the
->   macOS and Linux strategies, are unmeasured.**
+> Residuals survive, and none is engineered away:
+>
+> - An archive that defeats **both** walks still reaches the native extractor.
+>   That is rarer than it was — a truncated zip, the commonest thing this rescue
+>   exists for, still yields all of its local names — but it is not impossible,
+>   and the notice printed before the spawn now tells you **which** names were
+>   checked rather than letting you assume they all were.
 > - A **symlink whose target escapes** the extraction root is a payload, not a
 >   name, so no name scan can see it. Amicus's own in-memory extractor refuses
 >   those; a native extractor is not asked to.
+> - The name walk trusts a local header's declared size to find the next one, and
+>   a wrong size is a property of exactly the corrupt archives this rescue is for.
+>   A desynchronised walk can read a "name" out of payload bytes. It fails toward
+>   **refusing**, so it can cost a rescue and never grant one.
+
 >
 > Amicus cleans up only *inside* the directory it asked the extractor to write to,
 > so anything a native tool wrote outside it would survive a failed strategy. This
-> is the concrete shape of "not a safe operation": if the archive came from
-> somewhere you do not trust, do not set this variable — get another copy.
+> is the concrete shape of "not a safe
+> operation": if the archive came from somewhere you do not trust, do not set this
+> variable — get another copy.
 >
 > **The one thing the strip does not cover, stated precisely** (measured against
 > `@electron/get` 5.0.0, and re-measured by

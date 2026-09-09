@@ -40,7 +40,7 @@ const MODE_SYMLINK = 0o120777;
 
 /**
  * Build a zip from `entries`.
- * @param {Array<{name:string, body?:string, mode?:number, flags?:number}>} entries
+ * @param {Array<{name:string, centralName?:string, body?:string, mode?:number, flags?:number}>} entries
  *   `mode` is a full st_mode (use MODE_FILE / MODE_DIR / MODE_SYMLINK).
  *   For a symlink, `body` is the link TARGET.
  *   `flags` is the general-purpose bit flag. `FLAG_ENCRYPTED` (bit 0) is the one
@@ -78,10 +78,15 @@ function buildZip(entries) {
     cdh.writeUInt32LE(crc, 16);
     cdh.writeUInt32LE(data.length, 20);
     cdh.writeUInt32LE(data.length, 24);
-    cdh.writeUInt16LE(name.length, 28);
+    // The CENTRAL name may differ from the LOCAL one. An archive declares its
+    // names TWICE, and the two native strategies were MEASURED to read different
+    // tables (`tar.exe` the local, `Expand-Archive` the central), so a fixture
+    // has to be able to make them disagree — see zip-name-scan.js :: scanLocalNames.
+    const cname = e.centralName === undefined ? name : Buffer.from(e.centralName, 'utf8');
+    cdh.writeUInt16LE(cname.length, 28);
     cdh.writeUInt32LE((mode << 16) >>> 0, 38);
     cdh.writeUInt32LE(offset, 42);
-    centrals.push(Buffer.concat([cdh, name]));
+    centrals.push(Buffer.concat([cdh, cname]));
     locals.push(local);
     offset += local.length;
   }
