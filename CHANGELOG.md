@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.9.7] - 2026-09-09
 
 Three findings deferred from the v4.9.6 cut, and the two open questions filed beside them. The
 council run that raised the three reviewed at **2 of 4 seats**, so each carried the weight of two
@@ -69,6 +69,25 @@ wrong about the fix.
   all of them, some of them, or none — because a real artifact truncated by a few kilobytes leaves
   both walks incomplete while every name it found was read and cleared, and a two-state notice would
   have claimed nothing was checked over dozens that were.
+
+  **Two council rounds then found the first cut of this incomplete, and the second cut of it
+  incomplete again — both in the same direction.** A walk that could not follow the chain used to
+  STOP, and an entry it never reached is an entry it cannot refuse: a lying size jumped one, and
+  later a *standard* data-descriptor entry (general-purpose bit 3 with a zero size — an ordinary
+  streaming encoding, not a malformed one) hid everything behind it. Neither needed an exotic
+  archive. So the walk now DEMOTES its claim and keeps going wherever it still has an offset to
+  follow — because a name it can still read is a name it can still refuse — and where it genuinely
+  has none, it SWEEPS the region it could not reach for local headers and puts their names through
+  the same rule. It can only add refusals, so an archive that is rescued today stops being rescued
+  only if it declares a hostile name. **The practical consequence for a user: an archive carrying a
+  traversal name behind an unreadable point is now refused where it previously reached the native
+  extractor.**
+
+  The claim "every name was checked" also became a conjunction rather than a disjunction. The two
+  tables carry different names and the two extractors read different ones, so one readable table
+  never meant both were clean — measured, a stopped local walk beside a benign central directory
+  reported all-clear and printed nothing while `tar.exe` reached a `../../../` entry only the local
+  table carried.
 
 ### Added
 
