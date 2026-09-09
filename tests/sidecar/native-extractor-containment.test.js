@@ -173,11 +173,21 @@ describe('the native extractors contain their own escapes (B2)', () => {
         } catch { /* a refusal is a PASS here; the assertions below decide */ }
 
         // (1) THE TREE. Nothing outside `dist` may have appeared.
+        // THE PREDICATE IS THE HOUSE FORM, INCLUDING THE `path.sep`, and this
+        // file learned that the hard way: written `inDir.startsWith('..')` it
+        // reported an ESCAPE for `<dir>/..\PWNED.txt` on macOS and Linux, where a
+        // backslash is a LEGAL FILENAME CHARACTER — so that entry is one ordinary
+        // file that `unzip` and `ditto` correctly wrote INSIDE `dir`, and the
+        // walker, not the tool, was wrong. Windows never sees it (there the name
+        // is a real traversal and both tools refuse it), which is exactly why a
+        // suite that only ever ran on one platform could not catch it. Same
+        // `path.sep` bug this branch fixed in `electron-exe-rel.js :: distHeldExe`
+        // — the fix and its own regression, two files apart.
         const outside = walk(root).filter((rel) => {
           const abs = path.resolve(root, rel);
           const inDir = path.relative(dir, abs);
-          const isInDir = inDir === '' || (!inDir.startsWith('..') && !path.isAbsolute(inDir));
-          return !isInDir && !['incoming', path.join('incoming', 'dist'), 'ABS-TARGET', 'probe.zip'].includes(rel);
+          const escapes = inDir === '..' || inDir.startsWith(`..${path.sep}`) || path.isAbsolute(inDir);
+          return escapes && !['incoming', path.join('incoming', 'dist'), 'ABS-TARGET', 'probe.zip'].includes(rel);
         });
         expect(outside).toEqual([]);
 
