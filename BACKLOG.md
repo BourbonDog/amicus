@@ -6969,16 +6969,134 @@ B3 (a truncated archive whose entry names cannot be read reaches the native resc
 failing OPEN), B2 (the rescue's cleanup does not reach writes a native tool makes outside its dir).
 The run that raised them reviewed at **2 of 4 seats**.
 
-- [ ] **macOS and Linux symlink handling is UNVERIFIED and no council run can close it.** The darwin
-  artifact is an `.app` bundle with real symlinks and the target-escape check added in v4.9.6 is a
-  behaviour `extract-zip` does not have — it could reject a layout that previously worked. Needs a
-  real darwin machine or a CI job on the actual artifact. Stated in the v4.9.6 release notes rather
-  than waited on.
-- [ ] **The council bench is degrading and it is now affecting verdicts.** Across the four runs the
-  seat counts were 3/4, 4/4, 3/4, 2/4. `qwen` and `glm` repeatedly died `OUTPUT_LENGTH` (the whole
-  reservation spent on reasoning, zero output — issue #218's own motivating failure) and `deepseek`
-  died `NO_OUTPUT_BACKSTOP` at 912 s on the final run. The last verdict therefore carries two seats.
-  The `outputBudget` lever shipped in v4.9.4 is the obvious thing to try on the CI bench.
+- [x] **macOS and Linux symlink handling — the REJECTION RISK IS REFUTED; linux is closed outright
+  and darwin is now job-backed (v4.9.7).** The filing feared the v4.9.6 target-escape check "could
+  reject a layout that previously worked". Measured against the real artifacts rather than reasoned
+  about:
+  - **Linux is settled, not deferred.** `electron-v43.1.1-linux-x64.zip` (124,861,804 B) and
+    `-linux-arm64.zip` (124,456,257 B) each hold **74 entries and ZERO symlinks**, so
+    `zip-entry-write.js :: writeSymlink` is unreachable there and no linux job is warranted.
+  - **Darwin does not trip the check.** The real `electron-v43.1.1-darwin-arm64.zip`
+    (122,054,683 B, sha256 `d6d0598d…6169`, which MATCHES the row in
+    `node_modules/electron/checksums.json`) declares **585 records, 14 symlinks, 310 dir entries**;
+    every target is relative, none carries a `..` component, none is absolute, and **0 of 585 entry
+    names traverse a symlinked component**. The lexical escape check cannot fire.
+    `zip-from-buffer.js`'s `root = fs.realpathSync(dir)` is why: on macOS the extraction root sits
+    under `/var`, itself a symlink to `/private/var`, so an UNRESOLVED root would have read every
+    link in a real `.app` as an escape. No Windows probe would ever show that.
+  - What remained was COVERAGE, not rejection, and `.github/workflows/darwin-bundle.yml` +
+    `scripts/probe-darwin-extract.js` close it: a real `symlinkSync`, a real `realpathSync` behind
+    the SYMLINKCHAIN control, the absolute-target branch on POSIX arithmetic, and `Electron
+    --version` loading the framework through two of the fourteen links. The parity diff against
+    `@electron-internal/extract-zip`'s own tree ships REPORT-ONLY on its first cut — that
+    comparison has never been measured, and making an unmeasured diff a blocking gate on day one
+    is how a job goes red for reasons unrelated to the lane it was built for.
+  - Residuals are enumerated in `docs/electron-testing.md`: darwin x64, case-sensitive APFS,
+    `codesign` (0 `_CodeSignature` entries — it would assert nothing), darwin dest-failure classes,
+    `promoteDist` on APFS, and the trailing-slash symlink entry. `platformExe`'s `mas` arm is dead
+    code — no caller passes `platform: 'mas'`.
+
+- [x] **A REPO BELIEF INVALIDATED: `electron@43.1.1` ships NO install script at all, so `npm ci`
+  NEVER downloads the ~122 MB binary — on any platform (v4.9.7).** Its `package.json` has no
+  `scripts` field; `install.js` is exposed only as the `install-electron` **bin**; and
+  `package-lock.json` carries no `hasInstallScript` for it. Measured on run `34246117877`: plain
+  `npm ci` on ubuntu, macos AND windows all left amicus's own postinstall reporting
+  `[amicus] Note: the Electron GUI binary is not provisioned yet` (an empty cache), while
+  lockfile-derived installable counts (588 / 588 / 587) match the observed `added N packages`
+  EXACTLY **with `electron` included** — the package is present, the binary is not. `ci.yml`'s
+  comment said `--omit=optional` "skips the Electron download"; there is no download on the default
+  path to skip, and the comment is corrected. This is also why the darwin job must provision
+  explicitly with `node node_modules/electron/install.js`, and why it must NOT use
+  `AMICUS_PREFETCH_ELECTRON=1` (`scripts/postinstall.js:86-88` routes that through amicus's OWN
+  extractor, so the parity diff would compare amicus against amicus — an echoed read-back inside
+  the job built to escape one).
+  ⚠️ A developer's Mac is the same trap one level down: `install.js :: isInstalled()`
+  short-circuits on a populated `dist/`, which on a dev box is very likely amicus's own self-heal
+  output. The job and the documented manual recipe therefore remove
+  `node_modules/electron/{dist,path.txt}` first, so the reference tree's provenance is true by
+  construction.
+- [x] **The council bench is degrading and it is now affecting verdicts — `outputBudget: 64000`
+  shipped on the CI bench (v4.9.7).** There were **FIVE** paid runs on `fix/v496-council-findings`,
+  not four: 34158075329 (2/4), 34165289952 (4/4), 34175671859 (3/4), 34182994208 (3/4), 34239260931
+  (2/4) — mean **2.8 of 4**. The earlier "3/4, 4/4, 3/4, 2/4" dropped the first run.
+  - **THE FILED CAUSE WAS HALF THE STORY.** Every one of the six lost seats lost its FIRST attempt
+    to the 480 s zero-token backstop (`run.json :: degrades[].data.firstFailure.reason =
+    NO_OUTPUT_BACKSTOP`); `OUTPUT_LENGTH` is what the RETRY then hit (4 of 6), and two retries died
+    zero-token at the 912 s `retryBackstopMs` (measured on the wire at 912.5 s / 913.0 s, which
+    also validates the elapsed-time method). 20 first attempts / 9 landed; 11 retries / 5 landed.
+    Per seat: gpt 5/5, deepseek 4/5, qwen 3/5, glm 2/5.
+  - **Config skew is NOT the cause, and this is measured rather than assumed:** all 57 ledger rows
+    across five runs carry the CI map's ids, where `curated-models.js` would have given
+    `qwen3.8-max-0902` and `deepseek-v4-pro`. A discriminating check, not an echo.
+  - **The token counts in `degrades[].data.reason` are LEG SUMS, not per-message.**
+    `src/headless.js:1559-1560,1580` passes `sumPerMessageUsage(mirror.usageByMsg)`
+    (`src/utils/pricing.js:24-36`, which iterates EVERY assistant message) into
+    `output-length.js:85-87`, while `finish`/`hasText` are decided on the LAST message alone
+    (`headless.js:1574-1578`). So 34843/32034/32934/35340 are a tool-loop message plus one
+    truncated AT the cap — `ec2980d5-s1r1-2`'s 31349 reasoning + 651 output = exactly 32000 is the
+    clean single-message case. The provider-side receipt for the 32000 reservation is OpenRouter's
+    own refusal in run 34158075329: "You requested up to 32000 tokens".
+    ⚠️ **Never compare a leg sum to a per-message reservation** — that ratio cannot be computed
+    from these artifacts at all, and a plausible-looking "Nx the healthy volume" sentence built
+    from one is how this nearly shipped with a false rationale.
+  - **The value is 64000 and the bound is 65536 SHARED BY TWO ROWS.** Measured on the wire
+    (opencode-ai 1.18.15, bare `{}` descriptors, one probe case per process, 2026-09-09): COLD
+    ceilings are glm-5.3 0/0 and qwen3.8-27b 0/0 (unknown rows — the budget passes as-is),
+    deepseek-v4-flash-0731 **65536**, gemini-3.1-pro-preview **65536**, gpt-5.6-terra 128000; WARM,
+    qwen 131072 and deepseek 943718. The flag at 100000 arrives as `max_tokens 65536` on the chair
+    (4/4 reads) AND on deepseek on every COLD read (4/5) — so reading deepseek's WARM ceiling
+    (943718) and raising past 65536 silently clamps two rows while landing in full on the other
+    three, and the run stops reserving one number. ⚠️ `--only` serving a case COLD is a **RACE**,
+    not a guarantee: two isolated runs read the live catalogue.
+  - **Spend is a FLOOR, not a figure.** `--max-cost 2.00` is enforced on the PRICED subtotal only
+    (`src/council/run-budget.js:56-62` refuses to invent a number for an unknown-cost leg), and all
+    five runs carry an `inexact-under-ceiling` degrade. Run 34165289952 reported $0.2059 while
+    carrying SIX unpriced legs with real volume worth ≥$0.561 at catalog prices — a floor of
+    ≥$0.767, a **3.7x undercount, and all six are glm or qwen**, exactly the seats this change
+    gives more room to. Highest effectively-exact run is 34175671859 at $0.9774. The five
+    `finish:'length'` legs cost ≥$0.898 (four priced at $0.7227; the fifth, `c3118728-s2-1`, is
+    `cost.source: unknown`, ≥$0.1755). Worst-case increment at 64000 ≈ **+$0.62 across five runs**.
+    Re-check by hand-pricing the ledger's unpriced rows, NEVER by reading `usage.cost.amount`.
+    Those unpriced legs are themselves the receipt that **CI has no `model-catalog.json`**:
+    `pricing.js:149` prices via `lookupPricing`, so a leg with `input > 0` can only resolve
+    `unknown` when the catalog cache is absent.
+  - ⚠️ **JUDGE THE FIRST TWO RUNS ON THE DEATH CLASS, NOT THE SEAT COUNT.** The change reaches 4 of
+    the 6 lost seats (the other two produced literally nothing and never reached a reservation), so
+    expect ≈3.6 of 4, not 4 of 4. **And the reservation is not the only wall — the leg cap is
+    960 s** (`--timeout 16` -> `src/council/run-retry.js:61`). Measured elapsed of the four targeted
+    legs: 394.9 s glm, 529.3 s qwen, 584.2 s qwen, 596.0 s glm; headroom 565/431/376/364 s. On the
+    three slowest the remaining headroom is SMALLER than the elapsed already spent, so a real
+    outcome is an `OUTPUT_LENGTH` death converting into a GENERIC leg-cap timeout — the same lost
+    seat with a worse diagnosis, and the unnamed death the whole #202 observability push existed to
+    eliminate. Read `run.json :: degrades[].data.reason`: (a) completed -> it worked; (b) still
+    `OUTPUT_LENGTH` -> raise toward 65536; (c) generic timeout at ~960 s -> the wall MOVED, and the
+    answer is the leg cap, not more budget and not a second retry (still refuted).
+  - **Why the leg cap did NOT move in the same commit.** At `--timeout 20` the worst case is
+    76-80 min against `timeout-minutes: 75`, and a bust CANCELS the job — the run-dir upload is
+    `if: !cancelled()`, so it deletes the forensic record every #202/#220 decision rests on (the
+    same mechanism that keeps the second retry refuted). Moving the reservation and the wall
+    together would also make the result unattributable. Raise `timeout-minutes` FIRST (free unless
+    hit) when the trigger above fires; both numbers are pinned as arithmetic in
+    `tests/scripts/council-review-workflow.test.js`.
+
+- [ ] **The pre-flight stops a seat that resolves to NOTHING, never one that resolves to SOMETHING
+  ELSE.** With no map on the base ref (the tolerated-404 `workflow_call`/fork path), `preflight.js`
+  prints five GREEN bindings and exits 0 — `getEffectiveAliases()` merges the shipped defaults back
+  in, so `qwen` would review as `qwen3.8-max-0902`, `deepseek` as `deepseek-v4-pro` and `gpt` as the
+  DIRECT `openai/gpt-5.6-terra`. Measured 2026-09-09 by executing the harvested heredoc against an
+  empty config dir. Unreachable for this repo's own PRs; real for a reusable-workflow caller. The
+  step's charter says a silent SUBSTITUTION is what it exists to stop, and that is the case it
+  misses.
+
+- [ ] **The CI chair runs at `reasoning: {effort:'high'}` that nobody asked for.** The engine emits
+  it on `openrouter/google/gemini-3.1-pro-preview` with NO variant requested — reproduced on 5 of 5
+  probe reads. Ledger chair reasoning tokens: 2164 / 1524 / 2026 / 12028. Not introduced by the
+  budget change; relevant before anyone re-prices the chair.
+
+- [ ] **The per-seat CAUSE never reaches the PR.** `verdict.json :: seatsReviewed` reaches the
+  check-run title and the sticky comment; `run.json :: degrades[].data.reason` lives only inside the
+  artifact. Nobody reading a PR can see that a seat died at its reservation rather than being
+  outvoted. One line in the sticky comment closes it.
 
 ## v4.9.7 candidates — deferred from the v4.9.6 cut (2026-09-08)
 
@@ -6989,8 +7107,9 @@ the D1 race and the C2 entry-ordering hole, so the sharpest reviewer on this bra
 Shipped anyway on the owner's call: none is a regression, none says a shipped control is ineffective,
 and the branch is strictly better than v4.9.5 with all three open.
 
-- [ ] **A1 [major] — a failed `dist` retirement can delete a WORKING install whose `path.txt` names
-  another platform's exe.** `promoteDist`'s step-1 fallback tests for `platformExe(platform)` and, not
+- [x] **A1 [major] — a failed `dist` retirement can delete a WORKING install whose `path.txt` names
+  another platform's exe.** — **DONE (v4.9.7).** See the ruling below; the filing's DIRECTION was
+  right and its stated RULE was not.** `promoteDist`'s step-1 fallback tests for `platformExe(platform)` and, not
   finding it, `rmSync`s `dist/` in place as "not an install". A package cross-installed through
   `npm_config_platform` holds a different basename, so a whole working tree is destroyed on a promote
   that FAILED. **Verified NOT a regression** — the guard is at `electron-layout.js:189` in
@@ -6999,7 +7118,8 @@ and the branch is strictly better than v4.9.5 with all three open.
   the retirement guard. The fix is to judge "is this an install" by what `path.txt` actually names,
   falling back to `platformExe` only when it is absent or unreadable — the rule
   `resolveElectronBinary` already uses.
-- [ ] **B3 [minor, but the boundary failing OPEN] — a TRUNCATED archive slips past the entry scan.**
+- [x] **B3 [minor, but the boundary failing OPEN] — a TRUNCATED archive slips past the entry scan.**
+  — **DONE (v4.9.7), and the answer was not the one the filing named.**
   The `hostileName` scan added in `524ea7be` enumerates entry names to refuse a hostile entry the
   parse failure would otherwise launder into the native rescue. When a zip's central directory is
   unreadable, it yields NO names — so nothing is found, nothing is refused, and the archive reaches
@@ -7007,7 +7127,8 @@ and the branch is strictly better than v4.9.5 with all three open.
   from a third direction** (first: excluding the refusal yauzl formed rather than the hostile entry;
   now: an archive whose names cannot be read at all). The rule to apply is the one this branch keeps
   re-learning: an enumeration that returns nothing must fail CLOSED, not silently pass.
-- [ ] **B2 [minor] — the rescue's cleanup only reaches inside the incoming directory.** `cleanDir`
+- [x] **B2 [minor] — the rescue's cleanup only reaches inside the incoming directory.**
+  — **HALF REFUTED, and the proposed FENCE was REFUSED rather than deferred (v4.9.7).** `cleanDir`
   cleans `<incoming>/dist`, so a native extractor that writes OUTSIDE it leaves those writes behind
   after a failed rescue. Bounded by the hatch (this path is unreachable without
   `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1`) and by the native tools' own traversal guards, which is why
@@ -7017,6 +7138,218 @@ and the branch is strictly better than v4.9.5 with all three open.
   window, which v4.9.6 documents deliberately and prints to the user before the spawn. It is the
   trade the hatch buys. Recorded here so a later reader does not mistake a disclosed cost for an
   open finding.
+
+## v4.9.7 — B3 and B2: the second name table, and a fence that was refused (2026-09-09)
+
+### B3 — the fix was not a taxonomy. It was reading the OTHER table.
+
+**THE FACT AS FILED IS CONFIRMED**, and it was worse than filed. Measured with the real
+`extractZipBuffer` behind the real boundary, hatch armed, spawn watched: **seven** distinct archive
+shapes carrying `../../../PWNED-BY-NATIVE.txt` reached a real spawn — two truncations (-8, -22), a
+clobbered central header, and **four ONE-FIELD forgeries of a COMPLETE end-of-central-directory
+record** (entry count `0xFFFF`, cd offset `0xFFFFFFFF`, a lying comment length, a multi-disk
+marker). On the comment-length one the rescue ran to COMPLETION and promoted. Only the Windows
+tools' own `..` guards stopped the escape — the exact reliance `electron-native-rescue.js` says
+amicus will not make.
+
+**FOUR CANDIDATE REMEDIES WERE PROPOSED AND ALL FOUR WERE WRONG IN THE SAME WAY.** A six-value
+`cause` taxonomy on the scan; a byte-level EOCD-presence discriminator (proposed independently by
+two reviewers, which is why it looked right); a decline placed after the hatch; a decline placed
+before it. Every one argued about **which blindness to tolerate** — while looking in only ONE of
+the archive's TWO name tables.
+
+**A zip declares its names twice, and the strategies do not agree on which copy they act on.**
+MEASURED on an archive declaring one name locally and another centrally: `tar.exe` (bsdtar 3.8.4)
+wrote the **LOCAL** name; `Expand-Archive` wrote the **CENTRAL** one. amicus read only the central
+table. So the boundary now asks both, via a new `zip-name-scan.js :: scanLocalNames`, and a refusal
+in **either** table refuses the archive.
+
+**WHAT IT COSTS: NOTHING MEASURED.** On six real electron artifacts (v28.0.0-v43.6.0, 107-151 MB)
+the local walk enumerates 73-75 names in 0-1 ms, finds zero data-descriptor entries, and returns
+names equal to the central ones entry-for-entry. Truncated, the central walk goes blind and the
+local walk still enumerates all of them. End to end: **all seven hostile shapes refused with ZERO
+spawns; the availability shapes still rescued; the two pinned residual tests green with no edit.**
+
+⚠️ **THE INVARIANT SURVIVES VERBATIM, and that is why this shape was chosen.** The module's
+"only ever a NARROWING" rule (`zip-name-scan.js`) holds because the new walk, like the old one, can
+only produce a REFUSAL. The rejected taxonomy would have made the scanner emit a token whose value
+AUTHORISED a spawn — the invariant inverted, and the reason two reviewers reached for a byte-level
+discriminator to patch it. No new authorising token means the placement question the reviewers
+fought over does not arise at all.
+
+**THE DISCLOSURE HAS THREE STATES, NOT TWO, AND THE MIDDLE ONE IS THE COMMON ONE.** The obvious
+predicate — `central.read || local.complete` — is FALSE on a real artifact truncated by as little
+as 4,455 bytes while the local walk read and cleared **every** name it found, so the notice would
+print "NOTHING checked its entries" over 73 checked entries. It now says which: all, N-and-unsure,
+or none. `namesComplete` has no default anywhere, because a disclosure must not fail to the
+reassuring branch when a caller forgets to thread it.
+
+**RESIDUAL, stated rather than engineered away:** the local walk trusts a header's declared size to
+find the next one, and a wrong size is a property of exactly the corrupt archives this rescue is
+for. A desynchronised walk can read a "name" out of payload bytes, so a forged local header planted
+there produces a refusal for a name that is not an entry. MEASURED constructible; MEASURED to need
+deliberate construction — zero spurious `PK\x03\x04` signatures across 777 MB of six real
+artifacts. **It fails toward REFUSING, so it can cost a rescue and never grant one.**
+
+### B2 — half already closed, and the fence REFUSED rather than deferred
+
+**HALF THE FILING WAS ALREADY FALSE, and the module's own docblock is what got it wrong.** Measured
+against the real `extractBytesToDist`: a child writing `<incoming>/beside-dist.txt` leaves nothing
+behind on EITHER exit, because `electron-layout.js`'s `finally` removes the WHOLE incoming tree, not
+`<incoming>/dist`. Only a write OUTSIDE `<incoming>` survives. The wide version of the claim was
+shipped in two places and is corrected in both.
+
+**THE ANSWER TO "IS ANY FENCE LESS DANGEROUS THAN THE LEAK?" IS NO**, and not on cost — the cost
+premise reproduced fine (88 entries, 1.42 ms lstat on a real 348 MB tree). Three measurements
+killed it:
+- **A names-diff fence is blind to the shapes that matter.** OVERWRITE of `dist/electron.exe`,
+  `path.txt`, `index.js`, or DELETE of `checksums.json`, each produce `breach = []`.
+- **Signalling a breach as `return null` DELETES THE USER'S ARTIFACT.** Measured end to end through
+  the real `repairFromCache`: `{"ARTIFACT_DELETED":true, "reason":"…was corrupt and removed"}`. And
+  that `null` channel is a PINNED invariant meaning "nothing can read this archive" — the opposite
+  of a containment breach. A FALSE breach is reachable from a concurrent provision in the same
+  package directory, so the fence would cost an air-gapped user the artifact, the rescue AND the
+  true explanation. That is finding D2's shape, which this cluster has already paid for once.
+- **It could never have covered darwin's distinctive vector.** An ABSOLUTE symlink target lands
+  outside any `electronDir`-bounded ring at any depth.
+
+**WHAT SHIPPED INSTEAD.** The rescue's boundary leans on a claim — "the native tools refuse
+traversal themselves" — and a claim nothing re-measures is a claim that rots. So:
+`tests/sidecar/native-extractor-containment.test.js` drives **12 escape shapes x every resolvable
+strategy** on every CI run. 56 real `spawnSync` runs when it landed; nothing appeared outside the
+given directory on any of them. Newly measured: **Info-ZIP `unzip` 6.00 CONTAINS** (it strips
+escaping components and writes inside the destination under a mangled name; its own `-hh` text
+documents this as the default, with `-:` as the opt-out, which amicus does not pass), and **GNU
+`tar` is INERT on a zip** (exit 2). That leaves **`ditto`, darwin strategy 1, as the ONLY unmeasured
+strategy in the whole plan** — and `ci.yml`'s matrix already includes `macos-latest`, so this suite
+measures it on the first CI run. **If `ditto` escapes, the build goes red, and that is the finding,
+not a flaky test.**
+
+Plus one line: the child now runs with the incoming tree as its `cwd`. **MEASURED NEUTRAL, not
+measured needed** — 18 paired runs, no tool observed writing anything cwd-relative. It ships because
+it converts a hypothetical cwd-relative write from "the user's own repo, under npx, forever" into
+"a tree amicus deletes unconditionally", and because the failure it could introduce (a cwd holder
+blocking the `rmSync`) is already swept by `sweepPromoteLitter` while the one it prevents is swept
+by nothing. `unzip.js :: robustExtract`'s native loop deliberately does NOT get the same treatment;
+the reason is now in its docblock rather than left to rot.
+
+### Filed by the B3/B2 pass — open
+
+- [ ] **The newly-refused set is PERMANENTLY terminal, not merely un-rescued.** An archive refused
+  for a hostile name returns `done:true` on every subsequent run — no download, no eviction —
+  because `electron-repair-cache.js` treats `UNZIP_UNSAFE_ARCHIVE` as terminal. That is correct for
+  a hostile archive and it is the honest phrasing of the cost: `docs/troubleshooting.md`'s "Online,
+  do nothing — a truncated download heals itself" now carries the exception explicitly.
+- [ ] **`electron-native-plan.js`'s `catch` around `spawn` does `continue` and so SKIPS the
+  `cleanDir` every other failure branch reaches**, leaving a partial tree `dirNonEmpty` could read
+  as a later strategy's success. Near-unreachable (`spawnSync` reports failures in `res.error`
+  under `{stdio:'ignore', windowsHide:true, timeout}`), and `cwd` does not change it. Filed rather
+  than folded in, because it is a VERDICT change and this rev's B2 work deliberately made none.
+- [ ] **A hostile cache-planter can deny electron provisioning permanently** with a local-header
+  traversal name. NOT a new capability class — the same denial already existed through a hostile
+  CENTRAL name — and an attacker who can write the electron cache has larger levers. Recorded so
+  the widening is on the record rather than discovered later.
+- [ ] **The Info-ZIP measurement is the win32 build.** `mapname()` is per-platform, so the result
+  does not formally transfer to the macOS or Linux builds. The containment suite is what closes
+  that, by running there rather than asserting from a table.
+
+## v4.9.7 — A1: the guard that asked the wrong question (2026-09-09)
+
+**A1 is CLOSED**, and the way it closed is the record worth keeping: the filing was right about the
+defect and wrong about the fix, and implementing its sentence literally would have opened three new
+holes of the same shape.
+
+**THE DEFECT, REPRODUCED FIRST.** Real `promoteDist`, real fs, only `renameSync` injected to throw
+the EPERM the step-1 fallback exists for:
+```
+path.txt "electron",  dist/electron                  -> dist GONE, usable true->false
+path.txt "Electron.app/Contents/MacOS/Electron", ... -> dist GONE, usable true->false
+path.txt "electron.exe" (control)                    -> REFUSED, tree kept
+no path.txt, dist/electron.exe (control)             -> REFUSED, tree kept
+```
+The guard protected a tree only when the basenames happened to agree. Note `pathTxtAfter` was
+`"electron"` in both failing rows: v4.9.6's step-0 put-back faithfully restored the POINTER while the
+retirement guard one function away deleted the TREE it pointed at.
+
+**WHY THE FILED RULE WAS NOT IMPLEMENTED AS WRITTEN.** The filing says "judge by what `path.txt`
+actually names, falling back to `platformExe` only when it is absent or unreadable". The rule it
+points at (`resolveElectronBinary`) also TRIMS and also falls back on BLANK, and — decisively — it is
+a REPLACEMENT rule for a resolver that only reads, not for a guard that deletes. Measured, the
+filing-literal variant destroys a working `dist/electron.exe` on three shapes the shipped guard
+protects: a whitespace-only `path.txt`, one with a trailing newline
+(`existsSync(join(dist,'electron.exe\n'))` is false on Windows), and a TRUNCATED one — `electr`, the
+shape `promoteDist`'s OWN best-effort put-back can leave. So the guard is a **UNION**:
+`platformExe` first and byte-for-byte unchanged, then the `path.txt` name. The set of trees it
+licenses deleting can only ever SHRINK.
+
+**THREE BOUNDS THE FILING DOES NOT MENTION, each measured, each with its own named mutant.**
+- CONTAINED, in the house form from `zip-entry-write.js :: writeSymlink` — including the `path.sep`.
+  A predicate written `inside.startsWith('..')` reads the LEGAL filename `dist/..electron.exe` as
+  escaping, drops it from the union, and deletes a tree the package resolves through: the defect
+  reproduced INSIDE its own fix. `..electron.exe`, `...electron` and `..a` were created on real NTFS
+  to check this is not hypothetical (`DISTHOLDSDOTPREFIX`).
+- A FILE, NOT A DIRECTORY. Every natural truncation of the darwin name (`Electron.app`,
+  `Electron.app/Contents`, `.../MacOS`) is a real DIRECTORY, and `existsSync` says true for all of
+  them. An `existsSync` arm 2 refuses every promote FOREVER on the AV-quarantine shape the self-heal
+  exists for, while printing "dist/ holds a usable Electron.app" (`DISTHOLDSDIRISEXE`).
+- THE MESSAGE NAMES WHAT WAS FOUND, not what was looked for. `distHeldExe` returns the matched name
+  rather than a boolean, because `docs/troubleshooting.md` tells the user this refusal means the tree
+  holds a usable executable — naming the wrong one sends them hunting for a file that is not there.
+
+**WHICH VALUE THE GUARD READS, and the read-back it must not do.** `raw`, captured before step 0.
+NOT `replaced` (nulled in exactly the branch that needs a name, and untrimmed) and NOT a re-read:
+MEASURED, at the guard `path.txt` already says `electron.exe` because step 0's own writer put it
+there, so a re-reading guard reads its own writer's value and deletes the tree exactly as before —
+[[plan-authoring-failure-modes]] #21, the echoed read-back, inside the fix for it.
+
+**THE DE-DUPLICATION IS THE ACTUAL FIX.** The filing's own words are "did not carry one function
+over". Two copies of one rule are free to drift, so the rule moved to a new true leaf
+`src/sidecar/electron-exe-rel.js` (`platformExe`, `writePathTxt`, `heldExeRel`, `distHeldExe`) and
+`resolveElectronBinary` now calls it. The split was FORCED, not chosen: `electron-layout.js` was
+exactly at the 300-line gate. A new table-driven test asserts both sides agree over 7 `path.txt`
+shapes x 3 platforms x override on/off — the anti-drift pin whose ABSENCE let them diverge.
+
+**AN UNREADABLE path.txt now REFUSES rather than guessing.** ENOENT is "absent" and still heals; any
+other read failure means promoteDist cannot know whether the tree is a cross-install, and guessing
+`platformExe` deletes it. Refusing is cheap HERE and nowhere else — the guard is reached only after
+the retirement rename has already failed, so it never blocks a normal self-heal
+(`UNREADABLEFALLSOPEN`, paired with an ABSENT-path.txt control so the arm cannot silently wedge a
+fresh package).
+
+**HOW THE PINS WERE VERIFIED, and the measurement that was thrown away.** Eight named mutants, applied
+by byte copy and reverted, each measured RED against the named test; a `HARNESS-IS-LIVE` sanity
+mutant proves the harness detects failure at all. Two rounds were DISCARDED and re-run:
+- The first harness crashed mid-run with a mutant applied and never reverted, so the NEXT run captured
+  a MUTATED file as its clean baseline. Every "RED (good)" in that round was measured against a
+  corrupted tree. The tell was a pre-existing test failing for a reason nobody could explain. The
+  harness now reverts in a `finally` and asserts byte-identity at the end.
+- `HELDEXENOTRIM` and `HELDEXENOFALLBACK` then SURVIVED — correctly. The first fixtures put
+  `electron.exe` in `dist/`, so arm 1 refused whatever `heldExeRel` did: **a true assertion for the
+  wrong reason**, [[plan-authoring-failure-modes]] #1 in a new dress. The trim is now pinned on a
+  cross-installed tree where arm 1 CANNOT fire, and `HELDEXENOFALLBACK` is pinned at its real site,
+  the RESOLVER — inside `distHeldExe` it is an EQUIVALENT mutant, because the containment bound
+  already rejects a blank name, so no promote test can ever kill it. Say that rather than inventing a
+  test that appears to.
+
+### Filed by the A1 pass — open
+
+- [ ] **`resolveElectronBinary` will resolve OUTSIDE `dist/`.** With `path.txt` = `../SIBLING`,
+  `isElectronUsable` returns TRUE for a file that is not in `dist/` at all, so `repairElectron` may
+  never run on a package whose "exe" is an arbitrary sibling file. A1's containment bound
+  deliberately does NOT touch this: the guard governs a DELETE, the resolver governs a SPAWN, and a
+  resolver that will hand `spawn` a path a repo-writable file chose is the bigger question. Rule on
+  it on its own, not as a rider to A1.
+- [ ] **A separator mismatch nobody has ruled on, and it needs a darwin machine.** Real electron
+  writes `Electron.app/Contents/MacOS/Electron` with FORWARD slashes (`node_modules/electron/
+  install.js`, hardcoded); `platformExe` uses `path.join`. So on a win32 or linux host inspecting a
+  darwin package the two strings are NOT equal, `replaced === platformExe(platform)` is false, and
+  step 0 REWRITES `path.txt` with backslashes — which on a real darwin machine become a literal
+  filename component. A1 does not change this (`heldExeRel` trims, it does not normalise separators)
+  and it is invisible on the machine this was built on. Do NOT "fix" it by normalising separators
+  without measuring on darwin first; it belongs with the darwin lane.
+- [ ] **This ruling overturns part of a DEGRADED filing and should itself go to the bench.** The run
+  that produced A1 reviewed at 2 of 4 seats. The union and the containment bound are the two places
+  a direction was chosen that the filing did not name, and are what a seat should be pointed at.
 
 ## v4.9.5 records — the Electron trust boundary (2026-09-07)
 
