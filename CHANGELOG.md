@@ -3,6 +3,139 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+Three findings deferred from the v4.9.6 cut, and the two open questions filed beside them. The
+council run that raised the three reviewed at **2 of 4 seats**, so each carried the weight of two
+seats — and on the one that mattered most, the filing turned out to be right about the defect and
+wrong about the fix.
+
+### Fixed
+
+- **A promote can no longer delete a working install that was cross-installed for another
+  platform.** v4.9.6 captured and restored a `path.txt` naming another platform's executable, but
+  the guard that decides whether a `dist/` may be removed in place still asked only about THIS
+  platform's default name. On a package installed through `npm_config_platform`, a promote whose
+  retirement rename failed therefore restored the pointer and deleted the tree it pointed at —
+  reproduced against the shipped code with a real filesystem and only `renameSync` injected to
+  throw the EPERM the fallback exists for.
+
+  The guard now judges by what `path.txt` actually names. **As a union with the platform default,
+  never as a replacement** — which is the part the finding did not say, and implementing its
+  sentence literally destroys a working `dist/electron.exe` on three shapes the old guard protected:
+  a whitespace-only `path.txt`, one with a trailing newline (`existsSync` of a name ending in `\n`
+  is false on Windows), and a TRUNCATED one — `electr`, the shape this function's own best-effort
+  put-back can leave. The platform-default arm runs first and is unchanged, so the set of trees a
+  promote will delete can only ever shrink.
+
+  The `path.txt` name additionally has to be **contained** in `dist/` and has to be a **file**: a
+  `path.txt` of `..`, `.` or `../SIBLING` names something that exists but that the delete never
+  touches, and every truncation of the darwin name (`Electron.app`, `Electron.app/Contents`,
+  `.../MacOS`) is a real directory — accepting either would refuse every promote forever while
+  reporting that `dist/` "holds a usable Electron.app". The refusal message now names the executable
+  that was found rather than the one that was looked for, because `docs/troubleshooting.md` tells
+  the user that refusal means the tree holds a usable executable.
+
+  An **unreadable** `path.txt` now refuses rather than guessing; an absent one still heals. The rule
+  itself moved to `src/sidecar/electron-exe-rel.js` and `resolveElectronBinary` now calls it, with a
+  table-driven test asserting both sides agree over seven `path.txt` shapes on three platforms with
+  and without `ELECTRON_OVERRIDE_DIST_PATH`. Two copies of one rule are what let these drift, and
+  the finding's own words for the defect were "did not carry one function over".
+
+- **(docs)** `.github/workflows/ci.yml` claimed `--omit=optional` "skips the Electron download". It
+  skips the optional *package*; there is no download on the default path to skip, because
+  `electron@43.1.1` ships no install script at all. Measured on run `34246117877` across all three
+  runner platforms.
+
+### Security
+
+- **The rescue boundary now reads BOTH tables an archive declares its entry names in.** A zip
+  carries its names twice — in the central directory and in each local file header — and amicus
+  read only the first. An archive can blind that one while leaving every local header whole: cutting
+  the tail off does it by accident, and four one-field edits to a *complete* end-of-central-directory
+  record do it on purpose. Measured against the real extractor with the hatch armed, **seven such
+  archives carrying a `../../../` entry reached a native extractor, and two ran to completion and
+  promoted the result.** Nothing escaped only because the Windows tools refuse `..` themselves — the
+  exact reliance this subsystem says amicus will not make.
+
+  The two tables can also disagree, and the tools do not agree on which to believe: measured,
+  `tar.exe` wrote the name from the local header while `Expand-Archive` wrote the one from the
+  central directory. A refusal in either table now refuses the archive.
+
+  **It costs no measured availability.** On six real Electron artifacts the local walk enumerates
+  every name in 0-1 ms and agrees with the central table entry-for-entry; on a truncated archive,
+  where the central walk goes blind, it still reads them all. The archives this rescue exists for
+  are still rescued. And the notice printed before a spawn now says *which* names were checked —
+  all of them, some of them, or none — because a real artifact truncated by a few kilobytes leaves
+  both walks incomplete while every name it found was read and cleared, and a two-state notice would
+  have claimed nothing was checked over dozens that were.
+
+### Added
+
+- **A macOS job that runs the real extract path over the real Electron `.app` artifact**
+  (`.github/workflows/darwin-bundle.yml`, `scripts/probe-darwin-extract.js`). v4.9.6 shipped a
+  symlink target-escape check that `extract-zip` does not have, and disclosed that it might *reject*
+  a layout that previously worked. **It does not** — measured against the real
+  `electron-v43.1.1-darwin-arm64.zip`: 585 records, 14 symlinks, every target relative, none with a
+  `..` component, none absolute, and none of the 585 entry names traversing a symlinked component.
+  The linux artifacts hold zero symlink entries, so that path is unreachable there at all.
+
+  What was left was coverage rather than risk, and the job closes it: a real `symlinkSync`, a real
+  `realpathSync` behind the chain control, the absolute-target branch on POSIX arithmetic, and
+  `Electron --version` loading the framework through two of the fourteen links. Ten assertions, each
+  naming the one-line mutation it catches. The parity diff against `@electron-internal/extract-zip`'s
+  own tree ships **report-only** on its first cut — that comparison has never been measured, and a
+  gate that has never been run once is not evidence.
+
+### Changed
+
+- **The claim that the native extractors refuse traversal themselves is now re-measured on every CI
+  run, instead of being asserted once.** That claim is the compensating control the rescue's
+  boundary leans on, and a claim nothing re-measures is a claim that rots.
+  `tests/sidecar/native-extractor-containment.test.js` drives 12 escape shapes through every
+  strategy that resolves on the machine. Newly measured this way: Info-ZIP `unzip` contains its own
+  escapes by stripping them, and GNU `tar` cannot read a zip at all — both were previously written
+  down as unmeasured. **`ditto`, the first macOS strategy, is now the only unmeasured one**, and the
+  macOS runner already in the matrix measures it the first time this suite runs there.
+
+  A proposed runtime "fence" around the Electron package directory was **refused rather than
+  deferred**, and the reasons are recorded because they were measured: a names-diff fence is blind
+  to an overwrite of `dist/electron.exe` or `path.txt`; and signalling a breach through the
+  available channel deletes the user's cached artifact and reports it corrupt — which a *false*
+  breach, reachable from a concurrent provision, would then do to the air-gapped machine this whole
+  feature exists for.
+
+  Half of the finding that prompted it was already false: everything the rescue writes lives under a
+  private incoming directory that is deleted unconditionally, so only an absolute write outside that
+  tree survives a failed strategy. Two shipped documents said otherwise and are corrected. The child
+  now also runs with that directory as its working directory — measured neutral, and it costs a line.
+
+- **The CI council bench reserves 64,000 output tokens per leg instead of the engine's 32,000
+  default** — for every PR whose base carries the change. The alias map is fetched from the BASE
+  REF, so a branch cannot change the reviewers of its own PR; the config therefore lands on `main`
+  separately and takes effect for runs opened after it, never for the branch carrying it. Measured:
+  the run on the PR that first carried this reported `outputBudget is unset` and lost a seat at the
+  32,000 default exactly as before. Across the five paid council runs on the v4.9.6 branch the bench averaged **2.8 of 4
+  seats**, and four of the six lost seats died at the reservation with `finish: 'length'` and
+  0–651 usable output tokens.
+
+  **64,000 is measured, not chosen.** Against the pinned engine with the bare descriptors CI
+  registers, it lands unclamped on all four seats and the chair in both catalogue states. The
+  binding ceiling is **65,536**, and on a cold read it is shared by **two** rows — the chair and
+  `deepseek-v4-flash-0731` — not by the chair alone: the flag at 100,000 arrives as
+  `max_tokens 65536` on both. A budget above it would land in full on three seats while two were
+  silently clamped, and a run would stop reserving one number. The pre-flight step now fails before
+  any spend on a budget above the ceiling or on one amicus would reject and silently replace with
+  32,000; the alias map's own validator inspects aliases only, so nothing caught that before.
+
+  **What it does not fix, said up front:** the other two lost seats — and ten of the eleven failed
+  first attempts — produced nothing at all and never reached a reservation. Expect roughly 3.6 of 4,
+  not 4 of 4. Read the death class rather than the seat count: three of the four targeted legs ran
+  529–596 s of a 960 s leg cap, so an `OUTPUT_LENGTH` death can convert into a generic timeout,
+  which is the same lost seat with a worse diagnosis. The leg cap deliberately did not move in the
+  same change — raising it busts the 75-minute job cap, and a bust cancels the job, which deletes
+  the run-directory artifact every diagnosis of this class rests on.
+
 ## [4.9.6] - 2026-09-08
 
 *Amicus never itself writes, or reports as verified, bytes it did not hash.*

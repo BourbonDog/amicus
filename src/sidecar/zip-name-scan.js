@@ -38,6 +38,11 @@
  * It also cannot see a SYMLINK whose TARGET escapes the root: that is bytes, not
  * a name, and `zip-from-buffer.js` refuses it only because it reads the payload.
  *
+ * THE BLINDNESS IN THE FIRST PARAGRAPH IS WHY `scanLocalNames` EXISTS (v4.9.7,
+ * B3). An archive carries its names TWICE, and an unreadable central directory
+ * says nothing about the local file headers — which is the table `tar` was
+ * MEASURED to act on. The caller asks both.
+ *
  * ── AND IT IS ONLY EVER A NARROWING ───────────────────────────────────────
  * Nothing here can make a rescue happen. A refusal it forms turns a
  * `UNZIP_BUFFER_FAILED` into the TERMINAL `UNZIP_UNSAFE_ARCHIVE` its caller

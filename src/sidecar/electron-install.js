@@ -16,7 +16,9 @@
  *
  * AT THE SIZE GATE, so pieces live next door: `./electron-custody` reads the
  * artifact into memory once, `./zip-from-buffer` extracts what was read,
- * `./electron-layout` holds `platformExe`/`writePathTxt`/`extractBytesToDist`
+ * `./electron-exe-rel` holds the ONE `path.txt` rule (`platformExe`/`heldExeRel`/
+ * `writePathTxt`/`distHeldExe`), shared with `promoteDist`'s retirement guard since
+ * v4.9.7 (A1); `./electron-layout` holds `promoteDist`/`extractBytesToDist`
  * (`platformExe` re-exported here for `ei.platformExe`), `./electron-refuse`
  * holds the refusal messages, `./electron-repair-cache` the whole cached-artifact
  * route, `./electron-provision` the pinned download. The arrow points one way out
@@ -32,7 +34,7 @@ const { cachedZip } = require('./electron-cache');
 const { isSafeArtifactName } = require('./electron-custody');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
-const { platformExe } = require('./electron-layout');
+const { platformExe, heldExeRel } = require('./electron-exe-rel');
 const { controlledProvision } = require('./electron-provision');
 const { repairFromCache } = require('./electron-repair-cache');
 const { isUnsafeArchive, refuseUnsafeArchive } = require('./electron-refuse');
@@ -61,16 +63,9 @@ function defaultElectronDir() {
  * @returns {string|null} resolved exe path, or null if path.txt is unreadable.
  */
 function resolveElectronBinary({ electronDir = defaultElectronDir(), env = process.env, platform = process.platform, fs = fsDefault } = {}) {
-  let exeRel;
-  const pathFile = path.join(electronDir, 'path.txt');
-  try {
-    exeRel = fs.readFileSync(pathFile, 'utf-8').trim();
-  } catch {
-    exeRel = '';
-  }
-  if (!exeRel) {
-    exeRel = platformExe(platform);
-  }
+  let raw = null;
+  try { raw = fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf-8'); } catch { /* absent or unreadable */ }
+  const exeRel = heldExeRel(raw, platform);   // the ONE rule (electron-exe-rel.js)
   const override = env.ELECTRON_OVERRIDE_DIST_PATH;
   if (override) {
     return path.join(override, exeRel);

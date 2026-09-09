@@ -452,10 +452,13 @@ That is what a swapped mirror or a planted cache file looks like. It is **also**
 
 **Fix, in order:**
 
-- **Online, do nothing.** Amicus downloads the artifact again with the digest pinned. A truncated download heals itself.
+- **Online, do nothing.** Amicus downloads the artifact again with the digest pinned. A truncated download
+  heals itself. The exception is an archive amicus refuses outright for path traversal — that is terminal
+  by design and is not re-fetched, because the problem is what the archive *contains*, not that it arrived
+  incomplete.
 - **Air-gapped, re-copy first.** Copy the cache directory again from the machine that downloaded it. A partial copy is the usual cause, and a fresh copy costs you nothing.
 - **Only if you cannot obtain another copy: the native-extractor rescue.** Set `AMICUS_ALLOW_UNVERIFIED_ELECTRON=1` and provision again. You do not have to have set it in advance: the run that printed the message above left the archive in place precisely so this one has something to work on. Amicus then writes the bytes it hashed to a path inside the Electron package and hands that path to your OS's own extractor (`tar` / `Expand-Archive` / `ditto` / `unzip`) — the same tools that handled the archive before amicus extracted in memory at all. **This is not a safe operation, and it is not described as one.** Between amicus writing the file and the child process opening it, anything running as your user can substitute it, and what that child extracts is promoted into `dist/` without being hashed again. Amicus prints the whole trade on stderr before it spawns anything, and the result is reported `unverified` even when the artifact's own sha256 matched. Unset the variable afterwards: it also downgrades a digest-mismatch refusal to a warning ([configuration.md](./configuration.md#gui-and-debug)).
-- **What the rescue will *not* do,** whatever this variable is set to: retry an archive refused for path traversal (`REFUSED (unsafe archive)` — terminal by design), retry an extraction that *stalled* (the timeout exists to stop work, not to hand it to a child process), rescue bytes that contradict the published digest (they are known wrong), or paper over a full or unwritable disk. Each of those says something different from "this archive cannot be read", and only the last of those is a rescue amicus was given. Before it hands anything over, amicus also reads the archive's *entry names* and refuses any that would write outside the destination — because an archive can break the extractor early enough that its own traversal check never ran. That name check cannot see inside an archive whose central directory is unreadable, and cannot see a symlink target at all; [configuration.md](./configuration.md#gui-and-debug) states both residuals and names which extractors were measured to refuse a `..` entry themselves.
+- **What the rescue will *not* do,** whatever this variable is set to: retry an archive refused for path traversal (`REFUSED (unsafe archive)` — terminal by design), retry an extraction that *stalled* (the timeout exists to stop work, not to hand it to a child process), rescue bytes that contradict the published digest (they are known wrong), or paper over a full or unwritable disk. Each of those says something different from "this archive cannot be read", and only the last of those is a rescue amicus was given. Before it hands anything over, amicus also reads the archive's *entry names* and refuses any that would write outside the destination — because an archive can break the extractor early enough that its own traversal check never ran. It reads them in **both** tables a zip declares them in, so cutting the tail off an archive no longer hides its names, and the two tables disagreeing does not let one through. It still cannot see a symlink target, and an archive that defeats both walks still reaches the extractor — the notice printed before the spawn says which names were checked; [configuration.md](./configuration.md#gui-and-debug) states every residual and names which extractors were measured to refuse a `..` entry themselves.
 - Headless runs and the full council work without the GUI throughout.
 
 ---
@@ -514,11 +517,15 @@ The third line names which way the read failed:
   guaranteed either way: a half-written tree is never what `dist/` contains, and a kill mid-extract
   leaves the previous `dist/` exactly where it was.
 - **A promote never removes a working `dist/` to make room.** If the old tree cannot be renamed out of
-  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable,
-  the repair refuses and leaves it untouched rather than deleting it with no way back. If it holds no
-  executable it is not an install, and it is replaced. In the one case where the tree was renamed away
-  and neither the swap nor the rollback could run, the previous `dist/` is intact at
-  `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
+  the way (a handle held on it, or an AV filter denying the move) and it holds a usable executable —
+  the one `path.txt` names, or this platform's default when `path.txt` is absent, unreadable or blank
+  — the repair refuses and leaves it untouched rather than deleting it with no way back. That covers
+  a package cross-installed for another platform through `npm_config_platform`, whose `path.txt` names
+  an executable this platform never looks for; through v4.9.6 the guard asked only about this
+  platform's default name, so such a tree was read as "not an install" and a promote that FAILED
+  deleted it. If it holds neither, it is not an install, and it is replaced. In the one case where the
+  tree was renamed away and neither the swap nor the rollback could run, the previous `dist/` is
+  intact at `.amicus-retired-<hex>` and the error names it — rename it back to `dist/` to restore it.
 - **A related refusal**, `Refusing to provision electron: … is not a usable artifact name`, means the
   `version` in the Electron package's own `package.json` is not a plausible version string. Amicus
   builds the artifact filename from it and refuses to use anything that is not a plain filename, since

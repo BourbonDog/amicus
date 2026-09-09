@@ -118,6 +118,7 @@ const { nativeRescue, RESCUE_ZIP, INCOMING_PREFIX } = require('./electron-native
 const { offerNativeRescue } = require('./electron-rescue-notice');
 // The read-only name walk the boundary consults before it trusts a verdict.
 const { scanEntryNames } = require('./zip-name-scan');
+const { scanLocalNames } = require('./zip-local-name-scan');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 /** The ONE extractor verdict a rescue may act on. See the docblock's boundary. */
@@ -144,27 +145,46 @@ function isRescuableFailure(err) {
  * unadvertised, left in place, exactly as if the archive had had nothing wrong
  * with it but that entry.
  *
- * THE RESIDUAL, STATED RATHER THAN ENGINEERED AWAY. The scan reads the central
- * directory; an archive whose central directory is unreadable — a truncated zip,
- * the commonest thing this rescue exists for — declares no names it can see, and
- * that archive still reaches the native extractor. Nothing here covers a SYMLINK
- * whose target escapes either: that is a payload, not a name. In both cases the
- * only remaining check is the extractor's own, which `tar` and `Expand-Archive`
- * were MEASURED to have (`ditto` and Info-ZIP `unzip` are unmeasured), and
- * `cleanDir` sweeps only inside `dir` — anything a native tool wrote outside it
- * would survive a failed strategy. `docs/configuration.md` says the same thing to
+ * BOTH TABLES, BECAUSE THE STRATEGIES DO NOT AGREE ON WHICH ONE THEY READ (B3).
+ * Through v4.9.6 this asked the CENTRAL directory only, so an archive that blinds
+ * yauzl there — a truncation, or any of four ONE-FIELD forgeries of a COMPLETE
+ * end-of-central-directory record — declared no names amicus could see and went
+ * to the native extractor anyway. MEASURED: seven such archives carrying
+ * `../../../PWNED-BY-NATIVE.txt` reached a real spawn, and on two the rescue ran
+ * to COMPLETION and promoted. Only the Windows tools' own `..` guards stopped the
+ * escape — the exact reliance this module says amicus will not make.
+ * And the tables can DISAGREE: on an archive declaring one name locally and
+ * another centrally, `tar.exe` wrote the LOCAL name while `Expand-Archive` wrote
+ * the CENTRAL one. So a refusal in EITHER table refuses the archive.
+ *
+ * THE RESIDUALS THAT REMAIN. Neither walk sees a SYMLINK whose target escapes:
+ * that is a payload, not a name. And an archive that defeats BOTH walks still
+ * reaches the extractor — rarer than before, but not impossible — so the notice
+ * printed before the spawn now says WHICH names were checked, rather than letting
+ * the user assume they all were. `docs/configuration.md` says the same thing to
  * the user who has to decide whether to set the flag.
+ *
+ * WHEN A NAME CHECK CANNOT SEE IT, the only check left is the extractor's own —
+ * and that claim is now RE-MEASURED on every CI run rather than asserted once
+ * (`tests/sidecar/native-extractor-containment.test.js`, 12 escape shapes per
+ * strategy). `tar.exe`, `Expand-Archive` and Info-ZIP `unzip` all contain their
+ * own escapes; GNU `tar` cannot read a zip at all; `ditto` is the one strategy
+ * still unmeasured, and that suite measures it the first time it runs on a Mac.
+ * What a failed strategy can still leave behind is ONLY a write to an ABSOLUTE
+ * path outside the incoming tree: everything else the rescue writes lives under
+ * that tree, which `extractBytesToDist`'s `finally` deletes unconditionally (B2).
+ * @param {{central:object, local:object}} seen the two walks' results
  * @returns {Error|null} a terminal UNZIP_UNSAFE_ARCHIVE, or null
  */
-async function hostileName(bytes, log) {
-  const seen = await scanEntryNames(bytes);
-  if (!seen.refusal) { return null; }
+function hostileName(seen, log) {
+  const refusal = seen.central.refusal || seen.local.refusal;
+  if (!refusal) { return null; }
   log('[amicus] REFUSING to rescue this archive: amicus could not read it, and while asking what');
   log('[amicus] it contains it found an entry that tries to write OUTSIDE the destination:');
-  log(`[amicus]   ${collapseExcerpt(seen.refusal)}`);
+  log(`[amicus]   ${collapseExcerpt(refusal)}`);
   log('[amicus] A native extractor may have no such check, so it is not offered this archive.');
   return Object.assign(
-    new Error(`refusing to extract this archive: ${collapseExcerpt(seen.refusal)}`),
+    new Error(`refusing to extract this archive: ${collapseExcerpt(refusal)}`),
     { code: 'UNZIP_UNSAFE_ARCHIVE' },
   );
 }
@@ -200,7 +220,8 @@ function withNativeRescue({
       // ...and the one class that IS rescuable is asked what names it declares
       // first, because the exclusion above keys on the refusal yauzl FORMED and
       // an earlier bad entry stops it forming one. See `hostileName`.
-      const hostile = await hostileName(bytes, log);
+      const seen = { central: await scanEntryNames(bytes), local: scanLocalNames(bytes) };
+      const hostile = hostileName(seen, log);
       if (hostile) { throw hostile; }
       if (!policy.allowUnverified) {
         // `offered` IS THE OFFER'S RECEIPT, and the cache route is required to
@@ -214,7 +235,25 @@ function withNativeRescue({
         throw err;
       }
       const strategy = nativeRescue({
-        bytes, dir: o.dir, reason: (err && err.message) || '', platform, fs, spawn, maxMs, log,
+        bytes,
+        dir: o.dir,
+        reason: (err && err.message) || '',
+        // WHAT THE NOTICE MAY CLAIM. Three states, not two: a real artifact
+        // truncated by a few KB has BOTH walks incomplete while the local walk
+        // read and cleared every name it found, so `central.read || local.complete`
+        // would print "nothing checked its entries" over 73 checked entries.
+        // BOTH, NOT EITHER. The two tables carry DIFFERENT names and the two
+        // strategies read different ones, so a disjunction cannot mean "every
+        // name was checked". MEASURED: a local walk stopped at entry 1 with a
+        // readable, benign central directory reported TRUE and printed nothing,
+        // while `tar.exe` reached a `../../../` entry only the local table had.
+        namesComplete: seen.central.read && seen.local.complete,
+        namesChecked: seen.local.names,
+        platform,
+        fs,
+        spawn,
+        maxMs,
+        log,
       });
       // A rescue that failed leaves the ORIGINAL classified error in flight, so
       // a genuinely bad archive is still evicted exactly as it was before.

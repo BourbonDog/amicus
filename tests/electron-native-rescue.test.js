@@ -714,6 +714,33 @@ describe('C2 — the docs say what the hatch now arms (HATCHDOCSSTALE)', () => {
     expect(prose('configuration.md')).toMatch(/keeps\*\* the cached archive|that discard now waits/);
   });
 
+  test('the pages do not claim a write inside the incoming tree survives (B2)', () => {
+    // MEASURED FALSE and shipped in two places: `extractBytesToDist`'s `finally`
+    // removes the WHOLE incoming tree, so only a write OUTSIDE it survives. The
+    // old sentence made a narrow residual sound like a wide one.
+    expect(prose('configuration.md')).not.toMatch(/cleans up only \*?inside\*? the directory it asked/);
+    expect(prose('configuration.md')).toMatch(/absolute path outside that tree|write a native tool makes to an\s+absolute path/);
+  });
+
+  test('the pages name the ONE strategy still unmeasured, and do not call the measured ones unmeasured (B2)', () => {
+    // `ditto` is the last unmeasured strategy in nativeUnzipPlan. Info-ZIP
+    // `unzip` and GNU `tar` are measured now, so a page still calling them
+    // unmeasured is stale in the direction that matters -- it overstates the risk
+    // and hides which one is real.
+    const text = prose('configuration.md');
+    expect(text).toMatch(/`ditto`, the first macOS strategy, is the one that\s+remains unmeasured/);
+    expect(text).not.toMatch(/`ditto` and Info-ZIP `unzip`, the\s+macOS and Linux strategies, are unmeasured/);
+  });
+
+  test('the pages say BOTH name tables are read (B3)', () => {
+    // The whole of B3 in one sentence a user can act on: cutting the tail off an
+    // archive no longer hides its names.
+    for (const name of PAGES) {
+      expect(prose(name)).toMatch(/both\*?\*? of the tables|both\*?\*? tables/i);
+    }
+    expect(prose('configuration.md')).not.toMatch(/central directory \*\*cannot be read at all\*\* — a truncated\s+zip.*still goes to the native extractor/);
+  });
+
   test('both pages name the rescue as a thing this variable arms', () => {
     for (const name of PAGES) {
       const text = prose(name);
@@ -834,19 +861,140 @@ describe('C2 — REAL archives, and the entry-ordering hole (ENTRYORDERTRAVERSAL
     expect(spawn).toHaveBeenCalled();
   });
 
-  test('an archive with NO readable central directory is still rescued — the stated residual', async () => {
-    // THE HONEST LIMIT, pinned so it stays deliberate. A truncated zip — the
-    // commonest thing this rescue exists for — declares no names anyone can
-    // read, so the scan proves nothing and the archive goes to the native
-    // extractor with only that tool's own `..` check between it and the disk.
-    // electron-native-rescue.js :: hostileName and docs/configuration.md both
-    // say so; this is the test that stops it being discovered by accident.
+  test('an archive with NO readable central directory is still rescued — the availability case', async () => {
+    // THE CASE THE RESCUE EXISTS FOR, pinned so a security fix cannot quietly
+    // delete it. A truncated zip is the commonest thing an air-gapped machine
+    // has, and it must still reach the extractor when its names are CLEAN.
+    // ⚠️ THE REASON THIS TEST PASSES CHANGED IN v4.9.7 AND THE OLD ONE WAS LEFT
+    // BEHIND FOR A MOMENT: it used to be "declares no names anyone can read, so
+    // the scan proves nothing". That is now FALSE — `scanLocalNames` reads the
+    // local file headers of exactly this archive and finds them clean. It is
+    // rescued because it is CLEAN, not because amicus is blind. The hostile
+    // twin below is what makes that distinction observable.
     const { wrapped, dir, spawn } = realBoundary();
     const whole = buildZip([{ name: 'electron.exe', body: 'MZ' }]);
 
     expect(await wrapped(whole.subarray(0, whole.length - 8), { dir })).toEqual({ strategy: 'tar', rescued: true });
 
     expect(spawn).toHaveBeenCalled();
+  });
+
+  test('a TRUNCATED archive whose LOCAL headers carry a traversal entry is refused (B3, LOCALSCANIGNORED)', async () => {
+    // The twin of the test above, and the hole B3 closed. Through v4.9.6 the
+    // boundary read the CENTRAL directory only, so cutting the tail off an
+    // archive hid its names and sent the traversal entry to the native
+    // extractor. MEASURED before the fix: this exact shape reached a real spawn.
+    const { wrapped, dir, spawn } = realBoundary();
+    const whole = buildZip([BREAKS_THE_WALK, { name: TRAVERSAL, body: 'pwn' }, { name: 'electron.exe', body: 'MZ' }]);
+
+    await expect(wrapped(whole.subarray(0, whole.length - 8), { dir }))
+      .rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  test('a WHOLE archive whose end-of-central-directory record is forged is refused (B3, LOCALSCANIGNORED)', async () => {
+    // Four ONE-FIELD edits to a COMPLETE EOCD each blind yauzl while leaving
+    // every local header — and every byte a native extractor reads — untouched.
+    // MEASURED before the fix: all four reached a spawn, and on the
+    // comment-length one the rescue ran to COMPLETION and promoted the result.
+    const forgeries = {
+      'entry count 0xFFFF': (b, e) => { b.writeUInt16LE(0xFFFF, e + 8); b.writeUInt16LE(0xFFFF, e + 10); },
+      'cd offset 0xFFFFFFFF': (b, e) => b.writeUInt32LE(0xFFFFFFFF, e + 16),
+      'a lying comment length': (b, e) => b.writeUInt16LE(500, e + 20),
+      'a multi-disk marker': (b, e) => { b.writeUInt16LE(7, e + 4); b.writeUInt16LE(7, e + 6); },
+    };
+    for (const [label, forge] of Object.entries(forgeries)) {
+      const { wrapped, dir, spawn } = realBoundary();
+      const bytes = buildZip([BREAKS_THE_WALK, { name: TRAVERSAL, body: 'pwn' }, { name: 'electron.exe', body: 'MZ' }]);
+      let eocd = -1;
+      for (let i = bytes.length - 22; i >= 0; i -= 1) { if (bytes.readUInt32LE(i) === 0x06054b50) { eocd = i; break; } }
+      expect(eocd).toBeGreaterThan(-1);
+      forge(bytes, eocd);
+
+      await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+      expect(spawn).not.toHaveBeenCalled();
+      expect(label).toBeTruthy();
+    }
+  });
+
+  test('the two tables can DISAGREE, and either one refuses the archive (B3, LOCALSCANONLYCENTRAL)', async () => {
+    // `tar.exe` was MEASURED to write the LOCAL name and `Expand-Archive` the
+    // CENTRAL one, so reading either table alone leaves the other tool's input
+    // unchecked. Both directions must refuse.
+    for (const entry of [
+      { name: TRAVERSAL, centralName: 'harmless.txt' },
+      { name: 'harmless.txt', centralName: TRAVERSAL },
+    ]) {
+      const { wrapped, dir, spawn } = realBoundary();
+      const bytes = buildZip([BREAKS_THE_WALK, { ...entry, body: 'pwn' }, { name: 'electron.exe', body: 'MZ' }]);
+
+      await expect(wrapped(bytes, { dir })).rejects.toMatchObject({ code: 'UNZIP_UNSAFE_ARCHIVE' });
+
+      expect(spawn).not.toHaveBeenCalled();
+    }
+  });
+
+  test('the notice says WHICH names were checked, in three states (NAMESREADOVERCLAIMED)', async () => {
+    // A DISCLOSURE THAT OVERCLAIMS IS WORSE THAN NONE, and the middle state is the
+    // common one: a real artifact truncated by a few KB leaves BOTH walks
+    // incomplete while the local walk still read and cleared every name it
+    // reached. A two-state notice keyed on `central.read || local.complete`
+    // prints "NOTHING checked its entries" over dozens of checked entries --
+    // MEASURED on a real electron zip, where `local.complete` flips false at a
+    // cut of ~4.5 KB while all 73 names stay readable.
+    const CLEAN = { name: 'electron.exe', body: 'MZ' };
+
+    // (a) names fully read -> no caveat at all.
+    const whole = await (async () => {
+      const { wrapped, dir, said } = realBoundary();
+      const bytes = buildZip([BREAKS_THE_WALK, CLEAN]);
+      await wrapped(bytes, { dir });
+      return said();
+    })();
+    expect(whole).toMatch(/THE WINDOW THIS OPENS/);
+    expect(whole).not.toMatch(/COULD NOT READ THE ENTRY NAMES EITHER/);
+    expect(whole).not.toMatch(/COULD NOT CONFIRM IT SAW THEM ALL/);
+
+    // (b) PARTIAL -- cut inside the payload of the last entry, so the local walk
+    // reads real names and then runs off the end without reaching the directory.
+    const partial = await (async () => {
+      const { wrapped, dir, said } = realBoundary();
+      const bytes = buildZip([BREAKS_THE_WALK, { name: 'second.bin', body: 'B'.repeat(400) }, CLEAN]);
+      await wrapped(bytes.subarray(0, 60), { dir });
+      return said();
+    })();
+    expect(partial).toMatch(/IT CHECKED 1 ENTRY NAMES AND COULD NOT CONFIRM IT SAW THEM ALL/);
+    expect(partial).not.toMatch(/NOTHING checked its/);
+
+    // (c) NOTHING read -> the full caveat.
+    const blind = await (async () => {
+      const { wrapped, dir, said } = realBoundary();
+      await wrapped(Buffer.from('not a zip at all, no header anywhere'), { dir });
+      return said();
+    })();
+    expect(blind).toMatch(/COULD NOT READ THE ENTRY NAMES EITHER/);
+    expect(blind).toMatch(/NOTHING checked its/);
+  });
+
+  test('the notice warns when only ONE table was fully read (NAMESCOMPLETEDISJUNCTION)', async () => {
+    // The two tables carry DIFFERENT names and the two strategies read different
+    // ones, so "every name was checked" is a CONJUNCTION. MEASURED on the
+    // disjunction: a local walk that stopped at entry 1 with a readable, benign
+    // central directory reported TRUE and printed nothing, while `tar.exe`
+    // reached a `../../../` entry that only the local table carried.
+    // Entry 1 sets bit 3 with a ZERO size, which is the one shape where the walk
+    // genuinely has no next offset -- so local.complete is false while the
+    // central directory is perfectly readable and clean.
+    const stop = buildZip([{ name: 'first.bin', body: 'AAAA', flags: 0x08 }, { name: 'electron.exe', body: 'MZ' }]);
+    stop.writeUInt32LE(0, 18);            // no size declared in the local header
+    const { wrapped, said } = wrap({ extract: () => { throw boom('UNZIP_BUFFER_FAILED'); }, hatch: true });
+    const { dir } = incomingTree();
+
+    await wrapped(stop, { dir });
+
+    expect(said()).toMatch(/COULD NOT CONFIRM IT SAW THEM ALL|COULD NOT READ THE ENTRY NAMES EITHER/);
   });
 
   test('with the hatch UNSET a hostile-named archive is refused, not OFFERED', async () => {

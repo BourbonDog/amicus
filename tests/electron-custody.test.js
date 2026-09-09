@@ -45,6 +45,44 @@
  *   in place with nothing to roll back to.
  *   RED: "a promote that cannot retire a WORKING dist/ REFUSES rather than
  *   destroying it".
+ * PROMOTEIGNORESPATHTXT electron-exe-rel.js :: distHeldExe - restore the v4.9.6
+ *   rule, `fs.existsSync(path.join(distDir, platformExe(platform)))` alone, so
+ *   the retirement fallback judges by this host's default name and a
+ *   cross-installed tree reads as "not an install".
+ *   RED: "a promote that cannot retire a CROSS-INSTALLED dist/ REFUSES rather
+ *   than destroying it" and "a DARWIN-layout dist/ inspected as win32 is an
+ *   install too".
+ * HELDEXENOTRIM    electron-exe-rel.js :: heldExeRel - drop the `.trim()`, so a
+ *   path.txt written with a trailing newline names a file that cannot exist.
+ *   RED: "a path.txt that is blank, padded or TRUNCATED still cannot license
+ *   the delete".
+ * HELDEXENOFALLBACK electron-exe-rel.js :: heldExeRel - return the raw value
+ *   instead of falling back to `platformExe` when it is blank, so an empty
+ *   path.txt names dist/ ITSELF (which exists, refusing everything, with an
+ *   empty name in the message).
+ *   RED: same test - the "holds a usable electron.exe and" assertion.
+ * DISTHOLDSNOUNION electron-exe-rel.js :: distHeldExe - check only `heldExeRel`
+ *   and drop the `platformExe` arm, turning the union into a replacement, so a
+ *   TRUNCATED path.txt over a good tree reads as empty.
+ *   RED: same test - the `electr` row.
+ * DISTHOLDSDOTPREFIX electron-exe-rel.js :: distHeldExe - widen the containment
+ *   test to `inside.startsWith('..')`, dropping the `path.sep`, so a legal
+ *   filename beginning with `..` reads as escaping dist/. Note DISTHOLDSNOBOUND
+ *   stays GREEN on this form, which is why it needs its own mutant.
+ *   RED: "a dist/ entry whose name begins with .. still protects the tree".
+ * DISTHOLDSNOBOUND electron-exe-rel.js :: distHeldExe - delete the
+ *   `path.relative` containment test, so a name that escapes dist/ can vouch
+ *   for it and every promote refuses forever.
+ * DISTHOLDSDIRISEXE electron-exe-rel.js :: distHeldExe - use `fs.existsSync`
+ *   instead of `statSync(full).isFile()` on arm 2, so a path.txt naming a
+ *   DIRECTORY (every truncation of the darwin name is one) wedges the heal.
+ *   RED (both): "a path.txt naming a DIRECTORY or a path outside dist/ does NOT
+ *   wedge the self-heal".
+ * UNREADABLEFALLSOPEN electron-layout.js :: promoteDist - set `unreadable`
+ *   unconditionally false (or restore the bare `catch {}`), so an EACCES
+ *   path.txt is treated as absent and the guard guesses `platformExe`.
+ *   RED: "an UNREADABLE path.txt refuses the in-place delete rather than
+ *   guessing".
  * DESTERRORISARCHIVE zip-entry-write.js :: writeEntry — tag a write failure
  *   `UNZIP_BUFFER_FAILED` instead of `UNZIP_DEST_FAILED`.
  *   RED: "a DESTINATION failure is not reported as a bad archive (D2)".
@@ -819,8 +857,12 @@ describe('the extraction is BOUNDED — a stall is an outcome, not a hang (STALL
   }, 20_000);
 });
 
-describe('symlinks — the darwin .app shape, which cannot be run here', () => {
-  // MEASURED-UNVERIFIABLE ON THIS MACHINE. The only electron artifact that
+describe('symlinks — the darwin .app shape, pinned here and EXERCISED in .github/workflows/darwin-bundle.yml', () => {
+  // NOT VERIFIABLE ON THIS MACHINE, AND NO LONGER UNVERIFIED ANYWHERE. Since
+  // v4.9.7 `.github/workflows/darwin-bundle.yml` runs the real extract path over
+  // the real artifact on a real Mac; these tests remain the platform-independent
+  // pin of the DECISION, which is what a mutant needs to go RED on every push.
+  // The only electron artifact that
   // contains symlinks is the darwin `.app` bundle (`Versions/Current` and the
   // framework chains); the win32 artifact has ZERO symlink entries, measured on
   // the real 138 MiB file. So these tests build the SHAPES a real `.app` uses
@@ -1103,6 +1145,209 @@ describe('extractBytesToDist — a partial extraction never becomes dist/', () =
 
     expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-NEW');
     expect(fs.existsSync(path.join(distDir, 'quarantined-leftovers.dll'))).toBe(false);
+  });
+
+  // -- A1: the guard must ask what path.txt NAMES, not what THIS host defaults to --
+  // Filed from council run 34239260931 (2 of 4 seats). MEASURED against the code
+  // as shipped in v4.9.6, real fs, only `renameSync` injected:
+  //   {"pathTxt":"electron","dist/electron":"present","WORKING_TREE_SURVIVED":false,
+  //    "distExists":false,"pathTxtAfter":"electron"}
+  // v4.9.6's step-0 put-back faithfully restored the POINTER while the retirement
+  // guard one function away deleted the TREE it pointed at.
+  const crossInstallFixture = ({ pathTxt, exeRel }) => {
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    const exeAbs = path.join(distDir, exeRel);
+    fs.mkdirSync(path.dirname(exeAbs), { recursive: true });
+    if (pathTxt !== null) { fs.writeFileSync(path.join(electronDir, 'path.txt'), pathTxt); }
+    fs.writeFileSync(exeAbs, 'MZ-OLD-BUT-WORKING');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noRenameFs = {
+      ...fs,
+      renameSync: () => { const e = new Error('EPERM: operation not permitted, rename'); e.code = 'EPERM'; throw e; },
+    };
+    return { electronDir, distDir, exeAbs, incoming, noRenameFs };
+  };
+
+  test('a promote that cannot retire a CROSS-INSTALLED dist/ REFUSES rather than destroying it (A1, PROMOTEIGNORESPATHTXT)', () => {
+    // A package installed through `npm_config_platform` holds another platform's
+    // basename in path.txt. The v4.9.6 guard asked only about `electron.exe`,
+    // found none, and read a whole working tree as "not an install".
+    const f = crossInstallFixture({ pathTxt: 'electron', exeRel: 'electron' });
+    const promote = () => promoteDist({
+      electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: f.noRenameFs,
+    });
+
+    expect(promote).toThrow(/EPERM/);
+    expect(promote).toThrow(/left exactly as it was/);
+    // The message must name the exe that was FOUND, never the one it looked for:
+    // docs/troubleshooting.md tells the user this refusal means the tree holds a
+    // usable executable, so naming `electron.exe` here sends them hunting for a
+    // file that is not there.
+    expect(promote).toThrow(/holds a usable electron and/);
+
+    expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+    // Measured through the PRODUCTION resolver, not restated: the user still has
+    // a usable install, and step 0's put-back still ran on this exit.
+    expect(isElectronUsable({ electronDir: f.electronDir, platform: 'win32', env: {}, fs })).toBe(true);
+    expect(fs.readFileSync(path.join(f.electronDir, 'path.txt'), 'utf8')).toBe('electron');
+    expect(fs.readdirSync(f.electronDir).filter((n) => n.startsWith('.amicus-retired-'))).toEqual([]);
+  });
+
+  test('a DARWIN-layout dist/ inspected as win32 is an install too (A1, PROMOTEIGNORESPATHTXT)', () => {
+    // electron's own getPlatformPath returns 'Electron.app/Contents/MacOS/Electron'
+    // with FORWARD slashes, hardcoded (node_modules/electron/install.js). This is
+    // the shape the filing does not name, and the only test that would catch a
+    // "fix" comparing basenames instead of joining the whole relative path.
+    const f = crossInstallFixture({
+      pathTxt: 'Electron.app/Contents/MacOS/Electron', exeRel: 'Electron.app/Contents/MacOS/Electron',
+    });
+
+    expect(() => promoteDist({
+      electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: f.noRenameFs,
+    })).toThrow(/left exactly as it was/);
+
+    expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+  });
+
+  test('a path.txt that is blank, padded or TRUNCATED still cannot license the delete (HELDEXENOTRIM, HELDEXENOFALLBACK, DISTHOLDSNOUNION)', () => {
+    // The filing's literal rule -- "judge by what path.txt names, falling back to
+    // platformExe only when it is absent or unreadable" -- was MEASURED to open
+    // three NEW holes on a tree holding a real electron.exe, because the rule it
+    // points at (resolveElectronBinary) also TRIMS and also falls back on blank.
+    // existsSync(join(dist, 'electron.exe' + LF)) is false on Windows, so an
+    // untrimmed name licenses the delete.
+    for (const pathTxt of ['electron.exe\n', '   \n', '', 'electr']) {
+      const f = crossInstallFixture({ pathTxt, exeRel: 'electron.exe' });
+      const promote = () => promoteDist({
+        electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: f.noRenameFs,
+      });
+
+      expect(promote).toThrow(/left exactly as it was/);
+      // An empty name joins to distDir ITSELF, which exists -- the message must
+      // never be "holds a usable " with nothing after it.
+      expect(promote).toThrow(/holds a usable electron\.exe and/);
+      expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+    }
+  });
+
+  test('the TRIM is what saves a cross-installed tree whose path.txt ends in a newline (HELDEXENOTRIM)', () => {
+    // The row above cannot pin the trim: it puts `electron.exe` in dist/, so
+    // ARM 1 refuses whatever `heldExeRel` does and HELDEXENOTRIM survives it --
+    // a true assertion for the wrong reason. Here dist/ holds NO platformExe, so
+    // arm 1 cannot fire and the trim is the only thing standing between a
+    // working tree and `rmSync`. MEASURED: existsSync(join(dist,'electron' + LF))
+    // is false on Windows, so an untrimmed name reads as "not an install".
+    const f = crossInstallFixture({ pathTxt: 'electron\n', exeRel: 'electron' });
+
+    expect(() => promoteDist({
+      electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: f.noRenameFs,
+    })).toThrow(/holds a usable electron and/);
+
+    expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+  });
+
+  test('a dist/ entry whose name begins with .. still protects the tree (DISTHOLDSDOTPREFIX)', () => {
+    // `path.relative` returns the FILENAME for an entry directly inside dist/, so
+    // a containment test written `inside.startsWith('..')` -- without path.sep --
+    // reads the legal name `..electron.exe` as escaping, drops it from the union,
+    // and deletes a tree the package resolves through. MEASURED: real names
+    // `..electron.exe`, `...electron` and `..a` all create fine on NTFS.
+    const f = crossInstallFixture({ pathTxt: '..electron.exe', exeRel: '..electron.exe' });
+
+    expect(() => promoteDist({
+      electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: f.noRenameFs,
+    })).toThrow(/left exactly as it was/);
+
+    expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+    expect(isElectronUsable({ electronDir: f.electronDir, platform: 'win32', env: {}, fs })).toBe(true);
+  });
+
+  test('a path.txt naming a DIRECTORY or a path outside dist/ does NOT wedge the self-heal (DISTHOLDSNOBOUND, DISTHOLDSDIRISEXE)', () => {
+    // The other direction, and the more dangerous one: a guard that accepts any
+    // EXISTING path refuses every promote forever while printing "dist/ holds a
+    // usable Electron.app". Every natural truncation of the darwin name is a real
+    // DIRECTORY, and existsSync says true for all of them; `..`, `.` and
+    // `../SIBLING` all exist too. repairElectron runs precisely when dist/ is
+    // broken, so refusing here breaks the case the self-heal exists for.
+    const cases = [
+      { pathTxt: 'Electron.app', mk: (d) => fs.mkdirSync(path.join(d, 'Electron.app', 'Contents'), { recursive: true }) },
+      { pathTxt: '..', mk: (d) => fs.writeFileSync(path.join(d, 'junk.dll'), 'JUNK') },
+      {
+        pathTxt: '../SIBLING',
+        mk: (d) => {
+          fs.writeFileSync(path.join(d, 'junk.dll'), 'JUNK');
+          fs.writeFileSync(path.join(d, '..', 'SIBLING'), 'X');
+        },
+      },
+    ];
+    for (const c of cases) {
+      const electronDir = mkTmp('amicus-electron-');
+      const distDir = path.join(electronDir, 'dist');
+      fs.mkdirSync(distDir, { recursive: true });
+      fs.writeFileSync(path.join(electronDir, 'path.txt'), c.pathTxt);
+      c.mk(distDir);
+      const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+      fs.mkdirSync(incoming, { recursive: true });
+      fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+      const noRetireFs = {
+        ...fs,
+        renameSync: (from, to) => {
+          if (from === distDir) { const e = new Error('EPERM: rename'); e.code = 'EPERM'; throw e; }
+          return fs.renameSync(from, to);
+        },
+      };
+
+      promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noRetireFs });
+
+      expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-NEW');
+    }
+  });
+
+  test('an UNREADABLE path.txt refuses the in-place delete rather than guessing (UNREADABLEFALLSOPEN)', () => {
+    // When the read throws for any reason but ENOENT, promoteDist cannot know
+    // whether the tree is a cross-install, and guessing `platformExe` deletes it.
+    // Refusing is cheap here and nowhere else: the guard is reached ONLY after
+    // the retirement rename has already failed.
+    const f = crossInstallFixture({ pathTxt: 'electron', exeRel: 'electron' });
+    const eaccesFs = {
+      ...f.noRenameFs,
+      readFileSync: (target, ...rest) => {
+        if (String(target).endsWith('path.txt')) { const e = new Error('EACCES: permission denied'); e.code = 'EACCES'; throw e; }
+        return fs.readFileSync(target, ...rest);
+      },
+    };
+
+    expect(() => promoteDist({
+      electronDir: f.electronDir, incomingDist: f.incoming, platform: 'win32', fs: eaccesFs,
+    })).toThrow(/path\.txt could not be read/);
+
+    expect(fs.readFileSync(f.exeAbs, 'utf8')).toBe('MZ-OLD-BUT-WORKING');
+  });
+
+  test('an ABSENT path.txt over a broken dist/ still heals - the control for UNREADABLEFALLSOPEN', () => {
+    // Without this pair, the arm above silently wedges the self-heal for every
+    // fresh package: ENOENT is "absent", not "unreadable".
+    const electronDir = mkTmp('amicus-electron-');
+    const distDir = path.join(electronDir, 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, 'quarantined-leftovers.dll'), 'JUNK');
+    const incoming = path.join(electronDir, '.amicus-incoming-test', 'dist');
+    fs.mkdirSync(incoming, { recursive: true });
+    fs.writeFileSync(path.join(incoming, 'electron.exe'), 'MZ-NEW');
+    const noRetireFs = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (from === distDir) { const e = new Error('EPERM: rename'); e.code = 'EPERM'; throw e; }
+        return fs.renameSync(from, to);
+      },
+    };
+
+    promoteDist({ electronDir, incomingDist: incoming, platform: 'win32', fs: noRetireFs });
+
+    expect(fs.readFileSync(path.join(distDir, 'electron.exe'), 'utf8')).toBe('MZ-NEW');
   });
 
   test('when the ROLLBACK also fails, the old tree survives and the message names where', () => {

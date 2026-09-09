@@ -112,6 +112,7 @@ src/
 │   ├── electron-custody.js  # CUSTODY of the Electron artifact: one open, one read, one Buffer.
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
 │   ├── electron-env-scrub.js  # The ENV SCRUB — which environment names a hostile REPOSITORY can plant.
+│   ├── electron-exe-rel.js  # WHICH exe a package resolves through, and whether a `dist/` HOLDS one.
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-layout.js  # The on-disk LAYOUT of an installed `electron` package: where the executable
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
@@ -166,6 +167,7 @@ src/
 │   ├── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 │   ├── zip-entry-write.js  # ONE ENTRY of an in-memory archive, and the classified failures every caller
 │   ├── zip-from-buffer.js  # Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED.
+│   ├── zip-local-name-scan.js  # THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers.
 │   ├── zip-name-scan.js  # WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central
 │   └── zip-stall-bound.js  # WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work.
 ├── template/
@@ -417,6 +419,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── probe-darwin-extract.js
 ├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
 ├── run-integration-keyless.js
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
@@ -566,6 +569,7 @@ evals/
 | `sidecar/electron-custody.js` | CUSTODY of the Electron artifact: one open, one read, one Buffer. | `readArtifactBytes()`, `isSafeArtifactName()`, `MAX_ARTIFACT_BYTES()`, `READ_CHUNK()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-env-scrub.js` | The ENV SCRUB — which environment names a hostile REPOSITORY can plant. | `isRepoPlantedName()`, `withScrubbedRepoEnv()`, `REPO_ENV_PREFIXES()` |
+| `sidecar/electron-exe-rel.js` | WHICH exe a package resolves through, and whether a `dist/` HOLDS one. | `platformExe()`, `writePathTxt()`, `heldExeRel()`, `distHeldExe()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-layout.js` | The on-disk LAYOUT of an installed `electron` package: where the executable | `platformExe()`, `writePathTxt()`, `promoteDist()`, `extractBytesToDist()`, `sweepPromoteLitter()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
@@ -620,6 +624,7 @@ evals/
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
 | `sidecar/zip-entry-write.js` | ONE ENTRY of an in-memory archive, and the classified failures every caller | `failure()`, `badArchive()`, `badDestination()`, `outOfBound()`, `extractorUnavailable()` |
 | `sidecar/zip-from-buffer.js` | Extract an archive that is ALREADY IN MEMORY and ALREADY HASHED. | `extractZipBuffer()` |
+| `sidecar/zip-local-name-scan.js` | THE OTHER TABLE AN ARCHIVE DECLARES ITS NAMES IN — the local file headers. | `scanLocalNames()`, `declaredCentralOffset()` |
 | `sidecar/zip-name-scan.js` | WHAT NAMES DOES THIS ARCHIVE DECLARE? A read-only walk of the central | `scanEntryNames()`, `nameRefusal()`, `SCAN_MS()`, `MAX_ENTRIES()` |
 | `sidecar/zip-stall-bound.js` | WHEN AMICUS GIVES UP ON AN IN-MEMORY EXTRACTION, and how it stops the work. | `IDLE_MS()`, `MAX_MS()`, `UNWIND_MS()`, `stalled()`, `awaitUnwind()` |
 | `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |

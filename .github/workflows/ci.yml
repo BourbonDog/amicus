@@ -230,8 +230,18 @@ jobs:
       - name: Pack tarball
         run: npm pack --ignore-scripts
       # Real global install of the packed tarball. --omit=optional skips the
-      # Electron download (the GUI is non-fatal/optional; we only assert
-      # MCP + skills). postinstall runs here and registers everything.
+      # optional `electron` PACKAGE — NOT an Electron download. There is no
+      # download on the default path either: electron@43.1.1 ships no install
+      # script at all (its package.json has no `scripts` field; it exposes
+      # install.js only as the `install-electron` bin, and package-lock.json
+      # carries no `hasInstallScript` for it), so npm never fetches the ~122 MB
+      # binary on ANY path. MEASURED on run 34246117877: plain `npm ci` on
+      # ubuntu, macos and windows alike finished in 15-38s and left amicus's own
+      # postinstall reporting "the Electron GUI binary is not provisioned yet",
+      # i.e. an EMPTY electron cache. (.github/workflows/darwin-bundle.yml
+      # therefore provisions the artifact in its own explicit step.) The GUI is
+      # non-fatal/optional here; we only assert MCP + skills. postinstall runs
+      # here and registers everything.
       - name: Global install (runs postinstall)
         shell: bash
         run: npm install -g --omit=optional ./amicus-*.tgz

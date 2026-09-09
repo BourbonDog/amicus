@@ -62,9 +62,26 @@ function offerNativeRescue({ reason, log = () => {} }) {
  * instead of reassuring anyone about it — the rescue is not safe, and the words a
  * user reads while it happens have to say so.
  */
-function announceNativeRescue({ zip, reason, log = () => {} }) {
+function announceNativeRescue({
+  zip, reason, namesComplete, namesChecked = 0, log = () => {},
+}) {
   log('[amicus] AMICUS_ALLOW_UNVERIFIED_ELECTRON=1 — running the NATIVE-EXTRACTOR RESCUE.');
   log(`[amicus]   amicus could not read the archive itself: ${collapseExcerpt(reason)}`);
+  // THREE STATES, NOT TWO, and the middle one is the common one: a real artifact
+  // truncated by a few KB leaves both walks incomplete while the local walk still
+  // read and cleared every name it reached. Saying "nothing checked its entries"
+  // there would be a FALSE disclosure on the shape this rescue exists for.
+  // `namesComplete` is undefined-means-no on purpose (see `nativeRescue`).
+  if (!namesComplete && namesChecked > 0) {
+    log(`[amicus]   IT CHECKED ${namesChecked} ENTRY NAMES AND COULD NOT CONFIRM IT SAW THEM ALL:`);
+    log('[amicus]   the archive stopped amicus part-way through its own tables, so an entry that');
+    log('[amicus]   writes OUTSIDE dist/ could sit past the point it reached.');
+  } else if (!namesComplete) {
+    log('[amicus]   AND IT COULD NOT READ THE ENTRY NAMES EITHER: neither this archive\'s central');
+    log('[amicus]   directory nor its local file headers could be walked, so NOTHING checked its');
+    log('[amicus]   entries for paths that write OUTSIDE dist/. The extractor below is the only');
+    log('[amicus]   check left.');
+  }
   log('[amicus] THE WINDOW THIS OPENS, stated plainly. amicus has written the bytes it hashed to');
   log(`[amicus]   ${collapseExcerpt(zip, PATH_EXCERPT_CHARS)}`);
   log('[amicus] and is about to hand that PATH to a native extractor it does not control. Between');
