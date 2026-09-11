@@ -52,6 +52,7 @@ jest.mock('../src/utils/logger', () => ({
 }));
 
 const { runHeadless } = require('../src/headless');
+const { logger: mockLogger } = require('../src/utils/logger');
 
 // Plain reply with real output but no [SIDECAR_FOLD] marker — the shape of any
 // non-fold headless run (e.g. `--prompt "Reply with exactly: OK"`).
@@ -146,6 +147,86 @@ describe('idle-detection exits classify as completed', () => {
     expect(result.completed).toBe(true);
     expect(result.error).toBeUndefined();
     expect(result.summary).toContain('Full deliverable text.');
+    // The veto is visible in a trace: exactly once for the single flat stretch, on its
+    // first vetoed poll (stablePolls still 0), naming the status it deferred to.
+    const resets = mockLogger.debug.mock.calls.filter((c) => c[0] === 'Idle heuristic reset: SDK busy, no live tools');
+    expect(resets).toHaveLength(1);
+    expect(resets[0][1]).toEqual({ taskId: 'task1234', stablePolls: 0, sdkStatus: 'busy' });
+  });
+
+  it('does NOT complete via the idle heuristic while the SDK says retry (provider backoff) and no tool is live — the engine has not given up (spec 2026-09-11 §3 as amended)', async () => {
+    // The D0 shape with the third arm of the SDK's status union: a 429 between
+    // attempts is not silence — the engine is still working the same turn.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    const answer = '# Breaking in a glove\n\nFull deliverable text.\n```json\n{"overall":"x","findings":[]}\n```';
+    let poll = 0;
+    mockGetMessages.mockImplementation(() => {
+      poll += 1;
+      if (poll < 12) {
+        return Promise.resolve([{
+          info: { role: 'assistant', id: 'm1', time: {} },          // NOT finalized
+          parts: [{ id: 'm1:t', type: 'text', text: narration }],
+        }]);
+      }
+      return Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' },
+        parts: [{ id: 'm1:t', type: 'text', text: narration + '\n\n' + answer }],
+      }]);
+    });
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 2, message: '429 rate limited', next: Date.now() + 60000 });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3, usageSettlePolls: 0 }
+    );
+    // Named mutant "RETRYHARVEST": drop the retry arm — the leg exits at poll 4 with
+    // only the narration.
+    expect(poll).toBeGreaterThanOrEqual(12);
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.summary).toContain('Full deliverable text.');
+    const retryResets = mockLogger.debug.mock.calls.filter((c) => c[0] === 'Idle heuristic reset: SDK busy, no live tools');
+    expect(retryResets).toHaveLength(1);
+    expect(retryResets[0][1]).toEqual({ taskId: 'task1234', stablePolls: 0, sdkStatus: 'retry' });
+  });
+
+  it('does NOT complete via the idle heuristic while busy when a SETTLED tool part is present (run D0\'s real mirror: narration + completed webfetch)', async () => {
+    // A settled tool part must not disarm the veto: it is neither live (B4) nor pending (B53).
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    const answer = '# Breaking in a glove\n\nFull deliverable text.\n```json\n{"overall":"x","findings":[]}\n```';
+    // A fresh object every poll: the real mirror sees a new snapshot each read.
+    const settledTool = () => ({
+      id: 'm1:tool1', sessionID: 'session-1', messageID: 'm1', type: 'tool', callID: 'call_1',
+      tool: 'webfetch',
+      state: { status: 'completed', input: { url: 'https://example.test/rawlings' }, output: 'fetched', title: 'webfetch', time: { start: 1, end: 2 } }
+    });
+    let poll = 0;
+    mockGetMessages.mockImplementation(() => {
+      poll += 1;
+      if (poll < 12) {
+        return Promise.resolve([{
+          info: { role: 'assistant', id: 'm1', time: {} },          // NOT finalized
+          parts: [settledTool(), { id: 'm1:t', type: 'text', text: narration }],
+        }]);
+      }
+      return Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' },
+        parts: [settledTool(), { id: 'm1:t', type: 'text', text: narration + '\n\n' + answer }],
+      }]);
+    });
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3, usageSettlePolls: 0 }
+    );
+    expect(poll).toBeGreaterThanOrEqual(12);
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.summary).toContain('Full deliverable text.');
+    expect(result.toolSettleTimedOut).toBeFalsy();
   });
 
   it('dead server after partial output STILL classifies as error (F4 unchanged)', async () => {

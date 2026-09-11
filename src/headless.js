@@ -882,6 +882,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // live tool is a model still answering, not a dead leg (study run D0: three
     // deliverables discarded 39–107 s before they finished while this said busy).
     let lastSdkStatus = 'unread';
+    // One trace line per flat stretch the veto holds open (spec §3 as amended 2026-09-11):
+    // cleared whenever a poll progresses, set on the first vetoed poll of the stretch.
+    let vetoLoggedThisStretch = false;
 
     // ---- v4.4 B4 part 1: the tool-settle deferral -----------------------------
     // Recomputed once per poll (see the loop body) so every completion gate in a
@@ -1206,10 +1209,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           break;
         }
 
-        // Authoritative signal from the OpenCode SDK: `idle` ends the leg here; `busy`
-        // vetoes the activity heuristic below (2026-09-11 spec §3) unless a tool call is
-        // live, in which case the B4 ceiling governs. Once the message has finalized the
-        // stable-finished path ends it regardless of status. Gate on real output so a
+        // Authoritative signal from the OpenCode SDK: `idle` ends the leg here; `busy` or
+        // `retry` vetoes the activity heuristic below (2026-09-11 spec §3) unless a tool
+        // call is live, in which case the B4 ceiling governs. Once the message has finalized
+        // the stable-finished path ends it regardless of status. Gate on real output so a
         // pre-processing 'idle' cannot end the run early. On any error the heuristic
         // runs as the fallback it was always meant to be.
         if (mirror.output.length > 0) {
@@ -1283,28 +1286,35 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           // empty assistant-message placeholder on promptAsync that is NOT a finished response.
           //
           // 2026-09-11 spec §3: the heuristic is the FALLBACK for when session.status is
-          // unavailable, not a second opinion on it. While the engine says `busy` and
-          // no tool call is live, the model is generating — in-flight parts are invisible
-          // to this poller (measured: in-flight parts never grow outputLength — 0 for the
-          // whole stream without tools, A1/E1; flat at the narration length with them, D0),
-          // so flat output here is not silence. `liveTools.length === 0` keeps the v4.4 B4
-          // bounded tool-settle ceiling (below) in charge whenever a tool IS live: that path
-          // fires through this gate while busy, then aborts the session (LC-2).
+          // unavailable, not a second opinion on it. While the engine says `busy` or
+          // `retry` (provider backoff — the engine has not given up; utils/session-status.js
+          // reads the same arm) and no tool call is live, the model is generating —
+          // in-flight parts are invisible to this poller (measured: in-flight parts never
+          // grow outputLength — 0 for the whole stream without tools, A1/E1; flat at the
+          // narration length with them, D0), so flat output here is not silence.
+          // `liveTools.length === 0` keeps the v4.4 B4 bounded tool-settle ceiling (below)
+          // in charge whenever a tool IS live: that path fires through this gate while busy,
+          // then aborts the session (LC-2). The trace line fires on the first vetoed poll of
+          // each flat stretch and whenever a non-zero count is reset, and "Polling loop
+          // exited" carries the last SDK status, so a leg that is held and then dies by
+          // --timeout leaves a record of what the engine said.
           // Named mutants: "BUSYIGNORED" (the veto never fires: replace the SDK-status test
-          // with `false` — reddens exactly the D0 case in headless-idle-completion, nothing
-          // else in the four suites) and "VETOOVERCEILING" (drop the liveTools guard —
-          // reddens the 12 B4 ceiling/abort tests in premature-completion, every `stuck()`
-          // call site). "FINISHEDVETO" (drop `!assistantFinished`) is pinned by
-          // premature-completion "message FINALIZES", the BL-7 case and the ALREADY-terminal
-          // case: a finalized message with a session-level `busy` must still end on the
-          // stable-finished path. A tool part with no `state` is not live here
-          // (pendingTools > 0, liveTools === 0), so that mock-only shape is now bounded by
-          // B53's stall detector rather than the 30-poll heuristic; the SDK always carries
-          // `state`.
+          // with `false` — reddens the three D0-shape cases in headless-idle-completion
+          // (busy, retry, settled tool part) and nothing else in the four suites) and
+          // "VETOOVERCEILING" (drop the liveTools guard — reddens the 12 B4 ceiling/abort
+          // tests in premature-completion, every `stuck()` call site). "RETRYHARVEST" (drop
+          // the retry arm) reddens exactly the retry case. "FINISHEDVETO" (drop
+          // `!assistantFinished`) is pinned by premature-completion "message FINALIZES", the
+          // BL-7 case and the ALREADY-terminal case: a finalized message with a session-level
+          // `busy` must still end on the stable-finished path. A tool part with no `state` is
+          // not live here (pendingTools > 0, liveTools === 0), so that mock-only shape is now
+          // bounded by B53's stall detector rather than the 30-poll heuristic; the SDK always
+          // carries `state`.
           if (currentAssistantMsgId !== null && mirror.output.length > 0
-              && !assistantFinished && lastSdkStatus === 'busy' && liveTools.length === 0) {
-            if (stablePolls > 0) {
-              logger.debug('Idle heuristic reset: SDK busy, no live tools', { taskId, stablePolls });
+              && !assistantFinished && (lastSdkStatus === 'busy' || lastSdkStatus === 'retry') && liveTools.length === 0) {
+            if (!vetoLoggedThisStretch || stablePolls > 0) {
+              logger.debug('Idle heuristic reset: SDK busy, no live tools', { taskId, stablePolls, sdkStatus: lastSdkStatus });
+              vetoLoggedThisStretch = true;
             }
             stablePolls = 0;
           } else if (currentAssistantMsgId !== null && mirror.output.length > 0) {
@@ -1335,6 +1345,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           }
         } else {
           stablePolls = 0;
+          vetoLoggedThisStretch = false;
         }
         lastAssistantMsgId = currentAssistantMsgId;
 
@@ -1364,6 +1375,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       aborted,
       pollCount,
       stablePolls,
+      sdkStatus: lastSdkStatus,
       outputLength: mirror.output.length,
       elapsed: Date.now() - startTime,
       hasAssistantMsg: lastAssistantMsgId !== null,

@@ -1269,10 +1269,12 @@ A headless leg ends on the first of: the engine reporting `idle`; its last messa
 finalizing (two stable polls); the no-output backstop; the tool-stall detector; the
 tool-settle ceiling (when a tool call never settles); or the leg `--timeout`. The
 flat-output heuristic that used to end a leg after 30 stable polls now runs only when
-`session.status` is unavailable **or** when a tool call is live (where the bounded ceiling
-governs). A busy engine with no live tool is a model still answering — the poller cannot
+`session.status` reports anything other than a working engine (busy or retry) — unavailable,
+unrecognised — **or** when a tool call is live (where the bounded ceiling governs). A busy
+(or retrying) engine with no live tool is a model still answering — the poller cannot
 see its text until the message finalizes — so the leg waits. A busy-but-wedged session
-therefore ends by `--timeout`, and is named that.
+therefore ends by `--timeout`, and is named that. At debug level the trace names the veto
+once per flat stretch and the exit line records the last engine status.
 
 ---
 
