@@ -315,6 +315,12 @@ describe('per-tool-call stall detector (B53)', () => {
       }]);
     });
 
+    // Spec 2026-09-11 §3: with the suite's `busy` default this unfinalized fixture would
+    // now wait for a finalize that never comes and exit by the 300 ms leg timeout — which
+    // sets no error and would pass this test vacuously. Pin the path the name claims (the
+    // stable-poll idle completion) on the fallback: status unavailable.
+    mockGetSessionStatus.mockRejectedValue(new Error('session.status unsupported'));
+
     const result = await runHeadless(
       'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
       300, 'build',

@@ -1263,17 +1263,6 @@ need Claude or a live council run to regenerate it.
 
 ---
 
-## See also
-
-- **[skills/second-opinion/SKILL.md](../skills/second-opinion/SKILL.md)** — the orchestration
-  recipe that drives an actual council run (model selection, briefings, anonymization, the Stage-2
-  tally assembly recipe, Stage 4 decision presentation).
-- **[skills/second-opinion/COUNCIL-DESIGN.md](../skills/second-opinion/COUNCIL-DESIGN.md)** — the
-  design spec behind the tier cascade and scoring model.
-- **[docs/usage.md](./usage.md)** — full CLI/MCP flag reference for every command, including
-  `council`.
-- **[README "The Council"](../README.md#the-council)** — the narrative overview and cost framing.
-
 ## Leg completion and `session.status`
 
 A headless leg ends on the first of: the engine reporting `idle`; its last message
@@ -1284,3 +1273,16 @@ flat-output heuristic that used to end a leg after 30 stable polls now runs only
 governs). A busy engine with no live tool is a model still answering — the poller cannot
 see its text until the message finalizes — so the leg waits. A busy-but-wedged session
 therefore ends by `--timeout`, and is named that.
+
+---
+
+## See also
+
+- **[skills/second-opinion/SKILL.md](../skills/second-opinion/SKILL.md)** — the orchestration
+  recipe that drives an actual council run (model selection, briefings, anonymization, the Stage-2
+  tally assembly recipe, Stage 4 decision presentation).
+- **[skills/second-opinion/COUNCIL-DESIGN.md](../skills/second-opinion/COUNCIL-DESIGN.md)** — the
+  design spec behind the tier cascade and scoring model.
+- **[docs/usage.md](./usage.md)** — full CLI/MCP flag reference for every command, including
+  `council`.
+- **[README "The Council"](../README.md#the-council)** — the narrative overview and cost framing.

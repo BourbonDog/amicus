@@ -137,10 +137,11 @@ describe('idle-detection exits classify as completed', () => {
     const result = await runHeadless(
       'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
       60000, 'build',
-      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3 }
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3, usageSettlePolls: 0 }
     );
-    // Named mutant "BUSYIGNORED": drop the `lastSdkStatus === 'busy'` veto —
-    // the leg exits at poll 4 with only the narration and `poll` never reaches 12.
+    // Named mutant "BUSYIGNORED": the veto never fires — the leg exits at poll 4 with
+    // only the narration and `poll` never reaches 12. (`usageSettlePolls: 0` keeps the
+    // post-loop usage-settle re-polls out of this counter, so 4 means 4.)
     expect(poll).toBeGreaterThanOrEqual(12);
     expect(result.completed).toBe(true);
     expect(result.error).toBeUndefined();

@@ -1208,7 +1208,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
         // Authoritative signal from the OpenCode SDK: `idle` ends the leg here; `busy`
         // vetoes the activity heuristic below (2026-09-11 spec §3) unless a tool call is
-        // live, in which case the B4 ceiling governs. Gate on real output so a
+        // live, in which case the B4 ceiling governs. Once the message has finalized the
+        // stable-finished path ends it regardless of status. Gate on real output so a
         // pre-processing 'idle' cannot end the run early. On any error the heuristic
         // runs as the fallback it was always meant to be.
         if (mirror.output.length > 0) {
@@ -1284,12 +1285,22 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           // 2026-09-11 spec §3: the heuristic is the FALLBACK for when session.status is
           // unavailable, not a second opinion on it. While the engine says `busy` and
           // no tool call is live, the model is generating — in-flight parts are invisible
-          // to this poller (measured: outputLength stays 0 until the message finalizes),
+          // to this poller (measured: in-flight parts never grow outputLength — 0 for the
+          // whole stream without tools, A1/E1; flat at the narration length with them, D0),
           // so flat output here is not silence. `liveTools.length === 0` keeps the v4.4 B4
           // bounded tool-settle ceiling (below) in charge whenever a tool IS live: that path
           // fires through this gate while busy, then aborts the session (LC-2).
-          // Named mutants: "BUSYIGNORED" (drop the busy check) and "VETOOVERCEILING"
-          // (drop the liveTools guard — reddens the 13 B4 tests in premature-completion).
+          // Named mutants: "BUSYIGNORED" (the veto never fires: replace the SDK-status test
+          // with `false` — reddens exactly the D0 case in headless-idle-completion, nothing
+          // else in the four suites) and "VETOOVERCEILING" (drop the liveTools guard —
+          // reddens the 12 B4 ceiling/abort tests in premature-completion, every `stuck()`
+          // call site). "FINISHEDVETO" (drop `!assistantFinished`) is pinned by
+          // premature-completion "message FINALIZES", the BL-7 case and the ALREADY-terminal
+          // case: a finalized message with a session-level `busy` must still end on the
+          // stable-finished path. A tool part with no `state` is not live here
+          // (pendingTools > 0, liveTools === 0), so that mock-only shape is now bounded by
+          // B53's stall detector rather than the 30-poll heuristic; the SDK always carries
+          // `state`.
           if (currentAssistantMsgId !== null && mirror.output.length > 0
               && !assistantFinished && lastSdkStatus === 'busy' && liveTools.length === 0) {
             if (stablePolls > 0) {
