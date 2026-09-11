@@ -1304,9 +1304,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           // "VETOOVERCEILING" (drop the liveTools guard — reddens the 12 B4 ceiling/abort
           // tests in premature-completion, every `stuck()` call site). "RETRYHARVEST" (drop
           // the retry arm) reddens exactly the retry case. "FINISHEDVETO" (drop
-          // `!assistantFinished`) is pinned by premature-completion "message FINALIZES", the
-          // BL-7 case and the ALREADY-terminal case: a finalized message with a session-level
-          // `busy` must still end on the stable-finished path. A tool part with no `state` is
+          // `!assistantFinished`) is pinned by premature-completion "message FINALIZES" and
+          // "ALREADY terminal" and by headless.test.js's BL-7 case: a finalized message with
+          // a session-level `busy` must still end on the stable-finished path. A tool part
+          // with no `state` is
           // not live here (pendingTools > 0, liveTools === 0), so that mock-only shape is now
           // bounded by B53's stall detector rather than the 30-poll heuristic; the SDK always
           // carries `state`.

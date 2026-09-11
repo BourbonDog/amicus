@@ -18,10 +18,10 @@ All notable changes to Amicus are documented here. Format follows
   (run D0), and the run reported `complete` with no degrades. The B4 bounded tool-settle
   ceiling is unchanged and still governs whenever a tool call is live. When `session.status`
   is unavailable the heuristic runs as the fallback it was always meant to be. The trade is
-  explicit: a busy-but-wedged leg that already produced output now runs to its `--timeout`
-  (15 min default) and is named `timeout`, instead of being declared complete at 60 s on a
-  stub; the debug trace names the veto once per flat stretch and the exit line records the
-  last engine status.
+  explicit: a busy-but-wedged (or permanently retrying) leg that already produced output now
+  runs to its `--timeout` (15 min default) and is named `timeout`, instead of being declared
+  complete at 60 s on a stub; the debug trace names the veto once per flat stretch and the exit
+  line records the last engine status.
   (`docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §3; PR 1 of 3.)
 
 ## [4.9.7] - 2026-09-09

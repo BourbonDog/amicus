@@ -9,9 +9,10 @@ const fs = require('fs');
  * Read a source file during a repo-tree scan, tolerating a file that vanishes
  * between the directory listing and the read. Returns null when it is gone.
  *
- * WHY THIS EXISTS. Three suites walk `src/` by listing a directory and then
+ * WHY THIS EXISTS. Four suites walk `src/` by listing a directory and then
  * reading every `.js` that listing named: no-phantom-dependencies.test.js,
- * cli-template-args.test.js and council/degrade-invariant.test.js. A fourth,
+ * cli-template-args.test.js, council/degrade-invariant.test.js and
+ * (since 2026-09-11) council/run-stats-entry.test.js. A fifth,
  * scripts/check-file-sizes.test.js, writes a REAL `src/__sizecheck_tmp__.js`
  * and unlinks it a few milliseconds later. That writer cannot move its fixture
  * to a tmpdir: checkAllTracked() filters its input through the anchored
@@ -25,7 +26,7 @@ const fs = require('fs');
  * describe body, so the whole file dies with "Test suite failed to run" —
  * observed on roughly 1 full `npm test` run in 2.
  *
- * Skipping a file that is no longer on disk is sound for all three callers:
+ * Skipping a file that is no longer on disk is sound for all four callers:
  * the only files that can vanish mid-walk are another worker's temp files,
  * which are by definition not the shipped source these guards assert about.
  *
