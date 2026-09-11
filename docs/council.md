@@ -1270,11 +1270,15 @@ finalizing (two stable polls); the no-output backstop; the tool-stall detector; 
 tool-settle ceiling (when a tool call never settles); or the leg `--timeout`. The
 flat-output heuristic that used to end a leg after 30 stable polls now runs only when
 `session.status` reports anything other than a working engine (busy or retry) — unavailable,
-unrecognised — **or** when a tool call is live (where the bounded ceiling governs). A busy
+unrecognised — **or** when a tool call is live (where the bounded ceiling governs). A finalized
+message always ends on the stable-finished path, whatever the status. A busy
 (or retrying) engine with no live tool is a model still answering — the poller cannot
 see its text until the message finalizes — so the leg waits. A busy-but-wedged session
 therefore ends by `--timeout`, and is named that. At debug level the trace names the veto
-once per flat stretch and the exit line records the last engine status.
+once per flat stretch (and again whenever a non-zero count is reset) and the exit line
+records the last engine status; when the fallback heuristic ends an unfinalized message the
+leg logs a warning naming the status it saw. A retry whose next attempt lies beyond the leg
+deadline ends the leg at once as `RETRY_BEYOND_DEADLINE`.
 
 ---
 

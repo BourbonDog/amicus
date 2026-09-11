@@ -173,7 +173,8 @@ describe('idle-detection exits classify as completed', () => {
         parts: [{ id: 'm1:t', type: 'text', text: narration + '\n\n' + answer }],
       }]);
     });
-    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 2, message: '429 rate limited', next: Date.now() + 60000 });
+    // within the 60 s leg deadline, so the leg is HELD (see the beyond-deadline case for the other branch)
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 2, message: '429 rate limited', next: Date.now() + 5000 });
 
     const result = await runHeadless(
       'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
@@ -245,5 +246,181 @@ describe('idle-detection exits classify as completed', () => {
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/3 consecutive/);
+  });
+
+  it('a busy leg whose message never finalizes ends by the leg --timeout, named as such, with the exit line carrying the status (the documented trade; council #246 C4)', async () => {
+    // The veto holds the leg for the WHOLE 300 ms window — there is no exit at
+    // stableIdlePolls 3 — and the bound for a busy-but-wedged leg is the leg --timeout BY
+    // DESIGN (spec §2/§3: D1's qwen ran 796 s legitimately busy, so any intermediate
+    // ceiling below that re-creates the mid-answer harvest). This pins that trade.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: {} },            // NEVER finalized
+      parts: [{ id: 'm1:t', type: 'text', text: narration }],
+    }]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      300, 'build',
+      { pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2, usageSettlePolls: 0 }
+    );
+    expect(result.completed).toBe(false);
+    expect(result.timedOut).toBe(true);
+    expect(result.error).toBeUndefined();            // a plain timeout carries no error
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);   // the timeout path aborts
+    expect(mockLogger.warn).toHaveBeenCalledWith('Task timed out', expect.objectContaining({ taskId: 'task1234' }));
+    const exits = [mockLogger.info, mockLogger.warn, mockLogger.debug, mockLogger.error]
+      .flatMap((f) => f.mock.calls)
+      .filter((c) => c[0] === 'Polling loop exited');
+    expect(exits).toHaveLength(1);
+    expect(exits[0][1]).toEqual(expect.objectContaining({ completed: false, sdkStatus: 'busy' }));
+  }, 10000);
+
+  it("a status flip-flop (busy → unavailable → busy) mid-stretch counts while unavailable, resets on busy, and the trace shows both the stretch's first veto and the reset (council #246 C3/C4)", async () => {
+    // Named mutant "FLAPSILENT": drop `|| stablePolls > 0` from the latch condition and only
+    // ONE line survives — the reset that discarded a non-zero count goes untraced.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    const answer = '# Breaking in a glove\n\nFull deliverable text.\n```json\n{"overall":"x","findings":[]}\n```';
+    let poll = 0;
+    mockGetMessages.mockImplementation(() => {
+      poll += 1;
+      if (poll < 12) {
+        return Promise.resolve([{
+          info: { role: 'assistant', id: 'm1', time: {} },          // NOT finalized
+          parts: [{ id: 'm1:t', type: 'text', text: narration }],
+        }]);
+      }
+      return Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' },
+        parts: [{ id: 'm1:t', type: 'text', text: narration + '\n\n' + answer }],
+      }]);
+    });
+    // Status calls 5 and 6 throw: two polls COUNT toward stableIdlePolls 3 without reaching it.
+    let statusCall = 0;
+    mockGetSessionStatus.mockImplementation(() => {
+      statusCall += 1;
+      if (statusCall === 5 || statusCall === 6) {
+        return Promise.reject(new Error('session.status unsupported'));
+      }
+      return Promise.resolve({ type: 'busy' });
+    });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2, usageSettlePolls: 0 }
+    );
+    expect(result.completed).toBe(true);
+    expect(result.summary).toContain('Full deliverable text.');
+    const resets = mockLogger.debug.mock.calls.filter((c) => c[0] === 'Idle heuristic reset: SDK busy, no live tools');
+    expect(resets).toHaveLength(2);
+    expect(resets[0][1]).toEqual({ taskId: 'task1234', stablePolls: 0, sdkStatus: 'busy' });
+    expect(resets[1][1]).toEqual({ taskId: 'task1234', stablePolls: 2, sdkStatus: 'busy' });
+    // The count never reached the threshold, so the fallback never ended this message.
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      'Idle heuristic ended an unfinalized message on the fallback path', expect.anything()
+    );
+  }, 10000);
+
+  it('the fallback heuristic ending an UNFINALIZED message logs a warning naming the status — status unavailable (council #246 C2/D2)', async () => {
+    // Named mutant "FALLBACKSILENT": delete the warning (keep the `if`) and BOTH
+    // fallback-warning cases redden.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: {} },            // NEVER finalized
+      parts: [{ id: 'm1:t', type: 'text', text: narration }],
+    }]);
+    mockGetSessionStatus.mockRejectedValue(new Error('session.status unsupported'));
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2, usageSettlePolls: 0 }
+    );
+    expect(result.completed).toBe(true);                 // the fallback fired
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Idle heuristic ended an unfinalized message on the fallback path',
+      expect.objectContaining({ taskId: 'task1234', stablePolls: 3, sdkStatus: 'unavailable' })
+    );
+  }, 10000);
+
+  it('the fallback heuristic ending an UNFINALIZED message logs a warning naming the status — status of a type this gate does not know (council #246 C2/D2)', async () => {
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: {} },            // NEVER finalized
+      parts: [{ id: 'm1:t', type: 'text', text: narration }],
+    }]);
+    // The raw type is recorded VERBATIM; only a non-string type maps to 'other'.
+    mockGetSessionStatus.mockResolvedValue({ type: 'working' });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2, usageSettlePolls: 0 }
+    );
+    expect(result.completed).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Idle heuristic ended an unfinalized message on the fallback path',
+      expect.objectContaining({ taskId: 'task1234', stablePolls: 3, sdkStatus: 'working' })
+    );
+  }, 10000);
+
+  it('a retry whose next attempt lies beyond the leg deadline ends the leg at once with the named reason, session aborted (council #246 C1/D1/A1, the next half)', async () => {
+    // Named mutant "NEXTIGNORED": drop the `lastSdkRetryNext > deadline` comparison and the
+    // leg runs to its 60 s --timeout instead, so this case dies on its 10 s jest timeout.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: {} },            // NEVER finalized
+      parts: [{ id: 'm1:t', type: 'text', text: narration }],
+    }]);
+    mockGetSessionStatus.mockResolvedValue({
+      type: 'retry', attempt: 3, message: '429 rate limited', next: Date.now() + 10 * 60 * 1000,
+    });
+
+    const started = Date.now();
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableIdlePolls: 3, stableFinishedPolls: 2, usageSettlePolls: 0 }
+    );
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(result.completed).toBe(false);
+    expect(result.timedOut).toBe(false);
+    expect(result.error).toMatch(/^RETRY_BEYOND_DEADLINE: /);
+    expect(result.error).toContain('attempt 3');
+    expect(result.error).toContain('429 rate limited');
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Provider backoff exceeds the leg deadline; ending the leg now instead of waiting',
+      expect.objectContaining({ taskId: 'task1234', attempt: 3 })
+    );
+  }, 10000);
+});
+
+describe('the session.status contract the veto reasons about', () => {
+  it('the pinned @opencode-ai/sdk still publishes exactly the three SessionStatus arms (idle | retry | busy) — a fourth arm or a rename must land here before it can silently disarm the veto', () => {
+    // headless.js HOLDS the leg on `busy` and on `retry` and EXITS on `idle`. Any other arm
+    // is recorded verbatim as `sdkStatus` and falls through to the fallback heuristic, which
+    // since council #246 warns when it ends an unfinalized message — so a new arm meaning
+    // "still working" would weaken the veto. This is the tripwire for that.
+    const realFs = jest.requireActual('fs');   // the module-level mock replaces `fs`
+    const path = require('path');
+    // ⚠️ NOT `require.resolve('@opencode-ai/sdk/package.json')`: the SDK is ESM-only and its
+    // `exports` map publishes neither `./package.json` nor any `require` condition, so BOTH
+    // Node's and Jest's resolvers refuse every specifier for it (measured 2026-09-11). The
+    // installed path is therefore read directly.
+    const typesPath = path.join(
+      __dirname, '..', 'node_modules', '@opencode-ai', 'sdk', 'dist', 'gen', 'types.gen.d.ts'
+    );
+    const src = realFs.readFileSync(typesPath, 'utf8');
+    const marker = 'export type SessionStatus =';
+    const start = src.indexOf(marker);
+    expect(start).toBeGreaterThan(-1);
+    const rest = src.slice(start + marker.length);
+    const end = rest.indexOf('export type');
+    const union = end === -1 ? rest : rest.slice(0, end);
+    const arms = [...union.matchAll(/type:\s*"([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(arms)).toEqual(new Set(['idle', 'retry', 'busy']));
   });
 });

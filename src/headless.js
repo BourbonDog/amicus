@@ -885,6 +885,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // One trace line per flat stretch the veto holds open (spec §3 as amended 2026-09-11):
     // cleared whenever a poll progresses, set on the first vetoed poll of the stretch.
     let vetoLoggedThisStretch = false;
+    // Council #246 (2026-09-11): the `next` half of the bound finding. When session.status
+    // is `retry`, the engine's own timestamp for the next attempt — epoch ms: opencode's
+    // session/processor.ts sets `next: Date.now() + delay`. If it lies past this leg's
+    // deadline, waiting cannot produce a
+    // deliverable; the leg ends at once with the named reason RETRY_BEYOND_DEADLINE and the
+    // session is aborted post-loop like the backstop path. Under a relative reading of
+    // `next` the comparison stays inert (a delay in ms never exceeds an epoch deadline),
+    // so the only failure mode is "no early exit". Named mutant "NEXTIGNORED" (drop the
+    // comparison) reddens exactly the retry-beyond-deadline case in headless-idle-completion
+    // — measured 1 of 13, killed by that case's own 10 s jest timeout because the leg then
+    // runs to its 60 s --timeout instead.
+    let lastSdkRetryNext = null;
+    let retryBeyondDeadline = false;
 
     // ---- v4.4 B4 part 1: the tool-settle deferral -----------------------------
     // Recomputed once per poll (see the loop body) so every completion gate in a
@@ -1225,6 +1238,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             );
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
             lastSdkStatus = (s && typeof s.type === 'string') ? s.type : 'other';
+            lastSdkRetryNext = (s && s.type === 'retry' && Number.isFinite(s.next)) ? s.next : null;
+            if (lastSdkRetryNext !== null && lastSdkRetryNext > deadline) {
+              retryBeyondDeadline = true;
+              sessionError = `RETRY_BEYOND_DEADLINE: the engine schedules the next attempt at ${new Date(lastSdkRetryNext).toISOString()}, after this leg's deadline ${new Date(deadline).toISOString()}${formatSessionStatusSuffix(s)}`;
+              logger.warn('Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', {
+                taskId, attempt: s.attempt, next: lastSdkRetryNext, deadline,
+              });
+              break;
+            }
             if (s && s.type === 'idle' && !deferForUnsettledTools('sdk-idle')) {
               logger.debug('Session reported idle by SDK — completing', { sessionId });
               completed = true;
@@ -1233,6 +1255,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           } catch (statusErr) {
             logger.debug('session.status unavailable; using activity heuristic', { error: statusErr.message });
             lastSdkStatus = 'unavailable';
+            lastSdkRetryNext = null;
           }
         }
 
@@ -1298,12 +1321,22 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           // each flat stretch and whenever a non-zero count is reset, and "Polling loop
           // exited" carries the last SDK status, so a leg that is held and then dies by
           // --timeout leaves a record of what the engine said.
-          // Named mutants: "BUSYIGNORED" (the veto never fires: replace the SDK-status test
-          // with `false` — reddens the three D0-shape cases in headless-idle-completion
-          // (busy, retry, settled tool part) and nothing else in the four suites) and
-          // "VETOOVERCEILING" (drop the liveTools guard — reddens the 12 B4 ceiling/abort
-          // tests in premature-completion, every `stuck()` call site). "RETRYHARVEST" (drop
-          // the retry arm) reddens exactly the retry case. "FINISHEDVETO" (drop
+          // Named mutants, ALL RE-MEASURED 2026-09-11 for the council #246 fix set — every
+          // count below is what was observed, not what was expected. "BUSYIGNORED" (the veto
+          // never fires: replace the SDK-status test with `false`) reddens FIVE cases in
+          // headless-idle-completion — the three D0-shape cases (busy, retry, settled tool
+          // part) plus the wedge-until-timeout and status-flip-flop cases this fix set added
+          // — and nothing else in the four suites (5 failed / 149). "VETOOVERCEILING" (drop
+          // the liveTools guard) reddens the 12 B4 ceiling/abort tests in premature-completion,
+          // every `stuck()` call site, and NOT the ALREADY-terminal case (12 failed / 42).
+          // "RETRYHARVEST" (drop the retry arm) reddens exactly the retry case (1 of 13) — the
+          // retry-beyond-deadline case SURVIVES it, because that exit fires in the status-read
+          // block above, before this gate ever runs. "FLAPSILENT" (drop `|| stablePolls > 0`
+          // from the latch below) reddens exactly the flip-flop case (1 of 13). Three further
+          // mutants are documented at their own sites and were measured in the same pass:
+          // "FALLBACKSILENT" (2 of 13, the stable-idle exit below), "NEXTIGNORED" (1 of 13, the
+          // status-read block above) and "BACKOFFNOTFORCED" (1 of 13, failedWithNoUsableOutput
+          // at the finalization). "FINISHEDVETO" (drop
           // `!assistantFinished`) is pinned by premature-completion "message FINALIZES" and
           // "ALREADY terminal" and by headless.test.js's BL-7 case: a finalized message with
           // a session-level `busy` must still end on the stable-finished path. A tool part
@@ -1335,6 +1368,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             // Gating it would add pure hang risk for no truth gained.
             if (stablePolls >= threshold
                 && !(!assistantFinished && deferForUnsettledTools('stable-idle'))) {
+              if (!assistantFinished && liveTools.length === 0) {
+                // Council #246 C2/D2: the fallback ended an UNFINALIZED message with no tool
+                // live — the D0 shape the veto exists for — reachable only because
+                // session.status did not say busy/retry (the read threw, or returned a type
+                // this gate does not know). Loud at warn level, so a stuttering status
+                // endpoint cannot re-open the mid-answer harvest silently. A live tool is
+                // excluded because that exit is the B4 ceiling, which is loud on its own.
+                // Named mutant "FALLBACKSILENT" (drop this warning, keep the `if`) reddens
+                // exactly the two fallback-warning cases in headless-idle-completion
+                // (measured 2 of 13).
+                logger.warn('Idle heuristic ended an unfinalized message on the fallback path', {
+                  taskId, stablePolls, sdkStatus: lastSdkStatus, outputLength: mirror.output.length,
+                });
+              }
               logger.debug('Session appears complete (idle)', { stablePolls, assistantFinished });
               completed = true;
               break;
@@ -1417,6 +1464,18 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         logger.info('Session aborted after no-output backstop', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after backstop', { error: abortErr.message });
+      }
+    }
+
+    // Council #246: a retry scheduled past the deadline ended the leg early. Abort the
+    // session exactly like the backstop path — the engine would otherwise keep retrying.
+    if (retryBeyondDeadline && !completed && !aborted) {
+      try {
+        const { abortSession } = require('./opencode-client');
+        await abortSession(client, sessionId, ...dirArgs);
+        logger.info('Session aborted after retry-beyond-deadline exit', { taskId, sessionId });
+      } catch (abortErr) {
+        logger.warn('Failed to abort session after retry-beyond-deadline exit', { error: abortErr.message });
       }
     }
 
@@ -1710,7 +1769,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // #218 PR 3: an OUTPUT_LENGTH death can have a non-empty mirror.output -- a
     // tool loop's earlier message text, or reasoning promoted before the answer
     // was known -- and must still fail.
-    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled || outputLengthDeath));
+    // Council #246 (2026-09-11): `|| retryBeyondDeadline` names the retry-past-deadline death
+    // through the same channel — without it the leg left as Incomplete with its narration
+    // promoted and the reason lost. Named mutant "BACKOFFNOTFORCED" (drop it) reddens exactly
+    // the beyond-deadline case in headless-idle-completion (measured 1 of 13).
+    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled || outputLengthDeath || retryBeyondDeadline));
     const { resolveTerminalState } = require('./sidecar/session-finalize');
     const terminalStage = resolveTerminalState({
       completed,
