@@ -343,6 +343,12 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     expect(sawClose).toBe(false);             // ...and the event that never comes
   });
 
+  // On Windows `realZip()` starts a PowerShell to run `Compress-Archive`, and
+  // that start is the whole cost: ~1.8 s on a warm runner (every passing CI
+  // job), 8.4 s on a cold one (run 34420025230, main@e99ddec0) -- past Jest's
+  // 5 s default with the FIXTURE'S PRODUCER on the clock, not the extractor.
+  // Linux and macOS use `zip` and finish in ~30 ms. The headroom is for the
+  // shell, so it is generous; the extraction itself is measured in the ms.
   test('a real, DEFLATED archive round-trips byte-for-byte', async () => {
     const bytes = realZip();
     if (!bytes) { return; }                   // no archiver on this box; nothing to assert
@@ -353,7 +359,7 @@ describe('extractZipBuffer — extraction with no filesystem source', () => {
     expect(res.entries).toBeGreaterThan(0);
     expect(fs.readFileSync(path.join(dir, 'a.txt'), 'utf8')).toBe('hello from a\n');
     expect(fs.readFileSync(path.join(dir, 'sub', 'b.txt'), 'utf8')).toBe('nested\n');
-  });
+  }, 30_000);
 
   test('directories, nesting and __MACOSX are handled as extract-zip handles them', async () => {
     const dir = mkTmp();
