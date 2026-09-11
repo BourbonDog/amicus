@@ -1273,3 +1273,14 @@ need Claude or a live council run to regenerate it.
 - **[docs/usage.md](./usage.md)** — full CLI/MCP flag reference for every command, including
   `council`.
 - **[README "The Council"](../README.md#the-council)** — the narrative overview and cost framing.
+
+## Leg completion and `session.status`
+
+A headless leg ends on the first of: the engine reporting `idle`; its last message
+finalizing (two stable polls); the no-output backstop; the tool-stall detector; the
+tool-settle ceiling (when a tool call never settles); or the leg `--timeout`. The
+flat-output heuristic that used to end a leg after 30 stable polls now runs only when
+`session.status` is unavailable **or** when a tool call is live (where the bounded ceiling
+governs). A busy engine with no live tool is a model still answering — the poller cannot
+see its text until the message finalizes — so the leg waits. A busy-but-wedged session
+therefore ends by `--timeout`, and is named that.

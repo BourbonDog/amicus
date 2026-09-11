@@ -3,6 +3,22 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Headless legs are no longer declared complete while the engine is still answering.** The
+  stable-idle heuristic (`headless.js`, the v4.4 B4 "measured defect site") now defers to
+  `session.status`: while the engine reports `busy` and no tool call is live, flat output is
+  treated as activity rather than silence, and the leg waits for its message to finalize.
+  In-flight reasoning and text are invisible to the poller, so a seat that narrated between
+  tool calls and then answered for longer than 60 s was harvested mid-answer — three complete
+  council deliverables were discarded 39–107 s before they finished in the 2026-09-11 study
+  (run D0), and the run reported `complete` with no degrades. The B4 bounded tool-settle
+  ceiling is unchanged and still governs whenever a tool call is live. When `session.status`
+  is unavailable the heuristic runs as the fallback it was always meant to be.
+  (`docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §3; PR 1 of 3.)
+
 ## [4.9.7] - 2026-09-09
 
 Three findings deferred from the v4.9.6 cut, and the two open questions filed beside them. The
