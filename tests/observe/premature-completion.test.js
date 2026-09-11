@@ -208,13 +208,16 @@ describe('the idle gate must not complete a leg while a tool call is live', () =
 
   test('a leg whose tools are ALREADY terminal completes with no added latency (wsgate01-s1-2 / wsgate03-s1-1 shape)', async () => {
     // Both recorded multi-tool legs had every tool part terminal well before the
-    // leg completed (62.3 s and 14.8 s earlier), so the gate must be a no-op.
+    // leg completed (62.3 s and 14.8 s earlier), so the gate must be a no-op on the finished path.
     const parts = [
       textPart('m1:t', 'full review text'),
       ...Array.from({ length: 8 }, (_, i) => toolPart(`p${i}`, 'read', 'completed')),
       toolPart('perr', 'read', 'error'), // wsgate03-s1-1's 3 read:error parts
     ];
-    mockGetMessages.mockResolvedValue([msg('m1', parts)]);
+    // The recorded legs FINALIZED their message after the last tool settled; the
+    // gate must be a no-op on the stable-finished path. (Pre-spec 2026-09-11 §3
+    // this fixture was unfinalized and exited via the idle heuristic while busy.)
+    mockGetMessages.mockResolvedValue([msg('m1', parts, { completed: true })]);
 
     const result = await runHeadless(MODEL, 'sys', 'user', 'nolatency', '/proj', 60000, 'build', OPTS);
 
