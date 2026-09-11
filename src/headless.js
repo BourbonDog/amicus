@@ -877,6 +877,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // block comment beside `sessionId`) so the catch-all return can carry it.
     let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
     let lastSettledToolCount = 0; // B4: tool calls observed reaching a terminal status
+    // 2026-09-11 spec §3: what session.status said on the most recent read this
+    // poll. The stable-idle heuristic below defers to it — a busy engine with no
+    // live tool is a model still answering, not a dead leg (study run D0: three
+    // deliverables discarded 39–107 s before they finished while this said busy).
+    let lastSdkStatus = 'unread';
 
     // ---- v4.4 B4 part 1: the tool-settle deferral -----------------------------
     // Recomputed once per poll (see the loop body) so every completion gate in a
@@ -1201,9 +1206,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           break;
         }
 
-        // Authoritative idle signal from the OpenCode SDK (preferred over the heuristic).
-        // Gate on real output so a pre-processing 'idle' cannot end the run early.
-        // Best-effort: on any error, fall back to the activity heuristic below.
+        // Authoritative signal from the OpenCode SDK: `idle` ends the leg here; `busy`
+        // vetoes the activity heuristic below (2026-09-11 spec §3) unless a tool call is
+        // live, in which case the B4 ceiling governs. Gate on real output so a
+        // pre-processing 'idle' cannot end the run early. On any error the heuristic
+        // runs as the fallback it was always meant to be.
         if (mirror.output.length > 0) {
           try {
             const remainingForStatus = deadline - Date.now();
@@ -1213,6 +1220,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
               'getSessionStatus'
             );
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
+            lastSdkStatus = (s && typeof s.type === 'string') ? s.type : 'other';
             if (s && s.type === 'idle' && !deferForUnsettledTools('sdk-idle')) {
               logger.debug('Session reported idle by SDK — completing', { sessionId });
               completed = true;
@@ -1220,6 +1228,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             }
           } catch (statusErr) {
             logger.debug('session.status unavailable; using activity heuristic', { error: statusErr.message });
+            lastSdkStatus = 'unavailable';
           }
         }
 
@@ -1271,7 +1280,23 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         if (!progressed) {
           // Require real output before counting toward completion — the SDK creates an
           // empty assistant-message placeholder on promptAsync that is NOT a finished response.
-          if (currentAssistantMsgId !== null && mirror.output.length > 0) {
+          //
+          // 2026-09-11 spec §3: the heuristic is the FALLBACK for when session.status is
+          // unavailable, not a second opinion on it. While the engine says `busy` and
+          // no tool call is live, the model is generating — in-flight parts are invisible
+          // to this poller (measured: outputLength stays 0 until the message finalizes),
+          // so flat output here is not silence. `liveTools.length === 0` keeps the v4.4 B4
+          // bounded tool-settle ceiling (below) in charge whenever a tool IS live: that path
+          // fires through this gate while busy, then aborts the session (LC-2).
+          // Named mutants: "BUSYIGNORED" (drop the busy check) and "VETOOVERCEILING"
+          // (drop the liveTools guard — reddens the 13 B4 tests in premature-completion).
+          if (currentAssistantMsgId !== null && mirror.output.length > 0
+              && !assistantFinished && lastSdkStatus === 'busy' && liveTools.length === 0) {
+            if (stablePolls > 0) {
+              logger.debug('Idle heuristic reset: SDK busy, no live tools', { taskId, stablePolls });
+            }
+            stablePolls = 0;
+          } else if (currentAssistantMsgId !== null && mirror.output.length > 0) {
             stablePolls++;
             const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
             // v4.4 B4 part 1 — THE MEASURED DEFECT SITE. This is the gate that

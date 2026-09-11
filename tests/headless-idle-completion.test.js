@@ -113,6 +113,40 @@ describe('idle-detection exits classify as completed', () => {
     expect(result.summary).toBe('OK');
   });
 
+  it('does NOT complete via the idle heuristic while the SDK says busy and no tool is live — waits for the message to finalize (spec 2026-09-11 §3, run D0)', async () => {
+    // D0 shape: a completed narration text part arms the gate (output > 0),
+    // the final answer is invisible in flight (no growth), the engine is busy.
+    const narration = 'Rawlings guidance captured. Now let me get the Wilson method.';
+    const answer = '# Breaking in a glove\n\nFull deliverable text.\n```json\n{"overall":"x","findings":[]}\n```';
+    let poll = 0;
+    mockGetMessages.mockImplementation(() => {
+      poll += 1;
+      if (poll < 12) {
+        return Promise.resolve([{
+          info: { role: 'assistant', id: 'm1', time: {} },          // NOT finalized
+          parts: [{ id: 'm1:t', type: 'text', text: narration }],
+        }]);
+      }
+      return Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: { completed: 1 }, finish: 'stop' },
+        parts: [{ id: 'm1:t', type: 'text', text: narration + '\n\n' + answer }],
+      }]);
+    });
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3 }
+    );
+    // Named mutant "BUSYIGNORED": drop the `lastSdkStatus === 'busy'` veto —
+    // the leg exits at poll 4 with only the narration and `poll` never reaches 12.
+    expect(poll).toBeGreaterThanOrEqual(12);
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.summary).toContain('Full deliverable text.');
+  });
+
   it('dead server after partial output STILL classifies as error (F4 unchanged)', async () => {
     // Output exists and the status endpoint never reports idle — the server
     // then dies. The idle-exit fix must not leak completed:true here.
