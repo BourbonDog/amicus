@@ -396,6 +396,26 @@ describe('idle-detection exits classify as completed', () => {
       expect.objectContaining({ taskId: 'task1234', attempt: 3 })
     );
   }, 10000);
+
+  it('a FINALIZED message with a session-level retry scheduled past the deadline still completes on the stable-finished path — the finished answer is never discarded (council #246 round 2 C1/B2)', async () => {
+    // The message is finalized from the first poll; the retry belongs to whatever the
+    // engine does next. Named mutant "FINISHEDRETRYEXIT": drop `!assistantFinished` from the
+    // beyond-deadline exit — the leg ends RETRY_BEYOND_DEADLINE and this answer is lost.
+    mockGetMessages.mockResolvedValue(plainReply('Final answer', true));
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 3, message: '429 rate limited', next: Date.now() + 10 * 60 * 1000 });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3, usageSettlePolls: 0 }
+    );
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.summary).toBe('Final answer');
+    expect(mockAbortSession).not.toHaveBeenCalled();
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      'Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', expect.anything());
+  });
 });
 
 describe('the session.status contract the veto reasons about', () => {
@@ -417,10 +437,14 @@ describe('the session.status contract the veto reasons about', () => {
     const marker = 'export type SessionStatus =';
     const start = src.indexOf(marker);
     expect(start).toBeGreaterThan(-1);
+    expect(src).toContain('export type SessionStatus =');
     const rest = src.slice(start + marker.length);
     const end = rest.indexOf('export type');
     const union = end === -1 ? rest : rest.slice(0, end);
     const arms = [...union.matchAll(/type:\s*"([^"]+)"/g)].map((m) => m[1]);
     expect(new Set(arms)).toEqual(new Set(['idle', 'retry', 'busy']));
+    // The retry arm's `next` is a number (epoch ms: opencode session/processor.ts sets
+    // next: Date.now() + delay).
+    expect(union).toMatch(/type:\s*"retry"[\s\S]*?next:\s*number/);
   });
 });

@@ -895,7 +895,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // so the only failure mode is "no early exit". Named mutant "NEXTIGNORED" (drop the
     // comparison) reddens exactly the retry-beyond-deadline case in headless-idle-completion
     // — measured 1 of 13, killed by that case's own 10 s jest timeout because the leg then
-    // runs to its 60 s --timeout instead.
+    // runs to its 60 s --timeout instead. "FINISHEDRETRYEXIT" (drop the assistantFinished
+    // guard) reddens the finalized-plus-retry case.
     let lastSdkRetryNext = null;
     let retryBeyondDeadline = false;
 
@@ -1239,7 +1240,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
             lastSdkStatus = (s && typeof s.type === 'string') ? s.type : 'other';
             lastSdkRetryNext = (s && s.type === 'retry' && Number.isFinite(s.next)) ? s.next : null;
-            if (lastSdkRetryNext !== null && lastSdkRetryNext > deadline) {
+            // Council #246 round 2 (C1/B2): never on a finalized last message — the
+            // stable-finished path ends that leg in two polls whatever the session-level
+            // status says (a `retry` here belongs to the engine's next step), and its text
+            // must not be discarded. Named mutant "FINISHEDRETRYEXIT" (drop
+            // `!assistantFinished`) reddens the finalized-plus-retry case.
+            if (!assistantFinished && lastSdkRetryNext !== null && lastSdkRetryNext > deadline) {
               retryBeyondDeadline = true;
               sessionError = `RETRY_BEYOND_DEADLINE: the engine schedules the next attempt at ${new Date(lastSdkRetryNext).toISOString()}, after this leg's deadline ${new Date(deadline).toISOString()}${formatSessionStatusSuffix(s)}`;
               logger.warn('Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', {
