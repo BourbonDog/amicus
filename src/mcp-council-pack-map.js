@@ -1,10 +1,9 @@
-// src/mcp-council-pack-map.js
-'use strict';
-
 /**
  * @module mcp-council-pack-map
  * COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16).
  */
+
+'use strict';
 
 /**
  * v4.5 Task 15 (B7/F5): maps amicus_council_run's MCP input keys to the CLI
