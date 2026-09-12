@@ -104,7 +104,7 @@ describe('resolveSeatTools', () => {
   });
   test('with the declared list, every accepted id passes', () => {
     expect(st.resolveSeatTools({ intent: 'task', optIn: ['read', 'grep', 'glob', 'bash', 'websearch'], declaredIds: DECLARED }))
-      .toEqual({ ok: true, tools: ['bash', 'glob', 'grep', 'read', 'websearch', 'webfetch'], local: true });
+      .toEqual({ ok: true, tools: ['bash', 'glob', 'grep', 'read', 'webfetch', 'websearch'], local: true });
   });
 });
 
@@ -1086,6 +1086,35 @@ In `src/cli-handlers-council-run.js`, directly after the `--intent` validation b
 ```
 
 and in the `runCouncil({ ... })` call, after the `...(args.intent === 'task' ? { intent: 'task' } : {}),` line: `...(toolIds ? { tools: toolIds } : {}), ...(agentOverride ? { agent: agentOverride } : {}),`.
+
+The v4.7 out-dir fence (`if (!isPathInside(runDir, project)) { return failJson(... '--out-dir must stay inside the project' ...) }`, ~:218) must let a LOCAL-tools run place its run dir outside the project — that is what spec §4 requires, and runCouncil then enforces "outside the tree AND under an allowed root" (Task 4). Change the fence to:
+
+```js
+  // Spec 2026-09-11 §4: a run whose seats carry a LOCAL tool must put its run dir
+  // OUTSIDE the project tree (runCouncil refuses inside, and requires an allowed
+  // root); every other run keeps the v4.7 fence exactly as it was.
+  const { REMOTE_TOOL_IDS } = require('./council/seat-tools');
+  const wantsLocalTool = !agentOverride && Array.isArray(toolIds) && toolIds.some((id) => !REMOTE_TOOL_IDS.includes(id));
+  if (!wantsLocalTool && !isPathInside(runDir, project)) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --out-dir must stay inside the project: '${args['out-dir']}' resolves outside ${project}` });
+  }
+```
+
+(The `--tools`/`--agent` block above must therefore sit BEFORE the fence — move it there if the file's order differs.) Add to the Step 1 tests:
+
+```js
+  test('a local tool lets --out-dir sit outside the project (runCouncil applies the placement rule); a remote tool keeps the v4.7 fence', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-out-'));
+    let code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].runDir).toBe(outside);
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ tools: 'webfetch', 'out-dir': outside }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+```
 
 - [ ] **Step 5: Run to verify they pass, plus the CLI suites**
 
