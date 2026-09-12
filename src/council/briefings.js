@@ -98,15 +98,22 @@ function dateLine(date) {
 }
 
 /**
- * The generalized Stage-1 skeleton (v4.9 W6): role / clause / date / contract /
- * separator / briefing. Both intents compose through here, which is what makes
- * the `--- MATERIAL / BRIEFING ---` separator — a PRODUCTION contract,
+ * The generalized Stage-1 skeleton (v4.9 W6; tools sentence added spec
+ * 2026-09-11 §4): role / tools sentence / clause / date / contract /
+ * separator / briefing. Both intents compose through here, which is what
+ * makes the `--- MATERIAL / BRIEFING ---` separator — a PRODUCTION contract,
  * src/sidecar/list-search.js:14 splits briefing-stage1.md on it — a single
  * spelling in both modes. briefings-task.js top-requires this.
+ * @param {string} role @param {string} clause @param {string} contract
+ * @param {{briefing: string, date?: string, tools?: string[]}} args
+ * @param {'review'|'answer'} [kind] the no-tools sentence's last word (spec §4:
+ *   the seat sentence forks exactly where the chair's does)
  */
-function composeWith(role, clause, contract, { briefing, date }) {
+function composeWith(role, clause, contract, { briefing, date, tools }, kind = 'review') {
+  const { seatToolsSentence } = require('./seat-tools'); // lazy: seat-tools requires briefings-chair
   return [
     role,
+    seatToolsSentence(tools || [], kind),
     clause,
     dateLine(date),
     contract,
@@ -135,13 +142,13 @@ function buildCriticBriefing(args) {
 }
 
 /** Expert-lens briefing (concurrent solo per seat — spec §4 --lenses). */
-function buildLensBriefing({ lens, briefing, date }) {
+function buildLensBriefing({ lens, briefing, date, tools }) {
   return compose(
     `Review this material strictly through the lens of a ${lens}. Raise only findings ` +
     'that perspective is qualified to raise, at the depth a top practitioner of it would ' +
     'reach. Stay in-domain: if something matters but is outside your lens, leave it to ' +
     'the other reviewers.',
-    { briefing, date }
+    { briefing, date, tools }
   );
 }
 

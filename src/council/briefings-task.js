@@ -110,22 +110,22 @@ const TASK_CRITIC_BRIEF = [
 
 /** Task seat briefing (Stage-1 fanout wave). */
 function buildTaskSeatBriefing(args) {
-  return composeWith(TASK_SEAT_ROLE, TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, args);
+  return composeWith(TASK_SEAT_ROLE, TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, args, 'answer');
 }
 
 /** Task critic briefing (concurrent solo — --critic, ruling V13). */
 function buildTaskCriticBriefing(args) {
-  return composeWith(TASK_CRITIC_BRIEF, TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, args);
+  return composeWith(TASK_CRITIC_BRIEF, TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, args, 'answer');
 }
 
 /** Task expert-lens briefing (concurrent solo per seat — --lenses). */
-function buildTaskLensBriefing({ lens, briefing, date }) {
+function buildTaskLensBriefing({ lens, briefing, date, tools }) {
   return composeWith(
     `Do the work the briefing asks for strictly through the lens of a ${lens}. ` +
     'Produce only what that perspective is qualified to produce, at the depth a top ' +
     'practitioner of it would reach. Stay in-domain: if something matters but is outside ' +
     'your lens, leave it to the other analysts.',
-    TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, { briefing, date }
+    TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, { briefing, date, tools }, 'answer'
   );
 }
 
