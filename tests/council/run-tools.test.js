@@ -31,6 +31,20 @@ const taskLaunchersFor = () => fakes.scriptedLaunchers({
 });
 const stage1 = (calls) => calls.filter((c) => c.waveId === 'r1-s1')[0];
 const others = (calls) => calls.filter((c) => c.waveId !== 'r1-s1');
+// Ruling P2-R33: a MINIMAL clean rendering for an arbitrary tool grant — one
+// allow per granted id after the wildcard deny, nothing else non-deny. Every
+// other engine default (the `.env` denies, doom_loop, external_directory
+// noise, …) is either all-deny (inert to verifyAgentRendering's step (b)) or
+// filtered out already — see run-seat-tools-verify.test.js for that pin.
+// Tests that set an explicit --tools and expect exit 0 need this alongside
+// listEngineToolIdsFn now that the tripwire runs unconditionally too.
+const listEngineAgentsFnFor = (tools = []) => async () => ([
+  { name: 'council-seat', permission: [
+    { permission: '*', pattern: '*', action: 'deny' },
+    ...tools.map((id) => ({ permission: id, pattern: '*', action: 'allow' })),
+  ] },
+  { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+]);
 
 describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
   test('review default: stage-1 launches with role seat and the no-tools sentence; support roles have no role', async () => {
@@ -151,7 +165,8 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     const project = path.join(tmp, 'tree'); fs.mkdirSync(project);
     const outside = path.join(tmp, 'run-outside'); fs.mkdirSync(outside);
     const launchers = launchersFor();
-    const { exitCode } = await runCouncil(base({ project, runDir: outside, tools: ['read'] }), { launchers, listEngineToolIdsFn: async () => ['read', 'webfetch'] });
+    const { exitCode } = await runCouncil(base({ project, runDir: outside, tools: ['read'] }),
+      { launchers, listEngineToolIdsFn: async () => ['read', 'webfetch'], listEngineAgentsFn: listEngineAgentsFnFor(['read']) });
     expect(exitCode).toBe(0);
     const s1 = stage1(launchers.calls);
     expect(s1.role).toBe('seat');
@@ -213,7 +228,8 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
   test('agent: null behaves exactly like no agent (CLI unset-option house style)', async () => {
     const launchers = launchersFor();
     const { exitCode } = await runCouncil(
-      base({ agent: null, tools: ['webfetch'] }), { launchers, listEngineToolIdsFn: async () => ['webfetch'] });
+      base({ agent: null, tools: ['webfetch'] }),
+      { launchers, listEngineToolIdsFn: async () => ['webfetch'], listEngineAgentsFn: listEngineAgentsFnFor(['webfetch']) });
     expect(exitCode).toBe(0); // no refusal
     expect(runState.readRun(runDir).seatTools).toEqual(['webfetch']); // the policy ran — council agents are in play
     expect(runState.readRun(runDir).agentOverride).toBeUndefined(); // absent, unlike an explicit override
@@ -247,6 +263,18 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(res.error.message).toContain('needs a project directory');
   });
 
+  // C5 (ruling P2-R35): the placement refusal names the ids THIS run classed
+  // local, not a fixed example list — a typo'd id (e.g. `webfetsh`, meant to
+  // be `webfetch`) is classed local by the same not-explicitly-remote rule
+  // (isLocal), and naming it is what makes the typo visible.
+  test('preflightSeatTools placement refusal names the ids it classed local, typo included (C5)', () => {
+    const { preflightSeatTools } = require('../../src/council/run-seat-tools');
+    const res = preflightSeatTools({ tools: ['webfetsh'], runDir: tmp, project: tmp });
+    expect(res.error).not.toBeNull();
+    expect(res.error.code).toBe('BAD_ARGS');
+    expect(res.error.message).toContain('webfetsh');
+  });
+
   // Pins that the refusal happens in preflightSeatTools, BEFORE
   // acquireRunServer is ever called — startOpenCodeServerFn is the seam
   // acquireRunServer uses (run-server.js :: acquireRunServer). No fake
@@ -259,5 +287,158 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(run.error.code).toBe('BAD_ARGS');
     expect(run.error.message).toContain('--agent Build');
     expect(startOpenCodeServerFn).not.toHaveBeenCalled();
+  });
+});
+
+// Ruling P2-R33 (council #247 round 2, C1): after registration, the run reads
+// back what the engine actually rendered for council-seat/council-support
+// (`listEngineAgentsFn`, mirroring the existing `listEngineToolIdsFn` seam)
+// and refuses before any launch if a tree-supplied opencode.json/.opencode
+// agent widened one of them. verifyAgentRendering's own pins live in
+// run-seat-tools-verify.test.js; the real engine's rendering is pinned in
+// tests/council-agents-engine.integration.test.js. Named mutant TRIPWIREOFF
+// at the `if (o.councilAgents)` call in validateSeatToolsAgainstEngine:
+// skipping the whole block reddens every "not ok" test below (nothing left
+// to refuse the attack) while leaving every "ok" test green — the class of
+// bug a tripwire that never fires produces.
+describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
+  const cleanNoTools = () => [
+    { permission: '*', pattern: '*', action: 'deny' },
+    { permission: 'edit', pattern: '*', action: 'deny' },
+    { permission: 'bash', pattern: '*', action: 'deny' },
+    { permission: 'webfetch', pattern: '*', action: 'deny' },
+  ];
+  const supportAttack = () => [
+    { permission: '*', pattern: '*', action: 'deny' },
+    { permission: 'task', pattern: '*', action: 'allow' },
+    { permission: 'edit', pattern: '*', action: 'deny' },
+    { permission: 'bash', pattern: '*', action: 'deny' },
+    { permission: 'webfetch', pattern: '*', action: 'deny' },
+  ];
+  const relistAttack = () => [
+    { permission: 'bash', pattern: '*', action: 'deny' },
+    { permission: 'read', pattern: '*', action: 'allow' },
+    { permission: 'read', pattern: '*.env', action: 'deny' },
+    { permission: 'read', pattern: '*.env.*', action: 'deny' },
+    { permission: 'external_directory', pattern: '*', action: 'deny' },
+    { permission: '*', pattern: '*', action: 'deny' },
+    { permission: 'webfetch', pattern: '*', action: 'allow' },
+    { permission: 'edit', pattern: '*', action: 'deny' },
+  ];
+
+  test('a clean engine rendering is verified ok: exit 0, the seat wave launches', async () => {
+    const launchers = launchersFor();
+    const listEngineAgentsFn = async () => ([
+      { name: 'council-seat', permission: cleanNoTools() },
+      { name: 'council-support', permission: cleanNoTools() },
+    ]);
+    const { exitCode } = await runCouncil(base(), { launchers, listEngineAgentsFn });
+    expect(exitCode).toBe(0);
+    expect(stage1(launchers.calls).role).toBe('seat');
+  });
+
+  test('a tree-widened council-support is refused before any launch, naming task', async () => {
+    const launchers = launchersFor();
+    const listEngineAgentsFn = async () => ([
+      { name: 'council-seat', permission: cleanNoTools() },
+      { name: 'council-support', permission: supportAttack() },
+    ]);
+    const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('rendered the council agents differently');
+    expect(run.error.message).toContain('task');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  test('a tree that re-lists a granted tool is refused, naming it', async () => {
+    const project = path.join(tmp, 'tree-p2r33'); fs.mkdirSync(project);
+    const outside = path.join(tmp, 'run-outside-p2r33'); fs.mkdirSync(outside);
+    const launchers = launchersFor();
+    const listEngineAgentsFn = async () => ([
+      { name: 'council-seat', permission: relistAttack() },
+      { name: 'council-support', permission: cleanNoTools() },
+    ]);
+    const { exitCode, run } = await runCouncil(
+      base({ project, runDir: outside, tools: ['read', 'webfetch'] }),
+      { launchers, listEngineToolIdsFn: async () => ['read', 'webfetch'], listEngineAgentsFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('rendered the council agents differently');
+    expect(run.error.message).toContain('read');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  test('an unverifiable engine (null) with an explicit --tools opt-in refuses before any launch', async () => {
+    const launchers = launchersFor();
+    const { exitCode, run } = await runCouncil(base({ tools: ['webfetch'] }),
+      { launchers, listEngineToolIdsFn: async () => ['webfetch'], listEngineAgentsFn: async () => null });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('could not be verified');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  test('an unverifiable engine (null) with defaults only degrades quietly and continues', async () => {
+    const launchers = launchersFor();
+    const { exitCode } = await runCouncil(base(), { launchers, listEngineAgentsFn: async () => null });
+    expect(exitCode).toBe(0);
+    const degrades = runState.readRun(runDir).degrades || [];
+    expect(degrades.some((d) => d.channel === 'council-agents-unverified')).toBe(true);
+  });
+});
+
+// C4 (ruling P2-R35): critic and lens solos are Stage-1 legs like the seat
+// wave — launchStage1's `common` object (run-stage1-launch.js) sets
+// `role: 'seat'` on every Stage-1 launch, seat wave, critic solo and lens
+// solos alike. Driven through the REAL createLaunchers (not the scripted
+// fake) so the agent-name resolution in run-launch.js actually runs — the
+// scripted fake only ever records `role`, never resolves it to an agent name.
+describe('C4: critic and lens solos launch as council-seat', () => {
+  const { createLaunchers } = require('../../src/council/run-launch');
+  const { buildCouncilAgents } = require('../../src/council/seat-tools');
+
+  // The scripted fake records opts VERBATIM (fake-launchers.js :: scriptedLaunchers),
+  // so `role` — consumed by the real createLaunchers to pick the agent NAME,
+  // never forwarded to the transport — is directly observable here.
+  test('critic run: the seat wave and the critic solo both carry role seat', async () => {
+    const launchers = fakes.scriptedLaunchers({ 'r1-s1': () => fakes.okWave([]), 'r1-c1': () => fakes.okWave([]) });
+    await runCouncil(base({ critic: 'qwen' }), { launchers });
+    const calls = launchers.calls.filter((c) => c.waveId === 'r1-s1' || c.waveId === 'r1-c1');
+    expect(calls).toHaveLength(2);
+    for (const c of calls) { expect(c.role).toBe('seat'); }
+  });
+
+  test('lens run: every lens solo carries role seat', async () => {
+    const launchers = fakes.scriptedLaunchers({ 'r1-l1': () => fakes.okWave([]), 'r1-l2': () => fakes.okWave([]) });
+    await runCouncil(base({ models: ['gemini', 'gpt'], critic: null, lenses: ['growth-stage VC', 'security architect'] }), { launchers });
+    const calls = launchers.calls.filter((c) => c.waveId === 'r1-l1' || c.waveId === 'r1-l2');
+    expect(calls).toHaveLength(2);
+    for (const c of calls) { expect(c.role).toBe('seat'); }
+  });
+
+  // Through the launcher DI where the test CAN reach the resolution: the real
+  // createLaunchers (not the scripted fake) so run-launch.js's `opts.role ===
+  // 'seat' ? 'council-seat' : 'council-support'` actually runs.
+  test('critic run, through the real createLaunchers: the seat wave and the critic solo resolve to council-seat', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { status: 'complete', legs: [] }, exitCode: 0 }; };
+    const agents = buildCouncilAgents({ tools: [], local: false });
+    const launchers = createLaunchers({ fanoutFn, councilAgents: () => agents });
+    await runCouncil(base({ critic: 'qwen' }), { launchers });
+    const s1Calls = seen.filter((o) => o.waveId === 'r1-s1' || o.waveId === 'r1-c1');
+    expect(s1Calls).toHaveLength(2);
+    for (const c of s1Calls) { expect(c.agent).toBe('council-seat'); }
+  });
+
+  test('lens run, through the real createLaunchers: every lens solo resolves to council-seat', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { status: 'complete', legs: [] }, exitCode: 0 }; };
+    const agents = buildCouncilAgents({ tools: [], local: false });
+    const launchers = createLaunchers({ fanoutFn, councilAgents: () => agents });
+    await runCouncil(base({ models: ['gemini', 'gpt'], critic: null, lenses: ['growth-stage VC', 'security architect'] }), { launchers });
+    const lensCalls = seen.filter((o) => o.waveId === 'r1-l1' || o.waveId === 'r1-l2');
+    expect(lensCalls).toHaveLength(2);
+    for (const c of lensCalls) { expect(c.agent).toBe('council-seat'); }
   });
 });

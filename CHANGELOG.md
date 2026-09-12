@@ -19,7 +19,11 @@ All notable changes to Amicus are documented here. Format follows
   allow; the refusal itself is exercised by the release ritual's live run); `grep` and
   `bash` have no per-file fence. `bash` is outside every fence (run directory, home,
   network) and the CLI says so when it is opted in; `--tools` and `--agent` cannot be
-  combined; `todowrite` counts as a tool that never touches the tree.
+  combined; `todowrite` counts as a tool that never touches the tree. After registration, the
+  run also reads back what the engine actually rendered for each council agent and refuses
+  before launch if a tree-supplied `opencode.json`/`.opencode/agent` file widened it — a
+  reviewed tree's own config was measured to merge into the registered agent by key order
+  (ruling P2-R33).
   Two of the three leg-loss classes in the 2026-09-11 study shared one
   precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
   install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's

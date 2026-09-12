@@ -99,7 +99,15 @@ test('a scripted dead Stage-1 leg whose retry RECOVERS: run exits 0, one stage1-
     'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
   };
   const opts = baseOptions(tmp);
-  const { exitCode } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+  // Ruling P2-R33: a clean listEngineAgentsFn keeps this test's OWN degrade
+  // count meaningful — without it, the engine-rendering tripwire (unrelated
+  // to retry-heal) would ALSO record a `council-agents-unverified` info note
+  // whenever no real shared server answers, which is every fake-launcher run.
+  const listEngineAgentsFn = async () => ([
+    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  ]);
+  const { exitCode } = await runCouncil(opts, { ...deps(scriptedLaunchers(script)), listEngineAgentsFn });
   expect(exitCode).toBe(0);
 
   const run = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'run.json'), 'utf-8'));

@@ -111,7 +111,7 @@ async function runCouncil(options, deps = {}) {
 
   // Injected launchers bring their own transport. Never throws — degrades to null.
   if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer({ ...o, degrade }, deps); }
-  const ev = await require('./run-seat-tools').validateSeatToolsAgainstEngine(o, sharedServer, deps);
+  const ev = await require('./run-seat-tools').validateSeatToolsAgainstEngine(o, sharedServer, { ...deps, degrade });
   if (ev.error) { return finalize(1, ev.error); }
 
   const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };

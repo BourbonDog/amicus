@@ -123,11 +123,12 @@ async function handleCouncilRunTool(input, project, helpers) {
   }
   // Spec 2026-09-11 §4 (P2-R28 supersedes P2-R25): --tools/--agent are refused together, before either is consulted, on every door. Tools that never touch the tree (webfetch, websearch, todowrite) ride through; local tools are refused naming the CLI.
   const toolsIn = input.tools === undefined ? undefined : (Array.isArray(input.tools) ? input.tools : [String(input.tools)]);
+  const mcpWording = (m) => m.replace(/^--tools:/, 'tools:').replace(/--agent Build/g, 'agent: "Build"').replace(/(?<!run )--tools/g, 'tools').replace(/--agent/g, 'agent'); // C6 (P2-R35): rewrites flag wording EXCEPT inside an actual `council run --tools ...` CLI suggestion (resolveRemoteOnlyTools's local-tool message), which stays literal.
   const conflict = require('./council/seat-tools').agentToolsConflict(input.agent, toolsIn);
-  if (conflict) { return textResult(conflict, true); }
+  if (conflict) { return textResult(mcpWording(conflict), true); }
   const mt = (toolsIn !== undefined)
     ? require('./council/seat-tools').resolveRemoteOnlyTools(toolsIn) : { ok: true, ids: [] };
-  if (!mt.ok) { return textResult(mt.message, true); }
+  if (!mt.ok) { return textResult(mcpWording(mt.message), true); }
 
   const { generateTaskId } = require('./sidecar/start');
   const runId = generateTaskId();

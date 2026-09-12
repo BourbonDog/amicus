@@ -32,12 +32,40 @@
  * take the same `{ mode, permission }` shape per agent that the probe prints
  * (mirroring what `client.app.agents()` returns), so `starRule`/`lastRule`
  * need no adaptation.
+ *
+ * Ruling P2-R33 (C1, council #247 round 2): the probe also prints
+ * `PROBE_TREE_JSON` — the SAME server, queried for a temp tree whose own
+ * opencode.json widens `council-support`. `verifyAgentRendering`
+ * (src/council/run-seat-tools.js) is applied to both: ok for the clean
+ * server-only agents, NOT ok for the tree-widened one — proving the tripwire
+ * catches the real engine's merge-by-key-order behaviour, not just a
+ * hand-built rule list.
+ *
+ * Ruling P2-R34 (B2/C2): a small transcription of the engine's evaluator
+ * (`wildcardMatch`/`evaluate` below) is applied to the REAL parsed seat rule
+ * list, asserting the `.env` deny/allow split the seat agent depends on.
  */
 
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { verifyAgentRendering } = require('../src/council/run-seat-tools');
 
 const PROBE = path.join(__dirname, '..', 'scripts', 'probe-council-agents.js');
+
+// opencode v1.18.15 packages/opencode/src/util/wildcard.ts (Wildcard.match) and
+// src/permission/index.ts (evaluate); transcribed, not imported (P2-R21: the
+// SDK is ESM-only) — RE-VERIFY ON AN ENGINE BUMP.
+const wildcardMatch = (str, pattern) => {
+  const s = String(str).replace(/\\/g, '/');
+  let p = String(pattern).replace(/\\/g, '/').replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  if (p.endsWith('/.*')) { p = `${p.slice(0, -3)}(/.*)?`; }
+  return new RegExp(`^${p}$`, process.platform === 'win32' ? 'si' : 's').test(s);
+};
+const evaluate = (rules, permission, pattern) => {
+  const list = Array.isArray(rules) ? rules : [];
+  const hit = list.slice().reverse().find((r) => wildcardMatch(permission, r.permission) && wildcardMatch(pattern, r.pattern));
+  return hit || { action: 'ask' };
+};
 
 const starRule = (agent, permission) => (Array.isArray(agent.permission) ? agent.permission : [])
   .filter((r) => r.permission === permission && r.pattern === '*').map((r) => r.action);
@@ -101,5 +129,31 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   expect(last(starRule(byName['council-probe-unknown'], 'bogus_tool'))).toBe('allow');
 
   expect(parsed.toolIds).toEqual(expect.arrayContaining(['read', 'glob', 'grep', 'bash', 'webfetch', 'websearch', 'task', 'skill', 'edit', 'write']));
+
+  // Ruling P2-R33 (C1): verifyAgentRendering on the REAL rendering — clean on
+  // the server-only agents, not ok once a reviewed tree widens council-support.
+  expect(verifyAgentRendering(seat.permission, ['grep', 'read', 'webfetch'])).toEqual({ ok: true });
+  expect(verifyAgentRendering(support.permission, [])).toEqual({ ok: true });
+
+  const treeLine = out.split(/\r?\n/).find((l) => l.startsWith('PROBE_TREE_JSON '));
+  if (!treeLine) {
+    throw new Error(`probe-council-agents.js printed no PROBE_TREE_JSON line.\nstatus: ${r.status}\nstderr:\n${r.stderr || '(empty)'}\nstdout:\n${out}`);
+  }
+  const treeParsed = JSON.parse(treeLine.slice('PROBE_TREE_JSON '.length));
+  const treeSupport = treeParsed.agents['council-support'];
+  const treeVerified = verifyAgentRendering(treeSupport.permission, []);
+  expect(treeVerified.ok).toBe(false);
+  expect(treeVerified.reason).toContain('task');
+
+  // Ruling P2-R34 (B2/C2): the transcribed evaluator applied to the REAL seat
+  // rule list — the `.env` deny/allow split the seat agent depends on.
+  expect(evaluate(seat.permission, 'read', '.env').action).toBe('deny');
+  expect(evaluate(seat.permission, 'read', 'foo/.env').action).toBe('deny');
+  expect(evaluate(seat.permission, 'read', 'config/.env.local').action).toBe('deny');
+  expect(evaluate(seat.permission, 'read', 'src/x.js').action).toBe('allow');
+  expect(evaluate(seat.permission, 'read', 'README.md').action).toBe('allow');
+  expect(evaluate(seat.permission, 'task', '*').action).toBe('deny');
+  expect(evaluate(support.permission, 'read', 'src/x.js').action).toBe('deny');
+
   expect(r.status).toBe(0);
 }, 180000);

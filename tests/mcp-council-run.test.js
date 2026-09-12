@@ -303,11 +303,14 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
   // into the "local tools" branch and suggest --out-dir, a command that
   // would also fail) — it must be refused the same way resolveSeatTools
   // refuses it, naming the real escape hatch.
-  test('a permanently-refused id (task) over MCP is refused naming --agent Build, not the out-dir fence (review r1 P2-R20)', async () => {
+  // C6 (P2-R35, council #247 round 2): the message no longer says `--agent
+  // Build` — an MCP client never types a `--` flag — it says `agent: "Build"`.
+  test('a permanently-refused id (task) over MCP is refused naming the Build agent, not the out-dir fence (review r1 P2-R20)', async () => {
     const spawnCalls = [];
     const res = await handleCouncilRunTool(input({ tools: ['task'] }), tmp, helpers(spawnCalls));
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain('--agent Build');
+    expect(res.content[0].text.startsWith('tools:')).toBe(true);
+    expect(res.content[0].text).toContain('agent: "Build"');
     expect(spawnCalls).toHaveLength(0);
   });
   // Ruling P2-R28 (supersedes P2-R25): `tools` and `agent` are mutually
@@ -319,6 +322,15 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     const res = await handleCouncilRunTool(input({ agent: 'Build', tools: ['task'] }), tmp, helpers(spawnCalls));
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('cannot be combined');
+    expect(spawnCalls).toHaveLength(0);
+  });
+  // C6: the same rewrite applied to the conflict message — no MCP client
+  // should ever see a `--` flag it cannot type.
+  test('MCP refusal wording never leaks CLI flag syntax (C6)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Plan', tools: ['webfetch'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).not.toContain('--');
     expect(spawnCalls).toHaveLength(0);
   });
 

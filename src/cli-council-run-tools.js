@@ -40,7 +40,11 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // runCouncil so every door — CLI, MCP, workflow — shares them).
   let toolIds;
   if (explicitKeys.has('tools') || args.tools !== undefined) {
-    const parsed = parseToolsFlag(args.tools);
+    // B6 (P2-R35): a repeated `--tools a --tools b` (or a caller that builds
+    // args directly, MCP-input style) can arrive as an array — join it before
+    // parseToolsFlag, which only ever spoke the comma-string shape.
+    const raw = Array.isArray(args.tools) ? args.tools.join(',') : args.tools;
+    const parsed = parseToolsFlag(raw);
     if (!parsed.ok) { return { error: { code: ERROR_CODES.BAD_ARGS, message: `Error: ${parsed.message}` } }; }
     toolIds = parsed.ids;
   }

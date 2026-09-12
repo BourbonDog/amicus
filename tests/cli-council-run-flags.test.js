@@ -426,6 +426,16 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(code).toBe(0);
     expect(runCouncil.mock.calls[0][0].tools).toEqual(['read', 'grep']);
   });
+  // B6 (ruling P2-R35): a repeated `--tools a --tools b` — or any caller that
+  // builds args directly with an array, MCP-input style — is joined before
+  // parseToolsFlag instead of losing every value but the last. Order is
+  // INSERTION order (parseToolsFlag's own `[...new Set(...)]` dedup, matching
+  // the sibling test above), not sorted.
+  test('a repeated --tools (args.tools arriving as an array) is joined and forwarded (B6)', async () => {
+    const code = await handleCouncilRun(argsBase({ tools: ['read', 'grep'] }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].tools).toEqual(['read', 'grep']);
+  });
   test('an empty or malformed --tools is BAD_ARGS before runCouncil', async () => {
     for (const bad of ['', ' , ', 'read,../x']) {
       runCouncil.mockClear();

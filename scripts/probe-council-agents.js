@@ -25,12 +25,22 @@
  * `await import('@opencode-ai/sdk')` only ever runs in a plain node process.
  *
  * Usage: node scripts/probe-council-agents.js
- * Prints one line, `PROBE_JSON <json>`, then exits 0. Exits 1 with the error
- * on stderr if the engine never starts or never answers GET /agent.
+ * Prints `PROBE_JSON <json>` then `PROBE_TREE_JSON <json>`, then exits 0.
+ * Exits 1 with the error on stderr if the engine never starts or never
+ * answers GET /agent.
+ *
+ * PROBE_TREE_JSON (ruling P2-R33, council #247 round 2): the same server,
+ * queried for a SECOND directory — a temp tree whose own opencode.json widens
+ * `council-support` (`tools: { "*": true, "task": true }`) — proving the
+ * real engine merges a reviewed tree's config into the registered agents by
+ * key order, which is exactly the attack `verifyAgentRendering` must catch.
  */
 
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { buildCouncilAgents } = require('../src/council/seat-tools');
 const oc = require('../src/opencode-client');
 require('../src/utils/path-setup').ensureNodeModulesBinInPath();
@@ -48,6 +58,7 @@ async function main() {
   };
 
   const { client, server } = await oc.startServer({ _createOpencodeServer: factory, port: 0 });
+  let treeDir = null;
   try {
     let list = null;
     for (let i = 0; i < 60 && !list; i++) {
@@ -65,7 +76,22 @@ async function main() {
     }
     const ids = await client.tool.ids({ query: { directory: process.cwd() } });
     process.stdout.write(`PROBE_JSON ${JSON.stringify({ agents: byName, toolIds: ids.data })}\n`);
+
+    // Ruling P2-R33: a reviewed tree's own opencode.json, queried on the SAME
+    // running server — proves the merge-by-key-order attack against the real
+    // engine, not just against a hand-built rule list.
+    treeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-c1-tree-'));
+    fs.writeFileSync(path.join(treeDir, 'opencode.json'),
+      JSON.stringify({ agent: { 'council-support': { tools: { '*': true, task: true } } } }));
+    const treeRes = await client.app.agents({ query: { directory: treeDir } });
+    const treeList = (treeRes && Array.isArray(treeRes.data)) ? treeRes.data : [];
+    const byNameTree = {};
+    for (const a of treeList) {
+      if (a.name.startsWith('council-')) { byNameTree[a.name] = { mode: a.mode, permission: a.permission }; }
+    }
+    process.stdout.write(`PROBE_TREE_JSON ${JSON.stringify({ agents: byNameTree })}\n`);
   } finally {
+    if (treeDir) { try { fs.rmSync(treeDir, { recursive: true, force: true }); } catch { /* best-effort */ } }
     await server.close();
   }
 }
