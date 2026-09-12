@@ -250,10 +250,10 @@ describe('tool registration', () => {
 });
 
 describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
-  // Split in two (final review, P2-R25): the original single test combined
-  // `tools` with `agent`, a combination the P2-R25 short-circuit below now
-  // gives different behavior (agent set => tools not consulted) — see the
-  // 'agent set + tools is NOT refused' test for that combination.
+  // Ruling P2-R28 supersedes P2-R25: `tools` and `agent` together are now
+  // refused outright on every door (see the 'agent + tools IS refused' test
+  // below) rather than short-circuited, so each of these single-flag cases
+  // stays its own test.
   test('forwards remote tools as --tools on the child argv (no agent)', async () => {
     const spawnCalls = [];
     const res = await handleCouncilRunTool(input({ tools: ['webfetch', 'websearch'] }), tmp, helpers(spawnCalls));
@@ -261,6 +261,15 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     const { args } = spawnCalls[0];
     expect(args[args.indexOf('--tools') + 1]).toBe('webfetch,websearch');
     expect(args).not.toContain('--agent');
+  });
+  // B2/D6: todowrite never touches the tree, so it rides through the MCP
+  // door exactly like webfetch/websearch — no out-dir placement rule applies.
+  test('forwards todowrite as --tools on the child argv (B2/D6)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['todowrite'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--tools') + 1]).toBe('todowrite');
   });
   test('forwards agent as --agent on the child argv (no tools)', async () => {
     const spawnCalls = [];
@@ -301,17 +310,15 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     expect(res.content[0].text).toContain('--agent Build');
     expect(spawnCalls).toHaveLength(0);
   });
-  // Ruling P2-R25 (final review): when `agent` is set, `tools` is not consulted
-  // at all — the MCP door must short-circuit the tools policy exactly like
-  // runCouncil's preflightSeatTools does for the CLI, so an id that would
-  // normally be refused (task) rides through unexamined under the override.
-  test('agent set + tools is NOT refused: the agent override short-circuits the tools policy (P2-R25)', async () => {
+  // Ruling P2-R28 (supersedes P2-R25): `tools` and `agent` are mutually
+  // exclusive on every door, including MCP — the override already runs every
+  // leg on its own agent with its full tool set, so a computed allowlist next
+  // to it is refused before either is consulted further.
+  test('agent + tools IS refused: --tools cannot be combined with --agent (P2-R28)', async () => {
     const spawnCalls = [];
     const res = await handleCouncilRunTool(input({ agent: 'Build', tools: ['task'] }), tmp, helpers(spawnCalls));
-    expect(res.isError).toBeFalsy();
-    expect(spawnCalls).toHaveLength(1);
-    const { args } = spawnCalls[0];
-    expect(args[args.indexOf('--agent') + 1]).toBe('Build');
-    expect(args).not.toContain('--tools');
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('cannot be combined');
+    expect(spawnCalls).toHaveLength(0);
   });
 });

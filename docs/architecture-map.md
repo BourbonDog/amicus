@@ -548,7 +548,7 @@ evals/
 | `council/run-stats-entry.js` |  | `buildRunStatsEntry()` |
 | `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
-| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS()`, `REMOTE_TOOL_IDS()`, `defaultToolsFor()`, `parseToolsFlag()`, `resolveSeatTools()` |
+| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS()`, `REMOTE_TOOL_IDS()`, `NON_LOCAL_TOOL_IDS()`, `defaultToolsFor()`, `parseToolsFlag()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |

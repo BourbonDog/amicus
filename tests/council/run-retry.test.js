@@ -1315,4 +1315,13 @@ describe('retryStage1Losses seat tools (spec 2026-09-11 §4, PR 2 review r1)', (
     await retryStage1Losses(ctx, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
     expect(launchWave.mock.calls[0][0].prompt).toContain('Your tools: read.');
   });
+
+  // B1/D1 (ruling P2-R31): a retry is a Stage-1 leg like any other, so under
+  // --agent it re-issues the override sentence too, not a tools-based one.
+  test('the retried legs\' prompt carries the run\'s --agent override — briefingFor forwards `agent`', async () => {
+    const launchWave = jest.fn().mockResolvedValue(recoveredWave());
+    const ctx = fakeCtx({ agent: 'Plan' }, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(launchWave.mock.calls[0][0].prompt).toContain("You run as the engine's Plan agent");
+  });
 });

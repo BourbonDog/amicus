@@ -49,3 +49,29 @@ describe('stage-1 briefings carry the seat tools sentence (spec 2026-09-11 §4)'
     expect(p).not.toContain('Your tools:');
   });
 });
+
+// B1/D1 (ruling P2-R31): under --agent there is no computed allowlist to
+// brief, so every stage-1 surface — seat, critic and lens, task and review
+// alike — gets the override sentence instead, naming the agent.
+describe('stage-1 briefings carry the --agent override sentence instead (ruling P2-R31)', () => {
+  const OVERRIDE = "You run as the engine's Build agent with its own tool set";
+  test('seat, critic and lens all carry the override sentence under review intent', () => {
+    expect(briefings.stage1SeatBriefing(undefined, args({ agent: 'Build' }))).toContain(OVERRIDE);
+    expect(briefings.stage1CriticBriefing(undefined, args({ agent: 'Build' }))).toContain(OVERRIDE);
+    expect(briefings.stage1LensBriefing(undefined, args({ lens: 'security engineer', agent: 'Build' }))).toContain(OVERRIDE);
+  });
+  test('seat, critic and lens all carry the override sentence under task intent too', () => {
+    expect(briefings.stage1SeatBriefing('task', args({ agent: 'Build' }))).toContain(OVERRIDE);
+    expect(briefings.stage1CriticBriefing('task', args({ agent: 'Build' }))).toContain(OVERRIDE);
+    expect(briefings.stage1LensBriefing('task', args({ lens: 'security engineer', agent: 'Build' }))).toContain(OVERRIDE);
+  });
+  test('none of them fall back to the shared no-tools sentence under --agent', () => {
+    for (const text of [
+      briefings.stage1SeatBriefing(undefined, args({ agent: 'Build' })),
+      briefings.stage1CriticBriefing('task', args({ agent: 'Build' })),
+      briefings.stage1LensBriefing(undefined, args({ lens: 'x', agent: 'Build' })),
+    ]) {
+      expect(text).not.toContain('Do NOT use any tools');
+    }
+  });
+});

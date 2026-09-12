@@ -33,11 +33,12 @@ const REFUSED_TOOL_IDS = Object.freeze({
   apply_patch: 'a council seat never modifies the tree',
 });
 
-/** Ids that never touch the local tree; every other accepted id is LOCAL. */
-const REMOTE_TOOL_IDS = Object.freeze(['webfetch', 'websearch']);
+/** Ids that never touch the local tree: the remote fetchers, plus the engine's own todo list. */
+const NON_LOCAL_TOOL_IDS = Object.freeze(['webfetch', 'websearch', 'todowrite']);
+const REMOTE_TOOL_IDS = NON_LOCAL_TOOL_IDS; // alias: existing importers keep resolving it
 
 /**
- * True if `tools` contains anything outside REMOTE_TOOL_IDS. Single source for the
+ * True if `tools` contains anything outside NON_LOCAL_TOOL_IDS. Single source for the
  * local/remote predicate — resolveSeatTools, buildCouncilAgents and seatToolsSentence
  * all call this instead of each re-writing the same `.some()` (review r1 P2-R8: the
  * duplication let `buildCouncilAgents` accept a `local` flag that could contradict its
@@ -47,7 +48,18 @@ const REMOTE_TOOL_IDS = Object.freeze(['webfetch', 'websearch']);
  * @param {string[]} tools @returns {boolean}
  */
 function isLocal(tools) {
-  return tools.some((id) => !REMOTE_TOOL_IDS.includes(id));
+  return tools.some((id) => !NON_LOCAL_TOOL_IDS.includes(id));
+}
+
+/**
+ * `--tools`/`--agent` are mutually exclusive (ruling P2-R28, supersedes P2-R25's
+ * MCP-only short-circuit): the override already runs every leg on its own agent.
+ * @param {string|null|undefined} agent @param {string[]|undefined} tools
+ * @returns {string|null} the refusal message, or null when there is no conflict
+ */
+function agentToolsConflict(agent, tools) {
+  if (!agent || !Array.isArray(tools) || !tools.length) { return null; }
+  return `--tools cannot be combined with --agent: the override runs every leg on the engine's own ${agent} agent with its full tool set; drop one of them`;
 }
 
 const ESCAPE_HATCH = '--agent Build';
@@ -123,12 +135,12 @@ function refusalFor(ids) {
  * naming the CLI command that DOES allow it (an out-of-project --out-dir). A
  * PERMANENTLY-refused id (review r1 P2-R20: task/skill/question/invalid/edit/
  * write/apply_patch) is refused first, with refusalFor's reason — it is not a
- * placement problem, and REMOTE_TOOL_IDS.includes(id) is false for every one
+ * placement problem, and NON_LOCAL_TOOL_IDS.includes(id) is false for every one
  * of them, so without this check the local-tools branch below caught them too
  * and suggested an --out-dir command that would ALSO fail (resolveSeatTools
  * refuses these ids unconditionally, everywhere, run-directory or not).
- * Remote tools (webfetch, websearch) carry no placement requirement and ride
- * through. Shape-checked the same way the CLI flag is (parseToolsFlag), so
+ * Tools that never touch the tree (webfetch, websearch, todowrite) carry no
+ * placement requirement and ride through. Shape-checked the same way the CLI flag is (parseToolsFlag), so
  * `mcp-council-run.js` never re-implements comma-splitting/normalizing for an
  * input that happens to arrive as an array instead of a flag string. An empty
  * array is treated as absent (`{ok: true, ids: []}`) rather than the
@@ -153,7 +165,7 @@ function resolveRemoteOnlyTools(input) {
   // (MCPLOCALLEAK target)' in tests/council/seat-tools.test.js and 'a local
   // tool over MCP is refused before anything spawns — the MCP run dir must
   // stay inside the project' in tests/mcp-council-run.test.js.
-  const local = parsed.ids.filter((id) => !REMOTE_TOOL_IDS.includes(id));
+  const local = parsed.ids.filter((id) => !NON_LOCAL_TOOL_IDS.includes(id));
   if (local.length) {
     return {
       ok: false,
@@ -265,10 +277,17 @@ function buildCouncilAgents({ tools = [], local = false } = {}) {
  * The briefing line a seat gets about its tools (spec §4 "briefing lines").
  * No tools → the shared no-tools sentence (briefings-chair.js), forked only on
  * its last word, exactly like the chair's. Config enforces; this informs (E1:
- * told not to, gemini complied).
- * @param {string[]} tools @param {'review'|'answer'} kind
+ * told not to, gemini complied). Under `--agent` (ruling P2-R31), `tools` is ignored.
+ * @param {string[]} tools @param {'review'|'answer'} kind @param {{agent?: string}} [opts]
  */
-function seatToolsSentence(tools, kind) {
+function seatToolsSentence(tools, kind, { agent } = {}) {
+  // Named mutant OVERRIDESENTENCEDROP: dropping this branch would brief an
+  // --agent-override seat as if a computed allowlist still applied.
+  if (agent) {
+    return `You run as the engine's ${agent} agent with its own tool set; use tools only where ` +
+      'the deliverable needs them; if research is incomplete, say so in the deliverable rather ' +
+      'than leave it unwritten.';
+  }
   if (!tools || !tools.length) { return `${CHAIR_NO_TOOLS_LEAD}${kind}.`; }
   const forbid = isLocal(tools) ? '' : ' — do not attempt to read files, search directories, or run commands';
   return `Your tools: ${tools.join(', ')}. You have no others${forbid}; if research is incomplete, ` +
@@ -276,6 +295,6 @@ function seatToolsSentence(tools, kind) {
 }
 
 module.exports = {
-  REFUSED_TOOL_IDS, REMOTE_TOOL_IDS, defaultToolsFor, parseToolsFlag, resolveSeatTools,
-  resolveRemoteOnlyTools, buildCouncilAgents, seatToolsSentence, isLocal,
+  REFUSED_TOOL_IDS, REMOTE_TOOL_IDS, NON_LOCAL_TOOL_IDS, defaultToolsFor, parseToolsFlag, resolveSeatTools,
+  resolveRemoteOnlyTools, buildCouncilAgents, seatToolsSentence, isLocal, agentToolsConflict,
 };

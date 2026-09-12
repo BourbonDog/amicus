@@ -52,6 +52,20 @@ function preflightSeatTools(o) {
   if (o.agent !== null && o.agent !== undefined && o.agent !== 'Plan' && o.agent !== 'Build') {
     return { error: { code: 'BAD_ARGS', message: `Error: agent must be Plan or Build; got '${o.agent}'` } };
   }
+  // Named mutant TOOLSNOTARRAY: dropping this check lets a non-array `tools`
+  // (a bare string, say) reach resolveSeatTools below, where
+  // `Array.isArray(o.tools) ? o.tools : []` silently discards it as `[]`
+  // instead of refusing the run. Pinned by run-tools.test.js's `tools: 'read'`
+  // case (BAD_ARGS naming the received type; nothing launches).
+  if (o.tools !== undefined && o.tools !== null && !Array.isArray(o.tools)) {
+    return { error: { code: 'BAD_ARGS', message: 'Error: tools must be an array of tool ids (got ' + typeof o.tools + ')' } };
+  }
+  // Ruling P2-R28 (supersedes P2-R25): --tools/--agent are refused together on
+  // every door. Named mutant AGENTTOOLSCONFLICT: dropping this check reddens
+  // the runCouncil conflict test (agent + a non-empty tools array must exit 1
+  // naming "cannot be combined", never reach a launch).
+  const conflict = seatTools.agentToolsConflict(o.agent, o.tools);
+  if (conflict) { return { error: { code: 'BAD_ARGS', message: `Error: ${conflict}` } }; }
   // The --agent escape hatch wins: no council agents, every leg runs on the
   // engine's own agent — so --tools is never even consulted under it (the
   // "--agent Build skips the council agents" pin, tests/council/run-tools.test.js).
@@ -101,46 +115,50 @@ function preflightSeatTools(o) {
 }
 
 /**
- * Validate the run's opt-in tool ids against the engine's own declaration,
- * after the server is up and before any Stage-1 leg launches. A no-op
- * (`{error: null}`) whenever there is nothing to validate: no `--agent`
- * override was requested is implied by the caller having reached this point
- * with council agents in play, and an EMPTY/absent `--tools` never needed the
- * engine's own list in the first place (the intent default alone — `webfetch`
- * for task mode, nothing for review — was already cleared by
- * `preflightSeatTools`, which needs no engine).
- * @param {{agent?: string, intent?: string, tools?: string[], project: string}} o
+ * Validate the run's seat tools against the engine's own declaration, after
+ * the server is up and before any Stage-1 leg launches. Ruling P2-R30: this
+ * runs for the intent's DEFAULT too, not only an explicit opt-in — a
+ * defaults-only run is never launched against an engine that does not
+ * actually declare it. A no-op (`{error: null}`) whenever there is nothing to
+ * validate at all (`--agent`, or a review run with no tools); and whenever the
+ * engine could not be asked (no shared server), a defaults-only run degrades
+ * quietly rather than refusing over a check nobody opted into.
+ * @param {{agent?: string, intent?: string, tools?: string[], seatTools?: string[], project: string}} o
  * @param {{serverClient: object}|null} sharedServer
  * @param {{listEngineToolIdsFn?: Function}} deps test seam; default = the real
  *   run-server.js :: listEngineToolIds
  * @returns {Promise<{error: {code: string, message: string}|null}>}
  */
 async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
-  // Named mutant NOAGENTGUARD: dropping the `!o.agent &&` conjunct would run
-  // this check even under the --agent escape hatch, where `preflightSeatTools`
-  // never turned --tools into a seat policy at all (it short-circuits to
-  // `{tools: [], local: false}` for any --agent value) — refusing a run that
-  // legitimately opted out of the council-agent tool policy. Pinned by
-  // run-tools.test.js's "--agent Build skips…" case (tools: ['task'], which
-  // IS a refused id under the normal policy, yet the run must NOT refuse).
-  if (!o.agent && Array.isArray(o.tools) && o.tools.length) {
+  // Named mutant DEFAULTSUNCHECKED: narrowing this to `Array.isArray(o.tools)
+  // && o.tools.length` (the pre-P2-R30 guard) would skip a task-intent run
+  // with NO explicit --tools even when the engine declares no `webfetch` at
+  // all. Pinned by run-tools.test.js's "no tools, engine has no webfetch" case.
+  if (Array.isArray(o.seatTools) && o.seatTools.length) {
     const seatTools = require('./seat-tools');
     const listIds = deps.listEngineToolIdsFn || require('./run-server').listEngineToolIds;
     const declared = await listIds(sharedServer, o.project);
     if (!declared) {
-      return {
-        error: {
-          code: 'BAD_ARGS',
-          message: 'Error: --tools could not be validated: the run\'s engine did not list its tools '
-            + '(no shared server, or the tool-ids endpoint failed); nothing was launched',
-        },
-      };
+      // No way to ask: an explicit opt-in is refused (as before P2-R30) —
+      // a defaults-only run is not, since nobody asked for that check and the
+      // shared-server degrade is already recorded elsewhere.
+      if (Array.isArray(o.tools) && o.tools.length) {
+        return {
+          error: {
+            code: 'BAD_ARGS',
+            message: 'Error: --tools could not be validated: the run\'s engine did not list its tools '
+              + '(no shared server, or the tool-ids endpoint failed); nothing was launched',
+          },
+        };
+      }
+      return { error: null };
     }
     // This second resolveSeatTools call is a GATE, not a recompute: `o.seatTools`
     // (preflightSeatTools's result) is already authoritative and unchanged by
     // this check, so `checked.tools`/`checked.local` are deliberately discarded
-    // here — only `checked.ok` (declared-id refusals) is consulted.
-    const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools, declaredIds: declared });
+    // here — only `checked.ok` (declared-id refusals, now over the default too)
+    // is consulted.
+    const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools || [], declaredIds: declared });
     if (!checked.ok) { return { error: { code: checked.code, message: `Error: ${checked.message}` } }; }
   }
   return { error: null };

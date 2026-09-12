@@ -125,13 +125,13 @@ function buildTaskCriticBriefing(args) {
  * case in 'lens and critic briefings carry a real tools line too, not just the seat
  * (LENSTOOLSDROP guard)', tests/council/briefings-tools.test.js.
  */
-function buildTaskLensBriefing({ lens, briefing, date, tools }) {
+function buildTaskLensBriefing({ lens, briefing, date, tools, agent }) {
   return composeWith(
     `Do the work the briefing asks for strictly through the lens of a ${lens}. ` +
     'Produce only what that perspective is qualified to produce, at the depth a top ' +
     'practitioner of it would reach. Stay in-domain: if something matters but is outside ' +
     'your lens, leave it to the other analysts.',
-    TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, { briefing, date, tools }, 'answer'
+    TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, { briefing, date, tools, agent }, 'answer'
   );
 }
 

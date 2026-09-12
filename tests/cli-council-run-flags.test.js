@@ -467,16 +467,53 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(runCouncil).not.toHaveBeenCalled();
     fs.rmSync(outside, { recursive: true, force: true });
   });
-  // Pins AGENTFENCELEAK (src/cli-council-run-tools.js): --agent is the escape
-  // hatch (no council agents, no allowlist), so a local --tools value must NOT
-  // relax the fence when --agent is also set — there are no seat tools in that
-  // mode, so nothing justifies letting the run dir sit outside the project.
-  test('--agent never relaxes the out-dir fence, even with a local --tools value', async () => {
+  // Ruling P2-R28 (supersedes P2-R25 / the old AGENTFENCELEAK guard): --tools
+  // and --agent are now refused together before the out-dir fence is ever
+  // consulted — --agent is the escape hatch (no council agents, no
+  // allowlist), so a computed tools-based agent never exists to relax the
+  // fence for in the first place.
+  test('--agent combined with --tools is refused: they cannot be combined (A3)', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-agent-out-'));
     const code = await handleCouncilRun(argsBase({ agent: 'build', tools: 'read', 'out-dir': outside }));
     expect(code).toBe(1);
     expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toMatch(/cannot be combined/);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  // B2/D6: todowrite never touches the tree, so — unlike read/grep/glob/bash —
+  // it does NOT relax the out-dir fence; a --tools todowrite run keeps the
+  // ordinary v4.7 in-project rule.
+  test('--tools todowrite does not relax the out-dir fence (B2/D6: it is not local)', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-todowrite-out-'));
+    const code = await handleCouncilRun(argsBase({ tools: 'todowrite', 'out-dir': outside }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
     expect(JSON.parse(stdout()).error.message).toMatch(/--out-dir must stay inside the project/);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  // D5: the CLI house style for an unset option is `agent: null`, never an
+  // invalid override and never --agent's own skip-the-council-agents branch.
+  test('agent: null is treated as absent (D5): not refused, no agent forwarded', async () => {
+    const code = await handleCouncilRun(argsBase({ agent: null }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect('agent' in opts).toBe(false);
+  });
+
+  // A1/D2: bash sits outside every fence (run directory, home, network); the
+  // CLI names that in a Notice on stderr whenever a caller opts it in.
+  test('A1/D2: --tools bash prints a Notice on stderr; --tools read does not', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-bash-out-'));
+    let code = await handleCouncilRun(argsBase({ tools: 'bash', 'out-dir': outside }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(true);
+    err.mockClear();
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(false);
     fs.rmSync(outside, { recursive: true, force: true });
   });
 });

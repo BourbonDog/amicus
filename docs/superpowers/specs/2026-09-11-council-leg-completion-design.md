@@ -100,6 +100,8 @@ report:      degrades[] + runStats.findingsUnverified/repairRefused → "What wa
 - Release as **v4.9.8**. (1) and (3) are correctness fixes; (2) is a behavior change and gets a CHANGELOG entry plus a `docs/council.md` section covering the per-usage defaults, `--tools`, and the `agent` override. The headless CI workflow needs no change.
 - `npm test` before push; `npm run test:integration` (keyless) covers the engine probe; the live replay in §3 is release-ritual only.
 
+**PR 2 live checks (release ritual, spends):** one `--intent task` run and one `--tools read --out-dir <dir outside the project>` run whose seat is asked to read a `.env` file and to call a refused tool; look for the prompt endpoint accepting `agent: council-seat`, the `.env` read refused with the leg continuing, and the deliverable finished. These are the only observations of spec §4's "gets the engine's tool-unavailable result and continues".
+
 ## 8. For the owner — recommendations, not blockers
 
 1. **Upstream on opencode**, with the study's session ids as evidence: (a) `grep`/`glob` over a directory holding 170 MB binaries is approved and never runs (D0/glove sessions); (b) `task {}` with empty arguments is accepted and spawns a child session (C2). Recommend filing both. `session.messages` not exposing in-flight parts is by design (`/event` is the delta channel) — no filing.

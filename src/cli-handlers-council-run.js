@@ -217,6 +217,8 @@ async function handleCouncilRun(args, depsOverride = {}) {
   // Spec 2026-09-11 §4 + the v4.7 PR6 fence: --tools/--agent shape and --out-dir placement — ./cli-council-run-tools.
   const tf = require('./cli-council-run-tools').checkCouncilRunTools({ args, explicitKeys, runDir, project });
   if (tf.error) { return failJson(useJson, tf.error); }
+  // A1/D2: e.g. the --tools bash Notice, printed either way (JSON still uses stderr for it).
+  for (const n of tf.notices || []) { process.stderr.write(n + '\n'); }
 
   const { resolveGatewayMode, loadConfig } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');

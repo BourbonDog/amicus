@@ -105,17 +105,17 @@ function dateLine(date) {
  * src/sidecar/list-search.js:14 splits briefing-stage1.md on it — a single
  * spelling in both modes. briefings-task.js top-requires this.
  * @param {string} role @param {string} clause @param {string} contract
- * @param {{briefing: string, date?: string, tools?: string[]}} args
+ * @param {{briefing: string, date?: string, tools?: string[], agent?: string}} args
  * @param {'review'|'answer'} [kind] the no-tools sentence's last word (spec §4:
  *   the seat sentence forks exactly where the chair's does)
  */
-function composeWith(role, clause, contract, { briefing, date, tools }, kind = 'review') {
+function composeWith(role, clause, contract, { briefing, date, tools, agent }, kind = 'review') {
   // lazy, defensively — not cycle-avoidance: seat-tools.js requires only ./briefings-chair,
   // which itself requires only ./seats, so no require cycle with this module exists today.
   const { seatToolsSentence } = require('./seat-tools');
   return [
     role,
-    seatToolsSentence(tools || [], kind),
+    seatToolsSentence(tools || [], kind, { agent }),
     clause,
     dateLine(date),
     contract,
@@ -153,13 +153,13 @@ function buildCriticBriefing(args) {
  * the seat (LENSTOOLSDROP guard)', tests/council/briefings-tools.test.js. The task-intent
  * twin of this same mutant lives in briefings-task.js :: buildTaskLensBriefing.
  */
-function buildLensBriefing({ lens, briefing, date, tools }) {
+function buildLensBriefing({ lens, briefing, date, tools, agent }) {
   return compose(
     `Review this material strictly through the lens of a ${lens}. Raise only findings ` +
     'that perspective is qualified to raise, at the depth a top practitioner of it would ' +
     'reach. Stay in-domain: if something matters but is outside your lens, leave it to ' +
     'the other reviewers.',
-    { briefing, date, tools }
+    { briefing, date, tools, agent }
   );
 }
 

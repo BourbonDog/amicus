@@ -624,12 +624,14 @@ function getTools() {
       ),
       tools: z.array(z.string().min(1)).max(12).optional().describe(
         'Tool ids stage-1 seats may use, by the engine\'s own ids (task mode defaults to webfetch, review to none). ' +
-        'Over MCP only remote tools (webfetch, websearch) can be opted in: the MCP run directory stays inside the project, ' +
-        'and a seat with local tools must not run there — use the CLI with --out-dir outside the project for read/grep/glob/bash. ' +
-        'task and skill are always refused.'
+        'Over MCP only tools that never touch the tree (webfetch, websearch, todowrite) can be opted in: the MCP run ' +
+        'directory stays inside the project, and a seat with local tools must not run there — use the CLI with ' +
+        '--out-dir outside the project for read/grep/glob/bash. task, skill, question, invalid, edit, write and ' +
+        'apply_patch are always refused. Cannot be combined with agent.'
       ),
       agent: z.enum(['Plan', 'Build']).optional().describe(
-        'Escape hatch: run every leg on the engine\'s own agent instead of the council agents (no tool allowlist).'
+        'Escape hatch: run every leg on the engine\'s own agent instead of the council agents (no tool allowlist). ' +
+        'Cannot be combined with tools.'
       ),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +

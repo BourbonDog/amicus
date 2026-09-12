@@ -628,7 +628,10 @@ Subcommands for 'council':
                                 the project tree. read never opens .env files
                                 (denied at the engine); grep and bash have no such
                                 fence — opt them in only on a tree without
-                                secrets. --agent Plan|Build runs every leg on the
+                                secrets. bash is outside every fence — the CLI
+                                warns when you opt it in. --tools and --agent
+                                cannot be combined.
+                                --agent Plan|Build runs every leg on the
                                 engine's own agent instead (the escape hatch; no
                                 council agents, no allowlist).
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.

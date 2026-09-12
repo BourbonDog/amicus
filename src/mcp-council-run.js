@@ -121,8 +121,10 @@ async function handleCouncilRunTool(input, project, helpers) {
       (typeof input.maxCost !== 'number' || !Number.isFinite(input.maxCost) || input.maxCost <= 0)) {
     return textResult('maxCost must be a positive number.', true);
   }
-  // Spec 2026-09-11 §4 (P2-R2 / P2-R25): over MCP only remote tools ride through — the run dir stays inside the project (fence below); local tools are refused naming the CLI. When `agent` is set the override short-circuits the tools policy here exactly as runCouncil does (run-seat-tools.js :: preflightSeatTools: `o.agent ? {tools: [], local: false} : ...` — --tools is never even consulted under it).
-  const mt = (input.tools !== undefined && !input.agent)
+  // Spec 2026-09-11 §4 (P2-R28 supersedes P2-R25): --tools/--agent are refused together, before either is consulted, on every door. Tools that never touch the tree (webfetch, websearch, todowrite) ride through; local tools are refused naming the CLI.
+  const conflict = require('./council/seat-tools').agentToolsConflict(input.agent, Array.isArray(input.tools) ? input.tools : undefined);
+  if (conflict) { return textResult(conflict, true); }
+  const mt = (input.tools !== undefined)
     ? require('./council/seat-tools').resolveRemoteOnlyTools(input.tools) : { ok: true, ids: [] };
   if (!mt.ok) { return textResult(mt.message, true); }
 

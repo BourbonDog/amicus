@@ -27,12 +27,12 @@
 
 const { ERROR_CODES } = require('./utils/error-doc');
 const { isPathInside } = require('./project-root-allowlist');
-const { parseToolsFlag, isLocal } = require('./council/seat-tools');
+const { parseToolsFlag, isLocal, agentToolsConflict } = require('./council/seat-tools');
 
 /**
  * @param {{args: object, explicitKeys: Set<string>, runDir: string, project: string}} ctx
  * @returns {{error: ({code: string, message: string, hint?: string}|null),
- *   toolIds?: string[], agentOverride?: ('Plan'|'Build')}}
+ *   toolIds?: string[], agentOverride?: ('Plan'|'Build'), notices?: string[]}}
  */
 function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // Spec 2026-09-11 §4: shape only (refusals + the engine check live in
@@ -44,7 +44,9 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
     toolIds = parsed.ids;
   }
   let agentOverride;
-  if (explicitKeys.has('agent') || args.agent !== undefined) {
+  // Ruling P2-R30 (D5): `agent: null` is the CLI house style for an unset
+  // option, never an invalid override and never `--agent`'s own skip branch.
+  if (args.agent !== null && (explicitKeys.has('agent') || args.agent !== undefined)) {
     const a = typeof args.agent === 'string' ? args.agent.toLowerCase() : '';
     if (a !== 'plan' && a !== 'build') {
       return {
@@ -58,6 +60,11 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
     agentOverride = a === 'plan' ? 'Plan' : 'Build';
   }
 
+  // Ruling P2-R28 (supersedes P2-R25): --tools/--agent are refused together,
+  // before either is consulted further, on every door.
+  const conflict = agentToolsConflict(agentOverride, toolIds);
+  if (conflict) { return { error: { code: ERROR_CODES.BAD_ARGS, message: `Error: ${conflict}` } }; }
+
   // Spec 2026-09-11 §4: a run whose seats carry a LOCAL tool must put its run dir
   // OUTSIDE the project tree (runCouncil refuses inside, and requires an allowed
   // root); every other run keeps the v4.7 fence exactly as it was.
@@ -67,20 +74,14 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // fence; reddens "a local tool lets --out-dir sit outside the project" in
   // tests/cli-council-run-flags.test.js (a --tools read run with an
   // out-of-project --out-dir would then fail BAD_ARGS instead of reaching
-  // runCouncil).
-  //
-  // Named mutant: AGENTFENCELEAK — dropping the `!agentOverride &&` conjunct
-  // lets a --agent run's fence relax whenever --tools ALSO names a local id,
-  // even though --agent is the escape hatch (no council agents, no allowlist)
-  // and never builds the tools-based agent this relaxation exists for.
-  // Reddens "--agent never relaxes the out-dir fence, even with a local
-  // --tools value" in tests/cli-council-run-flags.test.js.
+  // runCouncil). `agentOverride` no longer needs its own conjunct here: the
+  // conflict check above already refuses any run where both are set.
   //
   // isLocal (not a hand-rolled `.some()`) — review r1 P2-R19: it is
   // council/seat-tools.js's single source for the local/remote predicate
   // (its own JSDoc names three other callers); re-deriving it here was a
   // fourth, silently-driftable copy of the same test.
-  const wantsLocalTool = !agentOverride && Array.isArray(toolIds) && isLocal(toolIds);
+  const wantsLocalTool = Array.isArray(toolIds) && isLocal(toolIds);
   if (!wantsLocalTool && !isPathInside(runDir, project)) {
     return {
       error: {
@@ -90,7 +91,15 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
     };
   }
 
-  return { error: null, toolIds, agentOverride };
+  // A1/D2: `bash` sits outside every fence (run directory, home, network) —
+  // the CLI names that in a Notice whenever a caller opts it in.
+  const notices = (Array.isArray(toolIds) && toolIds.includes('bash'))
+    ? ['Notice: --tools bash gives every stage-1 seat a shell as you: no fence applies — it can ' +
+      'reach the run directory outside the tree, your home directory and the network, and the ' +
+      'webfetch deny does not bind a shell.']
+    : undefined;
+
+  return { error: null, toolIds, agentOverride, ...(notices ? { notices } : {}) };
 }
 
 module.exports = { checkCouncilRunTools };

@@ -73,6 +73,26 @@ describe('resolveSeatTools', () => {
     expect(r.code).toBe('BAD_ARGS');
     expect(r.message).toContain('../x');
   });
+  test('todowrite is a tool that never touches the tree — opting it in does not flip local (B2/D6)', () => {
+    expect(st.isLocal(['todowrite'])).toBe(false);
+    expect(st.resolveSeatTools({ intent: 'task', optIn: ['todowrite'], declaredIds: DECLARED }))
+      .toEqual({ ok: true, tools: ['todowrite', 'webfetch'], local: false });
+  });
+});
+
+describe('agentToolsConflict (ruling P2-R28, supersedes P2-R25)', () => {
+  test('agent set + a non-empty tools array is a conflict, naming the agent', () => {
+    const msg = st.agentToolsConflict('Build', ['task']);
+    expect(msg).toContain('cannot be combined');
+    expect(msg).toContain('Build');
+  });
+  test('no conflict when agent is absent/null, tools is absent/empty, or both are unset', () => {
+    expect(st.agentToolsConflict(undefined, ['read'])).toBeNull();
+    expect(st.agentToolsConflict(null, ['read'])).toBeNull();
+    expect(st.agentToolsConflict('Build', undefined)).toBeNull();
+    expect(st.agentToolsConflict('Build', [])).toBeNull();
+    expect(st.agentToolsConflict(undefined, undefined)).toBeNull();
+  });
 });
 
 // PR 2 Task 6 (spec 2026-09-11 §4, ledger P2-R2/P2-R16): the MCP door's
@@ -119,6 +139,9 @@ describe('resolveRemoteOnlyTools', () => {
     expect(r.ok).toBe(false);
     expect(r.message).toContain('tools: read are local tools');
     expect(r.message).toContain('--tools webfetch,read');
+  });
+  test('todowrite rides through like webfetch/websearch (B2/D6): it never touches the tree', () => {
+    expect(st.resolveRemoteOnlyTools(['todowrite'])).toEqual({ ok: true, ids: ['todowrite'] });
   });
 });
 
@@ -183,5 +206,22 @@ describe('seatToolsSentence', () => {
     expect(st.seatToolsSentence(['grep', 'read', 'webfetch'], 'review')).toBe(
       'Your tools: grep, read, webfetch. You have no others; if research is incomplete, say so in the ' +
       'deliverable rather than leave it unwritten.');
+  });
+  // Ruling P2-R31 (B1/D1): under --agent there is no computed allowlist to
+  // brief, so the override sentence wins regardless of `tools` or `kind`.
+  test('agent set: the override sentence wins for both kinds, naming the agent, ignoring tools', () => {
+    for (const kind of ['review', 'answer']) {
+      const s = st.seatToolsSentence(['read', 'webfetch'], kind, { agent: 'Plan' });
+      expect(s).toBe(
+        "You run as the engine's Plan agent with its own tool set; use tools only where the " +
+        'deliverable needs them; if research is incomplete, say so in the deliverable rather ' +
+        'than leave it unwritten.');
+      expect(s).not.toContain('Do NOT use any tools');
+      expect(s).not.toContain('Your tools:');
+    }
+  });
+  test('agent absent: behaviour is byte-identical to calling with two arguments (P2-R31)', () => {
+    expect(st.seatToolsSentence(['read'], 'review', {})).toBe(st.seatToolsSentence(['read'], 'review'));
+    expect(st.seatToolsSentence([], 'answer', { agent: null })).toBe(st.seatToolsSentence([], 'answer'));
   });
 });

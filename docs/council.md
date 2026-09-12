@@ -394,10 +394,10 @@ council leg runs as one of two agents the run's own OpenCode server registers:
 `task` and `skill` are refused (`task` spawns child sessions amicus cannot observe; `skill` is
 where a seat starts reading the harness instead of the brief), as are `edit`, `write`,
 `apply_patch` (a seat never modifies the tree), `question` (a headless leg has no human) and
-`invalid`. Every other opted-in id is validated against the engine's own declared list
-before any leg launches; an unknown id is `BAD_ARGS` naming what the engine declares. `--agent Plan|Build`
-is the escape hatch: every leg runs on the engine's own agent, no council agents, no
-allowlist.
+`invalid`. Every seat tool — the intent's default included — is validated against the engine's
+declared list when the engine lists its tools; an unknown id is `BAD_ARGS` naming what the engine
+declares. `--agent Plan|Build` is the escape hatch: every leg runs on the engine's own agent, no
+council agents, no allowlist; it cannot be combined with `--tools`.
 
 **Run-directory placement with a local tool.** A seat that can read the project tree must
 not be able to read this run's sibling sessions, so with any local tool opted in the run dir
@@ -413,12 +413,17 @@ config enforces; the sentence informs — study run E1 showed gemini makes zero 
 told not to.
 
 **Secrets.** With `read` opted in, the seat agent denies `.env` and `.env.*` files at the
-engine — the seat gets a refusal and the leg continues (measured 2026-09-12: the deny rules
-render after the seat's own `read=allow`, and the engine takes the last matching rule).
+engine — the seat gets a refusal and the leg continues (the deny rules are measured to render
+after the seat's own `read=allow` and the engine takes the last matching rule; the refusal itself
+is exercised by the release ritual's live `--tools read` run, not by the probe).
 `grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
 the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
 With a local tool the seat's engine session is rooted at the project tree, so the engine also
 loads that tree's own opencode config; do not point a local-tools seat at a tree you do not trust.
+
+`bash` is outside every fence: a bash seat runs commands as you — it can reach the run directory
+outside the tree, your home directory and the network, and the `webfetch` deny does not bind a
+shell. Opt it in only where that is acceptable; the CLI prints a Notice when you do.
 
 ### Debate mode
 

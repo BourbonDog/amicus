@@ -22,6 +22,13 @@ const base = (extra = {}) => ({
   noValidateModel: true, date: '2026-09-12', json: true, ...extra,
 });
 const launchersFor = () => fakes.scriptedLaunchers(fakes.happyScript('r1'));
+// v4.9 W7: happyScript's chair speaks review mode ('VERDICT:'); a task run
+// needs an 'ANSWER:' terminal line or it buys an unscripted repair wave
+// (identical rationale to tests/council/run-intent.test.js's own taskChair).
+const taskLaunchersFor = () => fakes.scriptedLaunchers({
+  ...fakes.happyScript('r1'),
+  'r1-ch1': () => fakes.okWave([fakes.mkLeg('deepseek', 'Synthesis.\n\nANSWER: Converged', 'complete', 0.03)]),
+});
 const stage1 = (calls) => calls.filter((c) => c.waveId === 'r1-s1')[0];
 const others = (calls) => calls.filter((c) => c.waveId !== 'r1-s1');
 
@@ -53,6 +60,28 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(launchers.calls).toHaveLength(0);
   });
 
+  // A2: a non-array `tools` (e.g. a bare string a direct caller passed instead
+  // of an array) is refused before resolveSeatTools ever sees it.
+  test('a non-array tools value is BAD_ARGS before anything launches (A2)', async () => {
+    const launchers = launchersFor();
+    const { exitCode, run } = await runCouncil(base({ tools: 'read' }), { launchers });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('tools must be an array');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  // A3 (ruling P2-R28, supersedes P2-R25): --tools and --agent are refused
+  // together on every door, runCouncil included.
+  test('--agent with a non-empty --tools is BAD_ARGS: they cannot be combined (A3)', async () => {
+    const launchers = launchersFor();
+    const { exitCode, run } = await runCouncil(base({ agent: 'Build', tools: ['task'] }), { launchers });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('cannot be combined');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
   // ⚠️ Deviation from the task-4 brief (documented in task-4-report.md): the
   // brief's literal fixture left `project` at its `base()` default (`tmp`) and
   // only renamed `runDir` to `path.join(tmp, 'outside')` — which is still a
@@ -75,6 +104,29 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(run.error.code).toBe('BAD_ARGS');
     expect(run.error.message).toContain('grepp');
     expect(launchers.calls).toHaveLength(0);
+  });
+
+  // D4 (ruling P2-R30): the engine check now runs for the intent's DEFAULT
+  // too, not only an explicit opt-in — a task run is never launched against
+  // an engine that does not actually declare `webfetch`.
+  test('D4: a task-intent default (no --tools) is validated too — refused when the engine lacks webfetch', async () => {
+    const launchers = launchersFor();
+    const { exitCode, run } = await runCouncil(
+      base({ intent: 'task' }), { launchers, listEngineToolIdsFn: async () => ['read'] });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('webfetch');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  // D4, other half: a defaults-only run degrades QUIETLY when the engine
+  // cannot be asked at all — nobody opted into that check. Needs the
+  // task-shaped chair fixture (see taskLaunchersFor) to reach exit 0 at all.
+  test('D4: a task-intent default degrades quietly when the engine cannot be asked at all', async () => {
+    const launchers = taskLaunchersFor();
+    const { exitCode } = await runCouncil(
+      base({ intent: 'task' }), { launchers, listEngineToolIdsFn: async () => null });
+    expect(exitCode).toBe(0);
   });
 
   test('--tools with no way to ask the engine is refused, never launched unvalidated', async () => {
@@ -110,11 +162,25 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(runState.readRun(outside).seatTools).toEqual(['read']);
   });
 
+  // A3 supersedes the old fixture here: --tools + --agent together now refuse
+  // (see the "cannot be combined" test above), so this pin drops `tools`
+  // entirely — the override still has to work with none.
   test('--agent Build skips the council agents and records the override', async () => {
     const launchers = launchersFor();
-    const { exitCode } = await runCouncil(base({ agent: 'Build', tools: ['task'] }), { launchers });
+    const { exitCode } = await runCouncil(base({ agent: 'Build' }), { launchers });
     expect(exitCode).toBe(0); // no refusal: the override is the escape hatch
     expect(runState.readRun(runDir).agentOverride).toBe('Build');
+  });
+
+  // B1/D1 (ruling P2-R31): under --agent there is no computed allowlist, so
+  // the seat briefing — live AND the one persisted for auditability — carries
+  // the override sentence instead of a tools-based one.
+  test('--agent Build: the stage-1 briefing carries the override sentence, persisted too (D1)', async () => {
+    const launchers = launchersFor();
+    await runCouncil(base({ agent: 'Build' }), { launchers });
+    expect(stage1(launchers.calls).prompt).toContain("You run as the engine's Build agent");
+    const persisted = fs.readFileSync(path.join(runDir, 'briefing-stage1.md'), 'utf-8');
+    expect(persisted).toContain("You run as the engine's Build agent");
   });
 
   // Review r1 minor: the CLI's house style for an unset option is `agent:
