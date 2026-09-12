@@ -56,7 +56,7 @@ src/
 │   ├── run-retry-notes.js
 │   ├── run-retry-window.js  # The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay
 │   ├── run-retry.js
-│   ├── run-seat-tools-verify.js
+│   ├── run-seat-tools-verify.js  # The engine-rendering tripwire's near-pure pieces (ruling P2-R33), split out
 │   ├── run-seat-tools.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
@@ -538,7 +538,7 @@ evals/
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry-window.js` | The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay | `retryBackstopMs()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
-| `council/run-seat-tools-verify.js` |  | `verificationDirectories()`, `listEngineAgents()`, `verifyAgentRendering()` |
+| `council/run-seat-tools-verify.js` | The engine-rendering tripwire's near-pure pieces (ruling P2-R33), split out | `verificationDirectories()`, `listEngineAgents()`, `verifyAgentRendering()` |
 | `council/run-seat-tools.js` |  | `preflightSeatTools()`, `validateSeatToolsAgainstEngine()`, `listEngineAgents()`, `verifyAgentRendering()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()`, `listEngineToolIds()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |

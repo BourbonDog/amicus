@@ -144,6 +144,56 @@ describe('verifyAgentRendering (ruling P2-R33)', () => {
     expect(r.reason).toContain('/tmp/*');
   });
 
+  // Ruling P2-R42 (round-3 nits, mutant XDGROOTDROP): the engine data dir is
+  // resolved XDG-first, matching src/utils/auth-json.js :: authJsonCandidates
+  // and src/utils/engine-log.js :: engineLogDirCandidates (same engine, same
+  // data root) — not only the hard-coded ~/.local/share/opencode home form.
+  test('P2-R42: an external_directory allow under $XDG_DATA_HOME/opencode is exempt when XDG_DATA_HOME is set', () => {
+    const xdgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'p2r42-xdg-'));
+    const original = process.env.XDG_DATA_HOME;
+    try {
+      process.env.XDG_DATA_HOME = xdgDir;
+      const pattern = path.join(xdgDir, 'opencode', 'tool-output', '*');
+      expect(verifyAgentRendering(
+        [...CLEAN_SEAT, { permission: 'external_directory', pattern, action: 'allow' }],
+        ['read', 'webfetch'],
+      )).toEqual({ ok: true });
+    } finally {
+      if (original === undefined) { delete process.env.XDG_DATA_HOME; } else { process.env.XDG_DATA_HOME = original; }
+      fs.rmSync(xdgDir, { recursive: true, force: true });
+    }
+  });
+
+  test('P2-R42: the SAME $XDG_DATA_HOME-shaped pattern is NOT exempt once XDG_DATA_HOME is unset', () => {
+    const original = process.env.XDG_DATA_HOME;
+    try {
+      delete process.env.XDG_DATA_HOME;
+      const pattern = path.join(os.tmpdir(), 'p2r42-xdg-unset-fixture', 'opencode', 'tool-output', '*');
+      const r = verifyAgentRendering(
+        [...CLEAN_SEAT, { permission: 'external_directory', pattern, action: 'allow' }],
+        ['read', 'webfetch'],
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toContain('tool-output');
+    } finally {
+      if (original === undefined) { delete process.env.XDG_DATA_HOME; } else { process.env.XDG_DATA_HOME = original; }
+    }
+  });
+
+  test('P2-R42: the ~/.local/share/opencode home form is still exempt with XDG_DATA_HOME unset', () => {
+    const original = process.env.XDG_DATA_HOME;
+    try {
+      delete process.env.XDG_DATA_HOME;
+      const pattern = path.join(os.homedir(), '.local', 'share', 'opencode', 'tool-output', '*');
+      expect(verifyAgentRendering(
+        [...CLEAN_SEAT, { permission: 'external_directory', pattern, action: 'allow' }],
+        ['read', 'webfetch'],
+      )).toEqual({ ok: true });
+    } finally {
+      if (original === undefined) { delete process.env.XDG_DATA_HOME; } else { process.env.XDG_DATA_HOME = original; }
+    }
+  });
+
   // Ruling P2-R36 (round 2, check (b)): an ask cannot be answered by a headless
   // leg, so an allowlisted id rendered `ask` (not `allow`) after the wildcard
   // deny must fail loudly, not ride through because its pattern/permission

@@ -122,7 +122,7 @@ function preflightSeatTools(o) {
     error: null,
     seatTools: seatPolicy.tools,
     seatToolsLocal: seatPolicy.local,
-    councilAgents: o.agent ? null : seatTools.buildCouncilAgents({ tools: seatPolicy.tools, local: seatPolicy.local }),
+    councilAgents: o.agent ? null : seatTools.buildCouncilAgents({ tools: seatPolicy.tools }),
   };
 }
 

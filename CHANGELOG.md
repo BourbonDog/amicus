@@ -24,10 +24,15 @@ All notable changes to Amicus are documented here. Format follows
   each council agent — over the run directory, its `_scratch` support-leg directory, and the
   project tree when local — and refuses before launch if a tree-supplied
   `opencode.json`/`.opencode/agent` file widened it, or if the engine cannot be asked at all
-  once verification can run; a reviewed tree's own config was measured to merge into the
-  registered agent by key order (ruling P2-R33; the unconditional refusal on an unverifiable
-  engine is P2-R38, `_scratch` coverage is P2-R39, and the external_directory exemption for
-  the engine's own tool-output cache is narrowed by P2-R40).
+  once verification can run — including when the run's own shared OpenCode server fails to
+  start: a default (non-`--agent`) run now refuses before any launch instead of falling back,
+  and the per-wave fallback servers that used to absorb that failure for every run now serve
+  only an `--agent` run, whose verification is skipped by design; a reviewed tree's own config
+  was measured to merge into the registered agent by key order (ruling P2-R33; the
+  unconditional refusal on an unverifiable engine, a failed shared-server start included, is
+  P2-R38/P2-R43, `_scratch` coverage is P2-R39, and the external_directory exemption for the
+  engine's own tool-output cache — resolved XDG-first, matching `auth-json.js`/`engine-log.js`
+  — is narrowed by P2-R40/P2-R42).
   Two of the three leg-loss classes in the 2026-09-11 study shared one
   precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
   install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's
