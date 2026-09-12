@@ -530,6 +530,7 @@ function resolveServerStartTimeoutMs(options = {}, env, platform) {
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
  * @param {number|null} [options.outputBudget] - #218 PR 3: the per-leg output budget startServer
  *   already read; omitted means buildProviderModels reads config itself
+ * @param {Object<string, object>} [options.agents] - Extra agent configs to register (council seat agents, spec 2026-09-11 §4)
  * @returns {object} Server options ready for createOpencodeServer
  */
 function buildServerOptions(options = {}) {
@@ -654,6 +655,17 @@ function buildServerOptions(options = {}) {
     ...(config.agent || {}),
     chat: chatAgent
   };
+
+  // Council seat agents (spec 2026-09-11 §4, PR 2): a per-run map of extra agents
+  // the caller already computed (council/seat-tools.js :: buildCouncilAgents).
+  // Merged AFTER `chat`, so a caller can never displace the chat registration;
+  // seat-tools.js never emits a `chat` key. Absent → this block is a no-op and
+  // every non-council server's config is byte-identical to today.
+  if (options.agents && typeof options.agents === 'object') {
+    for (const [name, agentConfig] of Object.entries(options.agents)) {
+      config.agent[name] = { ...(config.agent[name] || {}), ...agentConfig };
+    }
+  }
 
   // Set system prompt on the target agent's config (hidden from UI).
   // The promptAsync `system` field is rendered as a visible chat message,

@@ -20,8 +20,10 @@ const {
   resolveExistingSessionDir
 } = require('../session-manager');
 
-/** Standard heartbeat interval in milliseconds */
-const HEARTBEAT_INTERVAL = 15000;
+// HEARTBEAT_INTERVAL + createHeartbeat live in ./heartbeat (size-gate split:
+// this file was already at the 300-line ceiling — spec 2026-09-11 §4 PR 2).
+// Re-exported below so no caller changes.
+const { HEARTBEAT_INTERVAL, createHeartbeat } = require('./heartbeat');
 
 /** Session path utilities - eliminates magic strings across modules */
 const SessionPaths = {
@@ -123,38 +125,6 @@ function outputSummary(summary) {
 }
 
 /**
- * Create a heartbeat that writes status to stderr periodically.
- * When sessionDir is provided, includes message count and latest activity.
- *
- * @param {number} [interval=HEARTBEAT_INTERVAL] - Interval in milliseconds
- * @param {string} [sessionDir] - Session directory to read progress from
- * @returns {{ stop: () => void }}
- */
-function createHeartbeat(interval = HEARTBEAT_INTERVAL, sessionDir) {
-  const startTime = Date.now();
-  const intervalId = setInterval(() => {
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const mins = Math.floor(elapsed / 60);
-    const secs = elapsed % 60;
-    const ts = mins > 0 ? `${mins}m${secs}s` : `${secs}s`;
-
-    if (sessionDir) {
-      const { readProgress } = require('./progress');
-      const progress = readProgress(sessionDir);
-      process.stderr.write(`[amicus] ${ts} | ${progress.messages} messages | ${progress.latest}\n`);
-    } else {
-      process.stderr.write(`[amicus] still running... ${ts} elapsed\n`);
-    }
-  }, interval);
-
-  return {
-    stop() {
-      clearInterval(intervalId);
-    }
-  };
-}
-
-/**
  * Execute sidecar in either headless or interactive mode
  * Consolidates the if/else pattern duplicated across start, resume, continue
  */
@@ -228,6 +198,7 @@ async function executeMode(options) {
  * @param {string} [options.client] - Client type (e.g. 'cowork', 'code-local')
  * @param {string} [options.systemPrompt] - System prompt to set on agent config (hidden from UI)
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
+ * @param {Object<string, object>} [options.agents] - Extra agents to register (council seat agents)
  * @param {string[]} [options.models] - Resolved executable id(s) actually launched on this
  *   server (#61 Task 4.6/7.3 sole-input invariant) — a multi-model shared server (fanout)
  *   has no single default `config.model`, so this registers ALL of them in provider.models
@@ -257,6 +228,8 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
   if (options.models) { serverOptions.models = options.models; }
   if (options.systemPrompt) { serverOptions.systemPrompt = options.systemPrompt; }
   if (options.agentName) { serverOptions.agentName = options.agentName; }
+  // Spec 2026-09-11 §4: the council's two agents ride into buildServerOptions.
+  if (options.agents) { serverOptions.agents = options.agents; }
   // Explicit per-call override only. Unset is the normal case and is correct:
   // buildServerOptions resolves AMICUS_SERVER_START_TIMEOUT_MS / the platform
   // default downstream, so forwarding `undefined` here would change nothing.

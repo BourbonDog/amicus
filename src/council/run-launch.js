@@ -63,12 +63,16 @@ function createLaunchers(deps = {}) {
   const reserveBudget = deps.reserveBudget || null;
   const onBudgetRefusal = deps.onBudgetRefusal || null;
   const sharedServer = deps.sharedServer || null;
+  // Spec 2026-09-11 §4: getters, like sharedServer — run.js builds the launchers
+  // before it has decided the seat policy.
+  const councilAgents = deps.councilAgents || (() => null);
+  const agentOverride = deps.agentOverride || (() => undefined);
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
    *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
    *   councilRunId?: string, councilName?: string, tag?: string, seats?: Array<object>,
-   *   fallback?: object, catalog?: Array, noOutputBackstopMs?: number}} opts
+   *   fallback?: object, catalog?: Array, noOutputBackstopMs?: number, role?: 'seat', directory?: string}} opts
    *   councilRunId/councilName (v4.3 Task 3, spec §7.2) are additive attribution
    *   ids forwarded verbatim into the runFanout call so it can stamp them onto
    *   every leg. tag (v4.7 F8 D16) rides the same forward — every call site
@@ -100,6 +104,13 @@ function createLaunchers(deps = {}) {
     // `serverClient` (see the seam comment in fanout.js). Absent → the wave
     // starts and closes its own server, exactly as before.
     const shared = sharedServer ? sharedServer() : null;
+    const agents = councilAgents();
+    // Spec 2026-09-11 §4: stage-1 seats and their retries run as council-seat,
+    // every other role as council-support; an explicit agent (the --agent
+    // escape hatch) wins. Without council agents (non-council DI, older
+    // callers) the pre-§4 default 'Plan' stands.
+    const agent = opts.agent || agentOverride()
+      || (agents ? (opts.role === 'seat' ? 'council-seat' : 'council-support') : 'Plan');
     const { wave, exitCode, errorDoc } = await fanoutFn({
       ...(typeof remaining === 'number' ? { maxCost: remaining } : {}),
       ...(shared ? { serverClient: shared.serverClient, server: shared.server } : {}),
@@ -112,12 +123,13 @@ function createLaunchers(deps = {}) {
       // onto every leg and its spend-ledger row (v4.3 --retry-failed machinery).
       // Spread-guarded so a normal launch's transport call stays byte-identical.
       ...(opts.retryOfWaveId ? { retryOfWaveId: opts.retryOfWaveId } : {}),
+      ...(agents ? { serverAgents: agents } : {}),
       models: opts.models.join(','),
       prompt: opts.prompt,
       promptMeta: { source: 'council-engine', file: null, chars: opts.prompt.length },
       waveId: opts.waveId,
       project: opts.project,
-      agent: opts.agent || 'Plan',
+      agent,
       timeout: opts.timeout,
       summaryLength: 'verbose',
       includeContext: false,
@@ -161,7 +173,8 @@ function createLaunchers(deps = {}) {
       // scopes them there) and strip inherited MCP servers, so a tool-capable
       // judge can't read the de-anonymized review-*.md files or the plaintext
       // labelMap in run.json sitting in the parent run dir.
-      directory: opts.project,
+      // Spec 2026-09-11 §4: a local-tools seat is scoped to the PROJECT TREE (opts.directory) while its metadata stays in the run dir (opts.project).
+      directory: opts.directory || opts.project,
       noMcp: true,
     });
     // A ceiling refusal returns `wave: null`, which the council driver's

@@ -105,6 +105,37 @@ describe('launchWave (DI over runFanout)', () => {
     await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'abc123-s1' });
     expect(seen[0].maxCost).toBeUndefined();
   });
+
+  test('with council agents: stage-1 role gets council-seat, everything else council-support, and the agents ride to fanout (spec §4)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const agents = { 'council-seat': { mode: 'primary', tools: { '*': false } }, 'council-support': { mode: 'primary', tools: { '*': false } } };
+    const { launchWave, launchSolo } = createLaunchers({ fanoutFn, councilAgents: () => agents });
+    await launchWave({ models: ['gemini', 'gpt'], prompt: 'p', project: tmp, waveId: 'r-s1', role: 'seat' });
+    await launchWave({ models: ['gemini', 'gpt'], prompt: 'p', project: tmp, waveId: 'r-s2' });
+    await launchSolo({ model: 'deepseek', prompt: 'p', project: tmp, waveId: 'r-ch1' });
+    expect(seen.map((o) => o.agent)).toEqual(['council-seat', 'council-support', 'council-support']);
+    expect(seen.every((o) => o.serverAgents === agents)).toBe(true);
+  });
+
+  test('the --agent override wins over the computed agents (spec §4 escape hatch)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn, councilAgents: () => null, agentOverride: () => 'Build' });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'r-s1', role: 'seat' });
+    expect(seen[0].agent).toBe('Build');
+    expect(seen[0].serverAgents).toBeUndefined();
+  });
+
+  test('directory can differ from project: a local-tools seat is scoped to the project tree while its metadata stays in the run dir', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    const projectTree = path.join(tmp, 'tree');
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: projectTree, waveId: 'r-s1' });
+    expect(seen[0].project).toBe(tmp);
+    expect(seen[0].directory).toBe(projectTree);
+  });
 });
 
 describe('launchSolo (single-leg wave)', () => {
