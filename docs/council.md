@@ -1280,8 +1280,8 @@ level the trace names the veto once per flat stretch (and again whenever a non-z
 count is reset) and the exit line records the last engine status. When the fallback
 heuristic ends an unfinalized message, the leg logs a warning (warn level) naming the
 status it saw. A retry whose next attempt lies beyond the leg deadline ends the leg
-at once as `RETRY_BEYOND_DEADLINE` — unless the last message has already finalized,
-in which case the leg completes normally.
+at once as `RETRY_BEYOND_DEADLINE` — unless the last message has already finalized (the
+leg completes normally) or a tool call is live (the bounded tool-settle ceiling governs).
 
 ---
 

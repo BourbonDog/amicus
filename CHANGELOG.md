@@ -26,7 +26,8 @@ All notable changes to Amicus are documented here. Format follows
   fallback heuristic ends an unfinalized message the leg logs a warning naming the
   status it saw, and a retry whose next attempt lies beyond the leg deadline ends the
   leg at once as `RETRY_BEYOND_DEADLINE` instead of holding the seat (never once the
-  last message has finalized — that leg completes normally).
+  last message has finalized — that leg completes normally — and never while a tool
+  call is live, where the tool-settle ceiling governs).
   (`docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §3; PR 1 of 3.)
 
 ## [4.9.7] - 2026-09-09
