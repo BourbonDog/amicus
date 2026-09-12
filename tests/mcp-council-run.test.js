@@ -248,3 +248,33 @@ describe('tool registration', () => {
     expect(src.indexOf('handleCouncilRunTool')).toBeGreaterThan(-1);
   });
 });
+
+describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
+  test('forwards remote tools as --tools and agent as --agent on the child argv', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['webfetch', 'websearch'], agent: 'Plan' }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--tools') + 1]).toBe('webfetch,websearch');
+    expect(args[args.indexOf('--agent') + 1]).toBe('Plan');
+  });
+  test('a local tool over MCP is refused before anything spawns — the MCP run dir must stay inside the project', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['read'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('amicus council run --tools');
+    expect(spawnCalls).toHaveLength(0);
+  });
+  test('a malformed tools entry is refused before anything spawns', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['../x'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(spawnCalls).toHaveLength(0);
+  });
+  test('absent tools/agent leave the argv byte-identical (no --tools, no --agent)', async () => {
+    const spawnCalls = [];
+    await handleCouncilRunTool(input(), tmp, helpers(spawnCalls));
+    expect(spawnCalls[0].args).not.toContain('--tools');
+    expect(spawnCalls[0].args).not.toContain('--agent');
+  });
+});

@@ -27,21 +27,11 @@ function textResult(text, isError) {
   return result;
 }
 
-/**
- * v4.5 Task 15 (B7/F5): maps amicus_council_run's MCP input keys to the CLI
- * arg-key names applyPackToArgs's knob tables use (pack-resolve.js), so
- * applyPackToMcpInput can reuse those tables unchanged. `template` has no
- * Zod-declared counterpart on this tool (MCP has no template param of its
- * own — template/apply.js's own docblock: "MCP has no template params of its
- * own") — a pack's briefing.template is the ONLY way a template reaches this
- * handler, carried through as a plain (non-schema) `input.template` property
- * consumed by the render step below.
- */
-const COUNCIL_PACK_PARAM_MAP = {
-  models: 'models', council: 'council', chair: 'chair', critic: 'critic', lenses: 'lenses',
-  debate: 'debate', timeoutMinutes: 'timeout', maxCost: 'max-cost', gateway: 'gateway',
-  template: 'template',
-};
+// COUNCIL_PACK_PARAM_MAP lives in its own leaf (P2-R16, the 300-line size
+// gate: this file was at 298 with no room for Task 6's tools/agent block) —
+// re-exported below unchanged so tests/pack/mcp-pack-params.test.js's
+// existing `require('../../src/mcp-council-run')` import keeps working.
+const { COUNCIL_PACK_PARAM_MAP } = require('./mcp-council-pack-map');
 
 /**
  * amicus_council_run: validate → prep run dir → spawn CLI child → return
@@ -131,6 +121,9 @@ async function handleCouncilRunTool(input, project, helpers) {
       (typeof input.maxCost !== 'number' || !Number.isFinite(input.maxCost) || input.maxCost <= 0)) {
     return textResult('maxCost must be a positive number.', true);
   }
+  // Spec 2026-09-11 §4 (P2-R2): over MCP only remote tools ride through — the run dir stays inside the project (fence below); local tools are refused naming the CLI.
+  const mt = input.tools !== undefined ? require('./council/seat-tools').resolveRemoteOnlyTools(input.tools) : { ok: true, ids: [] };
+  if (!mt.ok) { return textResult(mt.message, true); }
 
   const { generateTaskId } = require('./sidecar/start');
   const runId = generateTaskId();
@@ -207,6 +200,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   // v4.9 W5.2: emit-when-'task' — 'review' (the zod-declared default spelled
   // out) never reaches the child's argv; review-run argv stays byte-identical.
   if (input.intent === 'task') { args.push('--intent', 'task'); }
+  // Spec 2026-09-11 §4: remote tools + the Plan|Build override ride to the child as argv (the CLI door and runCouncil validate them again).
+  // Named mutant TOOLSEMITALWAYS: `mt.ids` (an array) is always truthy even when empty — swapping `.length` for a bare `mt.ids` check pushes `--tools ''` on every run; reddens 'absent tools/agent leave the argv byte-identical' in tests/mcp-council-run.test.js.
+  if (mt.ids.length) { args.push('--tools', mt.ids.join(',')); }
+  if (input.agent) { args.push('--agent', input.agent); }
 
   let child;
   try { child = helpers.spawnFn(args, runDir); } catch (err) {

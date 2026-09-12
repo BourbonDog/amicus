@@ -96,6 +96,41 @@ function parseToolsFlag(value) {
 }
 
 /**
+ * The MCP door's tool policy (spec 2026-09-11 §4, ledger P2-R2): over MCP the
+ * run directory must stay inside the project (the fence in mcp-council-run.js),
+ * so a seat cannot be placed there with a LOCAL tool — refused with a message
+ * naming the CLI command that DOES allow it (an out-of-project --out-dir).
+ * Remote tools (webfetch, websearch) carry no such placement requirement and
+ * ride through. Shape-checked the same way the CLI flag is (parseToolsFlag),
+ * so `mcp-council-run.js` never re-implements comma-splitting/normalizing for
+ * an input that happens to arrive as an array instead of a flag string.
+ * @param {string[]|string} input MCP `tools` input: an array (the declared
+ *   schema shape) or a string (defense-in-depth for a caller that bypasses it).
+ * @returns {{ok: true, ids: string[]}|{ok: false, message: string}}
+ */
+function resolveRemoteOnlyTools(input) {
+  const parsed = parseToolsFlag(Array.isArray(input) ? input.join(',') : String(input));
+  if (!parsed.ok) { return { ok: false, message: parsed.message }; }
+  // Named mutant MCPLOCALLEAK: dropping this filter/refusal lets a local id
+  // (e.g. `read`) ride through as `ok: true`, reaching the spawned CLI child
+  // whose run dir is fenced INSIDE the project — the exact placement spec §4
+  // forbids. Reddens 'a local id is refused with a message naming the CLI
+  // (MCPLOCALLEAK target)' in tests/council/seat-tools.test.js and 'a local
+  // tool over MCP is refused before anything spawns — the MCP run dir must
+  // stay inside the project' in tests/mcp-council-run.test.js.
+  const local = parsed.ids.filter((id) => !REMOTE_TOOL_IDS.includes(id));
+  if (local.length) {
+    return {
+      ok: false,
+      message: `tools: ${local.join(', ')} are local tools; over MCP the run directory must stay inside the project, ` +
+        'and a seat with local tools must not run there. Use `amicus council run --tools ' + parsed.ids.join(',') +
+        ' --out-dir <dir outside the project>` from the CLI.',
+    };
+  }
+  return { ok: true, ids: parsed.ids };
+}
+
+/**
  * Decide the seat's tool list: `defaultToolsFor(intent) ∪ optIn`, minus nothing —
  * a refused, malformed, or unknown id fails the whole run BEFORE any spend.
  * @param {{intent?: 'task'|undefined, optIn?: string[], declaredIds?: string[]|null}} args
@@ -213,5 +248,5 @@ function seatToolsSentence(tools, kind) {
 
 module.exports = {
   REFUSED_TOOL_IDS, REMOTE_TOOL_IDS, defaultToolsFor, parseToolsFlag, resolveSeatTools,
-  buildCouncilAgents, seatToolsSentence, isLocal,
+  resolveRemoteOnlyTools, buildCouncilAgents, seatToolsSentence, isLocal,
 };

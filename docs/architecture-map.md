@@ -340,6 +340,7 @@ src/
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-council-awareness.js
 ├── mcp-council-bench.js
+├── mcp-council-pack-map.js  # COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16).
 ├── mcp-council-run.js
 ├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
@@ -485,6 +486,7 @@ evals/
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
+| `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |

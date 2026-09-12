@@ -75,6 +75,25 @@ describe('resolveSeatTools', () => {
   });
 });
 
+// PR 2 Task 6 (spec 2026-09-11 §4, ledger P2-R2/P2-R16): the MCP door's
+// remote-only policy. mcp-council-run.js calls this before spawning the CLI
+// child — local ids are refused there (the MCP run dir must stay inside the
+// project), remote ids ride through as --tools.
+describe('resolveRemoteOnlyTools', () => {
+  test('a remote-only array is accepted, ids returned in order', () => {
+    expect(st.resolveRemoteOnlyTools(['webfetch', 'websearch'])).toEqual({ ok: true, ids: ['webfetch', 'websearch'] });
+  });
+  test('a local id is refused with a message naming the CLI (MCPLOCALLEAK target)', () => {
+    const r = st.resolveRemoteOnlyTools(['read']);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('are local tools');
+    expect(r.message).toContain('amicus council run --tools');
+  });
+  test('a string input is accepted the same way the --tools flag is', () => {
+    expect(st.resolveRemoteOnlyTools('webfetch')).toEqual({ ok: true, ids: ['webfetch'] });
+  });
+});
+
 describe('buildCouncilAgents', () => {
   test('support has every tool off and every permission denied', () => {
     const a = st.buildCouncilAgents({ tools: ['webfetch'], local: false })['council-support'];

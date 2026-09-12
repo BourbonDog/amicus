@@ -970,6 +970,8 @@ Every tool below also takes an optional `project` — an absolute path naming th
 - `debate` — add a Stage-2.5 rebuttal round before the chair synthesizes.
 - `claudeReviewFile` — path to Claude's own review, included as a judged entry. Claude is reviewed and ranked like a seat, but never judges or chairs.
 - `intent` — `task` marks a task-mode run (recorded on `run.json`/`verdict.json`, kept out of the reliability ledger): seats produce the deliverable and the chair closes with `ANSWER:` on a disjoint scale. `review` is the default and is never stored. See [docs/council.md § Task mode](./council.md#task-mode---intent-task).
+- `tools` — tool ids stage-1 seats may use, by the engine's own ids (task mode defaults to `webfetch`, review to none). Over MCP only remote tools (`webfetch`, `websearch`) can be opted in: the MCP run directory stays inside the project, so a seat with a local tool (`read`, `grep`, `glob`, `bash`, …) is refused with a message naming the CLI's `--tools` + `--out-dir` (outside the project) instead. `task` and `skill` are always refused.
+- `agent` — escape hatch: run every leg on the engine's own agent instead of the council agents, with no tool allowlist. `Plan` or `Build` only — unlike `amicus_start`'s `agent`, `Chat` is not accepted here.
 - `ui` — auto-open the Council Workspace window for this run. Default: opens under Claude Code (local) when Electron and a display exist and `workspace.autoOpen` is not `false`.
 - `onComplete`, `pack`, `tag` — as on `amicus_fanout`.
 
