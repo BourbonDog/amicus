@@ -27,6 +27,12 @@ the deliverable rests on (same JSON shape, same severity enum, `location` = sour
 the word `assumption`); the judge's ranking axis becomes *how well the work was done* rather than
 how accurate a critique was; and the chair closes on the ANSWER scale below.
 
+**v4.9.8 — tools are per run.** The engine registers two agents per council run (`council-seat`
+for stage-1 legs, `council-support` for everything else) and composes the seat's tools sentence
+itself: no tools → the shared no-tools sentence; tools → *"Your tools: webfetch. You have no
+others — …"* (`src/council/seat-tools.js :: seatToolsSentence`). The manual path copies that
+line into each seat's `_tmp-*` briefing; see `docs/council.md § Tool access`.
+
 ---
 
 ## Standard anti-sycophancy clause (ALL Stage-1 briefings — not an optional element)

@@ -22,6 +22,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [The pipeline, end to end](#the-pipeline-end-to-end)
 - [`amicus council run`](#amicus-council-run)
   - [Task mode (`--intent task`)](#task-mode---intent-task)
+  - [Tool access per usage (`--tools`)](#tool-access-per-usage---tools)
   - [Debate mode](#debate-mode)
 - [Council Workspace (GUI)](#council-workspace-gui)
   - [Auto-open on `amicus_council_run` (v4.5)](#auto-open-on-amicus_council_run-v45)
@@ -114,6 +115,7 @@ amicus council run --prompt-file <briefing.md>
     [--template <name|path>] [--artifact <file>] [--var k=v]  # v4.5, see docs/usage.md#briefing-templates
     [--pack <name|path>]                                       # v4.5, see docs/usage.md#policy-packs
     [--intent review|task]                                     # v4.9, see Task mode below
+    [--tools <a,b,c>] [--agent Plan|Build]                    # v4.9.8, see Tool access below
 ```
 
 **The headless engine (v4.0).** Everything the `second-opinion` skill orchestrates by hand in
@@ -371,6 +373,47 @@ empty-section wordings — is used verbatim in both intents. One vocabulary, two
   machinery and has no task-mode meaning.
 - **Task runs build no reliability history**, so they never contribute to — and never benefit from —
   `amicus council stats`, including the ledger-driven chair-fallback promotion.
+
+### Tool access per usage (`--tools`)
+
+Tool access is a property of the **run**, set by the caller according to whether the seats
+must go and get their material — not a property of the mode (spec 2026-09-11 §2). Every
+council leg runs as one of two agents the run's own OpenCode server registers:
+
+- **`council-seat`** — stage-1 seats (the bench wave, the critic, the lenses) and their retries.
+  Its tools are the intent's default ∪ `--tools`: **task mode** defaults to `webfetch` (the
+  co-worker can research); **review mode** defaults to none (the artifact under review arrives
+  in the briefing — `--artifact`, `--pack`, or pasted). `--tools read,grep,glob,bash` opts local
+  tools in, even for task mode — opt-in is deliberate.
+- **`council-support`** — repair re-prompts, the Stage-2 judges, debate legs and the chair.
+  No tools, ever: their briefings already say so, and the agent now enforces it.
+
+`task` and `skill` are refused (`task` spawns child sessions amicus cannot observe; `skill` is
+where a seat starts reading the harness instead of the brief), as are `edit`, `write`,
+`apply_patch` (a seat never modifies the tree), `question` (a headless leg has no human) and
+`invalid`. Every other id is validated against the engine's own declared list before any leg
+launches; an unknown id is `BAD_ARGS` naming what the engine declares. `--agent Plan|Build`
+is the escape hatch: every leg runs on the engine's own agent, no council agents, no
+allowlist.
+
+**Run-directory placement with a local tool.** A seat that can read the project tree must
+not be able to read this run's sibling sessions, so with any local tool opted in the run dir
+must sit **outside** the project tree (`--out-dir`), under your home, tmp or
+`AMICUS_PROJECT_ROOTS`; the seats are then scoped to the project tree (`external_directory:
+deny`) while their metadata stays in the run dir. Over MCP the run dir stays inside the
+project, so local tools are refused there with the CLI named; `webfetch`/`websearch` over MCP
+are fine.
+
+**What the seat is told.** With no tools it gets the same no-tools sentence as the chair
+(`Do NOT use any tools or read any files; …`), with tools one line naming exactly them. The
+config enforces; the sentence informs — study run E1 showed gemini makes zero tool calls when
+told not to.
+
+**Secrets.** With `read` opted in, the seat agent denies `.env` and `.env.*` files at the
+engine (the seat gets a refusal and the leg continues; measured 2026-09-12 — the deny rules
+render after the seat's own `read=allow`, and the engine takes the last matching rule).
+`grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
+the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
 
 ### Debate mode
 
