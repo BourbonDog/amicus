@@ -44,7 +44,7 @@ const { finishRun } = require('./run-finish');
  *   fallback/catalog (v4.3 Task 18 §6.2): ctx.o carries both, but only run-stages.js's
  *   stage launches read them — the chair/debate legs never substitute via chains.
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?,
- *   startOpenCodeServerFn? (v4.4.1 Task 0.5 test seam, see ./run-server)}
+ *   startOpenCodeServerFn?, listEngineToolIdsFn? (v4.4.1 Task 0.5 / spec 2026-09-11 §4 test seams, see ./run-server)}
  * @returns {Promise<{exitCode: number, run: object}>}
  */
 async function runCouncil(options, deps = {}) {

@@ -24,6 +24,14 @@
  */
 
 /**
+ * The seat-tools `intent` argument both functions derive from `o.intent`
+ * (`'task'` or absent — never a bare boolean or the raw `o.intent` string).
+ * One helper so the two derivations can never drift apart.
+ * @param {{intent?: string}} o @returns {'task'|undefined}
+ */
+function seatIntentOf(o) { return o.intent === 'task' ? 'task' : undefined; }
+
+/**
  * Decide the run's seat-tools policy before the server starts. Pure except for
  * the two lazy `require`s (seat-tools.js, project-root-allowlist.js), which
  * carry no state of their own.
@@ -33,8 +41,15 @@
  */
 function preflightSeatTools(o) {
   const seatTools = require('./seat-tools');
-  const seatIntent = o.intent === 'task' ? 'task' : undefined;
-  if (o.agent !== undefined && o.agent !== 'Plan' && o.agent !== 'Build') {
+  // Review r1: not-null-and-not-undefined (not just `!== undefined`), so
+  // `agent: null` — the CLI house style for an unset option (run.js's own `o`
+  // seed spreads `critic: null, lenses: null, maxCost: null, ...` the same
+  // way) — is treated as absent, not as an invalid override. Every OTHER
+  // `o.agent` check in this module already does this for free (`null` is
+  // falsy), so this guard was the one place stricter than the rest of the
+  // module. `!= null` would say the same thing in one operator, but the
+  // repo's eqeqeq('always') lint rule bans loose equality outright.
+  if (o.agent !== null && o.agent !== undefined && o.agent !== 'Plan' && o.agent !== 'Build') {
     return { error: { code: 'BAD_ARGS', message: `Error: agent must be Plan or Build; got '${o.agent}'` } };
   }
   // The --agent escape hatch wins: no council agents, every leg runs on the
@@ -42,7 +57,7 @@ function preflightSeatTools(o) {
   // "--agent Build skips the council agents" pin, tests/council/run-tools.test.js).
   const seatPolicy = o.agent
     ? { ok: true, tools: [], local: false }
-    : seatTools.resolveSeatTools({ intent: seatIntent, optIn: Array.isArray(o.tools) ? o.tools : [] });
+    : seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: Array.isArray(o.tools) ? o.tools : [] });
   if (!seatPolicy.ok) { return { error: { code: seatPolicy.code, message: `Error: ${seatPolicy.message}` } }; }
   if (seatPolicy.local) {
     // Run-directory placement (spec §4): a seat that can read the project tree
@@ -109,8 +124,11 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps) {
         },
       };
     }
-    const seatIntent = o.intent === 'task' ? 'task' : undefined;
-    const checked = seatTools.resolveSeatTools({ intent: seatIntent, optIn: o.tools, declaredIds: declared });
+    // This second resolveSeatTools call is a GATE, not a recompute: `o.seatTools`
+    // (preflightSeatTools's result) is already authoritative and unchanged by
+    // this check, so `checked.tools`/`checked.local` are deliberately discarded
+    // here — only `checked.ok` (declared-id refusals) is consulted.
+    const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools, declaredIds: declared });
     if (!checked.ok) { return { error: { code: checked.code, message: `Error: ${checked.message}` } }; }
   }
   return { error: null };

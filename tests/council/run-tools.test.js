@@ -21,7 +21,7 @@ const base = (extra = {}) => ({
   project: tmp, runId: 'r1', runDir, timeout: 1, maxCost: null, gateway: 'auto',
   noValidateModel: true, date: '2026-09-12', json: true, ...extra,
 });
-const launchersFor = () => fakes.scriptedLaunchers(fakes.happyScript ? fakes.happyScript('r1') : fakes.script3('r1'));
+const launchersFor = () => fakes.scriptedLaunchers(fakes.happyScript('r1'));
 const stage1 = (calls) => calls.filter((c) => c.waveId === 'r1-s1')[0];
 const others = (calls) => calls.filter((c) => c.waveId !== 'r1-s1');
 
@@ -34,6 +34,7 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(stage1(launchers.calls).prompt).toContain('begin immediately with the review.');
     expect(others(launchers.calls).every((c) => c.role === undefined)).toBe(true);
     expect(runState.readRun(runDir).seatTools).toBeUndefined(); // emit-when-non-empty
+    expect(runState.readRun(runDir).agentOverride).toBeUndefined(); // emit-when-set
   });
 
   test('task default: the seat sentence names webfetch and run.json records seatTools', async () => {
@@ -114,5 +115,25 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     const { exitCode } = await runCouncil(base({ agent: 'Build', tools: ['task'] }), { launchers });
     expect(exitCode).toBe(0); // no refusal: the override is the escape hatch
     expect(runState.readRun(runDir).agentOverride).toBe('Build');
+  });
+
+  // Review r1 minor: the CLI's house style for an unset option is `agent:
+  // null` (run.js's own `o` seed defaults critic/lenses/maxCost/etc. the same
+  // way), not an omitted key — `null` must behave exactly like absent, never
+  // like an invalid override AND never like `--agent Build`'s skip branch.
+  // `--tools webfetch` (a REMOTE id, so no run-directory rule applies) is the
+  // discriminator without touching intent: if the guard wrongly rejected null
+  // this would exit 1 BAD_ARGS before any launch; if null were wrongly routed
+  // through the --agent-override branch, `--tools` would never even be
+  // consulted and seatTools would never be recorded — so seeing it recorded,
+  // and the run completing 0 through a real (validated) engine check, proves
+  // the normal policy ran, i.e. council agents are genuinely in play.
+  test('agent: null behaves exactly like no agent (CLI unset-option house style)', async () => {
+    const launchers = launchersFor();
+    const { exitCode } = await runCouncil(
+      base({ agent: null, tools: ['webfetch'] }), { launchers, listEngineToolIdsFn: async () => ['webfetch'] });
+    expect(exitCode).toBe(0); // no refusal
+    expect(runState.readRun(runDir).seatTools).toEqual(['webfetch']); // the policy ran — council agents are in play
+    expect(runState.readRun(runDir).agentOverride).toBeUndefined(); // absent, unlike an explicit override
   });
 });
