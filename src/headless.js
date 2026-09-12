@@ -896,7 +896,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // comparison) reddens exactly the retry-beyond-deadline case in headless-idle-completion
     // — measured 1 of 13, killed by that case's own 10 s jest timeout because the leg then
     // runs to its 60 s --timeout instead. "FINISHEDRETRYEXIT" (drop the assistantFinished
-    // guard) reddens the finalized-plus-retry case.
+    // guard) reddens the finalized-plus-retry case. "RETRYOVERTOOL" (drop the
+    // liveTools guard) reddens the retry-with-live-tool case.
     let lastSdkRetryNext = null;
     let retryBeyondDeadline = false;
 
@@ -1245,7 +1246,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             // status says (a `retry` here belongs to the engine's next step), and its text
             // must not be discarded. Named mutant "FINISHEDRETRYEXIT" (drop
             // `!assistantFinished`) reddens the finalized-plus-retry case.
-            if (!assistantFinished && lastSdkRetryNext !== null && lastSdkRetryNext > deadline) {
+            // Council #246 round 3 (D1): never while a tool call is live either — the B4
+            // bounded tool-settle ceiling governs a live tool everywhere else in this loop and
+            // must here too; a retry-with-live-tool is not a shape the engine produces, but a
+            // lagging mirror can show one. Named mutant "RETRYOVERTOOL" (drop the liveTools
+            // guard) reddens the live-tool case.
+            if (!assistantFinished && liveTools.length === 0 && lastSdkRetryNext !== null && lastSdkRetryNext > deadline) {
               retryBeyondDeadline = true;
               sessionError = `RETRY_BEYOND_DEADLINE: the engine schedules the next attempt at ${new Date(lastSdkRetryNext).toISOString()}, after this leg's deadline ${new Date(deadline).toISOString()}${formatSessionStatusSuffix(s)}`;
               logger.warn('Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', {

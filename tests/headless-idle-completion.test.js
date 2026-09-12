@@ -416,6 +416,37 @@ describe('idle-detection exits classify as completed', () => {
     expect(mockLogger.warn).not.toHaveBeenCalledWith(
       'Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', expect.anything());
   });
+
+  it('a retry scheduled past the deadline while a tool call is LIVE defers to the B4 tool-settle ceiling instead of ending the leg (council #246 round 3 D1)', async () => {
+    // Real-shape running tool part + unfinalized narration + retry status with `next` past
+    // the deadline. The B4 ceiling (toolSettleGraceMs) bounds the wait and completes the leg
+    // loud; the beyond-deadline exit must not pre-empt it. Named mutant "RETRYOVERTOOL": drop
+    // `liveTools.length === 0` from that exit — the leg ends RETRY_BEYOND_DEADLINE at poll 1.
+    const narration = 'Fetching the Rawlings guidance.';
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'm1', time: {} },
+      parts: [
+        { id: 'm1:tool1', sessionID: 'session-1', messageID: 'm1', type: 'tool', callID: 'call_1',
+          tool: 'webfetch',
+          state: { status: 'running', input: { url: 'https://example.test/rawlings' }, title: 'webfetch', time: { start: 1 } } },
+        { id: 'm1:t', type: 'text', text: narration },
+      ],
+    }]);
+    mockGetSessionStatus.mockResolvedValue({ type: 'retry', attempt: 3, message: '429 rate limited', next: Date.now() + 10 * 60 * 1000 });
+    const started = Date.now();
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, stableFinishedPolls: 2, stableIdlePolls: 3, usageSettlePolls: 0, toolSettleGraceMs: 50 }
+    );
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(result.error).toBeUndefined();
+    expect(result.toolSettleTimedOut).toBe(true);
+    expect(result.completed).toBe(true);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      'Provider backoff exceeds the leg deadline; ending the leg now instead of waiting', expect.anything());
+  });
 });
 
 describe('the session.status contract the veto reasons about', () => {
