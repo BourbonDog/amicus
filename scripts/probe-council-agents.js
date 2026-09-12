@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
 /**
- * scripts/probe-council-agents.js
- *
  * Spec 2026-09-11 §4 — the ENGINE side of the council agents (ruling P2-R21).
  * Everything in council/seat-tools.js is pure; this probe is the automated
  * proof that the pinned engine (opencode-ai 1.18.15) still (1) lists its tool
