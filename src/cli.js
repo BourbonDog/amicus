@@ -625,8 +625,8 @@ Subcommands for 'council':
                                 review to none); task, skill, edit, write,
                                 apply_patch, question and invalid are refused.
                                 A local tool (read, grep, glob, bash) needs --out-dir OUTSIDE
-                                the project tree. read never opens .env files
-                                (denied at the engine); grep and bash have no such
+                                the project tree. read never opens .env, .env.*
+                                or .envrc files (denied at the engine); grep and bash have no such
                                 fence — opt them in only on a tree without
                                 secrets. bash is outside every fence — the CLI
                                 warns when you opt it in. --tools and --agent

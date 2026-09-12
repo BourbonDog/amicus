@@ -95,10 +95,23 @@ function happyTransport() {
 describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   let tmp; let pair; let startFn; let script;
 
+  // Ruling P2-R38 (council #247 round 3): this suite predates the seat-tools
+  // engine-rendering tripwire (v4.4.1 vs. spec 2026-09-11 §4) and never
+  // injects `launchers`, so `canVerify` is unconditionally true here — and
+  // its fake server pair's `client` has no real `app.agents` method, so
+  // without this seam `listEngineAgents` would return null on EVERY run
+  // (the shared-server-failure cases AND the successful-acquisition ones
+  // alike) and the new unconditional refusal would fire before any of this
+  // suite's own server-reuse/degrade/exit-code assertions ever ran. A clean
+  // rendering keeps the tripwire (unrelated to server-reuse) verifying ok.
+  const cleanListEngineAgentsFn = async () => ([
+    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  ]);
   const run = (overrides = {}, deps = {}) => runCouncil(
     baseOptions(tmp, overrides),
     { appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
-      startOpenCodeServerFn: startFn, ...deps });
+      startOpenCodeServerFn: startFn, listEngineAgentsFn: cleanListEngineAgentsFn, ...deps });
 
   beforeEach(() => {
     jest.clearAllMocks();

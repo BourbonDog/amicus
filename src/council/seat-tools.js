@@ -265,7 +265,7 @@ function buildCouncilAgents({ tools = [] } = {}) {
         // mutant: ENVALLOWDROP — every ordinary read would then fall through to the
         // wildcard *=deny; reddens 'a read seat gets a nested .env-denying read
         // permission' in seat-tools.test.js.
-        ...(tools.includes('read') ? { read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' } } : {}),
+        ...(tools.includes('read') ? { read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny', '*.envrc': 'deny' } } : {}),
       },
     },
   };

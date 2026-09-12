@@ -5,7 +5,12 @@
  * @module council/run-seat-tools
  * `runCouncil`'s seat-tools wiring (spec 2026-09-11 §4, PR 2 of 3), split out of
  * run.js under controller ruling P2-R14 (the 300-line size gate: run.js sat at
- * exactly 300 lines with no headroom for this task's ~20 lines of logic).
+ * exactly 300 lines with no headroom for this task's ~20 lines of logic). The
+ * engine-rendering tripwire's own near-pure pieces (`listEngineAgents`,
+ * `verifyAgentRendering`, `verificationDirectories`) live in the sibling
+ * module run-seat-tools-verify.js (council #247 round 3, same size gate);
+ * `listEngineAgents`/`verifyAgentRendering` are re-exported below so every
+ * existing importer keeps requiring them from here.
  *
  * Two pure-ish steps, called from run.js on either side of `acquireRunServer`:
  *   - `preflightSeatTools` (BEFORE the server): shape + refusals need no
@@ -122,91 +127,39 @@ function preflightSeatTools(o) {
 }
 
 /**
- * The council agents the run's engine actually registered, as rendered rule
- * lists. Mirrors run-server.js :: listEngineToolIds (same `shared.serverClient`
- * access, null on anything wrong, `logger.debug` on failure). Ruling P2-R33:
- * what validateSeatToolsAgainstEngine reads back to catch a tree-supplied
- * opencode.json/.opencode/agent file that widened a council agent (measured
- * 2026-09-12, probe-council-agents.js's PROBE_TREE_JSON).
- * @param {{serverClient: object}|null} shared
- * @param {string} directory
- * @returns {Promise<Array<{name: string, mode: string, permission: Array}>|null>}
- */
-async function listEngineAgents(shared, directory) {
-  const client = shared && shared.serverClient;
-  if (!client || !client.app || typeof client.app.agents !== 'function') { return null; }
-  try {
-    const res = await client.app.agents({ query: { directory } });
-    return (res && Array.isArray(res.data)) ? res.data.slice() : null;
-  } catch (err) {
-    const { logger } = require('../utils/logger');
-    logger.debug('Engine agent list unavailable', { error: err.message });
-    return null;
-  }
-}
-
-/**
- * Pure tripwire (ruling P2-R33): does an ENGINE-RENDERED rule list for a
- * council agent behave the way its allowlist says it should? A reviewed
- * tree's own opencode.json (or .opencode/agent/<name>.md) merges INTO the
- * server-registered agent by KEY ORDER (measured 2026-09-12 against opencode
- * 1.18.15): server values win per key, but a TREE-ONLY key keeps the tree's
- * position — after the tree's own `"*"`, it renders AFTER the server's
- * `*=deny` and wins under findLast (`council-support: { tools: { "*": true,
- * "task": true } }` renders `*=deny task=allow …` — task ALLOWED). A tree
- * that re-lists a GRANTED key (e.g. `read`) can instead move ITS allow
- * before `*=deny`, silently losing it. Neither shape is visible from what
- * this run registered — only from what the engine says it rendered.
- * @param {Array<{permission: string, pattern: string, action: string}>} rules
- * @param {string[]} allowlist ids this agent should have allowed (`o.seatTools`
- *   for council-seat, `[]` for council-support)
- * @returns {{ok: true}|{ok: false, reason: string}}
- */
-function verifyAgentRendering(rules, allowlist) {
-  // Measured against the real engine, not only the idealized lists above: it
-  // appends `external_directory` allows for its OWN paths (a tool-output
-  // cache, the machine's opencode config dirs) with a SPECIFIC pattern, even
-  // AFTER our own rules. buildCouncilAgents never emits `external_directory`
-  // with any pattern but `*`, so a specific-pattern one is never OUR policy.
-  const list = (Array.isArray(rules) ? rules : [])
-    .filter((r) => !(r.permission === 'external_directory' && r.pattern !== '*'));
-  let starIndex = -1;
-  list.forEach((r, i) => { if (r.permission === '*' && r.pattern === '*') { starIndex = i; } });
-  if (starIndex < 0 || list[starIndex].action !== 'deny') { return { ok: false, reason: 'no wildcard deny' }; }
-  // Named mutant TRIPWIREBLIND: dropping this loop leaves an extra allow
-  // OUTSIDE the allowlist (support attack: task=allow after *=deny) undetected.
-  for (let i = starIndex + 1; i < list.length; i++) {
-    const r = list[i];
-    if (r.action === 'deny') { continue; }
-    if (r.pattern !== '*' || !allowlist.includes(r.permission) || r.action !== 'allow') {
-      return { ok: false, reason: `${r.permission}[${r.pattern}]=${r.action} is allowed after the wildcard deny` };
-    }
-  }
-  for (const id of allowlist) {
-    const granted = list.slice(starIndex + 1).some((r) => r.permission === id && r.pattern === '*' && r.action === 'allow');
-    if (!granted) { return { ok: false, reason: `granted tool ${id} is not allowed after the wildcard deny` }; }
-  }
-  return { ok: true };
-}
-
-/**
  * Validate the run's seat tools against the engine's own declaration, after
- * the server is up and before any Stage-1 leg launches. Ruling P2-R30: this
- * runs for the intent's DEFAULT too, not only an explicit opt-in — a
- * defaults-only run is never launched against an engine that does not
- * actually declare it. A no-op (`{error: null}`) whenever there is nothing to
- * validate at all (`--agent`, or a review run with no tools); and whenever the
- * engine could not be asked (no shared server), a defaults-only run degrades
- * quietly rather than refusing over a check nobody opted into.
+ * the server is up and before any Stage-1 leg launches. Two independent
+ * checks:
  *
- * Ruling P2-R33 (after the tool-ids check): whenever `o.councilAgents` is set
- * — every non-`--agent` run — also reads back the engine's own rendering for
- * council-seat/council-support (`verifyAgentRendering`), same P2-R30 asymmetry.
- * Named mutant TRIPWIREOFF: skipping this block leaves a widened agent undetected.
+ * 1. Declared tool ids (ruling P2-R30): runs for the intent's DEFAULT too,
+ *    not only an explicit opt-in — a defaults-only run is never launched
+ *    against an engine that does not actually declare a tool it would use. A
+ *    no-op whenever there is nothing to validate (`--agent`, or a review run
+ *    with no tools). When the engine cannot be asked at all (no shared
+ *    server), an explicit `--tools` opt-in still refuses, but a
+ *    defaults-only run degrades quietly — nobody opted into this check.
+ *
+ * 2. The engine-rendered agents (ruling P2-R33), gated on `o.councilAgents &&
+ *    canVerify`. Ruling P2-R38 (B1, round 3) DROPS the P2-R30 asymmetry for
+ *    this half: once verification can run, a null agent list REFUSES
+ *    regardless of whether `--tools` was ever typed — never launch council
+ *    agents this run could not verify. `canVerify` is true when this run owns
+ *    its server (production never injects `deps.launchers`; run.js only
+ *    acquires the shared server when `!deps.launchers`) OR a test supplies
+ *    its own lister (`deps.listEngineAgentsFn`). With injected launchers and
+ *    no lister there is no real server to ask and the launchers ARE the
+ *    test's own transport, so the check is skipped rather than judged against
+ *    a null it could never have resolved. In production `deps.launchers` is
+ *    never injected, so verification always runs and a missing list always
+ *    refuses. When verifiable, every directory in run-seat-tools-verify.js ::
+ *    verificationDirectories (ruling P2-R39 adds `_scratch`) is checked
+ *    against council-seat/council-support's rendered rules
+ *    (run-seat-tools-verify.js :: verifyAgentRendering). Named mutant
+ *    TRIPWIREOFF: skipping this whole block leaves a widened agent undetected.
  * @param {object} o intent/tools/seatTools/seatToolsLocal/councilAgents/runDir/project
  * @param {{serverClient: object}|null} sharedServer
  * @param {{listEngineToolIdsFn?: Function, listEngineAgentsFn?: Function,
- *   degrade?: {note: Function}}} deps test seams; `degrade` is the run's own sink
+ *   launchers?: object}} deps test seams; `launchers` gates `canVerify` (see above)
  * @returns {Promise<{error: {code: string, message: string}|null}>}
  */
 async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
@@ -241,33 +194,28 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
     const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools || [], declaredIds: declared });
     if (!checked.ok) { return { error: { code: checked.code, message: `Error: ${checked.message}` } }; }
   }
-  if (o.councilAgents) {
+  // Ruling P2-R38: the run owns its server (production never injects
+  // `launchers`) OR a test injects its own lister — either way there is
+  // something real to judge a null answer against. See the docblock above.
+  const canVerify = !!deps.listEngineAgentsFn || !deps.launchers;
+  if (o.councilAgents && canVerify) {
+    const { listEngineAgents, verifyAgentRendering, verificationDirectories } = require('./run-seat-tools-verify');
     const agentsFn = deps.listEngineAgentsFn || listEngineAgents;
-    const directories = [...new Set([o.runDir, ...(o.seatToolsLocal ? [o.project] : [])])];
+    const directories = verificationDirectories(o);
     for (const dir of directories) {
       const list = await agentsFn(sharedServer, dir);
       if (!list) {
-        // Same P2-R30 asymmetry as above: an explicit opt-in refuses over a
-        // check nobody could run; a defaults-only run degrades quietly instead.
-        if (Array.isArray(o.tools) && o.tools.length) {
-          return {
-            error: {
-              code: 'BAD_ARGS',
-              message: 'Error: the council agents could not be verified against the run\'s engine '
-                + '(no shared server); nothing was launched',
-            },
-          };
-        }
-        if (deps.degrade) {
-          deps.degrade.note({
-            kind: 'info',
-            channel: 'council-agents-unverified',
-            what: 'the council agents could not be verified against the engine before launch',
-            why: sharedServer ? 'the shared server answered without an agent list' : 'no shared server was available to answer the agent list',
-            effect: 'a tree-supplied opencode config could alter them; the run continues on the recorded degrade',
-          });
-        }
-        continue;
+        // Ruling P2-R38: never launch council agents this run could not
+        // verify — a defaults-only run now refuses exactly like an explicit
+        // opt-in; there is no quiet degrade left to fall back on.
+        return {
+          error: {
+            code: 'BAD_ARGS',
+            message: 'Error: the council agents could not be verified against the run\'s engine '
+              + `(${sharedServer ? 'the shared server answered without an agent list' : 'no shared server was available to answer the agent list'}); `
+              + 'nothing was launched, or use --agent to run every leg on the engine\'s own agent knowingly',
+          },
+        };
       }
       for (const [name, allowlist] of [['council-seat', o.seatTools || []], ['council-support', []]]) {
         const agent = list.find((a) => a.name === name);
@@ -291,6 +239,8 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
   }
   return { error: null };
 }
+
+const { listEngineAgents, verifyAgentRendering } = require('./run-seat-tools-verify');
 
 module.exports = {
   preflightSeatTools, validateSeatToolsAgainstEngine, listEngineAgents, verifyAgentRendering,

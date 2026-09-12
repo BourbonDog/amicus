@@ -98,13 +98,23 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
 
   // A1/D2: `bash` sits outside every fence (run directory, home, network) —
   // the CLI names that in a Notice whenever a caller opts it in.
-  const notices = (Array.isArray(toolIds) && toolIds.includes('bash'))
-    ? ['Notice: --tools bash gives every stage-1 seat a shell as you: no fence applies — it can ' +
+  const notices = [];
+  if (Array.isArray(toolIds) && toolIds.includes('bash')) {
+    notices.push('Notice: --tools bash gives every stage-1 seat a shell as you: no fence applies — it can ' +
       'reach the run directory outside the tree, your home directory and the network, and the ' +
-      'webfetch deny does not bind a shell.']
-    : undefined;
+      'webfetch deny does not bind a shell.');
+  }
+  // Ruling P2-R41b (A4, round 3): --agent Build is the escape hatch running
+  // every leg on the engine's own agent, full tool set included — unlike the
+  // council-seat allowlist, Build can edit files and run commands, so the CLI
+  // names that in a Notice too.
+  if (agentOverride === 'Build') {
+    notices.push('Notice: --agent Build runs every leg on the engine\'s Build agent, which can edit files ' +
+      'and run commands, with the run directory (inside the project unless --out-dir moves it) as its ' +
+      'working directory.');
+  }
 
-  return { error: null, toolIds, agentOverride, ...(notices ? { notices } : {}) };
+  return { error: null, toolIds, agentOverride, ...(notices.length ? { notices } : {}) };
 }
 
 module.exports = { checkCouncilRunTools };

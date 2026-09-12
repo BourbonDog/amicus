@@ -14,16 +14,20 @@ All notable changes to Amicus are documented here. Format follows
   no tools at all. `task` and `skill` are refused (they spawn or escape the session), as are
   `edit`/`write`/`apply_patch`/`question`/`invalid`; `--agent Plan|Build` is the escape hatch. A
   local tool needs `--out-dir` outside the project tree and scopes the seats to the tree with
-  `external_directory: deny`. With `read` opted in the seat is denied `.env` and `.env.*`
-  files at the engine (the deny rules are measured to render after the seat's own read
-  allow; the refusal itself is exercised by the release ritual's live run); `grep` and
-  `bash` have no per-file fence. `bash` is outside every fence (run directory, home,
-  network) and the CLI says so when it is opted in; `--tools` and `--agent` cannot be
-  combined; `todowrite` counts as a tool that never touches the tree. After registration, the
-  run also reads back what the engine actually rendered for each council agent and refuses
-  before launch if a tree-supplied `opencode.json`/`.opencode/agent` file widened it — a
-  reviewed tree's own config was measured to merge into the registered agent by key order
-  (ruling P2-R33).
+  `external_directory: deny`. With `read` opted in the seat is denied `.env`, `.env.*` and
+  `.envrc` files at the engine (the match is case-sensitive on Linux; the deny rules are
+  measured to render after the seat's own read allow; the refusal itself is exercised by the
+  release ritual's live run); `grep` and `bash` have no per-file fence. `bash` is outside
+  every fence (run directory, home, network) and the CLI says so when it is opted in;
+  `--tools` and `--agent` cannot be combined; `todowrite` counts as a tool that never touches
+  the tree. After registration, the run also reads back what the engine actually rendered for
+  each council agent — over the run directory, its `_scratch` support-leg directory, and the
+  project tree when local — and refuses before launch if a tree-supplied
+  `opencode.json`/`.opencode/agent` file widened it, or if the engine cannot be asked at all
+  once verification can run; a reviewed tree's own config was measured to merge into the
+  registered agent by key order (ruling P2-R33; the unconditional refusal on an unverifiable
+  engine is P2-R38, `_scratch` coverage is P2-R39, and the external_directory exemption for
+  the engine's own tool-output cache is narrowed by P2-R40).
   Two of the three leg-loss classes in the 2026-09-11 study shared one
   precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
   install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's

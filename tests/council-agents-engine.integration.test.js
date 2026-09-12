@@ -159,6 +159,9 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   expect(evaluate(seat.permission, 'read', '.env').action).toBe('deny');
   expect(evaluate(seat.permission, 'read', 'foo/.env').action).toBe('deny');
   expect(evaluate(seat.permission, 'read', 'config/.env.local').action).toBe('deny');
+  // Ruling P2-R41a (A3, round 3): `.envrc` (direnv) joins `.env`/`.env.*` in
+  // the seat's read denylist, on the REAL rendered rule list.
+  expect(evaluate(seat.permission, 'read', '.envrc').action).toBe('deny');
   expect(evaluate(seat.permission, 'read', 'src/x.js').action).toBe('allow');
   expect(evaluate(seat.permission, 'read', 'README.md').action).toBe('allow');
   expect(evaluate(seat.permission, 'task', '*').action).toBe('deny');

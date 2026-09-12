@@ -397,9 +397,12 @@ where a seat starts reading the harness instead of the brief), as are `edit`, `w
 `invalid`. Every seat tool — the intent's default included — is validated against the engine's
 declared list when the engine lists its tools; an unknown id is `BAD_ARGS` naming what the engine
 declares. `--agent Plan|Build` is the escape hatch: every leg runs on the engine's own agent, no
-council agents, no allowlist; it cannot be combined with `--tools`. Its legs run with the engine
-agent's full tool set and the run directory as their working directory, so a seat can read the
-run's own records, the label map included — use it only where that is acceptable.
+council agents, no allowlist; it cannot be combined with `--tools`. Its legs run with the run
+directory (inside the project unless `--out-dir` moves it) as their working directory, so a seat
+can read the run's own records, the label map included — use it only where that is acceptable.
+`Build` is edit-capable: unlike the council agents' fenced allowlist, it can edit files and run
+commands over that directory (the CLI prints a Notice when you opt into it); `Plan` stays
+read-only analysis.
 
 Refusals land in a run directory that already exists, so the refusal itself is recorded (the same
 order the other pre-spend checks use); nothing is launched and nothing is spent. When the engine
@@ -407,12 +410,16 @@ cannot list its tools at all, a defaults-only run continues on the recorded degr
 explicit opt-in is refused.
 
 **Engine-rendered verification.** After registration, the run reads back what the engine actually
-rendered for `council-seat`/`council-support` (the run directory, and the project tree too when a
-local tool is opted in) and refuses before any launch if a tree-supplied `opencode.json` or
-`.opencode/agent` file altered them — naming the tree's config as the cause and `--agent` as the
-knowingly-unprotected alternative (ruling P2-R33). Unverifiable (no shared server to ask) follows
-the same rule as an unlisted tool id above: an explicit `--tools` opt-in refuses, a defaults-only
-run continues on the recorded degrade.
+rendered for `council-seat`/`council-support` — the run directory, its `_scratch` support-leg
+directory, and the project tree too when a local tool is opted in (ruling P2-R39) — and refuses
+before any launch if a tree-supplied `opencode.json` or `.opencode/agent` file altered them —
+naming the tree's config as the cause and `--agent` as the knowingly-unprotected alternative
+(ruling P2-R33). An `external_directory` allow after the wildcard deny is exempted only when it
+is the engine's own tool-output cache under its own data directory; any other one now reads as a
+widened agent too (ruling P2-R40). Unverifiable (no shared server to ask) REFUSES whenever
+verification can run at all — a defaults-only run included, no more quiet degrade (ruling
+P2-R38); it is skipped only when a caller supplies its own transport with no way to ask the
+engine at all (test-only — production always has a real server to ask).
 
 **Run-directory placement with a local tool.** A seat that can read the project tree must
 not be able to read this run's sibling sessions, so with any local tool opted in the run dir
@@ -428,12 +435,12 @@ under `--agent` a line saying it runs as the engine's named agent with its own t
 config enforces; the sentence informs — study run E1 showed gemini makes zero tool calls when
 told not to.
 
-**Secrets.** With `read` opted in, the seat agent denies `.env` and `.env.*` files at the
-engine — the seat gets a refusal and the leg continues (the deny rules are measured to render
-after the seat's own `read=allow`, and CI now models the engine's own evaluator — transcribed
-from its source — over the real rendering, confirming `.env`/`.env.*` deny and an ordinary file
-allows; the refusal itself is exercised by the release ritual's live `--tools read` run, not by
-the probe).
+**Secrets.** With `read` opted in, the seat agent denies `.env`, `.env.*` and `.envrc` files at
+the engine (the match is case-sensitive on Linux) — the seat gets a refusal and the leg
+continues (the deny rules are measured to render after the seat's own `read=allow`, and CI now
+models the engine's own evaluator — transcribed from its source — over the real rendering,
+confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the refusal itself is
+exercised by the release ritual's live `--tools read` run, not by the probe).
 `grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
 the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
 With a local tool the seat's engine session is rooted at the project tree, so the engine also

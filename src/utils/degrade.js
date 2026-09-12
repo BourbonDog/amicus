@@ -39,12 +39,6 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js
   // already gates the Stage-2 notes out of `seat-unbound` for the same reason).
   'stage2-judge',
-  // Ruling P2-R33 (council #247 round 2): the run could not read back what the
-  // engine rendered for council-seat/council-support (no shared server) and
-  // nobody opted into `--tools`, so verification is skipped rather than
-  // refused. kind 'info' only -- nothing is known to be wrong, the run
-  // continues; an explicit --tools opt-in refuses instead of landing here.
-  'council-agents-unverified',
   'internal',
   // doctor channels
   'doctor-check-failed', 'doctor-fix',

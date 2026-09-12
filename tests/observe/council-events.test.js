@@ -13,10 +13,11 @@ const noSignals = () => () => {};
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'council-ev-')); }
 
-// Ruling P2-R33: a clean listEngineAgentsFn so the engine-rendering tripwire
-// (unrelated to event streaming) verifies ok and records/announces nothing —
-// without it, every fake-launcher run below (no real shared server) would
-// write a `council-agents-unverified` Note to stderr, which is exactly the
+// Ruling P2-R33: a clean listEngineAgentsFn makes the engine-rendering
+// tripwire (unrelated to event streaming) verify ok for real in the two
+// --follow tests below, rather than being silently SKIPPED — with injected
+// `launchers` and no lister, `canVerify` (ruling P2-R38, round 3) is false,
+// so an ok-but-untested skip could otherwise pass for "verifies clean" on a
 // stream these tests assert is either pure NDJSON or silent.
 const cleanListEngineAgentsFn = async () => ([
   { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },

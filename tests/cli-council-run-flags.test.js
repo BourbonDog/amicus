@@ -526,4 +526,19 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(false);
     fs.rmSync(outside, { recursive: true, force: true });
   });
+
+  // Ruling P2-R41b (A4, round 3): --agent Build is edit-capable over the run
+  // directory (unlike the council agents' fenced allowlist) — the CLI names
+  // that in a Notice on stderr whenever a caller opts into it; --agent Plan
+  // (read-only) gets no such Notice.
+  test('P2-R41b: --agent Build prints a Notice on stderr naming it edit-capable; --agent Plan does not', async () => {
+    let code = await handleCouncilRun(argsBase({ agent: 'build' }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --agent Build'))).toBe(true);
+    err.mockClear();
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ agent: 'plan' }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --agent Build'))).toBe(false);
+  });
 });

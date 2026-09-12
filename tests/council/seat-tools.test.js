@@ -165,7 +165,7 @@ describe('buildCouncilAgents', () => {
     // tests below for that).
     expect(a.permission).toEqual({
       edit: 'deny', bash: 'allow', webfetch: 'deny', external_directory: 'deny',
-      read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' },
+      read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny', '*.envrc': 'deny' },
     });
   });
   test('never emits a chat key (buildServerOptions merges after chat)', () => {
@@ -182,7 +182,7 @@ describe('buildCouncilAgents', () => {
   });
   test('a read seat gets a nested .env-denying read permission (review r1 P2-R9, measured 2026-09-12)', () => {
     const a = st.buildCouncilAgents({ tools: ['read', 'grep'] })['council-seat'];
-    expect(a.permission.read).toEqual({ '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' });
+    expect(a.permission.read).toEqual({ '*': 'allow', '*.env': 'deny', '*.env.*': 'deny', '*.envrc': 'deny' });
   });
   test('no read in tools means no read permission key at all (review r1 P2-R9)', () => {
     const a = st.buildCouncilAgents({ tools: ['webfetch'] })['council-seat'];

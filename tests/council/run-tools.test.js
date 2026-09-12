@@ -327,6 +327,21 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     { permission: 'edit', pattern: '*', action: 'deny' },
   ];
 
+  // Ruling P2-R38 (B1, round 3): `canVerify` gates the whole block. Injected
+  // launchers with NO lister means no real server to ask AND the launchers
+  // are this test's own transport — verification is skipped, not judged
+  // against a null it could never resolve. An explicit non-empty --tools is
+  // used here specifically so a wrongly-verifying implementation would
+  // refuse (pre-P2-R38 behaviour): a defaults-only run alone cannot tell a
+  // genuine skip apart from the old degrade-and-continue path.
+  test('launchers injected with no lister: agent verification is skipped, the run proceeds', async () => {
+    const launchers = launchersFor();
+    const { exitCode } = await runCouncil(
+      base({ tools: ['webfetch'] }), { launchers, listEngineToolIdsFn: async () => ['webfetch'] });
+    expect(exitCode).toBe(0);
+    expect(stage1(launchers.calls).role).toBe('seat');
+  });
+
   test('a clean engine rendering is verified ok: exit 0, the seat wave launches', async () => {
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
@@ -370,6 +385,53 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     expect(launchers.calls).toHaveLength(0);
   });
 
+  // Ruling P2-R39 (A1, round 3): the support legs (judges, debate, chair) run
+  // with `project: <runDir>/_scratch`, so the verified directory set must
+  // include it — an attacker's opencode.json sitting ONLY there would
+  // otherwise render clean at `o.runDir` and reach a support leg unverified.
+  test('the verified directories include _scratch (and the project tree when local)', async () => {
+    const project = path.join(tmp, 'tree-scratch'); fs.mkdirSync(project);
+    const outside = path.join(tmp, 'run-outside-scratch'); fs.mkdirSync(outside);
+    const seen = [];
+    const launchers = launchersFor();
+    const listEngineAgentsFn = async (shared, dir) => {
+      seen.push(dir);
+      return [
+        { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' },
+          { permission: 'read', pattern: '*', action: 'allow' }] },
+        { name: 'council-support', permission: cleanNoTools() },
+      ];
+    };
+    const { exitCode } = await runCouncil(base({ project, runDir: outside, tools: ['read'] }),
+      { launchers, listEngineToolIdsFn: async () => ['read'], listEngineAgentsFn });
+    expect(exitCode).toBe(0);
+    expect(seen).toEqual(expect.arrayContaining([outside, path.join(outside, '_scratch'), project]));
+  });
+
+  test('an attack rendering returned ONLY for the _scratch directory is refused (P2-R39)', async () => {
+    const launchers = launchersFor();
+    const seen = [];
+    const listEngineAgentsFn = async (shared, dir) => {
+      seen.push(dir);
+      if (dir.endsWith('_scratch')) {
+        return [
+          { name: 'council-seat', permission: cleanNoTools() },
+          { name: 'council-support', permission: supportAttack() },
+        ];
+      }
+      return [
+        { name: 'council-seat', permission: cleanNoTools() },
+        { name: 'council-support', permission: cleanNoTools() },
+      ];
+    };
+    const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('rendered the council agents differently');
+    expect(seen.some((d) => d.endsWith('_scratch'))).toBe(true);
+    expect(launchers.calls).toHaveLength(0);
+  });
+
   test('an unverifiable engine (null) with an explicit --tools opt-in refuses before any launch', async () => {
     const launchers = launchersFor();
     const { exitCode, run } = await runCouncil(base({ tools: ['webfetch'] }),
@@ -380,28 +442,35 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     expect(launchers.calls).toHaveLength(0);
   });
 
-  test('an unverifiable engine (null) with defaults only degrades quietly and continues', async () => {
+  // Ruling P2-R38 (B1, round 3): REPLACES the old "null + defaults only
+  // degrades quietly and continues" test — a defaults-only run is now
+  // refused exactly like an explicit opt-in whenever verification can run
+  // but the engine answers with no agent list at all.
+  test('an unverifiable engine (null) with defaults only now refuses before any launch too', async () => {
     const launchers = launchersFor();
-    const { exitCode } = await runCouncil(base(), { launchers, listEngineAgentsFn: async () => null });
-    expect(exitCode).toBe(0);
-    const degrades = runState.readRun(runDir).degrades || [];
-    expect(degrades.some((d) => d.channel === 'council-agents-unverified')).toBe(true);
+    const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn: async () => null });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('could not be verified');
+    expect(run.error.message).toContain('no shared server was available');
+    expect(launchers.calls).toHaveLength(0);
   });
 
-  // Ruling P2-R36: the degrade note's `why` must tell the two null-agent-list
-  // causes apart. `launchers` is injected everywhere else in this file, which
+  // Ruling P2-R36 (wording) / P2-R38 (round 3, now a refusal not a note): the
+  // message's `<why>` must tell the two null-agent-list causes apart.
+  // `launchers` is injected everywhere else in this file, which
   // short-circuits acquireRunServer (run.js) and leaves `sharedServer` null —
   // so covering the OTHER wording needs a direct call through the seam
   // (validateSeatToolsAgainstEngine itself) with a truthy sharedServer stub.
-  test('a truthy shared server with no agent list notes a different reason than no server at all', async () => {
-    const notes = [];
+  test('a truthy shared server with no agent list refuses, naming a different reason than no server at all', async () => {
     const o = { tools: [], seatTools: [], seatToolsLocal: false, councilAgents: {}, runDir, project: tmp };
     const result = await validateSeatToolsAgainstEngine(o, { serverClient: {} }, {
       listEngineAgentsFn: async () => null,
-      degrade: { note: (n) => notes.push(n) },
     });
-    expect(result.error).toBeNull();
-    expect(notes[0].why).toBe('the shared server answered without an agent list');
+    expect(result.error).not.toBeNull();
+    expect(result.error.code).toBe('BAD_ARGS');
+    expect(result.error.message).toContain('could not be verified');
+    expect(result.error.message).toContain('answered without an agent list');
   });
 });
 
