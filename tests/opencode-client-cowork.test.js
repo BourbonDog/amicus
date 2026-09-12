@@ -185,5 +185,23 @@ describe('buildServerOptions provider model sync', () => {
     const opts = buildServerOptions({});
     expect(Object.keys(opts.config.agent)).toEqual(['chat']);
   });
+
+  // Fix-round-1 nit (opencode-client.js:661): a `chat` key in `agents` used to replace
+  // `config.agent.chat` with a brand-new object, detaching it from the local
+  // `chatAgent` the systemPrompt branch below mutates — so the "can never
+  // displace chat" comment was false. `chat` is now skipped in the merge loop.
+  it('ignores a chat key in agents — chat keeps the mutation the systemPrompt branch applies to it', () => {
+    const opts = buildServerOptions({
+      agents: { chat: { mode: 'other-ignored' } },
+      systemPrompt: 'hello from systemPrompt',
+    });
+    expect(opts.config.agent.chat.mode).toBe('primary'); // chatAgent's own mode, never overwritten
+    expect(opts.config.agent.chat.prompt).toBe('hello from systemPrompt'); // same object systemPrompt mutated
+  });
+
+  it('ignores agents when it is an array, not a plain object', () => {
+    const opts = buildServerOptions({ agents: ['not', 'an', 'object'] });
+    expect(Object.keys(opts.config.agent)).toEqual(['chat']);
+  });
 });
 // MCP type normalization tests extracted to tests/mcp-normalization.test.js

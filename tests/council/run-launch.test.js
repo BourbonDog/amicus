@@ -132,9 +132,32 @@ describe('launchWave (DI over runFanout)', () => {
     const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
     const { launchWave } = createLaunchers({ fanoutFn });
     const projectTree = path.join(tmp, 'tree');
-    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: projectTree, waveId: 'r-s1' });
+    // role: 'seat' is required (P2-R11 review): the directory override is gated to seat
+    // launches only, so a local-tools seat is the only caller that can point tool-exec
+    // cwd anywhere but opts.project — see the two tests below for the gate itself.
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: projectTree, waveId: 'r-s1', role: 'seat' });
     expect(seen[0].project).toBe(tmp);
     expect(seen[0].directory).toBe(projectTree);
+  });
+
+  // P2-R11 (review round 1): `directory` used to ride through unconditionally, which
+  // falsified this file's own §6 isolation proof — ANY launchWave/launchSolo caller
+  // (judge, debate, chair legs included) could redirect the OpenCode tool-exec cwd
+  // away from `_scratch`/the run dir. The escape hatch is now gated to `role: 'seat'`.
+  test('a non-seat launch ignores opts.directory — spec §6 isolation cannot be escaped (P2-R11)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: '/elsewhere', waveId: 'r-s1' });
+    expect(seen[0].directory).toBe(tmp);
+  });
+
+  test('a seat-role launch honors opts.directory — the local-tools escape hatch still works (P2-R11)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: '/elsewhere', waveId: 'r-s1', role: 'seat' });
+    expect(seen[0].directory).toBe('/elsewhere');
   });
 });
 

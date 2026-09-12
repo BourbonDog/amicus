@@ -87,6 +87,13 @@ function createLaunchers(deps = {}) {
    *   noOutputBackstopMs (Task 5, #129) is opt-in and spread-guarded on
    *   Number.isFinite (0 is a valid disable value); only run-retry.js sets it,
    *   to escalate the window on a Stage-1 retry.
+   *   role (spec 2026-09-11 §4, P2-R11) is the LAUNCH role, not the per-leg
+   *   value run-stages.js's `roleFor()` returns — every stage-1 leg (seat,
+   *   critic, and lens alike) launches with the literal `role: 'seat'` to get
+   *   the tool-capable agent; a caller must pass that literal, never a leg's
+   *   own `seat.role`. It also gates `directory` (see the comment above that
+   *   option below): only a `role: 'seat'` launch may point tool-exec cwd
+   *   anywhere but `opts.project`.
    * @returns {Promise<{wave: object|null, exitCode: number}>}
    */
   async function launchWave(opts) {
@@ -172,9 +179,18 @@ function createLaunchers(deps = {}) {
       // own session dir (judges' `project` is `<runDir>/_scratch`, so this
       // scopes them there) and strip inherited MCP servers, so a tool-capable
       // judge can't read the de-anonymized review-*.md files or the plaintext
-      // labelMap in run.json sitting in the parent run dir.
-      // Spec 2026-09-11 §4: a local-tools seat is scoped to the PROJECT TREE (opts.directory) while its metadata stays in the run dir (opts.project).
-      directory: opts.directory || opts.project,
+      // labelMap in run.json sitting in the parent run dir. Every launch is
+      // scoped to `opts.project` — the ONLY exception is a stage-1 seat launch
+      // (`opts.role === 'seat'`) that also passes `opts.directory`: a later
+      // task uses that to point a local-tools seat at the real project tree
+      // while the run's own metadata stays in `opts.project` (P2-R11 review).
+      // Judge, debate, and chair legs never set `role: 'seat'`, so `_scratch`
+      // isolation cannot be escaped through this option.
+      // Named mutant DIRGATEDROP: dropping the `opts.role === 'seat' &&`
+      // conjunct below lets ANY caller redirect tool-exec cwd via
+      // `opts.directory` — reddens "a non-seat launch ignores opts.directory"
+      // (tests/council/run-launch.test.js).
+      directory: (opts.role === 'seat' && opts.directory) || opts.project,
       noMcp: true,
     });
     // A ceiling refusal returns `wave: null`, which the council driver's

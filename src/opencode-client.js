@@ -658,11 +658,17 @@ function buildServerOptions(options = {}) {
 
   // Council seat agents (spec 2026-09-11 §4, PR 2): a per-run map of extra agents
   // the caller already computed (council/seat-tools.js :: buildCouncilAgents).
-  // Merged AFTER `chat`, so a caller can never displace the chat registration;
-  // seat-tools.js never emits a `chat` key. Absent → this block is a no-op and
+  // Merged AFTER `chat`, and a `chat` key is skipped outright (fix round 1 nit)
+  // so a caller genuinely can never displace the chat registration — without
+  // the skip, `agents: { chat: {...} }` would replace `config.agent.chat`
+  // with a brand-new object, detaching it from the `chatAgent` object the
+  // systemPrompt branch below still mutates by reference; seat-tools.js never
+  // emits a `chat` key, but the guard holds regardless of the caller. Absent,
+  // or not a plain object (arrays rejected too), this block is a no-op and
   // every non-council server's config is byte-identical to today.
-  if (options.agents && typeof options.agents === 'object') {
+  if (options.agents && typeof options.agents === 'object' && !Array.isArray(options.agents)) {
     for (const [name, agentConfig] of Object.entries(options.agents)) {
+      if (name === 'chat') { continue; }
       config.agent[name] = { ...(config.agent[name] || {}), ...agentConfig };
     }
   }
