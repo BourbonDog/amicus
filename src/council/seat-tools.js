@@ -44,6 +44,7 @@ const REMOTE_TOOL_IDS = NON_LOCAL_TOOL_IDS; // alias: existing importers keep re
  * `buildCouncilAgents` accepted a `local` flag that could contradict its own `tools`,
  * silently dropping `external_directory: 'deny'`; it now denies that key
  * unconditionally and takes no `local` flag). A third caller (PR 2
+ * Task 5 review r1, P2-R19): cli-council-run-tools.js's out-dir fence, which decides
  * whether a run's directory may sit outside the project tree.
  * @param {string[]} tools @returns {boolean}
  */
