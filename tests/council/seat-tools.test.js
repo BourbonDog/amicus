@@ -155,8 +155,7 @@ describe('buildCouncilAgents', () => {
   test('seat allows exactly the resolved tools over a wildcard deny', () => {
     const a = st.buildCouncilAgents({ tools: ['webfetch'], local: false })['council-seat'];
     expect(a.tools).toEqual({ '*': false, webfetch: true });
-    expect(a.permission).toEqual({ edit: 'deny', bash: 'deny', webfetch: 'allow' });
-    expect(a.permission.external_directory).toBeUndefined();
+    expect(a.permission).toEqual({ edit: 'deny', bash: 'deny', webfetch: 'allow', external_directory: 'deny' });
   });
   test('a local seat denies external_directory and allows bash only when bash is in', () => {
     const a = st.buildCouncilAgents({ tools: ['bash', 'read'], local: true })['council-seat'];
@@ -177,9 +176,9 @@ describe('buildCouncilAgents', () => {
     const a = st.buildCouncilAgents({ tools: ['read', 'grep'] })['council-seat'];
     expect(a.permission.external_directory).toBe('deny');
   });
-  test('a remote-only tool list still has no external_directory key when local is omitted (review r1 P2-R8)', () => {
+  test('a remote-only tool list still denies external_directory, unconditionally now (P2-R36)', () => {
     const a = st.buildCouncilAgents({ tools: ['webfetch'] })['council-seat'];
-    expect(a.permission.external_directory).toBeUndefined();
+    expect(a.permission.external_directory).toBe('deny');
   });
   test('a read seat gets a nested .env-denying read permission (review r1 P2-R9, measured 2026-09-12)', () => {
     const a = st.buildCouncilAgents({ tools: ['read', 'grep'] })['council-seat'];

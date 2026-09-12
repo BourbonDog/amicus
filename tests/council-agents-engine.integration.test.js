@@ -58,7 +58,7 @@ const PROBE = path.join(__dirname, '..', 'scripts', 'probe-council-agents.js');
 const wildcardMatch = (str, pattern) => {
   const s = String(str).replace(/\\/g, '/');
   let p = String(pattern).replace(/\\/g, '/').replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
-  if (p.endsWith('/.*')) { p = `${p.slice(0, -3)}(/.*)?`; }
+  if (p.endsWith(' .*')) { p = `${p.slice(0, -3)}( .*)?`; }
   return new RegExp(`^${p}$`, process.platform === 'win32' ? 'si' : 's').test(s);
 };
 const evaluate = (rules, permission, pattern) => {
@@ -78,6 +78,15 @@ const lastRule = (agent, permission, pattern) => {
   rules.forEach((r, i) => { if (r.permission === permission && r.pattern === pattern) { index = i; } });
   return { index, action: index >= 0 ? rules[index].action : undefined };
 };
+
+// Ruling P2-R36: the transcribed trailing-rule literal was wrong — the pinned
+// engine's is a SPACE, not a slash (confirmed against opencode.exe:
+// endsWith(' .*') -> slice(0,-3)+'( .*)?') — so a command pattern like
+// `git *` must also match the bare command with no arguments.
+test('wildcardMatch: a trailing space-star is an optional suffix, matching the bare command too', () => {
+  expect(wildcardMatch('git', 'git *')).toBe(true);
+  expect(wildcardMatch('gitx', 'git *')).toBe(false);
+});
 
 test('the pinned engine registers council-seat/council-support as amicus expects, and tolerates an unknown id', () => {
   const r = spawnSync(process.execPath, [PROBE], {

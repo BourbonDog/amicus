@@ -178,7 +178,7 @@ function verifyAgentRendering(rules, allowlist) {
   for (let i = starIndex + 1; i < list.length; i++) {
     const r = list[i];
     if (r.action === 'deny') { continue; }
-    if (r.pattern !== '*' || !allowlist.includes(r.permission)) {
+    if (r.pattern !== '*' || !allowlist.includes(r.permission) || r.action !== 'allow') {
       return { ok: false, reason: `${r.permission}[${r.pattern}]=${r.action} is allowed after the wildcard deny` };
     }
   }
@@ -263,7 +263,7 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
             kind: 'info',
             channel: 'council-agents-unverified',
             what: 'the council agents could not be verified against the engine before launch',
-            why: 'no shared server answered the agent list',
+            why: sharedServer ? 'the shared server answered without an agent list' : 'no shared server was available to answer the agent list',
             effect: 'a tree-supplied opencode config could alter them; the run continues on the recorded degrade',
           });
         }

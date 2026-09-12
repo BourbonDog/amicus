@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { runCouncil } = require('../../src/council/run');
+const { validateSeatToolsAgainstEngine } = require('../../src/council/run-seat-tools');
 const runState = require('../../src/council/run-state');
 const fakes = require('./helpers/fake-launchers');
 
@@ -385,6 +386,22 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     expect(exitCode).toBe(0);
     const degrades = runState.readRun(runDir).degrades || [];
     expect(degrades.some((d) => d.channel === 'council-agents-unverified')).toBe(true);
+  });
+
+  // Ruling P2-R36: the degrade note's `why` must tell the two null-agent-list
+  // causes apart. `launchers` is injected everywhere else in this file, which
+  // short-circuits acquireRunServer (run.js) and leaves `sharedServer` null —
+  // so covering the OTHER wording needs a direct call through the seam
+  // (validateSeatToolsAgainstEngine itself) with a truthy sharedServer stub.
+  test('a truthy shared server with no agent list notes a different reason than no server at all', async () => {
+    const notes = [];
+    const o = { tools: [], seatTools: [], seatToolsLocal: false, councilAgents: {}, runDir, project: tmp };
+    const result = await validateSeatToolsAgainstEngine(o, { serverClient: {} }, {
+      listEngineAgentsFn: async () => null,
+      degrade: { note: (n) => notes.push(n) },
+    });
+    expect(result.error).toBeNull();
+    expect(notes[0].why).toBe('the shared server answered without an agent list');
   });
 });
 

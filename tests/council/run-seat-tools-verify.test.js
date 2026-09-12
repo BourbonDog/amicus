@@ -109,6 +109,17 @@ describe('verifyAgentRendering (ruling P2-R33)', () => {
     ];
     expect(verifyAgentRendering(withNoise, ['read', 'webfetch'])).toEqual({ ok: true });
   });
+
+  // Ruling P2-R36 (round 2, check (b)): an ask cannot be answered by a headless
+  // leg, so an allowlisted id rendered `ask` (not `allow`) after the wildcard
+  // deny must fail loudly, not ride through because its pattern/permission
+  // matched the allowlist.
+  test('an allowlisted id rendered ask (not allow) after the wildcard deny is not ok, naming it', () => {
+    const withAsk = [...CLEAN_SEAT, { permission: 'read', pattern: '*', action: 'ask' }];
+    const r = verifyAgentRendering(withAsk, ['read', 'webfetch']);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('read');
+  });
 });
 
 describe('listEngineAgents (mirrors run-server.js :: listEngineToolIds)', () => {

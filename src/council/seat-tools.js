@@ -39,11 +39,11 @@ const REMOTE_TOOL_IDS = NON_LOCAL_TOOL_IDS; // alias: existing importers keep re
 
 /**
  * True if `tools` contains anything outside NON_LOCAL_TOOL_IDS. Single source for the
- * local/remote predicate — resolveSeatTools, buildCouncilAgents and seatToolsSentence
- * all call this instead of each re-writing the same `.some()` (review r1 P2-R8: the
- * duplication let `buildCouncilAgents` accept a `local` flag that could contradict its
- * own `tools`, silently dropping `external_directory: 'deny'`). A fourth caller (PR 2
- * Task 5 review r1, P2-R19): cli-council-run-tools.js's out-dir fence, which decides
+ * local/remote predicate — resolveSeatTools and seatToolsSentence both call this
+ * instead of each re-writing the same `.some()` (review r1 P2-R8: before this fix,
+ * `buildCouncilAgents` accepted a `local` flag that could contradict its own `tools`,
+ * silently dropping `external_directory: 'deny'`; it now denies that key
+ * unconditionally and takes no `local` flag). A third caller (PR 2
  * whether a run's directory may sit outside the project tree.
  * @param {string[]} tools @returns {boolean}
  */
@@ -235,16 +235,11 @@ function resolveSeatTools({ intent, optIn = [], declaredIds = null } = {}) {
  * reads fall through to `*=deny`. `grep` and `bash` have no such fence: opting
  * either in trusts the seat with the tree's contents, `.env` included. Never
  * emits `chat`.
- * @param {{tools: string[], local: boolean}} args
+ * @param {{tools: string[]}} args
  * @returns {{'council-seat': object, 'council-support': object}}
  */
-function buildCouncilAgents({ tools = [], local = false } = {}) {
+function buildCouncilAgents({ tools = [] } = {}) {
   const allow = Object.fromEntries(tools.map((id) => [id, true]));
-  // `local` is a caller-supplied hint, not a second source of truth: OR it with the
-  // real predicate (review r1 P2-R8) so a caller can never drop external_directory's
-  // deny by omitting or mis-stating the flag — `resolveSeatTools` already always
-  // passes a consistent pair, but this module has no other caller yet to hold to that.
-  const isLocalRun = local || isLocal(tools);
   return {
     'council-support': {
       description: 'Council support role (repair, judge, debate, chair): no tools — the material is in the briefing.',
@@ -260,7 +255,9 @@ function buildCouncilAgents({ tools = [], local = false } = {}) {
         edit: 'deny',
         bash: tools.includes('bash') ? 'allow' : 'deny',
         webfetch: tools.includes('webfetch') ? 'allow' : 'deny',
-        ...(isLocalRun ? { external_directory: 'deny' } : {}),
+        // council-seat always denies external directories; a tree cannot own
+        // that key — even a webfetch-only seat gets this rule (measured 2026-09-12).
+        external_directory: 'deny',
         // The '*': 'allow' entry is load-bearing, not decorative (measured 2026-09-12):
         // a nested `read` object REPLACES, rather than refines, the tools-map's
         // read=allow under the engine's findLast evaluation. Dropping it is a named
