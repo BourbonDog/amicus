@@ -391,8 +391,8 @@ council leg runs as one of two agents the run's own OpenCode server registers:
 `task` and `skill` are refused (`task` spawns child sessions amicus cannot observe; `skill` is
 where a seat starts reading the harness instead of the brief), as are `edit`, `write`,
 `apply_patch` (a seat never modifies the tree), `question` (a headless leg has no human) and
-`invalid`. Every other id is validated against the engine's own declared list before any leg
-launches; an unknown id is `BAD_ARGS` naming what the engine declares. `--agent Plan|Build`
+`invalid`. Every other opted-in id is validated against the engine's own declared list
+before any leg launches; an unknown id is `BAD_ARGS` naming what the engine declares. `--agent Plan|Build`
 is the escape hatch: every leg runs on the engine's own agent, no council agents, no
 allowlist.
 
@@ -410,7 +410,7 @@ config enforces; the sentence informs — study run E1 showed gemini makes zero 
 told not to.
 
 **Secrets.** With `read` opted in, the seat agent denies `.env` and `.env.*` files at the
-engine (the seat gets a refusal and the leg continues; measured 2026-09-12 — the deny rules
+engine — the seat gets a refusal and the leg continues (measured 2026-09-12: the deny rules
 render after the seat's own `read=allow`, and the engine takes the last matching rule).
 `grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
 the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.

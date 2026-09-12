@@ -14,11 +14,15 @@ All notable changes to Amicus are documented here. Format follows
   no tools at all. `task` and `skill` are refused (they spawn or escape the session), as are
   `edit`/`write`/`apply_patch`/`question`/`invalid`; `--agent Plan|Build` is the escape hatch. A
   local tool needs `--out-dir` outside the project tree and scopes the seats to the tree with
-  `external_directory: deny`. With `read` opted in the seat is denied `.env` and `.env.*` files at the engine (measured: the deny rules render after the seat's own read allow and the engine takes the last matching rule); `grep` and `bash` have no per-file fence.
+  `external_directory: deny`. With `read` opted in the seat is denied `.env` and `.env.*`
+  files at the engine (measured: the deny rules render after the seat's own read allow and
+  the engine takes the last matching rule); `grep` and `bash` have no per-file fence.
   Two of the three leg-loss classes in the 2026-09-11 study shared one
   precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
   install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's
-  `Plan` agent with every tool available. (`docs/council.md` § Tool access; spec §4; PR 2 of 3.)
+  `Plan` agent, which denies file edits but leaves the rest of the tool set available (the
+  study saw seats reach for `grep`, `glob` and `task` under it). (`docs/council.md` § Tool
+  access; spec §4; PR 2 of 3.)
 
 ### Fixed
 
