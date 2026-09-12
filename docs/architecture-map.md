@@ -311,6 +311,7 @@ src/
 │   └── seat-space.js  # Council Workspace — the seat-space PREDICATES (v4.8 PR5b).
 ├── cli-council-run-bench.js  # Bench and input resolution for the council run command.
 ├── cli-council-run-render.js
+├── cli-council-run-tools.js
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -455,6 +456,7 @@ evals/
 |--------|---------|-------------|
 | `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT()`, `parseList()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
+| `cli-council-run-tools.js` |  | `checkCouncilRunTools()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |

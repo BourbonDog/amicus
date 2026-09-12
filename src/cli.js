@@ -588,6 +588,7 @@ Subcommands for 'council':
       [--fallback] [--no-fallback] [--on-complete <cmd>]
       [--template <name|path>] [--artifact <file>] [--var <k=v>]
       [--pack <name|path>] [--tag <t>] [--intent review|task]
+      [--tools <a,b,c>] [--agent Plan|Build]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -619,6 +620,18 @@ Subcommands for 'council':
                                 explicit flags always override the pack's values.
                                 --intent task marks a task-mode run (v4.9);
                                 review is the default and is never stored.
+                                --tools <a,b,c> opts stage-1 seats into tools by the
+                                engine's own ids (task mode defaults to webfetch,
+                                review to none); task and skill are refused, as
+                                are edit/write/apply_patch/question. A local tool
+                                (read, grep, glob, bash) needs --out-dir OUTSIDE
+                                the project tree.
+                                read never opens .env files (denied at the engine);
+                                grep and bash have no such fence — opt them in only
+                                on a tree without secrets.
+                                --agent Plan|Build runs every
+                                leg on the engine's own agent instead (the
+                                escape hatch; no council agents, no allowlist).
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

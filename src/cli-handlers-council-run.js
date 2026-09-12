@@ -214,12 +214,9 @@ async function handleCouncilRun(args, depsOverride = {}) {
   const runDir = args['out-dir']
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
-  // v4.7 PR6: MCP has fenced this since v4.5 (mcp-council-run.js:137-141); the CLI
-  // never did, so `--out-dir ../../x` wrote outside the project and exited 0.
-  const { isPathInside } = require('./project-root-allowlist');
-  if (!isPathInside(runDir, project)) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --out-dir must stay inside the project: '${args['out-dir']}' resolves outside ${project}` });
-  }
+  // Spec 2026-09-11 §4 + the v4.7 PR6 fence: --tools/--agent shape and --out-dir placement — ./cli-council-run-tools.
+  const tf = require('./cli-council-run-tools').checkCouncilRunTools({ args, explicitKeys, runDir, project });
+  if (tf.error) { return failJson(useJson, tf.error); }
 
   const { resolveGatewayMode, loadConfig } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
@@ -250,6 +247,7 @@ async function handleCouncilRun(args, depsOverride = {}) {
     tag: args.tag, // v4.7 F8: undefined when no --tag; Task 3 stores it on the run.json seed.
     // v4.9 W5.2: o.intent is 'task' or ABSENT, never 'review' (validated above).
     ...(args.intent === 'task' ? { intent: 'task' } : {}),
+    ...(tf.toolIds ? { tools: tf.toolIds } : {}), ...(tf.agentOverride ? { agent: tf.agentOverride } : {}),
     droppedMembers: benchRes.droppedMembers, // v4.5 Wave 2: [] when nothing dropped; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and

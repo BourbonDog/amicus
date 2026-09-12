@@ -417,3 +417,47 @@ describe("--intent on council run (v4.9 W5.2, emit-when-'task')", () => {
     expect(getKnownFlags().has('intent')).toBe(true);
   });
 });
+
+describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validated, forwarded', () => {
+  test('--tools parses as a value flag and reaches runCouncil as a de-duplicated id array', async () => {
+    const args = parseArgs(['council', 'run', '--tools', 'read, Grep,read', '--models', 'a,b']);
+    expect(args.tools).toBe('read, Grep,read');
+    const code = await handleCouncilRun(argsBase({ tools: 'read, Grep,read' }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].tools).toEqual(['read', 'grep']);
+  });
+  test('an empty or malformed --tools is BAD_ARGS before runCouncil', async () => {
+    for (const bad of ['', ' , ', 'read,../x']) {
+      runCouncil.mockClear();
+      const code = await handleCouncilRun(argsBase({ tools: bad }));
+      expect(code).toBe(1);
+      expect(runCouncil).not.toHaveBeenCalled();
+    }
+  });
+  test('--agent accepts Plan/Build case-insensitively, forwards normalized, and refuses anything else', async () => {
+    let code = await handleCouncilRun(argsBase({ agent: 'build' }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].agent).toBe('Build');
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ agent: 'Chat' }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+  });
+  test('neither key is present on the options when the flags are absent (emit-when-set)', async () => {
+    await handleCouncilRun(argsBase({}));
+    const opts = runCouncil.mock.calls[0][0];
+    expect('tools' in opts).toBe(false);
+    expect('agent' in opts).toBe(false);
+  });
+  test('a local tool lets --out-dir sit outside the project (runCouncil applies the placement rule); a remote tool keeps the v4.7 fence', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-out-'));
+    let code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].runDir).toBe(outside);
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ tools: 'webfetch', 'out-dir': outside }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+});

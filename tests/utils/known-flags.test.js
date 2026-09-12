@@ -83,6 +83,12 @@ describe('getKnownFlags', () => {
       expect(flags.has(f)).toBe(true);
     }
   });
+
+  it("'tools' and 'agent' are known flags on council run (spec 2026-09-11 §4)", () => {
+    const known = getKnownFlags();
+    expect(known.has('tools')).toBe(true);
+    expect(known.has('agent')).toBe(true);
+  });
 });
 
 describe('unknownFlags', () => {
