@@ -460,4 +460,16 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(runCouncil).not.toHaveBeenCalled();
     fs.rmSync(outside, { recursive: true, force: true });
   });
+  // Pins AGENTFENCELEAK (src/cli-council-run-tools.js): --agent is the escape
+  // hatch (no council agents, no allowlist), so a local --tools value must NOT
+  // relax the fence when --agent is also set — there are no seat tools in that
+  // mode, so nothing justifies letting the run dir sit outside the project.
+  test('--agent never relaxes the out-dir fence, even with a local --tools value', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-agent-out-'));
+    const code = await handleCouncilRun(argsBase({ agent: 'build', tools: 'read', 'out-dir': outside }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toMatch(/--out-dir must stay inside the project/);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
 });

@@ -71,9 +71,9 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // Named mutant: AGENTFENCELEAK — dropping the `!agentOverride &&` conjunct
   // lets a --agent run's fence relax whenever --tools ALSO names a local id,
   // even though --agent is the escape hatch (no council agents, no allowlist)
-  // and never builds the tools-based agent this relaxation exists for. Not
-  // reddened by an existing test in this task's suite — --agent and --tools
-  // are never combined there; flagged in task-5-report.md as a coverage gap.
+  // and never builds the tools-based agent this relaxation exists for.
+  // Reddens "--agent never relaxes the out-dir fence, even with a local
+  // --tools value" in tests/cli-council-run-flags.test.js.
   const wantsLocalTool = !agentOverride && Array.isArray(toolIds) && toolIds.some((id) => !REMOTE_TOOL_IDS.includes(id));
   if (!wantsLocalTool && !isPathInside(runDir, project)) {
     return {
