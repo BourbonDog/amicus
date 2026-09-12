@@ -96,21 +96,56 @@ function parseToolsFlag(value) {
 }
 
 /**
+ * The REFUSED_TOOL_IDS check, factored out of resolveSeatTools (review r1
+ * P2-R20) so it has one message and one caller list: resolveSeatTools (CLI
+ * defaults + opt-in) and resolveRemoteOnlyTools (the MCP door) must refuse
+ * `task`/`skill`/… identically — a permanently-refused id is refused for the
+ * SAME reason regardless of which door it arrived through, never described
+ * as a placement (local-vs-remote) problem the way an ordinary local tool is.
+ * `ids` must already be normalized (lowercase/trimmed) — every caller here
+ * goes through normalizeIds or parseToolsFlag first.
+ * @param {string[]} ids @returns {{ok: false, code: 'BAD_ARGS', message: string}|null}
+ */
+function refusalFor(ids) {
+  const refused = ids.filter((id) => Object.prototype.hasOwnProperty.call(REFUSED_TOOL_IDS, id));
+  if (!refused.length) { return null; }
+  return {
+    ok: false, code: 'BAD_ARGS',
+    message: `--tools: ${refused.map((id) => `${id} (${REFUSED_TOOL_IDS[id]})`).join('; ')} — refused for council seats; ` +
+      `${ESCAPE_HATCH} runs every leg on the engine's full Build agent instead`,
+  };
+}
+
+/**
  * The MCP door's tool policy (spec 2026-09-11 §4, ledger P2-R2): over MCP the
  * run directory must stay inside the project (the fence in mcp-council-run.js),
  * so a seat cannot be placed there with a LOCAL tool — refused with a message
- * naming the CLI command that DOES allow it (an out-of-project --out-dir).
- * Remote tools (webfetch, websearch) carry no such placement requirement and
- * ride through. Shape-checked the same way the CLI flag is (parseToolsFlag),
- * so `mcp-council-run.js` never re-implements comma-splitting/normalizing for
- * an input that happens to arrive as an array instead of a flag string.
+ * naming the CLI command that DOES allow it (an out-of-project --out-dir). A
+ * PERMANENTLY-refused id (review r1 P2-R20: task/skill/question/invalid/edit/
+ * write/apply_patch) is refused first, with refusalFor's reason — it is not a
+ * placement problem, and REMOTE_TOOL_IDS.includes(id) is false for every one
+ * of them, so without this check the local-tools branch below caught them too
+ * and suggested an --out-dir command that would ALSO fail (resolveSeatTools
+ * refuses these ids unconditionally, everywhere, run-directory or not).
+ * Remote tools (webfetch, websearch) carry no placement requirement and ride
+ * through. Shape-checked the same way the CLI flag is (parseToolsFlag), so
+ * `mcp-council-run.js` never re-implements comma-splitting/normalizing for an
+ * input that happens to arrive as an array instead of a flag string. An empty
+ * array is treated as absent (`{ok: true, ids: []}`) rather than the
+ * `--tools`-with-nothing-typed shape error parseToolsFlag('') would raise —
+ * the MCP schema's `z.array(z.string().min(1))` allows `[]` (`.min(1)`
+ * constrains each string, not the array), so a caller can send it without
+ * ever having typed a flag at all.
  * @param {string[]|string} input MCP `tools` input: an array (the declared
  *   schema shape) or a string (defense-in-depth for a caller that bypasses it).
  * @returns {{ok: true, ids: string[]}|{ok: false, message: string}}
  */
 function resolveRemoteOnlyTools(input) {
+  if (Array.isArray(input) && !input.length) { return { ok: true, ids: [] }; }
   const parsed = parseToolsFlag(Array.isArray(input) ? input.join(',') : String(input));
   if (!parsed.ok) { return { ok: false, message: parsed.message }; }
+  const refusal = refusalFor(parsed.ids);
+  if (refusal) { return { ok: false, message: refusal.message }; }
   // Named mutant MCPLOCALLEAK: dropping this filter/refusal lets a local id
   // (e.g. `read`) ride through as `ok: true`, reaching the spawned CLI child
   // whose run dir is fenced INSIDE the project — the exact placement spec §4
@@ -149,14 +184,8 @@ function resolveSeatTools({ intent, optIn = [], declaredIds = null } = {}) {
   const shapeError = shapeErrorFor(normalizedOptIn);
   if (shapeError) { return { ok: false, code: 'BAD_ARGS', message: shapeError }; }
   const requested = [...new Set([...defaultToolsFor(intent), ...normalizedOptIn])];
-  const refused = requested.filter((id) => Object.prototype.hasOwnProperty.call(REFUSED_TOOL_IDS, id));
-  if (refused.length) {
-    return {
-      ok: false, code: 'BAD_ARGS',
-      message: `--tools: ${refused.map((id) => `${id} (${REFUSED_TOOL_IDS[id]})`).join('; ')} — refused for council seats; ` +
-        `${ESCAPE_HATCH} runs every leg on the engine's full Build agent instead`,
-    };
-  }
+  const refusal = refusalFor(requested);
+  if (refusal) { return refusal; }
   if (Array.isArray(declaredIds)) {
     const unknown = requested.filter((id) => !declaredIds.includes(id));
     if (unknown.length) {

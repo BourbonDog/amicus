@@ -277,4 +277,16 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     expect(spawnCalls[0].args).not.toContain('--tools');
     expect(spawnCalls[0].args).not.toContain('--agent');
   });
+  // Review r1 P2-R20: a permanently-refused id (task) is not a placement
+  // problem (REMOTE_TOOL_IDS.includes('task') is false, so it used to fall
+  // into the "local tools" branch and suggest --out-dir, a command that
+  // would also fail) — it must be refused the same way resolveSeatTools
+  // refuses it, naming the real escape hatch.
+  test('a permanently-refused id (task) over MCP is refused naming --agent Build, not the out-dir fence (review r1 P2-R20)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['task'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('--agent Build');
+    expect(spawnCalls).toHaveLength(0);
+  });
 });

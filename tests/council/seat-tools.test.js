@@ -92,6 +92,34 @@ describe('resolveRemoteOnlyTools', () => {
   test('a string input is accepted the same way the --tools flag is', () => {
     expect(st.resolveRemoteOnlyTools('webfetch')).toEqual({ ok: true, ids: ['webfetch'] });
   });
+  // Review r1 P2-R20: a permanently-refused id (task, skill, ...) is not a
+  // placement problem — REMOTE_TOOL_IDS.includes('task') is false, so the
+  // local-tools filter used to catch it too and send the out-dir message,
+  // which contradicts src/mcp-tools.js's own "task and skill are always
+  // refused" schema text and hands the user a command that will also fail.
+  test('a permanently-refused id (task) is reported with the refusal reason, not "local tools" (review r1 P2-R20)', () => {
+    const r = st.resolveRemoteOnlyTools(['task']);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('refused for council seats');
+    expect(r.message).toContain('--agent Build');
+    expect(r.message).not.toContain('are local tools');
+  });
+  // Review r1 P2-R20 minor: the schema allows an empty array (`.min(1)`
+  // constrains each STRING element, not the array itself); treat it as
+  // absent rather than a shape error a caller never typed.
+  test('an empty tools array is treated as absent, not a --tools shape error (review r1 P2-R20 minor)', () => {
+    expect(st.resolveRemoteOnlyTools([])).toEqual({ ok: true, ids: [] });
+  });
+  // Review r1 P2-R20 minor: pin the mixed remote+local case — only the local
+  // id is named as the problem, but the suggested CLI command still carries
+  // every id the caller asked for (dropping the remote one would silently
+  // change what the CLI run does).
+  test('a mixed remote+local list names only the local id, but the suggested command carries every id (review r1 P2-R20 minor)', () => {
+    const r = st.resolveRemoteOnlyTools(['webfetch', 'read']);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('tools: read are local tools');
+    expect(r.message).toContain('--tools webfetch,read');
+  });
 });
 
 describe('buildCouncilAgents', () => {
