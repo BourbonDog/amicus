@@ -1,19 +1,18 @@
-// src/cli-council-run-tools.js
-'use strict';
-
 /**
  * @module cli-council-run-tools
- * `--tools`/`--agent` shape validation plus the v4.7 PR6 out-dir fence for
- * `amicus council run` (spec 2026-09-11 §4). Split out of
- * cli-handlers-council-run.js (P2-R15, PR 2 Task 5): that file sits at the
- * 300-line pre-commit size gate and the combined block does not fit inline.
+ * `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`.
+ *
+ * Spec 2026-09-11 §4. Split out of cli-handlers-council-run.js (P2-R15, PR 2
+ * Task 5): that file sits at the 300-line pre-commit size gate and the
+ * combined block does not fit inline.
  *
  * Shape only — refusals and the engine's declared-tool check are NOT here,
  * they live in `runCouncil` (Task 4) so MCP, the workflow and any direct
  * `require('./council/run')` caller share them. The out-dir fence IS a
- * CLI-only concern (MCP has fenced `project`/cwd since v4.5 via
- * project-root-allowlist.js), which is why it lives beside the flags it
- * depends on rather than in the engine.
+ * CLI-only concern: MCP has fenced the out-dir since v4.5
+ * (mcp-council-run.js:137-141's own `isPathInside(runDir, project)`) — this
+ * module is what gives the CLI door the same fence, which is why it lives
+ * beside the flags it depends on rather than in the engine.
  *
  * The fence is the v4.7 PR6 rule (`--out-dir` must stay inside the project)
  * RELAXED for a run whose seats carry a LOCAL tool (read, grep, glob, bash):
@@ -24,9 +23,11 @@
  * even when `--tools` is also present.
  */
 
+'use strict';
+
 const { ERROR_CODES } = require('./utils/error-doc');
 const { isPathInside } = require('./project-root-allowlist');
-const { parseToolsFlag, REMOTE_TOOL_IDS } = require('./council/seat-tools');
+const { parseToolsFlag, isLocal } = require('./council/seat-tools');
 
 /**
  * @param {{args: object, explicitKeys: Set<string>, runDir: string, project: string}} ctx
@@ -74,7 +75,12 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // and never builds the tools-based agent this relaxation exists for.
   // Reddens "--agent never relaxes the out-dir fence, even with a local
   // --tools value" in tests/cli-council-run-flags.test.js.
-  const wantsLocalTool = !agentOverride && Array.isArray(toolIds) && toolIds.some((id) => !REMOTE_TOOL_IDS.includes(id));
+  //
+  // isLocal (not a hand-rolled `.some()`) — review r1 P2-R19: it is
+  // council/seat-tools.js's single source for the local/remote predicate
+  // (its own JSDoc names three other callers); re-deriving it here was a
+  // fourth, silently-driftable copy of the same test.
+  const wantsLocalTool = !agentOverride && Array.isArray(toolIds) && isLocal(toolIds);
   if (!wantsLocalTool && !isPathInside(runDir, project)) {
     return {
       error: {

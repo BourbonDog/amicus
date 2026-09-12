@@ -625,13 +625,12 @@ Subcommands for 'council':
                                 review to none); task and skill are refused, as
                                 are edit/write/apply_patch/question. A local tool
                                 (read, grep, glob, bash) needs --out-dir OUTSIDE
-                                the project tree.
-                                read never opens .env files (denied at the engine);
-                                grep and bash have no such fence — opt them in only
-                                on a tree without secrets.
-                                --agent Plan|Build runs every
-                                leg on the engine's own agent instead (the
-                                escape hatch; no council agents, no allowlist).
+                                the project tree. read never opens .env files
+                                (denied at the engine); grep and bash have no such
+                                fence — opt them in only on a tree without
+                                secrets. --agent Plan|Build runs every leg on the
+                                engine's own agent instead (the escape hatch; no
+                                council agents, no allowlist).
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

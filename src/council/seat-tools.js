@@ -41,7 +41,9 @@ const REMOTE_TOOL_IDS = Object.freeze(['webfetch', 'websearch']);
  * local/remote predicate — resolveSeatTools, buildCouncilAgents and seatToolsSentence
  * all call this instead of each re-writing the same `.some()` (review r1 P2-R8: the
  * duplication let `buildCouncilAgents` accept a `local` flag that could contradict its
- * own `tools`, silently dropping `external_directory: 'deny'`).
+ * own `tools`, silently dropping `external_directory: 'deny'`). A fourth caller (PR 2
+ * Task 5 review r1, P2-R19): cli-council-run-tools.js's out-dir fence, which decides
+ * whether a run's directory may sit outside the project tree.
  * @param {string[]} tools @returns {boolean}
  */
 function isLocal(tools) {
@@ -211,5 +213,5 @@ function seatToolsSentence(tools, kind) {
 
 module.exports = {
   REFUSED_TOOL_IDS, REMOTE_TOOL_IDS, defaultToolsFor, parseToolsFlag, resolveSeatTools,
-  buildCouncilAgents, seatToolsSentence,
+  buildCouncilAgents, seatToolsSentence, isLocal,
 };

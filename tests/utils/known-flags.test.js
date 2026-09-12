@@ -20,7 +20,7 @@
  */
 
 const { getKnownFlags, unknownFlags, INTERNAL_FLAGS } = require('../../src/utils/known-flags');
-const { parseArgs } = require('../../src/cli');
+const { parseArgs, getUsage } = require('../../src/cli');
 
 describe('getKnownFlags', () => {
   const known = getKnownFlags();
@@ -87,7 +87,10 @@ describe('getKnownFlags', () => {
   it("'tools' and 'agent' are known flags on council run (spec 2026-09-11 §4)", () => {
     const known = getKnownFlags();
     expect(known.has('tools')).toBe(true);
-    expect(known.has('agent')).toBe(true);
+    // known.has('agent') alone is vacuous — '--agent' already appears in the
+    // 'start' command's own usage block, independent of this task. Pin the
+    // actual council-run synopsis instead.
+    expect(getUsage('council')).toContain('[--tools <a,b,c>] [--agent Plan|Build]');
   });
 });
 

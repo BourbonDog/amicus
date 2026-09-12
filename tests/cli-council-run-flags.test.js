@@ -439,9 +439,16 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(code).toBe(0);
     expect(runCouncil.mock.calls[0][0].agent).toBe('Build');
     runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ agent: 'plan' }));
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].agent).toBe('Plan');
+    runCouncil.mockClear();
+    out.mockClear();
     code = await handleCouncilRun(argsBase({ agent: 'Chat' }));
     expect(code).toBe(1);
     expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.hint).toBe(
+      'Chat is not supported headless; omit --agent to run seats on the council agents');
   });
   test('neither key is present on the options when the flags are absent (emit-when-set)', async () => {
     await handleCouncilRun(argsBase({}));
