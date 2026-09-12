@@ -16,7 +16,7 @@
 - `docs/superpowers/` is gitignored; plan/spec edits are staged with `git add -f`.
 - Commit messages end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` — this is the controller session's attribution; a subagent's own attribution line does not apply.
 - Never `python -c`; never `git checkout -- <file>` / `git stash` with other uncommitted edits; never run a live council or anything that spends (a push to the labelled PR spends — the controller gates it).
-- **Measured 2026-09-12 on the pinned engine (keyless start, no prompt sent):** `client.tool.ids()` (`GET /experimental/tool/ids`) returns exactly `["invalid","question","bash","read","glob","grep","edit","write","task","webfetch","todowrite","websearch","skill","apply_patch"]`. `GET /agent` is `client.app.agents()` (there is no `client.agent`); its runtime `Agent` objects carry `permission` as a RULE LIST `[{permission, pattern, action}]` (the SDK d.ts declares an older object shape — assert on the runtime) and no `tools` key. An agent config `tools: { '*': false }` renders a `*=deny` rule; `tools: { '*': false, webfetch: true, read: true, grep: true }` renders `*=deny webfetch=allow read=allow grep=allow`; `permission: { edit: 'deny', bash: 'deny', external_directory: 'deny' }` renders `edit=deny bash=deny external_directory=deny` AFTER the engine's defaults (last rule wins). An UNKNOWN tool id in an agent's `tools` map (`bogus_tool: true`) does NOT poison the start — the server comes up and renders `bogus_tool=allow` — so unknown ids must be refused by amicus against `tool.ids()`, the engine will not. The engine's own defaults add `read[*.env]=ask` rules to every agent: a seat with `read` that opens a `.env` file hits an `ask` the headless leg cannot answer and ends by the B53 tool-stall detector (documented as a limitation, not changed here).
+- **Measured 2026-09-12 on the pinned engine (keyless start, no prompt sent):** `client.tool.ids()` (`GET /experimental/tool/ids`) returns exactly `["invalid","question","bash","read","glob","grep","edit","write","task","webfetch","todowrite","websearch","skill","apply_patch"]`. `GET /agent` is `client.app.agents()` (there is no `client.agent`); its runtime `Agent` objects carry `permission` as a RULE LIST `[{permission, pattern, action}]` (the SDK d.ts declares an older object shape — assert on the runtime) and no `tools` key. An agent config `tools: { '*': false }` renders a `*=deny` rule; `tools: { '*': false, webfetch: true, read: true, grep: true }` renders `*=deny webfetch=allow read=allow grep=allow`; `permission: { edit: 'deny', bash: 'deny', external_directory: 'deny' }` renders `edit=deny bash=deny external_directory=deny` AFTER the engine's defaults (last rule wins). An UNKNOWN tool id in an agent's `tools` map (`bogus_tool: true`) does NOT poison the start — the server comes up and renders `bogus_tool=allow` — so unknown ids must be refused by amicus against `tool.ids()`, the engine will not. The engine evaluates permissions with `findLast` over the merged rule list (v1.18.15 `permission/index.ts`: the LAST matching rule wins; `Wildcard.match` turns `*` into `.*`, which matches empty and `/`), and its own `read[*.env]=ask` defaults render BEFORE the agent's tools-map `read=allow` — so a seat granted `read` would READ `.env` files, not stall (measured 2026-09-12; ruling P2-R9 supersedes P2-R6). The seat agent therefore adds, only when `read` is opted in, `permission.read = { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' }`, measured to render `read=allow read[*.env]=deny read[*.env.*]=deny` AFTER the tools map (`.env` → refusal, the leg continues; the `'*': 'allow'` entry is required — without it the explicit object replaces the tools-derived `read=allow` and ordinary reads fall to `*=deny`). `grep` and `bash` cannot be fenced per file: opting them in trusts every seat with the tree's contents, `.env` included (documented, Task 8).
 - Refused ids (hand-listed on purpose; every other id is validated against the engine): `task`, `skill` (spec §2: spawn/escape), `question` (blocks a headless leg), `invalid` (the engine's error surface, not a tool), `edit`, `write`, `apply_patch` (a council seat never modifies the tree; the seat agent's `edit: 'deny'` would only turn them into refusals inside the model's loop). Remote ids: `webfetch`, `websearch`; every other accepted id is local.
 - Defaults (spec §2.1): task mode → `['webfetch']`; review → `[]`. The `--agent Plan|Build` override wins over the computed agents (spec §4) and is the escape hatch the refusal Notice names.
 - Out-dir rule (spec §4 vs the v4.7 CLI fence "`--out-dir` must stay inside the project"): with a LOCAL tool opted in, the run dir must be OUTSIDE the project tree AND under an allowed root (`project-root-allowlist.js :: isAllowedProjectRoot`: home, cwd, tmp, `AMICUS_PROJECT_DIR`, `AMICUS_PROJECT_ROOTS`); inside the project it is refused with a Notice. Over MCP the run dir must stay inside the project (`mcp-council-run.js:137-141`), so local tools over MCP are refused with a message that names the CLI; `webfetch`/`websearch` over MCP are fine.
@@ -1279,8 +1279,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
  * pinned engine (opencode-ai 1.18.15) still (1) lists its tool ids on
  * /experimental/tool/ids, (2) accepts an agent config whose `tools` map uses the
  * '*' wildcard, (3) renders that map and the permission block as the rule list
- * amicus relies on, and (4) tolerates an UNKNOWN tool id at start (so amicus,
- * not the engine, has to refuse it). One engine start, no prompt, zero spend.
+ * amicus relies on, (4) tolerates an UNKNOWN tool id at start (so amicus,
+ * not the engine, has to refuse it), and (5) places the seat's nested `read`
+ * rules AFTER its tools-map `read=allow`, so the engine's `findLast` evaluation
+ * denies `.env` reads instead of allowing them (ruling P2-R9). One engine start,
+ * no prompt, zero spend.
  * Measured 2026-09-12 as the values pinned below. Runtime shape: `permission`
  * is a rule list [{permission, pattern, action}] — the SDK d.ts still declares
  * an object; assert on the runtime.
@@ -1293,6 +1296,14 @@ require('../src/utils/path-setup').ensureNodeModulesBinInPath();
 const starRule = (agent, permission) => (Array.isArray(agent.permission) ? agent.permission : [])
   .filter((r) => r.permission === permission && r.pattern === '*').map((r) => r.action);
 const last = (arr) => arr[arr.length - 1];
+// The LAST rule for (permission, pattern) and WHERE it sits — the engine's
+// evaluate() is findLast, so order is the fact under test, not only the action.
+const lastRule = (agent, permission, pattern) => {
+  const rules = Array.isArray(agent.permission) ? agent.permission : [];
+  let index = -1;
+  rules.forEach((r, i) => { if (r.permission === permission && r.pattern === pattern) { index = i; } });
+  return { index, action: index >= 0 ? rules[index].action : undefined };
+};
 
 async function withAgents(agents, fn) {
   const sdk = await import('@opencode-ai/sdk');
@@ -1335,6 +1346,18 @@ test('the pinned engine registers council-seat/council-support as amicus expects
     expect(last(starRule(seat, 'bash'))).toBe('deny');
     expect(last(starRule(seat, 'external_directory'))).toBe('deny');
 
+    // (5): the seat's nested read rules land AFTER its tools-map read=allow, so
+    // the engine's findLast evaluation DENIES .env reads (ruling P2-R9). Both
+    // the action and the ORDER are asserted — the order is what makes deny win.
+    const readAllow = lastRule(seat, 'read', '*');
+    const envDeny = lastRule(seat, 'read', '*.env');
+    const envDotDeny = lastRule(seat, 'read', '*.env.*');
+    expect(readAllow.action).toBe('allow');
+    expect(envDeny.action).toBe('deny');
+    expect(envDotDeny.action).toBe('deny');
+    expect(envDeny.index).toBeGreaterThan(readAllow.index);
+    expect(envDotDeny.index).toBeGreaterThan(readAllow.index);
+
     // (4): an unknown id is ACCEPTED by the engine — which is exactly why
     // runCouncil validates --tools against tool.ids() itself.
     expect(last(starRule(byName['council-probe-unknown'], 'bogus_tool'))).toBe('allow');
@@ -1363,8 +1386,10 @@ git commit -m "test(integration): keyless probe — the pinned engine renders th
 
 One engine start, no prompt: /experimental/tool/ids lists the ids, '*' in a
 tools map renders *=deny with the allowlist's =allow after it, the permission
-block lands as the last rules, and an unknown id is accepted at start — so
-amicus, not the engine, refuses it (runCouncil validates against tool.ids()).
+block lands as the last rules (the seat's nested read rules after its own
+read=allow, so .env reads are DENIED by findLast — ruling P2-R9), and an
+unknown id is accepted at start — so amicus, not the engine, refuses it
+(runCouncil validates against tool.ids()).
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
@@ -1419,9 +1444,11 @@ are fine.
 config enforces; the sentence informs — study run E1 showed gemini makes zero tool calls when
 told not to.
 
-**Known edge.** The engine's own defaults ask before reading `*.env` files; a seat with `read`
-that opens one hits an `ask` the headless leg cannot answer and ends by the tool-stall
-detector. Keep secrets out of the tree a seat is pointed at.
+**Secrets.** With `read` opted in, the seat agent denies `.env` and `.env.*` files at the
+engine (the seat gets a refusal and the leg continues; measured 2026-09-12 — the deny rules
+render after the seat's own `read=allow`, and the engine takes the last matching rule).
+`grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
+the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
 ```
 
 Add the subsection to the table of contents beside the Task mode entry.
