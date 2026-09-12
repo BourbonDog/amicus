@@ -110,7 +110,9 @@ function dateLine(date) {
  *   the seat sentence forks exactly where the chair's does)
  */
 function composeWith(role, clause, contract, { briefing, date, tools }, kind = 'review') {
-  const { seatToolsSentence } = require('./seat-tools'); // lazy: seat-tools requires briefings-chair
+  // lazy, defensively — not cycle-avoidance: seat-tools.js requires only ./briefings-chair,
+  // which itself requires only ./seats, so no require cycle with this module exists today.
+  const { seatToolsSentence } = require('./seat-tools');
   return [
     role,
     seatToolsSentence(tools || [], kind),
@@ -141,7 +143,16 @@ function buildCriticBriefing(args) {
   return compose(CRITIC_BRIEF, args);
 }
 
-/** Expert-lens briefing (concurrent solo per seat — spec §4 --lenses). */
+/**
+ * Expert-lens briefing (concurrent solo per seat — spec §4 --lenses).
+ * `tools` must survive both the destructure below and the rebuilt object handed to
+ * `compose` — this builder (unlike buildSeatBriefing/buildCriticBriefing, which just
+ * forward the `args` they're given) reconstructs a NARROWER object, so dropping `tools`
+ * from either spot is silent. Named mutant LENSTOOLSDROP: drop `tools` here; reddens the
+ * review-intent case in 'lens and critic briefings carry a real tools line too, not just
+ * the seat (LENSTOOLSDROP guard)', tests/council/briefings-tools.test.js. The task-intent
+ * twin of this same mutant lives in briefings-task.js :: buildTaskLensBriefing.
+ */
 function buildLensBriefing({ lens, briefing, date, tools }) {
   return compose(
     `Review this material strictly through the lens of a ${lens}. Raise only findings ` +

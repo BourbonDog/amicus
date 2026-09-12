@@ -118,7 +118,13 @@ function buildTaskCriticBriefing(args) {
   return composeWith(TASK_CRITIC_BRIEF, TASK_ANTI_SYCOPHANCY_CLAUSE, TASK_FINDINGS_CONTRACT, args, 'answer');
 }
 
-/** Task expert-lens briefing (concurrent solo per seat — --lenses). */
+/**
+ * Task expert-lens briefing (concurrent solo per seat — --lenses).
+ * Named mutant LENSTOOLSDROP (see briefings.js :: buildLensBriefing for the full account):
+ * dropping `tools` from the destructure or the rebuilt object below reddens the task-intent
+ * case in 'lens and critic briefings carry a real tools line too, not just the seat
+ * (LENSTOOLSDROP guard)', tests/council/briefings-tools.test.js.
+ */
 function buildTaskLensBriefing({ lens, briefing, date, tools }) {
   return composeWith(
     `Do the work the briefing asks for strictly through the lens of a ${lens}. ` +
