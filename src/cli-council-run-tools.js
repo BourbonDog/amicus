@@ -18,9 +18,10 @@
  * RELAXED for a run whose seats carry a LOCAL tool (read, grep, glob, bash):
  * spec §4 requires such a run's directory sit OUTSIDE the project tree, and
  * `runCouncil` enforces that placement (outside AND under an allowed root)
- * itself — this module only has to stop blocking it. `--agent` is the escape
- * hatch (no council agents, no allowlist), so it never wants the relaxation
- * even when `--tools` is also present.
+ * itself — this module only has to stop blocking it. `--agent` combined with
+ * `--tools` is refused outright (ruling P2-R28), before this fence is ever
+ * consulted — the escape hatch (no council agents, no allowlist) has no
+ * tools-based agent for the relaxation to apply to.
  */
 
 'use strict';
@@ -44,7 +45,7 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
     toolIds = parsed.ids;
   }
   let agentOverride;
-  // Ruling P2-R30 (D5): `agent: null` is the CLI house style for an unset
+  // council #247 D5: `agent: null` is the CLI house style for an unset
   // option, never an invalid override and never `--agent`'s own skip branch.
   if (args.agent !== null && (explicitKeys.has('agent') || args.agent !== undefined)) {
     const a = typeof args.agent === 'string' ? args.agent.toLowerCase() : '';

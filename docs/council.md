@@ -404,11 +404,12 @@ not be able to read this run's sibling sessions, so with any local tool opted in
 must sit **outside** the project tree (`--out-dir`), under your home, tmp or
 `AMICUS_PROJECT_ROOTS`; the seats are then scoped to the project tree (`external_directory:
 deny`) while their metadata stays in the run dir. Over MCP the run dir stays inside the
-project, so local tools are refused there with the CLI named; `webfetch`/`websearch` over MCP
-are fine.
+project, so local tools are refused there with the CLI named; tools that never touch the tree
+(`webfetch`, `websearch`, `todowrite`) over MCP are fine.
 
 **What the seat is told.** With no tools it gets the same no-tools sentence as the chair
-(`Do NOT use any tools or read any files; …`), with tools one line naming exactly them. The
+(`Do NOT use any tools or read any files; …`), with tools one line naming exactly them, and
+under `--agent` a line saying it runs as the engine's named agent with its own tool set. The
 config enforces; the sentence informs — study run E1 showed gemini makes zero tool calls when
 told not to.
 

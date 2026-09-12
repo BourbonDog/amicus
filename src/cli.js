@@ -622,9 +622,9 @@ Subcommands for 'council':
                                 review is the default and is never stored.
                                 --tools <a,b,c> opts stage-1 seats into tools by the
                                 engine's own ids (task mode defaults to webfetch,
-                                review to none); task and skill are refused, as
-                                are edit/write/apply_patch/question. A local tool
-                                (read, grep, glob, bash) needs --out-dir OUTSIDE
+                                review to none); task, skill, edit, write,
+                                apply_patch, question and invalid are refused.
+                                A local tool (read, grep, glob, bash) needs --out-dir OUTSIDE
                                 the project tree. read never opens .env files
                                 (denied at the engine); grep and bash have no such
                                 fence — opt them in only on a tree without

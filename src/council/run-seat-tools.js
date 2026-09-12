@@ -67,8 +67,11 @@ function preflightSeatTools(o) {
   const conflict = seatTools.agentToolsConflict(o.agent, o.tools);
   if (conflict) { return { error: { code: 'BAD_ARGS', message: `Error: ${conflict}` } }; }
   // The --agent escape hatch wins: no council agents, every leg runs on the
-  // engine's own agent — so --tools is never even consulted under it (the
-  // "--agent Build skips the council agents" pin, tests/council/run-tools.test.js).
+  // engine's own agent — so --tools is never even consulted under it. Pinned
+  // by run-tools.test.js's "--agent Build short-circuits resolveSeatTools
+  // even under task intent" case — review intent alone can't tell the
+  // short-circuit apart from an unconditional resolveSeatTools call (both
+  // give `tools: []`), only the task default (`['webfetch']`) can.
   const seatPolicy = o.agent
     ? { ok: true, tools: [], local: false }
     : seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: Array.isArray(o.tools) ? o.tools : [] });

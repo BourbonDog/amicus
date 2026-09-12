@@ -172,6 +172,22 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(runState.readRun(runDir).agentOverride).toBe('Build');
   });
 
+  // Re-review nit: dropping `tools` from the test above (A3) left
+  // preflightSeatTools's `o.agent ? { ok: true, tools: [], local: false } :
+  // resolveSeatTools(...)` short-circuit with no pin at all — under review
+  // intent BOTH branches give `tools: []`, so nothing here could tell a real
+  // short-circuit from an unconditional resolveSeatTools call. Only a
+  // task-intent run can: resolveSeatTools's task default is `['webfetch']`,
+  // which the short-circuit must never pick up. Uses taskLaunchersFor (see
+  // its own comment above) because this run must reach exit 0.
+  test('--agent Build short-circuits resolveSeatTools even under task intent: no webfetch default picked up', async () => {
+    const launchers = taskLaunchersFor();
+    const { exitCode } = await runCouncil(base({ agent: 'Build', intent: 'task' }), { launchers });
+    expect(exitCode).toBe(0);
+    expect(runState.readRun(runDir).seatTools).toBeUndefined();
+    expect(runState.readRun(runDir).agentOverride).toBe('Build');
+  });
+
   // B1/D1 (ruling P2-R31): under --agent there is no computed allowlist, so
   // the seat briefing — live AND the one persisted for auditability — carries
   // the override sentence instead of a tools-based one.

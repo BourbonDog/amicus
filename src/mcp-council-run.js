@@ -122,10 +122,11 @@ async function handleCouncilRunTool(input, project, helpers) {
     return textResult('maxCost must be a positive number.', true);
   }
   // Spec 2026-09-11 §4 (P2-R28 supersedes P2-R25): --tools/--agent are refused together, before either is consulted, on every door. Tools that never touch the tree (webfetch, websearch, todowrite) ride through; local tools are refused naming the CLI.
-  const conflict = require('./council/seat-tools').agentToolsConflict(input.agent, Array.isArray(input.tools) ? input.tools : undefined);
+  const toolsIn = input.tools === undefined ? undefined : (Array.isArray(input.tools) ? input.tools : [String(input.tools)]);
+  const conflict = require('./council/seat-tools').agentToolsConflict(input.agent, toolsIn);
   if (conflict) { return textResult(conflict, true); }
-  const mt = (input.tools !== undefined)
-    ? require('./council/seat-tools').resolveRemoteOnlyTools(input.tools) : { ok: true, ids: [] };
+  const mt = (toolsIn !== undefined)
+    ? require('./council/seat-tools').resolveRemoteOnlyTools(toolsIn) : { ok: true, ids: [] };
   if (!mt.ok) { return textResult(mt.message, true); }
 
   const { generateTaskId } = require('./sidecar/start');

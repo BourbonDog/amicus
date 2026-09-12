@@ -321,4 +321,20 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     expect(res.content[0].text).toContain('cannot be combined');
     expect(spawnCalls).toHaveLength(0);
   });
+
+  // Re-review nit: agentToolsConflict only ever saw an ARRAY-shaped `input.tools`
+  // (`Array.isArray(input.tools) ? input.tools : undefined`), so a
+  // schema-bypassing bare string slipped past the conflict check even though
+  // resolveRemoteOnlyTools's own docblock names a string as a supported
+  // "defense-in-depth" shape — an inconsistency between the two guards.
+  // `toolsIn` now normalizes once so both see the same shape.
+  test('a string tools value with agent is refused the same as an array (schema-bypass, D8)', async () => {
+    const spawnCalls = [];
+    const before = fs.readdirSync(tmp);
+    const res = await handleCouncilRunTool(input({ agent: 'Plan', tools: 'webfetch' }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('cannot be combined');
+    expect(spawnCalls).toHaveLength(0);
+    expect(fs.readdirSync(tmp)).toEqual(before); // no run dir was created
+  });
 });
