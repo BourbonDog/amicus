@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { readIfPresent } = require('../helpers/read-if-present');
 
 const asm = require('../../src/council/run-assemble');
 const rse = require('../../src/council/run-stats-entry');
@@ -253,8 +254,15 @@ describe('the ttftMs emit gate is ONE predicate (PR #207 round 3, B3)', () => {
    * that decision is recorded, and every entry there carries its reason.
    */
   test('no ttftMs site in src/ escapes the roster', () => {
-    const touching = srcFiles().filter(
-      (f) => fs.readFileSync(path.join(ROOT, f), 'utf8').includes('ttftMs'));
+    // A file srcFiles() listed can be gone by this read: tests/scripts/check-file-sizes.test.js
+    // writes and unlinks a REAL src/__sizecheck_tmp__.js in a parallel worker. c999a5e5 moved
+    // three sibling walkers onto helpers/read-if-present for exactly this; this one was missed
+    // and killed one `npm test` run on 2026-09-11 with ENOENT. A vanished file is another
+    // worker's temp file, never a shipped source, so skipping it cannot hide a ttftMs site.
+    const touching = srcFiles().filter((f) => {
+      const src = readIfPresent(path.join(ROOT, f));
+      return src !== null && src.includes('ttftMs');
+    });
     expect(new Set(touching))
       .toEqual(new Set([...IMPORTERS, INLINE, 'src/utils/ttft.js', ...MENTIONS_ONLY]));
   });

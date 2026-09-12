@@ -1032,12 +1032,15 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
    *
    * The throw seam is `server.close()` on the success path (src/headless.js:1343
    * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
-   * guarded one in the handler): the leg polls, streams 'hello', completes, and
-   * only then does the close reject into the outer catch.
+   * guarded one in the handler): the leg polls, streams 'hello', its message
+   * finalizes so it completes on the stable-finished path (spec 2026-09-11 §3:
+   * with the suite's busy default an unfinalized fixture would now run to the
+   * 2 s leg timeout instead), and only then does the close reject into the outer
+   * catch.
    */
   test('a leg that measured a first token and THEN exploded keeps the measurement', async () => {
     mockGetMessages.mockResolvedValue([{
-      info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+      info: { role: 'assistant', id: 'm1', time: { created: 1, completed: 2 } },
       parts: [{ id: 't1', type: 'text', text: 'hello' }],
     }]);
     mockStartServer.mockResolvedValue({

@@ -1210,7 +1210,7 @@ describe('Headless Mode Runner', () => {
     it('does NOT fold on a standalone [SIDECAR_FOLD] that is followed by more content (#BL-7)', async () => {
       const echoed = 'To finish I would emit:\n[SIDECAR_FOLD]\n...but I am not done yet, continuing analysis';
       mockGetMessages.mockResolvedValue([{
-        info: { role: 'assistant', id: 'msg-1', time: {} },
+        info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
         parts: [{ id: 'p1', type: 'text', text: echoed }]
       }]);
 
@@ -1218,8 +1218,10 @@ describe('Headless Mode Runner', () => {
         testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
         30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 3 }
       );
-      // Ended via the idle fallback (a genuine completion), NOT the fold marker:
-      // the echoed marker is preserved as content, never treated as a delimiter.
+      // Ended via the stable-finished path (the message finalized), NOT the fold
+      // marker: the echoed marker is preserved as content, never treated as a
+      // delimiter. (Pre-spec 2026-09-11 §3 this exited via the idle heuristic on
+      // an unfinalized message while the SDK said busy — the defect shape.)
       expect(result.completed).toBe(true);
       expect(result.summary).toContain('[SIDECAR_FOLD]');
       expect(result.summary).toContain('continuing analysis');
@@ -1293,16 +1295,21 @@ describe('Headless Mode Runner', () => {
       });
     });
 
-    it('completes via the idle fallback after stableIdlePolls without assistantFinished', async () => {
+    it('completes via the idle fallback after stableIdlePolls when session.status is unavailable and the message never finalizes (spec 2026-09-11 §3 — the heuristic is the fallback)', async () => {
       const stableMessage = [{
         info: { role: 'assistant', id: 'msg-1', time: {} },
         parts: [{ id: 'p1', type: 'text', text: 'Final output' }]
       }];
       mockGetMessages.mockResolvedValue(stableMessage);
+      // Pre-spec this ran with the suite's `busy` default and pinned the defect
+      // (a busy engine cut at stableIdlePolls). Named mutant "UNAVAILABLEVETO":
+      // treat 'unavailable' as busy — this hangs to the 30 s timeout.
+      mockGetSessionStatus.mockRejectedValue(new Error('session.status unsupported'));
       const result = await runHeadless(
         testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
         30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 4 }
       );
+      expect(result.completed).toBe(true);
       expect(result.summary).toBe('Final output');
     });
 

@@ -315,6 +315,12 @@ describe('per-tool-call stall detector (B53)', () => {
       }]);
     });
 
+    // Spec 2026-09-11 §3: with the suite's `busy` default this unfinalized fixture would
+    // now wait for a finalize that never comes and exit by the 300 ms leg timeout — which
+    // sets no error and would pass this test vacuously. Pin the path the name claims (the
+    // stable-poll idle completion) on the fallback: status unavailable.
+    mockGetSessionStatus.mockRejectedValue(new Error('session.status unsupported'));
+
     const result = await runHeadless(
       'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
       300, 'build',
@@ -335,6 +341,11 @@ describe('per-tool-call stall detector (B53)', () => {
     // away from being killed as "wedged". Nothing but `progressed` resetting the
     // clock was saving it. Now `state.status: 'completed'` settles it outright.
     mockGetMessages.mockResolvedValue(completedRealShapeToolCall);
+    // Spec 2026-09-11 §3: with the suite's `busy` default this leg would now wait for
+    // its message to finalize (which this fixture never does) instead of exiting at
+    // 40 stable polls. The property under test — B53 must NOT fire once the tool
+    // COMPLETED — is independent of the exit path, so pin it on the fallback path.
+    mockGetSessionStatus.mockRejectedValue(new Error('session.status unsupported'));
     const started = Date.now();
 
     const result = await runHeadless(

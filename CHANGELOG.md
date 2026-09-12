@@ -3,6 +3,33 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Headless legs are no longer declared complete while the engine is still answering.**
+  The stable-idle heuristic (`headless.js`, the v4.4 B4 "measured defect site") now
+  defers to `session.status`: while the engine reports `busy` (or `retry`, provider
+  backoff) and no tool call is live, flat output is treated as activity rather than
+  silence, and the leg waits for its message to finalize. In-flight reasoning and text
+  are invisible to the poller, so a seat that narrated between tool calls and then
+  answered for longer than 60 s was harvested mid-answer — three complete council
+  deliverables were discarded 39–107 s before they finished in the 2026-09-11
+  study (run D0), and the run reported `complete` with no degrades. The B4 bounded
+  tool-settle ceiling is unchanged and still governs whenever a tool call is live. When
+  `session.status` is unavailable the heuristic runs as the fallback it was always meant
+  to be. The trade is explicit: a busy-but-wedged (or permanently retrying) leg that
+  already produced output now runs to its `--timeout` (15 min default) and is named
+  `timeout`, instead of being declared complete at 60 s on a stub; the debug trace
+  names the veto once per flat stretch (and again whenever a non-zero count is reset,
+  e.g. a status flip-flop) and the exit line records the last engine status. When the
+  fallback heuristic ends an unfinalized message the leg logs a warning naming the
+  status it saw, and a retry whose next attempt lies beyond the leg deadline ends the
+  leg at once as `RETRY_BEYOND_DEADLINE` instead of holding the seat (never once the
+  last message has finalized — that leg completes normally — and never while a tool
+  call is live, where the tool-settle ceiling governs).
+  (`docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §3; PR 1 of 3.)
+
 ## [4.9.7] - 2026-09-09
 
 Three findings deferred from the v4.9.6 cut, and the two open questions filed beside them. The
