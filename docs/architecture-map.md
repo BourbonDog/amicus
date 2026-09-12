@@ -66,6 +66,7 @@ src/
 │   ├── run-stats-entry.js
 │   ├── run-verdict-files.js
 │   ├── run.js
+│   ├── seat-tools.js
 │   ├── seats.js
 │   ├── stage1-bind.js
 │   ├── street-cred.js
@@ -494,7 +495,7 @@ evals/
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
 | `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES()`, `ANSWER_SCALE_ADDENDUM()`, `TASK_CHAIR_SYNTHESIS()`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS()`, `TASK_CONCURRENCE_CAVEAT()` |
-| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_LEAD()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2-task.js` |  | `TASK_JUDGE_FRAME()`, `TASK_JUDGE_A()`, `TASK_JUDGE_B()`, `TASK_JUDGE_B_NO_CLAIMS()`, `NO_CLAIMS_INDEX()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
@@ -539,6 +540,7 @@ evals/
 | `council/run-stats-entry.js` |  | `buildRunStatsEntry()` |
 | `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
+| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS()`, `REMOTE_TOOL_IDS()`, `defaultToolsFor()`, `parseToolsFlag()`, `resolveSeatTools()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
