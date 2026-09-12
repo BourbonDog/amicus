@@ -57,6 +57,22 @@ describe('resolveSeatTools', () => {
     expect(st.resolveSeatTools({ intent: 'task', optIn: ['read', 'grep', 'glob', 'bash', 'websearch'], declaredIds: DECLARED }))
       .toEqual({ ok: true, tools: ['bash', 'glob', 'grep', 'read', 'webfetch', 'websearch'], local: true });
   });
+  test('a case-variant refused id is caught without the engine list (review r1 P2-R7)', () => {
+    const r = st.resolveSeatTools({ intent: 'task', optIn: ['Task'], declaredIds: null });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('BAD_ARGS');
+    expect(r.message).toContain('task');
+  });
+  test('optIn is normalized like the flag: whitespace and case do not change the result (review r1 P2-R7)', () => {
+    expect(st.resolveSeatTools({ intent: 'task', optIn: [' Grep '], declaredIds: ['grep', 'webfetch'] }))
+      .toEqual({ ok: true, tools: ['grep', 'webfetch'], local: true });
+  });
+  test('an opted-in id with a bad shape is refused without the engine list (review r1 P2-R7)', () => {
+    const r = st.resolveSeatTools({ intent: 'task', optIn: ['../x'], declaredIds: null });
+    expect(r.ok).toBe(false);
+    expect(r.code).toBe('BAD_ARGS');
+    expect(r.message).toContain('../x');
+  });
 });
 
 describe('buildCouncilAgents', () => {
@@ -75,11 +91,33 @@ describe('buildCouncilAgents', () => {
   test('a local seat denies external_directory and allows bash only when bash is in', () => {
     const a = st.buildCouncilAgents({ tools: ['bash', 'read'], local: true })['council-seat'];
     expect(a.tools).toEqual({ '*': false, bash: true, read: true });
-    expect(a.permission).toEqual({ edit: 'deny', bash: 'allow', webfetch: 'deny', external_directory: 'deny' });
+    // `read` is in tools, so review r1 P2-R9's nested read permission now appears too —
+    // updated alongside that fix, not new coverage of its own (see the dedicated P2-R9
+    // tests below for that).
+    expect(a.permission).toEqual({
+      edit: 'deny', bash: 'allow', webfetch: 'deny', external_directory: 'deny',
+      read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' },
+    });
   });
   test('never emits a chat key (buildServerOptions merges after chat)', () => {
     expect(Object.keys(st.buildCouncilAgents({ tools: [], local: false })).sort())
       .toEqual(['council-seat', 'council-support']);
+  });
+  test('external_directory denies even when the caller omits local, if a local tool is in (review r1 P2-R8)', () => {
+    const a = st.buildCouncilAgents({ tools: ['read', 'grep'] })['council-seat'];
+    expect(a.permission.external_directory).toBe('deny');
+  });
+  test('a remote-only tool list still has no external_directory key when local is omitted (review r1 P2-R8)', () => {
+    const a = st.buildCouncilAgents({ tools: ['webfetch'] })['council-seat'];
+    expect(a.permission.external_directory).toBeUndefined();
+  });
+  test('a read seat gets a nested .env-denying read permission (review r1 P2-R9, measured 2026-09-12)', () => {
+    const a = st.buildCouncilAgents({ tools: ['read', 'grep'] })['council-seat'];
+    expect(a.permission.read).toEqual({ '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' });
+  });
+  test('no read in tools means no read permission key at all (review r1 P2-R9)', () => {
+    const a = st.buildCouncilAgents({ tools: ['webfetch'] })['council-seat'];
+    expect(a.permission).not.toHaveProperty('read');
   });
 });
 
