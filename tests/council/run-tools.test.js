@@ -136,4 +136,46 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(runState.readRun(runDir).seatTools).toEqual(['webfetch']); // the policy ran — council agents are in play
     expect(runState.readRun(runDir).agentOverride).toBeUndefined(); // absent, unlike an explicit override
   });
+
+  // Final review minor (NOPROJECTSCOPE): with a local tool opted in and a
+  // falsy o.project, isPathInside(runDir, undefined) is false, so the
+  // run-directory placement rule alone would PASS and run-launch.js's
+  // directory fallback would silently resolve to the run dir itself — a
+  // direct caller (bypassing the CLI's required --project) could scope a
+  // seat to the very dir holding its own sibling sessions. Defensive
+  // refusal, before any launch.
+  // ⚠️ Deviation from the literal brief: the brief's fixture (`project:
+  // undefined` driven through runCouncil) cannot reach this guard —
+  // runCouncil's OWN initCouncilRun (run-state.js :: writePointer ::
+  // pointerPath) does `path.join(project, …)` unconditionally, several
+  // lines before preflightSeatTools ever runs, and throws a raw
+  // (uncaught) TypeError on a falsy project regardless of --tools. That
+  // crash is pre-existing, unrelated to seat tools, and out of scope here.
+  // Calling preflightSeatTools directly is the faithful equivalent: it is
+  // the exported unit the guard actually lives in, with no engine/server
+  // dependency, matching how this module's own docblock describes it
+  // ("preflightSeatTools (BEFORE the server): shape + refusals need no
+  // engine ... so both are decided, and refused, at ZERO SPEND").
+  test('preflightSeatTools refuses a local tool with no project directory (NOPROJECTSCOPE)', () => {
+    const { preflightSeatTools } = require('../../src/council/run-seat-tools');
+    const outside = path.join(tmp, 'run-outside'); fs.mkdirSync(outside);
+    const res = preflightSeatTools({ tools: ['read'], runDir: outside, project: undefined });
+    expect(res.error).not.toBeNull();
+    expect(res.error.code).toBe('BAD_ARGS');
+    expect(res.error.message).toContain('needs a project directory');
+  });
+
+  // Pins that the refusal happens in preflightSeatTools, BEFORE
+  // acquireRunServer is ever called — startOpenCodeServerFn is the seam
+  // acquireRunServer uses (run-server.js :: acquireRunServer). No fake
+  // launchers are injected here either, so a false pass-through would have
+  // to reach real transport code, not merely a test double.
+  test('a refused id is caught before the shared server ever starts (no launchers injected)', async () => {
+    const startOpenCodeServerFn = jest.fn();
+    const { exitCode, run } = await runCouncil(base({ tools: ['task'] }), { startOpenCodeServerFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('--agent Build');
+    expect(startOpenCodeServerFn).not.toHaveBeenCalled();
+  });
 });

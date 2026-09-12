@@ -60,6 +60,18 @@ function preflightSeatTools(o) {
     : seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: Array.isArray(o.tools) ? o.tools : [] });
   if (!seatPolicy.ok) { return { error: { code: seatPolicy.code, message: `Error: ${seatPolicy.message}` } }; }
   if (seatPolicy.local) {
+    // Defensive refusal: with a local tool and a falsy o.project,
+    // isPathInside(runDir, undefined) is false, so the placement rule below
+    // would PASS, and run-launch.js's directory fallback
+    // (`(opts.role === 'seat' && opts.directory) || opts.project`) resolves to
+    // the run dir itself — a direct caller (bypassing the CLI's required
+    // --project) could scope a seat to the very dir holding its own sibling
+    // sessions, exactly what the placement rule below exists to prevent.
+    // Named mutant NOPROJECTSCOPE: dropping this guard lets that through.
+    // Pinned by run-tools.test.js's "project: undefined" case.
+    if (!o.project) {
+      return { error: { code: 'BAD_ARGS', message: 'Error: a local tool needs a project directory to scope the seats to' } };
+    }
     // Run-directory placement (spec §4): a seat that can read the project tree
     // must not be able to read this run's sibling sessions, so the run dir must
     // sit OUTSIDE the tree (and still under a root amicus is willing to write to).
@@ -103,7 +115,7 @@ function preflightSeatTools(o) {
  *   run-server.js :: listEngineToolIds
  * @returns {Promise<{error: {code: string, message: string}|null}>}
  */
-async function validateSeatToolsAgainstEngine(o, sharedServer, deps) {
+async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
   // Named mutant NOAGENTGUARD: dropping the `!o.agent &&` conjunct would run
   // this check even under the --agent escape hatch, where `preflightSeatTools`
   // never turned --tools into a seat policy at all (it short-circuits to

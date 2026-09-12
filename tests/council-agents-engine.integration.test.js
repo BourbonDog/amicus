@@ -7,11 +7,14 @@
  * pinned engine (opencode-ai 1.18.15) still (1) lists its tool ids on
  * /experimental/tool/ids, (2) accepts an agent config whose `tools` map uses the
  * '*' wildcard, (3) renders that map and the permission block as the rule list
- * amicus relies on, (4) tolerates an UNKNOWN tool id at start (so amicus,
- * not the engine, has to refuse it), and (5) places the seat's nested `read`
- * rules AFTER its tools-map `read=allow`, so the engine's `findLast` evaluation
- * denies `.env` reads instead of allowing them (ruling P2-R9). One engine start,
- * no prompt, zero spend.
+ * amicus relies on — including the ORDER rules land in, not merely their
+ * actions, since the engine evaluates permissions by findLast (a seat's own
+ * `grep`/`webfetch` allows must land after the blanket wildcard deny, and its
+ * `.env` denies after its own `read` allow) — (4) tolerates an UNKNOWN tool id
+ * at start (so amicus, not the engine, has to refuse it), and (5) places the
+ * seat's nested `read` rules AFTER its tools-map `read=allow`, so the engine's
+ * `findLast` evaluation denies `.env` reads instead of allowing them (ruling
+ * P2-R9). One engine start, no prompt, zero spend.
  * Measured 2026-09-12 as the values pinned below. Runtime shape: `permission`
  * is a rule list [{permission, pattern, action}] — the SDK d.ts still declares
  * an object; assert on the runtime.
@@ -85,6 +88,13 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   expect(envDotDeny.action).toBe('deny');
   expect(envDeny.index).toBeGreaterThan(readAllow.index);
   expect(envDotDeny.index).toBeGreaterThan(readAllow.index);
+
+  // Same P2-R9 shape, one level up: the seat's own `grep`/`webfetch` allows
+  // must land AFTER the blanket wildcard rule (`expect(last(starRule(seat,
+  // '*'))).toBe('deny')` above only pins the ACTION) — order is what makes the
+  // specific allow win under findLast, not merely its presence.
+  expect(lastRule(seat, 'grep', '*').index).toBeGreaterThan(lastRule(seat, '*', '*').index);
+  expect(lastRule(seat, 'webfetch', '*').index).toBeGreaterThan(lastRule(seat, '*', '*').index);
 
   // (4): an unknown id is ACCEPTED by the engine — which is exactly why
   // runCouncil validates --tools against tool.ids() itself.

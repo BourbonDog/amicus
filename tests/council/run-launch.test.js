@@ -121,10 +121,22 @@ describe('launchWave (DI over runFanout)', () => {
   test('the --agent override wins over the computed agents (spec §4 escape hatch)', async () => {
     const seen = [];
     const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
-    const { launchWave } = createLaunchers({ fanoutFn, councilAgents: () => null, agentOverride: () => 'Build' });
+    // Real agents (not null): the agent NAME and the serverAgents CONFIG are
+    // two independent things in the code (run-launch.js:112-131) — `agent` is
+    // `opts.agent || agentOverride() || (agents ? … : 'Plan')`, so the override
+    // wins the name regardless of `agents`; `serverAgents` is forwarded
+    // whenever `agents` itself is truthy, with no dependency on how `agent`
+    // resolved. So passing a real `agents` object here (rather than null)
+    // actually pins override-over-computed, instead of a vacuous case where
+    // there was nothing to be overridden.
+    const agents = { 'council-seat': { mode: 'primary', tools: { '*': false } }, 'council-support': { mode: 'primary', tools: { '*': false } } };
+    const { launchWave } = createLaunchers({ fanoutFn, councilAgents: () => agents, agentOverride: () => 'Build' });
     await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'r-s1', role: 'seat' });
     expect(seen[0].agent).toBe('Build');
-    expect(seen[0].serverAgents).toBeUndefined();
+    // The launcher DOES still forward them under an override: `...(agents ? {
+    // serverAgents: agents } : {})` is gated only on `agents`, never on how
+    // `agent` resolved (verified against run-launch.js:112-131, then here).
+    expect(seen[0].serverAgents).toBe(agents);
   });
 
   test('directory can differ from project: a local-tools seat is scoped to the project tree while its metadata stays in the run dir', async () => {

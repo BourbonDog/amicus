@@ -387,6 +387,9 @@ council leg runs as one of two agents the run's own OpenCode server registers:
   tools in, even for task mode — opt-in is deliberate.
 - **`council-support`** — repair re-prompts, the Stage-2 judges, debate legs and the chair.
   No tools, ever: their briefings already say so, and the agent now enforces it.
+  The wildcard deny also covers the engine's own doom-loop and question prompts, so a seat
+  cannot stall a headless leg waiting for an answer nobody can give (rule rendering measured;
+  the leg behaviour is the §7 live check).
 
 `task` and `skill` are refused (`task` spawns child sessions amicus cannot observe; `skill` is
 where a seat starts reading the harness instead of the brief), as are `edit`, `write`,
@@ -414,6 +417,8 @@ engine — the seat gets a refusal and the leg continues (measured 2026-09-12: t
 render after the seat's own `read=allow`, and the engine takes the last matching rule).
 `grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
 the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
+With a local tool the seat's engine session is rooted at the project tree, so the engine also
+loads that tree's own opencode config; do not point a local-tools seat at a tree you do not trust.
 
 ### Debate mode
 

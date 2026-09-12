@@ -1264,7 +1264,7 @@ describe('v4.8 T-A4: two unattributable twins are TWO slots on ONE key', () => {
   });
 });
 
-// Review r1 (Important finding): run.js:94's `common` two-key addition and
+// Review r1 (Important finding): run-retry.js:94-95's `common` two-key addition and
 // run-retry-launch.js's `tools` forwarding had ZERO coverage in this suite —
 // every fixture above pre-dates spec 2026-09-11 §4 and never sets
 // o.seatTools/seatToolsLocal/project, so a retried leg's role/directory/tools
@@ -1292,11 +1292,19 @@ describe('retryStage1Losses seat tools (spec 2026-09-11 §4, PR 2 review r1)', (
     expect(withLocal.mock.calls[0][0].directory).toBe(project);
 
     const withoutLocal = jest.fn().mockResolvedValue(recoveredWave());
-    // seatToolsLocal absent (a review/task run with no local tool opted in) —
-    // Named mutant RETRYROLEDROP (see run-retry.js's `common`): dropping the
+    // seatToolsLocal absent (a review/task run with no local tool opted in), but
+    // a REAL project so this assertion is load-bearing: with ctxPlain carrying
+    // no project at all, `directory` reads undefined whether or not the
+    // conditional even runs, which is vacuous — an unconditional
+    // `directory: o.project` would read undefined here too. A real project
+    // makes the two shapes diverge. Named mutant RETRYROLEDROP (see
+    // run-retry.js's `common`): dropping the whole
     // `role: 'seat', ...(o.seatToolsLocal ? { directory: o.project } : {}),`
-    // line reddens exactly the two assertions in this test and the one above.
-    const ctxPlain = fakeCtx({}, { launchWave: withoutLocal });
+    // line reddens one assertion in this test (the withLocal directory check
+    // above) plus the one assertion in the test above ('role seat') — it does
+    // NOT redden this toBeUndefined check, since dropping the line removes
+    // `directory` entirely regardless of seatToolsLocal.
+    const ctxPlain = fakeCtx({ project: path.join(os.tmpdir(), 'seat-tools-project-tree-plain') }, { launchWave: withoutLocal });
     await retryStage1Losses(ctxPlain, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
     expect(withoutLocal.mock.calls[0][0].directory).toBeUndefined();
   });

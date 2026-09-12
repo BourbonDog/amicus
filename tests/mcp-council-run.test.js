@@ -250,13 +250,25 @@ describe('tool registration', () => {
 });
 
 describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
-  test('forwards remote tools as --tools and agent as --agent on the child argv', async () => {
+  // Split in two (final review, P2-R25): the original single test combined
+  // `tools` with `agent`, a combination the P2-R25 short-circuit below now
+  // gives different behavior (agent set => tools not consulted) — see the
+  // 'agent set + tools is NOT refused' test for that combination.
+  test('forwards remote tools as --tools on the child argv (no agent)', async () => {
     const spawnCalls = [];
-    const res = await handleCouncilRunTool(input({ tools: ['webfetch', 'websearch'], agent: 'Plan' }), tmp, helpers(spawnCalls));
+    const res = await handleCouncilRunTool(input({ tools: ['webfetch', 'websearch'] }), tmp, helpers(spawnCalls));
     expect(res.isError).toBeFalsy();
     const { args } = spawnCalls[0];
     expect(args[args.indexOf('--tools') + 1]).toBe('webfetch,websearch');
+    expect(args).not.toContain('--agent');
+  });
+  test('forwards agent as --agent on the child argv (no tools)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Plan' }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
     expect(args[args.indexOf('--agent') + 1]).toBe('Plan');
+    expect(args).not.toContain('--tools');
   });
   test('a local tool over MCP is refused before anything spawns — the MCP run dir must stay inside the project', async () => {
     const spawnCalls = [];
@@ -288,5 +300,18 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('--agent Build');
     expect(spawnCalls).toHaveLength(0);
+  });
+  // Ruling P2-R25 (final review): when `agent` is set, `tools` is not consulted
+  // at all — the MCP door must short-circuit the tools policy exactly like
+  // runCouncil's preflightSeatTools does for the CLI, so an id that would
+  // normally be refused (task) rides through unexamined under the override.
+  test('agent set + tools is NOT refused: the agent override short-circuits the tools policy (P2-R25)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Build', tools: ['task'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    expect(spawnCalls).toHaveLength(1);
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--agent') + 1]).toBe('Build');
+    expect(args).not.toContain('--tools');
   });
 });
