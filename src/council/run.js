@@ -38,11 +38,11 @@ const { finishRun } = require('./run-finish');
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
  *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?,
- *   councilName?, fallback?, catalog?} councilName (v4.3 Task 3) = preset name when
- *   launched via `--council <preset>`, else null — threaded via ctx.o into every
- *   launchWave/launchSolo for leg ledger attribution. fallback/catalog (v4.3 Task 18
- *   §6.2): ctx.o carries both, but only run-stages.js's stage launches read them —
- *   the chair/debate legs never substitute via chains.
+ *   councilName?, fallback?, catalog?, tools?: string[], agent?: 'Plan'|'Build'} councilName
+ *   (v4.3 Task 3) = preset name when launched via `--council <preset>`, else null —
+ *   threaded via ctx.o into every launchWave/launchSolo for leg ledger attribution.
+ *   fallback/catalog (v4.3 Task 18 §6.2): ctx.o carries both, but only run-stages.js's
+ *   stage launches read them — the chair/debate legs never substitute via chains.
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?,
  *   startOpenCodeServerFn? (v4.4.1 Task 0.5 test seam, see ./run-server)}
  * @returns {Promise<{exitCode: number, run: object}>}
@@ -70,22 +70,13 @@ async function runCouncil(options, deps = {}) {
   // below (a getter, because the launchers are built first); null = as before.
   let sharedServer = null;
   const launchers = deps.launchers
-    || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal, sharedServer: () => sharedServer });
+    || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal, sharedServer: () => sharedServer,
+      councilAgents: () => o.councilAgents || null, agentOverride: () => o.agent }); // spec 2026-09-11 §4: getters, decided below.
 
   runState.initCouncilRun(o); // run.json seed + sessions-dir pointer (run-state.js)
 
-  // dropped-members (spec §5, Plan 4): a seat the user's preset requested that
-  // never resolved is a lost seat — announced like every other loss. Fires
-  // once per member, before any launch (zero spend), for BOTH transports.
-  for (const dm of o.droppedMembers || []) {
-    degrade.note({
-      channel: 'dropped-members',
-      what: `seat ${dm.member} was not seated`,
-      why: dm.reason,
-      effect: 'the bench is smaller than the preset requested; the run will exit degraded (2)',
-      data: { member: dm.member, reason: dm.reason },
-    });
-  }
+  // dropped-members announcement lives in ./run-degrade (300-line gate, P2-R14).
+  require('./run-degrade').noteDroppedMembers(degrade, o.droppedMembers);
 
   emitRunStarted(o.runDir, o.runId, { bench: o.models, chair: o.chair }, o.follow);
 
@@ -113,8 +104,15 @@ async function runCouncil(options, deps = {}) {
     return { exitCode: code, run };
   };
 
+  // Spec 2026-09-11 §4 (PR 2): seat tools decided + refused pre-spend, checked below.
+  const st = require('./run-seat-tools').preflightSeatTools(o);
+  if (st.error) { return finalize(1, st.error); }
+  Object.assign(o, { seatTools: st.seatTools, seatToolsLocal: st.seatToolsLocal, councilAgents: st.councilAgents });
+
   // Injected launchers bring their own transport. Never throws — degrades to null.
   if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer({ ...o, degrade }, deps); }
+  const ev = await require('./run-seat-tools').validateSeatToolsAgainstEngine(o, sharedServer, deps);
+  if (ev.error) { return finalize(1, ev.error); }
 
   const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 
@@ -142,11 +140,13 @@ async function runCouncil(options, deps = {}) {
     o.seats = seatPre.seats;
     o.criticSeat = seatPre.criticSeat;
     runState.checkpoint(o.runDir, { seats: o.seats, criticSeat: o.criticSeat,
-      ...(o.intent === 'task' ? { intent: 'task' } : {}) });   // v4.9 W5.3: emit-when-'task', never 'review'
+      ...(o.intent === 'task' ? { intent: 'task' } : {}),   // v4.9 W5.3: emit-when-'task', never 'review'
+      // spec §4: seatTools emit-when-non-empty, agentOverride emit-when-set.
+      ...(o.seatTools && o.seatTools.length ? { seatTools: o.seatTools } : {}), ...(o.agent ? { agentOverride: o.agent } : {}) });
 
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
-      briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date }), { mode: 0o600 });
+      briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date, tools: o.seatTools }), { mode: 0o600 });
 
     // ---- Stage 1: independent reviews ----
     // Lens mode launches one solo per seat instead of a `-s1` seat wave, so it

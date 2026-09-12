@@ -33,6 +33,11 @@ async function launchStage1(ctx) {
     // the chair (run-chair.js) and debate legs (run-debate.js) never receive
     // this, so they never substitute via chains.
     fallback: o.fallback, catalog: o.catalog,
+    // Spec 2026-09-11 §4: stage-1 legs are SEATS (council-seat); with a local
+    // tool opted in they are scoped to the project tree while their metadata
+    // stays in the run dir (`project: o.runDir` above).
+    role: 'seat',
+    ...(o.seatToolsLocal ? { directory: o.project } : {}),
   };
   const launches = [];
   const seated = []; // parallel to `launches`: what each one was SUPPOSED to seat
@@ -47,7 +52,7 @@ async function launchStage1(ctx) {
       seated.push({ waveId, models: [m], roster: seats.slice(i, i + 1) });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId, seats: seated[seated.length - 1].roster,
-        prompt: briefings.stage1LensBriefing(o.intent, { lens: o.lenses[i], briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1LensBriefing(o.intent, { lens: o.lenses[i], briefing: o.briefing, date: o.date, tools: o.seatTools }),
       }));
     });
   } else {
@@ -61,7 +66,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias !== o.critic) });
       launches.push(launchers.launchWave({
         ...common, models: seats1, waveId: `${o.runId}-s1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date, tools: o.seatTools }),
       }));
     }
     if (o.critic) {
@@ -70,7 +75,7 @@ async function launchStage1(ctx) {
         roster: seats.filter(s => s.alias === o.critic).slice(0, 1) });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`, seats: seated[seated.length - 1].roster,
-        prompt: briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date }),
+        prompt: briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date, tools: o.seatTools }),
       }));
     }
   }

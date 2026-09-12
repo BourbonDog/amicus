@@ -56,6 +56,7 @@ src/
 │   ├── run-retry-notes.js
 │   ├── run-retry-window.js  # The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay
 │   ├── run-retry.js
+│   ├── run-seat-tools.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
 │   ├── run-stage1-rows.js
@@ -521,7 +522,7 @@ evals/
 | `council/run-debate-revote.js` |  | `legOpts()`, `legRow()`, `runRevoteWave()` |
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
-| `council/run-degrade.js` |  | `createDegradeSink()` |
+| `council/run-degrade.js` |  | `createDegradeSink()`, `noteDroppedMembers()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
@@ -531,6 +532,7 @@ evals/
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry-window.js` | The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay | `retryBackstopMs()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
+| `council/run-seat-tools.js` |  | `preflightSeatTools()`, `validateSeatToolsAgainstEngine()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()`, `listEngineToolIds()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
