@@ -22,9 +22,9 @@
  * the shape spec §5 names and the council-review check title prints. Not a stub count
  * (study run B2: a real 19,064-byte review with a malformed trailing block carried the
  * flag). A refused repair (`repairRefused`) is NOT counted under `unverified` — that seat
- * tallied no findings at all — and since council #248 round 2 has its OWN number, `refused`
- * (P3-R17), so a seat that contributed nothing is visible on the same gate surfaces (title,
- * footer, stderr) and never reads as a full reviewer on them.
+ * tallied no findings at all — and since council #248 round 2 it has its OWN number,
+ * `refused` (P3-R17): a seat that contributed nothing is visible on the same gate surfaces
+ * (title, footer, stderr) and never reads as a full reviewer on them.
  *
  * `unverified ⊆ reviewed` and "bench rows only" are STRUCTURAL (council #248 round 1, B1/C2/D2):
  * `isUnverifiedSeat` requires a bench role, `status: 'complete'` and the literal `true`, and
