@@ -55,7 +55,7 @@
 
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { verifyAgentRendering } = require('../src/council/run-seat-tools');
+const { verifyAgentRendering, verifyAgentFields } = require('../src/council/run-seat-tools');
 
 const PROBE = path.join(__dirname, '..', 'scripts', 'probe-council-agents.js');
 
@@ -150,6 +150,9 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   // the server-only agents, not ok once a reviewed tree widens council-support.
   expect(verifyAgentRendering(seat.permission, ['grep', 'read', 'webfetch'])).toEqual({ ok: true });
   expect(verifyAgentRendering(support.permission, [])).toEqual({ ok: true });
+  // Ruling P2-R53 (B1, round 6): the server-only rendering is clean on the
+  // non-permission surface too — no model, no set prompt/temperature/etc.
+  expect(verifyAgentFields(seat)).toEqual({ ok: true });
 
   const treeLine = out.split(/\r?\n/).find((l) => l.startsWith('PROBE_TREE_JSON '));
   if (!treeLine) {
@@ -194,6 +197,21 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   const extdirSeat = findProbeLine('PROBE_TREE_EXTDIR_JSON').agents['council-seat'];
   expect(extdirSeat.permission.some((rule) => String(rule.pattern).includes('secrets'))).toBe(false);
   expect(verifyAgentRendering(extdirSeat.permission, ['grep', 'read', 'webfetch'])).toEqual({ ok: true });
+
+  // Ruling P2-R53 (round 6, B1): a tree setting council-seat's prompt, model
+  // and sampling directly — verifyAgentRendering (permission only) still says
+  // ok (the hole this rounds closes: the permission list is untouched), but
+  // verifyAgentFields catches it. `model` is the observed first offender
+  // (checked before the prompt/temperature/… loop in verifyAgentFields), not
+  // `prompt` — pinned here rather than asserted as an assumption.
+  const fieldsSeat = findProbeLine('PROBE_TREE_FIELDS_JSON').agents['council-seat'];
+  expect(fieldsSeat.model).toEqual(expect.objectContaining({ providerID: 'openrouter' }));
+  expect(fieldsSeat.options.reasoning).toBe('high');
+  expect(fieldsSeat.topP).toBe(0.5);
+  expect(verifyAgentRendering(fieldsSeat.permission, ['grep', 'read', 'webfetch'])).toEqual({ ok: true });
+  const fieldsVerified = verifyAgentFields(fieldsSeat);
+  expect(fieldsVerified.ok).toBe(false);
+  expect(fieldsVerified.reason).toContain('model');
 
   // Ruling P2-R34 (B2/C2): the transcribed evaluator applied to the REAL seat
   // rule list — the `.env` deny/allow split the seat agent depends on.

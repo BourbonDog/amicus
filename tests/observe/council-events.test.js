@@ -19,9 +19,13 @@ function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'council-ev-')); }
 // `launchers` and no lister, `canVerify` (ruling P2-R38, round 3) is false,
 // so an ok-but-untested skip could otherwise pass for "verifies clean" on a
 // stream these tests assert is either pure NDJSON or silent.
+// `mode: 'primary'` added under P2-R53 (round 6): verifyAgentFields, run
+// right after verifyAgentRendering at the same call site, refuses any agent
+// whose `mode` is not `'primary'` — including simply absent, which this
+// fixture was before.
 const cleanListEngineAgentsFn = async () => ([
-  { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
-  { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  { name: 'council-seat', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  { name: 'council-support', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
 ]);
 
 describe('council run events (spec 4.2) — Task 7', () => {

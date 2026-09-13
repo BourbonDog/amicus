@@ -26,9 +26,9 @@
  *
  * Usage: node scripts/probe-council-agents.js
  * Prints `PROBE_JSON <json>`, `PROBE_TREE_JSON <json>`, `PROBE_TREE_ENV_JSON
- * <json>`, `PROBE_TREE_GREP_JSON <json>` and `PROBE_TREE_EXTDIR_JSON <json>`,
- * then exits 0. Exits 1 with the error on stderr if the engine never starts
- * or never answers GET /agent.
+ * <json>`, `PROBE_TREE_GREP_JSON <json>`, `PROBE_TREE_EXTDIR_JSON <json>` and
+ * `PROBE_TREE_FIELDS_JSON <json>`, then exits 0. Exits 1 with the error on
+ * stderr if the engine never starts or never answers GET /agent.
  *
  * PROBE_TREE_JSON (ruling P2-R33, council #247 round 2): the same server,
  * queried for a SECOND directory — a temp tree whose own opencode.json widens
@@ -45,6 +45,12 @@
  * tree's `external_directory` object on council-seat is replaced wholesale by
  * the server's plain string, so the B1/C1 widening claim is unreachable on
  * this engine). Measured 2026-09-12.
+ *
+ * PROBE_TREE_FIELDS_JSON (ruling P2-R53, council #247 round 6): one more tree
+ * on `council-seat`, printing its FULL rendered agent object (not stripped to
+ * {mode, permission} like the others) — a tree can set a council agent's
+ * system prompt, model and sampling directly, which `verifyAgentRendering`
+ * never checked (it only ever reads `permission`). Measured 2026-09-13.
  */
 
 'use strict';
@@ -91,7 +97,11 @@ async function main() {
     // Ruling P2-R33: a reviewed tree's own opencode.json, queried on the SAME
     // running server — proves the merge-by-key-order attack against the real
     // engine, not just against a hand-built rule list.
-    const treeFor = async (config) => {
+    // `full` (ruling P2-R53, round 6): PROBE_TREE_FIELDS_JSON below needs the
+    // agent's WHOLE rendering (prompt/model/temperature/topP/options/…), not
+    // only {mode, permission} — every other tree here only ever cared about
+    // permission, so they keep the stripped-down default.
+    const treeFor = async (config, { full = false } = {}) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-c4-tree-'));
       treeDirs.push(dir);
       fs.writeFileSync(path.join(dir, 'opencode.json'), JSON.stringify(config));
@@ -99,7 +109,7 @@ async function main() {
       const treeList = (res && Array.isArray(res.data)) ? res.data : [];
       const byNameTree = {};
       for (const a of treeList) {
-        if (a.name.startsWith('council-')) { byNameTree[a.name] = { mode: a.mode, permission: a.permission }; }
+        if (a.name.startsWith('council-')) { byNameTree[a.name] = full ? a : { mode: a.mode, permission: a.permission }; }
       }
       return byNameTree;
     };
@@ -142,6 +152,26 @@ async function main() {
       } },
     });
     process.stdout.write(`PROBE_TREE_EXTDIR_JSON ${JSON.stringify({ agents: extdirAgents })}\n`);
+
+    // P2-R53 (council #247 round 6, B1): a tree setting council-seat's system
+    // prompt, model and sampling directly (not only its permission block) —
+    // the FULL agent object is printed (not stripped to {mode, permission})
+    // so the test can inspect prompt/model/temperature/topP/options/mode too.
+    const fieldsAgents = await treeFor({
+      agent: {
+        'council-seat': {
+          prompt: 'TREE-INJECTED-SYSTEM-PROMPT',
+          model: 'openrouter/deepseek/deepseek-v4-flash-0731',
+          temperature: 0.9,
+          top_p: 0.5,
+          description: 'TREE-DESC',
+          mode: 'subagent',
+          color: '#ff0000',
+          options: { reasoning: 'high' },
+        },
+      },
+    }, { full: true });
+    process.stdout.write(`PROBE_TREE_FIELDS_JSON ${JSON.stringify({ agents: fieldsAgents })}\n`);
   } finally {
     for (const dir of treeDirs) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } }
     await server.close();

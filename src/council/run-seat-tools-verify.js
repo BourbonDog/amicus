@@ -1,13 +1,19 @@
 /**
  * @module council/run-seat-tools-verify
- * The engine-rendering tripwire's near-pure pieces (ruling P2-R33), split out
+ * The engine-rendering tripwire's pure pieces, plus `verificationDirectories`'
+ * one side effect — the best-effort `_scratch` mkdir it documents — split out
  * of run-seat-tools.js at council #247 round 3 under the 300-line size gate:
  * which directories to check (`verificationDirectories`, ruling P2-R39), how
  * to ask the engine what it registered for one of them (`listEngineAgents`),
- * and whether that answer still matches the allowlist an agent was given
+ * whether that answer still matches the allowlist an agent was given
  * (`verifyAgentRendering`, ruling P2-R40/P2-R42's external_directory
- * exemption). `listEngineAgents` and `verifyAgentRendering` are re-exported
- * from run-seat-tools.js so every existing importer keeps working unchanged.
+ * exemption), whether the same agent's non-permission surface was left alone
+ * too (`verifyAgentFields`, ruling P2-R53, round 6), and whether a run
+ * directory's placement holds up against a symlinked ancestor
+ * (`resolvePhysicalPath`/`isPhysicallyInside`, ruling P2-R54, round 6).
+ * `listEngineAgents`, `verifyAgentRendering` and `verifyAgentFields` are
+ * re-exported from run-seat-tools.js so every existing importer keeps
+ * working unchanged.
  */
 
 'use strict';
@@ -16,6 +22,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { SEAT_READ_DENY_PATTERNS } = require('./seat-tools');
+const { isPathInside } = require('../project-root-allowlist');
 
 /**
  * The unique set of directories the post-registration tripwire checks the
@@ -198,4 +205,92 @@ function verifyAgentRendering(rules, allowlist) {
   return { ok: true };
 }
 
-module.exports = { verificationDirectories, listEngineAgents, verifyAgentRendering };
+/**
+ * Ruling P2-R53 (council #247 round 6, B1): does a rendered council agent's
+ * NON-permission surface still look like the one this run registered?
+ * `verifyAgentRendering` above only ever checked `permission` — measured
+ * 2026-09-13 (probe-r6.js) that a reviewed tree's opencode.json can ALSO set
+ * a council agent's system prompt, model and sampling (`prompt`, `model`,
+ * `temperature`, `topP`, `options`), its display metadata (`color`), its
+ * step budget (`steps`), whether it is hidden from the UI (`hidden`), a
+ * prompt variant (`variant`), and even its `mode` (`primary` vs `subagent`)
+ * or whether it is a `native` (built-in) agent — all silently, since the
+ * permission list stayed clean. `mode`/`native`/`model` are checked first
+ * (each already fatal on its own — an agent rendered as anything but the
+ * plain, non-native, model-less primary agent seat-tools.js registers is
+ * suspect regardless of what else is set); the remaining fields are checked
+ * in a fixed order so the reason always names the FIRST offender, not
+ * whichever happens to be enumerated last. Named mutant FIELDSBLIND:
+ * returning `{ ok: true }` unconditionally here restores the blind spot —
+ * every check below (and run-seat-tools.js's own call site) go dark at once.
+ * @param {object} agent a rendered council agent, as returned by listEngineAgents
+ * @returns {{ok: true}|{ok: false, reason: string}}
+ */
+function verifyAgentFields(agent) {
+  if (agent.mode !== 'primary') { return { ok: false, reason: `mode is '${agent.mode}', not primary` }; }
+  if (agent.native === true) { return { ok: false, reason: 'native agent' }; }
+  if (agent.model !== undefined && agent.model !== null) { return { ok: false, reason: 'model is set' }; }
+  for (const field of ['prompt', 'temperature', 'topP', 'variant', 'steps', 'hidden', 'color']) {
+    const value = agent[field];
+    if (value !== undefined && value !== null) { return { ok: false, reason: `${field} is set` }; }
+  }
+  if (agent.options && typeof agent.options === 'object') {
+    const key = Object.keys(agent.options)[0];
+    if (key !== undefined) { return { ok: false, reason: `options has ${key}` }; }
+  }
+  return { ok: true };
+}
+
+/**
+ * Ruling P2-R54 (council #247 round 6, C1): `isPathInside`
+ * (project-root-allowlist.js:37) compares canonicalized STRINGS only — no
+ * realpath anywhere in that fence — and a run directory is created with
+ * `fs.mkdirSync(runDir, { recursive: true, mode: 0o700 })`
+ * (run-state.js:79), which follows a symlinked ancestor. So an `--out-dir`
+ * that is (or sits under) a symlink/junction pointing INTO the project
+ * passes the lexical "outside the tree" rule while the run's records land
+ * PHYSICALLY inside the tree a `read` seat runs in (measured 2026-09-13).
+ * Walks up from `p` to the deepest EXISTING ancestor (the run directory
+ * itself usually does not exist yet), resolves THAT ancestor with
+ * `fs.realpathSync.native` (follows symlinks/junctions), then re-appends the
+ * unresolved tail unchanged. Any throw (a root that never resolves, a
+ * permissions error) returns `p` unchanged, so this can only ever be AS
+ * STRICT as comparing the lexical paths, never less.
+ * @param {string} p
+ * @returns {string}
+ */
+function resolvePhysicalPath(p) {
+  try {
+    let current = p;
+    const tail = [];
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) { return p; } // a root that does not exist either
+      tail.unshift(path.basename(current));
+      current = parent;
+    }
+    const resolved = fs.realpathSync.native(current);
+    return tail.length ? path.join(resolved, ...tail) : resolved;
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * `isPathInside`, but on PHYSICAL paths (ruling P2-R54): closes the symlink
+ * escape `resolvePhysicalPath`'s docblock describes, alongside (never
+ * instead of) the lexical `isPathInside` check — see run-seat-tools.js ::
+ * preflightSeatTools, where both are consulted. Named mutant SYMLINKBLIND:
+ * dropping this conjunct from that placement check restores the escape.
+ * @param {string} child
+ * @param {string} parent
+ * @returns {boolean}
+ */
+function isPhysicallyInside(child, parent) {
+  return isPathInside(resolvePhysicalPath(child), resolvePhysicalPath(parent));
+}
+
+module.exports = {
+  verificationDirectories, listEngineAgents, verifyAgentRendering, verifyAgentFields,
+  resolvePhysicalPath, isPhysicallyInside,
+};

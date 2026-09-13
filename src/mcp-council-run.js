@@ -122,7 +122,7 @@ async function handleCouncilRunTool(input, project, helpers) {
     return textResult('maxCost must be a positive number.', true);
   }
   // Spec 2026-09-11 §4 (P2-R28 supersedes P2-R25): --tools/--agent are refused together, before either is consulted, on every door. Tools that never touch the tree (webfetch, websearch, todowrite) ride through; local tools are refused naming the CLI.
-  const toolsIn = input.tools === undefined ? undefined : (Array.isArray(input.tools) ? input.tools : [String(input.tools)]);
+  const toolsIn = (input.tools === undefined || input.tools === null) ? undefined : (Array.isArray(input.tools) ? input.tools : [String(input.tools)]);
   const mcpWording = (m) => m.replace(/^--tools:/, 'tools:').replace(/--agent Build/g, 'agent: "Build"').replace(/(?<!run )--tools/g, 'tools').replace(/--agent/g, 'agent'); // C6 (P2-R35): rewrites flag wording EXCEPT inside an actual `council run --tools ...` CLI suggestion (resolveRemoteOnlyTools's local-tool message), which stays literal.
   const conflict = require('./council/seat-tools').agentToolsConflict(input.agent, toolsIn);
   if (conflict) { return textResult(mcpWording(conflict), true); }

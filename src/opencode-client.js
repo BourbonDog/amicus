@@ -666,10 +666,18 @@ function buildServerOptions(options = {}) {
   // emits a `chat` key, but the guard holds regardless of the caller. Absent,
   // or not a plain object (arrays rejected too), this block is a no-op and
   // every non-council server's config is byte-identical to today.
+  //
+  // council #247 round 6 (P2-R53): a council agent REPLACES any pre-existing
+  // same-name entry outright, rather than merging onto it — measured
+  // 2026-09-13 (probe-r6.js) that the old shallow merge below let a
+  // pre-existing entry's `prompt`/`temperature` survive and render on the
+  // seat. Named mutant AGENTMERGE: restoring the spread
+  // (`{ ...(config.agent[name] || {}), ...agentConfig }`) lets `prompt`
+  // survive again.
   if (options.agents && typeof options.agents === 'object' && !Array.isArray(options.agents)) {
     for (const [name, agentConfig] of Object.entries(options.agents)) {
       if (name === 'chat') { continue; }
-      config.agent[name] = { ...(config.agent[name] || {}), ...agentConfig };
+      config.agent[name] = { ...agentConfig };
     }
   }
 

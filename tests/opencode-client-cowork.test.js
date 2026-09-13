@@ -186,6 +186,30 @@ describe('buildServerOptions provider model sync', () => {
     expect(Object.keys(opts.config.agent)).toEqual(['chat']);
   });
 
+  // council #247 round 6 (P2-R53, AGENTMERGE): a council agent REPLACES any
+  // pre-existing same-name entry in config.agent outright, rather than
+  // merging onto it. buildServerOptions builds `config` fresh every call and
+  // has no seam to hand it a pre-existing config.agent entry directly, so the
+  // only way to reach the state opencode-client.js's merge line
+  // (`config.agent[name] || {}`, a plain property READ) sees is the same
+  // property lookup a real pre-existing entry would use: the prototype
+  // chain. `config.agent` has no own 'council-seat' property before this
+  // loop runs (only 'chat' does), so polluting Object.prototype for that one
+  // key simulates exactly the pre-existing-entry state probe-r6.js measured
+  // (a stale/hostile prior registration), without needing any new seam.
+  // Cleaned up in `finally` so no other test ever observes the pollution.
+  it('a council agent REPLACES a pre-existing same-name entry outright, not merges (AGENTMERGE)', () => {
+    Object.prototype['council-seat'] = { prompt: 'PRE', temperature: 0.3 };
+    try {
+      const opts = buildServerOptions({ agents: { 'council-seat': { mode: 'primary', tools: { '*': false } } } });
+      expect(opts.config.agent['council-seat']).toEqual({ mode: 'primary', tools: { '*': false } });
+      expect(opts.config.agent['council-seat'].prompt).toBeUndefined();
+      expect(opts.config.agent['council-seat'].temperature).toBeUndefined();
+    } finally {
+      delete Object.prototype['council-seat'];
+    }
+  });
+
   // Fix-round-1 nit (opencode-client.js:661): a `chat` key in `agents` used to replace
   // `config.agent.chat` with a brand-new object, detaching it from the local
   // `chatAgent` the systemPrompt branch below mutates — so the "can never

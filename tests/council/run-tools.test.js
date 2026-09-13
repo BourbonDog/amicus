@@ -42,15 +42,21 @@ const others = (calls) => calls.filter((c) => c.waveId !== 'r1-s1');
 // P2-R44 (round 4): when `read` is granted, the three deny patterns must
 // render AFTER the read allow — a caller passing `['read']` alone (no
 // denies) is exactly the pre-round-4 shape the new order check refuses.
+// P2-R53 (round 6): every fixture agent object below now also carries `mode:
+// 'primary'` — the shape a real listEngineAgents() call always returns for a
+// clean council agent (probe-r6-out.json's "clean"/"support" fixtures) — so
+// verifyAgentFields (checked right after verifyAgentRendering at the same
+// call site) does not itself refuse an otherwise-clean fixture for a field
+// none of these tests are exercising.
 const listEngineAgentsFnFor = (tools = []) => async () => ([
-  { name: 'council-seat', permission: [
+  { name: 'council-seat', mode: 'primary', permission: [
     { permission: '*', pattern: '*', action: 'deny' },
     ...tools.map((id) => ({ permission: id, pattern: '*', action: 'allow' })),
     ...(tools.includes('read')
       ? ['*.env', '*.env.*', '*.envrc'].map((p) => ({ permission: 'read', pattern: p, action: 'deny' }))
       : []),
   ] },
-  { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  { name: 'council-support', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
 ]);
 // Hoisted to module scope (council #247 round 5, P2-R49) so the B1 tests
 // next to the D4 tests below can reuse them too — same fixtures the
@@ -252,6 +258,67 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     expect(runState.readRun(outside).seatTools).toEqual(['read']);
   });
 
+  // Ruling P2-R54 (C2, round 6): the placement rule also compares PHYSICAL
+  // paths — a run directory reached through a symlink/junction into the
+  // project is refused even though it is lexically outside it. Symlink
+  // capability is probed once, synchronously, at collection time (test.skip
+  // must be chosen before any test body runs) — junctions need no elevated
+  // privilege on Windows NTFS, so this is expected to run, not skip, on an
+  // ordinary dev box or CI runner.
+  let canSymlinkP2R54 = true;
+  {
+    const probeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'symlink-probe-run-tools-'));
+    const probeTarget = path.join(probeParent, 'target');
+    fs.mkdirSync(probeTarget);
+    try {
+      fs.symlinkSync(probeTarget, path.join(probeParent, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      canSymlinkP2R54 = false;
+    }
+    fs.rmSync(probeParent, { recursive: true, force: true });
+  }
+
+  (canSymlinkP2R54 ? test : test.skip)(
+    'P2-R54: a run dir reached through a symlink into the project is refused (SYMLINKBLIND)', async () => {
+      const project = path.join(tmp, 'sym-project');
+      fs.mkdirSync(project);
+      const inner = path.join(project, 'inner');
+      fs.mkdirSync(inner);
+      const outsideTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'run-tools-symlink-'));
+      const link = path.join(outsideTmp, 'link');
+      fs.symlinkSync(inner, link, process.platform === 'win32' ? 'junction' : 'dir');
+      try {
+        const launchers = launchersFor();
+        const { exitCode, run } = await runCouncil(
+          base({ project, runDir: path.join(link, 'run1'), tools: ['read'] }),
+          { launchers, listEngineToolIdsFn: async () => ['read'] });
+        expect(exitCode).toBe(1);
+        expect(run.error.code).toBe('BAD_ARGS');
+        expect(run.error.message).toContain('--out-dir OUTSIDE the project tree');
+        expect(launchers.calls).toHaveLength(0);
+      } finally {
+        fs.rmSync(outsideTmp, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test('P2-R54: the same run dir shape OUTSIDE the project, without a symlink, is not refused by the placement rule', async () => {
+    const project = path.join(tmp, 'sym-project2');
+    fs.mkdirSync(project);
+    const outsideTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'run-tools-nosymlink-'));
+    const runDir = path.join(outsideTmp, 'run1');
+    fs.mkdirSync(runDir);
+    try {
+      const launchers = launchersFor();
+      const { exitCode } = await runCouncil(
+        base({ project, runDir, tools: ['read'] }),
+        { launchers, listEngineToolIdsFn: async () => ['read', 'webfetch'], listEngineAgentsFn: listEngineAgentsFnFor(['read']) });
+      expect(exitCode).toBe(0);
+    } finally {
+      fs.rmSync(outsideTmp, { recursive: true, force: true });
+    }
+  });
+
   // A3 supersedes the old fixture here: --tools + --agent together now refuse
   // (see the "cannot be combined" test above), so this pin drops `tools`
   // entirely — the override still has to work with none.
@@ -399,8 +466,8 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
   test('a clean engine rendering is verified ok: exit 0, the seat wave launches', async () => {
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
-      { name: 'council-seat', permission: cleanNoTools() },
-      { name: 'council-support', permission: cleanNoTools() },
+      { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
+      { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
     ]);
     const { exitCode } = await runCouncil(base(), { launchers, listEngineAgentsFn });
     expect(exitCode).toBe(0);
@@ -410,7 +477,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
   test('a tree-widened council-support is refused before any launch, naming task', async () => {
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
-      { name: 'council-seat', permission: cleanNoTools() },
+      { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
       { name: 'council-support', permission: supportAttack() },
     ]);
     const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });
@@ -427,7 +494,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
       { name: 'council-seat', permission: relistAttack() },
-      { name: 'council-support', permission: cleanNoTools() },
+      { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
     ]);
     const { exitCode, run } = await runCouncil(
       base({ project, runDir: outside, tools: ['read', 'webfetch'] }),
@@ -436,6 +503,26 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     expect(run.error.code).toBe('BAD_ARGS');
     expect(run.error.message).toContain('rendered the council agents differently');
     expect(run.error.message).toContain('read');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  // Ruling P2-R53 (B1, round 6): verifyAgentRendering only ever checked
+  // `permission` — a tree can also set a council agent's prompt, model,
+  // sampling, options and mode. council-seat here renders a CLEAN permission
+  // list (so the pre-round-6 tripwire alone would call this "ok") but
+  // carries a tree-injected `prompt` — the new verifyAgentFields call at this
+  // same site must still refuse it, naming the field, before any launch.
+  test('P2-R53: a council-seat with a clean permission list but a set prompt is refused, naming it', async () => {
+    const launchers = launchersFor();
+    const listEngineAgentsFn = async () => ([
+      { name: 'council-seat', mode: 'primary', permission: cleanNoTools(), prompt: 'x' },
+      { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
+    ]);
+    const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('rendered the council agents differently');
+    expect(run.error.message).toContain('prompt');
     expect(launchers.calls).toHaveLength(0);
   });
 
@@ -451,12 +538,12 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     const listEngineAgentsFn = async (shared, dir) => {
       seen.push(dir);
       return [
-        { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' },
+        { name: 'council-seat', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' },
           { permission: 'read', pattern: '*', action: 'allow' },
           { permission: 'read', pattern: '*.env', action: 'deny' },
           { permission: 'read', pattern: '*.env.*', action: 'deny' },
           { permission: 'read', pattern: '*.envrc', action: 'deny' }] },
-        { name: 'council-support', permission: cleanNoTools() },
+        { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
       ];
     };
     const { exitCode } = await runCouncil(base({ project, runDir: outside, tools: ['read'] }),
@@ -472,13 +559,13 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
       seen.push(dir);
       if (dir.endsWith('_scratch')) {
         return [
-          { name: 'council-seat', permission: cleanNoTools() },
+          { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
           { name: 'council-support', permission: supportAttack() },
         ];
       }
       return [
-        { name: 'council-seat', permission: cleanNoTools() },
-        { name: 'council-support', permission: cleanNoTools() },
+        { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
+        { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
       ];
     };
     const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });

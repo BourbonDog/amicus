@@ -454,6 +454,8 @@ refusal and the leg continues (the deny rules are measured to render after the s
 `read=allow`, and CI now models the engine's own evaluator — transcribed from its source — over
 the real rendering, confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the
 refusal itself is exercised by the release ritual's live `--tools read` run, not by the probe).
+The CLI prints a Notice for `read` too, naming those three fenced names and asking you to keep
+other secrets out.
 `grep`, `glob` and `bash` have no per-file fence: opting them in trusts every seat with
 everything in the tree, `.env` included — grep returns its contents, glob lists its name — and
 the CLI prints a Notice when you opt any of grep, glob or bash in. Keep secrets out of any tree

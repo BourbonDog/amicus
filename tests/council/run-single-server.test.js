@@ -104,9 +104,14 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   // alike) and the new unconditional refusal would fire before any of this
   // suite's own server-reuse/degrade/exit-code assertions ever ran. A clean
   // rendering keeps the tripwire (unrelated to server-reuse) verifying ok.
+  // `mode: 'primary'` added under P2-R53 (round 6): verifyAgentFields, run
+  // at the same call site right after verifyAgentRendering, refuses any
+  // agent whose `mode` is not `'primary'` — including simply absent, which
+  // this fixture was before — so every run in this suite would otherwise
+  // now be refused by the NEW check instead of exercising server-reuse.
   const cleanListEngineAgentsFn = async () => ([
-    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
-    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-seat', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
   ]);
   const run = (overrides = {}, deps = {}) => runCouncil(
     baseOptions(tmp, overrides),

@@ -298,6 +298,18 @@ describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
     expect(spawnCalls[0].args).not.toContain('--tools');
     expect(spawnCalls[0].args).not.toContain('--agent');
   });
+
+  // council #247 round 6 (P2-R55, D5): tools: null is the MCP house style for
+  // an unset param too (mirrors the CLI's own tools: null / agent: null house
+  // style, and runCouncil's own preflight, which already treats a null
+  // o.tools as absent) — behaves exactly like an absent tools, not like an
+  // (invalid) empty opt-in.
+  test('tools: null behaves exactly like absent tools (D5): no refusal, no --tools on the argv', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: null }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    expect(spawnCalls[0].args).not.toContain('--tools');
+  });
   // Review r1 P2-R20: a permanently-refused id (task) is not a placement
   // problem (REMOTE_TOOL_IDS.includes('task') is false, so it used to fall
   // into the "local tools" branch and suggest --out-dir, a command that

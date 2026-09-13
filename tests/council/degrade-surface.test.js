@@ -106,9 +106,12 @@ test('a scripted dead Stage-1 leg whose retry RECOVERS: run exits 0, one stage1-
   // check would be silently SKIPPED rather than genuinely passing, which
   // would make this test's coverage of the retry-heal path an accident of
   // that skip rather than a proven-clean seat-tools check alongside it.
+  // `mode: 'primary'` added under P2-R53 (round 6): verifyAgentFields, run
+  // right after verifyAgentRendering at the same call site, refuses any
+  // agent whose `mode` is not `'primary'` — including simply absent.
   const listEngineAgentsFn = async () => ([
-    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
-    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-seat', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', mode: 'primary', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
   ]);
   const { exitCode } = await runCouncil(opts, { ...deps(scriptedLaunchers(script)), listEngineAgentsFn });
   expect(exitCode).toBe(0);

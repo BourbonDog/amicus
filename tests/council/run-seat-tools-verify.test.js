@@ -19,8 +19,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { verifyAgentRendering, listEngineAgents } = require('../../src/council/run-seat-tools');
-const { verificationDirectories } = require('../../src/council/run-seat-tools-verify');
+const { verifyAgentRendering, listEngineAgents, verifyAgentFields } = require('../../src/council/run-seat-tools');
+const {
+  verificationDirectories, resolvePhysicalPath,
+} = require('../../src/council/run-seat-tools-verify');
 
 const CLEAN_SEAT = [
   { permission: '*', pattern: '*', action: 'deny' },
@@ -324,6 +326,82 @@ describe('verifyAgentRendering (ruling P2-R33)', () => {
   });
 });
 
+// Ruling P2-R53 (council #247 round 6, B1): a rendered council agent's
+// NON-permission surface — verifyAgentRendering above only ever checked
+// `permission`. The clean fixture is the measured 2026-09-13 shape
+// (probe-r6.js / probe-r6-out.json's "clean" object).
+describe('verifyAgentFields (ruling P2-R53)', () => {
+  const clean = () => ({
+    name: 'council-seat', mode: 'primary', native: false, hidden: null, topP: null,
+    temperature: null, color: null, variant: null, prompt: null, options: {}, steps: null,
+    permission: [],
+  });
+
+  test('a clean rendering is ok', () => {
+    expect(verifyAgentFields(clean())).toEqual({ ok: true });
+  });
+
+  test('a model set (tree-injected) is not ok, naming model', () => {
+    const r = verifyAgentFields({ ...clean(), model: { providerID: 'openrouter', modelID: 'x' } });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('model');
+  });
+
+  test('a prompt set is not ok, naming prompt', () => {
+    const r = verifyAgentFields({ ...clean(), prompt: 'x' });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('prompt');
+  });
+
+  test('options carrying a key is not ok, naming the key', () => {
+    const r = verifyAgentFields({ ...clean(), options: { reasoning: 'high' } });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('reasoning');
+  });
+
+  test('mode other than primary is not ok, naming mode', () => {
+    const r = verifyAgentFields({ ...clean(), mode: 'subagent' });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('mode');
+  });
+
+  test('temperature set is not ok, naming temperature', () => {
+    const r = verifyAgentFields({ ...clean(), temperature: 0.3 });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('temperature');
+  });
+
+  test('a native agent is not ok, naming it, even with every other field clean', () => {
+    const r = verifyAgentFields({ ...clean(), native: true });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('native');
+  });
+
+  // The measured probe-r6-out.json "tree" fixture: a tree sets prompt, model,
+  // temperature, topP and options together, but the server had already set
+  // prompt/temperature (so those two survive as the SERVER's own values,
+  // unchanged) — model is the first genuinely tree-controlled field in check
+  // order, so it is the named offender, not prompt.
+  test('the measured tree-attack rendering is not ok, naming model (the first offender in check order)', () => {
+    const r = verifyAgentFields({
+      ...clean(),
+      topP: 0.5, temperature: 0.3, color: '#ff0000',
+      model: { modelID: 'deepseek/deepseek-v4-flash-0731', providerID: 'openrouter' },
+      prompt: 'PREEXISTING-AMICUS-PROMPT', options: { reasoning: 'high' },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('model');
+  });
+
+  // Fields simply ABSENT (no key at all, not even set to null) must be
+  // treated exactly like a clean rendering — a real engine response may omit
+  // a key entirely rather than sending it as null (`model` is absent, per
+  // the brief, on a clean rendering that has none configured).
+  test('an object with the checked fields simply absent (not even null) is ok', () => {
+    expect(verifyAgentFields({ name: 'council-seat', mode: 'primary', permission: [] })).toEqual({ ok: true });
+  });
+});
+
 describe('listEngineAgents (mirrors run-server.js :: listEngineToolIds)', () => {
   test('returns the agents the engine lists, scoped to the directory', async () => {
     const calls = [];
@@ -380,5 +458,60 @@ describe('verificationDirectories (ruling P2-R39)', () => {
     const runDir = path.join(tmp, 'run4');
     fs.mkdirSync(path.join(runDir, '_scratch'), { recursive: true });
     expect(() => verificationDirectories({ runDir, seatToolsLocal: false })).not.toThrow();
+  });
+});
+
+// Ruling P2-R54 (council #247 round 6, C1): resolvePhysicalPath walks up to
+// the deepest EXISTING ancestor and resolves THAT through fs.realpathSync.native,
+// so a not-yet-created run directory reached through a symlink/junction still
+// resolves through it.
+describe('resolvePhysicalPath (ruling P2-R54)', () => {
+  let tmp;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-phys-')); });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  test('a non-existent deep path under a temp dir resolves to <realpath(tmp)>/<tail>', () => {
+    const deep = path.join(tmp, 'a', 'b', 'c');
+    const expected = path.join(fs.realpathSync.native(tmp), 'a', 'b', 'c');
+    expect(resolvePhysicalPath(deep)).toBe(expected);
+  });
+
+  test('a path whose root does not exist is returned unchanged', () => {
+    // path.dirname of a root returns the root itself (fixed point) — the
+    // walk-up loop detects that and bails out, returning the input verbatim,
+    // whether or not this particular root happens to exist on this machine.
+    const bogusRoot = process.platform === 'win32'
+      ? 'Q:\\amicus-round6-does-not-exist\\nested\\deep'
+      : '/amicus-round6-does-not-exist-xyz/nested/deep';
+    const rootPiece = process.platform === 'win32' ? 'Q:\\' : '/amicus-round6-does-not-exist-xyz';
+    if (fs.existsSync(rootPiece)) { return; } // moot on a machine where this exists; harmless either way
+    expect(resolvePhysicalPath(bogusRoot)).toBe(bogusRoot);
+  });
+
+  // Symlink/junction capability is probed once, synchronously, at
+  // collection time — `test.skip` must be chosen before any test body runs.
+  // Junctions need no elevated privilege on Windows NTFS, so this should
+  // pass on an ordinary dev box; skips (rather than fails) where the OS or
+  // filesystem refuses it.
+  let canSymlink = true;
+  {
+    const probeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'symlink-probe-'));
+    const probeTarget = path.join(probeParent, 'target');
+    fs.mkdirSync(probeTarget);
+    try {
+      fs.symlinkSync(probeTarget, path.join(probeParent, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      canSymlink = false;
+    }
+    fs.rmSync(probeParent, { recursive: true, force: true });
+  }
+
+  (canSymlink ? test : test.skip)('a path under a junction/symlink resolves to the target', () => {
+    const target = path.join(tmp, 'inner');
+    fs.mkdirSync(target);
+    const link = path.join(tmp, 'link');
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const nested = path.join(link, 'file.txt');
+    expect(resolvePhysicalPath(nested)).toBe(path.join(fs.realpathSync.native(target), 'file.txt'));
   });
 });

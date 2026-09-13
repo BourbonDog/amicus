@@ -537,9 +537,12 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect('tools' in opts).toBe(false);
   });
 
-  // A1/D2: bash sits outside every fence (run directory, home, network); the
-  // CLI names that in a Notice on stderr whenever a caller opts it in.
-  test('A1/D2: --tools bash prints a Notice on stderr; --tools read does not', async () => {
+  // A1/D2/C2 (round 6, P2-R55): bash sits outside every fence (run directory,
+  // home, network); the CLI names that in a Notice on stderr whenever a
+  // caller opts it in. read gets its OWN Notice (the .env/.env.*/.envrc
+  // fence, and a reminder that every OTHER secret is still readable) —
+  // never bash's, and vice versa.
+  test('A1/D2/C2: --tools bash prints its own Notice; --tools read prints its own, not bash\'s', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-bash-out-'));
     let code = await handleCouncilRun(argsBase({ tools: 'bash', 'out-dir': outside }));
     expect(code).toBe(0);
@@ -549,12 +552,46 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     // independence do not hold under bash.
     const noticeLine = err.mock.calls.map((c) => c[0]).find((line) => line.includes('Notice: --tools bash'));
     expect(noticeLine).toContain('anonymity');
+    expect(err.mock.calls.some((c) => c[0].includes('--tools read opens'))).toBe(false);
     err.mockClear();
     runCouncil.mockClear();
     code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
     expect(code).toBe(0);
     expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(false);
+    const readNotice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('--tools read opens'));
+    expect(readNotice).toBeDefined();
     fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  // council #247 round 6 (P2-R55, C2): the read Notice names the exact fence
+  // (.env/.env.*/.envrc) and asks the caller to keep every OTHER secret out,
+  // naming .npmrc as an example; a remote tool like webfetch gets no read
+  // Notice at all.
+  test('P2-R55 C2: --tools read prints a Notice naming .npmrc; --tools webfetch prints none', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-read-notice-out-'));
+    let code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
+    expect(code).toBe(0);
+    const notice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('--tools read opens'));
+    expect(notice).toContain('.npmrc');
+    err.mockClear();
+    runCouncil.mockClear();
+    code = await handleCouncilRun(argsBase({ tools: 'webfetch' }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('--tools read opens'))).toBe(false);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  // council #247 round 6 (P2-R55, C8a): a non-string --agent (schema-bypass,
+  // MCP-input style) must render as its JSON, not the bare, unreadable
+  // `[object Object]`; a genuine string still renders bare.
+  test('P2-R55 C8a: a non-string agent value is JSON-stringified in the refusal; a string still renders bare', async () => {
+    let code = await handleCouncilRun(argsBase({ agent: { x: 1 } }));
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout()).error.message).toContain('{"x":1}');
+    out.mockClear();
+    code = await handleCouncilRun(argsBase({ agent: 'Chat' }));
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout()).error.message).toContain("got 'Chat'");
   });
 
   // council #247 round 5 (P2-R50, B2/D5/C2): grep/glob search the whole tree

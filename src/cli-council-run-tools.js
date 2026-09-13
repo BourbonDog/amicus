@@ -58,10 +58,15 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   if (args.agent !== null && (explicitKeys.has('agent') || args.agent !== undefined)) {
     const a = typeof args.agent === 'string' ? args.agent.toLowerCase() : '';
     if (a !== 'plan' && a !== 'build') {
+      // council #247 round 6 (P2-R55, C8a): a non-string --agent (schema-bypass,
+      // MCP-input style — agentToolsConflict already accepts any typeof for its
+      // first argument) used to render as the bare, unreadable `[object Object]`;
+      // JSON.stringify it instead. A genuine string still renders bare.
+      const got = typeof args.agent === 'string' ? args.agent : JSON.stringify(args.agent);
       return {
         error: {
           code: ERROR_CODES.BAD_ARGS,
-          message: `Error: --agent must be Plan or Build; got '${args.agent}'`,
+          message: `Error: --agent must be Plan or Build; got '${got}'`,
           hint: 'Chat is not supported headless; omit --agent to run seats on the council agents',
         },
       };
@@ -108,9 +113,18 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
     };
   }
 
+  const notices = [];
+  // council #247 round 6 (P2-R55, C2): `read` denies only .env/.env.*/.envrc
+  // at the engine — every OTHER file in the tree, including other secrets
+  // (.npmrc, key files, credentials), is readable. The CLI names the exact
+  // fence so a caller does not assume `read` is a general secrets guard.
+  if (Array.isArray(toolIds) && toolIds.includes('read')) {
+    notices.push('Notice: --tools read opens every file in the project tree except the names .env, ' +
+      '.env.* and .envrc (case-sensitive on Linux); keep any other secret (.npmrc, key files, ' +
+      'credentials) out of a tree you point a read seat at.');
+  }
   // A1/D2: `bash` sits outside every fence (run directory, home, network) —
   // the CLI names that in a Notice whenever a caller opts it in.
-  const notices = [];
   if (Array.isArray(toolIds) && toolIds.includes('bash')) {
     notices.push('Notice: --tools bash gives every stage-1 seat a shell as you: no fence applies — it can ' +
       'reach the run directory outside the tree (this run\'s own records included: the label map ' +

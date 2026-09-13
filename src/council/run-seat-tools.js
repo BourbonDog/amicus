@@ -6,11 +6,13 @@
  * `runCouncil`'s seat-tools wiring (spec 2026-09-11 §4, PR 2 of 3), split out of
  * run.js under controller ruling P2-R14 (the 300-line size gate: run.js sat at
  * exactly 300 lines with no headroom for this task's ~20 lines of logic). The
- * engine-rendering tripwire's own near-pure pieces (`listEngineAgents`,
- * `verifyAgentRendering`, `verificationDirectories`) live in the sibling
- * module run-seat-tools-verify.js (council #247 round 3, same size gate);
- * `listEngineAgents`/`verifyAgentRendering` are re-exported below so every
- * existing importer keeps requiring them from here.
+ * engine-rendering tripwire's own pure pieces, plus `verificationDirectories`'
+ * one side effect — the best-effort `_scratch` mkdir it documents —
+ * (`listEngineAgents`, `verifyAgentRendering`, `verifyAgentFields`,
+ * `verificationDirectories`) live in the sibling module run-seat-tools-verify.js
+ * (council #247 round 3, same size gate; `verifyAgentFields` added round 6);
+ * `listEngineAgents`/`verifyAgentRendering`/`verifyAgentFields` are re-exported
+ * below so every existing importer keeps requiring them from here.
  *
  * Two pure-ish steps, called from run.js on either side of `acquireRunServer`:
  *   - `preflightSeatTools` (BEFORE the server): shape + refusals need no
@@ -104,7 +106,14 @@ function preflightSeatTools(o) {
     // "run dir INSIDE the project" case (allowed root, still refused) and by its
     // "outside the project" case (same allowed root, not refused once sibling).
     const { isPathInside, isAllowedProjectRoot } = require('../project-root-allowlist');
-    if (isPathInside(o.runDir, o.project) || !isAllowedProjectRoot(o.runDir)) {
+    // Ruling P2-R54 (C1, round 6): `isPathInside` compares canonicalized
+    // STRINGS only, and run-dir creation follows a symlinked ancestor — so an
+    // `--out-dir` that is (or sits under) a symlink/junction into the project
+    // passed this rule lexically while landing physically inside the tree
+    // (measured 2026-09-13). Named mutant SYMLINKBLIND: dropping the
+    // `isPhysicallyInside(...) ||` conjunct restores that escape.
+    const { isPhysicallyInside } = require('./run-seat-tools-verify');
+    if (isPathInside(o.runDir, o.project) || isPhysicallyInside(o.runDir, o.project) || !isAllowedProjectRoot(o.runDir)) {
       // C5 (P2-R35): name the ids THIS run classed local (seat-tools.js's own
       // NON_LOCAL_TOOL_IDS, not a hand-rolled copy) — a typo'd id (e.g.
       // `webfetsh`) is classed local by the same not-explicitly-remote rule.
@@ -113,7 +122,9 @@ function preflightSeatTools(o) {
         error: {
           code: 'BAD_ARGS',
           message: `Error: --tools with a local tool (${localIds.join(', ')}) needs --out-dir OUTSIDE the project tree `
-            + '(a seat that can read the tree must not be able to read the run\'s sibling sessions) and under your home, tmp or AMICUS_PROJECT_ROOTS',
+            + '(a seat that can read the tree must not be able to read the run\'s sibling sessions; a run directory '
+            + 'that resolves inside the project through a symlink counts as inside) and under your home, tmp or '
+            + 'AMICUS_PROJECT_ROOTS',
         },
       };
     }
@@ -204,8 +215,21 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
   // something real to judge a null answer against. See the docblock above.
   const canVerify = !!deps.listEngineAgentsFn || !deps.launchers;
   if (o.councilAgents && canVerify) {
-    const { listEngineAgents, verifyAgentRendering, verificationDirectories } = require('./run-seat-tools-verify');
+    const { listEngineAgents, verifyAgentRendering, verifyAgentFields, verificationDirectories } = require('./run-seat-tools-verify');
     const agentsFn = deps.listEngineAgentsFn || listEngineAgents;
+    // Shared by both checks below (permission rendering and, ruling P2-R53,
+    // the non-permission surface) so their refusal is byte-identical either
+    // way — a caller cannot tell which check caught the tree from the message.
+    const renderMismatch = (reason, dir) => ({
+      error: {
+        code: 'BAD_ARGS',
+        message: 'Error: the engine rendered the council agents differently from what this run registered '
+          + `(${reason}, directory ${dir}) — an opencode.json or .opencode/agent file the engine `
+          + 'loads for that directory (the tree\'s, or your global config) defines council-seat/'
+          + 'council-support and alters them; remove those entries, or run with --agent Plan to use the '
+          + 'engine\'s own agent knowingly (v4.9.7 behaviour). Nothing was launched.',
+      },
+    });
     const directories = verificationDirectories(o);
     for (const dir of directories) {
       const list = await agentsFn(sharedServer, dir);
@@ -229,26 +253,22 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
           return { error: { code: 'BAD_ARGS', message: `Error: the engine did not register ${name}` } };
         }
         const verified = verifyAgentRendering(Array.isArray(agent.permission) ? agent.permission : [], allowlist);
-        if (!verified.ok) {
-          return {
-            error: {
-              code: 'BAD_ARGS',
-              message: 'Error: the engine rendered the council agents differently from what this run registered '
-                + `(${verified.reason}, directory ${dir}) — an opencode.json or .opencode/agent file the engine `
-                + 'loads for that directory (the tree\'s, or your global config) defines council-seat/'
-                + 'council-support and alters them; remove those entries, or run with --agent Plan to use the '
-                + 'engine\'s own agent knowingly (v4.9.7 behaviour). Nothing was launched.',
-            },
-          };
-        }
+        if (!verified.ok) { return renderMismatch(verified.reason, dir); }
+        // Ruling P2-R53 (B1, round 6): verifyAgentRendering only ever checked
+        // `permission` — a tree can ALSO set a council agent's prompt, model,
+        // sampling, options and mode (measured 2026-09-13). Named mutant
+        // FIELDSBLIND (in verifyAgentFields itself): returning {ok:true}
+        // unconditionally there reddens this call site's own coverage too.
+        const fieldsVerified = verifyAgentFields(agent);
+        if (!fieldsVerified.ok) { return renderMismatch(fieldsVerified.reason, dir); }
       }
     }
   }
   return { error: null };
 }
 
-const { listEngineAgents, verifyAgentRendering } = require('./run-seat-tools-verify');
+const { listEngineAgents, verifyAgentRendering, verifyAgentFields } = require('./run-seat-tools-verify');
 
 module.exports = {
-  preflightSeatTools, validateSeatToolsAgainstEngine, listEngineAgents, verifyAgentRendering,
+  preflightSeatTools, validateSeatToolsAgainstEngine, listEngineAgents, verifyAgentRendering, verifyAgentFields,
 };

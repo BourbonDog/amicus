@@ -36,7 +36,12 @@ All notable changes to Amicus are documented here. Format follows
   unconditional refusal on an unverifiable engine, a failed shared-server start included, is
   P2-R38/P2-R43, `_scratch` coverage is P2-R39, and the external_directory exemption for the
   engine's own tool-output cache — resolved XDG-first, matching `auth-json.js`/`engine-log.js`
-  — is narrowed by P2-R40/P2-R42).
+  — is narrowed by P2-R40/P2-R42). The tripwire also verifies the council agents' non-permission
+  surface (prompt, model, sampling, options, mode) as rendered, since a tree can set those too
+  (P2-R53); a council agent is registered by replacing any same-name entry; the local-tool
+  placement rule compares physical paths, so a run directory reached through a symlink into the
+  project is refused (P2-R54); the CLI prints a Notice for `read` naming its exact fence;
+  `tools: null` over MCP is unset (P2-R55).
   Two of the three leg-loss classes in the 2026-09-11 study shared one
   precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
   install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's
