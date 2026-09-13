@@ -42,8 +42,8 @@
  *                 a rebuild", "html: the section table carries the channel column and the voice
  *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
  *                 HEAD by construction, pinned by ROWALWAYS", "D0 with its three flags stripped
- *                 renders byte-identically to the pre-feature renderer (snapshots, both formats;
- *                 checked against main 5541bb44 by byte count at recording time)", "a flagged
+ *                 renders byte-identically to main 5541bb44's renderer (snapshots; compared
+ *                 byte-for-byte against a git-archive render of main at recording time)", "a flagged
  *                 row that is not a COMPLETED BENCH seat renders nothing…", and "the report and
  *                 the census agree on every shape…". Nothing in report.test.js, report-intent.
  *                 test.js, degrade-surface.test.js or run-all-clean.test.js reddened.
@@ -261,12 +261,13 @@ describe('byte-identity: a verdict with no flagged row renders exactly as before
     }
   });
 
-  test('D0 with its three flags stripped renders byte-identically to the pre-feature renderer (snapshots, both formats; checked against main 5541bb44 by byte count at recording time)', () => {
-    // A TRUE byte pin (council #248 r1, C4/D3): the flag-stripped D0 document must render exactly as
-    // the renderer did before this feature existed. The snapshots were recorded on this branch and
-    // checked against main 5541bb44's measured output (md 2007 / html 12560 bytes) at recording time;
-    // like the four other report snapshots, a deliberate renderer change re-records them — that is
-    // what a byte pin is for, and the cost D3 names is the cost of having one.
+  test('D0 with its three flags stripped renders byte-identically to main 5541bb44\'s renderer (snapshots; compared byte-for-byte against a git-archive render of main at recording time)', () => {
+    // A TRUE byte pin (council #248 r1 C4/D3, r2 P3-R20): the flag-stripped D0 document must render
+    // exactly as main 5541bb44's renderer does. Verified by an actual render, not a byte count:
+    // `git archive 5541bb44 src` into a scratch copy, rendered the same stripped document through
+    // ITS OWN report.js, and compared the two outputs byte-for-byte at recording time — identical,
+    // md 2007 / html 12560 bytes. Like the four other report snapshots, a deliberate renderer change
+    // re-records them — that is what a byte pin is for, and the cost D3 names is the cost of having one.
     const v = JSON.parse(JSON.stringify(readJson('verdict.json')));
     for (const r of v.runStats) { delete r.findingsUnverified; delete r.repairRefused; }
     const md = buildReport({ verdict: v }, { format: 'md' });
