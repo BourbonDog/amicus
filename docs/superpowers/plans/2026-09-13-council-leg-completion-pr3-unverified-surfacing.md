@@ -90,6 +90,7 @@
 - Create: `tests/council/fixtures/study-d0/tally.json`, `tests/council/fixtures/study-d0/verdict.json`, `tests/council/fixtures/study-d0/README.md`
 - Modify: `src/utils/degrade.js` (the `DEGRADE_CHANNELS` literal, after `'stage2-judge',` at line 41)
 - Modify: `src/council/report.js:18-20` (add one `require`), `:266` (one comment line), `:279` (the `degrades:` line)
+- Modify: `src/council/report-md.js:50-51` (the section-guard comment — see Step 6 item 4)
 - Modify: `docs/council.md:996-998` (the `amicus council report` "What it renders" paragraph)
 - Regenerate: `docs/architecture-map.md` (`node scripts/generate-docs.js`)
 
@@ -151,7 +152,7 @@ Create `tests/council/report-unverified.test.js` with exactly this content (edit
  * committed tree and recorded here by the implementer):
  *   ROWALWAYS   — `if (r.findingsUnverified === true) { rows.push(unverifiedRow(r)); }`
  *                 → `rows.push(unverifiedRow(r));` (every row becomes a loss). Red set: TBD-MEASURE
- *   REFUSEDDROP — the `if (r.repairRefused && …) { rows.push(refusedRow(r)); }` statement removed.
+ *   REFUSEDDROP — the `if (isPlainObject(r.repairRefused)) { rows.push(refusedRow(r)); }` statement removed.
  *                 Red set: TBD-MEASURE
  */
 
@@ -184,7 +185,7 @@ const DEAD_LEG = {
 
 // The exact voice line (formatDegrade output without its trailing newline). Task 3's docs and
 // CHANGELOG quote the what/why/effect; a paraphrase anywhere is a defect.
-const UNVERIFIED_LINE = (seat) => `Notice: seat ${seat}'s findings came from a repair of a response with no findings block — nothing verified them. the tiers they were given rest on the repair alone; the seat counts as reviewed, and as unverified in seatsReviewed.`;
+const UNVERIFIED_LINE = (seat) => `Notice: seat ${seat}'s findings came from a repair of a response with no findings block — nothing verified them. the tiers they were given rest on the repair alone; the seat still counts as reviewed.`;
 const REFUSED_LINE = "Notice: seat beta's repair was refused (REPAIR_CHANGED_FINDING_COUNT) — repair returned 2 findings, original attempted 3. the seat contributed no findings; its review text still reached the judges and it counts as reviewed.";
 
 describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () => {
@@ -384,7 +385,7 @@ function unverifiedRow(r) {
     channel: 'unverified-repair',
     what: `seat ${seat}'s findings came from a repair of a response with no findings block`,
     why: 'nothing verified them',
-    effect: 'the tiers they were given rest on the repair alone; the seat counts as reviewed, and as unverified in seatsReviewed',
+    effect: 'the tiers they were given rest on the repair alone; the seat still counts as reviewed',
     data: { seat },
   });
 }
@@ -441,6 +442,8 @@ In `src/council/report.js`:
    ```
 
 Then: `wc -l src/council/report.js` → `300`, and `node scripts/check-file-sizes.js --all` exits 0.
+
+4. (Added after the Task 1 review, ruling P3-R9.) In `src/council/report-md.js:50-51` the guard comment "Heading-over-nothing: emitted ONLY when the run actually degraded, so a clean verdict's report stays byte-identical to before this section existed." becomes false once the model carries the runStats-derived rows (D0 did not degrade and now renders the section). Reword it to: `// Heading-over-nothing: emitted ONLY when the model carries losses — the sink's records plus (v4.9.8, #242) the runStats-derived unverified/refused-repair rows report.js :: toModel appends — so a clean verdict's report stays byte-identical to before this section existed.` (`report-md.js` has headroom; two lines are fine.) `report-html.js`'s guard comment ("absent or empty degrades ⇒ no section at all") stays true and is not touched. The unverified row's `effect` was also softened at that review (ruling P3-R8): it must be true on every document it can render on, including a pre-4.9.8 `verdict.json` whose census has no `unverified` key — so it does not name the census.
 
 - [ ] **Step 7: Run the new file and every suite that renders a report or reads the channel registry**
 
