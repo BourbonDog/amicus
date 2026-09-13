@@ -14,6 +14,16 @@
  * repairs are not bench seats. `reviewed` is those whose leg completed: a
  * `timeout` is not a review any more than an `error` is.
  *
+ * `unverified` (#242 / spec §5, v4.9.8) is those bench seats whose findings came from a
+ * repair of a response with no parseable findings block — the LC-11 flag
+ * run-stages.js :: runStage1 sets on the row. The seat stays in `reviewed` (its leg
+ * completed) and is counted here too. ALWAYS written once the census is: 0 is a
+ * measurement, absence keeps its one meaning. Key order is reviewed / unverified / of —
+ * the shape spec §5 names and the council-review check title prints. Not a stub count
+ * (study run B2: a real 19,064-byte review with a malformed trailing block carried the
+ * flag). A refused repair (`repairRefused`) is NOT counted: that seat tallied no findings
+ * at all, and the report's `repair-refused` row says so.
+ *
  * A LEAF: it requires nothing, matching its seat-loss sibling.
  */
 
@@ -21,7 +31,7 @@
 
 /**
  * @param {Array<object>|undefined} runStats
- * @returns {{seatsReviewed?: {reviewed: number, of: number}}}
+ * @returns {{seatsReviewed?: {reviewed: number, unverified: number, of: number}}}
  */
 /**
  * Is this runStats row a BENCH seat — something that was asked to review?
@@ -53,6 +63,9 @@ function seatsReviewedOf(runStats) {
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
     reviewed: seats.filter(r => r.status === 'complete').length,
+    // `=== true`, matching tally.js's emit-when-true — a hand-assembled truthy string is not
+    // a flag (V14). Named mutant: CENSUSZERO (tests/council/verdict.test.js).
+    unverified: seats.filter(r => r.findingsUnverified === true).length,
     of: seats.length,
   } };
 }
