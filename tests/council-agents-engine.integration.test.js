@@ -177,6 +177,9 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   };
 
   const envSeat = findProbeLine('PROBE_TREE_ENV_JSON').agents['council-seat'];
+  // The two `allow` expectations below pin the ENGINE's behaviour (the tree
+  // reorders the seat's read rules): a red here means the engine changed,
+  // not that amicus regressed — re-measure before touching the tripwire.
   expect(evaluate(envSeat.permission, 'read', '.env').action).toBe('allow');
   expect(evaluate(envSeat.permission, 'read', '.envrc').action).toBe('allow');
   const envVerified = verifyAgentRendering(envSeat.permission, ['grep', 'read', 'webfetch']);

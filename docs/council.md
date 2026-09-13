@@ -447,12 +447,11 @@ config enforces; the sentence informs — study run E1 showed gemini makes zero 
 told not to.
 
 **Secrets.** With `read` opted in, the seat agent denies `.env`, `.env.*` and `.envrc` files at
-the engine (the match is case-sensitive on Linux; no other spelling is fenced) — the seat
-gets a refusal and the leg
-continues (the deny rules are measured to render after the seat's own `read=allow`, and CI now
-models the engine's own evaluator — transcribed from its source — over the real rendering,
-confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the refusal itself is
-exercised by the release ritual's live `--tools read` run, not by the probe).
+the engine (the match is case-sensitive on Linux; no other spelling is fenced) — the seat gets a
+refusal and the leg continues (the deny rules are measured to render after the seat's own
+`read=allow`, and CI now models the engine's own evaluator — transcribed from its source — over
+the real rendering, confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the
+refusal itself is exercised by the release ritual's live `--tools read` run, not by the probe).
 `grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
 the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
 With a local tool the seat's engine session is rooted at the project tree, so the engine also
