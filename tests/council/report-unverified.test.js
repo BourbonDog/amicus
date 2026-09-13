@@ -21,33 +21,41 @@
  * The wording never says "stub": the flag also fires on a real 19,064-byte review whose
  * trailing JSON block was malformed (study run B2, qwen-flash).
  *
- * Named mutants (exact edits in src/council/report-lost-rows.js; red sets measured on the
- * committed tree and recorded here by the implementer). The definitions below are restated
- * against the current body, after the predicate rename (council #248 r1 nits, P3-R16); the
- * counts still reflect the pre-rename run and are re-measured next:
+ * Named mutants (exact edits in src/council/report-lost-rows.js; red sets re-measured after the
+ * predicate rename, on the committed tree — via `npx jest tests/council/report-unverified.test.js
+ * tests/council/report.test.js tests/council/report-intent.test.js
+ * tests/council/degrade-surface.test.js tests/council/run-all-clean.test.js` with each mutant
+ * applied in turn and reverted (`git checkout --`) — and recorded here by the implementer):
  *   ROWALWAYS   — `if (isUnverifiedSeat(r)) { rows.push(unverifiedRow(r)); }`
  *                 → `rows.push(unverifiedRow(r));` (unconditional: every row becomes a loss).
- *                 Red set (10 of 72): "D0: one unverified-repair row per flagged seat, in
- *                 runStats order, as frozen makeDegrade records", "a refused repair gets a
- *                 repair-refused row naming the code, with the detail as the why", "a refused
- *                 repair with no code/detail (hand-assembled input) still renders, with
- *                 fallbacks", "emit-when-TRUE, matching the producer: a truthy non-boolean flag
- *                 is not a flag, a string repairRefused is not a refusal", "tolerates every
- *                 schema-free shape the report entry points can deliver", 'never says "stub",
- *                 and both channels are registered (the degrade-contract drift pin reads src/)',
- *                 "the fixture is the pre-4.9.8 verdict.json — the rows come from runStats, not
- *                 from a rebuild", "html: the section table carries the channel column and the
- *                 voice line", "av-receiver (three rows, no flags): no rows, no section — GREEN
- *                 at HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
- *                 stripped renders byte-identically to the pre-feature renderer (snapshots, both
- *                 formats; checked against main 5541bb44 by byte count at recording time)".
+ *                 Red set, re-measured after the predicate rename (council #248 r1 nits): 12 of
+ *                 74 — the same ten as before plus exactly the two tests the round-1 wave added,
+ *                 no others: "D0: one unverified-repair row per flagged seat, in runStats order,
+ *                 as frozen makeDegrade records", "a refused repair gets a repair-refused row
+ *                 naming the code, with the detail as the why", "a refused repair with no
+ *                 code/detail (hand-assembled input) still renders, with fallbacks",
+ *                 "emit-when-TRUE, matching the producer: a truthy non-boolean flag is not a
+ *                 flag, a string repairRefused is not a refusal", "tolerates every schema-free
+ *                 shape the report entry points can deliver", 'never says "stub", and both
+ *                 channels are registered (the degrade-contract drift pin reads src/)', "the
+ *                 fixture is the pre-4.9.8 verdict.json — the rows come from runStats, not from
+ *                 a rebuild", "html: the section table carries the channel column and the voice
+ *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
+ *                 HEAD by construction, pinned by ROWALWAYS", "D0 with its three flags stripped
+ *                 renders byte-identically to the pre-feature renderer (snapshots, both formats;
+ *                 checked against main 5541bb44 by byte count at recording time)", "a flagged
+ *                 row that is not a COMPLETED BENCH seat renders nothing…", and "the report and
+ *                 the census agree on every shape…". Nothing in report.test.js, report-intent.
+ *                 test.js, degrade-surface.test.js or run-all-clean.test.js reddened.
  *   REFUSEDDROP — the `if (isRefusedSeat(r)) { rows.push(refusedRow(r)); }` statement removed.
- *                 Red set (4 of 72): "a refused repair gets a repair-refused row naming the
- *                 code, with the detail as the why", "a refused repair with no code/detail
- *                 (hand-assembled input) still renders, with fallbacks", "a row carrying BOTH
- *                 facts yields both rows, unverified first — the exclusivity is the producer's,
- *                 not the renderer's", and 'never says "stub", and both channels are registered
- *                 (the degrade-contract drift pin reads src/)'.
+ *                 Red set, re-measured after the predicate rename (council #248 r1 nits):
+ *                 unchanged at 4 of 74 (denominator only — same members as before the rename):
+ *                 "a refused repair gets a repair-refused row naming the code, with the detail
+ *                 as the why", "a refused repair with no code/detail (hand-assembled input)
+ *                 still renders, with fallbacks", "a row carrying BOTH facts yields both rows,
+ *                 unverified first — the exclusivity is the producer's, not the renderer's", and
+ *                 'never says "stub", and both channels are registered (the degrade-contract
+ *                 drift pin reads src/)'.
  */
 
 const fs = require('fs');
