@@ -87,9 +87,11 @@ All notable changes to Amicus are documented here. Format follows
   a third number, `seatsReviewed: {reviewed, unverified, of}` (always written; older documents
   still validate), and the council-review check title and sticky comment print `(N unverified)`
   when it is non-zero. The wording never says "stub": the flag also fires on a real review whose
-  trailing JSON block was malformed. Study run D0 (three narration stubs, three repairs) now
-  reads `3 reviewed · 3 unverified · of 3` with three rows where it read `3 of 3` and nothing.
-  (#242; `docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §5; PR 3 of 3.)
+  trailing JSON block was malformed. Study run D0 (three narration stubs, three repairs) now reads
+  `{reviewed: 3, unverified: 3, of: 3}` in `verdict.json` — `seats reviewed: 3 of 3 (3 unverified)`
+  in the sticky comment — with three rows in the report, where it read `{reviewed: 3, of: 3}` and
+  nothing. (#242; `docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §5; PR 3 of
+  3.)
 
 ## [4.9.7] - 2026-09-09
 

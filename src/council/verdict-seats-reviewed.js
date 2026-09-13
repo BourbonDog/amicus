@@ -24,15 +24,19 @@
  * flag). A refused repair (`repairRefused`) is NOT counted: that seat tallied no findings
  * at all, and the report's `repair-refused` row says so.
  *
+ * `unverified ⊆ reviewed`, and "bench rows only", are guaranteed by the PRODUCER and not re-checked
+ * here: run-launch.js :: materializeReviews drops every non-complete leg before a repair can run
+ * (so a flagged row is always `status: 'complete'`), and a primary row's role is its seat's —
+ * seats.js :: buildSeats and run-stages.js :: roleFor mint only `seat`, `critic` and `lens:*`. A
+ * hand-assembled or MCP record (V6/V14 show why such records reach buildVerdict) can violate both;
+ * this census reads what it is given, and report-lost-rows.js :: lostRowsOf reads the same flag
+ * with the same trust, so the two never disagree on an engine-written record.
+ *
  * A LEAF: it requires nothing, matching its seat-loss sibling.
  */
 
 'use strict';
 
-/**
- * @param {Array<object>|undefined} runStats
- * @returns {{seatsReviewed?: {reviewed: number, unverified: number, of: number}}}
- */
 /**
  * Is this runStats row a BENCH seat — something that was asked to review?
  *
@@ -51,6 +55,10 @@ function isBenchRole(role) {
     || (typeof role === 'string' && role.startsWith('lens:'));
 }
 
+/**
+ * @param {Array<object>|undefined} runStats
+ * @returns {{seatsReviewed?: {reviewed: number, unverified: number, of: number}}}
+ */
 function seatsReviewedOf(runStats) {
   // ⚠️ `Array.isArray`, NOT `runStats || []`. buildVerdict is reachable on
   // externally-supplied records that never touched tally() in-process — the MCP

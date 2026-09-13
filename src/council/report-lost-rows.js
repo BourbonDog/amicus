@@ -22,6 +22,13 @@
  *
  * `data.seat` is the row's label: the seat id when the bench repeats an alias, else the alias —
  * the `seat || model` rule the street-cred rows use in both renderers.
+ *
+ * Role and status are not consulted, on purpose: on every engine-written record a flagged row is a
+ * completed bench seat (run-launch.js :: materializeReviews drops non-complete legs before any
+ * repair runs; run-stages.js :: roleFor and seats.js :: buildSeats mint only bench roles), and
+ * verdict-seats-reviewed.js :: seatsReviewedOf reads the same flag with the same trust — the two
+ * never disagree on an engine-written record. A hand-assembled record that flags a judge or a
+ * timed-out leg renders a row all the same; the row's wording describes an engine-written record.
  */
 
 const { makeDegrade } = require('../utils/degrade');
@@ -61,7 +68,9 @@ function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArra
 
 /**
  * @param {*} runStats `verdict.runStats` — any shape: the report's entry points are schema-free
- *   JSON.parse (see report.js :: isSeatSpace), so a non-array yields no rows rather than a throw.
+ *   JSON.parse (see report.js :: isSeatSpace), so THIS LEAF yields no rows rather than a throw on a
+ *   non-array. That is the leaf's contract only — the cost table (report-cost.js) still throws on a
+ *   non-array runStats, pre-existing and untouched here.
  * @returns {Array<object>} frozen makeDegrade records, in runStats order; `[]` when none.
  */
 function lostRowsOf(runStats) {

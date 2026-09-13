@@ -137,7 +137,7 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     expect(lostRowsOf([seatRow('z', { repairRefused: 'REPAIR_CHANGED_FINDING_COUNT' })])).toEqual([]);
   });
 
-  test('tolerates every schema-free shape the report entry points can deliver', () => {
+  test('the leaf tolerates every schema-free shape the report entry points can deliver (the cost table has its own contract)', () => {
     for (const bad of [undefined, null, {}, 'runStats', 42, [], [null, 42, 'x', {}, [], true]]) {
       expect(lostRowsOf(bad)).toEqual([]);
     }
