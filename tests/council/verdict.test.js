@@ -393,7 +393,12 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
   // council #248 round 1 (B1/C2/D2): the subset relation is structural, not producer trust —
   // one predicate (isUnverifiedSeat) gates both the census and the report's rows. Named mutant
   // SUBSETBLIND (`&& r.status === 'complete'` deleted from isUnverifiedSeat), red set measured
-  // on the committed tree: TBD-MEASURE
+  // on the committed tree (`npx jest tests/council/verdict.test.js
+  // tests/council/report-unverified.test.js`): V15, V16, and in report-unverified.test.js: "a
+  // flagged row that is not a COMPLETED BENCH seat renders nothing — the census predicate is
+  // the renderer's (council #248 r1, B1/C2/D2)" and "the report and the census agree on every
+  // shape: unverified-repair rows === seatsReviewed.unverified, and unverified ≤ reviewed" (4
+  // of 50).
   test('V15 a flagged row whose leg did not complete is NOT an unverified review — unverified ⊆ reviewed by construction', () => {
     const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
       runStats: [{ ...seatRow('glm', 'timeout'), findingsUnverified: true }, seatRow('gpt', 'complete')] });
