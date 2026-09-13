@@ -15,13 +15,18 @@
 const briefings = require('./briefings');
 const { bindPaddedWave } = require('./stage1-bind');
 
-/** The briefing a retry unit re-issues — same intent-aware dispatchers Stage 1 used (v4.9 W6). */
+/**
+ * The briefing a retry unit re-issues — same intent-aware dispatchers Stage 1
+ * used (v4.9 W6), now also carrying the run's seat-tools line and any --agent
+ * override (spec 2026-09-11 §4, PR 2): a retry is a Stage-1 leg like any
+ * other, so it gets the same `tools`/`agent` a first attempt would have.
+ */
 function briefingFor(o, unit) {
-  if (unit.unit === 'critic') { return briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date }); }
+  if (unit.unit === 'critic') { return briefings.stage1CriticBriefing(o.intent, { briefing: o.briefing, date: o.date, tools: o.seatTools, agent: o.agent }); }
   if (unit.unit === 'lens') {
-    return briefings.stage1LensBriefing(o.intent, { lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date });
+    return briefings.stage1LensBriefing(o.intent, { lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date, tools: o.seatTools, agent: o.agent });
   }
-  return briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date });
+  return briefings.stage1SeatBriefing(o.intent, { briefing: o.briefing, date: o.date, tools: o.seatTools, agent: o.agent });
 }
 
 /**

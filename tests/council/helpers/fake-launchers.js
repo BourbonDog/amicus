@@ -57,11 +57,17 @@ function scriptedLaunchers(script) {
   return { launchWave, launchSolo, calls };
 }
 
-/** 3-bench happy-path script: gemini/gpt/qwen review; all judge; deepseek chairs. */
-function happyScript() {
+/**
+ * 3-bench happy-path script: gemini/gpt/qwen review; all judge; deepseek chairs.
+ * Keyed to `runId` (default 'abc123', every existing driver-suite call site's
+ * runId) so a caller running a DIFFERENT runId — tests/council/run-tools.test.js
+ * uses 'r1' — gets a script keyed to match its own waveIds instead of throwing
+ * "no script for waveId" on the very first launch.
+ */
+function happyScript(runId = 'abc123') {
   return {
-    'abc123-s1': (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
-    'abc123-s2': () => okWave([
+    [`${runId}-s1`]: (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
+    [`${runId}-s2`]: () => okWave([
       mkLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
         [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
       mkLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
@@ -69,7 +75,7 @@ function happyScript() {
       mkLeg('qwen', judgeOut(['Review A', 'Review B', 'Review C'],
         [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }, { id: 'C1', verdict: 'agree' }])),
     ]),
-    'abc123-ch1': () => okWave([
+    [`${runId}-ch1`]: () => okWave([
       mkLeg('deepseek', 'Synthesis of the bench.\n\nHARD QUESTIONS\n1. Q?\n\nVERDICT: Ship it', 'complete', 0.03),
     ]),
   };

@@ -229,8 +229,8 @@ const HEADLESS_STATUS_REMINDER = '<system-reminder>Preferred: call amicus_wait w
  * v4.5 Task 15 (B7/F5): map amicus_fanout / amicus_start's MCP input keys to
  * the CLI arg-key names applyPackToArgs's knob tables use (pack-resolve.js),
  * so applyPackToMcpInput can reuse those tables unchanged — see
- * src/mcp-council-run.js's COUNCIL_PACK_PARAM_MAP for the sibling map and its
- * fuller docblock. `includeContext` is the one inverted-polarity knob: the
+ * src/mcp-council-pack-map.js's COUNCIL_PACK_PARAM_MAP for the sibling map and
+ * its fuller docblock. `includeContext` is the one inverted-polarity knob: the
  * pack/CLI side is `no-context` (true = drop context), the MCP side is
  * `includeContext` (true = keep context, default true).
  */

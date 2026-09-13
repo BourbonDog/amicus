@@ -530,6 +530,7 @@ function resolveServerStartTimeoutMs(options = {}, env, platform) {
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
  * @param {number|null} [options.outputBudget] - #218 PR 3: the per-leg output budget startServer
  *   already read; omitted means buildProviderModels reads config itself
+ * @param {Object<string, object>} [options.agents] - Extra agent configs to register (council seat agents, spec 2026-09-11 §4)
  * @returns {object} Server options ready for createOpencodeServer
  */
 function buildServerOptions(options = {}) {
@@ -654,6 +655,31 @@ function buildServerOptions(options = {}) {
     ...(config.agent || {}),
     chat: chatAgent
   };
+
+  // Council seat agents (spec 2026-09-11 §4, PR 2): a per-run map of extra agents
+  // the caller already computed (council/seat-tools.js :: buildCouncilAgents).
+  // Merged AFTER `chat`, and a `chat` key is skipped outright (fix round 1 nit)
+  // so a caller genuinely can never displace the chat registration — without
+  // the skip, `agents: { chat: {...} }` would replace `config.agent.chat`
+  // with a brand-new object, detaching it from the `chatAgent` object the
+  // systemPrompt branch below still mutates by reference; seat-tools.js never
+  // emits a `chat` key, but the guard holds regardless of the caller. Absent,
+  // or not a plain object (arrays rejected too), this block is a no-op and
+  // every non-council server's config is byte-identical to today.
+  //
+  // council #247 round 6 (P2-R53): a council agent REPLACES any pre-existing
+  // same-name entry outright, rather than merging onto it — measured
+  // 2026-09-13 (probe-r6.js) that the old shallow merge below let a
+  // pre-existing entry's `prompt`/`temperature` survive and render on the
+  // seat. Named mutant AGENTMERGE: restoring the spread
+  // (`{ ...(config.agent[name] || {}), ...agentConfig }`) lets `prompt`
+  // survive again.
+  if (options.agents && typeof options.agents === 'object' && !Array.isArray(options.agents)) {
+    for (const [name, agentConfig] of Object.entries(options.agents)) {
+      if (name === 'chat') { continue; }
+      config.agent[name] = { ...agentConfig };
+    }
+  }
 
   // Set system prompt on the target agent's config (hidden from UI).
   // The promptAsync `system` field is rendered as a visible chat message,

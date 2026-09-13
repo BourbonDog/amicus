@@ -46,6 +46,7 @@ const { deriveLegIds } = require('./leg-ids');
  *     to run this wave's legs on. Both or neither. When supplied this wave never
  *     starts a server and never closes one — see the seam comment in step 4.
  *     NOT `client`, which is the client TYPE string on this function.)
+ *   serverAgents? (spec 2026-09-11 §4: agents to register if this wave starts its own server)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -218,7 +219,12 @@ async function runFanout(options) {
     logger.debug('Using external server (shared server mode)', { waveId, url: server.url });
   } else {
     try {
-      ({ client, server } = await startOpenCodeServer(mcpServers, { models: validated.serverModels || okLegs.map(l => l.model) }));
+      ({ client, server } = await startOpenCodeServer(mcpServers, {
+        models: validated.serverModels || okLegs.map(l => l.model),
+        // Spec 2026-09-11 §4: a wave that starts its own server still needs the
+        // council agents registered on it. Spread-guarded: byte-identical otherwise.
+        ...(options.serverAgents ? { agents: options.serverAgents } : {}),
+      }));
     } catch (err) {
       writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
       return errorWave(waveId, `Failed to start server: ${err.message}`, waveDir);

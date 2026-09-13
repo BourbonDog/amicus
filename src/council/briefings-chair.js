@@ -289,7 +289,7 @@ function chairRepairPromptFor(intent, args) {
 
 module.exports = {
   dateLine,
-  CHAIR_NO_TOOLS_PREAMBLE, chairRepairPromptFor,
+  CHAIR_NO_TOOLS_LEAD, CHAIR_NO_TOOLS_PREAMBLE, chairRepairPromptFor,
   CHAIR_VERDICT_VALUES,
   VERDICT_SCALE_ADDENDUM,
   CHAIR_TASK,

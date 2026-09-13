@@ -116,6 +116,21 @@ describe('v4.9 W5.3: runCouncil intent validation — BAD_ARGS pre-spend', () =>
     expect(run.error.message).toContain('--claude-review');
     expect(run.error.message).toContain('review N+1');
   });
+
+  // Spec 2026-09-11 §4 (PR 2): the task-intent default (`webfetch`) is still a
+  // LOCAL/REMOTE classification, not a waiver of the run-directory placement
+  // rule — a task run with an explicit local `--tools read` must be refused
+  // exactly like a review run's, mirroring tests/council/run-tools.test.js's
+  // "run dir INSIDE the project" case.
+  test('intent task + explicit --tools read is BAD_ARGS when the run dir is inside the project — the task default does not waive the placement rule', async () => {
+    const counter = { n: 0 };
+    const { exitCode, run } = await runCouncil(
+      baseOptions(tmp, { intent: 'task', tools: ['read'] }), deps(countingLaunchers(counter)));
+    expect(exitCode).toBe(1);
+    expect(counter.n).toBe(0);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('OUTSIDE the project tree');
+  });
 });
 
 describe("v4.9 W5.3: a task run stamps intent:'task' on meta, run.json and the verdict", () => {

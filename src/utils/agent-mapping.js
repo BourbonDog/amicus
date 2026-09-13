@@ -6,7 +6,7 @@
  * OpenCode Native Agents (https://opencode.ai/docs/agents/):
  *   - Chat: Reads auto, writes/bash ask permission (interactive default)
  *   - Build: Default primary agent with full tool access
- *   - Plan: Read-only agent for analysis and planning
+ *   - Plan: Analysis and planning without edits (reads, searches and shell allowed)
  *   - General: Full-access agent for research
  *   - Explore: Read-only agent for codebase exploration
  *

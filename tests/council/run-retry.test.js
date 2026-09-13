@@ -1263,3 +1263,65 @@ describe('v4.8 T-A4: two unattributable twins are TWO slots on ONE key', () => {
     expect(firstFailureReasons(out)).toEqual(['boom-A', 'boom-B']);
   });
 });
+
+// Review r1 (Important finding): run-retry.js:94-95's `common` two-key addition and
+// run-retry-launch.js's `tools` forwarding had ZERO coverage in this suite —
+// every fixture above pre-dates spec 2026-09-11 §4 and never sets
+// o.seatTools/seatToolsLocal/project, so a retried leg's role/directory/tools
+// were unverified on the one path where a silent failure is worst: a retried
+// seat launching under council-support (no tools) while its OWN briefing still
+// says "Your tools: read." (or losing directory scoping for a local tool).
+describe('retryStage1Losses seat tools (spec 2026-09-11 §4, PR 2 review r1)', () => {
+  const oneDeadWave = { waveId: 'r1-s1', models: ['a', 'b'], reason: 'died' };
+  const recoveredWave = () => ({
+    wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1), usableLeg('b', 'r1-s1r1', 2)] }, exitCode: 0,
+  });
+
+  test('a retry launch reaches the launcher with role seat', async () => {
+    const launchWave = jest.fn().mockResolvedValue(recoveredWave());
+    const ctx = fakeCtx({}, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(launchWave.mock.calls[0][0]).toMatchObject({ role: 'seat' });
+  });
+
+  test('a local tool opted in scopes the retry launch to the project tree; without one, no directory key at all', async () => {
+    const project = path.join(os.tmpdir(), 'seat-tools-project-tree');
+    const withLocal = jest.fn().mockResolvedValue(recoveredWave());
+    const ctxLocal = fakeCtx({ seatToolsLocal: true, project }, { launchWave: withLocal });
+    await retryStage1Losses(ctxLocal, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(withLocal.mock.calls[0][0].directory).toBe(project);
+
+    const withoutLocal = jest.fn().mockResolvedValue(recoveredWave());
+    // seatToolsLocal absent (a review/task run with no local tool opted in), but
+    // a REAL project so this assertion is load-bearing: with ctxPlain carrying
+    // no project at all, `directory` reads undefined whether or not the
+    // conditional even runs, which is vacuous — an unconditional
+    // `directory: o.project` would read undefined here too. A real project
+    // makes the two shapes diverge. Named mutant RETRYROLEDROP (see
+    // run-retry.js's `common`): dropping the whole
+    // `role: 'seat', ...(o.seatToolsLocal ? { directory: o.project } : {}),`
+    // line reddens one assertion in this test (the withLocal directory check
+    // above) plus the one assertion in the test above ('role seat') — it does
+    // NOT redden this toBeUndefined check, since dropping the line removes
+    // `directory` entirely regardless of seatToolsLocal.
+    const ctxPlain = fakeCtx({ project: path.join(os.tmpdir(), 'seat-tools-project-tree-plain') }, { launchWave: withoutLocal });
+    await retryStage1Losses(ctxPlain, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(withoutLocal.mock.calls[0][0].directory).toBeUndefined();
+  });
+
+  test('the retried legs\' prompt carries the run\'s seat tools — briefingFor forwards `tools`', async () => {
+    const launchWave = jest.fn().mockResolvedValue(recoveredWave());
+    const ctx = fakeCtx({ seatTools: ['read'] }, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(launchWave.mock.calls[0][0].prompt).toContain('Your tools: read.');
+  });
+
+  // B1/D1 (ruling P2-R31): a retry is a Stage-1 leg like any other, so under
+  // --agent it re-issues the override sentence too, not a tools-based one.
+  test('the retried legs\' prompt carries the run\'s --agent override — briefingFor forwards `agent`', async () => {
+    const launchWave = jest.fn().mockResolvedValue(recoveredWave());
+    const ctx = fakeCtx({ agent: 'Plan' }, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [oneDeadWave], deadLegs: [], counts: COUNTS });
+    expect(launchWave.mock.calls[0][0].prompt).toContain("You run as the engine's Plan agent");
+  });
+});

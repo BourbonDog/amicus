@@ -105,6 +105,72 @@ describe('launchWave (DI over runFanout)', () => {
     await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'abc123-s1' });
     expect(seen[0].maxCost).toBeUndefined();
   });
+
+  test('with council agents: stage-1 role gets council-seat, everything else council-support, and the agents ride to fanout (spec §4)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const agents = { 'council-seat': { mode: 'primary', tools: { '*': false } }, 'council-support': { mode: 'primary', tools: { '*': false } } };
+    const { launchWave, launchSolo } = createLaunchers({ fanoutFn, councilAgents: () => agents });
+    await launchWave({ models: ['gemini', 'gpt'], prompt: 'p', project: tmp, waveId: 'r-s1', role: 'seat' });
+    await launchWave({ models: ['gemini', 'gpt'], prompt: 'p', project: tmp, waveId: 'r-s2' });
+    await launchSolo({ model: 'deepseek', prompt: 'p', project: tmp, waveId: 'r-ch1' });
+    expect(seen.map((o) => o.agent)).toEqual(['council-seat', 'council-support', 'council-support']);
+    expect(seen.every((o) => o.serverAgents === agents)).toBe(true);
+  });
+
+  test('the --agent override wins over the computed agents (spec §4 escape hatch)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    // Real agents (not null): the agent NAME and the serverAgents CONFIG are
+    // two independent things in the code (run-launch.js:112-131) — `agent` is
+    // `opts.agent || agentOverride() || (agents ? … : 'Plan')`, so the override
+    // wins the name regardless of `agents`; `serverAgents` is forwarded
+    // whenever `agents` itself is truthy, with no dependency on how `agent`
+    // resolved. So passing a real `agents` object here (rather than null)
+    // actually pins override-over-computed, instead of a vacuous case where
+    // there was nothing to be overridden.
+    const agents = { 'council-seat': { mode: 'primary', tools: { '*': false } }, 'council-support': { mode: 'primary', tools: { '*': false } } };
+    const { launchWave } = createLaunchers({ fanoutFn, councilAgents: () => agents, agentOverride: () => 'Build' });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'r-s1', role: 'seat' });
+    expect(seen[0].agent).toBe('Build');
+    // The launcher DOES still forward them under an override: `...(agents ? {
+    // serverAgents: agents } : {})` is gated only on `agents`, never on how
+    // `agent` resolved (verified against run-launch.js:112-131, then here).
+    expect(seen[0].serverAgents).toBe(agents);
+  });
+
+  test('directory can differ from project: a local-tools seat is scoped to the project tree while its metadata stays in the run dir', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    const projectTree = path.join(tmp, 'tree');
+    // role: 'seat' is required (P2-R11 review): the directory override is gated to seat
+    // launches only, so a local-tools seat is the only caller that can point tool-exec
+    // cwd anywhere but opts.project — see the two tests below for the gate itself.
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: projectTree, waveId: 'r-s1', role: 'seat' });
+    expect(seen[0].project).toBe(tmp);
+    expect(seen[0].directory).toBe(projectTree);
+  });
+
+  // P2-R11 (review round 1): `directory` used to ride through unconditionally, which
+  // falsified this file's own §6 isolation proof — ANY launchWave/launchSolo caller
+  // (judge, debate, chair legs included) could redirect the OpenCode tool-exec cwd
+  // away from `_scratch`/the run dir. The escape hatch is now gated to `role: 'seat'`.
+  test('a non-seat launch ignores opts.directory — spec §6 isolation cannot be escaped (P2-R11)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: '/elsewhere', waveId: 'r-s1' });
+    expect(seen[0].directory).toBe(tmp);
+  });
+
+  test('a seat-role launch honors opts.directory — the local-tools escape hatch still works (P2-R11)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => { seen.push(opts); return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 }; };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, directory: '/elsewhere', waveId: 'r-s1', role: 'seat' });
+    expect(seen[0].directory).toBe('/elsewhere');
+  });
 });
 
 describe('launchSolo (single-leg wave)', () => {

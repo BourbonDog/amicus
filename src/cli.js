@@ -588,6 +588,7 @@ Subcommands for 'council':
       [--fallback] [--no-fallback] [--on-complete <cmd>]
       [--template <name|path>] [--artifact <file>] [--var <k=v>]
       [--pack <name|path>] [--tag <t>] [--intent review|task]
+      [--tools <a,b,c>] [--agent Plan|Build]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -619,6 +620,27 @@ Subcommands for 'council':
                                 explicit flags always override the pack's values.
                                 --intent task marks a task-mode run (v4.9);
                                 review is the default and is never stored.
+                                --tools <a,b,c> opts stage-1 seats into tools by the
+                                engine's own ids (task mode defaults to webfetch,
+                                review to none); task, skill, edit, write,
+                                apply_patch, question and invalid are refused.
+                                A local tool (read, grep, glob, bash) needs --out-dir OUTSIDE
+                                the project tree. read is denied exactly the
+                                names .env, .env.* and .envrc at the engine
+                                (case-sensitive on Linux; no other spelling is
+                                fenced); grep, glob and bash have no per-file
+                                fence — opt them in only on a tree without
+                                secrets. bash is outside every fence, this
+                                run's own records included (bench anonymity
+                                does not hold under it) — the CLI warns when
+                                you opt any of them in. --tools and --agent
+                                cannot be combined.
+                                --agent Plan|Build runs every leg on the
+                                engine's own agent instead (the escape hatch; no
+                                council agents, no allowlist). Plan's legs,
+                                judges and chair included, can read, search and
+                                run commands (edits denied); Build's can also
+                                edit. The CLI warns for either.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output
@@ -718,7 +740,7 @@ const USAGE_TRAILER = `
 OpenCode Agent Types:
     Chat       Reads auto, writes/bash ask permission (interactive default)
     Build      Full tool access (headless default)
-    Plan       Read-only analysis and planning
+    Plan       Analysis without edits (reads, searches, shell allowed)
 
   NOTE: --agent chat is interactive-only (incompatible with --no-ui).
   Headless mode defaults to build agent.

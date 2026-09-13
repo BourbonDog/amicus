@@ -21,10 +21,12 @@
  *      (opencode-client.js) passes only hostname/port/signal/config to
  *      `createOpencodeServer`. The server is directory-agnostic.
  *   2. Scoping is PER CALL: run-launch.js sets `directory: opts.project` on
- *      every launch, fanout threads it to each leg, and runHeadless turns it
- *      into `query.directory` on create/prompt/messages/status/abort (dirArgs,
- *      headless.js). A judge's calls carry `_scratch`; a Stage-1 leg's carry the
- *      run dir. One server answers both, scoped per request.
+ *      every launch except a stage-1 seat launch (`opts.role === 'seat'`,
+ *      P2-R11) that passes `opts.directory` — never a judge/debate/chair
+ *      leg's. fanout threads it to each leg, and runHeadless turns it into
+ *      `query.directory` on create/prompt/messages/status/abort (dirArgs,
+ *      headless.js). A judge's calls carry `_scratch`; a Stage-1 leg's carry
+ *      the run dir. One server answers both, scoped per request.
  *   3. The MCP surface is identical for both stages already: every council
  *      launch passes `noMcp: true` and nothing else MCP-related, and fanout's
  *      buildMcpConfig call receives no `projectDir`, so its result is a pure
@@ -216,7 +218,12 @@ async function acquireRunServer(o, deps = {}) {
   for (const notice of notices) { process.stderr.write(`Notice: ${notice}\n`); }
 
   try {
-    const { client, server } = await startFn(mcpServers, { models });
+    const { client, server } = await startFn(mcpServers, {
+      models,
+      // Spec 2026-09-11 §4: the run's two council agents (run.js computes them
+      // from the intent and --tools before this call).
+      ...(o.councilAgents ? { agents: o.councilAgents } : {}),
+    });
     logger.info('Council run using ONE shared OpenCode server',
       { runId: o.runId, url: server.url, models: models.length });
     // The POSITIVE, durable signal (see the ⚠️ above). `goPid` is the field that
@@ -227,6 +234,7 @@ async function acquireRunServer(o, deps = {}) {
       sharedServer: {
         acquired: true, at: new Date().toISOString(),
         goPid: (server && server.goPid) || null, models: models.length,
+        agents: Object.keys(o.councilAgents || {}),
       },
     }, 'sharedServer');
     return { serverClient: client, server };
@@ -262,4 +270,31 @@ async function releaseRunServer(shared) {
   try { await shared.server.close(); } catch { /* best-effort: the run is over */ }
 }
 
-module.exports = { acquireRunServer, releaseRunServer, resolveRunServerModels, recordServerFate };
+/**
+ * The tool ids the run's engine declares (spec 2026-09-11 §4): what `--tools`
+ * is validated against, read from the engine itself so the accepted set is
+ * never hand-listed. Best-effort and never throws: null means "could not ask"
+ * (no shared server, an engine without the endpoint, a transport error), and
+ * run.js refuses `--tools` on null rather than launching unvalidated.
+ * Measured 2026-09-12 on the pinned SDK 1.18.15 with a keyless server start
+ * (`GET /experimental/tool/ids`); the keyless probe suite
+ * `tests/council-agents-engine.integration.test.js`, added later in this PR,
+ * pins it in CI (P2-R12: this citation named that file before it existed).
+ * @param {{serverClient: object}|null} shared
+ * @param {string} directory the project directory the query is scoped to
+ * @returns {Promise<string[]|null>}
+ */
+async function listEngineToolIds(shared, directory) {
+  const client = shared && shared.serverClient;
+  if (!client || !client.tool || typeof client.tool.ids !== 'function') { return null; }
+  try {
+    const res = await client.tool.ids({ query: { directory } });
+    return (res && Array.isArray(res.data)) ? res.data.slice() : null;
+  } catch (err) {
+    const { logger } = require('../utils/logger');
+    logger.debug('Engine tool list unavailable', { error: err.message });
+    return null;
+  }
+}
+
+module.exports = { acquireRunServer, releaseRunServer, resolveRunServerModels, recordServerFate, listEngineToolIds };

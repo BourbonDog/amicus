@@ -16,7 +16,9 @@ const KINDS = ['council', 'fanout', 'solo'];
 /** Per-kind allowed `options` keys (spec §5.1; solo UI-suppression key per Task 0's verified flag set).
  * v4.5 HOLD-gate decision 2 (final-review F1): `agent`/`thinking`/`summaryLength`
  * are inert on EVERY council surface — handleCouncilRun never reads a pack-filled
- * one, and the engine hardcodes agent 'Plan'/summaryLength 'verbose' regardless.
+ * one; `--agent` (CLI) / the MCP `agent` param are a council run's only agent
+ * setters (spec 2026-09-11 §4, v4.9.8), and summaryLength stays hardcoded
+ * 'verbose' on every council launch regardless of what a pack sets.
  * Dropped from `council` pre-release rather than shipped as dead weight a pack
  * author would reasonably expect to work; a council pack that still sets one now
  * fails save/run validation (PACK_INVALID) like any other unknown option for the

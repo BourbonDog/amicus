@@ -278,3 +278,20 @@ describe("intent reaches the spawned council run argv (v4.9 W5.2, emit-when-'tas
     expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['intent']));
   });
 });
+
+// PR 2 Task 6 (spec 2026-09-11 §4): the MCP door's zod schema for tools/agent.
+// Forwarding behavior (argv, the local-tool refusal) is covered in
+// tests/mcp-council-run.test.js; this is the schema accept/reject contract only.
+describe('tools/agent are declared on the amicus_council_run schema (spec 2026-09-11 §4)', () => {
+  const { z } = require('zod');
+
+  test('accepts tools:[webfetch] and agent:Build; rejects agent:Chat and a bare-string tools value', () => {
+    const tool = getTools().find(t => t.name === 'amicus_council_run');
+    const schema = z.object(tool.inputSchema);
+    const base = { briefingFile: 'x.md', models: ['gemini', 'gpt'] };
+    expect(schema.safeParse({ ...base, tools: ['webfetch'] }).success).toBe(true);
+    expect(schema.safeParse({ ...base, agent: 'Build' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, agent: 'Chat' }).success).toBe(false);
+    expect(schema.safeParse({ ...base, tools: 'read' }).success).toBe(false);
+  });
+});

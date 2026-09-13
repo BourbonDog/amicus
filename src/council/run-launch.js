@@ -63,12 +63,16 @@ function createLaunchers(deps = {}) {
   const reserveBudget = deps.reserveBudget || null;
   const onBudgetRefusal = deps.onBudgetRefusal || null;
   const sharedServer = deps.sharedServer || null;
+  // Spec 2026-09-11 §4: getters, like sharedServer — run.js builds the launchers
+  // before it has decided the seat policy.
+  const councilAgents = deps.councilAgents || (() => null);
+  const agentOverride = deps.agentOverride || (() => undefined);
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
    *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
    *   councilRunId?: string, councilName?: string, tag?: string, seats?: Array<object>,
-   *   fallback?: object, catalog?: Array, noOutputBackstopMs?: number}} opts
+   *   fallback?: object, catalog?: Array, noOutputBackstopMs?: number, role?: 'seat', directory?: string}} opts
    *   councilRunId/councilName (v4.3 Task 3, spec §7.2) are additive attribution
    *   ids forwarded verbatim into the runFanout call so it can stamp them onto
    *   every leg. tag (v4.7 F8 D16) rides the same forward — every call site
@@ -83,6 +87,13 @@ function createLaunchers(deps = {}) {
    *   noOutputBackstopMs (Task 5, #129) is opt-in and spread-guarded on
    *   Number.isFinite (0 is a valid disable value); only run-retry.js sets it,
    *   to escalate the window on a Stage-1 retry.
+   *   role (spec 2026-09-11 §4, P2-R11) is the LAUNCH role, not the per-leg
+   *   value run-stages.js's `roleFor()` returns — every stage-1 leg (seat,
+   *   critic, and lens alike) launches with the literal `role: 'seat'` to get
+   *   the tool-capable agent; a caller must pass that literal, never a leg's
+   *   own `seat.role`. It also gates `directory` (see the comment above that
+   *   option below): only a `role: 'seat'` launch may point tool-exec cwd
+   *   anywhere but `opts.project`.
    * @returns {Promise<{wave: object|null, exitCode: number}>}
    */
   async function launchWave(opts) {
@@ -100,6 +111,13 @@ function createLaunchers(deps = {}) {
     // `serverClient` (see the seam comment in fanout.js). Absent → the wave
     // starts and closes its own server, exactly as before.
     const shared = sharedServer ? sharedServer() : null;
+    const agents = councilAgents();
+    // Spec 2026-09-11 §4: stage-1 seats and their retries run as council-seat,
+    // every other role as council-support; an explicit agent (the --agent
+    // escape hatch) wins. Without council agents (non-council DI, older
+    // callers) the pre-§4 default 'Plan' stands.
+    const agent = opts.agent || agentOverride()
+      || (agents ? (opts.role === 'seat' ? 'council-seat' : 'council-support') : 'Plan');
     const { wave, exitCode, errorDoc } = await fanoutFn({
       ...(typeof remaining === 'number' ? { maxCost: remaining } : {}),
       ...(shared ? { serverClient: shared.serverClient, server: shared.server } : {}),
@@ -112,12 +130,13 @@ function createLaunchers(deps = {}) {
       // onto every leg and its spend-ledger row (v4.3 --retry-failed machinery).
       // Spread-guarded so a normal launch's transport call stays byte-identical.
       ...(opts.retryOfWaveId ? { retryOfWaveId: opts.retryOfWaveId } : {}),
+      ...(agents ? { serverAgents: agents } : {}),
       models: opts.models.join(','),
       prompt: opts.prompt,
       promptMeta: { source: 'council-engine', file: null, chars: opts.prompt.length },
       waveId: opts.waveId,
       project: opts.project,
-      agent: opts.agent || 'Plan',
+      agent,
       timeout: opts.timeout,
       summaryLength: 'verbose',
       includeContext: false,
@@ -160,8 +179,18 @@ function createLaunchers(deps = {}) {
       // own session dir (judges' `project` is `<runDir>/_scratch`, so this
       // scopes them there) and strip inherited MCP servers, so a tool-capable
       // judge can't read the de-anonymized review-*.md files or the plaintext
-      // labelMap in run.json sitting in the parent run dir.
-      directory: opts.project,
+      // labelMap in run.json sitting in the parent run dir. Every launch is
+      // scoped to `opts.project` — the ONLY exception is a stage-1 seat launch
+      // (`opts.role === 'seat'`) that also passes `opts.directory`: a later
+      // task uses that to point a local-tools seat at the real project tree
+      // while the run's own metadata stays in `opts.project` (P2-R11 review).
+      // Judge, debate, and chair legs never set `role: 'seat'`, so `_scratch`
+      // isolation cannot be escaped through this option.
+      // Named mutant DIRGATEDROP: dropping the `opts.role === 'seat' &&`
+      // conjunct below lets ANY caller redirect tool-exec cwd via
+      // `opts.directory` — reddens "a non-seat launch ignores opts.directory"
+      // (tests/council/run-launch.test.js).
+      directory: (opts.role === 'seat' && opts.directory) || opts.project,
       noMcp: true,
     });
     // A ceiling refusal returns `wave: null`, which the council driver's

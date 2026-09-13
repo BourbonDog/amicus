@@ -90,6 +90,9 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       councilRunId: o.runId, councilName: o.councilName,
       tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
       fallback: o.fallback, catalog: o.catalog,
+      // Spec 2026-09-11 §4: a retry relaunches as role 'seat', scoped like Stage 1's own launch.
+      // Named mutant RETRYROLEDROP: dropping this line reddens run-retry.test.js's "seat tools" describe (review r1).
+      role: 'seat', ...(o.seatToolsLocal ? { directory: o.project } : {}),
       waveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, prompt: briefingFor(o, unit),
       noOutputBackstopMs: escalatedBackstopMs };
     // Dispatch by UNIT TYPE, not model count (spec §4: bench is always a wave —

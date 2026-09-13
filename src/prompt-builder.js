@@ -234,7 +234,7 @@ ${context}`;
  * Note: Tool restrictions are now handled by OpenCode's native agent framework.
  * The agent parameter passed to OpenCode API controls permissions:
  *   - Build: Full tool access (default)
- *   - Plan: Read-only access
+ *   - Plan: Edits denied; reads, searches and shell allowed (measured, opencode 1.18.15)
  *   - Explore: Read-only subagent
  *   - General: Full-access subagent
  *
@@ -258,7 +258,7 @@ Tool permissions are managed by the OpenCode agent framework based on your agent
 // buildPlanModeEnvironment) have been removed. OpenCode's native agent framework now handles
 // tool permissions based on the agent type:
 //   - Build: Full tool access (default)
-//   - Plan: Read-only access
+//   - Plan: Edits denied; reads, searches and shell allowed
 //   - Explore: Read-only subagent
 //   - General: Full-access subagent
 // See: https://opencode.ai/docs/agents/

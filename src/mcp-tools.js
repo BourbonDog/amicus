@@ -73,8 +73,8 @@ function getTools() {
       agent: z.enum(['Chat', 'Plan', 'Build']).optional()
         .describe(
           'Agent mode. Chat (interactive default; headless runs auto-convert ' +
-          'to Build): reads auto, writes ask permission. Plan: read-only ' +
-          'analysis. Build: full auto (all operations approved).'
+          'to Build): reads auto, writes ask permission. Plan: analysis without ' +
+          'edits (reads, searches and shell allowed). Build: full auto (all operations approved).'
         ),
       noUi: z.boolean().optional().describe(
         'Run headless without GUI. Default false (opens Electron window).'
@@ -345,7 +345,7 @@ function getTools() {
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'
       ),
       agent: z.enum(['Plan', 'Build']).optional().describe(
-        'Agent mode for every leg. Build (default): full tool access. Plan: read-only analysis. Chat is not supported headless.'
+        'Agent mode for every leg. Build (default): full tool access. Plan: analysis without edits (reads, searches and shell allowed). Chat is not supported headless.'
       ),
       thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe(
         'Reasoning effort for every leg. Omitted: nothing is sent and each provider\'s own default effort governs. A leg whose model does not declare the level is refused before anything is spent; the other legs run. A leg whose model the engine\'s catalogue does not know in time is sent the level unverified.'
@@ -622,6 +622,17 @@ function getTools() {
         "run.json/verdict.json and kept out of the reliability ledger; 'review' is the " +
         'default and is never stored.'
       ),
+      tools: z.array(z.string().min(1)).max(12).optional().describe(
+        'Tool ids stage-1 seats may use, by the engine\'s own ids (task mode defaults to webfetch, review to none). ' +
+        'Over MCP only tools that never touch the tree (webfetch, websearch, todowrite) can be opted in: the MCP run ' +
+        'directory stays inside the project, and a seat with local tools must not run there — use the CLI with ' +
+        '--out-dir outside the project for read/grep/glob/bash. task, skill, question, invalid, edit, write and ' +
+        'apply_patch are always refused. Cannot be combined with agent.'
+      ),
+      agent: z.enum(['Plan', 'Build']).optional().describe(
+        'Escape hatch: run every leg on the engine\'s own agent instead of the council agents (no tool allowlist). ' +
+        'Cannot be combined with tools.'
+      ),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
         'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +
@@ -742,7 +753,7 @@ Each leg is an ordinary session: read/resume/continue it by taskId.
 | Agent | Reads | Writes | Bash | Use When |
 |-------|-------|--------|------|----------|
 | Chat (interactive default*) | auto | asks | asks | Questions, analysis |
-| Plan | auto | denied | denied | Read-only analysis |
+| Plan | auto | denied | auto | Analysis without edits |
 | Build | auto | auto | auto | Implementation tasks |
 
 * Headless (\`noUi\`) runs auto-convert Chat to Build — Chat would otherwise stall waiting on write/bash approval with no UI to approve it.

@@ -120,10 +120,12 @@ describe('validatePack: options allowlist', () => {
 
   // v4.5 HOLD-gate decision 2 (final-review F1): agent/thinking/summaryLength
   // were inert on every council surface (the CLI dead-fills them, never reads
-  // them; the engine hardcodes agent 'Plan'/summaryLength 'verbose') — dropped
-  // from KIND_OPTIONS.council pre-release rather than shipped as dead weight.
-  // A council pack that still carries one now fails save-validation, same as
-  // any other unknown option for the kind.
+  // them; `--agent`/the MCP `agent` param are a council run's only agent
+  // setters (spec 2026-09-11 §4, v4.9.8), and summaryLength stays hardcoded
+  // 'verbose' on every council launch) — dropped from KIND_OPTIONS.council
+  // pre-release rather than shipped as dead weight. A council pack that still
+  // carries one now fails save-validation, same as any other unknown option
+  // for the kind.
   test.each(['agent', 'thinking', 'summaryLength'])(
     "dropped council option '%s' is rejected as unknown (v4.5 HOLD-gate decision 2)",
     (key) => {
