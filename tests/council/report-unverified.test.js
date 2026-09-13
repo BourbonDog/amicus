@@ -37,8 +37,9 @@
  *                 a rebuild", "html: the section table carries the channel column and the voice
  *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
  *                 HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
- *                 stripped renders to the bytes main 5541bb44 produced (md 2007 / html 12560)".
- *   REFUSEDDROP — the `if (r.repairRefused && …) { rows.push(refusedRow(r)); }` statement removed.
+ *                 stripped renders to the same byte LENGTHS main 5541bb44 produced (md 2007 /
+ *                 html 12560; content is pinned by the report snapshots)".
+ *   REFUSEDDROP — the `if (isPlainObject(r.repairRefused)) { rows.push(refusedRow(r)); }` statement removed.
  *                 Red set (4 of 72): "a refused repair gets a repair-refused row naming the
  *                 code, with the detail as the why", "a refused repair with no code/detail
  *                 (hand-assembled input) still renders, with fallbacks", "a row carrying BOTH
@@ -76,7 +77,7 @@ const DEAD_LEG = {
 
 // The exact voice line (formatDegrade output without its trailing newline). Task 3's docs and
 // CHANGELOG quote the what/why/effect; a paraphrase anywhere is a defect.
-const UNVERIFIED_LINE = (seat) => `Notice: seat ${seat}'s findings came from a repair of a response with no findings block — nothing verified them. the tiers they were given rest on the repair alone; the seat counts as reviewed, and as unverified in seatsReviewed.`;
+const UNVERIFIED_LINE = (seat) => `Notice: seat ${seat}'s findings came from a repair of a response with no findings block — nothing verified them. the tiers they were given rest on the repair alone; the seat still counts as reviewed.`;
 const REFUSED_LINE = "Notice: seat beta's repair was refused (REPAIR_CHANGED_FINDING_COUNT) — repair returned 2 findings, original attempted 3. the seat contributed no findings; its review text still reached the judges and it counts as reviewed.";
 
 describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () => {
@@ -106,6 +107,17 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     expect(rows[0].what).toBe("seat beta's repair was refused (REPAIR_REFUSED)");
     expect(rows[0].why).toBe('the repair broke its contract');
     expect(rows[0].data).toEqual({ seat: 'beta', code: 'REPAIR_REFUSED' });
+
+    // The fallback isn't just for ABSENT code/detail: a non-string pair and a
+    // whitespace-only/empty pair both fall back the same way.
+    for (const bad of [{ code: 42, detail: 7 }, { code: '   ', detail: '' }]) {
+      const r = lostRowsOf([seatRow('beta', { repairRefused: bad })])[0];
+      expect(r.what).toBe("seat beta's repair was refused (REPAIR_REFUSED)");
+      expect(r.why).toBe('the repair broke its contract');
+    }
+
+    // An array is not a refusal — isPlainObject refuses it, same as any other non-plain-object.
+    expect(lostRowsOf([seatRow('beta', { repairRefused: ['REPAIR_CHANGED_FINDING_COUNT'] })])).toEqual([]);
   });
 
   test('the seat LABEL is the seat id when the bench repeats an alias, else the alias (the street-cred rule)', () => {
@@ -129,6 +141,9 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     for (const bad of [undefined, null, {}, 'runStats', 42, [], [null, 42, 'x', {}, [], true]]) {
       expect(lostRowsOf(bad)).toEqual([]);
     }
+    // A flagged row with neither `seat` nor `model` still renders — seatLabel's final
+    // fallback, otherwise unreached by any test in this file.
+    expect(lostRowsOf([{ findingsUnverified: true }])[0].data.seat).toBe('unknown');
   });
 
   test('never says "stub", and both channels are registered (the degrade-contract drift pin reads src/)', () => {
@@ -196,7 +211,7 @@ describe('byte-identity: a verdict with no flagged row renders exactly as before
     }
   });
 
-  test('D0 with its three flags stripped renders to the bytes main 5541bb44 produced (md 2007 / html 12560)', () => {
+  test('D0 with its three flags stripped renders to the same byte LENGTHS main 5541bb44 produced (md 2007 / html 12560; content is pinned by the report snapshots)', () => {
     // Measured 2026-09-13 on main 5541bb44, before this change, on this same fixture: the
     // renderer must not move a single byte of an unflagged document. If this reddens with a
     // different length while lostRowsOf is untouched, something ELSE changed the renderer —

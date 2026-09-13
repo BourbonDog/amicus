@@ -38,7 +38,7 @@ function unverifiedRow(r) {
     channel: 'unverified-repair',
     what: `seat ${seat}'s findings came from a repair of a response with no findings block`,
     why: 'nothing verified them',
-    effect: 'the tiers they were given rest on the repair alone; the seat counts as reviewed, and as unverified in seatsReviewed',
+    effect: 'the tiers they were given rest on the repair alone; the seat still counts as reviewed',
     data: { seat },
   });
 }
