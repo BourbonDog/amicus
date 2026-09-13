@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { runCouncil } = require('../../src/council/run');
+const { finishRun } = require('../../src/council/run-finish');
 const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
   require('./helpers/fake-launchers');
 
@@ -56,4 +57,60 @@ test('review control: the same run WITHOUT intent appends exactly once', async (
   });
   expect(exitCode).toBe(0);
   expect(appendRunFn).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * P3-R13 (council #248 round 1, C1/D1, provisional — the owner may veto): finishRun's new
+ * end-of-run stderr Notice. Driven by calling finishRun DIRECTLY with a hand-built context —
+ * the plain data the function already takes as parameters, not a new harness — because
+ * producing a `findingsUnverified: true` row through the real bounded-repair loop would need a
+ * from-scratch stage1/repair/stage2/chair script keyed to a model ('glm') this suite never
+ * benches, disproportionate to what this stderr-only change needs to be exercised.
+ */
+function finishRunCtx(runDir, runStatsRow) {
+  fs.mkdirSync(runDir, { recursive: true });
+  return {
+    o: { runDir, runId: 'g1', chair: 'deepseek', debate: false, critic: null, lenses: null,
+      intent: undefined, follow: null },
+    chairRes: { chairLeg: null, actualChair: null, chairText: '', chairConformance: null,
+      overallVerdict: null, chairRows: [], chairAttempts: [] },
+    debatedInput: {
+      meta: { runId: 'g1', runType: 'headless', date: '2026-09-13', chair: 'deepseek',
+        models: ['glm'], claudeInCouncil: false },
+      findings: [], rankings: [], adjudications: [], runStats: [runStatsRow],
+    },
+    debateFindings: null, appendRunFn: jest.fn(), degrade: { all: () => [] }, deadWaves: [],
+    now: () => '2026-09-13T00:00:00.000Z',
+  };
+}
+
+test('a completed bench seat flagged findingsUnverified prints exactly one Notice: line on stderr naming it (P3-R13)', () => {
+  const runDir = path.join(tmp, 'council-g1');
+  const row = { model: 'glm', role: 'seat', wasChair: false, conformance: 'repaired',
+    status: 'complete', durationMs: 1, usage: null, findingsUnverified: true };
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    finishRun(finishRunCtx(runDir, row));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const notice = spy.mock.calls[0][0];
+    expect(notice.startsWith('Notice: 1 of ')).toBe(true);
+    expect(notice).toContain('(glm)');
+    expect(notice).toContain('report.html');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a run with no unverified seats prints no Notice: line about verification (P3-R13)', () => {
+  const runDir = path.join(tmp, 'council-g2');
+  const row = { model: 'glm', role: 'seat', wasChair: false, conformance: 'clean',
+    status: 'complete', durationMs: 1, usage: null };
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    finishRun(finishRunCtx(runDir, row));
+    const notice = spy.mock.calls.map(c => c[0]).find(s => s.includes('nothing could verify'));
+    expect(notice).toBeUndefined();
+  } finally {
+    spy.mockRestore();
+  }
 });

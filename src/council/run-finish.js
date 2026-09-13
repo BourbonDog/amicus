@@ -11,6 +11,7 @@ const { decorateRecord } = require('./debate');
 const runState = require('./run-state');
 const asm = require('./run-assemble');
 const { emitStageStarted, emitStageTerminal } = require('../observe/events');
+const { isUnverifiedSeat } = require('./verdict-seats-reviewed');
 
 /**
  * Build the final tally, gate the ledger append, write tally+verdict
@@ -62,8 +63,18 @@ function finishRun({ o, chairRes, debatedInput, debateFindings, appendRunFn, deg
   emitStageTerminal(o.runDir, o.runId, tallyStage, 'complete', null, o.follow);
   // Verdict assembly is the degrade cut-off: anything noted after this line
   // reaches stderr + run.json but not verdict.json (spec §6 rule 1).
-  asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText,
+  const verdict = asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText,
     critic: o.critic, deadWaves, degrades: degrade.all() });
+  // council #248 round 1 (C1/D1): the census is in verdict.json and on the CI title, but a LOCAL
+  // run said nothing — the product principle's silent-degrade shape. One stderr line, read off the
+  // census the verdict already carries: no new computation, no artifact, no exit-code change, not a
+  // sink record (so `degraded` never flips). Emitted only when the count is non-zero, so every other
+  // run's stderr is byte-identical; names the seats so the reader need not open the report.
+  const census = verdict && verdict.seatsReviewed;
+  if (census && census.unverified > 0) {
+    const names = (verdict.runStats || []).filter(isUnverifiedSeat).map(r => r.seat || r.model).join(', ');
+    process.stderr.write(`Notice: ${census.unverified} of ${census.of} seats' findings came from a repair nothing could verify (${names}) — see "What was lost" in report.html\n`);
+  }
   runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
   emitStageStarted(o.runDir, o.runId, 'verdict', null, o.follow);
   emitStageTerminal(o.runDir, o.runId, 'verdict', 'complete', null, o.follow);
