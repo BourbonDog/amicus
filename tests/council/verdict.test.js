@@ -344,7 +344,8 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
   // measurement, absence keeps its one meaning (no bench rows). Not a stub count (study run B2:
   // a real 19,064-byte review carried the flag). Named mutant CENSUSZERO
   // (`unverified: seats.filter(r => r.findingsUnverified === true).length` → `unverified: 0`),
-  // red set measured on the committed tree: TBD-MEASURE
+  // red set measured on the committed tree (`npx jest tests/council/verdict.test.js
+  // tests/council/report-unverified.test.js`): V10, V12 — nothing in report-unverified.test.js.
   test('V10 flagged seats are counted under `unverified` — and still under `reviewed`', () => {
     const flagged = (model) => ({ ...seatRow(model, 'complete'), findingsUnverified: true });
     const v = build([flagged('glm'), flagged('qwen'), seatRow('gpt', 'complete')]);
