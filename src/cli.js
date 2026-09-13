@@ -625,8 +625,10 @@ Subcommands for 'council':
                                 review to none); task, skill, edit, write,
                                 apply_patch, question and invalid are refused.
                                 A local tool (read, grep, glob, bash) needs --out-dir OUTSIDE
-                                the project tree. read never opens .env, .env.*
-                                or .envrc files (denied at the engine); grep and bash have no such
+                                the project tree. read is denied exactly the
+                                names .env, .env.* and .envrc at the engine
+                                (case-sensitive on Linux; no other spelling is
+                                fenced); grep, glob and bash have no per-file
                                 fence — opt them in only on a tree without
                                 secrets. bash is outside every fence — the CLI
                                 warns when you opt it in. --tools and --agent
@@ -733,7 +735,7 @@ const USAGE_TRAILER = `
 OpenCode Agent Types:
     Chat       Reads auto, writes/bash ask permission (interactive default)
     Build      Full tool access (headless default)
-    Plan       Read-only analysis and planning
+    Plan       Analysis without edits (reads, searches, shell allowed)
 
   NOTE: --agent chat is interactive-only (incompatible with --no-ui).
   Headless mode defaults to build agent.

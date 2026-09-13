@@ -35,7 +35,7 @@ const REFUSED_TOOL_IDS = Object.freeze({
 
 /** Ids that never touch the local tree: the remote fetchers, plus the engine's own todo list. */
 const NON_LOCAL_TOOL_IDS = Object.freeze(['webfetch', 'websearch', 'todowrite']);
-const REMOTE_TOOL_IDS = NON_LOCAL_TOOL_IDS; // alias: existing importers keep resolving it
+const SEAT_READ_DENY_PATTERNS = Object.freeze(['*.env', '*.env.*', '*.envrc']); // measured 2026-09-12: patterns a granted `read` must never cover
 
 /**
  * True if `tools` contains anything outside NON_LOCAL_TOOL_IDS. Single source for the
@@ -60,7 +60,7 @@ function isLocal(tools) {
  */
 function agentToolsConflict(agent, tools) {
   if (!agent || !Array.isArray(tools) || !tools.length) { return null; }
-  return `--tools cannot be combined with --agent: the override runs every leg on the engine's own ${agent} agent with its full tool set; drop one of them`;
+  return `--tools cannot be combined with --agent: the override runs every leg on the engine's own ${agent} agent with that agent's own tool set; drop one of them`;
 }
 
 const ESCAPE_HATCH = '--agent Build';
@@ -186,6 +186,7 @@ function resolveRemoteOnlyTools(input) {
  * @returns {{ok: true, tools: string[], local: boolean}|{ok: false, code: 'BAD_ARGS', message: string}}
  */
 function resolveSeatTools({ intent, optIn = [], declaredIds = null } = {}) {
+  if (!Array.isArray(optIn)) { return { ok: false, code: 'BAD_ARGS', message: `--tools must be a list of tool ids (got ${typeof optIn})` }; }
   // Normalize + shape-check optIn BEFORE anything else, so a door that never goes
   // through parseToolsFlag (an MCP arg array, a config list) reaches the same gates
   // the --tools flag does. Skipping this is a named mutant: OPTINRAW — 'Task' would
@@ -265,7 +266,7 @@ function buildCouncilAgents({ tools = [] } = {}) {
         // mutant: ENVALLOWDROP — every ordinary read would then fall through to the
         // wildcard *=deny; reddens 'a read seat gets a nested .env-denying read
         // permission' in seat-tools.test.js.
-        ...(tools.includes('read') ? { read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny', '*.envrc': 'deny' } } : {}),
+        ...(tools.includes('read') ? { read: { '*': 'allow', ...Object.fromEntries(SEAT_READ_DENY_PATTERNS.map((p) => [p, 'deny'])) } } : {}),
       },
     },
   };
@@ -293,6 +294,6 @@ function seatToolsSentence(tools, kind, { agent } = {}) {
 }
 
 module.exports = {
-  REFUSED_TOOL_IDS, REMOTE_TOOL_IDS, NON_LOCAL_TOOL_IDS, defaultToolsFor, parseToolsFlag, resolveSeatTools,
-  resolveRemoteOnlyTools, buildCouncilAgents, seatToolsSentence, isLocal, agentToolsConflict,
+  REFUSED_TOOL_IDS, REMOTE_TOOL_IDS: NON_LOCAL_TOOL_IDS, NON_LOCAL_TOOL_IDS, SEAT_READ_DENY_PATTERNS, defaultToolsFor,
+  parseToolsFlag, resolveSeatTools, resolveRemoteOnlyTools, buildCouncilAgents, seatToolsSentence, isLocal, agentToolsConflict,
 };

@@ -12,8 +12,9 @@ All notable changes to Amicus are documented here. Format follows
   and `--tools <a,b,c>` (MCP: `tools`) opts more in, validated against the engine's own declared
   ids before any leg launches; repair, judge, debate and chair legs run as `council-support` with
   no tools at all. `task` and `skill` are refused (they spawn or escape the session), as are
-  `edit`/`write`/`apply_patch`/`question`/`invalid`; `--agent Plan|Build` is the escape hatch. A
-  local tool needs `--out-dir` outside the project tree and scopes the seats to the tree with
+  `edit`/`write`/`apply_patch`/`question`/`invalid`; `--agent Plan|Build` is the escape hatch
+  (`Plan` = the pre-4.9.8 behaviour: edits denied, reads/searches/shell allowed). A local tool
+  needs `--out-dir` outside the project tree and scopes the seats to the tree with
   `external_directory: deny`. With `read` opted in the seat is denied `.env`, `.env.*` and
   `.envrc` files at the engine (the match is case-sensitive on Linux; the deny rules are
   measured to render after the seat's own read allow; the refusal itself is exercised by the

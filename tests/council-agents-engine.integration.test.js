@@ -44,6 +44,13 @@
  * Ruling P2-R34 (B2/C2): a small transcription of the engine's evaluator
  * (`wildcardMatch`/`evaluate` below) is applied to the REAL parsed seat rule
  * list, asserting the `.env` deny/allow split the seat agent depends on.
+ *
+ * Ruling P2-R44 (round 4, C4/A3/B1-C1): the probe also prints
+ * `PROBE_TREE_ENV_JSON`/`PROBE_TREE_GREP_JSON`/`PROBE_TREE_EXTDIR_JSON` —
+ * three more trees on council-seat, on the same server. ENV proves the T1
+ * hole is real on the pinned engine (the transcribed evaluator) and that
+ * `verifyAgentRendering` catches it; GREP and EXTDIR prove the other two
+ * round-4 claims are not reachable on this engine.
  */
 
 const path = require('path');
@@ -153,6 +160,37 @@ test('the pinned engine registers council-seat/council-support as amicus expects
   const treeVerified = verifyAgentRendering(treeSupport.permission, []);
   expect(treeVerified.ok).toBe(false);
   expect(treeVerified.reason).toContain('task');
+
+  // Ruling P2-R44 (round 4, C4/A3/B1-C1): three more trees on the SAME
+  // server. ENV is the real attack (T1): the transcribed evaluator (P2-R34,
+  // below) shows the hole is real on the pinned engine, then
+  // verifyAgentRendering shows it catches it. GREP (T5) and EXTDIR (T6) show
+  // the other two claims are not reachable on this engine — GREP already
+  // refused by the existing tripwire, EXTDIR because the tree's
+  // external_directory object never renders at all.
+  const findProbeLine = (tag) => {
+    const line = out.split(/\r?\n/).find((l) => l.startsWith(`${tag} `));
+    if (!line) {
+      throw new Error(`probe-council-agents.js printed no ${tag} line.\nstatus: ${r.status}\nstderr:\n${r.stderr || '(empty)'}\nstdout:\n${out}`);
+    }
+    return JSON.parse(line.slice(`${tag} `.length));
+  };
+
+  const envSeat = findProbeLine('PROBE_TREE_ENV_JSON').agents['council-seat'];
+  expect(evaluate(envSeat.permission, 'read', '.env').action).toBe('allow');
+  expect(evaluate(envSeat.permission, 'read', '.envrc').action).toBe('allow');
+  const envVerified = verifyAgentRendering(envSeat.permission, ['grep', 'read', 'webfetch']);
+  expect(envVerified.ok).toBe(false);
+  expect(envVerified.reason).toContain('.env');
+
+  const grepSeat = findProbeLine('PROBE_TREE_GREP_JSON').agents['council-seat'];
+  const grepVerified = verifyAgentRendering(grepSeat.permission, ['grep', 'read', 'webfetch']);
+  expect(grepVerified.ok).toBe(false);
+  expect(grepVerified.reason).toContain('grep');
+
+  const extdirSeat = findProbeLine('PROBE_TREE_EXTDIR_JSON').agents['council-seat'];
+  expect(extdirSeat.permission.some((rule) => String(rule.pattern).includes('secrets'))).toBe(false);
+  expect(verifyAgentRendering(extdirSeat.permission, ['grep', 'read', 'webfetch'])).toEqual({ ok: true });
 
   // Ruling P2-R34 (B2/C2): the transcribed evaluator applied to the REAL seat
   // rule list — the `.env` deny/allow split the seat agent depends on.

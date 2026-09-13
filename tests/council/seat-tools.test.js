@@ -78,6 +78,21 @@ describe('resolveSeatTools', () => {
     expect(st.resolveSeatTools({ intent: 'task', optIn: ['todowrite'], declaredIds: DECLARED }))
       .toEqual({ ok: true, tools: ['todowrite', 'webfetch'], local: false });
   });
+  // P2-R48 (A6): a non-array optIn (a bare string, a number) is refused by name
+  // rather than reaching normalizeIds's `.map`, which would throw instead of
+  // returning a clean BAD_ARGS.
+  test('a non-array optIn is BAD_ARGS naming the type it received (P2-R48 A6)', () => {
+    for (const bad of ['read', 42]) {
+      const r = st.resolveSeatTools({ intent: undefined, optIn: bad });
+      expect(r.ok).toBe(false);
+      expect(r.code).toBe('BAD_ARGS');
+      expect(r.message).toContain('list of tool ids');
+    }
+  });
+  test('optIn undefined still keeps its default []', () => {
+    expect(st.resolveSeatTools({ intent: undefined, optIn: undefined }))
+      .toEqual({ ok: true, tools: [], local: false });
+  });
 });
 
 describe('agentToolsConflict (ruling P2-R28, supersedes P2-R25)', () => {
@@ -85,6 +100,7 @@ describe('agentToolsConflict (ruling P2-R28, supersedes P2-R25)', () => {
     const msg = st.agentToolsConflict('Build', ['task']);
     expect(msg).toContain('cannot be combined');
     expect(msg).toContain('Build');
+    expect(msg).not.toContain('full tool set');
   });
   test('no conflict when agent is absent/null, tools is absent/empty, or both are unset', () => {
     expect(st.agentToolsConflict(undefined, ['read'])).toBeNull();

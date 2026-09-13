@@ -27,6 +27,28 @@ const CLEAN_SEAT = [
   { permission: 'read', pattern: '*', action: 'allow' },
   { permission: 'read', pattern: '*.env', action: 'deny' },
   { permission: 'read', pattern: '*.env.*', action: 'deny' },
+  { permission: 'read', pattern: '*.envrc', action: 'deny' },
+  { permission: 'webfetch', pattern: '*', action: 'allow' },
+  { permission: 'edit', pattern: '*', action: 'deny' },
+  { permission: 'bash', pattern: '*', action: 'deny' },
+  { permission: 'external_directory', pattern: '*', action: 'deny' },
+];
+
+// P2-R44 (round 4, C4): T1's REAL measured rendering for a tree opencode.json
+// = {"agent":{"council-seat":{"tools":{"*":false},"permission":{"read":
+// {"*.env":"allow","*.env.*":"allow","*.envrc":"allow"}}}}} on council-seat —
+// the server's VALUES win per sub-key (so the three patterns still say
+// `deny`), but the TREE's sub-key ORDER wins, so the denies render BEFORE
+// `read[*]=allow`. Under findLast, `.env`/`.env.*`/`.envrc` are all ALLOWED
+// on the real engine even though every rule the pre-round-4 tripwire checked
+// (existence, never position) is present.
+const ENV_REORDER_ATTACK = [
+  { permission: '*', pattern: '*', action: 'deny' },
+  { permission: 'read', pattern: '*.env', action: 'deny' },
+  { permission: 'read', pattern: '*.env.*', action: 'deny' },
+  { permission: 'read', pattern: '*.envrc', action: 'deny' },
+  { permission: 'read', pattern: '*', action: 'allow' },
+  { permission: 'grep', pattern: '*', action: 'allow' },
   { permission: 'webfetch', pattern: '*', action: 'allow' },
   { permission: 'edit', pattern: '*', action: 'deny' },
   { permission: 'bash', pattern: '*', action: 'deny' },
@@ -53,6 +75,7 @@ const RELIST_ATTACK = [
   { permission: 'read', pattern: '*', action: 'allow' },
   { permission: 'read', pattern: '*.env', action: 'deny' },
   { permission: 'read', pattern: '*.env.*', action: 'deny' },
+  { permission: 'read', pattern: '*.envrc', action: 'deny' },
   { permission: 'external_directory', pattern: '*', action: 'deny' },
   { permission: '*', pattern: '*', action: 'deny' },
   { permission: 'webfetch', pattern: '*', action: 'allow' },
@@ -85,6 +108,69 @@ describe('verifyAgentRendering (ruling P2-R33)', () => {
     const r = verifyAgentRendering(RELIST_ATTACK, ['read', 'webfetch']);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain('read');
+  });
+
+  // P2-R44 (round 4, C4): order-verified read denies, not merely existence.
+  test('P2-R44: the T1 env-reorder attack (denies render before the read allow) is not ok, naming .env', () => {
+    const r = verifyAgentRendering(ENV_REORDER_ATTACK, ['grep', 'read', 'webfetch']);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('.env');
+  });
+
+  test('P2-R44: a read seat missing the .envrc deny after its read allow is not ok, naming .envrc', () => {
+    const rules = [
+      { permission: '*', pattern: '*', action: 'deny' },
+      { permission: 'read', pattern: '*', action: 'allow' },
+      { permission: 'read', pattern: '*.env', action: 'deny' },
+      { permission: 'read', pattern: '*.env.*', action: 'deny' },
+      { permission: 'webfetch', pattern: '*', action: 'allow' },
+    ];
+    const r = verifyAgentRendering(rules, ['read', 'webfetch']);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('.envrc');
+  });
+
+  // GRANTDENYBLIND target: a granted tool re-denied by a non-`.env` pattern
+  // after its own allow must be refused, naming it — not waved through
+  // because an earlier allow already satisfies the "at least one" check.
+  test('P2-R44: grep[*]=allow then grep[*]=deny after the wildcard is not ok, naming grep', () => {
+    const rules = [
+      { permission: '*', pattern: '*', action: 'deny' },
+      { permission: 'grep', pattern: '*', action: 'allow' },
+      { permission: 'grep', pattern: '*', action: 'deny' },
+    ];
+    const r = verifyAgentRendering(rules, ['grep']);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('grep');
+  });
+
+  // The three SEAT_READ_DENY_PATTERNS denies are present and correctly
+  // ordered here (so step 5 has nothing to say) — isolates step 3's
+  // narrowing check as the ONLY thing that can catch `src/*`, so this test
+  // reddens on GRANTDENYBLIND for the reason it names, not by accident.
+  test('P2-R44: a narrowing read[src/*]=deny after the read allow is not ok, naming the pattern', () => {
+    const rules = [
+      { permission: '*', pattern: '*', action: 'deny' },
+      { permission: 'read', pattern: '*', action: 'allow' },
+      { permission: 'read', pattern: '*.env', action: 'deny' },
+      { permission: 'read', pattern: '*.env.*', action: 'deny' },
+      { permission: 'read', pattern: '*.envrc', action: 'deny' },
+      { permission: 'read', pattern: 'src/*', action: 'deny' },
+    ];
+    const r = verifyAgentRendering(rules, ['read']);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('src/*');
+  });
+
+  test('P2-R44: a seat with allowlist [webfetch] and no read rules at all is still ok (step 5 only applies when read is granted)', () => {
+    const rules = [
+      { permission: '*', pattern: '*', action: 'deny' },
+      { permission: 'webfetch', pattern: '*', action: 'allow' },
+      { permission: 'edit', pattern: '*', action: 'deny' },
+      { permission: 'bash', pattern: '*', action: 'deny' },
+      { permission: 'external_directory', pattern: '*', action: 'deny' },
+    ];
+    expect(verifyAgentRendering(rules, ['webfetch'])).toEqual({ ok: true });
   });
 
   test('no wildcard deny at all is not ok', () => {
@@ -191,6 +277,38 @@ describe('verifyAgentRendering (ruling P2-R33)', () => {
       )).toEqual({ ok: true });
     } finally {
       if (original === undefined) { delete process.env.XDG_DATA_HOME; } else { process.env.XDG_DATA_HOME = original; }
+    }
+  });
+
+  // P2-R45 (round 4, B1/C1, mutant EXEMPTBROAD): the exemption is narrowed to
+  // the data root's `tool-output/` subdirectory only — a sibling directory
+  // under the SAME data root (which also holds the engine's `auth.json`) is
+  // a widened rule like any other, not "noise".
+  test('P2-R45: an external_directory allow under the home data root but NOT tool-output (e.g. secrets) is not ok, naming it', () => {
+    const pattern = path.join(os.homedir(), '.local', 'share', 'opencode', 'secrets', '*');
+    const r = verifyAgentRendering(
+      [...CLEAN_SEAT, { permission: 'external_directory', pattern, action: 'allow' }],
+      ['read', 'webfetch'],
+    );
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('secrets');
+  });
+
+  test('P2-R45: the same holds under $XDG_DATA_HOME — a secrets sibling of tool-output is not ok', () => {
+    const xdgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'p2r45-xdg-'));
+    const original = process.env.XDG_DATA_HOME;
+    try {
+      process.env.XDG_DATA_HOME = xdgDir;
+      const pattern = path.join(xdgDir, 'opencode', 'secrets', '*');
+      const r = verifyAgentRendering(
+        [...CLEAN_SEAT, { permission: 'external_directory', pattern, action: 'allow' }],
+        ['read', 'webfetch'],
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toContain('secrets');
+    } finally {
+      if (original === undefined) { delete process.env.XDG_DATA_HOME; } else { process.env.XDG_DATA_HOME = original; }
+      fs.rmSync(xdgDir, { recursive: true, force: true });
     }
   });
 

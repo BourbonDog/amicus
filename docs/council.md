@@ -401,8 +401,9 @@ council agents, no allowlist; it cannot be combined with `--tools`. Its legs run
 directory (inside the project unless `--out-dir` moves it) as their working directory, so a seat
 can read the run's own records, the label map included — use it only where that is acceptable.
 `Build` is edit-capable: unlike the council agents' fenced allowlist, it can edit files and run
-commands over that directory (the CLI prints a Notice when you opt into it); `Plan` stays
-read-only analysis.
+commands over that directory (the CLI prints a Notice when you opt into it); `Plan` is the
+pre-4.9.8 default: it denies edits but allows reads, searches and the shell (measured on the
+pinned engine), so it is the escape hatch that restores v4.9.7's behaviour exactly.
 
 Refusals land in a run directory that already exists, so the refusal itself is recorded (the same
 order the other pre-spend checks use); nothing is launched and nothing is spent. When the engine
@@ -429,7 +430,7 @@ When the run's own shared OpenCode server fails to start, that IS "no server to 
 (non-`--agent`) run now refuses before any launch rather than falling back — the per-wave
 fallback servers that used to absorb a shared-server failure for every run now serve only an
 `--agent` run, whose verification is skipped by design and so never has to ask at all (ruling
-P2-R43).
+P2-R43). `--agent Plan` restores v4.9.7's per-wave behaviour exactly.
 
 **Run-directory placement with a local tool.** A seat that can read the project tree must
 not be able to read this run's sibling sessions, so with any local tool opted in the run dir
@@ -446,7 +447,8 @@ config enforces; the sentence informs — study run E1 showed gemini makes zero 
 told not to.
 
 **Secrets.** With `read` opted in, the seat agent denies `.env`, `.env.*` and `.envrc` files at
-the engine (the match is case-sensitive on Linux) — the seat gets a refusal and the leg
+the engine (the match is case-sensitive on Linux; no other spelling is fenced) — the seat
+gets a refusal and the leg
 continues (the deny rules are measured to render after the seat's own `read=allow`, and CI now
 models the engine's own evaluator — transcribed from its source — over the real rendering,
 confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the refusal itself is
@@ -456,9 +458,11 @@ the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `g
 With a local tool the seat's engine session is rooted at the project tree, so the engine also
 loads that tree's own opencode config; do not point a local-tools seat at a tree you do not trust.
 
-`bash` is outside every fence: a bash seat runs commands as you — it can reach the run directory
-outside the tree, your home directory and the network, and the `webfetch` deny does not bind a
-shell. Opt it in only where that is acceptable; the CLI prints a Notice when you do.
+`bash` is outside every fence: a bash seat runs commands as you — it can reach the run
+directory outside the tree (this run's own records included: the label map that anonymizes the
+bench and every review already on disk, so bench anonymity and independence do not hold under
+bash), your home directory and the network, and the `webfetch` deny does not bind a shell. Opt
+it in only where that is acceptable; the CLI prints a Notice when you do.
 
 ### Debate mode
 

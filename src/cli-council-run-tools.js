@@ -101,8 +101,10 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   const notices = [];
   if (Array.isArray(toolIds) && toolIds.includes('bash')) {
     notices.push('Notice: --tools bash gives every stage-1 seat a shell as you: no fence applies — it can ' +
-      'reach the run directory outside the tree, your home directory and the network, and the ' +
-      'webfetch deny does not bind a shell.');
+      'reach the run directory outside the tree (this run\'s own records included: the label map ' +
+      'that anonymizes the bench and every review already on disk, so bench anonymity and ' +
+      'independence do not hold under bash), your home directory and the network, and the webfetch ' +
+      'deny does not bind a shell.');
   }
   // Ruling P2-R41b (A4, round 3): --agent Build is the escape hatch running
   // every leg on the engine's own agent, full tool set included — unlike the

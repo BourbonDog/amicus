@@ -39,10 +39,16 @@ const others = (calls) => calls.filter((c) => c.waveId !== 'r1-s1');
 // filtered out already — see run-seat-tools-verify.test.js for that pin.
 // Tests that set an explicit --tools and expect exit 0 need this alongside
 // listEngineToolIdsFn now that the tripwire runs unconditionally too.
+// P2-R44 (round 4): when `read` is granted, the three deny patterns must
+// render AFTER the read allow — a caller passing `['read']` alone (no
+// denies) is exactly the pre-round-4 shape the new order check refuses.
 const listEngineAgentsFnFor = (tools = []) => async () => ([
   { name: 'council-seat', permission: [
     { permission: '*', pattern: '*', action: 'deny' },
     ...tools.map((id) => ({ permission: id, pattern: '*', action: 'allow' })),
+    ...(tools.includes('read')
+      ? ['*.env', '*.env.*', '*.envrc'].map((p) => ({ permission: 'read', pattern: p, action: 'deny' }))
+      : []),
   ] },
   { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
 ]);
@@ -321,6 +327,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     { permission: 'read', pattern: '*', action: 'allow' },
     { permission: 'read', pattern: '*.env', action: 'deny' },
     { permission: 'read', pattern: '*.env.*', action: 'deny' },
+    { permission: 'read', pattern: '*.envrc', action: 'deny' },
     { permission: 'external_directory', pattern: '*', action: 'deny' },
     { permission: '*', pattern: '*', action: 'deny' },
     { permission: 'webfetch', pattern: '*', action: 'allow' },
@@ -398,7 +405,10 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
       seen.push(dir);
       return [
         { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' },
-          { permission: 'read', pattern: '*', action: 'allow' }] },
+          { permission: 'read', pattern: '*', action: 'allow' },
+          { permission: 'read', pattern: '*.env', action: 'deny' },
+          { permission: 'read', pattern: '*.env.*', action: 'deny' },
+          { permission: 'read', pattern: '*.envrc', action: 'deny' }] },
         { name: 'council-support', permission: cleanNoTools() },
       ];
     };

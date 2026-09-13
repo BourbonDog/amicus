@@ -213,7 +213,8 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
             code: 'BAD_ARGS',
             message: 'Error: the council agents could not be verified against the run\'s engine '
               + `(${sharedServer ? 'the shared server answered without an agent list' : 'no shared server was available to answer the agent list'}); `
-              + 'nothing was launched, or use --agent to run every leg on the engine\'s own agent knowingly',
+              + 'nothing was launched; --agent Plan runs every leg on the engine\'s own Plan agent as v4.9.7 did '
+              + '(reads, searches and shell allowed; edits denied), knowingly and without the allowlist',
           },
         };
       }
@@ -230,7 +231,7 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
               message: 'Error: the engine rendered the council agents differently from what this run registered '
                 + `(${verified.reason}, directory ${dir}) — a tree-supplied opencode.json or .opencode/agent file `
                 + 'alters them; remove the council-seat/council-support entries from that tree, or run with --agent '
-                + 'to use the engine\'s own agent knowingly. Nothing was launched.',
+                + 'Plan to use the engine\'s own agent knowingly (v4.9.7 behaviour). Nothing was launched.',
             },
           };
         }

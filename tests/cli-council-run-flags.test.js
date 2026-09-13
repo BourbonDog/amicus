@@ -519,6 +519,11 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     let code = await handleCouncilRun(argsBase({ tools: 'bash', 'out-dir': outside }));
     expect(code).toBe(0);
     expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(true);
+    // P2-R48 (A4): the Notice names the concrete consequence — this run's own
+    // label map and reviews on disk are reachable, so bench anonymity and
+    // independence do not hold under bash.
+    const noticeLine = err.mock.calls.map((c) => c[0]).find((line) => line.includes('Notice: --tools bash'));
+    expect(noticeLine).toContain('anonymity');
     err.mockClear();
     runCouncil.mockClear();
     code = await handleCouncilRun(argsBase({ tools: 'read', 'out-dir': outside }));
