@@ -24,10 +24,10 @@ All notable changes to Amicus are documented here. Format follows
   can run commands); `tools: null` is treated as unset like `agent: null`; an `--agent` run's
   directory stays inside the project; `--tools` and `--agent` cannot be combined; `todowrite`
   counts as a tool that never touches the tree. After registration, the run also reads back
-  what the engine actually rendered for
-  each council agent — over the run directory, its `_scratch` support-leg directory, and the
-  project tree when local — and refuses before launch if a tree-supplied
-  `opencode.json`/`.opencode/agent` file widened it, or if the engine cannot be asked at all
+  what the engine actually rendered for each council agent — over the run directory, its
+  `_scratch` support-leg directory, and the project tree when local — and refuses before
+  launch if an `opencode.json`/`.opencode/agent` file the engine loads for that directory (the
+  tree's, or your global config) widened it, or if the engine cannot be asked at all
   once verification can run — including when the run's own shared OpenCode server fails to
   start: a default (non-`--agent`) run now refuses before any launch instead of falling back,
   and the per-wave fallback servers that used to absorb that failure for every run now serve

@@ -585,6 +585,15 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     err.mockClear();
     runCouncil.mockClear();
 
+    // Re-review of round 5: bash and grep opted in together print BOTH
+    // Notices — a later if/else-if tidy-up must not drop one silently.
+    code = await handleCouncilRun(argsBase({ tools: 'bash,grep', 'out-dir': outside }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --tools bash'))).toBe(true);
+    expect(err.mock.calls.some((c) => c[0].includes('--tools grep search'))).toBe(true);
+    err.mockClear();
+    runCouncil.mockClear();
+
     code = await handleCouncilRun(argsBase({ tools: 'webfetch' }));
     expect(code).toBe(0);
     expect(err.mock.calls.some((c) => c[0].includes('--tools grep') || c[0].includes('--tools glob'))).toBe(false);

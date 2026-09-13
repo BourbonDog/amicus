@@ -637,7 +637,10 @@ Subcommands for 'council':
                                 cannot be combined.
                                 --agent Plan|Build runs every leg on the
                                 engine's own agent instead (the escape hatch; no
-                                council agents, no allowlist).
+                                council agents, no allowlist). Plan's legs,
+                                judges and chair included, can read, search and
+                                run commands (edits denied); Build's can also
+                                edit. The CLI warns for either.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

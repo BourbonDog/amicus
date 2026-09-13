@@ -417,13 +417,14 @@ P2-R38).
 **Engine-rendered verification.** After registration, the run reads back what the engine actually
 rendered for `council-seat`/`council-support` — the run directory, its `_scratch` support-leg
 directory, and the project tree too when a local tool is opted in (ruling P2-R39) — and refuses
-before any launch if a tree-supplied `opencode.json` or `.opencode/agent` file altered them —
-naming the tree's config as the cause and `--agent` as the knowingly-unprotected alternative
-(ruling P2-R33). An `external_directory` allow after the wildcard deny is exempted only when it
-is the engine's own tool-output cache under its own XDG-first data directory (`$XDG_DATA_HOME/
-opencode` when set, else `~/.local/share/opencode` — ruling P2-R42, matching how
-`src/utils/auth-json.js`/`src/utils/engine-log.js` already resolve it); any other one reads as a
-widened agent too (ruling P2-R40). Unverifiable (no shared server to ask) REFUSES whenever
+before any launch if an `opencode.json` or `.opencode/agent` file the engine loads for that
+directory (the tree's, or your global config) altered them — naming that config as the cause
+and `--agent` as the knowingly-unprotected alternative (ruling P2-R33). An `external_directory`
+allow after the wildcard deny is exempted only when it is the engine's own tool-output cache
+under its own XDG-first data directory (`$XDG_DATA_HOME/opencode` when set, else
+`~/.local/share/opencode` — ruling P2-R42, matching how `src/utils/auth-json.js`/
+`src/utils/engine-log.js` already resolve it); any other one reads as a widened agent too
+(ruling P2-R40). Unverifiable (no shared server to ask) REFUSES whenever
 verification can run at all — a defaults-only run included, no more quiet degrade (ruling
 P2-R38); it is skipped only when a caller supplies its own transport with no way to ask the
 engine at all (test-only — production always VERIFIES and refuses when it has no server to ask).
