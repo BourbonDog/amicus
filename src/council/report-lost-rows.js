@@ -23,15 +23,20 @@
  * `data.seat` is the row's label: the seat id when the bench repeats an alias, else the alias —
  * the `seat || model` rule the street-cred rows use in both renderers.
  *
- * Role and status are not consulted, on purpose: on every engine-written record a flagged row is a
- * completed bench seat (run-launch.js :: materializeReviews drops non-complete legs before any
- * repair runs; run-stages.js :: roleFor and seats.js :: buildSeats mint only bench roles), and
- * verdict-seats-reviewed.js :: seatsReviewedOf reads the same flag with the same trust — the two
- * never disagree on an engine-written record. A hand-assembled record that flags a judge or a
- * timed-out leg renders a row all the same; the row's wording describes an engine-written record.
+ * Role and status ARE consulted, through the census's own predicates (verdict-seats-reviewed.js ::
+ * isUnverifiedSeat / isRefusedSeat — council #248 round 1, B1/C2/D2): a row renders here exactly
+ * when the census counts it, so the report and `seatsReviewed` can never disagree, and the row's
+ * "still counts as reviewed" is true of every row it is ever written for. A flagged row that is
+ * not a completed bench seat renders nothing — no review happened; a real dead leg has the sink's
+ * own dead-leg row. On engine-written records the gate is a no-op (run-launch.js ::
+ * materializeReviews drops non-complete legs before any repair runs; run-stages.js :: roleFor and
+ * seats.js :: buildSeats mint only bench roles).
  */
 
 const { makeDegrade } = require('../utils/degrade');
+// The census's own predicates — one function, two readers, so the report and
+// `seatsReviewed` cannot disagree (a leaf that requires nothing; no cycle).
+const { isUnverifiedSeat, isRefusedSeat } = require('./verdict-seats-reviewed');
 
 function seatLabel(r) {
   if (typeof r.seat === 'string' && r.seat) { return r.seat; }
@@ -77,8 +82,8 @@ function lostRowsOf(runStats) {
   const rows = [];
   for (const r of (Array.isArray(runStats) ? runStats : [])) {
     if (!isPlainObject(r)) { continue; }
-    if (r.findingsUnverified === true) { rows.push(unverifiedRow(r)); }
-    if (isPlainObject(r.repairRefused)) { rows.push(refusedRow(r)); }
+    if (isUnverifiedSeat(r)) { rows.push(unverifiedRow(r)); }
+    if (isRefusedSeat(r)) { rows.push(refusedRow(r)); }
   }
   return rows;
 }

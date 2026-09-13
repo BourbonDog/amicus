@@ -389,4 +389,31 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
       runStats: [{ ...seatRow('glm', 'complete'), findingsUnverified: 'yes' }, seatRow('gpt', 'complete')] });
     expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, of: 2 });
   });
+
+  // council #248 round 1 (B1/C2/D2): the subset relation is structural, not producer trust —
+  // one predicate (isUnverifiedSeat) gates both the census and the report's rows. Named mutant
+  // SUBSETBLIND (`&& r.status === 'complete'` deleted from isUnverifiedSeat), red set measured
+  // on the committed tree: TBD-MEASURE
+  test('V15 a flagged row whose leg did not complete is NOT an unverified review — unverified ⊆ reviewed by construction', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('glm', 'timeout'), findingsUnverified: true }, seatRow('gpt', 'complete')] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, of: 2 });
+  });
+
+  test('V16 unverified never exceeds reviewed on any row shape (a property over a shape table)', () => {
+    const judge = (model) => ({ model, role: 'judge', wasChair: false, conformance: 'clean',
+      status: 'complete', durationMs: 1, usage: null, findingsUnverified: true });
+    const shapes = [
+      [{ ...seatRow('a', 'timeout'), findingsUnverified: true }],
+      [{ ...seatRow('a', 'error'), findingsUnverified: true }, { ...seatRow('b', 'complete'), findingsUnverified: true }],
+      [{ ...seatRow('a', 'complete'), findingsUnverified: true }, { ...seatRow('b', 'timeout'), findingsUnverified: true }, seatRow('c', 'complete')],
+      [judge('j'), seatRow('a', 'complete')],
+      [{ ...seatRow('a', 'complete'), findingsUnverified: true }, { ...seatRow('b', 'complete'), findingsUnverified: true }],
+    ];
+    for (const runStats of shapes) {
+      const c = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {}, runStats }).seatsReviewed;
+      const key = JSON.stringify(runStats.map(r => [r.role, r.status, !!r.findingsUnverified]));
+      expect(`${key} → ${c.unverified} ≤ ${c.reviewed}: ${c.unverified <= c.reviewed}`).toBe(`${key} → ${c.unverified} ≤ ${c.reviewed}: true`);
+    }
+  });
 });

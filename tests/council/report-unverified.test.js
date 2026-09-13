@@ -37,8 +37,8 @@
  *                 a rebuild", "html: the section table carries the channel column and the voice
  *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
  *                 HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
- *                 stripped renders to the same byte LENGTHS main 5541bb44 produced (md 2007 /
- *                 html 12560; content is pinned by the report snapshots)".
+ *                 stripped renders byte-identically to main 5541bb44 (snapshots, both
+ *                 formats)".
  *   REFUSEDDROP — the `if (isPlainObject(r.repairRefused)) { rows.push(refusedRow(r)); }` statement removed.
  *                 Red set (4 of 72): "a refused repair gets a repair-refused row naming the
  *                 code, with the detail as the why", "a refused repair with no code/detail
@@ -54,6 +54,7 @@ const { buildReport, toModel } = require('../../src/council/report');
 const { buildVerdict } = require('../../src/council/verdict');
 const { tally } = require('../../src/council/tally');
 const { lostRowsOf } = require('../../src/council/report-lost-rows');
+const { seatsReviewedOf } = require('../../src/council/verdict-seats-reviewed');
 const { formatDegrade, DEGRADE_CHANNELS } = require('../../src/utils/degrade');
 const avInput = require('./fixtures/av-receiver-input');
 
@@ -143,7 +144,8 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     }
     // A flagged row with neither `seat` nor `model` still renders — seatLabel's final
     // fallback, otherwise unreached by any test in this file.
-    expect(lostRowsOf([{ findingsUnverified: true }])[0].data.seat).toBe('unknown');
+    // (a completed bench row — the census predicate gates the row; council #248 r1)
+    expect(lostRowsOf([{ role: 'seat', status: 'complete', findingsUnverified: true }])[0].data.seat).toBe('unknown');
   });
 
   test('never says "stub", and both channels are registered (the degrade-contract drift pin reads src/)', () => {
@@ -153,6 +155,37 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     for (const r of rows) { expect(`${r.what} ${r.why} ${r.effect}`).not.toMatch(/stub/i); }
     expect(DEGRADE_CHANNELS.has('unverified-repair')).toBe(true);
     expect(DEGRADE_CHANNELS.has('repair-refused')).toBe(true);
+  });
+
+  test("a flagged row that is not a COMPLETED BENCH seat renders nothing — the census predicate is the renderer's (council #248 r1, B1/C2/D2)", () => {
+    expect(lostRowsOf([seatRow('t', { status: 'timeout', findingsUnverified: true })])).toEqual([]);
+    expect(lostRowsOf([{ ...seatRow('j', { findingsUnverified: true }), role: 'judge' }])).toEqual([]);
+    expect(lostRowsOf([{ ...seatRow('r', { repairRefused: { code: 'C', detail: 'd' } }), role: 'repair' }])).toEqual([]);
+    expect(lostRowsOf([seatRow('e', { status: 'error', repairRefused: { code: 'C', detail: 'd' } })])).toEqual([]);
+    // the same rows as completed bench seats DO render — the gate, not the flag, is what changed
+    expect(lostRowsOf([seatRow('t', { findingsUnverified: true })])).toHaveLength(1);
+    expect(lostRowsOf([{ ...seatRow('c', { findingsUnverified: true }), role: 'critic' }])).toHaveLength(1);
+    expect(lostRowsOf([{ ...seatRow('l', { findingsUnverified: true }), role: 'lens:citation-auditor' }])).toHaveLength(1);
+  });
+
+  test('the report and the census agree on every shape: unverified-repair rows === seatsReviewed.unverified, and unverified ≤ reviewed', () => {
+    const shapes = [
+      [seatRow('a', { findingsUnverified: true })],
+      [seatRow('a', { status: 'timeout', findingsUnverified: true })],
+      [{ ...seatRow('a', { findingsUnverified: true }), role: 'judge' }],
+      [{ ...seatRow('a', { findingsUnverified: true }), role: 'lens:x' }],
+      [{ ...seatRow('a', { findingsUnverified: true }), role: 'critic' }],
+      [seatRow('a', { findingsUnverified: 'yes' })],
+      [seatRow('a'), seatRow('b', { findingsUnverified: true }), seatRow('c', { status: 'error', findingsUnverified: true })],
+      readJson('tally.json').runStats,
+    ];
+    for (const rows of shapes) {
+      const key = JSON.stringify(rows.map(r => [r.role, r.status, r.findingsUnverified]));
+      const census = seatsReviewedOf(rows).seatsReviewed || { reviewed: 0, unverified: 0, of: 0 };
+      const rendered = lostRowsOf(rows).filter(d => d.channel === 'unverified-repair').length;
+      expect(`${key} → rows ${rendered} · census ${census.unverified} · reviewed ${census.reviewed} · subset ${census.unverified <= census.reviewed}`)
+        .toBe(`${key} → rows ${census.unverified} · census ${census.unverified} · reviewed ${census.reviewed} · subset true`);
+    }
   });
 });
 
@@ -211,16 +244,18 @@ describe('byte-identity: a verdict with no flagged row renders exactly as before
     }
   });
 
-  test('D0 with its three flags stripped renders to the same byte LENGTHS main 5541bb44 produced (md 2007 / html 12560; content is pinned by the report snapshots)', () => {
-    // Measured 2026-09-13 on main 5541bb44, before this change, on this same fixture: the
-    // renderer must not move a single byte of an unflagged document. If this reddens with a
-    // different length while lostRowsOf is untouched, something ELSE changed the renderer —
-    // stop and say so rather than re-pinning the number.
+  test('D0 with its three flags stripped renders byte-identically to main 5541bb44 (snapshots, both formats)', () => {
+    // A TRUE byte pin (council #248 r1, C4/D3): the flag-stripped D0 document must render exactly as
+    // the renderer did before this feature existed. The snapshots were recorded on this branch and
+    // checked against main 5541bb44's measured output (md 2007 / html 12560 bytes) at recording time;
+    // like the four other report snapshots, a deliberate renderer change re-records them — that is
+    // what a byte pin is for, and the cost D3 names is the cost of having one.
     const v = JSON.parse(JSON.stringify(readJson('verdict.json')));
     for (const r of v.runStats) { delete r.findingsUnverified; delete r.repairRefused; }
     const md = buildReport({ verdict: v }, { format: 'md' });
     const html = buildReport({ verdict: v }, { format: 'html' });
     expect(md).not.toContain('What was lost');
-    expect(`md ${Buffer.byteLength(md)} html ${Buffer.byteLength(html)}`).toBe('md 2007 html 12560');
+    expect(md).toMatchSnapshot('stripped-d0-md');
+    expect(html).toMatchSnapshot('stripped-d0-html');
   });
 });

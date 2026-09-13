@@ -24,13 +24,13 @@
  * flag). A refused repair (`repairRefused`) is NOT counted: that seat tallied no findings
  * at all, and the report's `repair-refused` row says so.
  *
- * `unverified ⊆ reviewed`, and "bench rows only", are guaranteed by the PRODUCER and not re-checked
- * here: run-launch.js :: materializeReviews drops every non-complete leg before a repair can run
- * (so a flagged row is always `status: 'complete'`), and a primary row's role is its seat's —
- * seats.js :: buildSeats and run-stages.js :: roleFor mint only `seat`, `critic` and `lens:*`. A
- * hand-assembled or MCP record (V6/V14 show why such records reach buildVerdict) can violate both;
- * this census reads what it is given, and report-lost-rows.js :: lostRowsOf reads the same flag
- * with the same trust, so the two never disagree on an engine-written record.
+ * `unverified ⊆ reviewed` and "bench rows only" are STRUCTURAL (council #248 round 1, B1/C2/D2):
+ * `isUnverifiedSeat` requires a bench role, `status: 'complete'` and the literal `true`, and
+ * report-lost-rows.js :: lostRowsOf uses that same function — so the census and the report agree
+ * on every input, engine-written or hand-assembled, and `unverified` can never exceed `reviewed`.
+ * On engine-written records the gate is a no-op: run-launch.js :: materializeReviews drops every
+ * non-complete leg before a repair can run, and seats.js :: buildSeats / run-stages.js :: roleFor
+ * mint only bench roles (V6/V14 show why hand-assembled records reach buildVerdict at all).
  *
  * A LEAF: it requires nothing, matching its seat-loss sibling.
  */
@@ -56,6 +56,29 @@ function isBenchRole(role) {
 }
 
 /**
+ * The ONE predicate for "this row is an unverified review", shared with
+ * report-lost-rows.js :: lostRowsOf so the census and the report can never disagree
+ * (council #248 round 1, B1/C2/D2: `unverified` counted flagged rows regardless of
+ * status, so a hand-assembled or MCP record could publish `reviewed 0 · unverified 1`
+ * and CI would print `seats 0/1 (1 unverified)`). STRUCTURAL, not producer trust: a
+ * bench role, a COMPLETED leg, and the literal `true` tally.js emits. A flagged row that
+ * is not a completed bench seat is an unverified review of nothing — counted nowhere and
+ * rendered nowhere; a real dead leg has the sink's own dead-leg row. `unverified` can
+ * therefore never exceed `reviewed` (V15/V16). Named mutant: SUBSETBLIND
+ * (`&& r.status === 'complete'` deleted from this function).
+ */
+function isUnverifiedSeat(r) {
+  return !!r && typeof r === 'object' && isBenchRole(r.role)
+    && r.status === 'complete' && r.findingsUnverified === true;
+}
+
+/** Its sibling for a refused repair: the same gate, and `repairRefused` a plain object. */
+function isRefusedSeat(r) {
+  return !!r && typeof r === 'object' && isBenchRole(r.role) && r.status === 'complete'
+    && !!r.repairRefused && typeof r.repairRefused === 'object' && !Array.isArray(r.repairRefused);
+}
+
+/**
  * @param {Array<object>|undefined} runStats
  * @returns {{seatsReviewed?: {reviewed: number, unverified: number, of: number}}}
  */
@@ -71,11 +94,12 @@ function seatsReviewedOf(runStats) {
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
     reviewed: seats.filter(r => r.status === 'complete').length,
-    // `=== true`, matching tally.js's emit-when-true — a hand-assembled truthy string is not
-    // a flag (V14). Named mutant: CENSUSZERO (tests/council/verdict.test.js).
-    unverified: seats.filter(r => r.findingsUnverified === true).length,
+    // The shared predicate (isUnverifiedSeat above): `=== true` matching tally.js's
+    // emit-when-true (V14), a completed leg (V15/V16). Named mutants: CENSUSZERO
+    // (`unverified: 0`) and SUBSETBLIND — tests/council/verdict.test.js.
+    unverified: seats.filter(isUnverifiedSeat).length,
     of: seats.length,
   } };
 }
 
-module.exports = { seatsReviewedOf };
+module.exports = { seatsReviewedOf, isBenchRole, isUnverifiedSeat, isRefusedSeat };
