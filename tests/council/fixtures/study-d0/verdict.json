@@ -1,0 +1,540 @@
+{
+  "schemaVersion": 2,
+  "type": "council-verdict",
+  "runId": "20dde633",
+  "runType": "headless",
+  "date": "2026-09-11",
+  "chair": "deepseek",
+  "council": [
+    "kimi",
+    "grok",
+    "qwen"
+  ],
+  "claudeInCouncil": false,
+  "intent": "task",
+  "overallVerdict": "Insufficient",
+  "findings": [
+    {
+      "id": "A1",
+      "raiser": "kimi",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A2",
+      "raiser": "kimi",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A3",
+      "raiser": "kimi",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C1",
+      "raiser": "qwen",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C2",
+      "raiser": "qwen",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C3",
+      "raiser": "qwen",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C4",
+      "raiser": "qwen",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C5",
+      "raiser": "qwen",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "kimi",
+          "verdict": "agree"
+        },
+        {
+          "judge": "grok",
+          "verdict": "agree"
+        },
+        {
+          "judge": "qwen",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    }
+  ],
+  "streetCred": [
+    {
+      "model": "kimi",
+      "withSelf": 1.6666666666666667,
+      "peersOnly": 1.5
+    },
+    {
+      "model": "grok",
+      "withSelf": 3,
+      "peersOnly": 3
+    },
+    {
+      "model": "qwen",
+      "withSelf": 1.3333333333333333,
+      "peersOnly": 1
+    }
+  ],
+  "runStats": [
+    {
+      "model": "kimi",
+      "role": "seat",
+      "wasChair": false,
+      "conformance": "repaired",
+      "findingsUnverified": true,
+      "waveId": "20dde633-s1",
+      "resolvedModel": "openrouter/moonshotai/kimi-k3",
+      "status": "complete",
+      "durationMs": 222315,
+      "ttftMs": 50572,
+      "usage": {
+        "tokens": {
+          "input": 34349,
+          "output": 949,
+          "reasoning": 2374,
+          "cacheRead": 104448,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.146516688,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "grok",
+      "role": "seat",
+      "wasChair": false,
+      "conformance": "repaired",
+      "findingsUnverified": true,
+      "waveId": "20dde633-s1",
+      "resolvedModel": "openrouter/x-ai/grok-4.6",
+      "status": "complete",
+      "durationMs": 147749,
+      "ttftMs": 12195,
+      "usage": {
+        "tokens": {
+          "input": 96277,
+          "output": 1375,
+          "reasoning": 854,
+          "cacheRead": 311168,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.36151200000000006,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "qwen",
+      "role": "seat",
+      "wasChair": false,
+      "conformance": "repaired",
+      "findingsUnverified": true,
+      "waveId": "20dde633-s1",
+      "resolvedModel": "openrouter/qwen/qwen3.8-27b",
+      "status": "complete",
+      "durationMs": 163135,
+      "ttftMs": 66802,
+      "usage": {
+        "tokens": {
+          "input": 44020,
+          "output": 243,
+          "reasoning": 4795,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.0336024,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "kimi",
+      "role": "repair",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-p1",
+      "resolvedModel": "openrouter/moonshotai/kimi-k3",
+      "status": "complete",
+      "durationMs": 32513,
+      "ttftMs": 18263,
+      "usage": {
+        "tokens": {
+          "input": 5242,
+          "output": 441,
+          "reasoning": 633,
+          "cacheRead": 6144,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.026435664,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "grok",
+      "role": "repair",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-p2",
+      "resolvedModel": "openrouter/x-ai/grok-4.6",
+      "status": "complete",
+      "durationMs": 16343,
+      "ttftMs": 12199,
+      "usage": {
+        "tokens": {
+          "input": 11830,
+          "output": 55,
+          "reasoning": 592,
+          "cacheRead": 128,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.027606,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "qwen",
+      "role": "repair",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-p3",
+      "resolvedModel": "openrouter/qwen/qwen3.8-27b",
+      "status": "complete",
+      "durationMs": 129798,
+      "ttftMs": 119622,
+      "usage": {
+        "tokens": {
+          "input": 4323,
+          "output": 0,
+          "reasoning": 9172,
+          "cacheRead": 7840,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.02999806,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "kimi",
+      "role": "judge",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-s2",
+      "resolvedModel": "openrouter/moonshotai/kimi-k3",
+      "status": "complete",
+      "durationMs": 171878,
+      "ttftMs": 141413,
+      "usage": {
+        "tokens": {
+          "input": 6358,
+          "output": 1513,
+          "reasoning": 3401,
+          "cacheRead": 6144,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.073975104,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "grok",
+      "role": "judge",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-s2",
+      "resolvedModel": "openrouter/x-ai/grok-4.6",
+      "status": "complete",
+      "durationMs": 60785,
+      "ttftMs": 48522,
+      "usage": {
+        "tokens": {
+          "input": 13160,
+          "output": 531,
+          "reasoning": 2433,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.044104,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "qwen",
+      "role": "judge",
+      "wasChair": false,
+      "conformance": "clean",
+      "waveId": "20dde633-s2",
+      "resolvedModel": "openrouter/qwen/qwen3.8-27b",
+      "status": "complete",
+      "durationMs": 244816,
+      "ttftMs": 228493,
+      "usage": {
+        "tokens": {
+          "input": 13349,
+          "output": 0,
+          "reasoning": 16870,
+          "cacheRead": 0,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.05621658,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    },
+    {
+      "model": "deepseek",
+      "role": "chair",
+      "wasChair": true,
+      "conformance": "clean",
+      "waveId": "20dde633-ch1",
+      "resolvedModel": "deepseek/deepseek-v4-pro",
+      "status": "complete",
+      "durationMs": 89365,
+      "ttftMs": 66976,
+      "usage": {
+        "tokens": {
+          "input": 10518,
+          "output": 827,
+          "reasoning": 2958,
+          "cacheRead": 1920,
+          "cacheWrite": 0
+        },
+        "cost": {
+          "amount": 0.00787524,
+          "currency": "USD",
+          "source": "reported"
+        }
+      }
+    }
+  ],
+  "tierCounts": {
+    "Confirmed": 8,
+    "Contested": 0,
+    "Singleton": 0,
+    "Disputed": 0
+  },
+  "seatsReviewed": {
+    "reviewed": 3,
+    "of": 3
+  }
+}

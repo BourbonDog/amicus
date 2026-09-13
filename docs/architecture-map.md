@@ -38,6 +38,7 @@ src/
 │   ├── presets-cli.js
 │   ├── report-cost.js
 │   ├── report-html.js
+│   ├── report-lost-rows.js
 │   ├── report-md.js
 │   ├── report.js
 │   ├── run-assemble.js
@@ -520,6 +521,7 @@ evals/
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
+| `council/report-lost-rows.js` |  | `lostRowsOf()` |
 | `council/report-md.js` |  | `renderMd()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |

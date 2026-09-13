@@ -994,8 +994,12 @@ tier-count summary table — headed **Verdict summary** on a review run and **An
 task run, since a task run produces an answer, not a verdict, and on a task run followed by the
 one-line concurrence qualifier (*tiers report peer concurrence, never verification*) — a
 **What was lost** section
-when the run degraded (plus a **Notes** list for informational records, e.g. a task run's
-ledger-skipped announcement), the **adjudication matrix** (finding × judge, `✓`/`✗`/`–` with
+when the run degraded — and, since v4.9.8 (#242), one row per seat whose findings came from a
+repair of a response with no findings block (channel `unverified-repair`) and one per refused
+repair (channel `repair-refused`, naming the code), derived from `runStats[]` when the report is
+built, so re-rendering an older `verdict.json` shows them too — (plus a **Notes** list for
+informational records, e.g. a task run's ledger-skipped announcement), the **adjudication
+matrix** (finding × judge, `✓`/`✗`/`–` with
 `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
 tier** (Disputed first), and a **cost table** (per-model status/duration/cost + wave total,
 sourced from `runStats[].usage`).
