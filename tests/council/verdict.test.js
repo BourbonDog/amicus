@@ -421,4 +421,19 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
       expect(`${key} → ${c.unverified} ≤ ${c.reviewed}: ${c.unverified <= c.reviewed}`).toBe(`${key} → ${c.unverified} ≤ ${c.reviewed}: true`);
     }
   });
+
+  test('V17 an array wearing row properties is not a row — the census and the report agree (P3-R16)', () => {
+    const fake = Object.assign([], { model: 'glm', role: 'seat', status: 'complete', findingsUnverified: true });
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [fake, seatRow('gpt', 'complete')] });
+    // isBenchRole reads `fake.role === 'seat'`, so without the array guard the census would count
+    // it under `of`, `reviewed` AND `unverified` while lostRowsOf's plain-object guard renders nothing.
+    // MEASURED (not the task's first guess of {reviewed:1, unverified:0, of:1}): the bench filter
+    // in seatsReviewedOf is `r && isBenchRole(r.role)`, which an array PASSES — it is truthy and
+    // `.role` reads through — so `of` and `reviewed` both count it. Only the shared predicate
+    // (isUnverifiedSeat, guarded by N1's `!Array.isArray(r)`) refuses it, so `unverified` alone
+    // stays a subset instead of matching `reviewed`. The bench filter itself is not guarded here —
+    // that is a separate, out-of-scope gap (see the round-1 nits report).
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, of: 2 });
+  });
 });

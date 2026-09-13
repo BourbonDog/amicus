@@ -22,24 +22,26 @@
  * trailing JSON block was malformed (study run B2, qwen-flash).
  *
  * Named mutants (exact edits in src/council/report-lost-rows.js; red sets measured on the
- * committed tree and recorded here by the implementer):
- *   ROWALWAYS   — `if (r.findingsUnverified === true) { rows.push(unverifiedRow(r)); }`
- *                 → `rows.push(unverifiedRow(r));` (every row becomes a loss). Red set (10 of
- *                 72): "D0: one unverified-repair row per flagged seat, in runStats order, as
- *                 frozen makeDegrade records", "a refused repair gets a repair-refused row
- *                 naming the code, with the detail as the why", "a refused repair with no
- *                 code/detail (hand-assembled input) still renders, with fallbacks",
- *                 "emit-when-TRUE, matching the producer: a truthy non-boolean flag is not a
- *                 flag, a string repairRefused is not a refusal", "tolerates every schema-free
- *                 shape the report entry points can deliver", 'never says "stub", and both
- *                 channels are registered (the degrade-contract drift pin reads src/)', "the
- *                 fixture is the pre-4.9.8 verdict.json — the rows come from runStats, not from
- *                 a rebuild", "html: the section table carries the channel column and the voice
- *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
- *                 HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
- *                 stripped renders byte-identically to main 5541bb44 (snapshots, both
- *                 formats)".
- *   REFUSEDDROP — the `if (isPlainObject(r.repairRefused)) { rows.push(refusedRow(r)); }` statement removed.
+ * committed tree and recorded here by the implementer). The definitions below are restated
+ * against the current body, after the predicate rename (council #248 r1 nits, P3-R16); the
+ * counts still reflect the pre-rename run and are re-measured next:
+ *   ROWALWAYS   — `if (isUnverifiedSeat(r)) { rows.push(unverifiedRow(r)); }`
+ *                 → `rows.push(unverifiedRow(r));` (unconditional: every row becomes a loss).
+ *                 Red set (10 of 72): "D0: one unverified-repair row per flagged seat, in
+ *                 runStats order, as frozen makeDegrade records", "a refused repair gets a
+ *                 repair-refused row naming the code, with the detail as the why", "a refused
+ *                 repair with no code/detail (hand-assembled input) still renders, with
+ *                 fallbacks", "emit-when-TRUE, matching the producer: a truthy non-boolean flag
+ *                 is not a flag, a string repairRefused is not a refusal", "tolerates every
+ *                 schema-free shape the report entry points can deliver", 'never says "stub",
+ *                 and both channels are registered (the degrade-contract drift pin reads src/)',
+ *                 "the fixture is the pre-4.9.8 verdict.json — the rows come from runStats, not
+ *                 from a rebuild", "html: the section table carries the channel column and the
+ *                 voice line", "av-receiver (three rows, no flags): no rows, no section — GREEN
+ *                 at HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
+ *                 stripped renders byte-identically to the pre-feature renderer (snapshots, both
+ *                 formats; checked against main 5541bb44 by byte count at recording time)".
+ *   REFUSEDDROP — the `if (isRefusedSeat(r)) { rows.push(refusedRow(r)); }` statement removed.
  *                 Red set (4 of 72): "a refused repair gets a repair-refused row naming the
  *                 code, with the detail as the why", "a refused repair with no code/detail
  *                 (hand-assembled input) still renders, with fallbacks", "a row carrying BOTH
@@ -166,6 +168,8 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
     expect(lostRowsOf([seatRow('t', { findingsUnverified: true })])).toHaveLength(1);
     expect(lostRowsOf([{ ...seatRow('c', { findingsUnverified: true }), role: 'critic' }])).toHaveLength(1);
     expect(lostRowsOf([{ ...seatRow('l', { findingsUnverified: true }), role: 'lens:citation-auditor' }])).toHaveLength(1);
+    // an array wearing row properties is not a row (N1) — the census agrees, see verdict.test.js V17
+    expect(lostRowsOf([Object.assign([], { role: 'seat', status: 'complete', findingsUnverified: true })])).toEqual([]);
   });
 
   test('the report and the census agree on every shape: unverified-repair rows === seatsReviewed.unverified, and unverified ≤ reviewed', () => {
@@ -244,7 +248,7 @@ describe('byte-identity: a verdict with no flagged row renders exactly as before
     }
   });
 
-  test('D0 with its three flags stripped renders byte-identically to main 5541bb44 (snapshots, both formats)', () => {
+  test('D0 with its three flags stripped renders byte-identically to the pre-feature renderer (snapshots, both formats; checked against main 5541bb44 by byte count at recording time)', () => {
     // A TRUE byte pin (council #248 r1, C4/D3): the flag-stripped D0 document must render exactly as
     // the renderer did before this feature existed. The snapshots were recorded on this branch and
     // checked against main 5541bb44's measured output (md 2007 / html 12560 bytes) at recording time;

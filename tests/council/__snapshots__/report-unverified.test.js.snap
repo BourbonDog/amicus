@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to main 5541bb44 (snapshots, both formats): stripped-d0-html 1`] = `
+exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to the pre-feature renderer (snapshots, both formats; checked against main 5541bb44 by byte count at recording time): stripped-d0-html 1`] = `
 "<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Council Report — 20dde633</title>
@@ -180,7 +180,7 @@ td.c { text-align: center; }
 "
 `;
 
-exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to main 5541bb44 (snapshots, both formats): stripped-d0-md 1`] = `
+exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to the pre-feature renderer (snapshots, both formats; checked against main 5541bb44 by byte count at recording time): stripped-d0-md 1`] = `
 "# Council Report — task (20dde633)
 
 _2026-09-11 · chair: deepseek · council: kimi, grok, qwen_

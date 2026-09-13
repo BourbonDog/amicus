@@ -67,14 +67,15 @@ function isBenchRole(role) {
  * therefore never exceed `reviewed` (V15/V16). Named mutant: SUBSETBLIND
  * (`&& r.status === 'complete'` deleted from this function).
  */
+// !Array.isArray: an array carrying named properties is not a row — lostRowsOf's own plain-object guard already skips it, and the census must agree.
 function isUnverifiedSeat(r) {
-  return !!r && typeof r === 'object' && isBenchRole(r.role)
+  return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role)
     && r.status === 'complete' && r.findingsUnverified === true;
 }
 
 /** Its sibling for a refused repair: the same gate, and `repairRefused` a plain object. */
 function isRefusedSeat(r) {
-  return !!r && typeof r === 'object' && isBenchRole(r.role) && r.status === 'complete'
+  return !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role) && r.status === 'complete'
     && !!r.repairRefused && typeof r.repairRefused === 'object' && !Array.isArray(r.repairRefused);
 }
 
