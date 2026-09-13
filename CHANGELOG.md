@@ -73,6 +73,29 @@ All notable changes to Amicus are documented here. Format follows
   last message has finalized — that leg completes normally — and never while a tool
   call is live, where the tool-settle ceiling governs).
   (`docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §3; PR 1 of 3.)
+- **A seat whose findings nothing could verify is now visible in the report and in the verdict
+  census.** When a Stage-1 response carried no parseable findings block and the bounded repair
+  supplied one, the seat's `runStats` row has carried `findingsUnverified: true` since the repair
+  contract landed (LC-11) — through `tally.json` and `verdict.json` — and died at the renderer:
+  `report.html`'s **What was lost** table held only the degrade sink's records (dead legs and the
+  like), and `seatsReviewed` counted the seat as a full reviewer. Now the report (Markdown and
+  HTML) gains one **What was lost** row per such seat (channel `unverified-repair`: *seat X's
+  findings came from a repair of a response with no findings block — nothing verified them*) and
+  one per refused repair (channel `repair-refused`, naming the code), derived from `runStats` when
+  the report is built — so `amicus council report` on an older `verdict.json` shows them too, and
+  nothing in `run.json`, the exit code or the degrade sink changes. `verdict.json`'s census gains
+  two numbers, `seatsReviewed: {reviewed, unverified, refused, of}` (always written, never more
+  than `reviewed`; older documents still validate) — `refused` (council #248 round 2) counts
+  seats whose repair was refused: they tallied no findings and would otherwise read as full
+  reviewers on every gate surface, and the council-review check title and sticky comment print
+  `(N unverified)` and `(N refused)` when non-zero. A run also prints one `Notice:` line on
+  stderr at the end naming its unverified and refused seats, so a local run is no longer silent
+  about them; the exit code and every artifact are unchanged. The wording never says "stub":
+  the flag also fires on a real review whose trailing JSON block was malformed. Study run D0
+  (three narration stubs, three repairs) now reads `{reviewed: 3, unverified: 3, refused: 0,
+  of: 3}` in `verdict.json` — `seats reviewed: 3 of 3 (3 unverified)` in the sticky comment
+  — with three rows in the report, where it read `{reviewed: 3, of: 3}` and nothing. (#242;
+  `docs/superpowers/specs/2026-09-11-council-leg-completion-design.md` §5; PR 3 of 3.)
 
 ## [4.9.7] - 2026-09-09
 

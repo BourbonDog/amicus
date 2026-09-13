@@ -18,6 +18,7 @@
 // v4.9 W8 T-A: the cost table's model lives in ./report-cost (extraction, this
 // file's headroom). Eager, not lazy: that module back-requires nothing here.
 const { buildCostModel } = require('./report-cost');
+const { lostRowsOf } = require('./report-lost-rows'); // #242: a leaf; back-requires nothing here
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 // __proto__: null — an inherited/unknown vote key (e.g. "toString") must fold as unrecognized, never resolve off Object.prototype.
@@ -263,7 +264,7 @@ function toModel(verdict, wave) {
     // Plan 2 final review F2 + v4.9 W8 T-A: LOSSES ONLY. A heal is announced on stderr/run.json
     // but is not a loss (spec D4, §8), and neither is v4.9's kind:'info' — `ledger-skipped` says
     // a task run wrote no reliability rows, which is speech, not damage. Info records ride
-    // `notes`, which both renderers list APART from "What was lost".
+    // `notes`, which both renderers list APART from "What was lost". v4.9.8 (#242): the runStats-derived unverified/refused-repair rows (./report-lost-rows) are appended AFTER the sink's records.
     // ⚠️ NOT the positive `kind === 'degrade'`, and the difference is measured: a record with NO
     // kind key — hand-written, or parsed off a verdict older than kinds, which
     // `utils/degrade.js :: formatDegrade` still deliberately serves as 'Notice' — is a loss at
@@ -276,7 +277,7 @@ function toModel(verdict, wave) {
     // 'degrade'`, citing THIS lesson by name. Their kind LISTS still differ from this one's, and
     // deliberately (over there the question is narrower: which announcements imply a LOST SEAT).
     // Align the treatment of an ABSENT kind; never the lists.
-    degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal' && d.kind !== 'info'),
+    degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal' && d.kind !== 'info').concat(lostRowsOf(verdict.runStats)),
     notes: (verdict.degrades || []).filter(d => d.kind === 'info'),
     cost: buildCostModel(verdict.runStats || [], wave),
   };

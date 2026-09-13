@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const Ajv = require('ajv/dist/2020');
 const { buildVerdict, writeVerdictAtomic } = require('../../src/council/verdict');
 const { tally } = require('../../src/council/tally');
 const asm = require('../../src/council/run-assemble');
@@ -258,13 +259,13 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
   test('V1 a full bench reports every seat reviewed', () => {
     const v = build([seatRow('glm', 'complete'), seatRow('qwen', 'complete'),
       seatRow('gpt', 'complete')]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 3, of: 3 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 3, unverified: 0, refused: 0, of: 3 });
   });
 
   test('V2 a dead seat is subtracted — this is the number W11 never published', () => {
     const v = build([seatRow('glm', 'error'), seatRow('qwen', 'complete'),
       seatRow('gpt', 'complete')]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 3 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 3 });
   });
 
   test('V3 only BENCH seats count — superseded, judge, chair and repair rows do not', () => {
@@ -277,12 +278,12 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
       other('deepseek', 'chair', 'complete'),
       other('qwen', 'repair', 'complete'),
     ]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 2 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 2 });
   });
 
   test('V4 a timeout counts as not-reviewed, same as an error', () => {
     const v = build([seatRow('glm', 'timeout'), seatRow('gpt', 'complete')]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 1, of: 2 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 2 });
   });
 
   test('V6 a NON-ARRAY runStats is tolerated — buildVerdict takes permissive records', () => {
@@ -311,14 +312,14 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
       conformance: 'clean', status, durationMs: 1, usage: null });
     const v = build([lens('glm', 'citation-auditor', 'complete'),
       lens('qwen', 'test-skeptic', 'error'), lens('gpt', 'scope-adversary', 'complete')]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 3 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 3 });
   });
 
   test('V8 a critic IS a bench seat — it reviews', () => {
     const v = build([seatRow('glm', 'complete'),
       { model: 'qwen', role: 'critic', wasChair: false, conformance: 'clean',
         status: 'complete', durationMs: 1, usage: null }]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 2, of: 2 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 2 });
   });
 
   test('V9 CONTROL: judge / chair / repair / superseded are still excluded', () => {
@@ -327,7 +328,7 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
     const v = build([seatRow('glm', 'complete'),
       other('glm', 'superseded', 'error'), other('gpt', 'judge', 'complete'),
       other('deepseek', 'chair', 'complete'), other('qwen', 'repair', 'complete')]);
-    expect(v.seatsReviewed).toEqual({ reviewed: 1, of: 1 });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 1 });
   });
 
   test('V5 a run with no bench rows at all emits nothing rather than 0 of 0', () => {
@@ -335,5 +336,110 @@ describe('#202 — verdict.json publishes seats reviewed of seats benched', () =
     // one meaning, matching every other emit-when-set field on this document.
     const v = build([]);
     expect('seatsReviewed' in v).toBe(false);
+  });
+
+  // #242 / spec §5 (v4.9.8): the third number. A seat whose findings came from a repair of a
+  // response with no findings block (run-stages.js sets `findingsUnverified: true`) is
+  // `reviewed` — its leg completed — AND `unverified`. Always written with the census: 0 is a
+  // measurement, absence keeps its one meaning (no bench rows). Not a stub count (study run B2:
+  // a real 19,064-byte review carried the flag). Named mutant CENSUSZERO
+  // (`unverified: seats.filter(r => r.findingsUnverified === true).length` → `unverified: 0`),
+  // red set measured on the committed tree (`npx jest tests/council/verdict.test.js
+  // tests/council/report-unverified.test.js`): V10, V12 — nothing in report-unverified.test.js.
+  test('V10 flagged seats are counted under `unverified` — and still under `reviewed`', () => {
+    const flagged = (model) => ({ ...seatRow(model, 'complete'), findingsUnverified: true });
+    const v = build([flagged('glm'), flagged('qwen'), seatRow('gpt', 'complete')]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 3, unverified: 2, refused: 0, of: 3 });
+  });
+
+  test('V11 the key order is reviewed / unverified / refused / of — the shape spec §5 names and the CI title prints', () => {
+    const v = build([seatRow('glm', 'complete')]);
+    expect(Object.keys(v.seatsReviewed)).toEqual(['reviewed', 'unverified', 'refused', 'of']);
+  });
+
+  test('V12 study run D0 (three narration stubs, three repairs): 3 reviewed · 3 unverified · of 3, and the document validates', () => {
+    const record = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'study-d0', 'tally.json'), 'utf-8'));
+    const v = buildVerdict(record, []);
+    expect(v.seatsReviewed).toEqual({ reviewed: 3, unverified: 3, refused: 0, of: 3 });
+    const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'schemas', 'council-verdict.schema.json'), 'utf-8'));
+    const validate = new Ajv({ allErrors: true, strict: false }).compile(schema);
+    expect(`${validate(v)} ${JSON.stringify(validate.errors)}`).toBe('true null');
+  });
+
+  test('V13 a flagged NON-bench row is not counted; a refused repair is counted under `refused`, never under `unverified` (P3-R17)', () => {
+    // A `repair` row never carries the flag in production (only primary review rows do) — the
+    // pin is that the census filters by ROLE before it reads either flag. A refused repair
+    // (`repairRefused`, conformance unstructured) tallied NO findings and is counted under
+    // `refused` (council #248 round 2, P3-R17) — never under `unverified`, which is about
+    // findings that WERE tallied.
+    const v = build([
+      seatRow('glm', 'complete'),
+      { ...seatRow('qwen', 'complete'), conformance: 'unstructured',
+        repairRefused: { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'repair returned 2 findings, original attempted 3' } },
+      { model: 'glm', role: 'repair', wasChair: false, conformance: 'clean', status: 'complete',
+        durationMs: 1, usage: null, findingsUnverified: true },
+    ]);
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 1, of: 2 });
+  });
+
+  test('V14 the flag is tested `=== true` on a record that bypassed tally(): a truthy string is not a flag', () => {
+    // tally.js's allowlist coerces any truthy value to the literal `true`, so through `build`
+    // this shape cannot be observed. buildVerdict is also reachable on hand-assembled and MCP
+    // records (V6) — there the census reads exactly what the producer would have written.
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('glm', 'complete'), findingsUnverified: 'yes' }, seatRow('gpt', 'complete')] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 2, unverified: 0, refused: 0, of: 2 });
+  });
+
+  // council #248 round 1 (B1/C2/D2): the subset relation is structural, not producer trust —
+  // one predicate (isUnverifiedSeat) gates both the census and the report's rows. Named mutant
+  // SUBSETBLIND (`&& r.status === 'complete'` deleted from isUnverifiedSeat), red set measured
+  // on the committed tree (`npx jest tests/council/verdict.test.js
+  // tests/council/report-unverified.test.js`): V15, V16, and in report-unverified.test.js: "a
+  // flagged row that is not a COMPLETED BENCH seat renders nothing — the census predicate is
+  // the renderer's (council #248 r1, B1/C2/D2)" and "the report and the census agree on every
+  // shape: unverified-repair rows === seatsReviewed.unverified, and unverified ≤ reviewed" (4
+  // of 50).
+  test('V15 a flagged row whose leg did not complete is NOT an unverified review — unverified ⊆ reviewed by construction', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('glm', 'timeout'), findingsUnverified: true }, seatRow('gpt', 'complete')] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 2 });
+  });
+
+  test('V16 unverified never exceeds reviewed on any row shape (a property over a shape table)', () => {
+    const judge = (model) => ({ model, role: 'judge', wasChair: false, conformance: 'clean',
+      status: 'complete', durationMs: 1, usage: null, findingsUnverified: true });
+    const shapes = [
+      [{ ...seatRow('a', 'timeout'), findingsUnverified: true }],
+      [{ ...seatRow('a', 'error'), findingsUnverified: true }, { ...seatRow('b', 'complete'), findingsUnverified: true }],
+      [{ ...seatRow('a', 'complete'), findingsUnverified: true }, { ...seatRow('b', 'timeout'), findingsUnverified: true }, seatRow('c', 'complete')],
+      [judge('j'), seatRow('a', 'complete')],
+      [{ ...seatRow('a', 'complete'), findingsUnverified: true }, { ...seatRow('b', 'complete'), findingsUnverified: true }],
+    ];
+    for (const runStats of shapes) {
+      const c = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {}, runStats }).seatsReviewed;
+      const key = JSON.stringify(runStats.map(r => [r.role, r.status, !!r.findingsUnverified]));
+      expect(`${key} → ${c.unverified} ≤ ${c.reviewed}: ${c.unverified <= c.reviewed}`).toBe(`${key} → ${c.unverified} ≤ ${c.reviewed}: true`);
+      expect(`${key} → ${c.refused} ≤ ${c.reviewed}: ${c.refused <= c.reviewed}`).toBe(`${key} → ${c.refused} ≤ ${c.reviewed}: true`);
+    }
+  });
+
+  test('V17 an array wearing row properties is not a row — the census and the report agree (P3-R16)', () => {
+    const fake = Object.assign([], { model: 'glm', role: 'seat', status: 'complete', findingsUnverified: true });
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [fake, seatRow('gpt', 'complete')] });
+    // council #248 round 2 (A5, ruling P3-R19): the bench filter in seatsReviewedOf now refuses
+    // the array too — the same plain-object guard the shared predicates already carried — so the
+    // fake row is excluded from `of`/`reviewed`/`unverified`/`refused` alike, and the census and
+    // the report agree on it.
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 1 });
+  });
+
+  test('V18 a refused repair on a leg that did not complete is not counted under `refused` either (the same gate)', () => {
+    const v = buildVerdict({ meta, findings: [], streetCred: [], tierCounts: {},
+      runStats: [{ ...seatRow('qwen', 'timeout'), conformance: 'unstructured',
+        repairRefused: { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'repair returned 2 findings, original attempted 3' } },
+        seatRow('gpt', 'complete')] });
+    expect(v.seatsReviewed).toEqual({ reviewed: 1, unverified: 0, refused: 0, of: 2 });
   });
 });

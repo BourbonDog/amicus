@@ -47,7 +47,9 @@ function renderMd(m) {
   // (tests/council/report-intent.test.js).
   if (m.intent === 'task') { out.push('\n_Tiers report peer concurrence, never verification._'); }
 
-  // Heading-over-nothing: emitted ONLY when the run actually degraded, so a
+  // Heading-over-nothing: emitted ONLY when the model carries losses — the
+  // sink's records plus (v4.9.8, #242) the runStats-derived
+  // unverified/refused-repair rows report.js :: toModel appends — so a
   // clean verdict's report stays byte-identical to before this section
   // existed. Losses are headline news, so they sit directly under the
   // summary, before the reader reaches the adjudication detail.

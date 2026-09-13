@@ -127,12 +127,20 @@ describe('evaluateAliasesCheck — deps-injected (no real I/O)', () => {
     });
 
     test('exactly at the freshness boundary (24h old, inclusive) still repairs', () => {
-      const d = baseDeps({
-        fix: true,
-        readCache: () => ({ fetchedAt: Date.now() - 24 * 60 * 60 * 1000, models: FABRICATED_CATALOG }),
-      });
-      const row = evaluateAliasesCheck(d);
-      expect(d.repairAlias).toHaveBeenCalledTimes(1);
+      // One clock reading for both the fixture and the source (doctor-alias-check.js reads
+      // Date.now() itself): with two live readings the age can be 24 h + 1 ms whenever they
+      // straddle a millisecond, and the inclusive boundary then declines — measured as a CI
+      // flake on ubuntu/node 22 (run 34772368371, 1 of 10069 tests) while eight legs passed.
+      const now = 1_760_000_000_000;
+      const spy = jest.spyOn(Date, 'now').mockReturnValue(now);
+      try {
+        const d = baseDeps({
+          fix: true,
+          readCache: () => ({ fetchedAt: now - 24 * 60 * 60 * 1000, models: FABRICATED_CATALOG }),
+        });
+        const row = evaluateAliasesCheck(d);
+        expect(d.repairAlias).toHaveBeenCalledTimes(1);
+      } finally { spy.mockRestore(); }
     });
 
     test('one second past the freshness boundary declines', () => {

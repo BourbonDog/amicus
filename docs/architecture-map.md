@@ -38,6 +38,7 @@ src/
 │   ├── presets-cli.js
 │   ├── report-cost.js
 │   ├── report-html.js
+│   ├── report-lost-rows.js
 │   ├── report-md.js
 │   ├── report.js
 │   ├── run-assemble.js
@@ -520,6 +521,7 @@ evals/
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-cost.js` |  | `buildCostModel()` |
 | `council/report-html.js` |  | `renderHtml()` |
+| `council/report-lost-rows.js` |  | `lostRowsOf()` |
 | `council/report-md.js` |  | `renderMd()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
@@ -556,7 +558,7 @@ evals/
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict-seat-loss.js` |  | `summarizeSeatLoss()`, `deriveSeatLoss()` |
-| `council/verdict-seats-reviewed.js` | #202: the bench-seat census for verdict.json, as a spreadable fragment. | `seatsReviewedOf()` |
+| `council/verdict-seats-reviewed.js` | #202: the bench-seat census for verdict.json, as a spreadable fragment. | `seatsReviewedOf()`, `isBenchRole()`, `isUnverifiedSeat()`, `isRefusedSeat()`, `seatLabel()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/council-legs.js` |  | `buildLegRows()` |

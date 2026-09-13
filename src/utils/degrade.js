@@ -39,6 +39,14 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   // lost reviewer by consumers that only ever meant seats (verdict-seat-loss.js
   // already gates the Stage-2 notes out of `seat-unbound` for the same reason).
   'stage2-judge',
+  // #242 / spec §5 (v4.9.8): render-time rows the report derives from runStats
+  // (council/report-lost-rows.js) — never emitted by the sink, so neither can
+  // flip `degraded` or the exit code. `unverified-repair`: a seat's findings
+  // came from a repair of a response with no findings block
+  // (runStats[].findingsUnverified); `repair-refused`: the repair broke its
+  // count contract (runStats[].repairRefused). Registered here because the
+  // degrade-contract drift pin reads every `channel:` literal in src/.
+  'unverified-repair', 'repair-refused',
   'internal',
   // doctor channels
   'doctor-check-failed', 'doctor-fix',

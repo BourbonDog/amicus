@@ -74,7 +74,7 @@ Classes 1 and 2 share one precondition — *a stage-1 seat uses tools* — which
 
 **Change.**
 - "What was lost" gains one row per `runStats` seat with `findingsUnverified` (channel `unverified-repair`: *"seat X's findings came from a repair of a response with no findings block; nothing verified them"*) and per `repairRefused` (channel `repair-refused`, with the code). Data source: `runStats`, no new computation. The wording never says "stub": B2's qwen-flash carried the flag on a real 19 k review whose JSON block was malformed.
-- `seatsReviewed` gains a third number: `{ reviewed, unverified, of }`. `reviewed` keeps its meaning; `unverified` counts stage-1 seats whose findings are flagged. Glove-breakin-01 then reads `{ reviewed: 4, unverified: 3, of: 5 }` instead of `4 of 5 · Converged`. The publish gate (verdict + seatsReviewed) sees it.
+- `seatsReviewed` gains a third number: `{ reviewed, unverified, of }`. `reviewed` keeps its meaning; `unverified` counts stage-1 seats whose findings are flagged. Glove-breakin-01 then reads `{ reviewed: 4, unverified: 3, of: 5 }` instead of `4 of 5 · Converged`. The publish gate (verdict + seatsReviewed) sees it. *Amended 2026-09-13 (council #248 round 2, ruling P3-R17): a fourth number, `refused`, counts seats whose repair was refused — the census is `{ reviewed, unverified, refused, of }` — and the publish gate prints `(N refused)` alongside `(N unverified)`; the CLI also prints one end-of-run stderr `Notice:` naming both kinds of seat (P3-R13).*
 - #242's item 1 (write repair output back to `review-<seat>.md` / the Stage-2 bundle) is **not** in this spec: after sub-fix 1 the narration-stub repair case largely disappears, and the remaining write-back question is a separate small change on #242.
 
 **Tests.** `tests/council/report-html*.test.js`, `report-md`, `verdict-seats-reviewed.test.js` with glove-breakin-01's `tally.json` as a fixture (3 flagged seats): rows present, counts exact, and a run with no flags renders byte-identically to today (mutant **ROWALWAYS** must redden).
@@ -91,7 +91,7 @@ gates, in order:  length-death │ sdk-idle (status idle) │ backstop │ tool-
 seat agent:  council-seat = defaultFor(intent) ∪ --tools opt-in  (task→{webfetch}, review→{})
              council-support = no tools (repair, judges, debate, chair)
              opts.agent override wins (MCP `agent`: Plan | Build)
-report:      degrades[] + runStats.findingsUnverified/repairRefused → "What was lost"; seatsReviewed {reviewed, unverified, of}
+report:      degrades[] + runStats.findingsUnverified/repairRefused → "What was lost"; seatsReviewed {reviewed, unverified, refused, of}
 ```
 
 ## 7. Rollout

@@ -1,0 +1,250 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to main 5541bb44's renderer (snapshots; compared byte-for-byte against a git-archive render of main at recording time): stripped-d0-html 1`] = `
+"<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Council Report — 20dde633</title>
+<style>
+/* ==========================================================================
+   Amicus — shared design tokens (clay/gold, neutral-black)
+   Single source of truth for the Electron app, council report, and site.
+   Re-tinted from the "Spectrum" design export to the shipped clay→gold brand
+   on the site's canonical neutral-black ramp. Injected by src/design/tokens.js.
+   ========================================================================== */
+
+/* ---- Webfonts (bundled, self-hosted) ---------------------------------- */
+/* Paths are relative to THIS file (src/design/tokens.css). The loader
+   rewrites them to absolute file-protocol URLs for the Electron app. */
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap; src: url('./fonts/Outfit-300.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/Outfit-400.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/Outfit-500.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 600; font-display: swap; src: url('./fonts/Outfit-600.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 700; font-display: swap; src: url('./fonts/Outfit-700.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 800; font-display: swap; src: url('./fonts/Outfit-800.ttf') format('truetype'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/IBMPlexMono-400.ttf') format('truetype'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/IBMPlexMono-500.ttf') format('truetype'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('./fonts/IBMPlexMono-600.ttf') format('truetype'); }
+
+:root {
+  /* ---- Brand accent · clay (re-tinted from violet) ------------------- */
+  --accent-500: #d97757;   /* the one brand accent (re-tinted from Spectrum violet) */
+  --accent-400: #e8a07c;   /* lighter tint — hover text                  */
+  --accent-600: #c45c3f;   /* pressed / hover fill; spec value — intentionally supersedes the app's old clay-600 */
+  --accent-soft: rgba(217, 119, 87, 0.10);  /* tint wash / selected — site --asoft */
+  --accent-glow: rgba(217, 119, 87, 0.05);  /* radial glow — site --aglow */
+  --accent-line: rgba(217, 119, 87, 0.28);  /* dashed connectors, borders */
+
+  /* ---- Counter-accent · gold (re-tinted from lime) ------------------- */
+  --gold-400: #e8b24a;   /* counter-accent (re-tinted from Spectrum lime) */
+  --gold-500: #d49a2e;   /* deeper gold                                  */
+  --gold-soft: rgba(232, 178, 74, 0.12);
+  --gold-line: rgba(232, 178, 74, 0.28);
+
+  /* ---- Neutral-black ramp (site :root — canonical) ------------------- */
+  --bg: #0a0a0a;             /* page / window background                */
+  --surface-1: #111113;      /* card / input / inset (site --s1)        */
+  --surface-2: #161618;      /* raised / hover (site --s2)              */
+  --surface-3: #1c1c1f;      /* inset row (site --s3)                   */
+  --surface-sel: #1e1613;    /* selected row (app-additive, provisional)*/
+  --border: #222225;         /* hairline                                */
+  --border-strong: #2c2c30;  /* hover / focus hairline (site --border2) */
+  --text-1: #f5f5f3;         /* primary text                            */
+  --text-2: #a1a1a0;         /* secondary text                          */
+  --text-3: #666666;         /* tertiary / muted (site --t3 #666)       */
+  --text-4: #3a3a3e;         /* disabled / faint (app-additive)         */
+
+  /* ---- Semantic status (unchanged from export) ---------------------- */
+  --ok: #6BBF6B;
+  --ok-bright: #4ade80;
+  --warn: #FBBF24;
+  --danger: #E05252;
+  --running: #4ade80;
+
+  /* ---- Council verdict tiers (report tables, light ground) ----------- */
+  --tier-confirmed: #d7ead0;
+  --tier-contested: #efe4c4;
+  --tier-disputed: #ecd4ec;
+  --tier-singleton: #e2e0ea;
+  --tier-confirmed-ink: #15803d;
+  --tier-contested-ink: #b45309;
+  --tier-disputed-ink: #a21caf;
+  --tier-singleton-ink: #4b5563;
+
+  /* ---- Severity ----------------------------------------------------- */
+  --sev-blocker: #E05252;
+  --sev-major: #FBBF24;
+  --sev-minor: #a1a1a0;
+  --sev-nit: #666666;
+
+  /* ---- Provider brand colors (fixed external brands) ----------------- */
+  --pv-anthropic: #D97757;
+  --pv-google: #4285F4;
+  --pv-openai: #10A37F;
+  --pv-deepseek: #4D6BFE;
+  --pv-meta: #0081FB;
+  --pv-xai: #ECE9F5;
+  --pv-openrouter: #6566F1;
+
+  /* ---- Semantic aliases --------------------------------------------- */
+  --surface: var(--surface-1);
+  --surface-hover: var(--surface-2);
+  --text: var(--text-1);
+  --text-muted: var(--text-2);
+  --text-faint: var(--text-3);
+  --text-disabled: var(--text-4);
+  --accent: #d97757;
+  --accent-hover: var(--accent-600);
+  --accent-2: #e8b24a;
+  --accent-text: #ffffff;
+  --on-accent: #ffffff;
+  --focus-ring: var(--accent-500);
+
+  /* ---- Typography --------------------------------------------------- */
+  --font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  --w-light: 300; --w-regular: 400; --w-medium: 500;
+  --w-semibold: 600; --w-bold: 700; --w-extra: 800;
+  --fs-9: 9px; --fs-10: 10px; --fs-11: 11px; --fs-12: 12px;
+  --fs-13: 13px; --fs-15: 15px; --fs-18: 18px; --fs-22: 22px;
+  --lh-tight: 1.08; --lh-snug: 1.3; --lh-body: 1.6; --lh-relaxed: 1.7; --lh-display: 0.92;
+  --ls-display: -0.05em; --ls-tight: -0.03em; --ls-normal: -0.01em;
+  --ls-eyebrow: 0.14em; --ls-label: 0.5px; --ls-brand: 0.8px;
+
+  /* ---- Radii / borders / shadows / motion (color-free, from export) -- */
+  --r-2: 2px; --r-3: 3px; --r-4: 4px; --r-6: 6px; --r-7: 7px;
+  --r-8: 8px; --r-10: 10px; --r-12: 12px; --r-full: 999px;
+  --bd: 1px solid var(--border);
+  --bd-strong: 1px solid var(--border-strong);
+  --bd-accent: 1px solid var(--accent-500);
+  --bd-dashed: 1px dashed var(--border);
+  --bd-connector: 0.8px dashed var(--accent-line);
+  --shadow-none: none;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-pop: 0 8px 24px rgba(0,0,0,0.45);
+  --shadow-glow: 0 0 0 3px var(--accent-soft);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-std: ease;
+  --dur-fast: 0.15s; --dur-mid: 0.25s; --dur-slow: 0.7s;
+
+  /* ---- Spacing ------------------------------------------------------ */
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px;
+  --space-5: 10px; --space-6: 12px; --space-7: 14px; --space-8: 16px;
+  --space-10: 20px; --space-12: 24px; --space-16: 32px;
+  --space-20: 40px; --space-24: 48px; --space-32: 64px;
+  --pad-pill: 3px 8px;
+  --pad-btn-sm: 5px 14px;
+  --pad-btn: 7px 12px;
+  --pad-input: 7px 10px;
+  --pad-card: 12px 16px;
+  --toolbar-h: 40px;
+  --gap-row: 8px;
+}
+
+:root {
+  /* Council tiers — light-ground palette + ink. Intentionally re-declared
+     here with the SAME values tokenCss() emits (self-documenting + robust to
+     a loader refactor; the cascade resolves identically). */
+  --tier-confirmed: #d7ead0;
+  --tier-contested: #efe4c4;
+  --tier-disputed: #ecd4ec;
+  --tier-singleton: #e2e0ea;
+  --tier-confirmed-ink: #15803d;
+  --tier-contested-ink: #b45309;
+  --tier-disputed-ink: #a21caf;
+  --tier-singleton-ink: #4b5563;
+}
+body { font: 14px/1.6 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; background: #fff; }
+h1 { font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; }
+h2 { font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; margin-top: 2rem; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: .25rem; }
+table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+th, td { border: 1px solid #e5e7eb; padding: .35rem .5rem; text-align: left; }
+th { background: #f9fafb; font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; font-weight: 600; }
+td.c { text-align: center; }
+.meta, .legend { color: #6b7280; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.legend { font-size: .85rem; }
+</style></head><body>
+<h1>Council Report — task (20dde633)</h1>
+<p class="meta">2026-09-11 · chair: deepseek · council: kimi, grok, qwen</p>
+<h2>Answer summary</h2>
+<table><tr><th>Tier</th><th>Count</th></tr><tr><td>Disputed</td><td>0</td></tr><tr><td>Contested</td><td>0</td></tr><tr><td>Confirmed</td><td>8</td></tr><tr><td>Singleton</td><td>0</td></tr></table>
+<p class="legend">Tiers report peer concurrence, never verification.</p>
+<h2>Adjudication matrix</h2>
+<table><tr><th>Finding</th><th>Sev</th><th>Raiser</th><th>kimi</th><th>grok</th><th>qwen</th><th>Tier</th><th>Decision</th></tr><tr style="background:var(--tier-confirmed)"><td>A1</td><td>blocker</td><td>kimi</td><td class="c">✓<sup>*</sup></td><td class="c">✓</td><td class="c">✓</td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>A2</td><td>major</td><td>kimi</td><td class="c">✓<sup>*</sup></td><td class="c">✓</td><td class="c">✓</td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>A3</td><td>minor</td><td>kimi</td><td class="c">✓<sup>*</sup></td><td class="c">–</td><td class="c">✓</td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>C1</td><td>blocker</td><td>qwen</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓<sup>*</sup></td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>C2</td><td>blocker</td><td>qwen</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓<sup>*</sup></td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>C3</td><td>blocker</td><td>qwen</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓<sup>*</sup></td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>C4</td><td>major</td><td>qwen</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓<sup>*</sup></td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr><tr style="background:var(--tier-confirmed)"><td>C5</td><td>major</td><td>qwen</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓<sup>*</sup></td><td style="color:var(--tier-confirmed-ink);font-weight:600">Confirmed</td><td></td></tr></table>
+<p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>
+<h2>Street-cred <span class="meta">(peers-only; lower = better)</span></h2>
+<table><tr><th>Model</th><th>peers-only</th><th>with-self</th></tr><tr><td>kimi</td><td>1.50</td><td>1.67</td></tr><tr><td>grok</td><td>3.00</td><td>3.00</td></tr><tr><td>qwen</td><td>1.00</td><td>1.33</td></tr></table>
+<h2>Cost</h2>
+<table><tr><th>Model</th><th>Status</th><th>Duration</th><th>Cost</th></tr><tr><td>kimi</td><td>complete</td><td>3m42s</td><td>$0.1465</td></tr><tr><td>grok</td><td>complete</td><td>2m28s</td><td>$0.3615</td></tr><tr><td>qwen</td><td>complete</td><td>2m43s</td><td>$0.0336</td></tr><tr><td>kimi (repair)</td><td>complete</td><td>33s</td><td>$0.0264</td></tr><tr><td>grok (repair)</td><td>complete</td><td>16s</td><td>$0.0276</td></tr><tr><td>qwen (repair)</td><td>complete</td><td>2m10s</td><td>$0.0300</td></tr><tr><td>kimi (judge)</td><td>complete</td><td>2m52s</td><td>$0.0740</td></tr><tr><td>grok (judge)</td><td>complete</td><td>1m1s</td><td>$0.0441</td></tr><tr><td>qwen (judge)</td><td>complete</td><td>4m5s</td><td>$0.0562</td></tr><tr><td>deepseek</td><td>complete</td><td>1m29s</td><td>$0.0079</td></tr>
+<tr><td><strong>Wave total</strong></td><td></td><td></td><td>$0.8078</td></tr></table>
+</body></html>
+"
+`;
+
+exports[`byte-identity: a verdict with no flagged row renders exactly as before (mutant ROWALWAYS) D0 with its three flags stripped renders byte-identically to main 5541bb44's renderer (snapshots; compared byte-for-byte against a git-archive render of main at recording time): stripped-d0-md 1`] = `
+"# Council Report — task (20dde633)
+
+_2026-09-11 · chair: deepseek · council: kimi, grok, qwen_
+
+## Answer summary
+
+| Tier | Count |
+|---|---|
+| Disputed | 0 |
+| Contested | 0 |
+| Confirmed | 8 |
+| Singleton | 0 |
+
+_Tiers report peer concurrence, never verification._
+
+## Adjudication matrix
+
+| Finding | Sev | Raiser | kimi | grok | qwen | Tier | Decision |
+|---|---|---|---|---|---|---|---|
+| A1 | blocker | kimi | ✓* | ✓ | ✓ | Confirmed |  |
+| A2 | major | kimi | ✓* | ✓ | ✓ | Confirmed |  |
+| A3 | minor | kimi | ✓* | – | ✓ | Confirmed |  |
+| C1 | blocker | qwen | ✓ | ✓ | ✓* | Confirmed |  |
+| C2 | blocker | qwen | ✓ | ✓ | ✓* | Confirmed |  |
+| C3 | blocker | qwen | ✓ | ✓ | ✓* | Confirmed |  |
+| C4 | major | qwen | ✓ | ✓ | ✓* | Confirmed |  |
+| C5 | major | qwen | ✓ | ✓ | ✓* | Confirmed |  |
+
+_Legend: ✓ agree · ✗ dispute · – neutral · \`*\` raiser's own vote_
+
+## Street-cred (peers-only; lower = better)
+
+| Model | peers-only | with-self |
+|---|---|---|
+| kimi | 1.50 | 1.67 |
+| grok | 3.00 | 3.00 |
+| qwen | 1.00 | 1.33 |
+
+## Findings by tier
+
+### Confirmed
+- **A1** (blocker, raiser kimi) — a2/d0/n0
+- **A2** (major, raiser kimi) — a2/d0/n0
+- **A3** (minor, raiser kimi) — a1/d0/n1
+- **C1** (blocker, raiser qwen) — a2/d0/n0
+- **C2** (blocker, raiser qwen) — a2/d0/n0
+- **C3** (blocker, raiser qwen) — a2/d0/n0
+- **C4** (major, raiser qwen) — a2/d0/n0
+- **C5** (major, raiser qwen) — a2/d0/n0
+
+## Cost
+
+| Model | Status | Duration | Cost |
+|---|---|---|---|
+| kimi | complete | 3m42s | $0.1465 |
+| grok | complete | 2m28s | $0.3615 |
+| qwen | complete | 2m43s | $0.0336 |
+| kimi (repair) | complete | 33s | $0.0264 |
+| grok (repair) | complete | 16s | $0.0276 |
+| qwen (repair) | complete | 2m10s | $0.0300 |
+| kimi (judge) | complete | 2m52s | $0.0740 |
+| grok (judge) | complete | 1m1s | $0.0441 |
+| qwen (judge) | complete | 4m5s | $0.0562 |
+| deepseek | complete | 1m29s | $0.0079 |
+| **Wave total** | | | $0.8078 |
+"
+`;
