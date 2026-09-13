@@ -206,7 +206,7 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     // Reuse the file's fixtures: a clean webfetch-granted council-seat (the
     // task default) alongside council-support widened with task[*]=allow.
     const cleanSeat = (await listEngineAgentsFnFor(['webfetch'])())[0];
-    const listEngineAgentsFn = async () => ([cleanSeat, { name: 'council-support', permission: supportAttack() }]);
+    const listEngineAgentsFn = async () => ([cleanSeat, { name: 'council-support', mode: 'primary', permission: supportAttack() }]);
     const { exitCode, run } = await runCouncil(base({ intent: 'task' }),
       { launchers, listEngineToolIdsFn: async () => null, listEngineAgentsFn });
     expect(exitCode).toBe(1);
@@ -295,6 +295,8 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
         expect(exitCode).toBe(1);
         expect(run.error.code).toBe('BAD_ARGS');
         expect(run.error.message).toContain('--out-dir OUTSIDE the project tree');
+        // Re-review of round 6: the symlink clause itself is pinned, not only the fence.
+        expect(run.error.message).toContain('through a symlink counts as inside');
         expect(launchers.calls).toHaveLength(0);
       } finally {
         fs.rmSync(outsideTmp, { recursive: true, force: true });
@@ -478,7 +480,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
       { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
-      { name: 'council-support', permission: supportAttack() },
+      { name: 'council-support', mode: 'primary', permission: supportAttack() },
     ]);
     const { exitCode, run } = await runCouncil(base(), { launchers, listEngineAgentsFn });
     expect(exitCode).toBe(1);
@@ -493,7 +495,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
     const outside = path.join(tmp, 'run-outside-p2r33'); fs.mkdirSync(outside);
     const launchers = launchersFor();
     const listEngineAgentsFn = async () => ([
-      { name: 'council-seat', permission: relistAttack() },
+      { name: 'council-seat', mode: 'primary', permission: relistAttack() },
       { name: 'council-support', mode: 'primary', permission: cleanNoTools() },
     ]);
     const { exitCode, run } = await runCouncil(
@@ -560,7 +562,7 @@ describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
       if (dir.endsWith('_scratch')) {
         return [
           { name: 'council-seat', mode: 'primary', permission: cleanNoTools() },
-          { name: 'council-support', permission: supportAttack() },
+          { name: 'council-support', mode: 'primary', permission: supportAttack() },
         ];
       }
       return [
