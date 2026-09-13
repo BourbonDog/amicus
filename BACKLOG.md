@@ -8700,3 +8700,33 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   cap as the reason), or — better, and it retires this whole class — the generator ruling already
   filed above (render constants without `()`, and either raise the cap or mark truncation), after
   which no module's export order is load-bearing for anything.
+
+## v4.9.9 candidates — follow-ups from the v4.9.8 cut (2026-09-13)
+
+Filed from the three council-leg-completion PRs (#246 idle-gate veto, #247 per-run seat tools,
+#248 unverified/refused census — three rounds on #248, every seat completed) and the v4.9.8
+release ritual (two live runs, $0.28: `--intent task`, and `--tools read` from a fake project
+whose seat was refused `.env` by `read[*.env]=deny` and `bash` as "not available", and continued).
+
+- [ ] **Policy: should an unverified or refused MAJORITY degrade the run?** Today (P3-R1, amended
+  by P3-R13) the seat census, the report rows, the CI title/footer and one end-of-run stderr line
+  say it; the exit code stays 0, `run.json`/`verdict.json.degrades[]` stay clean, the Workspace
+  GUI's lost-seat panels (which read `run.json.degrades`) stay dark, and the council-review check
+  stays green (`fail_on: rethink`). Raised as a major by two seats in #248 rounds 1–3 and held as
+  the owner's spec boundary each time. A sink `degrade` on the (already registered) channels
+  `unverified-repair`/`repair-refused` is the one-line mechanism; the exit-code trade is the
+  decision.
+- [ ] **End-to-end pin for a refused repair reaching `verdict.json` on disk.** The chain is pinned
+  hop by hop (`run-stages.test.js:372`, `run-assemble.test.js:616`, `tally.js:179`, `verdict.test.js`
+  V13 through `tally()`), but no `runCouncil` test scripts a repair wave that returns a different
+  finding count; the round-3 chair called the gap a blocker (refuted at the four sites, still worth
+  the belt-and-braces).
+- [ ] **Workspace GUI reads the census.** `seatsReviewed {reviewed, unverified, refused, of}` is in
+  every `verdict.json` since v4.9.8; the Workspace shows none of it.
+- [ ] **Two CI flakes, one pinned.** `tests/doctor-alias-check.test.js`'s 24 h boundary case was
+  pinned to one clock reading in `cacc3c1c`; `tests/e2e.test.js` "should pass model to SDK
+  sendPromptAsync call" failed once on windows/node 22 (main run 34777725713, green on re-run)
+  amid "import after the Jest environment has been torn down" noise from two other suites — not
+  yet diagnosed.
+- [ ] **`report.js` sits at exactly 300/300 lines** (the sixth src file at the cap); its next edit
+  needs a split.
