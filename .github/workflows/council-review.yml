@@ -760,7 +760,10 @@ jobs:
           # sees without opening anything. `if .seatsReviewed then … else "" end`
           # because the key is emit-when-set — a bare interpolation would publish
           # "seats null/null" on exactly the degraded runs it exists to describe.
-          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)" + (if .seatsReviewed then " · seats \(.seatsReviewed.reviewed)/\(.seatsReviewed.of)" else "" end)' "$RUN_DIR/verdict.json")
+          # #242 (v4.9.8): `unverified` rides the same census, printed only when
+          # non-zero — jq orders null below every number, so an older verdict.json
+          # (no key) and a clean run (0) both print exactly as before.
+          TITLE=$(jq -r --arg v "$OVERALL" '"VERDICT: \($v) — Confirmed \(.tierCounts.Confirmed) · Contested \(.tierCounts.Contested) · Disputed \(.tierCounts.Disputed) · Singleton \(.tierCounts.Singleton)" + (if .seatsReviewed then " · seats \(.seatsReviewed.reviewed)/\(.seatsReviewed.of)" + (if .seatsReviewed.unverified > 0 then " (\(.seatsReviewed.unverified) unverified)" else "" end) else "" end)' "$RUN_DIR/verdict.json")
           {
             echo "**Chair verdict:** VERDICT: ${OVERALL}"
             echo
@@ -870,7 +873,8 @@ jobs:
           # whenever no --critic was requested, and CI never requests one. Carries
           # its own trailing separator so an absent census leaves the footer
           # byte-identical rather than stranding a " · ".
-          SEATS_LINE=$(jq -r 'if .seatsReviewed then "seats reviewed: \(.seatsReviewed.reviewed) of \(.seatsReviewed.of) · " else "" end' "$RUN_DIR/verdict.json")
+          # #242 (v4.9.8): the unverified count, only when non-zero (see the TITLE note).
+          SEATS_LINE=$(jq -r 'if .seatsReviewed then "seats reviewed: \(.seatsReviewed.reviewed) of \(.seatsReviewed.of)" + (if .seatsReviewed.unverified > 0 then " (\(.seatsReviewed.unverified) unverified)" else "" end) + " · " else "" end' "$RUN_DIR/verdict.json")
           {
             echo "$MARKER"
             echo "## Council Review (adjudicated — engine v2)"

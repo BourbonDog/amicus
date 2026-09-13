@@ -151,6 +151,19 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
+  test('#242: the unverified count reaches the title and the footer, printed only when non-zero', () => {
+    const y = yml();
+    const checkIdx = y.indexOf('Publish the Council Review check run');
+    const commentIdx = y.indexOf('Post sticky PR comment');
+    // `> 0`, never a bare truthiness test: jq treats 0 as TRUE, so `if .seatsReviewed.unverified`
+    // would print "(0 unverified)" on every clean run; and jq orders null below every number,
+    // so a pre-4.9.8 verdict.json (no key) prints exactly as before. Named mutant TITLEBLIND
+    // (the nested clause deleted from the TITLE line) reddens the first segment.
+    for (const seg of [y.slice(checkIdx, commentIdx), y.slice(commentIdx)]) {
+      expect(seg).toContain('if .seatsReviewed.unverified > 0 then " (\\(.seatsReviewed.unverified) unverified)" else "" end');
+    }
+  });
+
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
     // 2026-08-26 owner ruling: kimi off the bench (cost vs contribution — the
