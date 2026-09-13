@@ -20,8 +20,8 @@
  * run B2: a 19,064-byte review carried it). Both facts are tested with `=== true` / a plain
  * object, matching what tally.js emits; a hand-assembled truthy string is not a flag.
  *
- * `data.seat` is the row's label: the seat id when the bench repeats an alias, else the alias —
- * the `seat || model` rule the street-cred rows use in both renderers.
+ * `data.seat` is the row's label — verdict-seats-reviewed.js :: seatLabel, shared with the end-of-run
+ * stderr line so no row is ever named two ways (council #248 r2, A3).
  *
  * Role and status ARE consulted, through the census's own predicates (verdict-seats-reviewed.js ::
  * isUnverifiedSeat / isRefusedSeat — council #248 round 1, B1/C2/D2): a row renders here exactly
@@ -36,13 +36,8 @@
 const { makeDegrade } = require('../utils/degrade');
 // The census's own predicates — one function, two readers, so the report and
 // `seatsReviewed` cannot disagree (a leaf that requires nothing; no cycle).
-const { isUnverifiedSeat, isRefusedSeat } = require('./verdict-seats-reviewed');
-
-function seatLabel(r) {
-  if (typeof r.seat === 'string' && r.seat) { return r.seat; }
-  if (typeof r.model === 'string' && r.model) { return r.model; }
-  return 'unknown';
-}
+// … and the one seat label every human surface uses (P3-R18).
+const { isUnverifiedSeat, isRefusedSeat, seatLabel } = require('./verdict-seats-reviewed');
 
 function unverifiedRow(r) {
   const seat = seatLabel(r);
@@ -55,14 +50,17 @@ function unverifiedRow(r) {
   });
 }
 
+// The engine's only refusal code today is REPAIR_CHANGED_FINDING_COUNT (run-stages.js); a
+// hand-assembled row without one gets "code not recorded", never an invented code (council #248
+// r2, C6).
 function refusedRow(r) {
   const seat = seatLabel(r);
   const { code: rawCode, detail: rawDetail } = r.repairRefused;
-  const code = (typeof rawCode === 'string' && rawCode.trim()) ? rawCode.trim() : 'REPAIR_REFUSED';
+  const code = (typeof rawCode === 'string' && rawCode.trim()) ? rawCode.trim() : null;
   const detail = (typeof rawDetail === 'string' && rawDetail.trim()) ? rawDetail.trim() : 'the repair broke its contract';
   return makeDegrade({
     channel: 'repair-refused',
-    what: `seat ${seat}'s repair was refused (${code})`,
+    what: `seat ${seat}'s repair was refused (${code || 'code not recorded'})`,
     why: detail,
     effect: 'the seat contributed no findings; its review text still reached the judges and it counts as reviewed',
     data: { seat, code },

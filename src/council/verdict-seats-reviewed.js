@@ -18,11 +18,13 @@
  * repair of a response with no parseable findings block — the LC-11 flag
  * run-stages.js :: runStage1 sets on the row. The seat stays in `reviewed` (its leg
  * completed) and is counted here too. ALWAYS written once the census is: 0 is a
- * measurement, absence keeps its one meaning. Key order is reviewed / unverified / of —
+ * measurement, absence keeps its one meaning. Key order is reviewed / unverified / refused / of —
  * the shape spec §5 names and the council-review check title prints. Not a stub count
  * (study run B2: a real 19,064-byte review with a malformed trailing block carried the
- * flag). A refused repair (`repairRefused`) is NOT counted: that seat tallied no findings
- * at all, and the report's `repair-refused` row says so.
+ * flag). A refused repair (`repairRefused`) is NOT counted under `unverified` — that seat
+ * tallied no findings at all — and since council #248 round 2 has its OWN number, `refused`
+ * (P3-R17), so a seat that contributed nothing is visible on the same gate surfaces (title,
+ * footer, stderr) and never reads as a full reviewer on them.
  *
  * `unverified ⊆ reviewed` and "bench rows only" are STRUCTURAL (council #248 round 1, B1/C2/D2):
  * `isUnverifiedSeat` requires a bench role, `status: 'complete'` and the literal `true`, and
@@ -80,8 +82,21 @@ function isRefusedSeat(r) {
 }
 
 /**
+ * The row's label on every human surface — the report rows and the end-of-run stderr line —
+ * so the two can never name one row differently (council #248 r2, A3): the seat id when the
+ * bench repeats an alias, else the alias (the `seat || model` rule the street-cred rows use in
+ * both renderers), and 'unknown' for a hand-assembled row carrying neither — silence would
+ * hide the flag.
+ */
+function seatLabel(r) {
+  if (r && typeof r.seat === 'string' && r.seat) { return r.seat; }
+  if (r && typeof r.model === 'string' && r.model) { return r.model; }
+  return 'unknown';
+}
+
+/**
  * @param {Array<object>|undefined} runStats
- * @returns {{seatsReviewed?: {reviewed: number, unverified: number, of: number}}}
+ * @returns {{seatsReviewed?: {reviewed: number, unverified: number, refused: number, of: number}}}
  */
 function seatsReviewedOf(runStats) {
   // ⚠️ `Array.isArray`, NOT `runStats || []`. buildVerdict is reachable on
@@ -91,7 +106,11 @@ function seatsReviewedOf(runStats) {
   // truthy non-array sails past `||` and throws on `.filter`, turning a missing
   // census into a crashed verdict build. The closed-literal comment further down
   // makes the same argument about the same caller.
-  const seats = (Array.isArray(runStats) ? runStats : []).filter(r => r && isBenchRole(r.role));
+  // A row is a PLAIN OBJECT: an array wearing row properties is not a seat (council #248 r2, A5) —
+  // the same guard the shared predicates carry, so of/reviewed/unverified/refused and the report
+  // rows all agree on every input.
+  const seats = (Array.isArray(runStats) ? runStats : [])
+    .filter(r => !!r && typeof r === 'object' && !Array.isArray(r) && isBenchRole(r.role));
   if (seats.length === 0) { return {}; }
   return { seatsReviewed: {
     reviewed: seats.filter(r => r.status === 'complete').length,
@@ -99,8 +118,13 @@ function seatsReviewedOf(runStats) {
     // emit-when-true (V14), a completed leg (V15/V16). Named mutants: CENSUSZERO
     // (`unverified: 0`) and SUBSETBLIND — tests/council/verdict.test.js.
     unverified: seats.filter(isUnverifiedSeat).length,
+    // council #248 round 2 (A2/C2, ruling P3-R17): a refused repair — the seat tallied NO findings
+    // — was invisible on every gate surface while counting as a full reviewer. Its own number,
+    // always written, never more than `reviewed` (the same predicate gate), NOT folded into
+    // `unverified` (a seat with no findings has no unverified findings).
+    refused: seats.filter(isRefusedSeat).length,
     of: seats.length,
   } };
 }
 
-module.exports = { seatsReviewedOf, isBenchRole, isUnverifiedSeat, isRefusedSeat };
+module.exports = { seatsReviewedOf, isBenchRole, isUnverifiedSeat, isRefusedSeat, seatLabel };

@@ -115,15 +115,15 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
   test('a refused repair with no code/detail (hand-assembled input) still renders, with fallbacks', () => {
     const rows = lostRowsOf([seatRow('beta', { repairRefused: {} })]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].what).toBe("seat beta's repair was refused (REPAIR_REFUSED)");
+    expect(rows[0].what).toBe("seat beta's repair was refused (code not recorded)");
     expect(rows[0].why).toBe('the repair broke its contract');
-    expect(rows[0].data).toEqual({ seat: 'beta', code: 'REPAIR_REFUSED' });
+    expect(rows[0].data).toEqual({ seat: 'beta', code: null });
 
     // The fallback isn't just for ABSENT code/detail: a non-string pair and a
     // whitespace-only/empty pair both fall back the same way.
     for (const bad of [{ code: 42, detail: 7 }, { code: '   ', detail: '' }]) {
       const r = lostRowsOf([seatRow('beta', { repairRefused: bad })])[0];
-      expect(r.what).toBe("seat beta's repair was refused (REPAIR_REFUSED)");
+      expect(r.what).toBe("seat beta's repair was refused (code not recorded)");
       expect(r.why).toBe('the repair broke its contract');
     }
 
@@ -190,13 +190,18 @@ describe('lostRowsOf — the rows the tally already knows (#242, spec §5)', () 
       [seatRow('a', { findingsUnverified: 'yes' })],
       [seatRow('a'), seatRow('b', { findingsUnverified: true }), seatRow('c', { status: 'error', findingsUnverified: true })],
       readJson('tally.json').runStats,
+      // council #248 round 2 (P3-R17): a completed and a timed-out refused repair — the
+      // report's repair-refused rows must agree with `seatsReviewed.refused` on both.
+      [seatRow('a', { conformance: 'unstructured', repairRefused: { code: 'C', detail: 'd' } })],
+      [seatRow('a', { status: 'timeout', conformance: 'unstructured', repairRefused: { code: 'C', detail: 'd' } })],
     ];
     for (const rows of shapes) {
       const key = JSON.stringify(rows.map(r => [r.role, r.status, r.findingsUnverified]));
-      const census = seatsReviewedOf(rows).seatsReviewed || { reviewed: 0, unverified: 0, of: 0 };
+      const census = seatsReviewedOf(rows).seatsReviewed || { reviewed: 0, unverified: 0, refused: 0, of: 0 };
       const rendered = lostRowsOf(rows).filter(d => d.channel === 'unverified-repair').length;
-      expect(`${key} → rows ${rendered} · census ${census.unverified} · reviewed ${census.reviewed} · subset ${census.unverified <= census.reviewed}`)
-        .toBe(`${key} → rows ${census.unverified} · census ${census.unverified} · reviewed ${census.reviewed} · subset true`);
+      const refusedRendered = lostRowsOf(rows).filter(d => d.channel === 'repair-refused').length;
+      expect(`${key} → rows ${rendered} · census ${census.unverified} · reviewed ${census.reviewed} · subset ${census.unverified <= census.reviewed} · refused rows ${refusedRendered} · refused census ${census.refused}`)
+        .toBe(`${key} → rows ${census.unverified} · census ${census.unverified} · reviewed ${census.reviewed} · subset true · refused rows ${census.refused} · refused census ${census.refused}`);
     }
   });
 });

@@ -151,7 +151,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
-  test('#242: the unverified count reaches the title and the footer, printed only when non-zero', () => {
+  test('#242: the unverified and refused counts reach the title and the footer, printed only when non-zero', () => {
     const y = yml();
     const checkIdx = y.indexOf('Publish the Council Review check run');
     const commentIdx = y.indexOf('Post sticky PR comment');
@@ -162,6 +162,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // Measured red set: TITLEBLIND, 1 test.
     for (const seg of [y.slice(checkIdx, commentIdx), y.slice(commentIdx)]) {
       expect(seg).toContain('if .seatsReviewed.unverified > 0 then " (\\(.seatsReviewed.unverified) unverified)" else "" end');
+      expect(seg).toContain('if .seatsReviewed.refused > 0 then " (\\(.seatsReviewed.refused) refused)" else "" end');
     }
   });
 

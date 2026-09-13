@@ -67,7 +67,7 @@ test('review control: the same run WITHOUT intent appends exactly once', async (
  * from-scratch stage1/repair/stage2/chair script keyed to a model ('glm') this suite never
  * benches, disproportionate to what this stderr-only change needs to be exercised.
  */
-function finishRunCtx(runDir, runStatsRow) {
+function finishRunCtx(runDir, runStatsRows) {
   fs.mkdirSync(runDir, { recursive: true });
   return {
     o: { runDir, runId: 'g1', chair: 'deepseek', debate: false, critic: null, lenses: null,
@@ -77,7 +77,9 @@ function finishRunCtx(runDir, runStatsRow) {
     debatedInput: {
       meta: { runId: 'g1', runType: 'headless', date: '2026-09-13', chair: 'deepseek',
         models: ['glm'], claudeInCouncil: false },
-      findings: [], rankings: [], adjudications: [], runStats: [runStatsRow],
+      findings: [], rankings: [], adjudications: [],
+      // A single hand-built row (every P3-R13 case) or an array of them (P3-R17's mixed case).
+      runStats: Array.isArray(runStatsRows) ? runStatsRows : [runStatsRows],
     },
     debateFindings: null, appendRunFn: jest.fn(), degrade: { all: () => [] }, deadWaves: [],
     now: () => '2026-09-13T00:00:00.000Z',
@@ -110,6 +112,46 @@ test('a run with no unverified seats prints no Notice: line about verification (
     finishRun(finishRunCtx(runDir, row));
     const notice = spy.mock.calls.map(c => c[0]).find(s => s.includes('nothing could verify'));
     expect(notice).toBeUndefined();
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a completed bench seat with a refused repair prints exactly one Notice: line on stderr naming it (P3-R17)', () => {
+  const runDir = path.join(tmp, 'council-g3');
+  const row = { model: 'qwen', role: 'seat', wasChair: false, conformance: 'unstructured',
+    status: 'complete', durationMs: 1, usage: null,
+    repairRefused: { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'repair returned 2 findings, original attempted 3' } };
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    finishRun(finishRunCtx(runDir, row));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const notice = spy.mock.calls[0][0];
+    expect(notice.startsWith('Notice: 1 of ')).toBe(true);
+    expect(notice).toContain("repairs were refused and contributed no findings (qwen)");
+    expect(notice).not.toContain('nothing could verify');
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test('a run with both an unverified seat and a refused seat prints one Notice: line naming both, unverified first (P3-R17)', () => {
+  const runDir = path.join(tmp, 'council-g4');
+  const glmRow = { model: 'glm', role: 'seat', wasChair: false, conformance: 'repaired',
+    status: 'complete', durationMs: 1, usage: null, findingsUnverified: true };
+  const qwenRow = { model: 'qwen', role: 'seat', wasChair: false, conformance: 'unstructured',
+    status: 'complete', durationMs: 1, usage: null,
+    repairRefused: { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'repair returned 2 findings, original attempted 3' } };
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    finishRun(finishRunCtx(runDir, [glmRow, qwenRow]));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const notice = spy.mock.calls[0][0];
+    expect(notice).toContain("nothing could verify (glm)");
+    expect(notice).toContain("contributed no findings (qwen)");
+    // Joined by '; ', unverified first — the exact separator the code emits between clauses.
+    expect(notice).toContain('(glm); ');
+    expect(notice.indexOf('(glm)')).toBeLessThan(notice.indexOf('(qwen)'));
   } finally {
     spy.mockRestore();
   }
