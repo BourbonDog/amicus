@@ -24,9 +24,27 @@
  * Named mutants (exact edits in src/council/report-lost-rows.js; red sets measured on the
  * committed tree and recorded here by the implementer):
  *   ROWALWAYS   — `if (r.findingsUnverified === true) { rows.push(unverifiedRow(r)); }`
- *                 → `rows.push(unverifiedRow(r));` (every row becomes a loss). Red set: TBD-MEASURE
+ *                 → `rows.push(unverifiedRow(r));` (every row becomes a loss). Red set (10 of
+ *                 72): "D0: one unverified-repair row per flagged seat, in runStats order, as
+ *                 frozen makeDegrade records", "a refused repair gets a repair-refused row
+ *                 naming the code, with the detail as the why", "a refused repair with no
+ *                 code/detail (hand-assembled input) still renders, with fallbacks",
+ *                 "emit-when-TRUE, matching the producer: a truthy non-boolean flag is not a
+ *                 flag, a string repairRefused is not a refusal", "tolerates every schema-free
+ *                 shape the report entry points can deliver", 'never says "stub", and both
+ *                 channels are registered (the degrade-contract drift pin reads src/)', "the
+ *                 fixture is the pre-4.9.8 verdict.json — the rows come from runStats, not from
+ *                 a rebuild", "html: the section table carries the channel column and the voice
+ *                 line", "av-receiver (three rows, no flags): no rows, no section — GREEN at
+ *                 HEAD by construction, pinned by ROWALWAYS", and "D0 with its three flags
+ *                 stripped renders to the bytes main 5541bb44 produced (md 2007 / html 12560)".
  *   REFUSEDDROP — the `if (r.repairRefused && …) { rows.push(refusedRow(r)); }` statement removed.
- *                 Red set: TBD-MEASURE
+ *                 Red set (4 of 72): "a refused repair gets a repair-refused row naming the
+ *                 code, with the detail as the why", "a refused repair with no code/detail
+ *                 (hand-assembled input) still renders, with fallbacks", "a row carrying BOTH
+ *                 facts yields both rows, unverified first — the exclusivity is the producer's,
+ *                 not the renderer's", and 'never says "stub", and both channels are registered
+ *                 (the degrade-contract drift pin reads src/)'.
  */
 
 const fs = require('fs');
