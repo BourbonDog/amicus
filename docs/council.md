@@ -22,6 +22,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [The pipeline, end to end](#the-pipeline-end-to-end)
 - [`amicus council run`](#amicus-council-run)
   - [Task mode (`--intent task`)](#task-mode---intent-task)
+  - [Tool access per usage (`--tools`)](#tool-access-per-usage---tools)
   - [Debate mode](#debate-mode)
 - [Council Workspace (GUI)](#council-workspace-gui)
   - [Auto-open on `amicus_council_run` (v4.5)](#auto-open-on-amicus_council_run-v45)
@@ -114,6 +115,7 @@ amicus council run --prompt-file <briefing.md>
     [--template <name|path>] [--artifact <file>] [--var k=v]  # v4.5, see docs/usage.md#briefing-templates
     [--pack <name|path>]                                       # v4.5, see docs/usage.md#policy-packs
     [--intent review|task]                                     # v4.9, see Task mode below
+    [--tools <a,b,c>] [--agent Plan|Build]                    # v4.9.8, see Tool access below
 ```
 
 **The headless engine (v4.0).** Everything the `second-opinion` skill orchestrates by hand in
@@ -371,6 +373,99 @@ empty-section wordings — is used verbatim in both intents. One vocabulary, two
   machinery and has no task-mode meaning.
 - **Task runs build no reliability history**, so they never contribute to — and never benefit from —
   `amicus council stats`, including the ledger-driven chair-fallback promotion.
+
+### Tool access per usage (`--tools`)
+
+Tool access is a property of the **run**, set by the caller according to whether the seats
+must go and get their material — not a property of the mode (spec 2026-09-11 §2). Every
+council leg runs as one of two agents the run's own OpenCode server registers:
+
+- **`council-seat`** — stage-1 seats (the bench wave, the critic, the lenses) and their retries.
+  Its tools are the intent's default ∪ `--tools`: **task mode** defaults to `webfetch` (the
+  co-worker can research); **review mode** defaults to none (the artifact under review arrives
+  in the briefing — `--artifact`, `--pack`, or pasted). `--tools read,grep,glob,bash` opts local
+  tools in, even for task mode — opt-in is deliberate.
+- **`council-support`** — repair re-prompts, the Stage-2 judges, debate legs and the chair.
+  No tools, ever: their briefings already say so, and the agent now enforces it.
+  The wildcard deny also covers the engine's own doom-loop and question prompts, so the engine
+  never blocks a headless leg on a tool-level prompt; a model that asks its question in prose
+  simply ends its turn (what a leg does after a refusal is the §7 live check).
+
+`task` and `skill` are refused (`task` spawns child sessions amicus cannot observe; `skill` is
+where a seat starts reading the harness instead of the brief), as are `edit`, `write`,
+`apply_patch` (a seat never modifies the tree), `question` (a headless leg has no human) and
+`invalid`. Every seat tool — the intent's default included — is validated against the engine's
+declared list when the engine lists its tools; an unknown id is `BAD_ARGS` naming what the engine
+declares. `--agent Plan|Build` is the escape hatch: every leg runs on the engine's own agent, no
+council agents, no allowlist; it cannot be combined with `--tools`. Its legs run with the run
+directory (inside the project) as their working directory, so a seat can read the run's own
+records, the label map included — use it only where that is acceptable.
+`Build` is edit-capable: unlike the council agents' fenced allowlist, it can edit files and run
+commands over that directory (the CLI prints a Notice when you opt into it); `Plan` is the
+pre-4.9.8 default: it denies edits but allows reads, searches and the shell (measured on the
+pinned engine), so it is the escape hatch that restores v4.9.7's behaviour exactly, and the CLI
+prints a Notice for it too (every leg — judges and the chair included — can run commands).
+
+Refusals land in a run directory that already exists, so the refusal itself is recorded (the same
+order the other pre-spend checks use); nothing is launched and nothing is spent. When the engine
+cannot list its tools at all, a defaults-only run continues on the recorded degrade while an
+explicit opt-in is refused — in practice this only decides a defaults-only run's outcome when the
+shared server is otherwise up and only the tool-ids endpoint itself fails; a server that cannot
+start at all is now caught by the engine-rendered verification below regardless of intent (ruling
+P2-R38).
+
+**Engine-rendered verification.** After registration, the run reads back what the engine actually
+rendered for `council-seat`/`council-support` — the run directory, its `_scratch` support-leg
+directory, and the project tree too when a local tool is opted in (ruling P2-R39) — and refuses
+before any launch if an `opencode.json` or `.opencode/agent` file the engine loads for that
+directory (the tree's, or your global config) altered them — naming that config as the cause
+and `--agent` as the knowingly-unprotected alternative (ruling P2-R33). An `external_directory`
+allow after the wildcard deny is exempted only when it is the engine's own tool-output cache
+under its own XDG-first data directory (`$XDG_DATA_HOME/opencode` when set, else
+`~/.local/share/opencode` — ruling P2-R42, matching how `src/utils/auth-json.js`/
+`src/utils/engine-log.js` already resolve it); any other one reads as a widened agent too
+(ruling P2-R40). Unverifiable (no shared server to ask) REFUSES whenever
+verification can run at all — a defaults-only run included, no more quiet degrade (ruling
+P2-R38); it is skipped only when a caller supplies its own transport with no way to ask the
+engine at all (test-only — production always VERIFIES and refuses when it has no server to ask).
+When the run's own shared OpenCode server fails to start, that IS "no server to ask": a default
+(non-`--agent`) run now refuses before any launch rather than falling back — the per-wave
+fallback servers that used to absorb a shared-server failure for every run now serve only an
+`--agent` run, whose verification is skipped by design and so never has to ask at all (ruling
+P2-R43). `--agent Plan` restores v4.9.7's per-wave behaviour exactly.
+
+**Run-directory placement with a local tool.** A seat that can read the project tree must
+not be able to read this run's sibling sessions, so with any local tool opted in the run dir
+must sit **outside** the project tree (`--out-dir`), under your home, tmp or
+`AMICUS_PROJECT_ROOTS`; the seats are then scoped to the project tree (`external_directory:
+deny`) while their metadata stays in the run dir. Over MCP the run dir stays inside the
+project, so local tools are refused there with the CLI named; tools that never touch the tree
+(`webfetch`, `websearch`, `todowrite`) over MCP are fine.
+
+**What the seat is told.** With no tools it gets the same no-tools sentence as the chair
+(`Do NOT use any tools or read any files; …`), with tools one line naming exactly them, and
+under `--agent` a line saying it runs as the engine's named agent with its own tool set. The
+config enforces; the sentence informs — study run E1 showed gemini makes zero tool calls when
+told not to.
+
+**Secrets.** With `read` opted in, the seat agent denies `.env`, `.env.*` and `.envrc` files at
+the engine (the match is case-sensitive on Linux; no other spelling is fenced) — the seat gets a
+refusal and the leg continues (the deny rules are measured to render after the seat's own
+`read=allow`, and CI now models the engine's own evaluator — transcribed from its source — over
+the real rendering, confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the
+refusal itself is exercised by the release ritual's live `--tools read` run, not by the probe).
+`grep`, `glob` and `bash` have no per-file fence: opting them in trusts every seat with
+everything in the tree, `.env` included — grep returns its contents, glob lists its name — and
+the CLI prints a Notice when you opt any of grep, glob or bash in. Keep secrets out of any tree
+you point a `bash`, `grep` or `glob` seat at.
+With a local tool the seat's engine session is rooted at the project tree, so the engine also
+loads that tree's own opencode config; do not point a local-tools seat at a tree you do not trust.
+
+`bash` is outside every fence: a bash seat runs commands as you — it can reach the run
+directory outside the tree (this run's own records included: the label map that anonymizes the
+bench and every review already on disk, so bench anonymity and independence do not hold under
+bash), your home directory and the network, and the `webfetch` deny does not bind a shell. Opt
+it in only where that is acceptable; the CLI prints a Notice when you do.
 
 ### Debate mode
 

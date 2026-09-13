@@ -169,5 +169,39 @@ describe('buildServerOptions provider model sync', () => {
     expect(opts.config.provider.openrouter.models).toBeDefined();
     expect(opts.config.model).toBe('openrouter/x-ai/grok-4.3');
   });
+
+  it('merges caller-supplied agents after chat (council seat agents, spec 2026-09-11 §4)', () => {
+    const agents = {
+      'council-seat': { mode: 'primary', tools: { '*': false, webfetch: true }, permission: { edit: 'deny' } },
+      'council-support': { mode: 'primary', tools: { '*': false } },
+    };
+    const opts = buildServerOptions({ agents });
+    expect(opts.config.agent['council-seat']).toEqual(agents['council-seat']);
+    expect(opts.config.agent['council-support']).toEqual(agents['council-support']);
+    expect(opts.config.agent.chat).toBeDefined(); // never displaced
+  });
+
+  it('omits every council agent when none are supplied (non-council servers are byte-identical)', () => {
+    const opts = buildServerOptions({});
+    expect(Object.keys(opts.config.agent)).toEqual(['chat']);
+  });
+
+  // Fix-round-1 nit (opencode-client.js:661): a `chat` key in `agents` used to replace
+  // `config.agent.chat` with a brand-new object, detaching it from the local
+  // `chatAgent` the systemPrompt branch below mutates — so the "can never
+  // displace chat" comment was false. `chat` is now skipped in the merge loop.
+  it('ignores a chat key in agents — chat keeps the mutation the systemPrompt branch applies to it', () => {
+    const opts = buildServerOptions({
+      agents: { chat: { mode: 'other-ignored' } },
+      systemPrompt: 'hello from systemPrompt',
+    });
+    expect(opts.config.agent.chat.mode).toBe('primary'); // chatAgent's own mode, never overwritten
+    expect(opts.config.agent.chat.prompt).toBe('hello from systemPrompt'); // same object systemPrompt mutated
+  });
+
+  it('ignores agents when it is an array, not a plain object', () => {
+    const opts = buildServerOptions({ agents: ['not', 'an', 'object'] });
+    expect(Object.keys(opts.config.agent)).toEqual(['chat']);
+  });
 });
 // MCP type normalization tests extracted to tests/mcp-normalization.test.js

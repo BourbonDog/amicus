@@ -95,10 +95,23 @@ function happyTransport() {
 describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   let tmp; let pair; let startFn; let script;
 
+  // Ruling P2-R38 (council #247 round 3): this suite predates the seat-tools
+  // engine-rendering tripwire (v4.4.1 vs. spec 2026-09-11 §4) and never
+  // injects `launchers`, so `canVerify` is unconditionally true here — and
+  // its fake server pair's `client` has no real `app.agents` method, so
+  // without this seam `listEngineAgents` would return null on EVERY run
+  // (the shared-server-failure cases AND the successful-acquisition ones
+  // alike) and the new unconditional refusal would fire before any of this
+  // suite's own server-reuse/degrade/exit-code assertions ever ran. A clean
+  // rendering keeps the tripwire (unrelated to server-reuse) verifying ok.
+  const cleanListEngineAgentsFn = async () => ([
+    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  ]);
   const run = (overrides = {}, deps = {}) => runCouncil(
     baseOptions(tmp, overrides),
     { appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
-      startOpenCodeServerFn: startFn, ...deps });
+      startOpenCodeServerFn: startFn, listEngineAgentsFn: cleanListEngineAgentsFn, ...deps });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -376,17 +389,24 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     } finally { spy.mockRestore(); stderr.mockRestore(); }
   });
 
-  // Standing ruling: never fail closed on availability. A shared server that
-  // cannot start is a NOTICE — the run continues with one server per wave.
+  // Standing ruling, NARROWED by ruling P2-R43 (council #247 round-3 nits):
+  // never fail closed on availability *for a run with no council agents to
+  // verify*. `--agent` still degrades to one server per wave when the shared
+  // server cannot start — that stays a NOTICE, never a refusal. A DEFAULT
+  // (non-`--agent`) run is different since ruling P2-R38: `o.councilAgents`
+  // is set, so the run tries to verify it against the very server that just
+  // failed to start, gets a null answer back, and now REFUSES before any
+  // launch — the per-wave fallback below serves only an `--agent` run.
   //
-  // ⚠️ …but that fallback IS the bug this task removed, so it must also be LOUD
-  // and DURABLE (Step 10.5). Run v441plan02 degraded exactly here, lost 4 of 5
-  // seats to `database is locked`, and left nothing on run.json to show for it.
-  // v4.6 Plan 1 Task 8: this channel now routes through the real degrade sink,
-  // which made the exit-code degrade this describe block's title has always
-  // claimed REAL — a shared-server-acquisition failure with a working per-wave
-  // fallback now correctly will exit degraded (2), not a silent 0.
-  describe('a shared-server start failure degrades — loudly, durably, never fatally', () => {
+  // ⚠️ …but the fallback itself IS the mechanism this task's v4.4.1 work
+  // introduced, so it must also be LOUD and DURABLE (Step 10.5) for the
+  // `--agent` shape that still reaches it. Run v441plan02 degraded exactly
+  // here, lost 4 of 5 seats to `database is locked`, and left nothing on
+  // run.json to show for it. v4.6 Plan 1 Task 8: this channel now routes
+  // through the real degrade sink, which made the exit-code degrade this
+  // describe block's title used to claim for EVERY run real only for the
+  // `--agent` case P2-R38 leaves it in.
+  describe('a shared-server start failure: a default run refuses (P2-R43); an --agent run still degrades to per-wave servers', () => {
     let stderr; let perWaveStart;
     const runDoc = () => JSON.parse(
       fs.readFileSync(path.join(baseOptions(tmp).runDir, 'run.json'), 'utf-8'));
@@ -432,23 +452,33 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     });
     afterEach(() => { stderr.mockRestore(); });
 
-    test('it degrades to per-wave servers rather than aborting the run', async () => {
-      const { exitCode } = await run();
-      expect(exitCode).toBe(2);
-      for (const [o] of mockRunFanout.mock.calls) {
-        expect(o.server).toBeUndefined();
-        expect(o.serverClient).toBeUndefined();
-      }
-      // …and the fallback was genuinely EXERCISED: every wave started its own.
-      expect(perWaveStart.mock.calls.length).toBe(mockRunFanout.mock.calls.length);
-      expect(perWaveStart.mock.calls.length).toBeGreaterThanOrEqual(3);
-      expect(stderr.mock.calls.map(c => String(c[0])).join('')).toMatch(/shared OpenCode server/i);
+    // Ruling P2-R43 (round-3 nits): REPLACES the old "it degrades to per-wave
+    // servers rather than aborting the run" — that claim is no longer true
+    // for a DEFAULT run (see the describe-level comment above). A default
+    // run's `o.councilAgents` is set, so it tries to verify against the very
+    // server that just failed to start, before the per-wave fallback below
+    // is ever reached. The outer describe's blanket clean `listEngineAgentsFn`
+    // seam is explicitly cleared here (`undefined` overrides it in the
+    // shared `run()` helper) so the REAL null path fires — pinning
+    // production, not a faked "a server existed" answer.
+    test('a default run refuses before any launch — the old per-wave fallback no longer applies to it', async () => {
+      const result = await run({}, { listEngineAgentsFn: undefined });
+      expect(result.exitCode).toBe(1);
+      expect(result.run.error.code).toBe('BAD_ARGS');
+      expect(result.run.error.message).toContain('could not be verified');
+      expect(result.run.error.message).toContain('no shared server was available');
+      expect(mockRunFanout).not.toHaveBeenCalled();
+      expect(perWaveStart).not.toHaveBeenCalled();
     });
 
-    // NEVER FAIL CLOSED: the ACQUISITION failure is not what decides the exit
-    // code. With a working per-wave fallback the run still finishes clean.
-    test('the run still completes when the shared server is unavailable', async () => {
-      const { exitCode } = await run();
+    // NEVER FAIL CLOSED, the half ruling P2-R43 leaves standing: `--agent
+    // Build` has no council agents (`o.councilAgents` is null), so the
+    // tripwire never runs regardless of the server failure — the
+    // ACQUISITION failure still is not what decides the exit code for THIS
+    // shape of run. `listEngineAgentsFn` is cleared too, proving completion
+    // here owes nothing to the outer seam — the run never even asks.
+    test('an --agent Build run still completes via the per-wave fallback (verification is skipped, not refused)', async () => {
+      const { exitCode } = await run({ agent: 'Build' }, { listEngineAgentsFn: undefined });
       expect(exitCode).toBe(2);
       expect(exitCode).not.toBe(1);
     });

@@ -13,6 +13,17 @@ const noSignals = () => () => {};
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'council-ev-')); }
 
+// Ruling P2-R33: a clean listEngineAgentsFn makes the engine-rendering
+// tripwire (unrelated to event streaming) verify ok for real in the two
+// --follow tests below, rather than being silently SKIPPED — with injected
+// `launchers` and no lister, `canVerify` (ruling P2-R38, round 3) is false,
+// so an ok-but-untested skip could otherwise pass for "verifies clean" on a
+// stream these tests assert is either pure NDJSON or silent.
+const cleanListEngineAgentsFn = async () => ([
+  { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+]);
+
 describe('council run events (spec 4.2) — Task 7', () => {
   test('run-started/stage-started+terminal/run-terminal land in the run dir events.jsonl, including a chair pair (B3 guard)', async () => {
     const t = tmp();
@@ -96,6 +107,7 @@ describe('council run --follow (Task 13)', () => {
       result = await runCouncil(opts, {
         launchers: scriptedLaunchers(happyScript()),
         appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
+        listEngineAgentsFn: cleanListEngineAgentsFn,
       });
       // Snapshot the captured lines BEFORE mockRestore — it also clears .mock.calls.
       rawLines = stderrSpy.mock.calls.map(c => c[0]);
@@ -125,6 +137,7 @@ describe('council run --follow (Task 13)', () => {
       const result = await runCouncil(opts, {
         launchers: scriptedLaunchers(happyScript()),
         appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
+        listEngineAgentsFn: cleanListEngineAgentsFn,
       });
       expect(result.exitCode).toBe(0);
       expect(stderrSpy).not.toHaveBeenCalled();

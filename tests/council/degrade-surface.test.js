@@ -99,7 +99,18 @@ test('a scripted dead Stage-1 leg whose retry RECOVERS: run exits 0, one stage1-
     'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
   };
   const opts = baseOptions(tmp);
-  const { exitCode } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+  // Ruling P2-R33: a clean listEngineAgentsFn exercises the engine-rendering
+  // tripwire (unrelated to retry-heal) for real here, with no injected
+  // `launchers` to fall back on: without it, `canVerify` (ruling P2-R38,
+  // round 3) would be false — no real server, no lister — and the whole
+  // check would be silently SKIPPED rather than genuinely passing, which
+  // would make this test's coverage of the retry-heal path an accident of
+  // that skip rather than a proven-clean seat-tools check alongside it.
+  const listEngineAgentsFn = async () => ([
+    { name: 'council-seat', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+    { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
+  ]);
+  const { exitCode } = await runCouncil(opts, { ...deps(scriptedLaunchers(script)), listEngineAgentsFn });
   expect(exitCode).toBe(0);
 
   const run = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'run.json'), 'utf-8'));

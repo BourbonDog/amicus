@@ -41,4 +41,25 @@ function createDegradeSink({ runDir, degraded, write }) {
   return { note, all: () => records.slice() };
 }
 
-module.exports = { createDegradeSink };
+/**
+ * Announce every dropped preset member (spec §5, Plan 4): a seat the user's
+ * preset requested that never resolved is a lost seat — announced like every
+ * other loss. Fires once per member, before any launch (zero spend), for BOTH
+ * transports. Moved verbatim out of run.js for the 300-line gate (P2-R14: PR 2
+ * of the council-leg-completion work needed the headroom this freed).
+ * @param {{note: Function}} degrade the run's degrade sink
+ * @param {Array<{member: string, reason: string}>} [droppedMembers]
+ */
+function noteDroppedMembers(degrade, droppedMembers) {
+  for (const dm of droppedMembers || []) {
+    degrade.note({
+      channel: 'dropped-members',
+      what: `seat ${dm.member} was not seated`,
+      why: dm.reason,
+      effect: 'the bench is smaller than the preset requested; the run will exit degraded (2)',
+      data: { member: dm.member, reason: dm.reason },
+    });
+  }
+}
+
+module.exports = { createDegradeSink, noteDroppedMembers };

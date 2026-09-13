@@ -5,6 +5,45 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Council legs run as two per-run agents with an explicit tool allowlist.** Stage-1 seats and
+  their retries run as `council-seat` — task mode defaults to `webfetch`, review mode to no tools,
+  and `--tools <a,b,c>` (MCP: `tools`) opts more in, validated against the engine's own declared
+  ids before any leg launches; repair, judge, debate and chair legs run as `council-support` with
+  no tools at all. `task` and `skill` are refused (they spawn or escape the session), as are
+  `edit`/`write`/`apply_patch`/`question`/`invalid`; `--agent Plan|Build` is the escape hatch
+  (`Plan` = the pre-4.9.8 behaviour: edits denied, reads/searches/shell allowed). A local tool
+  needs `--out-dir` outside the project tree and scopes the seats to the tree with
+  `external_directory: deny`. With `read` opted in the seat is denied `.env`, `.env.*` and
+  `.envrc` files at the engine (the match is case-sensitive on Linux; the deny rules are
+  measured to render after the seat's own read allow; the refusal itself is exercised by the
+  release ritual's live run); `grep` and `bash` have no per-file fence. `bash` is outside
+  every fence (run directory, home, network) and the CLI says so when it is opted in; the CLI
+  also prints a Notice for `grep`/`glob` (no per-file fence) and for `--agent Plan` (every leg
+  can run commands); `tools: null` is treated as unset like `agent: null`; an `--agent` run's
+  directory stays inside the project; `--tools` and `--agent` cannot be combined; `todowrite`
+  counts as a tool that never touches the tree. After registration, the run also reads back
+  what the engine actually rendered for each council agent — over the run directory, its
+  `_scratch` support-leg directory, and the project tree when local — and refuses before
+  launch if an `opencode.json`/`.opencode/agent` file the engine loads for that directory (the
+  tree's, or your global config) widened it, or if the engine cannot be asked at all
+  once verification can run — including when the run's own shared OpenCode server fails to
+  start: a default (non-`--agent`) run now refuses before any launch instead of falling back,
+  and the per-wave fallback servers that used to absorb that failure for every run now serve
+  only an `--agent` run, whose verification is skipped by design; a reviewed tree's own config
+  was measured to merge into the registered agent by key order (ruling P2-R33; the
+  unconditional refusal on an unverifiable engine, a failed shared-server start included, is
+  P2-R38/P2-R43, `_scratch` coverage is P2-R39, and the external_directory exemption for the
+  engine's own tool-output cache — resolved XDG-first, matching `auth-json.js`/`engine-log.js`
+  — is narrowed by P2-R40/P2-R42).
+  Two of the three leg-loss classes in the 2026-09-11 study shared one
+  precondition — a seat reached for a tool it did not need (gemini `grep`/`glob` over the global
+  install, cohere `task {}`) — and this closes that door. Previously every leg ran as the engine's
+  `Plan` agent, which denies file edits but leaves the rest of the tool set available (the
+  study saw seats reach for `grep`, `glob` and `task` under it). (`docs/council.md` § Tool
+  access; spec §4; PR 2 of 3.)
+
 ### Fixed
 
 - **Headless legs are no longer declared complete while the engine is still answering.**

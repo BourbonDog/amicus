@@ -248,3 +248,105 @@ describe('tool registration', () => {
     expect(src.indexOf('handleCouncilRunTool')).toBeGreaterThan(-1);
   });
 });
+
+describe('amicus_council_run tools / agent (spec 2026-09-11 §4)', () => {
+  // Ruling P2-R28 supersedes P2-R25: `tools` and `agent` together are now
+  // refused outright on every door (see the 'agent + tools IS refused' test
+  // below) rather than short-circuited, so each of these single-flag cases
+  // stays its own test.
+  test('forwards remote tools as --tools on the child argv (no agent)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['webfetch', 'websearch'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--tools') + 1]).toBe('webfetch,websearch');
+    expect(args).not.toContain('--agent');
+  });
+  // B2/D6: todowrite never touches the tree, so it rides through the MCP
+  // door exactly like webfetch/websearch — no out-dir placement rule applies.
+  test('forwards todowrite as --tools on the child argv (B2/D6)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['todowrite'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--tools') + 1]).toBe('todowrite');
+  });
+  test('forwards agent as --agent on the child argv (no tools)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Plan' }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBeFalsy();
+    const { args } = spawnCalls[0];
+    expect(args[args.indexOf('--agent') + 1]).toBe('Plan');
+    expect(args).not.toContain('--tools');
+  });
+  test('a local tool over MCP is refused before anything spawns — the MCP run dir must stay inside the project', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['read'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('amicus council run --tools');
+    expect(spawnCalls).toHaveLength(0);
+  });
+  test('a malformed tools entry is refused before anything spawns', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['../x'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(spawnCalls).toHaveLength(0);
+  });
+  test('absent tools/agent leave the argv byte-identical (no --tools, no --agent)', async () => {
+    const spawnCalls = [];
+    await handleCouncilRunTool(input(), tmp, helpers(spawnCalls));
+    expect(spawnCalls[0].args).not.toContain('--tools');
+    expect(spawnCalls[0].args).not.toContain('--agent');
+  });
+  // Review r1 P2-R20: a permanently-refused id (task) is not a placement
+  // problem (REMOTE_TOOL_IDS.includes('task') is false, so it used to fall
+  // into the "local tools" branch and suggest --out-dir, a command that
+  // would also fail) — it must be refused the same way resolveSeatTools
+  // refuses it, naming the real escape hatch.
+  // C6 (P2-R35, council #247 round 2): the message no longer says `--agent
+  // Build` — an MCP client never types a `--` flag — it says `agent: "Build"`.
+  test('a permanently-refused id (task) over MCP is refused naming the Build agent, not the out-dir fence (review r1 P2-R20)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ tools: ['task'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text.startsWith('tools:')).toBe(true);
+    expect(res.content[0].text).toContain('agent: "Build"');
+    expect(spawnCalls).toHaveLength(0);
+  });
+  // Ruling P2-R28 (supersedes P2-R25): `tools` and `agent` are mutually
+  // exclusive on every door, including MCP — the override already runs every
+  // leg on its own agent with its full tool set, so a computed allowlist next
+  // to it is refused before either is consulted further.
+  test('agent + tools IS refused: --tools cannot be combined with --agent (P2-R28)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Build', tools: ['task'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('cannot be combined');
+    expect(spawnCalls).toHaveLength(0);
+  });
+  // C6: the same rewrite applied to the conflict message — no MCP client
+  // should ever see a `--` flag it cannot type.
+  test('MCP refusal wording never leaks CLI flag syntax (C6)', async () => {
+    const spawnCalls = [];
+    const res = await handleCouncilRunTool(input({ agent: 'Plan', tools: ['webfetch'] }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).not.toContain('--');
+    expect(spawnCalls).toHaveLength(0);
+  });
+
+  // Re-review nit: agentToolsConflict only ever saw an ARRAY-shaped `input.tools`
+  // (`Array.isArray(input.tools) ? input.tools : undefined`), so a
+  // schema-bypassing bare string slipped past the conflict check even though
+  // resolveRemoteOnlyTools's own docblock names a string as a supported
+  // "defense-in-depth" shape — an inconsistency between the two guards.
+  // `toolsIn` now normalizes once so both see the same shape.
+  test('a string tools value with agent is refused the same as an array (schema-bypass, D8)', async () => {
+    const spawnCalls = [];
+    const before = fs.readdirSync(tmp);
+    const res = await handleCouncilRunTool(input({ agent: 'Plan', tools: 'webfetch' }), tmp, helpers(spawnCalls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('cannot be combined');
+    expect(spawnCalls).toHaveLength(0);
+    expect(fs.readdirSync(tmp)).toEqual(before); // no run dir was created
+  });
+});

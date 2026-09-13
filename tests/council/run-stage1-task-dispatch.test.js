@@ -150,7 +150,14 @@ describe('runCouncil end to end: briefing-stage1.md + the repair solo fork on in
     });
     expect(result.exitCode).toBe(0);
     const wave = launchers.calls.find(c => c.waveId === 'abc123-s1');
-    const expected = task.buildTaskSeatBriefing({ briefing: opts.briefing, date: opts.date });
+    // Spec 2026-09-11 §4 (PR 2, task 4): a real runCouncil() task run now
+    // decides its seat tools for real — the task-intent default is `webfetch`
+    // (seat-tools.js :: defaultToolsFor) — so the composed brief this pin
+    // compares against must carry the same `tools` the live run actually
+    // decided, unlike the direct launchStage1()/briefingFor() calls earlier in
+    // this file, which never go through runCouncil's seat-tools wiring and so
+    // never receive a `tools` key on either side of their own comparisons.
+    const expected = task.buildTaskSeatBriefing({ briefing: opts.briefing, date: opts.date, tools: ['webfetch'] });
     expect(wave.prompt).toBe(expected);
     const s1 = fs.readFileSync(path.join(opts.runDir, 'briefing-stage1.md'), 'utf-8');
     expect(s1).toBe(expected);

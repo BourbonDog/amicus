@@ -56,6 +56,8 @@ src/
 │   ├── run-retry-notes.js
 │   ├── run-retry-window.js  # The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay
 │   ├── run-retry.js
+│   ├── run-seat-tools-verify.js  # The engine-rendering tripwire's near-pure pieces (ruling P2-R33), split out
+│   ├── run-seat-tools.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
 │   ├── run-stage1-rows.js
@@ -66,6 +68,7 @@ src/
 │   ├── run-stats-entry.js
 │   ├── run-verdict-files.js
 │   ├── run.js
+│   ├── seat-tools.js
 │   ├── seats.js
 │   ├── stage1-bind.js
 │   ├── street-cred.js
@@ -135,6 +138,7 @@ src/
 │   ├── fanout-validate.js
 │   ├── fanout-wave-io.js
 │   ├── fanout.js
+│   ├── heartbeat.js
 │   ├── interactive-abort.js
 │   ├── interactive-mirror.js
 │   ├── interactive-process.js  # Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing
@@ -308,6 +312,7 @@ src/
 │   └── seat-space.js  # Council Workspace — the seat-space PREDICATES (v4.8 PR5b).
 ├── cli-council-run-bench.js  # Bench and input resolution for the council run command.
 ├── cli-council-run-render.js
+├── cli-council-run-tools.js  # `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`.
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -336,6 +341,7 @@ src/
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-council-awareness.js
 ├── mcp-council-bench.js
+├── mcp-council-pack-map.js  # COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16).
 ├── mcp-council-run.js
 ├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
@@ -419,6 +425,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── probe-council-agents.js  # Spec 2026-09-11 §4 — the ENGINE side of the council agents (ruling P2-R21).
 ├── probe-darwin-extract.js
 ├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
 ├── run-integration-keyless.js
@@ -452,6 +459,7 @@ evals/
 |--------|---------|-------------|
 | `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `resolveBench()`, `resolveChair()`, `resolveCritic()`, `CHAIR_DEFAULT()`, `parseList()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
+| `cli-council-run-tools.js` | `--tools`/`--agent` validation and the v4.7 out-dir fence for `council run`. | `checkCouncilRunTools()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
@@ -480,6 +488,7 @@ evals/
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-bench.js` |  | `resolveBenchInput()`, `auditBenchAliases()` |
+| `mcp-council-pack-map.js` | COUNCIL_PACK_PARAM_MAP, split out of mcp-council-run.js for the 300-line size gate (P2-R16). | `COUNCIL_PACK_PARAM_MAP()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `COUNCIL_PACK_PARAM_MAP()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
@@ -494,7 +503,7 @@ evals/
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
 | `council/briefings-chair-task.js` |  | `CHAIR_ANSWER_VALUES()`, `ANSWER_SCALE_ADDENDUM()`, `TASK_CHAIR_SYNTHESIS()`, `TASK_CHAIR_SYNTHESIS_NO_CLAIMS()`, `TASK_CONCURRENCE_CAVEAT()` |
-| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_LEAD()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `chairRepairPromptFor()`, `CHAIR_VERDICT_VALUES()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2-task.js` |  | `TASK_JUDGE_FRAME()`, `TASK_JUDGE_A()`, `TASK_JUDGE_B()`, `TASK_JUDGE_B_NO_CLAIMS()`, `NO_CLAIMS_INDEX()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
@@ -519,7 +528,7 @@ evals/
 | `council/run-debate-revote.js` |  | `legOpts()`, `legRow()`, `runRevoteWave()` |
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
-| `council/run-degrade.js` |  | `createDegradeSink()` |
+| `council/run-degrade.js` |  | `createDegradeSink()`, `noteDroppedMembers()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
@@ -529,7 +538,9 @@ evals/
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `skippedWaveNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry-window.js` | The Stage-1 retry's no-output window: how long a RELAUNCHED leg may stay | `retryBackstopMs()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
-| `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
+| `council/run-seat-tools-verify.js` | The engine-rendering tripwire's near-pure pieces (ruling P2-R33), split out | `verificationDirectories()`, `listEngineAgents()`, `verifyAgentRendering()` |
+| `council/run-seat-tools.js` |  | `preflightSeatTools()`, `validateSeatToolsAgainstEngine()`, `listEngineAgents()`, `verifyAgentRendering()` |
+| `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()`, `listEngineToolIds()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage1-rows.js` |  | `pushDeadSeatRows()`, `supersededRows()` |
 | `council/run-stage1-superseded.js` |  | `supersededRows()` |
@@ -539,6 +550,7 @@ evals/
 | `council/run-stats-entry.js` |  | `buildRunStatsEntry()` |
 | `council/run-verdict-files.js` |  | `writeVerdictFiles()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
+| `council/seat-tools.js` |  | `REFUSED_TOOL_IDS()`, `REMOTE_TOOL_IDS()`, `NON_LOCAL_TOOL_IDS()`, `SEAT_READ_DENY_PATTERNS()`, `defaultToolsFor()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
 | `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()`, `bindPaddedWave()` |
 | `council/street-cred.js` |  | `computeStreetCred()`, `rankPositions()`, `credSeats()` |
@@ -592,6 +604,7 @@ evals/
 | `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
 | `sidecar/fanout-wave-io.js` |  | `writeWaveMetadata()`, `writeWaveDoc()`, `finishWave()`, `stampLegAttribution()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
+| `sidecar/heartbeat.js` |  | `HEARTBEAT_INTERVAL()`, `createHeartbeat()` |
 | `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS()` |
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive-process.js` | Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()` |
