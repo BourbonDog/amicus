@@ -633,8 +633,8 @@ Subcommands for 'council':
                                 secrets. bash is outside every fence, this
                                 run's own records included (bench anonymity
                                 does not hold under it) — the CLI warns when
-                                you opt it in. --tools and --agent cannot be
-                                combined.
+                                you opt any of them in. --tools and --agent
+                                cannot be combined.
                                 --agent Plan|Build runs every leg on the
                                 engine's own agent instead (the escape hatch; no
                                 council agents, no allowlist).

@@ -398,12 +398,13 @@ where a seat starts reading the harness instead of the brief), as are `edit`, `w
 declared list when the engine lists its tools; an unknown id is `BAD_ARGS` naming what the engine
 declares. `--agent Plan|Build` is the escape hatch: every leg runs on the engine's own agent, no
 council agents, no allowlist; it cannot be combined with `--tools`. Its legs run with the run
-directory (inside the project unless `--out-dir` moves it) as their working directory, so a seat
-can read the run's own records, the label map included — use it only where that is acceptable.
+directory (inside the project) as their working directory, so a seat can read the run's own
+records, the label map included — use it only where that is acceptable.
 `Build` is edit-capable: unlike the council agents' fenced allowlist, it can edit files and run
 commands over that directory (the CLI prints a Notice when you opt into it); `Plan` is the
 pre-4.9.8 default: it denies edits but allows reads, searches and the shell (measured on the
-pinned engine), so it is the escape hatch that restores v4.9.7's behaviour exactly.
+pinned engine), so it is the escape hatch that restores v4.9.7's behaviour exactly, and the CLI
+prints a Notice for it too (every leg — judges and the chair included — can run commands).
 
 Refusals land in a run directory that already exists, so the refusal itself is recorded (the same
 order the other pre-spend checks use); nothing is launched and nothing is spent. When the engine
@@ -452,8 +453,10 @@ refusal and the leg continues (the deny rules are measured to render after the s
 `read=allow`, and CI now models the engine's own evaluator — transcribed from its source — over
 the real rendering, confirming `.env`/`.env.*`/`.envrc` deny and an ordinary file allows; the
 refusal itself is exercised by the release ritual's live `--tools read` run, not by the probe).
-`grep` and `bash` have no per-file fence: opting them in trusts every seat with everything in
-the tree, `.env` included. Keep secrets out of any tree you point a `bash` or `grep` seat at.
+`grep`, `glob` and `bash` have no per-file fence: opting them in trusts every seat with
+everything in the tree, `.env` included — grep returns its contents, glob lists its name — and
+the CLI prints a Notice when you opt any of grep, glob or bash in. Keep secrets out of any tree
+you point a `bash`, `grep` or `glob` seat at.
 With a local tool the seat's engine session is rooted at the project tree, so the engine also
 loads that tree's own opencode config; do not point a local-tools seat at a tree you do not trust.
 

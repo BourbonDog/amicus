@@ -477,6 +477,21 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect(runCouncil).not.toHaveBeenCalled();
     fs.rmSync(outside, { recursive: true, force: true });
   });
+
+  // council #247 round 5 (P2-R51, D4): an --agent run has no local tool of
+  // its own (--agent + --tools is refused outright above), so the ordinary
+  // v4.7 out-dir fence still applies to it — an outside run directory would
+  // put the --agent leg's own working directory outside the tree it must
+  // read, and the engine's `external_directory` default (`ask`) is a prompt
+  // a headless leg can never answer.
+  test('--agent build with an out-of-project --out-dir and no --tools is still fenced (D4)', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-agent-fence-out-'));
+    const code = await handleCouncilRun(argsBase({ agent: 'build', 'out-dir': outside }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toMatch(/--out-dir must stay inside the project/);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
   // Ruling P2-R28 (supersedes P2-R25 / the old AGENTFENCELEAK guard): --tools
   // and --agent are now refused together before the out-dir fence is ever
   // consulted — --agent is the escape hatch (no council agents, no
@@ -512,6 +527,16 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     expect('agent' in opts).toBe(false);
   });
 
+  // council #247 round 5 (P2-R51, B3): `tools: null` is the CLI house style
+  // for an unset option too, mirroring `agent: null` above — and matching
+  // runCouncil's own preflight, which already treats it as absent.
+  test('tools: null is treated as absent (B3): not refused, no toolIds forwarded', async () => {
+    const code = await handleCouncilRun(argsBase({ tools: null }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect('tools' in opts).toBe(false);
+  });
+
   // A1/D2: bash sits outside every fence (run directory, home, network); the
   // CLI names that in a Notice on stderr whenever a caller opts it in.
   test('A1/D2: --tools bash prints a Notice on stderr; --tools read does not', async () => {
@@ -532,18 +557,57 @@ describe('council run --tools / --agent (spec 2026-09-11 §4): accepted, validat
     fs.rmSync(outside, { recursive: true, force: true });
   });
 
+  // council #247 round 5 (P2-R50, B2/D5/C2): grep/glob search the whole tree
+  // with no per-file fence either (grep returns .env contents, glob lists
+  // .env names) — the CLI names that in a Notice too, naming whichever id(s)
+  // were opted in (both together as `grep/glob`); a remote id like webfetch
+  // gets neither.
+  test('P2-R50: --tools grep/glob print a Notice naming the id(s) and .env; webfetch does not', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'council-grepglob-out-'));
+    let code = await handleCouncilRun(argsBase({ tools: 'grep', 'out-dir': outside }));
+    expect(code).toBe(0);
+    let notice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('--tools grep search'));
+    expect(notice).toContain('.env contents');
+    err.mockClear();
+    runCouncil.mockClear();
+
+    code = await handleCouncilRun(argsBase({ tools: 'glob', 'out-dir': outside }));
+    expect(code).toBe(0);
+    notice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('--tools glob search'));
+    expect(notice).toBeDefined();
+    err.mockClear();
+    runCouncil.mockClear();
+
+    code = await handleCouncilRun(argsBase({ tools: 'grep,glob', 'out-dir': outside }));
+    expect(code).toBe(0);
+    notice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('--tools grep/glob search'));
+    expect(notice).toBeDefined();
+    err.mockClear();
+    runCouncil.mockClear();
+
+    code = await handleCouncilRun(argsBase({ tools: 'webfetch' }));
+    expect(code).toBe(0);
+    expect(err.mock.calls.some((c) => c[0].includes('--tools grep') || c[0].includes('--tools glob'))).toBe(false);
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
   // Ruling P2-R41b (A4, round 3): --agent Build is edit-capable over the run
   // directory (unlike the council agents' fenced allowlist) — the CLI names
-  // that in a Notice on stderr whenever a caller opts into it; --agent Plan
-  // (read-only) gets no such Notice.
-  test('P2-R41b: --agent Build prints a Notice on stderr naming it edit-capable; --agent Plan does not', async () => {
+  // that in a Notice on stderr whenever a caller opts into it. council #247
+  // round 5 (P2-R50, D3): --agent Plan now gets its OWN Notice too (every
+  // leg — judges and the chair included — can read, search and run
+  // commands), but never Build's, and Build never gets Plan's.
+  test("P2-R41b/P2-R50 D3: --agent Build prints its own Notice; --agent Plan prints its own, not Build's", async () => {
     let code = await handleCouncilRun(argsBase({ agent: 'build' }));
     expect(code).toBe(0);
     expect(err.mock.calls.some((c) => c[0].includes('Notice: --agent Build'))).toBe(true);
+    expect(err.mock.calls.some((c) => c[0].includes('Notice: --agent Plan'))).toBe(false);
     err.mockClear();
     runCouncil.mockClear();
     code = await handleCouncilRun(argsBase({ agent: 'plan' }));
     expect(code).toBe(0);
     expect(err.mock.calls.some((c) => c[0].includes('Notice: --agent Build'))).toBe(false);
+    const planNotice = err.mock.calls.map((c) => c[0]).find((line) => line.includes('Notice: --agent Plan'));
+    expect(planNotice).toContain('judges and the chair');
   });
 });

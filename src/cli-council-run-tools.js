@@ -39,7 +39,11 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // Spec 2026-09-11 §4: shape only (refusals + the engine check live in
   // runCouncil so every door — CLI, MCP, workflow — shares them).
   let toolIds;
-  if (explicitKeys.has('tools') || args.tools !== undefined) {
+  // council #247 round 5 (P2-R51, B3): `tools: null` is the CLI house style
+  // for an unset option, exactly as `agent: null` below, and runCouncil's
+  // own preflight (preflightSeatTools) already treats a null `o.tools` as
+  // absent — so this door must too.
+  if (args.tools !== null && (explicitKeys.has('tools') || args.tools !== undefined)) {
     // B6 (P2-R35): a repeated `--tools a --tools b` (or a caller that builds
     // args directly, MCP-input style) can arrive as an array — join it before
     // parseToolsFlag, which only ever spoke the comma-string shape.
@@ -86,6 +90,14 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
   // council/seat-tools.js's single source for the local/remote predicate
   // (its own JSDoc names three other callers); re-deriving it here was a
   // fourth, silently-driftable copy of the same test.
+  //
+  // council #247 round 5 (P2-R51, D4): an `--agent` run carries no toolIds of
+  // its own (the conflict check above refuses combining `--agent` with
+  // `--tools`), so `wantsLocalTool` is false and this same fence applies to
+  // it too — an outside run directory would put the `--agent` leg's working
+  // directory outside the tree it must read, and the engine's own
+  // `external_directory` default is `ask`, a prompt a headless leg can never
+  // answer.
   const wantsLocalTool = Array.isArray(toolIds) && isLocal(toolIds);
   if (!wantsLocalTool && !isPathInside(runDir, project)) {
     return {
@@ -106,14 +118,34 @@ function checkCouncilRunTools({ args, explicitKeys, runDir, project }) {
       'independence do not hold under bash), your home directory and the network, and the webfetch ' +
       'deny does not bind a shell.');
   }
+  // council #247 round 5 (P2-R50, B2/D5/C2): `grep`/`glob` search the whole
+  // project tree with no per-file fence either (grep returns `.env`
+  // contents, glob lists `.env` names — the read fence only ever binds
+  // `read`), so the CLI names that in a Notice too, whenever either is
+  // opted in (both together name both ids, `grep/glob`).
+  const grepGlobIds = ['grep', 'glob'].filter((id) => Array.isArray(toolIds) && toolIds.includes(id));
+  if (grepGlobIds.length) {
+    notices.push(`Notice: --tools ${grepGlobIds.join('/')} search the whole project tree with no per-file fence — ` +
+      'grep returns .env contents and glob lists .env names; the read fence does not bind them. Opt them in ' +
+      'only on a tree without secrets.');
+  }
   // Ruling P2-R41b (A4, round 3): --agent Build is the escape hatch running
   // every leg on the engine's own agent, full tool set included — unlike the
   // council-seat allowlist, Build can edit files and run commands, so the CLI
   // names that in a Notice too.
   if (agentOverride === 'Build') {
     notices.push('Notice: --agent Build runs every leg on the engine\'s Build agent, which can edit files ' +
-      'and run commands, with the run directory (inside the project unless --out-dir moves it) as its ' +
+      'and run commands, with the run directory (inside the project) as its ' +
       'working directory.');
+  }
+  // council #247 round 5 (P2-R50, D3): --agent Plan runs every leg — judges
+  // and the chair included, not only stage-1 — on the engine's own Plan
+  // agent, which can read, search and run shell commands (only edits are
+  // denied); the CLI names that in a Notice too.
+  if (agentOverride === 'Plan') {
+    notices.push('Notice: --agent Plan runs every leg (judges and the chair included) on the engine\'s Plan ' +
+      'agent, which can read, search and run commands (edits denied) — v4.9.7\'s behaviour — with the run ' +
+      'directory (inside the project) as its working directory.');
   }
 
   return { error: null, toolIds, agentOverride, ...(notices.length ? { notices } : {}) };

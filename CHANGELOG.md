@@ -19,9 +19,12 @@ All notable changes to Amicus are documented here. Format follows
   `.envrc` files at the engine (the match is case-sensitive on Linux; the deny rules are
   measured to render after the seat's own read allow; the refusal itself is exercised by the
   release ritual's live run); `grep` and `bash` have no per-file fence. `bash` is outside
-  every fence (run directory, home, network) and the CLI says so when it is opted in;
-  `--tools` and `--agent` cannot be combined; `todowrite` counts as a tool that never touches
-  the tree. After registration, the run also reads back what the engine actually rendered for
+  every fence (run directory, home, network) and the CLI says so when it is opted in; the CLI
+  also prints a Notice for `grep`/`glob` (no per-file fence) and for `--agent Plan` (every leg
+  can run commands); `tools: null` is treated as unset like `agent: null`; an `--agent` run's
+  directory stays inside the project; `--tools` and `--agent` cannot be combined; `todowrite`
+  counts as a tool that never touches the tree. After registration, the run also reads back
+  what the engine actually rendered for
   each council agent — over the run directory, its `_scratch` support-leg directory, and the
   project tree when local — and refuses before launch if a tree-supplied
   `opencode.json`/`.opencode/agent` file widened it, or if the engine cannot be asked at all

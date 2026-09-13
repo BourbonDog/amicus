@@ -172,9 +172,14 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
     const listIds = deps.listEngineToolIdsFn || require('./run-server').listEngineToolIds;
     const declared = await listIds(sharedServer, o.project);
     if (!declared) {
-      // No way to ask: an explicit opt-in is refused (as before P2-R30) —
-      // a defaults-only run is not, since nobody asked for that check and the
-      // shared-server degrade is already recorded elsewhere.
+      // No way to ask: an explicit opt-in is refused (as before P2-R30); a
+      // defaults-only run's declared-id check is skipped instead — nobody
+      // opted into it and the shared-server degrade is recorded elsewhere —
+      // but the run still falls through to the agent-rendering tripwire
+      // below (ruling P2-R38): a defaults-only run is refused there too once
+      // a null agent list comes back. Named mutant EARLYRETURN: restoring
+      // `return { error: null }` here lets a task-intent default run launch
+      // unverified when the engine lists no tool ids.
       if (Array.isArray(o.tools) && o.tools.length) {
         return {
           error: {
@@ -184,15 +189,15 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
           },
         };
       }
-      return { error: null };
+    } else {
+      // This second resolveSeatTools call is a GATE, not a recompute:
+      // `o.seatTools` (preflightSeatTools's result) is already authoritative
+      // and unchanged by this check, so `checked.tools`/`checked.local` are
+      // deliberately discarded here — only `checked.ok` (declared-id
+      // refusals, now over the default too) is consulted.
+      const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools || [], declaredIds: declared });
+      if (!checked.ok) { return { error: { code: checked.code, message: `Error: ${checked.message}` } }; }
     }
-    // This second resolveSeatTools call is a GATE, not a recompute: `o.seatTools`
-    // (preflightSeatTools's result) is already authoritative and unchanged by
-    // this check, so `checked.tools`/`checked.local` are deliberately discarded
-    // here — only `checked.ok` (declared-id refusals, now over the default too)
-    // is consulted.
-    const checked = seatTools.resolveSeatTools({ intent: seatIntentOf(o), optIn: o.tools || [], declaredIds: declared });
-    if (!checked.ok) { return { error: { code: checked.code, message: `Error: ${checked.message}` } }; }
   }
   // Ruling P2-R38: the run owns its server (production never injects
   // `launchers`) OR a test injects its own lister — either way there is
@@ -229,9 +234,10 @@ async function validateSeatToolsAgainstEngine(o, sharedServer, deps = {}) {
             error: {
               code: 'BAD_ARGS',
               message: 'Error: the engine rendered the council agents differently from what this run registered '
-                + `(${verified.reason}, directory ${dir}) — a tree-supplied opencode.json or .opencode/agent file `
-                + 'alters them; remove the council-seat/council-support entries from that tree, or run with --agent '
-                + 'Plan to use the engine\'s own agent knowingly (v4.9.7 behaviour). Nothing was launched.',
+                + `(${verified.reason}, directory ${dir}) — an opencode.json or .opencode/agent file the engine `
+                + 'loads for that directory (the tree\'s, or your global config) defines council-seat/'
+                + 'council-support and alters them; remove those entries, or run with --agent Plan to use the '
+                + 'engine\'s own agent knowingly (v4.9.7 behaviour). Nothing was launched.',
             },
           };
         }

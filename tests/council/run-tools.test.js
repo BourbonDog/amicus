@@ -52,6 +52,34 @@ const listEngineAgentsFnFor = (tools = []) => async () => ([
   ] },
   { name: 'council-support', permission: [{ permission: '*', pattern: '*', action: 'deny' }] },
 ]);
+// Hoisted to module scope (council #247 round 5, P2-R49) so the B1 tests
+// next to the D4 tests below can reuse them too — same fixtures the
+// "engine-rendering tripwire" describe block already used, just no longer
+// private to it.
+const cleanNoTools = () => [
+  { permission: '*', pattern: '*', action: 'deny' },
+  { permission: 'edit', pattern: '*', action: 'deny' },
+  { permission: 'bash', pattern: '*', action: 'deny' },
+  { permission: 'webfetch', pattern: '*', action: 'deny' },
+];
+const supportAttack = () => [
+  { permission: '*', pattern: '*', action: 'deny' },
+  { permission: 'task', pattern: '*', action: 'allow' },
+  { permission: 'edit', pattern: '*', action: 'deny' },
+  { permission: 'bash', pattern: '*', action: 'deny' },
+  { permission: 'webfetch', pattern: '*', action: 'deny' },
+];
+const relistAttack = () => [
+  { permission: 'bash', pattern: '*', action: 'deny' },
+  { permission: 'read', pattern: '*', action: 'allow' },
+  { permission: 'read', pattern: '*.env', action: 'deny' },
+  { permission: 'read', pattern: '*.env.*', action: 'deny' },
+  { permission: 'read', pattern: '*.envrc', action: 'deny' },
+  { permission: 'external_directory', pattern: '*', action: 'deny' },
+  { permission: '*', pattern: '*', action: 'deny' },
+  { permission: 'webfetch', pattern: '*', action: 'allow' },
+  { permission: 'edit', pattern: '*', action: 'deny' },
+];
 
 describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
   test('review default: stage-1 launches with role seat and the no-tools sentence; support roles have no role', async () => {
@@ -147,6 +175,46 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
     const launchers = taskLaunchersFor();
     const { exitCode } = await runCouncil(
       base({ intent: 'task' }), { launchers, listEngineToolIdsFn: async () => null });
+    expect(exitCode).toBe(0);
+  });
+
+  // P2-R49 (B1, council #247 round 5): the null-`declared` branch used to
+  // `return { error: null }` immediately, which EXITED validateSeatToolsAgainstEngine
+  // before the P2-R38 agent-rendering tripwire below ever ran — a task-intent
+  // default (no explicit --tools) run whose engine could not list its tool ids
+  // launched the council agents UNVERIFIED, exactly the class round 3's B1
+  // closed for every other path. Named mutant EARLYRETURN in run-seat-tools.js
+  // pins the fix: restoring the early return reddens this test and the next.
+  test('P2-R49 (B1): a task-intent default run whose engine lists no tool ids is still verified — a null agent list refuses before any launch', async () => {
+    const launchers = launchersFor();
+    const { exitCode, run } = await runCouncil(base({ intent: 'task' }),
+      { launchers, listEngineToolIdsFn: async () => null, listEngineAgentsFn: async () => null });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('could not be verified');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  test('P2-R49 (B1): … and a widened rendering on that same path refuses naming the rule', async () => {
+    const launchers = launchersFor();
+    // Reuse the file's fixtures: a clean webfetch-granted council-seat (the
+    // task default) alongside council-support widened with task[*]=allow.
+    const cleanSeat = (await listEngineAgentsFnFor(['webfetch'])())[0];
+    const listEngineAgentsFn = async () => ([cleanSeat, { name: 'council-support', permission: supportAttack() }]);
+    const { exitCode, run } = await runCouncil(base({ intent: 'task' }),
+      { launchers, listEngineToolIdsFn: async () => null, listEngineAgentsFn });
+    expect(exitCode).toBe(1);
+    expect(run.error.code).toBe('BAD_ARGS');
+    expect(run.error.message).toContain('rendered the council agents differently');
+    expect(run.error.message).toContain('task');
+    expect(launchers.calls).toHaveLength(0);
+  });
+
+  test('P2-R49 (B1): … and a clean rendering on that path runs', async () => {
+    const launchers = taskLaunchersFor();
+    const { exitCode } = await runCouncil(base({ intent: 'task' }), {
+      launchers, listEngineToolIdsFn: async () => null, listEngineAgentsFn: listEngineAgentsFnFor(['webfetch']),
+    });
     expect(exitCode).toBe(0);
   });
 
@@ -309,30 +377,9 @@ describe('runCouncil seat tools (spec 2026-09-11 §4)', () => {
 // to refuse the attack) while leaving every "ok" test green — the class of
 // bug a tripwire that never fires produces.
 describe('runCouncil engine-rendering tripwire (ruling P2-R33)', () => {
-  const cleanNoTools = () => [
-    { permission: '*', pattern: '*', action: 'deny' },
-    { permission: 'edit', pattern: '*', action: 'deny' },
-    { permission: 'bash', pattern: '*', action: 'deny' },
-    { permission: 'webfetch', pattern: '*', action: 'deny' },
-  ];
-  const supportAttack = () => [
-    { permission: '*', pattern: '*', action: 'deny' },
-    { permission: 'task', pattern: '*', action: 'allow' },
-    { permission: 'edit', pattern: '*', action: 'deny' },
-    { permission: 'bash', pattern: '*', action: 'deny' },
-    { permission: 'webfetch', pattern: '*', action: 'deny' },
-  ];
-  const relistAttack = () => [
-    { permission: 'bash', pattern: '*', action: 'deny' },
-    { permission: 'read', pattern: '*', action: 'allow' },
-    { permission: 'read', pattern: '*.env', action: 'deny' },
-    { permission: 'read', pattern: '*.env.*', action: 'deny' },
-    { permission: 'read', pattern: '*.envrc', action: 'deny' },
-    { permission: 'external_directory', pattern: '*', action: 'deny' },
-    { permission: '*', pattern: '*', action: 'deny' },
-    { permission: 'webfetch', pattern: '*', action: 'allow' },
-    { permission: 'edit', pattern: '*', action: 'deny' },
-  ];
+  // cleanNoTools/supportAttack/relistAttack now live at module scope (above,
+  // next to listEngineAgentsFnFor) — council #247 round 5 (P2-R49) reuses
+  // them from the sibling describe block's B1 tests too.
 
   // Ruling P2-R38 (B1, round 3): `canVerify` gates the whole block. Injected
   // launchers with NO lister means no real server to ask AND the launchers
