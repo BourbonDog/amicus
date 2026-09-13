@@ -159,6 +159,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     // would print "(0 unverified)" on every clean run; and jq orders null below every number,
     // so a pre-4.9.8 verdict.json (no key) prints exactly as before. Named mutant TITLEBLIND
     // (the nested clause deleted from the TITLE line) reddens the first segment.
+    // Measured red set: TITLEBLIND, 1 test.
     for (const seg of [y.slice(checkIdx, commentIdx), y.slice(commentIdx)]) {
       expect(seg).toContain('if .seatsReviewed.unverified > 0 then " (\\(.seatsReviewed.unverified) unverified)" else "" end');
     }
