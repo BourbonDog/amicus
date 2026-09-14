@@ -21,6 +21,8 @@ amicus abort --all [--json]
 # Setup & maintenance
 amicus setup                              # Full wizard: keys, default model, aliases
 amicus setup --api-keys                   # Open just the API-key step
+amicus aliases                      # your aliases: following (shipped pin) / pinned (yours)
+amicus aliases --review             # walk the proposals — no copy-paste
 amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview  # bare canonical, direct-first
 amicus models                             # List the live catalog
 amicus models --search gemini             # Filter by substring
@@ -397,7 +399,19 @@ direct namespace while the OpenRouter route still serves — a gateway-only rout
 no direct sibling is a routing choice, not staleness. Deliberately gateway-only
 entries (e.g. `gpt-pro`) are annotated as such and are never offered a retarget.
 
-**Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only by default and does not change the exit code — pass `--strict` alongside `--check` to make curated per-gateway drift (stale or divergent direct/OpenRouter forms) exit non-zero too.
+### Aliases: following vs pinned
+
+A curated alias (`gemini`, `gpt`, `opus`, `deepseek`, …) absent from `config.aliases` **follows** the pin Amicus ships and moves to the new target on every release; a present key **pins** it to that exact id and makes it reviewable.
+
+```bash
+amicus aliases            # every alias: following (shipped pin) / pinned (yours), by vendor
+amicus aliases --review   # walk outdated pins in a numbered picker — no copy-paste
+amicus aliases --json     # the same document, for scripts
+```
+
+`--review` offers, per outdated pin: accept a newer same-tier sibling, follow the shipped pin again, choose another catalog id, skip, or never ask again for that pairing — it needs a terminal (without one it prints the list and exits 1). Picking "follow the shipped pin" removes the key from `config.aliases`. `amicus setup` no longer seeds all 21 curated ids — it pins only the default alias you chose, and only when its live flagship differs from the shipped pin, and says so.
+
+**Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line points at `amicus aliases --review`. Drift is informational only by default and does not change the exit code — pass `--strict` alongside `--check` to make curated per-gateway drift (stale or divergent direct/OpenRouter forms) exit non-zero too.
 
 **Live probe (`--check --live`).** Presence in the catalog is not proof of service — a stored alias can point at a model id the catalog still lists but the provider has quietly stopped serving (the v4.6.1 `gemini` incident). `--check` alone can't see that; `--live` can, by actually asking. Scope is **stored aliases only** (`amicus setup --add-alias`) — curated defaults follow the catalog by construction and have no "was it actually served" question for a live probe to answer. **This spends real money — one tiny leg per stored alias** — every probed alias gets one ordinary engine leg on a single quiet fan-out wave, with a real session dir and a real spend-ledger row, exactly as if you'd run it yourself.
 
@@ -417,7 +431,7 @@ Each stored alias resolves to one of three outcomes:
 
 **Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
 
-**Aliases are a curated seed, not a fixed list.** `amicus setup` seeds a curated set of short aliases (e.g. `gemini`, `gpt`, `opus`, `deepseek`), and you add or override them with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
+**Aliases are a curated seed, not a fixed list.** The curated aliases (`gemini`, `gpt`, `opus`, …) are shipped and follow the package's pins unless you pin them — pin one, or add an entirely new one, with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
 
 **Full-id passthrough.** You can always bypass aliases and name a model directly. Bare `provider/model` is the canonical, policy-routed form; `openrouter/provider/model` is an explicit override. See [Routing](../README.md#routing) for the full explanation — summary:
 
