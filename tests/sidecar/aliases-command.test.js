@@ -55,6 +55,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(code).toBe(0);
     expect(out).toContain('following');
     expect(out).toContain('nothing to review');
+    expect(catalogCalls).toEqual([]);
   });
   test('virgin machine (readCache returns null): list still renders every curated alias as following, no network', async () => {
     catalogCache = null;
@@ -72,13 +73,18 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8')).aliases).toEqual({ mine: 'openrouter/z-ai/glm-5.4' });
     expect(process.stderr.write.mock.calls.filter(c => String(c[0]).includes("alias 'glm' matches the shipped recommendation")).length).toBe(1);
   });
-  test('--json: versioned document, byte-clean stdout, rows + proposals (normalisation fires and does not leak onto stdout)', async () => {
+  test('--json: versioned document, byte-clean stdout, rows + proposals (normalisation fires inside the captured call and does not leak onto stdout)', async () => {
     const shipped = cfg.getDefaultAliases();
-    // glm is seeded AT the shipped value so normalizeOnEntry actually removes
-    // it (and saveConfig fires a real stderr Notice) during this very call —
-    // proving the Notice never leaks onto stdout, not just that none occurs.
+    // Written RAW (not through cfg.saveConfig, which self-normalizes at
+    // seed time and would strip `glm` — and fire its Notice — before
+    // captureStdout even starts). Writing the file directly, exactly like
+    // the sibling normalize-on-entry test above, means `glm` is still on
+    // disk at the shipped value when handleAliases runs, so normalizeOnEntry
+    // is what strips it and fires the Notice, INSIDE the captured call —
+    // which is the scenario this test needs to prove stays byte-clean.
     // `mine` carries the stale-pin/proposal assertions glm used to.
-    cfg.saveConfig({ aliases: { glm: shipped.glm, mine: 'openrouter/z-ai/glm-5.2' } });
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(cfg.getConfigPath(), JSON.stringify({ aliases: { glm: shipped.glm, mine: 'openrouter/z-ai/glm-5.2' } }));
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
     expect(code).toBe(0);
     const doc = JSON.parse(out);
@@ -89,6 +95,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(doc.aliases.find(r => r.alias === 'mine')).toEqual({ alias: 'mine', id: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: false, shipped: null });
     expect(doc.proposalCount).toBe(1);
     expect(doc.proposals[0].candidates[0].id).toBe('openrouter/z-ai/glm-5.4');
+    expect(process.stderr.write.mock.calls.filter(c => String(c[0]).includes("alias 'glm' matches")).length).toBe(1);
   });
   test('--review with --json or --quiet is an argument error', async () => {
     const a = await captureStdout(() => handleAliases({ _: ['aliases'], review: true, json: true }));
