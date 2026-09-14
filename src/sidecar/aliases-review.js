@@ -6,21 +6,24 @@
  * (follows); anything else → `addAlias` (pinned). Without a TTY it refuses
  * loudly (Q2): the list, one reason line, exit 1. The §5 WRITE gate lives
  * here: accepting a catalog-vouched id needs a fresh catalog (24 h); `follow`
- * is exempt because it removes a key. Pure screen text lives in
- * aliases-review-render.js (split in fix round 1 to hold the 300-line gate);
- * the real-readline prompt lives in aliases-review-prompt.js (split in fix
- * round 3, same reason — see that module for the Ctrl-C/Ctrl-D facts).
+ * is exempt because it removes a key. Screen text is aliases-review-render.js
+ * and the readline prompt is aliases-review-prompt.js (both split out to
+ * hold the 300-line gate). Every alias/id/key this module writes to the
+ * terminal — including a caught `err.message`, via `collapseExcerpt`, since
+ * a thrown message is a sentence rather than an id — rides the house
+ * sanitizer first (`utils/text-sanitize.js`, #249 r2 C4).
  *
  * Fix round 1: a missing cache reads as its own banner, never a bogus
- * multi-thousand-day `ageLabel`; an aborted prompt mid-question rejects the
- * pending `ask` with a `REVIEW_ABORTED` sentinel rather than silently
- * exiting 0 (fix round 3, #249 r2 D1: this is Ctrl-D/EOF's readline `close`
- * and Ctrl-C's own readline `SIGINT` — two distinct events, not one
- * conflated "Ctrl-C/D close"); every config write is caught per-call so a
- * failure reports and re-shows the menu; typing the shipped id into "choose
- * another" follows (Q4's encoding) rather than pinning a redundant copy; a
- * taken notable name gets a numeric suffix (`freeSuffix`), deliberately not
- * `deriveFreeAlias`'s `free-` naming, which is for free-tier council seeds.
+ * multi-thousand-day `ageLabel`; an aborted prompt — Ctrl-D/EOF (readline's
+ * `close`) or Ctrl-C (readline's own `SIGINT`, #249 r2 D1 — two distinct
+ * events, see aliases-review-prompt.js) — rejects the pending `ask` with a
+ * `REVIEW_ABORTED` sentinel rather than silently exiting 0; every config
+ * write is caught per-call so a failure reports and re-shows the menu;
+ * typing the shipped id into "choose another" follows unconditionally
+ * (Q4's encoding, #249 r2 A1/C2) rather than pinning a redundant copy or
+ * consulting either gate; a taken notable name gets a numeric suffix
+ * (`freeSuffix`), deliberately not `deriveFreeAlias`'s `free-` naming,
+ * which is for free-tier council seeds.
  * Fix round 2 (#249 r1) gate helpers (§5-gated "choose another", clock-skew
  * freshness, a throwing `readCache`) live in aliases-review-gate.js.
  */
@@ -30,6 +33,7 @@
 const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 const { stripGatewayPrefix } = require('../utils/curated-models');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
+const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 const { menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
 const { classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner } = require('./aliases-review-gate');
 
@@ -93,34 +97,32 @@ function acceptCandidate(p, c, d) {
   try {
     if (c.why === 'follow') {
       d.removeAlias(p.alias);
-      d.write(`  ✓ ${p.alias} now follows the shipped recommendation (${c.id})\n`);
+      d.write(`  ✓ ${safeFragment(p.alias)} now follows the shipped recommendation (${safeFragment(c.id)})\n`);
       return true;
     }
     if (c.why === 'notable') {
       const name = freeSuffix(p.alias, d.effectiveAliasNames());
       d.addAlias(name, c.id);
-      d.write(`  ✓ ${name} → ${c.id} (pinned)\n`);
+      d.write(`  ✓ ${safeFragment(name)} → ${safeFragment(c.id)} (pinned)\n`);
       return true;
     }
     d.addAlias(p.alias, c.id);
-    d.write(`  ✓ ${p.alias} → ${c.id} (pinned)\n`);
+    d.write(`  ✓ ${safeFragment(p.alias)} → ${safeFragment(c.id)} (pinned)\n`);
     return true;
   } catch (err) {
-    d.write(`  could not write: ${err.message}\n`);
+    d.write(`  could not write: ${collapseExcerpt(err.message)}\n`);
     return false;
   }
 }
 
 /**
- * The "choose another" sub-flow: a free-text model id. Typing the shipped
- * id (M3, #249 r2 A1/C2) IS the menu's `follow` action, checked FIRST and
- * exempt from BOTH gates below -- it removes a key rather than writing a
- * catalog-vouched one, and the numbered `follow` menu item is offered
- * regardless of the catalog, so typing the same id must follow too, even
- * when the catalog is stale or does not carry the shipped id at all.
+ * The "choose another" sub-flow: a free-text model id. Typing the shipped id
+ * (M3, #249 r2 A1/C2) IS the menu's `follow` action, checked FIRST and exempt
+ * from BOTH gates below, even when the catalog is stale or lacks the shipped
+ * id -- the numbered `follow` item is offered regardless of the catalog.
  * Anything else is checked against the §5 display gate (R2 — the SAME
- * `gatedCatalogIds` the menu's own candidates come from) then the
- * freshness gate; a write failure (M2) is a cancel/refusal.
+ * `gatedCatalogIds` the menu's own candidates come from) then the freshness
+ * gate; a write failure (M2) is a cancel/refusal.
  * @returns {Promise<'accepted'|'cancel'|'refused'|'error'>}
  */
 async function chooseAnother(p, ctx) {
@@ -129,8 +131,7 @@ async function chooseAnother(p, ctx) {
     const raw = await ask('  model id (provider/model), blank to cancel: ');
     const ans = String(raw || '').trim();
     if (!ans) { return 'cancel'; }
-    // GATEFIRST mutant: restore the old classify-then-fresh-then-follow
-    // order (i.e. move this below the two gates) and the R1 tests go red.
+    // Mutant GATEFIRST: move this below the two gates and the R1 tests go red.
     const follows = !!(p.shipped && sameModel(ans, p.shipped));
     if (!follows) {
       const status = classifyTypedId(ans, allCatalogIds, gatedIds);
@@ -144,14 +145,14 @@ async function chooseAnother(p, ctx) {
     try {
       if (follows) {
         d.removeAlias(p.alias);
-        d.write(`  ✓ ${p.alias} now follows the shipped recommendation (${ans})\n`);
+        d.write(`  ✓ ${safeFragment(p.alias)} now follows the shipped recommendation (${safeFragment(ans)})\n`);
       } else {
         d.addAlias(p.alias, ans);
-        d.write(`  ✓ ${p.alias} → ${ans} (pinned)\n`);
+        d.write(`  ✓ ${safeFragment(p.alias)} → ${safeFragment(ans)} (pinned)\n`);
       }
       return 'accepted';
     } catch (err) {
-      d.write(`  could not write: ${err.message}\n`);
+      d.write(`  could not write: ${collapseExcerpt(err.message)}\n`);
       return 'error';
     }
   }
@@ -182,10 +183,10 @@ async function reviewOne(p, i, n, ctx) {
     if (item.action === 'dismiss') {
       try {
         d.recordDismissal(p.dismissKey);
-        d.write(`  dismissed ${p.dismissKey}\n`);
+        d.write(`  dismissed ${safeFragment(p.dismissKey)}\n`);
         return 'dismissed';
       } catch (err) {
-        d.write(`  could not write: ${err.message}\n`);
+        d.write(`  could not write: ${collapseExcerpt(err.message)}\n`);
         d.write(menuLineText(items) + '\n');
         continue;
       }
@@ -216,9 +217,8 @@ async function reviewOne(p, i, n, ctx) {
  */
 async function runReview(args, deps) {
   // F4b: merge (not replace), so a test can inject only the members it cares
-  // about and let every other collaborator run for real against the
-  // hermetic scratch config; every existing deps-object test still
-  // overrides every member it uses, so this stays additive.
+  // about and let every other collaborator run for real against the hermetic
+  // scratch config -- additive, so every existing deps-object test still works.
   const d = { ...defaultDeps(), ...(deps || {}) };
   let prompt = null;
   let ask = d.ask; // M6: kept local, never written back onto `d`

@@ -777,7 +777,7 @@ evals/
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
-| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
+| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()`, `safeFragment()`, `MAX_FRAGMENT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS()`, `validateThinkingLevel()` |
 | `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |

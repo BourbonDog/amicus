@@ -9,6 +9,13 @@
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
  * Every form normalizes the config on entry (D6), best-effort.
+ *
+ * #249 r2 C4: `renderAliasList`'s alias names and ids, and the typed name in
+ * `handleUnpin`'s messages, are quoted onto a terminal and ride `safeFragment`
+ * (the house sanitizer, `utils/text-sanitize.js`) — the fragment, never the
+ * composed line, per `alias-shadow.js :: formatAliasShadow`'s rule. A caught
+ * `err.message` is a sentence, not an id, so it rides `collapseExcerpt` at
+ * the house default cap instead (the `describeThrown` precedent).
  */
 
 'use strict';
@@ -16,6 +23,7 @@
 const { SCHEMA_VERSION } = require('../utils/result-schema-version');
 const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 const { stripGatewayPrefix } = require('../utils/curated-models');
+const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 
 /** @returns {object} this module's collaborators, gathered so a caller can override them in tests */
 function loadDeps() {
@@ -127,7 +135,10 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const proposalByAlias = new Map(view.proposals.map(p => [p.alias, p]));
   const map = { __proto__: null };
   for (const r of view.rows) { map[r.alias] = r.id; }
-  const width = Math.max(6, ...view.rows.map(r => r.alias.length));
+  // #249 r2 C4: width is computed from the SANITIZED name -- a bidi/ANSI
+  // fragment stripped at render time must not skew the column alignment of
+  // every other row's padding.
+  const width = Math.max(6, ...view.rows.map(r => safeFragment(r.alias).length));
   const lines = [];
   for (const g of groupAliases(map)) {
     lines.push(`  ${g.label}`);
@@ -135,7 +146,7 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
       const r = byAlias.get(key);
       const p = proposalByAlias.get(key);
       const flag = p ? rowFlag(p.reasons) : sameGatewayNote(r);
-      lines.push(`    ${key.padEnd(width)}  → ${r.id.padEnd(44)} ${r.state}${flag}`);
+      lines.push(`    ${safeFragment(key).padEnd(width)}  → ${safeFragment(r.id).padEnd(44)} ${r.state}${flag}`);
     }
   }
   lines.push('');
@@ -199,16 +210,16 @@ function handleUnpin(rawName) {
   try {
     removed = removeAlias(name);
   } catch (err) {
-    process.stderr.write(`Error: ${err.message}\n`);
+    process.stderr.write(`Error: ${collapseExcerpt(err.message)}\n`);
     return 1;
   }
   if (!removed) {
-    process.stderr.write(`Error: '${name}' is not pinned (see: amicus aliases)\n`);
+    process.stderr.write(`Error: '${safeFragment(name)}' is not pinned (see: amicus aliases)\n`);
     return 1;
   }
   process.stdout.write(isCurated(name, defaults)
-    ? `✓ ${name} now follows the shipped recommendation (${defaults[name]})\n`
-    : `✓ ${name} removed\n`);
+    ? `✓ ${safeFragment(name)} now follows the shipped recommendation (${defaults[name]})\n`
+    : `✓ ${safeFragment(name)} removed\n`);
   return 0;
 }
 

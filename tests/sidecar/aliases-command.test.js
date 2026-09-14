@@ -4,6 +4,15 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+// R3 (#249 r2 C4) hostile-fragment fixtures. Built with String.fromCharCode
+// so this SOURCE FILE never carries a raw control/bidi byte itself (the same
+// class of footgun the fix guards terminal output against) -- only the
+// runtime string value carries the ESC/RLO codepoint.
+const HOSTILE_ESC = String.fromCharCode(0x1b);
+const HOSTILE_RLO = String.fromCharCode(0x202e); // right-to-left override
+const HOSTILE_ALIAS = `${HOSTILE_ESC}[31mred${HOSTILE_ESC}[0m`;
+const HOSTILE_ID = `openrouter/x/${HOSTILE_RLO}evil\nNotice: forged`;
+
 function captureStdout(fn) {
   const writes = [];
   const orig = process.stdout.write;
@@ -181,6 +190,28 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('--review is interactive'))).toBe(true);
   });
 
+  // R3 (#249 r2 C4): a hostile alias name/id must never reach the terminal
+  // raw -- ANSI and bidi controls dropped, and the smuggled '\n' must never
+  // forge a second, independent line (the attack `alias-shadow.js` names).
+  // Mutant RAWFRAG (drop the `safeFragment` calls here) turns this red.
+  test('R3: renderAliasList sanitizes a hostile alias name and id in a row', () => {
+    const { renderAliasList } = require('../../src/sidecar/aliases');
+    const alias = HOSTILE_ALIAS;
+    const id = HOSTILE_ID;
+    const view = {
+      rows: [{ alias, id, state: 'pinned', curated: false, shipped: null }],
+      proposals: [],
+      catalogInfo: { fetchedAt: Date.now(), models: [{ id }] },
+      catalogAvailable: true,
+    };
+    const out = renderAliasList(view);
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('red');
+    expect(out).toContain('evil');
+  });
+
   describe('--unpin (#238 PR1 fix wave F6)', () => {
     test('unpinning a curated name reverts it to following and says so', async () => {
       cfg.saveConfig({ aliases: { glm: 'openrouter/z-ai/glm-5.4' } });
@@ -204,6 +235,18 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       expect(code).toBe(1);
       expect(out).toBe('');
       expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes("Error: 'nope' is not pinned (see: amicus aliases)"))).toBe(true);
+    });
+    // R3 (#249 r2 C4): a padded hostile name is refused as "not pinned" (it
+    // was never in this empty config) and the ECHOED name in that message is
+    // clean -- ANSI dropped, and trimmed same as every other --unpin path.
+    test('R3: --unpin echoes a padded hostile name cleanly when refusing "not pinned"', async () => {
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: `  ${HOSTILE_ALIAS}  ` }));
+      expect(code).toBe(1);
+      expect(out).toBe('');
+      const stderrText = process.stderr.write.mock.calls.map(c => String(c[0])).join('');
+      expect(stderrText).toContain('is not pinned (see: amicus aliases)');
+      expect(stderrText).not.toContain(HOSTILE_ESC);
+      expect(stderrText).toContain('red');
     });
     test('--unpin combined with --review or --json is an argument error', async () => {
       const a = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm', review: true }));
@@ -264,7 +307,7 @@ describe('aliases is a registered command with a --review flag', () => {
     const { getUsage, getCommandNames, parseArgs } = require('../../src/cli');
     expect(getCommandNames()).toContain('aliases');
     expect(getUsage('aliases')).toContain('--review');
-    expect(getUsage()).toMatch(/\n  aliases\s+/);
+    expect(getUsage()).toMatch(/\n {2}aliases\s+/);
     const { getKnownFlags } = require('../../src/utils/known-flags');
     expect(getKnownFlags().has('review')).toBe(true);
     const parsed = parseArgs(['aliases', '--review', 'stray']);

@@ -20,6 +20,17 @@
  * that has landed here (ANSI in round 2, bidi in round 3) was a class the
  * previous pass could not see.
  *
+ * `safeFragment` (#249 r2 C4) is the same discipline for a shorter kind of
+ * text: not a sentence-length excerpt but ONE quoted config/catalog/typed
+ * value — an alias name, a model id, a dismiss key. MEASURED: the longest id
+ * in a 638-row live catalog cache is 67 characters
+ * (`openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition`);
+ * past 96 it is a payload, not an id. `utils/alias-shadow.js` keeps its OWN
+ * 64-char local cap (measured against the curated table alone, which never
+ * exceeds 39 characters) through this same `collapseExcerpt` function — one
+ * sanitizer, two caps sized to what each caller actually holds, no second
+ * dialect.
+ *
  * PURE: no I/O, no throwing paths, no state.
  */
 
@@ -75,7 +86,23 @@ function collapseExcerpt(text, maxChars = MAX_EXCERPT_CHARS) {
   return `${oneLine.slice(0, maxChars - 1)}…`;
 }
 
+/** One quoted fragment's cap — an id/name/key, not a sentence. See the module docblock. */
+const MAX_FRAGMENT_CHARS = 96;
+
+/**
+ * One third-party fragment (an alias name, a model id, a dismiss key, a
+ * catalog note), safe to interpolate into a terminal line. Same pass as
+ * `collapseExcerpt`, just capped for a short value instead of a sentence.
+ * @param {*} value
+ * @returns {string}
+ */
+function safeFragment(value) {
+  return collapseExcerpt(value, MAX_FRAGMENT_CHARS);
+}
+
 module.exports = {
   collapseExcerpt,
   MAX_EXCERPT_CHARS,
+  safeFragment,
+  MAX_FRAGMENT_CHARS,
 };

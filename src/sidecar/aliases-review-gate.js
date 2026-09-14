@@ -5,11 +5,17 @@
  * was already at five exports) or aliases-review.js (it was already at the
  * 300-line wall). Every export here takes plain data and returns a string or
  * a classification — no I/O, no config reads/writes, no `ask`.
+ *
+ * #249 r2 C4: a typed id is user input rendered straight to a terminal, so
+ * both line-builders below quote it through `safeFragment` (the house
+ * sanitizer, `utils/text-sanitize.js`) — the fragment, not the composed
+ * line, per `alias-shadow.js :: formatAliasShadow`'s rule.
  */
 
 'use strict';
 
 const { ageLabel } = require('./aliases-review-render');
+const { safeFragment } = require('../utils/text-sanitize');
 
 /**
  * Classifies a typed "choose another" model id against the §5 display gate
@@ -30,12 +36,12 @@ function classifyTypedId(id, allCatalogIds, gatedIds) {
 
 /** @returns {string} the line for an id absent from the catalog entirely */
 function notInCatalogLine(id) {
-  return `  not in the catalog — try: amicus models --search ${id.split('/').pop()}\n`;
+  return `  not in the catalog — try: amicus models --search ${safeFragment(id).split('/').pop()}\n`;
 }
 
 /** @returns {string} the line for an id present in the catalog but excluded by the §5 display gate */
 function notVerifiedLine(id) {
-  return `  ${id} is in the catalog but was not verified this run (floor row or rejected provider) — refresh and try again\n`;
+  return `  ${safeFragment(id)} is in the catalog but was not verified this run (floor row or rejected provider) — refresh and try again\n`;
 }
 
 /**

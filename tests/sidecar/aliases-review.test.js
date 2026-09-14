@@ -3,6 +3,14 @@
 
 const DAY = 24 * 60 * 60 * 1000;
 
+// R3 (#249 r2 C4) hostile-fragment fixtures. Built with String.fromCharCode
+// so this SOURCE FILE never carries a raw control/bidi byte itself -- only
+// the runtime string value carries the ESC/RLO codepoint.
+const HOSTILE_ESC = String.fromCharCode(0x1b);
+const HOSTILE_RLO = String.fromCharCode(0x202e); // right-to-left override
+const HOSTILE_ALIAS = `${HOSTILE_ESC}[31mred${HOSTILE_ESC}[0m`;
+const HOSTILE_ID = `openrouter/x/${HOSTILE_RLO}evil\nNotice: forged`;
+
 function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], models = [], providerFailures = [], readCache } = {}) {
   const out = [];
   const err = [];
@@ -287,5 +295,60 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.writes.addAlias).toEqual([]);
     expect(t.out()).not.toContain('not in the catalog');
     expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
+  });
+
+  // R3 (#249 r2 C4): a hostile alias name/id must never reach the terminal
+  // raw -- ANSI/bidi controls dropped, and the smuggled '\n' must never
+  // forge a second, independent line (the attack `alias-shadow.js` names).
+  // Mutant RAWFRAG (drop the `safeFragment` call in `renderScreen`) turns
+  // this test red.
+  test('R3: renderScreen + menuFor sanitize a hostile alias, id and catalog note in a proposal', async () => {
+    const hostile = {
+      alias: HOSTILE_ALIAS, state: 'unmapped', current: null, shipped: null, curated: false,
+      reasons: ['notable-unmapped'],
+      candidates: [{ id: HOSTILE_ID, why: 'notable', evidence: { note: HOSTILE_ID } }],
+      dismissKey: `x@${HOSTILE_ID}`,
+    };
+    const t = makeDeps({ proposals: [hostile], answers: ['4'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    const out = t.out();
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('red');
+    expect(out).toContain('evil');
+  });
+
+  test('R3: "choose another" sanitizes a hostile typed id that is not in the catalog (notInCatalogLine)', async () => {
+    // Unlike a "not fresh" refusal, an 'unknown' classification does not
+    // return to the outer menu -- it re-prompts inside chooseAnother, so a
+    // blank answer is needed to cancel back before the next menu digit.
+    const t = makeDeps({ proposals: [glm], answers: ['3', HOSTILE_ID, '', '4'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    const out = t.out();
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('not in the catalog');
+    expect(out).toContain('evil');
+  });
+
+  test('R3: chooseAnother\'s ✓ line sanitizes a hostile alias and a hostile typed id when pinning', async () => {
+    const hostile = {
+      alias: HOSTILE_ALIAS, state: 'unmapped', current: null, shipped: null, curated: false,
+      reasons: ['notable-unmapped'],
+      candidates: [{ id: 'openrouter/x/y', why: 'notable', evidence: {} }],
+      dismissKey: 'x@openrouter/x/y',
+    };
+    // menu: [1] add <alias> -> openrouter/x/y, [2] choose another, [3] skip, [4] never ask again
+    const t = makeDeps({ proposals: [hostile], answers: ['2', HOSTILE_ID], models: [{ id: HOSTILE_ID }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    const out = t.out();
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('red');
+    expect(out).toContain('evil');
+    // the WRITE itself stays raw -- only the terminal line is sanitized.
+    expect(t.writes.addAlias).toEqual([[HOSTILE_ALIAS, HOSTILE_ID]]);
   });
 });
