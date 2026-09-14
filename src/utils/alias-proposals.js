@@ -16,6 +16,11 @@
  *
  * Own keys only: a `__proto__`/`toString` alias is a custom row here as it is
  * everywhere else in the alias tables.
+ *
+ * `retired` and `notable` are inputs `amicus aliases` does not supply yet:
+ * Phase 2 (`curated-pins.json`) ships the retirement data and Phase 4 the
+ * notable list (spec §7); the paths are built and tested here so they are
+ * not written twice, and are inert from the CLI until then (council r2, D3).
  */
 
 'use strict';
@@ -54,6 +59,13 @@ function gatedCatalogIds(catalogInfo) {
 function proposeForRow(r, ctx) {
   if (r.state !== 'pinned' || own(ctx.retired, r.alias)) { return null; }
   if (ctx.failures.has(providerOf(r.id))) { return null; }             // its namespace cannot be judged
+  // Staleness is judged against the RAW catalog on purpose (council r2,
+  // B1/D4): the §5 gate governs what is PROPOSED, not what is condemned --
+  // on a keyless machine the only Anthropic rows are the hardcoded floor,
+  // and judging liveness against the gated set would call every working
+  // Anthropic pin stale and propose a replacement for each. A floor row is
+  // not evidence the provider serves a model; it is not evidence it
+  // stopped, either.
   const stale = findStaleAliases([{ alias: r.alias, model: r.id, source: 'user-config' }], ctx.models).length === 1;
   const sibling = newestSibling(r.id, ctx.candidateIds);
   // Order (fix round 1, Finding 3): sibling first, UNLESS it is the shipped
