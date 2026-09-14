@@ -34,4 +34,41 @@ describe('model-id-siblings (lifted from scripts/check-ci-alias-pins.js, #238 D7
     expect(script.newestSibling).toBe(newestSibling);
     expect(script.compareVersions).toBe(compareVersions);
   });
+
+  // R2 (#249 r2 B2): a numeric run glued to a following ASCII letter is a
+  // size/variant token (`20b`, `8x22b`, `4o`), never a version -- MEASURED
+  // against a 638-id live catalog cache, 129 ids carry one. Mutant
+  // GLUEDVERSION (drop the glued-letter skip in parsePin) turns the
+  // gpt-oss/gpt-4o/glm-4.5v cases below into non-null parses and the
+  // newestSibling(gpt-oss-20b) case into 'openrouter/openai/gpt-oss-120b'.
+  describe('R2: a size/variant token glued to a number is never read as a version', () => {
+    test('parsePin: glued runs (b/o/v) never parse -- a preceding letter is unaffected', () => {
+      expect(parsePin('openrouter/openai/gpt-oss-20b')).toBeNull();
+      expect(parsePin('openrouter/openai/gpt-4o')).toBeNull();
+      expect(parsePin('openrouter/z-ai/glm-4.5v')).toBeNull();
+      // Preceded-by-letter runs keep parsing exactly as before (unaffected --
+      // only the character AFTER a run is ever examined).
+      expect(parsePin('openrouter/moonshotai/kimi-k3')).toEqual({ vendor: 'openrouter/moonshotai', prefix: 'kimi-k', version: [3], suffix: '' });
+      expect(parsePin('openrouter/x/deepseek-v4-pro')).toEqual({ vendor: 'openrouter/x', prefix: 'deepseek-v', version: [4], suffix: '-pro' });
+      expect(parsePin('openrouter/x/qwen3.8-max')).toEqual({ vendor: 'openrouter/x', prefix: 'qwen', version: [3, 8], suffix: '-max' });
+    });
+    test('parsePin: a glued run is skipped in favour of the next, un-glued, numeric-dotted run', () => {
+      expect(parsePin('openrouter/mistralai/mixtral-8x7b-instruct-v0.1'))
+        .toEqual({ vendor: 'openrouter/mistralai', prefix: 'mixtral-8x7b-instruct-v', version: [0, 1], suffix: '' });
+      expect(parsePin('openrouter/mistralai/mistral-small-3.2-24b-instruct'))
+        .toEqual({ vendor: 'openrouter/mistralai', prefix: 'mistral-small-', version: [3, 2], suffix: '-24b-instruct' });
+    });
+    test('newestSibling: a differently-sized variant is never offered as a "newer" sibling', () => {
+      expect(newestSibling('openrouter/openai/gpt-oss-20b', [...CATALOG, 'openrouter/openai/gpt-oss-120b'])).toBeNull();
+    });
+    test('newestSibling: same prefix/version-shape/suffix still finds the real newer sibling, a different size is still excluded by the suffix check', () => {
+      const catalog = [
+        ...CATALOG,
+        'openrouter/mistralai/mistral-small-3.3-24b-instruct', // same suffix (-24b-instruct), newer version -> the sibling
+        'openrouter/mistralai/mistral-small-3.3-70b-instruct', // different suffix (-70b-instruct) -> excluded, not a size upgrade
+      ];
+      expect(newestSibling('openrouter/mistralai/mistral-small-3.2-24b-instruct', catalog))
+        .toBe('openrouter/mistralai/mistral-small-3.3-24b-instruct');
+    });
+  });
 });
