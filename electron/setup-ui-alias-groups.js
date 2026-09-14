@@ -13,7 +13,7 @@
  * export (NEW_ROUTES_GROUP_LABEL) defined here. `ALIAS_VENDOR_LABELS` (the
  * vendor -> display-name table `vendorLabel` looks up) stayed
  * module-private to alias-groups.js -- it is not one of the five and
- * nothing imports it directly (#249 r1 D2).
+ * nothing imports it directly (issue 249 review round 1, finding D2).
  *
  * SHARED-WITH-THE-BROWSER NOTE (still applies to the grouping rule, wherever
  * it lives) — deliberately NOT shared. The wizard's inline script cannot
