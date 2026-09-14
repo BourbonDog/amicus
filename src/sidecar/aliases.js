@@ -10,7 +10,9 @@
  * gate); the picker refreshes inline when the cache is stale (write gate).
  * Every form normalizes the config on entry (D6), best-effort.
  *
- * #249 r2 C4: `renderAliasList`'s alias names and ids, and the typed name in
+ * #249 r2 C4: `renderAliasList`'s alias names, ids and vendor-group labels
+ * (an unmapped vendor's label is `titleCaseVendor` of a config VALUE's
+ * segment — still third-party, per review F1), and the typed name in
  * `handleUnpin`'s messages, are quoted onto a terminal and ride `safeFragment`
  * (the house sanitizer, `utils/text-sanitize.js`) — the fragment, never the
  * composed line, per `alias-shadow.js :: formatAliasShadow`'s rule. A caught
@@ -141,7 +143,14 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const width = Math.max(6, ...view.rows.map(r => safeFragment(r.alias).length));
   const lines = [];
   for (const g of groupAliases(map)) {
-    lines.push(`  ${g.label}`);
+    // F1 (#249 r2 review, C4 residual): for a vendor NOT in ALIAS_VENDOR_LABELS,
+    // `alias-groups.js :: vendorLabel` title-cases the raw vendor segment of a
+    // config VALUE (`aliasVendorOf`) rather than mapping it to house text --
+    // that is still third-party data, unlike the ~30 mapped labels. Sanitized
+    // HERE, not inside `vendorLabel`: that helper also renders into the
+    // Electron setup UI's HTML context (`electron/setup-ui-alias-groups.js`),
+    // out of scope for this terminal-only house rule.
+    lines.push(`  ${safeFragment(g.label)}`);
     for (const key of g.keys) {
       const r = byAlias.get(key);
       const p = proposalByAlias.get(key);

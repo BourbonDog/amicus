@@ -12,6 +12,9 @@ const HOSTILE_ESC = String.fromCharCode(0x1b);
 const HOSTILE_RLO = String.fromCharCode(0x202e); // right-to-left override
 const HOSTILE_ALIAS = `${HOSTILE_ESC}[31mred${HOSTILE_ESC}[0m`;
 const HOSTILE_ID = `openrouter/x/${HOSTILE_RLO}evil\nNotice: forged`;
+// F1 (#249 r2 review): a hostile VENDOR segment -- the id's own second path
+// segment, which an unmapped vendor's group label is titleCased from.
+const HOSTILE_VENDOR_ID = `openrouter/${HOSTILE_ESC}[31mevil${HOSTILE_RLO}\nNotice: forged/model-1`;
 
 function captureStdout(fn) {
   const writes = [];
@@ -209,6 +212,25 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(out).not.toContain(HOSTILE_RLO);
     expect(out).not.toMatch(/^Notice: forged/m);
     expect(out).toContain('red');
+    expect(out).toContain('evil');
+  });
+
+  // F1 (#249 r2 review, C4 residual): for a vendor NOT in ALIAS_VENDOR_LABELS,
+  // the group label is `titleCaseVendor(vendorOf(<config value>))` -- still
+  // third-party text, since title-casing strips nothing. Mutant: drop the
+  // `safeFragment(g.label)` wrap at the push -> red.
+  test('F1: renderAliasList sanitizes a hostile vendor-group label (unmapped vendor)', () => {
+    const { renderAliasList } = require('../../src/sidecar/aliases');
+    const view = {
+      rows: [{ alias: 'mine', id: HOSTILE_VENDOR_ID, state: 'pinned', curated: false, shipped: null }],
+      proposals: [],
+      catalogInfo: { fetchedAt: Date.now(), models: [{ id: HOSTILE_VENDOR_ID }] },
+      catalogAvailable: true,
+    };
+    const out = renderAliasList(view);
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^notice: forged/im);
     expect(out).toContain('evil');
   });
 
