@@ -25,6 +25,7 @@ function loadDeps() {
     buildAliasProposals: require('../utils/alias-proposals').buildAliasProposals,
     readDismissals: require('../utils/alias-store').readDismissals,
     getCatalogInfo: require('../utils/model-catalog').getCatalogInfo,
+    readCache: require('../utils/model-catalog').readCache,
     groupAliases: require('../../electron/setup-ui-alias-groups').groupAliases,
   };
 }
@@ -54,15 +55,31 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
   const userAliases = normalizeOnEntry(d);
   const defaults = d.config.getDefaultAliases();
   let catalogInfo = { models: [], fetchedAt: null, providerFailures: [] };
-  try { catalogInfo = await d.getCatalogInfo(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs }); }
-  catch (err) { process.stderr.write(`Notice: catalog unavailable (${err.message}) — no proposals\n`); }
+  try {
+    if (opts.maxAgeMs === Number.POSITIVE_INFINITY) {
+      // Display gate (§5): the LIST never networks, even to fill an empty or
+      // v1 cache — read whatever is on disk, verbatim, with no freshness
+      // check at all. `getCatalogInfo` cannot be reused here: it always
+      // calls `getCatalog`, which refreshes (a real fetch) the moment
+      // `readCache()` returns null, regardless of `maxAgeMs`.
+      const c = d.readCache();
+      catalogInfo = {
+        models: (c && Array.isArray(c.models)) ? c.models : [],
+        fetchedAt: c && typeof c.fetchedAt === 'number' ? c.fetchedAt : null,
+        providerFailures: (c && Array.isArray(c.providerFailures)) ? c.providerFailures : [],
+      };
+    } else {
+      // The picker's default-age path (Task 8): a stale cache refreshes inline.
+      catalogInfo = await d.getCatalogInfo(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs });
+    }
+  } catch (err) { process.stderr.write(`Notice: catalog unavailable (${err.message}) — no proposals\n`); }
   const rows = d.listAliasRows(userAliases, defaults);
   const proposals = d.buildAliasProposals({ userAliases, defaults, catalogInfo, dismissed: d.readDismissals() });
   return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0 };
 }
 
-/** @param {{rows: Array, proposals: Array}} view @param {Function} groupAliases @returns {string} */
-function renderAliasList(view, groupAliases) {
+/** @param {{rows: Array, proposals: Array}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
+function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const byAlias = new Map(view.rows.map(r => [r.alias, r]));
   const flagged = new Set(view.proposals.map(p => p.alias));
   const map = { __proto__: null };
