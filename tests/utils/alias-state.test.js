@@ -5,7 +5,14 @@ const { normalizeAliases, listAliasRows, isCurated } = require('../../src/utils/
 const defaults = { __proto__: null, gemini: 'google/gemini-3.6-flash', glm: 'openrouter/z-ai/glm-5.3' };
 
 describe('normalizeAliases (#238 D6 — a key equal to the shipped default follows)', () => {
-  // Named mutant "KEEPEQUAL" — return the input map unchanged.
+  // Named mutant "KEEPEQUAL" — return the input map unchanged
+  // (`return { aliases: { ...aliases }, removed: [] };` at the top of the
+  // function). Measured red 2026-09-14, `npx jest tests/utils/alias-state.test.js`,
+  // 4 of 12 failed:
+  //   - 'drops keys whose value equals the shipped default, keeps the rest, in order'
+  //   - 'is idempotent and never notifies twice'
+  //   - 'a __proto__ key in the input is kept as a plain own key, never a prototype write'
+  //   - 'D6 no-op proof: every alias resolves to the identical id before and after normalization'
   test('drops keys whose value equals the shipped default, keeps the rest, in order', () => {
     const lines = [];
     const { aliases, removed } = normalizeAliases(
