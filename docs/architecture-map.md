@@ -188,6 +188,7 @@ src/
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── alias-shadow-writer.js  # The alias-shadow notice's WRITE half: say it without ever sinking the run.
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
+│   ├── alias-store.js  # The write sinks the alias review flow needs beyond `setup.js :: addAlias`
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
@@ -654,6 +655,7 @@ evals/
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
+| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `recordDismissal()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
