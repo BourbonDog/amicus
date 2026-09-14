@@ -11,8 +11,8 @@ describe('createDefaultConfig (read-modify-write)', () => {
     process.env.AMICUS_CONFIG_DIR = tempDir;
     jest.resetModules();
     // #238 Q9: createDefaultConfig no longer seeds curated aliases (it never
-    // writes anything equal to a shipped default), so this block shouldn't
-    // print Notices — the spy stays as defensive insurance regardless.
+    // writes anything equal to a shipped default). The spy is LOAD-BEARING
+    // (#238 T5 fix round 1, Finding 1) -- see the assertion below for why.
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
   afterEach(() => {
@@ -41,6 +41,15 @@ describe('createDefaultConfig (read-modify-write)', () => {
     // the shipped defaults (absence follows, #238 D1).
     expect(Object.keys(cfg.aliases).length).toBe(0);
     expect(Object.keys(getEffectiveAliases()).length).toBe(Object.keys(getDefaultAliases()).length);
+    // #238 T5 fix round 1 (Finding 1): the actual regression guard -- Task
+    // 3's normalization would strip a re-seeded `cfg.aliases` back to `{}`
+    // either way, so the two assertions above cannot tell a re-seed from no
+    // seed. Mirrors setup.test.js's 'does not seed curated aliases — they
+    // follow the shipped pins by absence (#238 Q9)' assertion -- both go RED
+    // if createDefaultConfig re-seeds (verified: restoring
+    // `...getDefaultAliases(),` reddens 'still resolves a full default-alias
+    // table on a fresh install' here and the setup.test.js test there).
+    expect(stderrSpy).not.toHaveBeenCalled();
   });
 });
 

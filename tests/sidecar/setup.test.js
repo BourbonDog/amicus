@@ -149,9 +149,12 @@ describe('Setup Wizard', () => {
   describe('createDefaultConfig', () => {
     // #238 Q9: createDefaultConfig no longer seeds curated aliases into a
     // fresh config -- a curated alias follows the shipped pin by being
-    // absent (D1). The stderr spy stays as defensive insurance: saveConfig
-    // still normalizes away (with a Notice) any alias a test explicitly
-    // seeds that happens to equal its shipped default.
+    // absent (D1). The stderr spy is LOAD-BEARING (#238 T5 fix round 1,
+    // Finding 1): reverting createDefaultConfig to re-seed
+    // `...getDefaultAliases()` would still leave `cfg.aliases` at `{}` (Task
+    // 3's normalization strips all 21 seeded-equal-to-shipped keys right back
+    // out), so the aliases-shape assertions alone cannot catch a re-seeding
+    // regression -- only the absence of the 21 "now following" Notices can.
     let stderrSpy;
     beforeEach(() => {
       stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -165,6 +168,14 @@ describe('Setup Wizard', () => {
       const cfg = createDefaultConfig('gemini');
       expect(cfg.default).toBe('gemini');
       expect(cfg.aliases).toEqual({});
+      // #238 T5 fix round 1 (Finding 1): the actual regression guard. Mirrors
+      // free-council-config.test.js's 'still resolves a full default-alias
+      // table on a fresh install' assertion -- both go RED if
+      // createDefaultConfig re-seeds (verified: restoring
+      // `...getDefaultAliases(),` reddens 'does not seed curated aliases —
+      // they follow the shipped pins by absence (#238 Q9)' here and
+      // 'still resolves a full default-alias table on a fresh install' there).
+      expect(stderrSpy).not.toHaveBeenCalled();
       const { getEffectiveAliases } = require('../../src/utils/config');
       expect(getEffectiveAliases().gemini).toBeDefined();   // still resolves, via the defaults
     });

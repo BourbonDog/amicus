@@ -176,7 +176,8 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   });
 
   // Read-modify-write: never rewrite an alias the renderer didn't send.
-  // aliasWrites values: string = set, null = delete. First run seeds live.
+  // aliasWrites values: string = set, null = delete. First run starts from
+  // an empty alias map (issue 238 Q9).
   // councilPicks (optional): when length >= 2, seeds the free council via seedFreeCouncil.
   ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites, councilPicks) => {
     try {
