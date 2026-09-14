@@ -16,8 +16,9 @@
  * Notice per key. It runs inside `saveConfig` (so every write converges) and on
  * entry to `amicus aliases`. It is idempotent and never a startup write.
  *
- * Own keys only, everywhere: a `__proto__`/`toString`/`constructor` name in a
- * user config is a plain custom alias, never a curated one.
+ * Own keys only, everywhere: a `toString`/`constructor` name in a user
+ * config is a plain custom alias, never a curated one; a `__proto__` key
+ * gets no row at all — `saveConfig` can never persist it.
  */
 
 'use strict';

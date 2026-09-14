@@ -15,7 +15,8 @@
  * silently exiting 0; every config write is caught per-call so a failure
  * reports and re-shows the menu; typing the shipped id into "choose another"
  * follows (Q4's encoding) rather than pinning a redundant copy; a taken
- * notable name gets a numeric suffix against the live effective-alias set.
+ * notable name gets a numeric suffix (`freeSuffix`), deliberately not
+ * `deriveFreeAlias`'s `free-` naming, which is for free-tier council seeds.
  * Fix round 2 (#249 r1) gate helpers (§5-gated "choose another", clock-skew
  * freshness, a throwing `readCache`) live in aliases-review-gate.js.
  */
