@@ -147,17 +147,42 @@ describe('Setup Wizard', () => {
   });
 
   describe('createDefaultConfig', () => {
+    // #238 D6: saveConfig drops any alias key equal to the shipped default
+    // (it FOLLOWS instead of being pinned) and writes one Notice per dropped
+    // key. createDefaultConfig seeds all 21 shipped defaults verbatim, so
+    // every call in this block would otherwise print 21 Notices to the real
+    // stderr; keep the suite's output pristine.
+    let stderrSpy;
+    beforeEach(() => {
+      stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    });
+    afterEach(() => {
+      stderrSpy.mockRestore();
+    });
+
     it('should create config with all default aliases and chosen default', () => {
       const { createDefaultConfig } = require('../../src/sidecar/setup');
       const cfg = createDefaultConfig('gemini');
 
       expect(cfg.default).toBe('gemini');
       expect(cfg.aliases).toBeDefined();
-      expect(cfg.aliases.gemini).toBeDefined();
-      expect(cfg.aliases['gemini-pro']).toBeDefined();
-      expect(cfg.aliases.gpt).toBeDefined();
-      expect(cfg.aliases.opus).toBeDefined();
-      expect(cfg.aliases.deepseek).toBeDefined();
+      // #238 D6: every seeded value equals its shipped default, so
+      // saveConfig's normalization drops these raw keys -- the alias now
+      // FOLLOWS instead of being pinned.
+      expect(cfg.aliases.gemini).toBeUndefined();
+      expect(cfg.aliases['gemini-pro']).toBeUndefined();
+      expect(cfg.aliases.gpt).toBeUndefined();
+      expect(cfg.aliases.opus).toBeUndefined();
+      expect(cfg.aliases.deepseek).toBeUndefined();
+      // ...but each still resolves to the identical shipped id through the
+      // effective (merged) view every consumer actually reads.
+      const { getEffectiveAliases } = require('../../src/utils/config');
+      const effective = getEffectiveAliases();
+      expect(effective.gemini).toBeDefined();
+      expect(effective['gemini-pro']).toBeDefined();
+      expect(effective.gpt).toBeDefined();
+      expect(effective.opus).toBeDefined();
+      expect(effective.deepseek).toBeDefined();
 
       // Verify it was saved to disk
       const saved = JSON.parse(
@@ -167,12 +192,14 @@ describe('Setup Wizard', () => {
       expect(saved.aliases).toEqual(cfg.aliases);
     });
 
-    it('should have 20+ aliases', () => {
+    it('should have 0 raw aliases once shipped defaults normalize away (#238 D6; was "20+ aliases" pre-normalization)', () => {
       const { createDefaultConfig } = require('../../src/sidecar/setup');
       const cfg = createDefaultConfig('gemini');
 
+      // Every seeded alias equals its shipped default and is dropped by
+      // saveConfig's normalization; Task 5 removes the seeding itself.
       const aliasCount = Object.keys(cfg.aliases).length;
-      expect(aliasCount).toBeGreaterThanOrEqual(20);
+      expect(aliasCount).toBe(0);
     });
 
     it('should accept any string as default model', () => {

@@ -4,15 +4,20 @@ const fs = require('fs');
 const os = require('os');
 
 describe('createDefaultConfig (read-modify-write)', () => {
-  let tempDir, originalEnv;
+  let tempDir, originalEnv, stderrSpy;
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'free-council-cfg-'));
     originalEnv = { ...process.env };
     process.env.AMICUS_CONFIG_DIR = tempDir;
     jest.resetModules();
+    // #238 D6: createDefaultConfig seeds every shipped default verbatim;
+    // saveConfig's normalization then drops each one with a Notice. Silence
+    // it here the same way Task 3's own wiring tests do.
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
   afterEach(() => {
     process.env = originalEnv;
+    stderrSpy.mockRestore();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -26,12 +31,16 @@ describe('createDefaultConfig (read-modify-write)', () => {
     expect(cfg.councils).toEqual({ free: ['free-deepseek-r1'] });
   });
 
-  it('still seeds a full default-alias table on a fresh install', () => {
+  it('still resolves a full default-alias table on a fresh install (#238 D6: shipped-equal keys now follow, so the raw map is empty)', () => {
     const { createDefaultConfig } = require('../src/sidecar/setup');
-    const { getDefaultAliases } = require('../src/utils/config');
+    const { getDefaultAliases, getEffectiveAliases } = require('../src/utils/config');
     const cfg = createDefaultConfig('gemini');
     expect(cfg.default).toBe('gemini');
-    expect(Object.keys(cfg.aliases).length).toBe(Object.keys(getDefaultAliases()).length);
+    // Every seeded alias equals its shipped default, so saveConfig's
+    // normalization drops all of them (Task 5 removes the seeding itself);
+    // the raw map is empty but the effective (merged) view still has them all.
+    expect(Object.keys(cfg.aliases).length).toBe(0);
+    expect(Object.keys(getEffectiveAliases()).length).toBe(Object.keys(getDefaultAliases()).length);
   });
 });
 
