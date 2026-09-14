@@ -71,12 +71,17 @@ describe('alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§
 
 describe('alias-proposals — the §5 display gate', () => {
   // Named mutant "FLOORSIBLING" — drop the `authoritative !== false` filter from candidateIds.
+  // Measured red (npx jest tests/utils/alias-proposals.test.js), 1/15 failed:
+  //   "alias-proposals — the §5 display gate › a non-authoritative row is never a candidate"
   test('a non-authoritative row is never a candidate', () => {
     const models = [...CATALOG, row('openrouter/z-ai/glm-5.9', { authoritative: false })];
     const [p] = run({ glm: 'openrouter/z-ai/glm-5.4' }, { catalogInfo: info(models) });
     expect(p.candidates.map(c => c.id)).not.toContain('openrouter/z-ai/glm-5.9');
   });
   // Named mutant "FAILEDCANDIDATE" — drop the providerFailures filter from candidateIds.
+  // Measured red (npx jest tests/utils/alias-proposals.test.js), 1/15 failed:
+  //   "alias-proposals — the §5 display gate › a row from a rejected namespace is never a
+  //   candidate, and a pin in a rejected namespace is not judged"
   test('a row from a rejected namespace is never a candidate, and a pin in a rejected namespace is not judged', () => {
     const failures = [{ provider: 'openrouter', reason: 'http-status', status: 403 }];
     expect(run({ glm: 'openrouter/z-ai/glm-5.2' }, { catalogInfo: info([...CATALOG, row('openrouter/z-ai/glm-5.2')], failures) })).toEqual([]);
@@ -85,6 +90,22 @@ describe('alias-proposals — the §5 display gate', () => {
     expect(out).toEqual([]);
   });
   // Named mutant "OLDERSIBLING" — compare with `>= 0` instead of `> 0` in the lifted comparator's caller (i.e. accept equal/older).
+  // Measured red (npx jest tests/utils/alias-proposals.test.js) via the engine-side substitute
+  // `ctx.candidateIds.find(id => id !== r.id && id.startsWith(r.id.slice(0, r.id.lastIndexOf('-'))))`
+  // in place of `newestSibling(r.id, ctx.candidateIds)` — cruder than a real `>= 0` flip (no
+  // vendor/prefix/suffix/version structure, first match wins), so it also breaks sibling
+  // selection generally; 6/15 failed, named test included:
+  //   "alias-proposals — the §5 display gate › an older sibling is never proposed"
+  //   "alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§2) › pinned behind a
+  //     newer sibling AND behind the shipped pin: ONE proposal, sibling first, follow second"
+  //   "alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§2) › pinned AHEAD of
+  //     the shipped pin with no newer sibling: follow is still offered (differs-from-shipped)"
+  //   "alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§2) › tier crossing is
+  //     never proposed: a sol pin never sees terra"
+  //   "alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§2) › stale pinned
+  //     custom alias: replacements from the same vendor, no follow (nothing shipped)"
+  //   "alias-proposals — dismissal, retired, notable › a dismissed key is skipped; a newer
+  //     proposed id is a new key and asks again"
   test('an older sibling is never proposed', () => {
     const models = [row('openrouter/z-ai/glm-5.1'), row('openrouter/z-ai/glm-5.4')];
     expect(run({ glm: 'openrouter/z-ai/glm-5.4' }, { catalogInfo: info(models) })
