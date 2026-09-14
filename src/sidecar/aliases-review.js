@@ -270,7 +270,7 @@ async function runReview(args, deps) {
     const catalogModels = Array.isArray(view.catalogInfo && view.catalogInfo.models) ? view.catalogInfo.models : [];
     const allCatalogIds = new Set(catalogModels.map(m => m && m.id).filter(Boolean));
     const gatedIds = new Set(gatedCatalogIds(view.catalogInfo));
-    const ctx = { d, fresh, view, ask, allCatalogIds, gatedIds };
+    const ctx = { d, fresh, ask, allCatalogIds, gatedIds };
     try {
       for (let i = 0; i < proposals.length; i++) {
         const outcome = await reviewOne(proposals[i], i, proposals.length, ctx);
