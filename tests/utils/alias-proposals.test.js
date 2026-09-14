@@ -58,6 +58,10 @@ describe('alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§
     const [p] = run({ glm: 'openrouter/z-ai/glm-5.2' }, { catalogInfo: info([row('openrouter/z-ai/glm-5.2'), row('openrouter/z-ai/glm-5.3')]) });
     expect(p.candidates).toEqual([{ id: 'openrouter/z-ai/glm-5.3', why: 'follow', evidence: {} }]);
     expect(p.dismissKey).toBe('glm@openrouter/z-ai/glm-5.3');
+    // F2: reasons must describe the CANDIDATES actually offered -- the sibling
+    // was found, but it is not a distinct candidate (it's the same id as
+    // `follow`), so 'newer-sibling' must not appear alongside it.
+    expect(p.reasons).toEqual(['differs-from-shipped']);
   });
   test('same model under another gateway form is not a difference (alias-shadow rule)', () => {
     expect(run({ gemini: 'openrouter/google/gemini-3.6-flash' })).toEqual([]);

@@ -79,10 +79,26 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
   return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0 };
 }
 
+/**
+ * F2: the per-row flag names the SPECIFIC reason a proposal exists, instead
+ * of a blanket "newer available" that was wrong for two of the three kinds —
+ * an ahead-of-shipped pin with no sibling only differs from the shipped pin,
+ * and a stale pin with no catalog match at all is gone from the catalog
+ * outright, neither of which is "newer available".
+ * @param {string[]} reasons a proposal's `reasons` array
+ * @returns {string} the row suffix, or '' when called with no reasons
+ */
+function rowFlag(reasons) {
+  if (!reasons || reasons.length === 0) { return ''; }
+  if (reasons.includes('newer-sibling')) { return '   ⚠ newer available'; }
+  if (reasons.includes('stale')) { return '   ⚠ gone from catalog'; }
+  return '   differs from shipped';
+}
+
 /** @param {{rows: Array, proposals: Array}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
 function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const byAlias = new Map(view.rows.map(r => [r.alias, r]));
-  const flagged = new Set(view.proposals.map(p => p.alias));
+  const proposalByAlias = new Map(view.proposals.map(p => [p.alias, p]));
   const map = { __proto__: null };
   for (const r of view.rows) { map[r.alias] = r.id; }
   const width = Math.max(6, ...view.rows.map(r => r.alias.length));
@@ -91,7 +107,8 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     lines.push(`  ${g.label}`);
     for (const key of g.keys) {
       const r = byAlias.get(key);
-      const flag = flagged.has(key) ? '   ⚠ newer available' : '';
+      const p = proposalByAlias.get(key);
+      const flag = p ? rowFlag(p.reasons) : '';
       lines.push(`    ${key.padEnd(width)}  → ${r.id.padEnd(44)} ${r.state}${flag}`);
     }
   }
@@ -106,7 +123,7 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const n = view.proposals.length;
   lines.push(n === 0
     ? '  nothing to review — amicus aliases --review'
-    : `  ${n} update${n === 1 ? '' : 's'} available — amicus aliases --review`);
+    : `  ${n} to review — amicus aliases --review`);
   // F1: the catalog is available but stale -- name its age so a user who
   // never runs --review still learns the background refresh isn't keeping up.
   const fetchedAt = view.catalogInfo && view.catalogInfo.fetchedAt;

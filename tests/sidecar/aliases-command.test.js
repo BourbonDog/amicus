@@ -47,8 +47,19 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(out).toMatch(/gemini\s+→\s+google\/gemini-3\.6-flash\s+following/);
     expect(out).toMatch(/glm\s+→\s+openrouter\/z-ai\/glm-5\.2\s+pinned\s+⚠ newer available/);
     expect(out).toMatch(/mine\s+→\s+openrouter\/z-ai\/glm-5\.4\s+pinned/);
-    expect(out).toContain('1 update available — amicus aliases --review');
+    expect(out).toContain('1 to review — amicus aliases --review');
     expect(catalogCalls).toEqual([]);   // display gate: reads the cache directly, never calls getCatalogInfo
+  });
+  // F2: the per-row flag names the SPECIFIC reason instead of a blanket
+  // "newer available" — an ahead-of-shipped pin with no sibling differs only
+  // from the shipped pin, and a stale custom pin (no catalog match at all,
+  // no same-vendor replacement) is gone from the catalog outright.
+  test('F2: row flags reflect the specific reason — AHEAD pin reads "differs from shipped", a stale custom pin reads "gone from catalog"', async () => {
+    cfg.saveConfig({ aliases: { glm: 'openrouter/z-ai/glm-5.4', ghost: 'openrouter/nobody/thing-1' } });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toMatch(/glm\s+→\s+openrouter\/z-ai\/glm-5\.4\s+pinned\s+differs from shipped/);
+    expect(out).toMatch(/ghost\s+→\s+openrouter\/nobody\/thing-1\s+pinned\s+⚠ gone from catalog/);
   });
   test('list with nothing pinned says so and does not network', async () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));

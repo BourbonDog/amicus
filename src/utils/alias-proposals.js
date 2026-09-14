@@ -39,12 +39,6 @@ function proposeForRow(r, ctx) {
   if (ctx.failures.has(providerOf(r.id))) { return null; }             // its namespace cannot be judged
   const stale = findStaleAliases([{ alias: r.alias, model: r.id, source: 'user-config' }], ctx.models).length === 1;
   const sibling = newestSibling(r.id, ctx.candidateIds);
-  const differs = r.curated && !sameModel(r.shipped, r.id);
-  const reasons = [];
-  if (stale) { reasons.push('stale'); }
-  if (sibling) { reasons.push('newer-sibling'); }
-  if (differs) { reasons.push('differs-from-shipped'); }
-  if (reasons.length === 0) { return null; }
   // Order (fix round 1, Finding 3): sibling first, UNLESS it is the shipped
   // model itself — `follow` already names that id, so listing it twice as
   // both "newer-sibling" and "follow" would be a display duplicate. `follow`
@@ -53,8 +47,19 @@ function proposeForRow(r, ctx) {
   // found (even if hidden here as identical to `follow`) means the
   // structurally-aware comparator has already answered "what's newer" —
   // replacements are only offered when that comparator found nothing at all.
+  const differs = r.curated && !sameModel(r.shipped, r.id);
+  // F2: a sibling identical to the shipped id is not a DISTINCT candidate (it
+  // never reaches `candidates` below), so it must not be named in `reasons`
+  // either — reasons describes what was actually offered, not every signal
+  // the engine looked at.
+  const siblingIsCandidate = !!sibling && !sameModel(sibling, r.shipped);
+  const reasons = [];
+  if (stale) { reasons.push('stale'); }
+  if (siblingIsCandidate) { reasons.push('newer-sibling'); }
+  if (differs) { reasons.push('differs-from-shipped'); }
+  if (reasons.length === 0) { return null; }
   const candidates = [];
-  if (sibling && !sameModel(sibling, r.shipped)) { candidates.push({ id: sibling, why: 'newer-sibling', evidence: {} }); }
+  if (siblingIsCandidate) { candidates.push({ id: sibling, why: 'newer-sibling', evidence: {} }); }
   if (differs) { candidates.push({ id: r.shipped, why: 'follow', evidence: {} }); }
   if (stale && !sibling) {
     // Fix round 2 (ruling: DEDUPE): a replacement never repeats an id
