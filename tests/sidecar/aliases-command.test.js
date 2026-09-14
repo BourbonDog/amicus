@@ -299,6 +299,45 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
       expect(onDisk.aliases).not.toHaveProperty('mine');
     });
+
+    // R4 (#249 r2 D2): unpinning a non-curated name that is ALSO
+    // config.default would leave the default dangling on a key that no
+    // longer resolves -- refused before any write, never a silent dangle.
+    test('R4(a): --unpin refuses a non-curated name that is also config.default; no write', async () => {
+      cfg.saveConfig({ default: 'mine', aliases: { mine: 'openrouter/x/y' } });
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'mine' }));
+      expect(code).toBe(1);
+      expect(out).toBe('');
+      expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes(
+        "Error: 'mine' is your default model (config.default) — pick another default first (amicus setup)"))).toBe(true);
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).toHaveProperty('mine', 'openrouter/x/y');
+      expect(onDisk.default).toBe('mine');
+    });
+
+    // A CURATED default is unaffected -- it keeps resolving from the shipped
+    // table after the unpin, same as any other curated unpin.
+    test('R4(b): --unpin still unpins a CURATED name even when it is config.default', async () => {
+      cfg.saveConfig({ default: 'glm', aliases: { glm: 'openrouter/z-ai/glm-5.2' } });
+      const shipped = cfg.getDefaultAliases();
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm' }));
+      expect(code).toBe(0);
+      expect(out).toBe(`✓ glm now follows the shipped recommendation (${shipped.glm})\n`);
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('glm');
+    });
+
+    // config.default can also be a bare model id (not an alias name at all,
+    // per start-helpers.js) -- the guard compares against the literal `name`
+    // argument, so a default that merely resolves to the SAME id is not a match.
+    test('R4(c): config.default is a full model id, not the alias name -- --unpin is unaffected', async () => {
+      cfg.saveConfig({ default: 'openrouter/x/y', aliases: { mine: 'openrouter/x/y' } });
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'mine' }));
+      expect(code).toBe(0);
+      expect(out).toBe('✓ mine removed\n');
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('mine');
+    });
   });
 });
 
