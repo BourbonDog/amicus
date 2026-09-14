@@ -63,7 +63,7 @@ function normalizeOnEntry(d) {
   const probe = d.normalizeAliases(cfg.aliases, defaults);
   if (probe.removed.length > 0 || hasStrippableAliasValue(cfg.aliases)) {
     try { d.config.saveConfig(cfg); }                              // saveConfig prints the Notices
-    catch (err) { process.stderr.write(`Notice: could not normalize aliases (${err.message}) — keys left on disk; every alias still resolves to the same id\n`); }
+    catch (err) { process.stderr.write(`Notice: could not normalize aliases (${collapseExcerpt(err.message)}) — keys left on disk; every alias still resolves to the same id\n`); }
   }
   return probe.aliases;
 }
@@ -93,7 +93,7 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
       // The picker's default-age path (Task 8): a stale cache refreshes inline.
       catalogInfo = await d.getCatalogInfo(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs });
     }
-  } catch (err) { process.stderr.write(`Notice: catalog unavailable (${err.message}) — no proposals\n`); }
+  } catch (err) { process.stderr.write(`Notice: catalog unavailable (${collapseExcerpt(err.message)}) — no proposals\n`); }
   const rows = d.listAliasRows(userAliases, defaults);
   const proposals = d.buildAliasProposals({ userAliases, defaults, catalogInfo, dismissed: d.readDismissals() });
   return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0 };

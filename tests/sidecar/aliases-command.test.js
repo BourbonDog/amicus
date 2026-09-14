@@ -145,6 +145,21 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       String(c[0]).includes('Notice: could not normalize aliases (disk full) — keys left on disk; every alias still resolves to the same id'))).toBe(true);
     cfg.saveConfig.mockRestore();
   });
+  // F4 (#249 r2 review): this Notice line interpolated a caught err.message
+  // RAW, contradicting the module docblock's claim that a caught message
+  // rides collapseExcerpt. Same injection pattern as the test above, with a
+  // hostile message instead of a plain one.
+  test('F4: a hostile normalize-on-entry write-failure message is sanitized on stderr (no ESC)', async () => {
+    const shipped = cfg.getDefaultAliases();
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(cfg.getConfigPath(), JSON.stringify({ aliases: { glm: shipped.glm } }));
+    jest.spyOn(cfg, 'saveConfig').mockImplementation(() => { throw new Error(`disk full${HOSTILE_ESC}[31m!`); });
+    await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    const stderrText = process.stderr.write.mock.calls.map(c => String(c[0])).join('');
+    expect(stderrText).toContain('Notice: could not normalize aliases (disk full');
+    expect(stderrText).not.toContain(HOSTILE_ESC);
+    cfg.saveConfig.mockRestore();
+  });
   // R8a (#249 r1 A3/D4): normalizeAliases only drops a value equal to the
   // shipped default -- a garbage (non-string) value sat on disk forever,
   // since probe.removed stayed empty and saveConfig was never triggered.
