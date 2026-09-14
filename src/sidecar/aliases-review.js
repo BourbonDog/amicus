@@ -9,24 +9,24 @@
  * is exempt because it removes a key. Pure screen text lives in
  * aliases-review-render.js (split in fix round 1 to hold the 300-line gate).
  *
- * Fix round 1: a missing cache (`fetchedAt` not a number — first run, or
- * offline) gets its own banner instead of a bogus multi-thousand-day
- * `ageLabel` (never called on a non-number); the banner only ever appears
- * once there is something to review. A readline `close` (Ctrl-C/D) mid-prompt
- * rejects the pending `ask` with a `REVIEW_ABORTED` sentinel instead of
- * silently exiting 0. Every config write (`addAlias`/`removeAlias`/
- * `recordDismissal`) is caught per-call so a write failure reports and
- * re-shows the menu rather than crashing the review. Typing the shipped id
- * into "choose another" follows (Q4's encoding) rather than pinning a
- * redundant copy. A taken notable name gets a numeric suffix against the
- * live effective-alias set, not the free-model `deriveFreeAlias` naming.
+ * Fix round 1: a missing cache reads as its own banner, never a bogus
+ * multi-thousand-day `ageLabel`; a readline `close` (Ctrl-C/D) mid-prompt
+ * rejects the pending `ask` with a `REVIEW_ABORTED` sentinel rather than
+ * silently exiting 0; every config write is caught per-call so a failure
+ * reports and re-shows the menu; typing the shipped id into "choose another"
+ * follows (Q4's encoding) rather than pinning a redundant copy; a taken
+ * notable name gets a numeric suffix against the live effective-alias set.
+ * Fix round 2 (#249 r1) gate helpers (§5-gated "choose another", clock-skew
+ * freshness, a throwing `readCache`) live in aliases-review-gate.js.
  */
 
 'use strict';
 
 const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 const { stripGatewayPrefix } = require('../utils/curated-models');
-const { ageLabel, menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
+const { gatedCatalogIds } = require('../utils/alias-proposals');
+const { menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
+const { classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner } = require('./aliases-review-gate');
 
 /**
  * Real-CLI collaborators. Requires are lazy/function-scoped (not top-level)
@@ -54,12 +54,13 @@ function defaultDeps() {
 }
 
 /**
- * The §5 WRITE gate: mirrors doctor-alias-check.js's unexported
- * `isCatalogFresh` (same rule, restated here since it is not exported).
- * @returns {boolean} true when `fetchedAt` is a number no older than 24h
+ * The §5 WRITE gate (mirrors doctor-alias-check.js's unexported
+ * `isCatalogFresh`). R3: `age >= 0` is required too, so a future `fetchedAt`
+ * (clock skew) is explicitly not fresh rather than indefinitely so.
+ * @returns {boolean} true when `fetchedAt` is a number, not in the future, and no older than 24h
  */
 function isFresh(fetchedAt, now) {
-  return typeof fetchedAt === 'number' && (now - fetchedAt) <= DEFAULT_MAX_AGE_MS;
+  return typeof fetchedAt === 'number' && (now - fetchedAt) >= 0 && (now - fetchedAt) <= DEFAULT_MAX_AGE_MS;
 }
 
 /** @returns {boolean} true when two ids name the same model once gateway prefixes are normalized */
@@ -106,24 +107,21 @@ function acceptCandidate(p, c, d) {
 }
 
 /**
- * The "choose another" sub-flow: a free-text model id, validated against the
- * catalog, gated by the same freshness rule as any other accept. Typing the
- * shipped id (M3) routes to the follow path, never a redundant pin. A write
- * failure (M2) is reported and treated like a cancel/refusal by the caller.
+ * The "choose another" sub-flow: a free-text model id, checked against the
+ * §5 display gate (R2 — the SAME `gatedCatalogIds` the menu's own candidates
+ * come from) then the freshness gate. The shipped id (M3) follows rather
+ * than pinning a redundant copy; a write failure (M2) is a cancel/refusal.
  * @returns {Promise<'accepted'|'cancel'|'refused'|'error'>}
  */
 async function chooseAnother(p, ctx) {
-  const { d, fresh, view, ask } = ctx;
-  const models = (view.catalogInfo && Array.isArray(view.catalogInfo.models)) ? view.catalogInfo.models : [];
-  const validIds = new Set(models.map(m => m && m.id).filter(Boolean));
+  const { d, fresh, allCatalogIds, gatedIds, ask } = ctx;
   for (;;) {
     const raw = await ask('  model id (provider/model), blank to cancel: ');
     const ans = String(raw || '').trim();
     if (!ans) { return 'cancel'; }
-    if (!ans.includes('/') || !validIds.has(ans)) {
-      d.write(`  not in the catalog — try: amicus models --search ${ans.split('/').pop()}\n`);
-      continue;
-    }
+    const status = classifyTypedId(ans, allCatalogIds, gatedIds);
+    if (status === 'unknown') { d.write(notInCatalogLine(ans)); continue; }
+    if (status === 'ungated') { d.write(notVerifiedLine(ans)); continue; }
     if (!fresh) {
       d.write('  cannot accept: the catalog is not fresh (see above)\n');
       return 'refused';
@@ -203,12 +201,10 @@ async function reviewOne(p, i, n, ctx) {
  * @returns {Promise<number>} 1 when refused for lacking a TTY or interrupted, else 0
  */
 async function runReview(args, deps) {
-  // F4b: merge rather than replace, so a test can inject only the members it
-  // cares about (isTTY/ask/write/stderr, say) and let every other collaborator
-  // run for real against the hermetic scratch config -- an e2e-shaped test
-  // without hand-wiring every member `defaultDeps()` already knows how to
-  // build. Every existing deps-object test still overrides every member it
-  // uses, so this is additive.
+  // F4b: merge (not replace), so a test can inject only the members it cares
+  // about and let every other collaborator run for real against the
+  // hermetic scratch config; every existing deps-object test still
+  // overrides every member it uses, so this stays additive.
   const d = { ...defaultDeps(), ...(deps || {}) };
   let rl = null;
   let ask = d.ask; // M6: kept local, never written back onto `d`
@@ -224,10 +220,8 @@ async function runReview(args, deps) {
       const readline = require('readline');
       rl = readline.createInterface({ input: process.stdin, output: process.stdout });
       let pendingReject = null;
-      // M1: Ctrl-C/D closes stdin without rl ever invoking the question
-      // callback — reject whatever `ask` call is in flight so the loop below
-      // can end the review with a summary instead of the process just
-      // exiting 0 with no trace of how far it got.
+      // M1: Ctrl-C/D closes stdin without invoking the question callback --
+      // reject any in-flight `ask` so the loop below ends with a summary.
       rl.on('close', () => {
         if (pendingReject) {
           const reject = pendingReject;
@@ -242,8 +236,13 @@ async function runReview(args, deps) {
         rl.question(q, (a) => { pendingReject = null; resolve((a || '').trim()); });
       });
     }
-    // Minor (spec §4): name the inline refresh wait so it doesn't read as a hang.
-    if (typeof d.readCache === 'function') { const line = refreshingCatalogLine(d.readCache(), Date.now()); if (line) { d.write(line); } }
+    // Minor (spec §4): name the inline refresh wait so it doesn't read as a
+    // hang. R7: a throwing readCache (disk error, corrupt cache) drops this
+    // best-effort banner rather than crashing the review.
+    if (typeof d.readCache === 'function') {
+      try { const line = refreshingCatalogLine(d.readCache(), Date.now()); if (line) { d.write(line); } }
+      catch { /* best-effort banner only */ }
+    }
     const view = await d.collectAliasView({});
     // F1: no catalog at all means no proposal was ever judged -- that is not
     // the same fact as "judged them all, nothing to review" (below), so it
@@ -260,17 +259,18 @@ async function runReview(args, deps) {
       d.write(`  Nothing to review — ${(view.rows || []).length} aliases, all following or up to date.\n`);
       return 0;
     }
-    // M5: the stale/no-cache banner only ever prints once there is something
-    // to act on — a "nothing to review" run never mentions the catalog.
-    if (!fresh) {
-      d.write(typeof fetchedAt === 'number'
-        ? `  catalog is ${ageLabel(fetchedAt, now)} old and could not be refreshed — proposals are shown, but accepting is disabled until \`amicus models --refresh\` succeeds\n`
-        : '  no catalog cache and it could not be fetched — proposals are shown, but accepting is disabled until `amicus models --refresh` succeeds\n');
-    }
+    // M5: the stale/no-cache/clock-skew banner only ever prints once there is
+    // something to act on — a "nothing to review" run never mentions the catalog.
+    if (!fresh) { d.write(staleCatalogBanner(fetchedAt, now)); }
     let accepted = 0;
     let skipped = 0;
     let dismissed = 0;
-    const ctx = { d, fresh, view, ask };
+    // R2: computed once for the whole run (the catalog view is fixed for the
+    // session) so `chooseAnother` never re-derives them per keystroke.
+    const catalogModels = Array.isArray(view.catalogInfo && view.catalogInfo.models) ? view.catalogInfo.models : [];
+    const allCatalogIds = new Set(catalogModels.map(m => m && m.id).filter(Boolean));
+    const gatedIds = new Set(gatedCatalogIds(view.catalogInfo));
+    const ctx = { d, fresh, view, ask, allCatalogIds, gatedIds };
     try {
       for (let i = 0; i < proposals.length; i++) {
         const outcome = await reviewOne(proposals[i], i, proposals.length, ctx);

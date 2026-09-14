@@ -3,7 +3,7 @@
 
 const DAY = 24 * 60 * 60 * 1000;
 
-function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], models = [], readCache } = {}) {
+function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], models = [], providerFailures = [], readCache } = {}) {
   const out = [];
   const err = [];
   const writes = { addAlias: [], removeAlias: [], recordDismissal: [] };
@@ -14,7 +14,7 @@ function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], 
       isTTY: true,
       write: (s) => out.push(String(s)),
       ask: async () => { if (queue.length === 0) { throw new Error('no more scripted answers'); } return queue.shift(); },
-      collectAliasView: async (opts) => { calls.collectAliasView.push(opts); return { rows, proposals, catalogInfo: { models, fetchedAt, providerFailures: [] }, catalogAvailable: models.length > 0 }; },
+      collectAliasView: async (opts) => { calls.collectAliasView.push(opts); return { rows, proposals, catalogInfo: { models, fetchedAt, providerFailures }, catalogAvailable: models.length > 0 }; },
       renderAliasList: () => 'LIST\n',
       addAlias: (a, id) => writes.addAlias.push([a, id]),
       removeAlias: (a) => { writes.removeAlias.push(a); return true; },
@@ -113,6 +113,15 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).toContain('✓ atlas-2 → openrouter/newco/atlas-1 (pinned)');
   });
 
+  test('R3: a future fetchedAt (clock skew) never reads as fresh — its own banner, never a bogus negative-age label; accept refused, follow still works', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['1', '2'], fetchedAt: Date.now() + 3 * DAY, models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('catalog timestamp is in the future (clock skew?) — proposals are shown, but accepting is disabled until `amicus models --refresh` succeeds');
+    expect(t.out()).not.toContain('days old');
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.writes.removeAlias).toEqual(['glm']);
+  });
+
   test('IMPORTANT 1: no cache at all (fetchedAt: null) shows the no-cache banner, never a bogus day count; follow still works, accept refused', async () => {
     const t = makeDeps({ proposals: [glm], answers: ['1', '2'], fetchedAt: null, models: [{ id: 'x/y' }] });
     expect(await runReview({}, t.deps)).toBe(0);
@@ -194,6 +203,18 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).not.toContain('refreshing catalog');
   });
 
+  // R7 (#249 r1 D3): a throwing readCache (disk error, corrupt cache) must
+  // not crash the review over a best-effort banner -- no banner, continue.
+  test('R7: a throwing readCache() prints no banner and the review proceeds normally', async () => {
+    const t = makeDeps({
+      proposals: [glm], answers: ['4'], models: [{ id: 'x/y' }],
+      readCache: () => { throw new Error('ENOENT: corrupt cache'); },
+    });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).not.toContain('refreshing catalog');
+    expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
+  });
+
   test('F1: no catalog at all refuses to review before "Nothing to review", exit 1, no writes', async () => {
     const t = makeDeps({ proposals: [], rows: [], models: [] });
     expect(await runReview({}, t.deps)).toBe(1);
@@ -202,6 +223,31 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.writes.addAlias).toEqual([]);
     expect(t.writes.removeAlias).toEqual([]);
     expect(t.writes.recordDismissal).toEqual([]);
+  });
+
+  test('R2: a typed floor-row id (authoritative: false) is refused — in the catalog but not verified — and never pins', async () => {
+    const t = makeDeps({
+      proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.9', '', '4'],
+      models: [{ id: 'openrouter/z-ai/glm-5.9', authoritative: false }, { id: 'x/y' }],
+    });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('openrouter/z-ai/glm-5.9 is in the catalog but was not verified this run (floor row or rejected provider) — refresh and try again');
+    expect(t.writes.addAlias).toEqual([]);
+  });
+  test('R2: a typed id from a rejected namespace is refused the same way', async () => {
+    const t = makeDeps({
+      proposals: [glm], answers: ['3', 'google/gemini-9.9-flash', '', '4'],
+      models: [{ id: 'google/gemini-9.9-flash' }, { id: 'x/y' }],
+      providerFailures: [{ provider: 'google', reason: 'http-status', status: 401 }],
+    });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('google/gemini-9.9-flash is in the catalog but was not verified this run (floor row or rejected provider) — refresh and try again');
+    expect(t.writes.addAlias).toEqual([]);
+  });
+  test('R2: a gated (verified) typed id still pins normally', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.4'], models: [{ id: 'openrouter/z-ai/glm-5.4' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.addAlias).toEqual([['glm', 'openrouter/z-ai/glm-5.4']]);
   });
 
   test('M3: "choose another" typed with the shipped id follows, never pins a redundant copy', async () => {

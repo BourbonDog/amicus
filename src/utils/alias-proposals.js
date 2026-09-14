@@ -34,6 +34,23 @@ function candidateRows(models, failures) {
   return models.filter(m => m && typeof m.id === 'string' && m.authoritative !== false && !failures.has(providerOf(m.id)));
 }
 
+/**
+ * The §5 display gate's id set, exposed for the picker (#249 r1 R2): a typed
+ * "choose another" id that names a real catalog row must still fail if that
+ * row is a floor entry (`authoritative: false`) or sits in a rejected
+ * namespace -- the numbered menu would never have offered it as a candidate
+ * either. Reuses `candidateRows` so the two paths can never disagree.
+ * @param {{models?: Array, providerFailures?: Array}|null} catalogInfo
+ * @returns {string[]} ids of every row the §5 display gate allows as a candidate
+ */
+function gatedCatalogIds(catalogInfo) {
+  if (!catalogInfo || typeof catalogInfo !== 'object') { return []; }
+  const models = Array.isArray(catalogInfo.models) ? catalogInfo.models : [];
+  const rawFailures = catalogInfo.providerFailures;
+  const failures = new Set((Array.isArray(rawFailures) ? rawFailures : []).map(f => f && f.provider).filter(Boolean));
+  return candidateRows(models, failures).map(m => m.id);
+}
+
 function proposeForRow(r, ctx) {
   if (r.state !== 'pinned' || own(ctx.retired, r.alias)) { return null; }
   if (ctx.failures.has(providerOf(r.id))) { return null; }             // its namespace cannot be judged
@@ -119,4 +136,4 @@ function buildAliasProposals({ userAliases, defaults, catalogInfo, retired = {},
   return out;
 }
 
-module.exports = { buildAliasProposals };
+module.exports = { buildAliasProposals, gatedCatalogIds };

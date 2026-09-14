@@ -1,6 +1,6 @@
 // tests/utils/alias-proposals.test.js
 'use strict';
-const { buildAliasProposals } = require('../../src/utils/alias-proposals');
+const { buildAliasProposals, gatedCatalogIds } = require('../../src/utils/alias-proposals');
 
 const defaults = {
   __proto__: null,
@@ -160,6 +160,28 @@ describe('alias-proposals — the §5 display gate', () => {
     const models = [row('openrouter/z-ai/glm-5.1'), row('openrouter/z-ai/glm-5.4')];
     expect(run({ glm: 'openrouter/z-ai/glm-5.4' }, { catalogInfo: info(models) })
       .flatMap(p => p.candidates).map(c => c.id)).not.toContain('openrouter/z-ai/glm-5.1');
+  });
+});
+
+// R2 (#249 r1 A2/D5): the picker's "choose another" free-text entry must be
+// gated by the exact same §5 display rule the engine already applies to its
+// own candidates -- otherwise typing a floor row or a rejected-namespace id
+// bypasses the gate the numbered menu never offers it through.
+describe('gatedCatalogIds — the §5 display gate, exposed for the picker (#249 r1 R2)', () => {
+  test('excludes a non-authoritative row and a rejected-namespace row, includes the rest', () => {
+    const failures = [{ provider: 'openrouter', reason: 'http-status', status: 403 }];
+    const models = [
+      row('openrouter/z-ai/glm-5.3'),
+      row('openrouter/z-ai/glm-5.9', { authoritative: false }),
+      row('google/gemini-3.6-flash'),
+    ];
+    expect(gatedCatalogIds({ models, providerFailures: failures })).toEqual(['google/gemini-3.6-flash']);
+  });
+  test('never throws on odd input: null, a non-array models, a non-array providerFailures', () => {
+    expect(gatedCatalogIds(null)).toEqual([]);
+    expect(gatedCatalogIds(undefined)).toEqual([]);
+    expect(gatedCatalogIds({ models: null })).toEqual([]);
+    expect(gatedCatalogIds({ models: CATALOG, providerFailures: {} })).toEqual(CATALOG.map(m => m.id));
   });
 });
 
