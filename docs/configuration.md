@@ -540,7 +540,7 @@ amicus models --check && echo "aliases ok"
 
 ## Model Aliases
 
-Aliases are short names that resolve to full provider-prefixed model IDs. `amicus setup` seeds a curated default set (e.g. `gemini`, `gpt`, `opus`, `deepseek`) to the bare canonical form for direct-capable vendors. You add or override aliases with:
+Aliases are short names that resolve to full provider-prefixed model IDs. Amicus ships a curated set (`gemini`, `gpt`, `opus`, `deepseek`, `claude`, `glm`, …) that resolves to the pins the package ships — an alias you have not pinned FOLLOWS those pins and moves with each release. `amicus setup` no longer copies them into your config; it pins only the default alias you chose, and only when its live flagship differs from the shipped pin. See `amicus aliases` for what resolves on your machine. You add or override aliases with:
 
 ```bash
 amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview
