@@ -37,7 +37,11 @@ function compareIdsDesc(a, b) {
 function pickCurrent(catalog, nsPrefix, vendorPath, idPattern) {
   const prefix = `${nsPrefix}${vendorPath}/`;
   const ids = (Array.isArray(catalog) ? catalog : [])
-    .map(m => m && m.id)
+    // #238 §5: a non-authoritative row (the hardcoded Anthropic floor, a
+    // floor-fallback) is not evidence of what the provider serves — the same
+    // guard gateway-route-audit.js :: isAuthoritative applies per gateway.
+    .filter(m => m && m.authoritative !== false)
+    .map(m => m.id)
     .filter(id => typeof id === 'string' && id.startsWith(prefix))
     .filter(id => idPattern.test(id.slice(prefix.length)));
   if (ids.length === 0) { return null; }

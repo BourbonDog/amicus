@@ -194,7 +194,7 @@ async function runCheck(args) {
   // empty namespace explains stale/absent aliases downstream, and staying
   // silent about it is the original defect.
   for (const f of providerFailures) { process.stdout.write(fmtProviderFailure(f) + '\n'); }
-  const driftLines = buildFallbackDriftReport(catalog);
+  const driftLines = buildFallbackDriftReport(catalogInfo);
   if (stale.length === 0 && drifted.length === 0) {
     process.stdout.write(`All aliases resolve to catalog models (${sources.length} checked).\n`);
   } else if (stale.length > 0) {
@@ -233,12 +233,21 @@ async function runCheck(args) {
 
 /**
  * Non-blocking drift report: pinned family fallbacks vs live resolution.
- * Empty catalog → [] (cannot check). Never affects the exit code.
- * @param {Array<{id:string}>} catalog
+ * Accepts a catalogInfo (`{models, providerFailures}`) or a bare models array
+ * (older callers). Empty catalog → [] (cannot check). #238 §5: when the
+ * openrouter namespace itself was REJECTED this run, the catalog is missing the
+ * rows that make a pin look current, and a drift line computed from it would
+ * propose a downgrade — so the report is empty for that catalog. Never affects
+ * the exit code.
+ * @param {{models: Array<{id:string}>, providerFailures?: Array<{provider:string}>}|Array<{id:string}>} catalogOrInfo
  * @returns {string[]} human-readable warning lines
  */
-function buildFallbackDriftReport(catalog) {
-  if (!catalog || catalog.length === 0) { return []; }
+function buildFallbackDriftReport(catalogOrInfo) {
+  const info = Array.isArray(catalogOrInfo) ? { models: catalogOrInfo } : (catalogOrInfo || { models: [] });
+  const catalog = info.models || [];
+  if (catalog.length === 0) { return []; }
+  const failures = Array.isArray(info.providerFailures) ? info.providerFailures : [];
+  if (failures.some(f => f && f.provider === 'openrouter')) { return []; }
   const lines = [];
   for (const f of getFamilies()) {
     const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);

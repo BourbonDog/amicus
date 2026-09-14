@@ -53,6 +53,20 @@ describe('pickCurrent', () => {
     expect(pickCurrent([], 'openrouter/', 'google', flash)).toBeNull();
     expect(pickCurrent(null, 'openrouter/', 'google', flash)).toBeNull();
   });
+  // #238 §5: the hardcoded Anthropic floor and any other non-authoritative row
+  // must never be "the newest" — a partially-fetched catalog could otherwise
+  // make the drift report propose an OLDER sibling than the live catalog has.
+  // Named mutant "FLOORPICK" — drop the `authoritative !== false` filter;
+  // measured red 2026-09-14, reddens 'pickCurrent › ignores non-authoritative
+  // rows even when they sort newest'.
+  test('ignores non-authoritative rows even when they sort newest', () => {
+    const withFloor = [
+      { id: 'openrouter/google/gemini-9.9-flash', authoritative: false },
+      row('openrouter/google/gemini-3.5-flash'),
+    ];
+    expect(pickCurrent(withFloor, 'openrouter/', 'google', flash)).toBe('openrouter/google/gemini-3.5-flash');
+    expect(pickCurrent([{ id: 'openrouter/google/gemini-9.9-flash', authoritative: false }], 'openrouter/', 'google', flash)).toBeNull();
+  });
 });
 
 describe('resolveQuickPicks', () => {
