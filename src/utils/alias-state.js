@@ -6,9 +6,11 @@
  * A curated alias FOLLOWS the shipped pin when its name is ABSENT from
  * `config.aliases` — `config.js :: getEffectiveAliases` already merges
  * `{...DEFAULT_ALIASES, ...userAliases}`, so absence resolves to the shipped
- * id on every consumer. A present key is a PIN. There is no sentinel value:
- * an older amicus reading a normalized config sees fewer keys and fills from
- * its own defaults (downgrade-safe).
+ * id on every consumer. A present key is a PIN. Downgrade-safe in the narrow
+ * sense: an older amicus reads a normalized config without error and
+ * honours every present key (a pin) unchanged; the aliases that FOLLOW
+ * resolve to that older binary's shipped pins — following means tracking
+ * whichever binary runs.
  *
  * Normalization drops any key whose value equals the shipped default, with one
  * Notice per key. It runs inside `saveConfig` (so every write converges) and on
