@@ -48,6 +48,7 @@ amicus aliases --review           picker: walk every proposal (user sink)
 amicus aliases --review --owner   same picker, curated-pins.json sink (D8; repo + TTY + clean tree)
 amicus aliases --ui               open JUST the alias pane in Electron
 amicus aliases --json             versioned machine-readable document (includes proposals)
+amicus aliases --unpin <name>     remove a pin: a curated name goes back to following, a custom name is deleted (R1)
 ```
 
 `amicus models --check` stays a pure auditor; its scope does not change, and it gains one informational line class (Q7). The existing copy-paste remediation hints are rewritten to point here:
@@ -400,6 +401,7 @@ Taken in dependency order, not §8's original order: the encoding first, then th
 - **Per-alias mute** — deferred. A user who deliberately pins `gpt` to the sol tier will dismiss a "follow terra" proposal each time the terra pin moves, a few times a year. Add a mute only if that proves irritating; the retired-pin case argues against making it easy.
 - **The CI bench alias map** (`.github/amicus-ci-aliases.json`) is a third pin set with its own weekly checker. It consumes the lifted comparator and is otherwise untouched by this issue.
 - **Pinning to the current shipped value** is not expressible under Q3. Recorded as accepted, not forgotten.
+- **Rulings made during PR 1 execution (2026-09-14), recorded here so the spec stays the authority:** `amicus aliases --unpin <name>` exists (R1's "pins removable" had no CLI verb; a pin to the same model under another gateway form is kept by normalization yet never proposed, so it needed one). Candidate order is newer sibling → `follow` → up to 3 similarity replacements, deduped, and `reasons` describe the candidates offered. The list reads the catalog cache directly (`readCache()`), because `getCatalog` fetches on a missing cache even with an infinite max age; an unavailable catalog is reported as such, never as "nothing to review". A taken notable name derives `<name>-2`, not `deriveFreeAlias`'s `free-` prefix. A STALE shipped default keeps the `setup --add-alias` hint (the picker has nothing to propose for a following alias). The sibling comparator cannot see dash-versioned ids (Anthropic's `claude-opus-4-5`): it under-reports, never mis-reports. The Electron wizard's live-pick announcement (§6.5) is Phase 3 work.
 - **Deleting a curated alias** is not possible on either surface (it resurrects from the defaults) — same as today; the control is labelled *unpin* to say so.
 
 ---
