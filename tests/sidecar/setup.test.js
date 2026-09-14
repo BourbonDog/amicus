@@ -147,32 +147,43 @@ describe('Setup Wizard', () => {
   });
 
   describe('createDefaultConfig', () => {
-    it('should create config with all default aliases and chosen default', () => {
-      const { createDefaultConfig } = require('../../src/sidecar/setup');
-      const cfg = createDefaultConfig('gemini');
-
-      expect(cfg.default).toBe('gemini');
-      expect(cfg.aliases).toBeDefined();
-      expect(cfg.aliases.gemini).toBeDefined();
-      expect(cfg.aliases['gemini-pro']).toBeDefined();
-      expect(cfg.aliases.gpt).toBeDefined();
-      expect(cfg.aliases.opus).toBeDefined();
-      expect(cfg.aliases.deepseek).toBeDefined();
-
-      // Verify it was saved to disk
-      const saved = JSON.parse(
-        fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8')
-      );
-      expect(saved.default).toBe('gemini');
-      expect(saved.aliases).toEqual(cfg.aliases);
+    // #238 Q9: createDefaultConfig no longer seeds curated aliases into a
+    // fresh config -- a curated alias follows the shipped pin by being
+    // absent (D1). The stderr spy is LOAD-BEARING (#238 T5 fix round 1,
+    // Finding 1): reverting createDefaultConfig to re-seed
+    // `...getDefaultAliases()` would still leave `cfg.aliases` at `{}` (Task
+    // 3's normalization strips all 21 seeded-equal-to-shipped keys right back
+    // out), so the aliases-shape assertions alone cannot catch a re-seeding
+    // regression -- only the absence of the 21 "now following" Notices can.
+    let stderrSpy;
+    beforeEach(() => {
+      stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    });
+    afterEach(() => {
+      stderrSpy.mockRestore();
     });
 
-    it('should have 20+ aliases', () => {
+    it('does not seed curated aliases — they follow the shipped pins by absence (#238 Q9)', () => {
       const { createDefaultConfig } = require('../../src/sidecar/setup');
       const cfg = createDefaultConfig('gemini');
-
-      const aliasCount = Object.keys(cfg.aliases).length;
-      expect(aliasCount).toBeGreaterThanOrEqual(20);
+      expect(cfg.default).toBe('gemini');
+      expect(cfg.aliases).toEqual({});
+      // #238 T5 fix round 1 (Finding 1): the actual regression guard. Mirrors
+      // free-council-config.test.js's 'still resolves a full default-alias
+      // table on a fresh install' assertion -- both go RED if
+      // createDefaultConfig re-seeds (verified: restoring
+      // `...getDefaultAliases(),` reddens 'does not seed curated aliases —
+      // they follow the shipped pins by absence (#238 Q9)' here and
+      // 'still resolves a full default-alias table on a fresh install' there).
+      expect(stderrSpy).not.toHaveBeenCalled();
+      const { getEffectiveAliases } = require('../../src/utils/config');
+      expect(getEffectiveAliases().gemini).toBeDefined();   // still resolves, via the defaults
+    });
+    it('preserves aliases an existing config already holds', () => {
+      const { saveConfig } = require('../../src/utils/config');
+      saveConfig({ aliases: { mine: 'openrouter/a/b-1' } });
+      const { createDefaultConfig } = require('../../src/sidecar/setup');
+      expect(createDefaultConfig('gemini').aliases).toEqual({ mine: 'openrouter/a/b-1' });
     });
 
     it('should accept any string as default model', () => {

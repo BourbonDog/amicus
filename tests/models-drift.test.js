@@ -17,6 +17,26 @@ describe('buildFallbackDriftReport', () => {
     const current = getFamilies().map(f => row(f.fallback.openrouter));
     expect(buildFallbackDriftReport(current)).toEqual([]);
   });
+  // #238 §5: a REJECTED openrouter namespace leaves the catalog missing the
+  // rows that would make a pin look current; reporting drift from that
+  // catalog proposes a downgrade. Named mutant "FAILEDNS" — drop the
+  // providerFailures guard; measured red 2026-09-14, reddens
+  // 'buildFallbackDriftReport › silent when the openrouter namespace was
+  // rejected (providerFailures)'.
+  test('silent when the openrouter namespace was rejected (providerFailures)', () => {
+    const info = {
+      models: [row('openrouter/google/gemini-9.9-flash')],
+      providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }],
+    };
+    expect(buildFallbackDriftReport(info)).toEqual([]);
+  });
+  test('still reports from a catalogInfo whose failures name another provider', () => {
+    const info = {
+      models: [row('openrouter/google/gemini-9.9-flash')],
+      providerFailures: [{ provider: 'google', reason: 'http-status', status: 401 }],
+    };
+    expect(buildFallbackDriftReport(info).some(l => l.includes('gemini'))).toBe(true);
+  });
 });
 
 describe('runCheck drift wiring', () => {

@@ -4,15 +4,20 @@ const fs = require('fs');
 const os = require('os');
 
 describe('createDefaultConfig (read-modify-write)', () => {
-  let tempDir, originalEnv;
+  let tempDir, originalEnv, stderrSpy;
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'free-council-cfg-'));
     originalEnv = { ...process.env };
     process.env.AMICUS_CONFIG_DIR = tempDir;
     jest.resetModules();
+    // #238 Q9: createDefaultConfig no longer seeds curated aliases (it never
+    // writes anything equal to a shipped default). The spy is LOAD-BEARING
+    // (#238 T5 fix round 1, Finding 1) -- see the assertion below for why.
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
   afterEach(() => {
     process.env = originalEnv;
+    stderrSpy.mockRestore();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -26,12 +31,25 @@ describe('createDefaultConfig (read-modify-write)', () => {
     expect(cfg.councils).toEqual({ free: ['free-deepseek-r1'] });
   });
 
-  it('still seeds a full default-alias table on a fresh install', () => {
+  it('still resolves a full default-alias table on a fresh install (#238 Q9: nothing is seeded, so the raw map starts empty)', () => {
     const { createDefaultConfig } = require('../src/sidecar/setup');
-    const { getDefaultAliases } = require('../src/utils/config');
+    const { getDefaultAliases, getEffectiveAliases } = require('../src/utils/config');
     const cfg = createDefaultConfig('gemini');
     expect(cfg.default).toBe('gemini');
-    expect(Object.keys(cfg.aliases).length).toBe(Object.keys(getDefaultAliases()).length);
+    // createDefaultConfig no longer seeds curated aliases at all -- the raw
+    // map is empty but the effective (merged) view still has them all, via
+    // the shipped defaults (absence follows, #238 D1).
+    expect(Object.keys(cfg.aliases).length).toBe(0);
+    expect(Object.keys(getEffectiveAliases()).length).toBe(Object.keys(getDefaultAliases()).length);
+    // #238 T5 fix round 1 (Finding 1): the actual regression guard -- Task
+    // 3's normalization would strip a re-seeded `cfg.aliases` back to `{}`
+    // either way, so the two assertions above cannot tell a re-seed from no
+    // seed. Mirrors setup.test.js's 'does not seed curated aliases — they
+    // follow the shipped pins by absence (#238 Q9)' assertion -- both go RED
+    // if createDefaultConfig re-seeds (verified: restoring
+    // `...getDefaultAliases(),` reddens 'still resolves a full default-alias
+    // table on a fresh install' here and the setup.test.js test there).
+    expect(stderrSpy).not.toHaveBeenCalled();
   });
 });
 

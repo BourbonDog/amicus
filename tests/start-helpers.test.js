@@ -22,6 +22,16 @@ describe('validateAgainstCatalog', () => {
     ).rejects.toThrow(/not found in the OpenRouter catalog/);
   });
 
+  // F4d (#238 D4): the copy-paste remediation hint now points at the review
+  // picker instead of `amicus setup --add-alias`.
+  test('the thrown message points at amicus aliases --review (#238 D4)', async () => {
+    mockCatalog([{ id: 'openrouter/openai/gpt-5.4', name: 'gpt' }]);
+    const { validateAgainstCatalog } = require('../src/utils/model-validator');
+    await expect(
+      validateAgainstCatalog('openrouter/openai/ghost-model', 'gpt', { headless: true })
+    ).rejects.toThrow(/amicus aliases --review/);
+  });
+
   test('is graceful (returns model) when the catalog is empty', async () => {
     mockCatalog([]);
     const { validateAgainstCatalog } = require('../src/utils/model-validator');

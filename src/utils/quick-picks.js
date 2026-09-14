@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { getFamilies, toDefaultAliases, DIVERGENT_VENDORS } = require('./curated-models');
+const { getFamilies, DIVERGENT_VENDORS } = require('./curated-models');
 const { directFormIfSafe } = require('./model-canonicalization');
 
 const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
@@ -37,7 +37,11 @@ function compareIdsDesc(a, b) {
 function pickCurrent(catalog, nsPrefix, vendorPath, idPattern) {
   const prefix = `${nsPrefix}${vendorPath}/`;
   const ids = (Array.isArray(catalog) ? catalog : [])
-    .map(m => m && m.id)
+    // #238 §5: a non-authoritative row (the hardcoded Anthropic floor, a
+    // floor-fallback) is not evidence of what the provider serves — the same
+    // guard gateway-route-audit.js :: isAuthoritative applies per gateway.
+    .filter(m => m && m.authoritative !== false)
+    .map(m => m.id)
     .filter(id => typeof id === 'string' && id.startsWith(prefix))
     .filter(id => idPattern.test(id.slice(prefix.length)));
   if (ids.length === 0) { return null; }
@@ -92,37 +96,14 @@ function toStorableRoute(pick, catalogInfo) {
   }
   const route = routes.openrouter || Object.values(routes)[0];
   if (!route) { return undefined; }
-  // issue 214 remedy 1: this value is PERSISTED (sidecar/setup.js writes it into
-  // config.aliases; toLiveSeedAliases seeds a fresh config with it), so it must
-  // not be a blind prefix strip. directFormIfSafe keeps the optimism for a
-  // namespace that was never fetched while refusing for one the catalog
-  // disproves OR whose fetch was rejected -- the gap #208 closed on the picker
-  // path and left open here.
+  // issue 214 remedy 1: this value is PERSISTED -- sidecar/setup.js writes it
+  // into config.aliases for the chosen default when it differs from the
+  // shipped pin (#238 Q9) -- so it must not be a blind prefix strip.
+  // directFormIfSafe keeps the optimism for a namespace that was never
+  // fetched while refusing for one the catalog disproves OR whose fetch was
+  // rejected -- the gap #208 closed on the picker path and left open here.
   return directFormIfSafe(pick.vendorPath, route, catalogInfo || { models: [] });
 }
-
-/**
- * Seed map for fresh configs: static defaults overlaid with live family
- * routes (cardless aliases stay pinned). See `toStorableRoute` for why the
- * overlaid value is not a raw prefix strip.
- * @returns {Object<string,string>}
- */
-function toLiveSeedAliases(catalogOrInfo) {
-  // Accepts the bare models array (historical callers) or a full catalogInfo.
-  // issue 214: the evidence was always handed in and then discarded.
-  const info = Array.isArray(catalogOrInfo)
-    ? { models: catalogOrInfo }
-    : (catalogOrInfo || { models: [] });
-  const seeds = toDefaultAliases();
-  for (const r of resolveQuickPicks(info.models || [])) {
-    if (r.source === 'live' && r.routes.openrouter) {
-      const stored = toStorableRoute(r, info);
-      if (stored) { seeds[r.alias] = stored; }
-    }
-  }
-  return seeds;
-}
-
 
 /**
  * Per-provider SAFE storable form for a resolved quick pick (issue 214).
@@ -147,4 +128,4 @@ function canonicalRoutesFor(pick, catalogInfo) {
   return out;
 }
 
-module.exports = { compareIdsDesc, canonicalRoutesFor, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute };
+module.exports = { compareIdsDesc, canonicalRoutesFor, pickCurrent, resolveQuickPicks, toStorableRoute };

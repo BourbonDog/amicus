@@ -540,7 +540,7 @@ amicus models --check && echo "aliases ok"
 
 ## Model Aliases
 
-Aliases are short names that resolve to full provider-prefixed model IDs. `amicus setup` seeds a curated default set (e.g. `gemini`, `gpt`, `opus`, `deepseek`) to the bare canonical form for direct-capable vendors. You add or override aliases with:
+Aliases are short names that resolve to full provider-prefixed model IDs. Amicus ships a curated set (`gemini`, `gpt`, `opus`, `deepseek`, `claude`, `glm`, …) that resolves to the pins the package ships — an alias you have not pinned FOLLOWS those pins and moves with each release. `amicus setup` no longer copies them into your config; it pins only the default alias you chose, and only when its live flagship differs from the shipped pin. See `amicus aliases` for what resolves on your machine. You add or override aliases with:
 
 ```bash
 amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview
@@ -671,14 +671,14 @@ level includes everything above it.
   // Default alias, resolved via `aliases` below when --model is omitted.
   "default": "gemini",
 
-  // Short name -> full model id. Bare `provider/model` (canonical) routes direct-first;
-  // `amicus setup` seeds direct-capable vendors this way automatically.
-  // `amicus setup --add-alias name=provider/model` adds more.
+  // Short name -> full model id, for the aliases YOU pinned. A curated alias
+  // (gemini, gpt, opus, …) that is ABSENT here FOLLOWS the pin amicus ships and
+  // moves with each release; a present key is pinned and reviewable with
+  // `amicus aliases --review`. A key equal to the shipped pin is dropped on save
+  // (with a Notice) — it is the same as following.
   "aliases": {
-    "gemini": "google/gemini-3-pro-preview",
-    "gpt": "openai/gpt-5",
-    "opus": "anthropic/claude-opus-4",
-    "deepseek": "deepseek/deepseek-v3"
+    "glm": "openrouter/z-ai/glm-5.4",
+    "fast": "google/gemini-3.6-flash-lite"
   },
 
   // Named council member lists, e.g. seeded by the Free OpenRouter council
@@ -698,6 +698,12 @@ level includes everything above it.
     "tier": "balanced",
     "migration_notified": { "openai": true },
     "tier_onboarded": true
+  },
+
+  // Written by `amicus aliases --review`'s "never ask again" — keyed
+  // `alias@proposedId`; hand-delete a key here to be asked again.
+  "aliasReview": {
+    "dismissed": { "glm@openrouter/z-ai/glm-5.4": "2026-09-14T00:00:00.000Z" }
   },
 
   // User-defined local / OpenAI-compatible providers (v4.2) — written by

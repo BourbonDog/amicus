@@ -3,6 +3,37 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **`amicus aliases`** — your model aliases as a standing command: `following` (the shipped
+  pin, moves with releases) vs `pinned` (yours), grouped by vendor; `--review` walks every
+  proposal in a numbered picker (accept a newer same-tier sibling, follow the shipped pin,
+  choose another catalog id, skip, or never ask again — no copy-paste); `--json` for scripts.
+  Without a terminal `--review` prints the list, says it is interactive, and exits 1;
+  `--unpin <name>` removes a pin (a curated name goes back to following, a custom name is
+  deleted); refuses instead when `name` is also your (non-curated) `config.default`, so a
+  delete can never leave the default dangling on a key that no longer resolves — pick a new
+  default first. The sibling comparator behind "newer same-tier sibling" (and shared with the
+  CI alias-pin drift gate, `scripts/check-ci-alias-pins.js`) never reads a size/variant token
+  glued to a number (`20b`, `8x22b`) as a version, so a differently-sized variant is never
+  offered as a sibling of another. (#238, #249)
+
+### Changed
+
+- **A curated alias follows the shipped pin unless you pin it.** A name absent from
+  `config.aliases` resolves to the pin amicus ships (this is how the merge always worked);
+  a present key is a pin. On save, a key equal to the shipped pin is dropped with a Notice —
+  every alias still resolves to the same id it did before. The setup wizard no longer seeds
+  the 21 curated ids; it pins only the default you chose, and only when its live flagship
+  differs from the shipped pin, and says so. (#238 D1/D6/Q9)
+- **The drift report cannot propose a downgrade.** `models --check`'s family fallback-drift
+  line ignores non-authoritative catalog rows and is silent when the OpenRouter namespace was
+  rejected this run. (#238 §5)
+- The `--add-alias` copy-paste hints in `models --check`, model validation and alias repair now
+  point at `amicus aliases --review` where the alias is reviewable there. (#238 D4)
+
 ## [4.9.8] - 2026-09-13
 
 ### Changed

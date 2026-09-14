@@ -39,7 +39,7 @@ function autoRepairAlias(alias, config, defaultAliases, saveConfig) {
   }
   throw new Error(
     `Alias '${alias}' is configured but has no model value. ` +
-    `Fix with: amicus setup --add-alias ${alias}=provider/model`
+    `Fix with: amicus aliases --review, or amicus setup --add-alias ${alias}=provider/model`
   );
 }
 

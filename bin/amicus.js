@@ -165,6 +165,11 @@ async function main() {
         exitCode = await handleModels(args);
         break;
       }
+      case 'aliases': {
+        const { handleAliases } = require('../src/sidecar/aliases');
+        exitCode = await handleAliases(args);
+        break;
+      }
       case 'council': {
         const { handleCouncil } = require('../src/cli-handlers-council');
         exitCode = await handleCouncil(args);

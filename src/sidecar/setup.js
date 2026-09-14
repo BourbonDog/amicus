@@ -42,7 +42,7 @@ function addAlias(name, modelString) {
 /**
  * Ensure a config exists with the chosen default model. Read-modify-write:
  * preserves every pre-existing top-level key (aliases, councils, …) and only
- * fills in the default + any missing default aliases. Never clobbers.
+ * fills in the default — aliases are left untouched (absence follows, #238 Q9).
  * @param {string} defaultModel - Default model alias or full model string
  * @returns {object} The resulting config object
  */
@@ -51,17 +51,12 @@ function createDefaultConfig(defaultModel) {
   const cfg = {
     ...existing,
     default: existing.default || defaultModel,
-    // Same restatement as the readline gate below (fix round 3, G-2): a spread
-    // into `{}` re-materialises Object.prototype. `saveConfig` rebuilds this
-    // into its own literal anyway, so this one is defense in depth rather than
-    // a measured hole — recorded as such rather than claimed as a fix.
-    aliases: { __proto__: null, ...getDefaultAliases(), ...(existing.aliases || {}) },
+    // #238 Q9: no seeding. A curated alias FOLLOWS the shipped pin by being
+    // ABSENT from config.aliases (D1); only what the user chose is written.
+    aliases: { __proto__: null, ...(existing.aliases || {}) },
   };
   saveConfig(cfg);
-  logger.info('Default config ensured', {
-    default: cfg.default,
-    aliasCount: Object.keys(cfg.aliases).length,
-  });
+  logger.info('Default config ensured', { default: cfg.default, aliasCount: Object.keys(cfg.aliases).length });
   return cfg;
 }
 
@@ -524,7 +519,8 @@ async function runReadlineSetup() {
       return;
     }
 
-    const { resolveQuickPicks, toLiveSeedAliases, toStorableRoute } = require('../utils/quick-picks');
+    const { resolveQuickPicks, toStorableRoute } = require('../utils/quick-picks');
+    const { stripGatewayPrefix } = require('../utils/curated-models');
     const picks = resolveQuickPicks(catalog);
 
     console.log('Choose your default model:');
@@ -545,7 +541,7 @@ async function runReadlineSetup() {
     }
 
     // Read-modify-write — never rebuild the alias table (no-clobber rule).
-    const cfg = loadConfig() || { aliases: toLiveSeedAliases({ models: catalog, providerFailures }) };
+    const cfg = loadConfig() || { aliases: {} };
     if (!cfg.aliases) { cfg.aliases = {}; }
     if (chosen.alias) {
       cfg.default = chosen.alias;
@@ -555,11 +551,16 @@ async function runReadlineSetup() {
       // pointing at that alias name is fine (the user's explicit overall-default
       // choice), but the alias's VALUE must stay the vendor phase's tier choice --
       // skip the curated-flagship upgrade so it isn't discarded.
+      // #238 Q9: write the chosen default's LIVE pick only when it differs
+      // from the shipped pin, and say so — a pin the user was told about.
+      // Otherwise leave the key alone: absent = follows (D1).
       if (pick && !chosen.noUpgrade && !vendorAliasesWritten.has(chosen.alias)) {
-        cfg.aliases[chosen.alias] = toStorableRoute(pick, { models: catalog, providerFailures });
-      } else if (cfg.aliases[chosen.alias] === undefined) {
-        const fallback = getDefaultAliases()[chosen.alias];
-        if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }
+        const live = toStorableRoute(pick, { models: catalog, providerFailures });
+        const shipped = getDefaultAliases()[chosen.alias];
+        if (live && stripGatewayPrefix(live) !== stripGatewayPrefix(shipped)) {
+          cfg.aliases[chosen.alias] = live;
+          console.log(`${chosen.alias} → ${live} (live flagship differs from the shipped ${shipped} — pinned)`);
+        }
       }
 
       // #138: offer the family -> model second level. `pick.vendorPath` is
@@ -608,7 +609,7 @@ async function runReadlineSetup() {
           const shortlist = buildModelShortlist(pick.vendorPath, {
             catalog,
             providerFailures,
-            recommendedId: cfg.aliases[chosen.alias],
+            recommendedId: cfg.aliases[chosen.alias] || getDefaultAliases()[chosen.alias],
           });
           const specific = await promptForVendorModel(
             askQuestion.bind(null, rl), console.log, shortlist, pick.vendorPath
@@ -626,7 +627,8 @@ async function runReadlineSetup() {
 
     console.log('');
     console.log(`Default model set to: ${cfg.default}`);
-    console.log(`Config saved (${Object.keys(cfg.aliases).length} aliases).`);
+    const pinned = Object.keys(cfg.aliases).length;
+    console.log(`Config saved (${pinned} pinned alias${pinned === 1 ? '' : 'es'}; the rest follow the shipped recommendations — amicus aliases).`);
     console.log(`Config path: ${path.join(getConfigDir(), 'config.json')}`);
 
     // C8: compact doctor summary, best-effort (see printDoctorFinale).

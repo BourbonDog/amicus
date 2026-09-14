@@ -106,6 +106,11 @@ src/
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
+│   ├── aliases-review-gate.js  # Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split
+│   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
+│   ├── aliases-review-render.js  # Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4),
+│   ├── aliases-review.js  # `amicus aliases --review` (#238 §4): a numbered readline picker over the
+│   ├── aliases.js  # `amicus aliases` (#238 D4) — the user's alias map as a standing command.
 │   ├── budget.js
 │   ├── child-sessions.js
 │   ├── context-builder.js  # Context Builder Module
@@ -185,9 +190,13 @@ src/
 │   ├── activity-poller.js
 │   ├── agent-mapping.js  # Agent Mapping Module
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
+│   ├── alias-groups.js  # Vendor-derived alias grouping (issue 213). Moved VERBATIM out of
+│   ├── alias-proposals.js  # The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── alias-shadow-writer.js  # The alias-shadow notice's WRITE half: say it without ever sinking the run.
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
+│   ├── alias-state.js  # Following-vs-pinned state for model aliases (#238 D1) and the normalization
+│   ├── alias-store.js  # The write sinks the alias review flow needs beyond `setup.js :: addAlias`
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
@@ -252,6 +261,7 @@ src/
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
+│   ├── model-id-siblings.js  # The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor
 │   ├── model-input-default.js
 │   ├── model-output-limit.js  # Issue #218 — the per-model `limit` descriptor amicus hands opencode.
 │   ├── model-shortlist.js  # Vendor model shortlist (#138) -- the family -> model second level.
@@ -573,6 +583,11 @@ evals/
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
+| `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
+| `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |
+| `sidecar/aliases-review-render.js` | Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4), | `ageLabel()`, `menuFor()`, `menuLineText()`, `renderScreen()`, `refreshingCatalogLine()` |
+| `sidecar/aliases-review.js` | `amicus aliases --review` (#238 §4): a numbered readline picker over the | `runReview()` |
+| `sidecar/aliases.js` | `amicus aliases` (#238 D4) — the user's alias map as a standing command. | `handleAliases()`, `collectAliasView()`, `renderAliasList()`, `buildAliasesDoc()`, `loadDeps()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
@@ -650,9 +665,13 @@ evals/
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
+| `utils/alias-groups.js` | Vendor-derived alias grouping (issue 213). Moved VERBATIM out of | `groupAliases()`, `aliasVendorOf()`, `vendorLabel()`, `titleCaseVendor()`, `PREFERRED_VENDOR_ORDER()` |
+| `utils/alias-proposals.js` | The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns | `buildAliasProposals()`, `gatedCatalogIds()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
+| `utils/alias-state.js` | Following-vs-pinned state for model aliases (#238 D1) and the normalization | `normalizeAliases()`, `listAliasRows()`, `isCurated()` |
+| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `recordDismissal()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
@@ -717,6 +736,7 @@ evals/
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
+| `utils/model-id-siblings.js` | The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor | `parsePin()`, `compareVersions()`, `newestSibling()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
@@ -736,7 +756,7 @@ evals/
 | `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()`, `directFormIfSafe()`, `directFormIfProven()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
-| `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
+| `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toStorableRoute()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |
@@ -757,7 +777,7 @@ evals/
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
-| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()` |
+| `utils/text-sanitize.js` | One third-party string, safe to render: no escapes, no bidi, one short line. | `collapseExcerpt()`, `MAX_EXCERPT_CHARS()`, `safeFragment()`, `MAX_FRAGMENT_CHARS()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `VARIANT_LEVELS()`, `validateThinkingLevel()` |
 | `utils/ttft.js` | The one honesty predicate for the time-to-first-token probe (v4.9 W13). | `isMeasuredTtft()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()`, `defangOutboundFenceTags()`, `OUTBOUND_FENCE_TAGS()` |

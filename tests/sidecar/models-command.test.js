@@ -191,6 +191,21 @@ describe('amicus models', () => {
     expect(out).toContain('STALE: grok -> openrouter/x-ai/grok-4.1-fast (defaults)');
     expect(out).toContain('openrouter/x-ai/grok-4.3');
     expect(out).toContain('amicus setup --add-alias grok=openrouter/x-ai/grok-4.3');
+    expect(out).toContain('(pins over the stale shipped default)');
+  });
+
+  // #238 D4: a defaults/curated-route row has nothing for the review picker
+  // to propose (the shipped pin is gone; the alias just follows) — the
+  // copy-paste fix stays, annotated. A user-config row IS reviewable, so it
+  // gets sent to the picker instead of a candidate copy-paste.
+  it('--check stale on a user-config row points at the review picker, not a copy-paste fix', async () => {
+    const stale = [{ alias: 'mymodel', model: 'openrouter/acme/mymodel-v1', source: 'user-config' }];
+    const { handleModels } = loadHandler({ sources: stale, stale });
+    const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+    expect(code).toBe(1);
+    expect(out).toContain('STALE: mymodel -> openrouter/acme/mymodel-v1 (user-config)');
+    expect(out).toContain('fix: amicus aliases --review');
+    expect(out).not.toContain('setup --add-alias');
   });
 
   it('--check --json emits an alias-audit document', async () => {
@@ -219,13 +234,17 @@ describe('amicus models', () => {
       current: 'google/gemini-3.6-flash',
     }];
 
-    it('prints DRIFTED lines with a paste-ready refresh fix and exit stays 0', async () => {
+    it('prints DRIFTED lines and points at the review picker; exit stays 0', async () => {
       const { handleModels } = loadHandler({ sources: [], stale: [], drifted: oneDrift });
       const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
       expect(code).toBe(0); // drift never affects the exit code
       expect(out).toContain(
         'DRIFTED: gemini -> openrouter/google/gemini-3.1-flash-lite-preview (stored; current resolution: google/gemini-3.6-flash)');
-      expect(out).toContain('amicus setup --add-alias gemini=google/gemini-3.6-flash');
+      // #238 D4: a DRIFTED row is user-config by construction (findDriftedStoredAliases
+      // only ever checks that source), so it is always reviewable — no more
+      // per-alias copy-paste fix, just the picker.
+      expect(out).toContain('review: amicus aliases --review');
+      expect(out).not.toContain('setup --add-alias');
       expect(out).not.toContain('All aliases resolve'); // suppressed: drift alone is not "all clean"
     });
 
