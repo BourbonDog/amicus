@@ -316,16 +316,23 @@ describe('applyProviderDefault — read-modify-write (vendor alias + seed defaul
   let originalEnv;
   let loadConfig;
   let saveConfig;
+  let getEffectiveAliases;
+  let stderrSpy;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-config-test-'));
     originalEnv = { ...process.env };
     process.env.AMICUS_CONFIG_DIR = tempDir;
-    ({ loadConfig, saveConfig } = require('../src/utils/config'));
+    ({ loadConfig, saveConfig, getEffectiveAliases } = require('../src/utils/config'));
+    // #238 D6: a shipped-equal alias value normalizes away with a Notice on
+    // save; keep this suite's output pristine the same way Task 3's own
+    // wiring tests do.
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    stderrSpy.mockRestore();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -356,7 +363,11 @@ describe('applyProviderDefault — read-modify-write (vendor alias + seed defaul
 
     const cfg = loadConfig();
     expect(cfg.aliases.gpt).toBe('openai/gpt-5.5');
-    expect(cfg.aliases.deepseek).toBe('deepseek/deepseek-v4-pro');
+    // #238 D6: 'deepseek' equals its shipped default, so saveConfig's
+    // normalization drops the raw key -- the alias now FOLLOWS instead of
+    // being pinned, but still resolves to the identical id.
+    expect(cfg.aliases.deepseek).toBeUndefined();
+    expect(getEffectiveAliases().deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
   });
 

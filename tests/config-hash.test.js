@@ -152,12 +152,18 @@ describe('Sidecar Config Module - Hashing & Alias Table', () => {
       expect(table).toBe('');
     });
 
-    it('should return empty string when config has no aliases', () => {
+    it('lists the effective (shipped-default) aliases when config has no aliases key (#238 D6)', () => {
       const data = { default: 'gemini' };
       fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
       const config = loadModule();
       const table = config.buildAliasTable();
-      expect(table).toBe('');
+      // #238 D6: buildAliasTable now lists the EFFECTIVE alias map (shipped
+      // defaults merged with the user's config), not the raw config.aliases
+      // map -- a following alias is absent from config.aliases but is still
+      // an alias the CLAUDE.md block must list.
+      expect(table).not.toBe('');
+      expect(table).toContain('| Alias | Model |');
+      expect(table).toContain('| gemini (default) | ');
     });
   });
 

@@ -77,7 +77,10 @@ function saveConfig(configData) {
       }
       cleaned[key] = value;
     }
-    configData.aliases = cleaned;
+    // #238 D6: a key equal to the shipped default is the same as absence —
+    // drop it so the alias FOLLOWS the next pin bump (one Notice per key).
+    const { normalizeAliases } = require('./alias-state');
+    configData.aliases = normalizeAliases(cleaned, DEFAULT_ALIASES, (line) => process.stderr.write(line)).aliases;
   }
   const configDir = getConfigDir();
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
@@ -187,9 +190,11 @@ function computeConfigHash() {
 /** @returns {string} Markdown alias table with (default) marker, or empty string */
 function buildAliasTable() {
   const config = loadConfig();
-  if (!config || !config.aliases || Object.keys(config.aliases).length === 0) {
-    return '';
-  }
+  if (!config) { return ''; }
+  // #238 D6: EFFECTIVE aliases — a following alias is absent from config.aliases
+  // but is still an alias the project's CLAUDE.md block must list.
+  const aliases = getEffectiveAliases();
+  if (Object.keys(aliases).length === 0) { return ''; }
 
   const defaultAlias = config.default || null;
   const lines = [];
@@ -197,7 +202,7 @@ function buildAliasTable() {
   lines.push('| Alias | Model |');
   lines.push('|-------|-------|');
 
-  for (const [alias, model] of Object.entries(config.aliases)) {
+  for (const [alias, model] of Object.entries(aliases)) {
     const marker = (alias === defaultAlias) ? ' (default)' : '';
     lines.push(`| ${alias}${marker} | ${model} |`);
   }
