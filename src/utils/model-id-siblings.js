@@ -5,7 +5,7 @@
  * the version number — so `gpt-5.6-terra` is never compared against
  * `gpt-5.6-sol`, and `kimi-k3` never against `kimi-k2.7-code`. Lifted verbatim
  * from scripts/check-ci-alias-pins.js (which still consumes it) so the alias
- * review engine (alias-proposals.js) asks the shipped pins the SAME sibling
+ * review engine (alias-proposals.js) asks the user's pinned ids the SAME sibling
  * question the CI drift gate asks the CI alias map. `amicus models --check`
  * asks a DIFFERENT question of the same shipped pins — still-listed vs.
  * gone-from-the-catalog — through `alias-audit.js :: findStaleAliases`, not
@@ -22,7 +22,7 @@
  *      token, never a version (#249 r2 B2) — `parsePin` returns `null` for
  *      both `gpt-oss-20b` and `gpt-oss-120b` (#249 r2 review F6: a null
  *      parse has no prefix at all, unlike limit 1's dash-versioned case
- *      below), since `20`/`120` are each immediately followed by `b` and no
+ *      above), since `20`/`120` are each immediately followed by `b` and no
  *      other numeric-dotted run exists to fall back to. MEASURED against a
  *      638-id live catalog cache: 129 ids carry a glued run (`24b`, `70b`,
  *      `a3b`, `8x22b`, `4o`, …) — without this rule `gpt-oss-120b` reads as
