@@ -5,8 +5,11 @@
  * the version number — so `gpt-5.6-terra` is never compared against
  * `gpt-5.6-sol`, and `kimi-k3` never against `kimi-k2.7-code`. Lifted verbatim
  * from scripts/check-ci-alias-pins.js (which still consumes it) so the alias
- * review engine (alias-proposals.js) and `models --check` ask the same question
- * of the shipped pins that the CI drift gate asks of the CI alias map.
+ * review engine (alias-proposals.js) asks the shipped pins the SAME sibling
+ * question the CI drift gate asks the CI alias map. `amicus models --check`
+ * asks a DIFFERENT question of the same shipped pins — still-listed vs.
+ * gone-from-the-catalog — through `alias-audit.js :: findStaleAliases`, not
+ * this module (#249 r2 review F2: this line previously implied otherwise).
  *
  * Known limits, both under-report by design (a suppressed sibling, never a
  * manufactured one) — INVARIANT: neither rule can ever turn two DIFFERENT
