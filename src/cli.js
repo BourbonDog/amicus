@@ -154,6 +154,7 @@ const BOOLEAN_FLAGS = [
      'fix',                  // doctor: self-heal fixable checks in place (#56)
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
      'live',                 // models --check: opt-in probe of stored aliases with real engine legs (v4.6.2 PR3, spec §6)
+     'review',               // aliases: interactive picker over the review proposals (#238 D4)
      'render',               // council verdict: also refresh report.html next to the decided verdict
      'claude',               // init: register for Claude Code only (Task 15)
      'desktop',              // init: register for Claude Desktop only (Task 15)
@@ -391,6 +392,7 @@ Commands:
   continue    New session building on previous
   read        Output session summary/conversation
   models      List/search the model catalog, refresh it, audit aliases
+  aliases     Your model aliases — following / pinned (--review walks the proposals)
   council run <briefing.md> (--models a,b,c | --council <name>)   Headless council: reviews → cross-review → tally → chair → verdict
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
@@ -511,6 +513,13 @@ Options for 'models':
                                engine leg (spends) — served / accepted-but-silent /
                                error. Requires --check.
   --json                       Machine-readable output
+`,
+  aliases: `
+Options for 'aliases':
+  --review                     Interactive picker: accept, choose, skip or dismiss each
+                               proposal (stale pin, newer sibling, differs from the
+                               shipped pin). Needs a terminal.
+  --json                       Machine-readable document (aliases + proposals)
 `,
   list: `
 Options for 'list':

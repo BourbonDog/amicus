@@ -419,6 +419,7 @@ When you don't need a full council — just one other model's take — fork a co
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus watch <id>` | Live-render a fan-out wave, council run, or session from any terminal until it finishes — in-place table on a TTY, `--plain` milestone lines, or `--json` NDJSON; exit code maps the terminal state. `--ui` opens the [Council Workspace](./docs/council.md#council-workspace-gui) window instead (interactive-only, no `--json`). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
+| `amicus aliases` | Your model aliases — following / pinned; `--review` walks the update proposals, `--json` for scripts. |
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
 | `amicus spend` | Cross-run cost rollup from the spend ledger, with per-run attribution — total + per-model spend, tokens, and source mix, most-expensive first (`--wave`/`--council`/`--project`/`--model`/`--op`/`--failed` filter it, `--group-by` buckets it, `--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
