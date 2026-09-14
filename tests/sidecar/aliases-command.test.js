@@ -99,6 +99,22 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8')).aliases).toEqual({ mine: 'openrouter/z-ai/glm-5.4' });
     expect(process.stderr.write.mock.calls.filter(c => String(c[0]).includes("alias 'glm' matches the shipped recommendation")).length).toBe(1);
   });
+  // F4a: normalize-on-entry is best-effort (module docblock) -- a read-only
+  // config dir must not block the listing. `cfg` here is the SAME module
+  // instance `loadDeps()` requires (neither this file nor aliases.js mocks
+  // '../../src/utils/config'), so spying on it directly intercepts the call
+  // aliases.js makes.
+  test('F4a: a write failure during normalize-on-entry does not block the list — reports on stderr, serves the in-memory normalized view', async () => {
+    const shipped = cfg.getDefaultAliases();
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(cfg.getConfigPath(), JSON.stringify({ aliases: { glm: shipped.glm } }));
+    jest.spyOn(cfg, 'saveConfig').mockImplementation(() => { throw new Error('disk full'); });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toMatch(/glm\s+→[^\n]*\sfollowing/);
+    expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('could not normalize aliases'))).toBe(true);
+    cfg.saveConfig.mockRestore();
+  });
   test('--json: versioned document, byte-clean stdout, rows + proposals (normalisation fires inside the captured call and does not leak onto stdout)', async () => {
     const shipped = cfg.getDefaultAliases();
     // Written RAW (not through cfg.saveConfig, which self-normalizes at

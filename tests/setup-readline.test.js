@@ -127,6 +127,28 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     console.log.mockRestore();
   });
 
+  // F4c: the negative half of Q9 -- when the live pick EQUALS the shipped
+  // pin, D1 says an absent key already resolves to it, so nothing is
+  // written and nothing is announced as a pin.
+  test('the negative half of Q9: when the live pick equals the shipped pin, nothing is written and nothing is announced (#238 Q9)', async () => {
+    const { resolveQuickPicks } = require('../src/utils/quick-picks');
+    resolveQuickPicks.mockReturnValueOnce([
+      { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context', vendorPath: 'google',
+        source: 'live', routes: { openrouter: 'openrouter/google/gemini-3.6-flash' } },
+    ]);
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue(null);
+    mockReadline('1');
+    const logs = [];
+    jest.spyOn(console, 'log').mockImplementation((s) => logs.push(String(s)));
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    const written = saveConfig.mock.calls.at(-1)[0];
+    expect(written.aliases.gemini).toBeUndefined();
+    expect(logs.some(l => l.includes('gemini') && l.includes('pinned'))).toBe(false);
+    console.log.mockRestore();
+  });
+
   test('invalid input does not write config', async () => {
     mockReadline('xyz');
     const { loadConfig, saveConfig } = require('../src/utils/config');

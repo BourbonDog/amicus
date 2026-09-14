@@ -210,6 +210,14 @@ describe('Null Alias Defense', () => {
       }
     });
 
+    // F4d (#238 D4): the copy-paste remediation hint now points at the
+    // review picker instead of `amicus setup --add-alias`.
+    it('the thrown message points at amicus aliases --review (#238 D4)', () => {
+      writeConfig({ default: 'gemini', aliases: { toString: null } });
+      const config = loadConfig();
+      expect(() => config.resolveModel('toString')).toThrow(/amicus aliases --review/);
+    });
+
     it('never announces an auto-repair for one', () => {
       writeConfig({ default: 'gemini', aliases: { toString: null } });
       const config = loadConfig();

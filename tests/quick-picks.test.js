@@ -198,4 +198,12 @@ describe('divergent-vendor routes are never derived by prefix-stripping', () => 
       routes: { openrouter: 'openrouter/qwen/qwen4-max' },
     })).toBe('openrouter/qwen/qwen4-max');
   });
+
+  // F4c: #238 Q9 retired the fresh-config seeding this module used to drive
+  // (the wizard writes only what the user actively chose) -- pin that the
+  // export is gone, not merely unused, so it cannot be reintroduced as a
+  // silent dead export.
+  test('toLiveSeedAliases has been retired (#238 Q9)', () => {
+    expect(require('../src/utils/quick-picks').toLiveSeedAliases).toBeUndefined();
+  });
 });

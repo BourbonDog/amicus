@@ -203,7 +203,13 @@ async function reviewOne(p, i, n, ctx) {
  * @returns {Promise<number>} 1 when refused for lacking a TTY or interrupted, else 0
  */
 async function runReview(args, deps) {
-  const d = deps || defaultDeps();
+  // F4b: merge rather than replace, so a test can inject only the members it
+  // cares about (isTTY/ask/write/stderr, say) and let every other collaborator
+  // run for real against the hermetic scratch config -- an e2e-shaped test
+  // without hand-wiring every member `defaultDeps()` already knows how to
+  // build. Every existing deps-object test still overrides every member it
+  // uses, so this is additive.
+  const d = { ...defaultDeps(), ...(deps || {}) };
   let rl = null;
   let ask = d.ask; // M6: kept local, never written back onto `d`
   try {
