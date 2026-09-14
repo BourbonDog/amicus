@@ -19,9 +19,11 @@
  *      version group only extends through a DOTTED numeric run), so two
  *      dash-versioned releases are never compared as siblings at all.
  *   2. A numeric run glued to a following ASCII letter is a size/variant
- *      token, never a version (#249 r2 B2) — `gpt-oss-20b` and
- *      `gpt-oss-120b` parse to prefix `gpt-oss-`, no version, since `20`/
- *      `120` are each immediately followed by `b`. MEASURED against a
+ *      token, never a version (#249 r2 B2) — `parsePin` returns `null` for
+ *      both `gpt-oss-20b` and `gpt-oss-120b` (#249 r2 review F6: a null
+ *      parse has no prefix at all, unlike limit 1's dash-versioned case
+ *      below), since `20`/`120` are each immediately followed by `b` and no
+ *      other numeric-dotted run exists to fall back to. MEASURED against a
  *      638-id live catalog cache: 129 ids carry a glued run (`24b`, `70b`,
  *      `a3b`, `8x22b`, `4o`, …) — without this rule `gpt-oss-120b` reads as
  *      a "newer same-tier sibling" of `gpt-oss-20b`, a different model

@@ -7,19 +7,19 @@
  * loudly (Q2): the list, one reason line, exit 1. The §5 WRITE gate lives
  * here: accepting a catalog-vouched id needs a fresh catalog (24 h); `follow`
  * is exempt because it removes a key. Screen text is aliases-review-render.js
- * and the readline prompt is aliases-review-prompt.js (both split out to
- * hold the 300-line gate). Every alias/id/key this module writes to the
- * terminal — including a caught `err.message`, via `collapseExcerpt`, since
- * a thrown message is a sentence rather than an id — rides the house
- * sanitizer first (`utils/text-sanitize.js`, #249 r2 C4).
+ * and the readline prompt is aliases-review-prompt.js (both split out to hold
+ * the 300-line gate). Every alias/id/key written to the terminal — including
+ * a caught `err.message`, via `collapseExcerpt` (a sentence, not an id) —
+ * rides the house sanitizer first (`utils/text-sanitize.js`, #249 r2 C4).
  *
  * Fix round 1: a missing cache reads as its own banner, never a bogus
  * multi-thousand-day `ageLabel`; an aborted prompt — Ctrl-D/EOF (readline's
- * `close`) or Ctrl-C (readline's own `SIGINT`, #249 r2 D1 — two distinct
- * events, see aliases-review-prompt.js) — rejects the pending `ask` with a
- * `REVIEW_ABORTED` sentinel rather than silently exiting 0; every config
- * write is caught per-call so a failure reports and re-shows the menu;
- * typing the shipped id into "choose another" follows unconditionally
+ * `close`) or, IN A RAW-MODE TERMINAL (stdout a TTY), Ctrl-C (readline's own
+ * `SIGINT`, #249 r2 D1) — rejects the pending `ask` with a `REVIEW_ABORTED`
+ * sentinel rather than silently exiting 0 (piped stdout: `terminal` defaults
+ * false, so Ctrl-C is then the ordinary process signal — #249 r2 review
+ * F6/F9); every config write is caught per-call so a failure reports and
+ * re-shows the menu; typing the shipped id into "choose another" follows unconditionally
  * (Q4's encoding, #249 r2 A1/C2) rather than pinning a redundant copy or
  * consulting either gate; a taken notable name gets a numeric suffix
  * (`freeSuffix`), deliberately not `deriveFreeAlias`'s `free-` naming,
