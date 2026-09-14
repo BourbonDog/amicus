@@ -257,4 +257,35 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.writes.addAlias).toEqual([]);
     expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
   });
+
+  // R1 (#249 r2 A1/C2): typing the shipped id IS the menu's `follow` action,
+  // exempt from BOTH the §5 display gate and the freshness gate -- it
+  // removes a key rather than writing a catalog-vouched one. Mutant
+  // GATEFIRST (restore the old classify-then-fresh-then-follow order in
+  // `chooseAnother`) turns (a) and (c) red: (a) because the stale-catalog
+  // refusal would fire before `follows` is ever checked, (c) because
+  // `classifyTypedId` would call the shipped id "unknown" first.
+  test('R1(a): a STALE catalog — choose another, type the shipped id — still follows, no addAlias', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.3'], fetchedAt: Date.now() - 3 * DAY, models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.removeAlias).toEqual(['glm']);
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
+  });
+
+  test('R1(b): same stale catalog — a gated NON-shipped id is still refused (the fresh gate still binds a real pin)', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.4', '4'], fetchedAt: Date.now() - 3 * DAY, models: [{ id: 'openrouter/z-ai/glm-5.4' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('cannot accept: the catalog is not fresh');
+    expect(t.writes.addAlias).toEqual([]);
+  });
+
+  test('R1(c): a FRESH catalog that does not carry the shipped id at all — typing it still follows, never "not in the catalog"', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.3'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.removeAlias).toEqual(['glm']);
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).not.toContain('not in the catalog');
+    expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
+  });
 });

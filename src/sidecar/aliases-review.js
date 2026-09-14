@@ -112,10 +112,15 @@ function acceptCandidate(p, c, d) {
 }
 
 /**
- * The "choose another" sub-flow: a free-text model id, checked against the
- * §5 display gate (R2 — the SAME `gatedCatalogIds` the menu's own candidates
- * come from) then the freshness gate. The shipped id (M3) follows rather
- * than pinning a redundant copy; a write failure (M2) is a cancel/refusal.
+ * The "choose another" sub-flow: a free-text model id. Typing the shipped
+ * id (M3, #249 r2 A1/C2) IS the menu's `follow` action, checked FIRST and
+ * exempt from BOTH gates below -- it removes a key rather than writing a
+ * catalog-vouched one, and the numbered `follow` menu item is offered
+ * regardless of the catalog, so typing the same id must follow too, even
+ * when the catalog is stale or does not carry the shipped id at all.
+ * Anything else is checked against the §5 display gate (R2 — the SAME
+ * `gatedCatalogIds` the menu's own candidates come from) then the
+ * freshness gate; a write failure (M2) is a cancel/refusal.
  * @returns {Promise<'accepted'|'cancel'|'refused'|'error'>}
  */
 async function chooseAnother(p, ctx) {
@@ -124,14 +129,18 @@ async function chooseAnother(p, ctx) {
     const raw = await ask('  model id (provider/model), blank to cancel: ');
     const ans = String(raw || '').trim();
     if (!ans) { return 'cancel'; }
-    const status = classifyTypedId(ans, allCatalogIds, gatedIds);
-    if (status === 'unknown') { d.write(notInCatalogLine(ans)); continue; }
-    if (status === 'ungated') { d.write(notVerifiedLine(ans)); continue; }
-    if (!fresh) {
-      d.write('  cannot accept: the catalog is not fresh (see above)\n');
-      return 'refused';
-    }
+    // GATEFIRST mutant: restore the old classify-then-fresh-then-follow
+    // order (i.e. move this below the two gates) and the R1 tests go red.
     const follows = !!(p.shipped && sameModel(ans, p.shipped));
+    if (!follows) {
+      const status = classifyTypedId(ans, allCatalogIds, gatedIds);
+      if (status === 'unknown') { d.write(notInCatalogLine(ans)); continue; }
+      if (status === 'ungated') { d.write(notVerifiedLine(ans)); continue; }
+      if (!fresh) {
+        d.write('  cannot accept: the catalog is not fresh (see above)\n');
+        return 'refused';
+      }
+    }
     try {
       if (follows) {
         d.removeAlias(p.alias);
