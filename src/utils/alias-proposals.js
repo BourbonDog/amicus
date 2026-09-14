@@ -6,10 +6,11 @@
  * "Needs review" section to render and for their sinks to write.
  *
  * Only PINNED aliases propose (D1): a following alias resolves to the shipped
- * pin and cannot drift. The §5 DISPLAY gate is applied here — a candidate id
- * must be an authoritative row from a namespace that was not rejected, and a
- * sibling must be strictly newer (model-id-siblings.js) — so nothing this
- * module returns can be a downgrade. The WRITE gate (a fresh catalog) is the
+ * pin and cannot drift. The §5 DISPLAY gate is applied here: candidates never
+ * come from a non-authoritative row or a rejected namespace, and a sibling
+ * (model-id-siblings.js) is always strictly newer. A stale pin's
+ * `replacement` candidates are ranked by similarity (not recency) and sit
+ * after `follow` for a curated alias. The WRITE gate (a fresh catalog) is the
  * renderer's, at accept time.
  *
  * Own keys only: a `__proto__`/`toString` alias is a custom row here as it is
@@ -43,12 +44,20 @@ function proposeForRow(r, ctx) {
   if (sibling) { reasons.push('newer-sibling'); }
   if (differs) { reasons.push('differs-from-shipped'); }
   if (reasons.length === 0) { return null; }
+  // Order (fix round 1, Finding 3): sibling first, UNLESS it is the shipped
+  // model itself — `follow` already names that id, so listing it twice as
+  // both "newer-sibling" and "follow" would be a display duplicate. `follow`
+  // outranks similarity-ranked replacements: a human-curated shipped pin is
+  // a better answer than a same-vendor guess, and a sibling was already
+  // found (even if hidden here as identical to `follow`) means the
+  // structurally-aware comparator has already answered "what's newer" —
+  // replacements are only offered when that comparator found nothing at all.
   const candidates = [];
-  if (sibling) { candidates.push({ id: sibling, why: 'newer-sibling', evidence: {} }); }
-  else if (stale) {
+  if (sibling && !sameModel(sibling, r.shipped)) { candidates.push({ id: sibling, why: 'newer-sibling', evidence: {} }); }
+  if (differs) { candidates.push({ id: r.shipped, why: 'follow', evidence: {} }); }
+  if (stale && !sibling) {
     for (const id of suggestReplacements(r.id, ctx.candidates)) { candidates.push({ id, why: 'replacement', evidence: {} }); }
   }
-  if (differs) { candidates.push({ id: r.shipped, why: 'follow', evidence: {} }); }
   const dismissKey = `${r.alias}@${candidates.length ? candidates[0].id : r.id}`;
   if (own(ctx.dismissed, dismissKey)) { return null; }
   return { alias: r.alias, state: 'pinned', current: r.id, shipped: r.shipped, curated: r.curated, reasons, candidates, dismissKey };
@@ -57,6 +66,13 @@ function proposeForRow(r, ctx) {
 function proposeNotable(entry, ctx) {
   if (!entry || typeof entry.id !== 'string' || typeof entry.suggestedAlias !== 'string') { return null; }
   if (own(ctx.retired, entry.suggestedAlias) || !ctx.candidateIds.includes(entry.id)) { return null; }
+  // Fix round 1, Finding 1: a notable must not shadow an alias NAME that
+  // already exists (curated or user, pinned or following) — rule 10 checked
+  // only the model, not the name, so a notable naming an already-pinned or
+  // already-taken alias produced a second, conflicting proposal for the same
+  // name (an 'unmapped' one beside the real 'pinned'/'following' one, in the
+  // worst case sharing a dismissKey with it).
+  if (ctx.names.has(entry.suggestedAlias)) { return null; }
   if (ctx.mapped.some(id => sameModel(id, entry.id))) { return null; }
   const dismissKey = `${entry.suggestedAlias}@${entry.id}`;
   if (own(ctx.dismissed, dismissKey)) { return null; }
@@ -72,13 +88,16 @@ function proposeNotable(entry, ctx) {
 function buildAliasProposals({ userAliases, defaults, catalogInfo, retired = {}, notable = [], dismissed = {} }) {
   const models = (catalogInfo && Array.isArray(catalogInfo.models)) ? catalogInfo.models : [];
   if (models.length === 0 || !defaults) { return []; }
-  const failures = new Set((catalogInfo.providerFailures || []).map(f => f && f.provider).filter(Boolean));
+  // Fix round 1, Finding 2 (rule 11 "never throws on odd input"): a truthy
+  // non-array providerFailures (e.g. `{}`) must not reach `.map`.
+  const rawFailures = catalogInfo.providerFailures;
+  const failures = new Set((Array.isArray(rawFailures) ? rawFailures : []).map(f => f && f.provider).filter(Boolean));
   const candidates = candidateRows(models, failures);
   const rows = listAliasRows(userAliases, defaults);
   const ctx = {
     models, failures, candidates, candidateIds: candidates.map(m => m.id),
     retired: retired || {}, dismissed: dismissed || {},
-    mapped: rows.map(r => r.id),
+    mapped: rows.map(r => r.id), names: new Set(rows.map(r => r.alias)),
   };
   const out = [];
   for (const r of rows) { const p = proposeForRow(r, ctx); if (p) { out.push(p); } }
