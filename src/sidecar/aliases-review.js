@@ -7,15 +7,19 @@
  * loudly (Q2): the list, one reason line, exit 1. The §5 WRITE gate lives
  * here: accepting a catalog-vouched id needs a fresh catalog (24 h); `follow`
  * is exempt because it removes a key. Pure screen text lives in
- * aliases-review-render.js (split in fix round 1 to hold the 300-line gate).
+ * aliases-review-render.js (split in fix round 1 to hold the 300-line gate);
+ * the real-readline prompt lives in aliases-review-prompt.js (split in fix
+ * round 3, same reason — see that module for the Ctrl-C/Ctrl-D facts).
  *
  * Fix round 1: a missing cache reads as its own banner, never a bogus
- * multi-thousand-day `ageLabel`; a readline `close` (Ctrl-C/D) mid-prompt
- * rejects the pending `ask` with a `REVIEW_ABORTED` sentinel rather than
- * silently exiting 0; every config write is caught per-call so a failure
- * reports and re-shows the menu; typing the shipped id into "choose another"
- * follows (Q4's encoding) rather than pinning a redundant copy; a taken
- * notable name gets a numeric suffix (`freeSuffix`), deliberately not
+ * multi-thousand-day `ageLabel`; an aborted prompt mid-question rejects the
+ * pending `ask` with a `REVIEW_ABORTED` sentinel rather than silently
+ * exiting 0 (fix round 3, #249 r2 D1: this is Ctrl-D/EOF's readline `close`
+ * and Ctrl-C's own readline `SIGINT` — two distinct events, not one
+ * conflated "Ctrl-C/D close"); every config write is caught per-call so a
+ * failure reports and re-shows the menu; typing the shipped id into "choose
+ * another" follows (Q4's encoding) rather than pinning a redundant copy; a
+ * taken notable name gets a numeric suffix (`freeSuffix`), deliberately not
  * `deriveFreeAlias`'s `free-` naming, which is for free-tier council seeds.
  * Fix round 2 (#249 r1) gate helpers (§5-gated "choose another", clock-skew
  * freshness, a throwing `readCache`) live in aliases-review-gate.js.
@@ -207,7 +211,7 @@ async function runReview(args, deps) {
   // hermetic scratch config; every existing deps-object test still
   // overrides every member it uses, so this stays additive.
   const d = { ...defaultDeps(), ...(deps || {}) };
-  let rl = null;
+  let prompt = null;
   let ask = d.ask; // M6: kept local, never written back onto `d`
   try {
     const isTTY = d.isTTY ?? !!process.stdin.isTTY;
@@ -218,24 +222,12 @@ async function runReview(args, deps) {
       return 1;
     }
     if (!ask) {
-      const readline = require('readline');
-      rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      let pendingReject = null;
-      // M1: Ctrl-C/D closes stdin without invoking the question callback --
-      // reject any in-flight `ask` so the loop below ends with a summary.
-      rl.on('close', () => {
-        if (pendingReject) {
-          const reject = pendingReject;
-          pendingReject = null;
-          const err = new Error('aliases --review interrupted');
-          err.code = 'REVIEW_ABORTED';
-          reject(err);
-        }
-      });
-      ask = (q) => new Promise((resolve, reject) => {
-        pendingReject = reject;
-        rl.question(q, (a) => { pendingReject = null; resolve((a || '').trim()); });
-      });
+      // Lazy require, same as `./aliases` above -- but for locality, not a
+      // cycle: aliases-review-prompt.js has no require edge back to this
+      // file, so a top-level require would be equally safe here.
+      const { createPrompt } = require('./aliases-review-prompt');
+      prompt = createPrompt();
+      ask = prompt.ask;
     }
     // Minor (spec §4): name the inline refresh wait so it doesn't read as a
     // hang. R7: a throwing readCache (disk error, corrupt cache) drops this
@@ -290,7 +282,7 @@ async function runReview(args, deps) {
     d.write(`  Reviewed ${n} proposal${n === 1 ? '' : 's'}: ${accepted} accepted, ${skipped} skipped, ${dismissed} dismissed.\n`);
     return 0;
   } finally {
-    if (rl) { rl.close(); }
+    if (prompt) { prompt.close(); }
   }
 }
 
