@@ -27,7 +27,7 @@ function loadDeps() {
     readDismissals: require('../utils/alias-store').readDismissals,
     getCatalogInfo: require('../utils/model-catalog').getCatalogInfo,
     readCache: require('../utils/model-catalog').readCache,
-    groupAliases: require('../../electron/setup-ui-alias-groups').groupAliases,
+    groupAliases: require('../utils/alias-groups').groupAliases,
   };
 }
 
