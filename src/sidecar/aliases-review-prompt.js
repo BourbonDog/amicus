@@ -21,9 +21,25 @@
  * explicit, and still correct if anything else ever attaches its own
  * `'SIGINT'` listener to this interface, which would otherwise suppress
  * readline's default close-on-SIGINT behaviour.
+ *
+ * F3 (#249 r2 review): a Ctrl-C with no `ask` PENDING — e.g. during the
+ * caller's inline catalog refresh, which runs after `createPrompt()` and
+ * before the first `ask()` — closes `rl` with nothing to reject; the next
+ * `ask()` then calls `rl.question` on an already-closed interface, which
+ * throws `ERR_USE_AFTER_CLOSE` instead of ever reaching `'close'`'s reject.
+ * `ask` tracks that window itself (a plain closure flag, not the
+ * undocumented `rl.closed`) and short-circuits to the SAME `REVIEW_ABORTED`
+ * error the pending-ask path builds.
  */
 
 'use strict';
+
+/** @returns {Error} the one `REVIEW_ABORTED` shape both abort paths in `createPrompt` build. */
+function abortedError() {
+  const err = new Error('aliases --review interrupted');
+  err.code = 'REVIEW_ABORTED';
+  return err;
+}
 
 /**
  * @param {{input?: NodeJS.ReadableStream, output?: NodeJS.WritableStream, terminal?: boolean}} [opts]
@@ -43,16 +59,16 @@ function createPrompt(opts = {}) {
     typeof terminal === 'boolean' ? { input, output, terminal } : { input, output }
   );
   let pendingReject = null;
+  let closed = false; // F3: ours, not the undocumented rl.closed -- see module docblock
   // Ctrl-D/EOF (or the stream simply ending) closes stdin without ever
   // invoking the `question` callback -- reject any in-flight `ask` so the
   // caller's loop ends with a summary instead of hanging or exiting silently.
   rl.on('close', () => {
+    closed = true;
     if (pendingReject) {
       const reject = pendingReject;
       pendingReject = null;
-      const err = new Error('aliases --review interrupted');
-      err.code = 'REVIEW_ABORTED';
-      reject(err);
+      reject(abortedError());
     }
   });
   // See the module docblock: this is readline's own 'SIGINT' event (a
@@ -61,6 +77,10 @@ function createPrompt(opts = {}) {
   // default, which only fires when nothing else has claimed this event.
   rl.on('SIGINT', () => rl.close());
   const ask = (q) => new Promise((resolve, reject) => {
+    // F3: already closed with no pending ask (see module docblock) -- calling
+    // rl.question here would throw ERR_USE_AFTER_CLOSE instead of ever
+    // reaching the 'close' handler's reject above.
+    if (closed) { reject(abortedError()); return; }
     pendingReject = reject;
     rl.question(q, (a) => { pendingReject = null; resolve((a || '').trim()); });
   });

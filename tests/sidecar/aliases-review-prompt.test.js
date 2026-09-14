@@ -53,6 +53,17 @@ describe('sidecar/aliases-review-prompt (#249 r2 D1)', () => {
     await expect(pending).rejects.toMatchObject({ code: 'REVIEW_ABORTED' });
   });
 
+  // F3 (#249 r2 review): Ctrl-C with NO ask pending yet (e.g. during the
+  // caller's inline catalog refresh, which runs after createPrompt() and
+  // before the first ask()) used to leave `ask` calling `rl.question` on an
+  // already-closed interface -- ERR_USE_AFTER_CLOSE, not REVIEW_ABORTED.
+  test('Ctrl-C before any ask() still rejects the FIRST ask with REVIEW_ABORTED, not ERR_USE_AFTER_CLOSE', async () => {
+    const { input, output } = streams();
+    const { ask } = createPrompt({ input, output, terminal: true });
+    input.write('\x03'); // no ask() pending at all yet
+    await expect(ask('> ')).rejects.toMatchObject({ code: 'REVIEW_ABORTED' });
+  });
+
   test('close() with no pending ask does not throw, and neither does a second close()', () => {
     const { input, output } = streams();
     const { close } = createPrompt({ input, output, terminal: true });
