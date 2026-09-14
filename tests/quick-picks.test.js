@@ -1,7 +1,7 @@
 // tests/quick-picks.test.js
 'use strict';
 
-const { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute } =
+const { compareIdsDesc, pickCurrent, resolveQuickPicks, toStorableRoute } =
   require('../src/utils/quick-picks');
 
 const row = id => ({ id, name: id, contextLength: 1, pricing: { prompt: '0' } });
@@ -123,31 +123,6 @@ describe('gpt quick-pick resolves to the terra tier (5.6 rename)', () => {
   });
 });
 
-describe('toLiveSeedAliases', () => {
-  test('direct-capable family alias overlays live catalog route as bare canonical (direct-first)', () => {
-    const seeds = toLiveSeedAliases([
-      row('openrouter/google/gemini-9.9-flash'),
-      row('openrouter/qwen/qwen4-max'),
-    ]);
-    expect(seeds.gemini).toBe('google/gemini-9.9-flash');
-    // gateway-only vendor (qwen): cardless, never overlaid by resolveQuickPicks,
-    // and even if it were, stripGatewayPrefix leaves non-direct vendors
-    // openrouter/-prefixed — stays pinned + openrouter/-prefixed regardless
-    // of the live catalog containing a qwen row.
-    expect(seeds.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
-  });
-  test('null/empty catalog returns the static defaults unchanged', () => {
-    const { toDefaultAliases } = require('../src/utils/curated-models');
-    expect(toLiveSeedAliases(null)).toEqual(toDefaultAliases());
-  });
-  test('family aliases that fell back to pinned are not overlaid', () => {
-    // Catalog has gemini flash but NOT gemini-pro -> gemini-pro stays pinned
-    const { toDefaultAliases } = require('../src/utils/curated-models');
-    const seeds = toLiveSeedAliases([row('openrouter/google/gemini-9.9-flash')]);
-    expect(seeds['gemini-pro']).toBe(toDefaultAliases()['gemini-pro']);
-  });
-});
-
 // v4.1.2. For a DIVERGENT vendor (anthropic) the direct id and the OpenRouter
 // id are different strings, not differently prefixed, so stripping
 // `openrouter/` fabricates an id the direct API rejects. A seeded config
@@ -172,20 +147,22 @@ describe('divergent-vendor routes are never derived by prefix-stripping', () => 
     // offers no direct row — NEVER the prefix-stripped dot id.
     ['stale dotted openrouter-only', ['openrouter/anthropic/claude-opus-4.8'], 'anthropic/claude-opus-5'],
     ['stale dotted openrouter + dash direct', ['openrouter/anthropic/claude-opus-4.8', 'anthropic/claude-opus-4-8'], 'anthropic/claude-opus-4-8'],
-  ])('seeds opus from a %s catalog as a direct-API id, never a stripped dot id', (_label, ids, expected) => {
-    const seeds = toLiveSeedAliases(ids.map(row));
-    expect(seeds.opus).toBe(expected);
-    expect(seeds.opus).not.toBe('anthropic/claude-opus-4.8'); // the fabricated strip
+  ])('resolves opus from a %s catalog as a direct-API id, never a stripped dot id', (_label, ids, expected) => {
+    const catalog = ids.map(row);
+    const opus = resolveQuickPicks(catalog).find(p => p.alias === 'opus');
+    const stored = toStorableRoute(opus, { models: catalog });
+    expect(stored).toBe(expected);
+    expect(stored).not.toBe('anthropic/claude-opus-4.8'); // the fabricated strip
   });
 
-  test('a live anthropic catalog never makes the seed diverge from the shipped defaults', () => {
-    const seeds = toLiveSeedAliases([
+  test('a live anthropic catalog resolves opus to the exact shipped default, never a stripped id', () => {
+    const catalog = [
       row('openrouter/anthropic/claude-opus-5'),
       row('anthropic/claude-opus-5'),
-    ]);
-    const defaults = toDefaultAliases();
-    const diverged = Object.keys(defaults).filter(k => seeds[k] !== defaults[k]);
-    expect(diverged).toEqual([]);
+    ];
+    const opus = resolveQuickPicks(catalog).find(p => p.alias === 'opus');
+    const stored = toStorableRoute(opus, { models: catalog });
+    expect(stored).toBe(toDefaultAliases().opus);
   });
 
   test('resolveQuickPicks exposes vendorPath so callers can apply the guard', () => {

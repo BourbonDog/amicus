@@ -183,14 +183,10 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
       const { loadConfig, saveConfig } = require('../src/utils/config');
       let cfg = loadConfig();
       if (!cfg) {
-        const { toLiveSeedAliases } = require('../src/utils/quick-picks');
-        // issue 214: getCatalogInfo, not getCatalog -- toLiveSeedAliases PERSISTS
-        // these routes, so it must see which namespaces were rejected.
-        let catalogInfo = { models: [] };
-        try {
-          catalogInfo = await require('../src/utils/model-catalog').getCatalogInfo();
-        } catch (_err) { /* offline: pinned seeds */ }
-        cfg = { aliases: toLiveSeedAliases(catalogInfo) };
+        // issue 238 Q9: nothing is seeded — a curated alias follows the
+        // shipped pin by being absent (D1). Only the renderer's explicit
+        // writes land.
+        cfg = { aliases: {} };
       }
       if (!cfg.aliases) { cfg.aliases = {}; }
       if (defaultModel) { cfg.default = defaultModel; }

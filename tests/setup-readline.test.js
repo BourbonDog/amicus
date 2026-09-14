@@ -7,7 +7,6 @@ jest.mock('../src/utils/quick-picks', () => ({
       vendorPath: 'google',
       source: 'live', routes: { openrouter: 'openrouter/google/gemini-9.9-flash' } },
   ])),
-  toLiveSeedAliases: jest.fn(() => ({ gemini: 'openrouter/google/gemini-9.9-flash' })),
 }));
 jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => [{ id: 'openrouter/google/gemini-9.9-flash' }]),
@@ -97,7 +96,7 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     expect(written.aliases).toEqual({ qwen: 'user/qwen' });
   });
 
-  test('first run (no config) seeds live aliases', async () => {
+  test('first run (no config) pins only the chosen default (#238 Q9)', async () => {
     mockReadline('1');
     const { loadConfig, saveConfig } = require('../src/utils/config');
     loadConfig.mockReturnValue(null);
@@ -105,10 +104,27 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     await runReadlineSetup();
     const written = saveConfig.mock.calls[0][0];
     // Chosen-alias write always runs through stripGatewayPrefix (Task 8.1a
-    // setup-seeding fix), regardless of whether toLiveSeedAliases (mocked
-    // here) seeded the fresh config — bare canonical for direct-capable 'google'.
+    // setup-seeding fix) -- bare canonical for direct-capable 'google'. No
+    // other alias is written; #238 Q9 retired the fresh-config seeding.
     expect(written.aliases.gemini).toBe('google/gemini-9.9-flash');
     expect(written.default).toBe('gemini');
+  });
+
+  test('the chosen default is pinned only when its live pick differs from the shipped pin, and says so (#238 Q9)', async () => {
+    // resolveQuickPicks (mocked at the top) resolves gemini live to gemini-9.9-flash,
+    // which differs from the shipped pin -> written and announced.
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue(null);
+    mockReadline('1');
+    const logs = [];
+    jest.spyOn(console, 'log').mockImplementation((s) => logs.push(String(s)));
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    const written = saveConfig.mock.calls.at(-1)[0];
+    expect(Object.keys(written.aliases)).toEqual(['gemini']);
+    expect(written.aliases.gemini).toBe('google/gemini-9.9-flash');
+    expect(logs.some(l => l.includes('gemini') && l.includes('pinned') && l.includes('differs from the shipped'))).toBe(true);
+    console.log.mockRestore();
   });
 
   test('invalid input does not write config', async () => {

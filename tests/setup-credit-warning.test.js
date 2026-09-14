@@ -13,7 +13,6 @@ jest.mock('../src/utils/quick-picks', () => ({
       vendorPath: 'google',
       source: 'live', routes: { openrouter: 'openrouter/google/gemini-9.9-flash' } },
   ])),
-  toLiveSeedAliases: jest.fn(() => ({ gemini: 'openrouter/google/gemini-9.9-flash' })),
 }));
 jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => [{ id: 'openrouter/google/gemini-9.9-flash' }]),
