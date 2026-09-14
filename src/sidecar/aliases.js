@@ -32,9 +32,18 @@ function loadDeps() {
   };
 }
 
+/** @returns {boolean} true when an own value of `aliases` is not a non-empty string -- saveConfig's own stripper would remove it */
+function hasStrippableAliasValue(aliases) {
+  return Object.keys(aliases).some(k => typeof aliases[k] !== 'string' || aliases[k].length === 0);
+}
+
 /**
  * Normalize on entry (D6), best-effort: a read-only config dir never blocks a
  * listing — the in-memory normalized view is used and the failure announced.
+ * Also fires on a non-string value (#249 r1 R8a): `normalizeAliases` only
+ * drops a value equal to the shipped default, so a garbage value would
+ * otherwise sit on disk forever -- `saveConfig`'s own stripper removes it,
+ * with its own Notice.
  * @returns {object} the user alias map after normalization
  */
 function normalizeOnEntry(d) {
@@ -42,7 +51,7 @@ function normalizeOnEntry(d) {
   const defaults = d.config.getDefaultAliases();
   if (!cfg || !cfg.aliases || typeof cfg.aliases !== 'object') { return {}; }
   const probe = d.normalizeAliases(cfg.aliases, defaults);
-  if (probe.removed.length > 0) {
+  if (probe.removed.length > 0 || hasStrippableAliasValue(cfg.aliases)) {
     try { d.config.saveConfig(cfg); }                              // saveConfig prints the Notices
     catch (err) { process.stderr.write(`Notice: could not normalize aliases (${err.message}) — keys left on disk; every alias still resolves to the same id\n`); }
   }

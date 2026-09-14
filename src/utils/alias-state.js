@@ -74,7 +74,11 @@ function listAliasRows(userAliases, defaults) {
       curated: true, shipped: defaults[alias] });
   }
   for (const alias of Object.keys(user)) {
-    if (isCurated(alias, defaults) || typeof user[alias] !== 'string') { continue; }
+    // #249 r1 R8b: '__proto__' can never be persisted (saveConfig's own
+    // stripper rejects it, config.js :: saveConfig) -- a row for it here
+    // would show state the user can never actually reach, so it gets no
+    // row and no proposal.
+    if (alias === '__proto__' || isCurated(alias, defaults) || typeof user[alias] !== 'string') { continue; }
     rows.push({ alias, id: user[alias], state: 'pinned', curated: false, shipped: null });
   }
   return rows;

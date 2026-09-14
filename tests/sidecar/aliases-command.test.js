@@ -133,6 +133,21 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       String(c[0]).includes('Notice: could not normalize aliases (disk full) — keys left on disk; every alias still resolves to the same id'))).toBe(true);
     cfg.saveConfig.mockRestore();
   });
+  // R8a (#249 r1 A3/D4): normalizeAliases only drops a value equal to the
+  // shipped default -- a garbage (non-string) value sat on disk forever,
+  // since probe.removed stayed empty and saveConfig was never triggered.
+  // saveConfig already has its own stripper (D6, "Removing invalid alias");
+  // this only needs to make sure it actually gets CALLED for this case.
+  test("R8a: a non-string alias value converges via saveConfig's own stripper; the row still reads following", async () => {
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(cfg.getConfigPath(), JSON.stringify({ aliases: { gemini: 42 } }));
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toMatch(/gemini\s+→[^\n]*\sfollowing/);
+    const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+    expect(onDisk.aliases).not.toHaveProperty('gemini');
+    expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes("Removing invalid alias 'gemini'"))).toBe(true);
+  });
   test('--json: versioned document, byte-clean stdout, rows + proposals (normalisation fires inside the captured call and does not leak onto stdout)', async () => {
     const shipped = cfg.getDefaultAliases();
     // Written RAW (not through cfg.saveConfig, which self-normalizes at

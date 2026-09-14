@@ -64,10 +64,15 @@ describe('listAliasRows', () => {
     expect(listAliasRows(null, defaults).every(r => r.state === 'following')).toBe(true);
     expect(listAliasRows({}, defaults)).toHaveLength(2);
   });
-  test('a __proto__ key parsed from JSON is a plain custom row, never a prototype write', () => {
+  // R8b (#249 r1 A3/D4): '__proto__' can never be PERSISTED (saveConfig's own
+  // stripper rejects it), so a row for it here would show state the user can
+  // never actually reach on disk -- it now gets no row and no proposal.
+  // Prototype safety still holds either way (own-key handling, never the
+  // inherited setter).
+  test('a __proto__ key parsed from JSON gets no row -- it can never be persisted -- and prototype safety still holds', () => {
     const user = JSON.parse('{"__proto__": "openrouter/a/b-1"}');
     const rows = listAliasRows(user, defaults);
-    expect(rows.find(r => r.alias === '__proto__')).toEqual({ alias: '__proto__', id: 'openrouter/a/b-1', state: 'pinned', curated: false, shipped: null });
+    expect(rows.find(r => r.alias === '__proto__')).toBeUndefined();
     expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 });
