@@ -37,6 +37,21 @@ function ageLabel(fetchedAt, now) {
 }
 
 /**
+ * Minor (spec §4): "refreshing catalog (3 days old)…" -- printed BEFORE the
+ * picker's own inline refresh, from the last cache on disk, so a stale-cache
+ * wait reads as progress rather than a hang. Pure: takes the pre-refresh
+ * `readCache()` doc and `now`, returns the line or null.
+ * @param {{fetchedAt?: number}|null} cache
+ * @param {number} now
+ * @returns {string|null} the line (with trailing newline), or null when the
+ *   cache is missing or not old enough to be worth naming
+ */
+function refreshingCatalogLine(cache, now) {
+  if (!cache || typeof cache.fetchedAt !== 'number' || (now - cache.fetchedAt) <= DEFAULT_MAX_AGE_MS) { return null; }
+  return `  refreshing catalog (${ageLabel(cache.fetchedAt, now)} old)…\n`;
+}
+
+/**
  * @param {object} p one proposal
  * @returns {Array<{label: string, action: 'accept'|'choose'|'skip'|'dismiss', candidate?: object}>}
  *   one entry per candidate in the engine's order (never re-sorted), then the
@@ -69,7 +84,7 @@ function menuLineText(items) {
 function renderScreen(p, i, n, items) {
   const lines = [`  [${i + 1}/${n}] ${p.alias}`];
   lines.push(p.current
-    ? `    ${'currently'.padEnd(LABEL_WIDTH)}${p.current}      (pinned by you)`
+    ? `    ${'currently'.padEnd(LABEL_WIDTH)}${p.current}      (pinned)`
     : '    not mapped yet');
   if (p.curated) { lines.push(`    ${'shipped'.padEnd(LABEL_WIDTH)}${p.shipped}`); }
   const top = p.candidates[0];
@@ -88,4 +103,4 @@ function renderScreen(p, i, n, items) {
   return lines.join('\n') + '\n';
 }
 
-module.exports = { ageLabel, menuFor, menuLineText, renderScreen };
+module.exports = { ageLabel, menuFor, menuLineText, renderScreen, refreshingCatalogLine };

@@ -3,7 +3,7 @@
 
 const DAY = 24 * 60 * 60 * 1000;
 
-function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], models = [] }) {
+function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], models = [], readCache } = {}) {
   const out = [];
   const err = [];
   const writes = { addAlias: [], removeAlias: [], recordDismissal: [] };
@@ -21,6 +21,7 @@ function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], 
       recordDismissal: (k) => writes.recordDismissal.push(k),
       effectiveAliasNames: () => new Set(rows.map(r => r.alias)),
       stderr: (s) => err.push(String(s)),
+      ...(readCache ? { readCache } : {}),
     },
     out: () => out.join(''), err: () => err.join(''), writes, calls,
   };
@@ -59,7 +60,10 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     const t = makeDeps({ proposals: [glm], answers: ['1'], models: [{ id: 'openrouter/z-ai/glm-5.4' }] });
     expect(await runReview({}, t.deps)).toBe(0);
     expect(t.out()).toMatch(/\[1\/1\] glm/);
-    expect(t.out()).toContain('currently  openrouter/z-ai/glm-5.2');
+    // Minor: "(pinned by you)" -> "(pinned)" -- every proposal here is
+    // necessarily the user's own pin (D1: a following alias never proposes).
+    expect(t.out()).toContain('currently  openrouter/z-ai/glm-5.2      (pinned)');
+    expect(t.out()).not.toContain('pinned by you');
     expect(t.out()).toContain('shipped    openrouter/z-ai/glm-5.3');
     expect(t.out()).toContain('[1] accept openrouter/z-ai/glm-5.4');
     expect(t.out()).toContain('[2] follow the shipped pin (openrouter/z-ai/glm-5.3)');
@@ -173,6 +177,21 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).toContain('stale      current id is gone from the catalog — no same-vendor replacement found');
     expect(t.writes.addAlias).toEqual([]);
     expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
+  });
+
+  test('Minor: a stale readCache() prints "refreshing catalog (N days old)…" once, before the picker itself refreshes', async () => {
+    const t = makeDeps({
+      proposals: [glm], answers: ['4'], models: [{ id: 'x/y' }],
+      readCache: () => ({ fetchedAt: Date.now() - 3 * DAY }),
+    });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect((t.out().match(/refreshing catalog \(3 days old\)…/g) || []).length).toBe(1);
+  });
+
+  test('Minor: readCache omitted (a fully-mocked deps object) never throws and prints no refresh banner', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['4'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).not.toContain('refreshing catalog');
   });
 
   test('F1: no catalog at all refuses to review before "Nothing to review", exit 1, no writes', async () => {

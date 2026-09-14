@@ -7,6 +7,13 @@
  * from scripts/check-ci-alias-pins.js (which still consumes it) so the alias
  * review engine (alias-proposals.js) and `models --check` ask the same question
  * of the shipped pins that the CI drift gate asks of the CI alias map.
+ *
+ * Known limit: a dash-versioned id — Anthropic's `claude-opus-4-5`, say —
+ * parses its trailing `-5` as part of the suffix rather than the version
+ * (the version group only extends through a DOTTED numeric run), so two
+ * dash-versioned releases are never compared as siblings at all. This
+ * under-reports; it never mis-reports, since a suffix mismatch can only
+ * suppress a real sibling, never manufacture a false one.
  */
 
 'use strict';

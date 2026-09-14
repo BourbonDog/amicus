@@ -406,10 +406,13 @@ A curated alias (`gemini`, `gpt`, `opus`, `deepseek`, …) absent from `config.a
 ```bash
 amicus aliases            # every alias: following (shipped pin) / pinned (yours), by vendor
 amicus aliases --review   # walk outdated pins in a numbered picker — no copy-paste
+amicus aliases --unpin <name>   # remove a pin: a curated name goes back to following, a custom name is deleted
 amicus aliases --json     # the same document, for scripts
 ```
 
 `--review` offers, per outdated pin: accept a newer same-tier sibling, follow the shipped pin again, choose another catalog id, skip, or never ask again for that pairing — it needs a terminal (without one it prints the list and exits 1). Picking "follow the shipped pin" removes the key from `config.aliases`. `amicus setup` no longer seeds all 21 curated ids — it pins only the default alias you chose, and only when its live flagship differs from the shipped pin, and says so.
+
+Accepting a catalog-vouched id needs a catalog fresher than 24 hours — the picker refreshes it inline first (an authenticated model-list call to each provider you hold a key for, the same call `amicus models --refresh` makes); `follow` never needs the catalog.
 
 **Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line points at `amicus aliases --review`. Drift is informational only by default and does not change the exit code — pass `--strict` alongside `--check` to make curated per-gateway drift (stale or divergent direct/OpenRouter forms) exit non-zero too.
 
@@ -431,7 +434,7 @@ Each stored alias resolves to one of three outcomes:
 
 **Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
 
-**Aliases are a curated seed, not a fixed list.** The curated aliases (`gemini`, `gpt`, `opus`, …) are shipped and follow the package's pins unless you pin them — pin one, or add an entirely new one, with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
+**Curated aliases follow the shipped pins unless you pin them.** The curated aliases (`gemini`, `gpt`, `opus`, …) are shipped and follow the package's pins unless you pin them — pin one, or add an entirely new one, with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus aliases` — that is the source of truth.
 
 **Full-id passthrough.** You can always bypass aliases and name a model directly. Bare `provider/model` is the canonical, policy-routed form; `openrouter/provider/model` is an explicit override. See [Routing](../README.md#routing) for the full explanation — summary:
 

@@ -11,7 +11,9 @@ All notable changes to Amicus are documented here. Format follows
   pin, moves with releases) vs `pinned` (yours), grouped by vendor; `--review` walks every
   proposal in a numbered picker (accept a newer same-tier sibling, follow the shipped pin,
   choose another catalog id, skip, or never ask again — no copy-paste); `--json` for scripts.
-  Without a terminal `--review` prints the list, says it is interactive, and exits 1. (#238)
+  Without a terminal `--review` prints the list, says it is interactive, and exits 1;
+  `--unpin <name>` removes a pin (a curated name goes back to following, a custom name is
+  deleted). (#238)
 
 ### Changed
 

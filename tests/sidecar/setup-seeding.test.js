@@ -78,4 +78,36 @@ describe('--add-alias catalog warning', () => {
     const out = await runAddAlias({ catalog: [] });
     expect(out).toBe('');
   });
+
+  // Minor (#238 PR1 fix wave): --add-alias's own confirmation line follows
+  // D1's vocabulary too -- writing the shipped id verbatim is the same as
+  // never having pinned at all, so say so instead of "added".
+  it('reports "now follows the shipped recommendation" instead of "added" when the value matches the shipped pin', async () => {
+    jest.resetModules();
+    jest.doMock('../../src/sidecar/setup', () => ({
+      addAlias: jest.fn(), runInteractiveSetup: jest.fn(), runApiKeySetup: jest.fn(),
+    }));
+    jest.doMock('../../src/utils/model-catalog', () => ({ getCatalog: jest.fn(async () => []) }));
+    const { handleSetup } = require('../../src/cli-handlers');
+    const logs = [];
+    const origLog = console.log;
+    console.log = (s) => logs.push(String(s));
+    await handleSetup({ 'add-alias': 'glm=openrouter/z-ai/glm-5.3' }).finally(() => { console.log = origLog; });
+    expect(logs).toContain("Alias 'glm' now follows the shipped recommendation (openrouter/z-ai/glm-5.3)");
+    expect(logs.some(l => l.includes("Alias 'glm' added"))).toBe(false);
+  });
+
+  it('still reports "added" for a value that differs from (or has no) shipped pin', async () => {
+    jest.resetModules();
+    jest.doMock('../../src/sidecar/setup', () => ({
+      addAlias: jest.fn(), runInteractiveSetup: jest.fn(), runApiKeySetup: jest.fn(),
+    }));
+    jest.doMock('../../src/utils/model-catalog', () => ({ getCatalog: jest.fn(async () => []) }));
+    const { handleSetup } = require('../../src/cli-handlers');
+    const logs = [];
+    const origLog = console.log;
+    console.log = (s) => logs.push(String(s));
+    await handleSetup({ 'add-alias': 'glm=openrouter/z-ai/glm-5.4' }).finally(() => { console.log = origLog; });
+    expect(logs).toContain("Alias 'glm' added: openrouter/z-ai/glm-5.4");
+  });
 });

@@ -112,7 +112,11 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
     expect(out).toMatch(/glm\s+→[^\n]*\sfollowing/);
-    expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('could not normalize aliases'))).toBe(true);
+    // Minor: exact wording -- "keys left on disk; every alias still resolves
+    // to the same id" (not the old "continuing with the normalized view",
+    // which undersold what actually happened on disk).
+    expect(process.stderr.write.mock.calls.some(c =>
+      String(c[0]).includes('Notice: could not normalize aliases (disk full) — keys left on disk; every alias still resolves to the same id'))).toBe(true);
     cfg.saveConfig.mockRestore();
   });
   test('--json: versioned document, byte-clean stdout, rows + proposals (normalisation fires inside the captured call and does not leak onto stdout)', async () => {

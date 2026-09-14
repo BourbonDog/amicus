@@ -26,7 +26,7 @@
 
 const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 const { stripGatewayPrefix } = require('../utils/curated-models');
-const { ageLabel, menuFor, menuLineText, renderScreen } = require('./aliases-review-render');
+const { ageLabel, menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
 
 /**
  * Real-CLI collaborators. Requires are lazy/function-scoped (not top-level)
@@ -242,6 +242,8 @@ async function runReview(args, deps) {
         rl.question(q, (a) => { pendingReject = null; resolve((a || '').trim()); });
       });
     }
+    // Minor (spec §4): name the inline refresh wait so it doesn't read as a hang.
+    if (typeof d.readCache === 'function') { const line = refreshingCatalogLine(d.readCache(), Date.now()); if (line) { d.write(line); } }
     const view = await d.collectAliasView({});
     // F1: no catalog at all means no proposal was ever judged -- that is not
     // the same fact as "judged them all, nothing to review" (below), so it

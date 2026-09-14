@@ -43,7 +43,7 @@ function normalizeOnEntry(d) {
   const probe = d.normalizeAliases(cfg.aliases, defaults);
   if (probe.removed.length > 0) {
     try { d.config.saveConfig(cfg); }                              // saveConfig prints the Notices
-    catch (err) { process.stderr.write(`Notice: could not normalize aliases (${err.message}) — continuing with the normalized view\n`); }
+    catch (err) { process.stderr.write(`Notice: could not normalize aliases (${err.message}) — keys left on disk; every alias still resolves to the same id\n`); }
   }
   return probe.aliases;
 }

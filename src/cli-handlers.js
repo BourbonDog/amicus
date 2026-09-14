@@ -47,7 +47,14 @@ async function handleSetup(args) {
       process.exit(1);
     }
     addAlias(name, model);
-    console.log(`Alias '${name}' added: ${model}`);
+    // Minor (#238 D1 vocabulary): writing the shipped id verbatim is the
+    // same as never having pinned at all -- say so, not "added".
+    const { getDefaultAliases } = require('./utils/config');
+    if (getDefaultAliases()[name] === model) {
+      console.log(`Alias '${name}' now follows the shipped recommendation (${model})`);
+    } else {
+      console.log(`Alias '${name}' added: ${model}`);
+    }
     // F5: warn (never block) when the model is absent from a checkable catalog.
     try {
       const { getCatalog } = require('./utils/model-catalog');
