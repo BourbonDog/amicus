@@ -14,6 +14,7 @@
 'use strict';
 
 const { SCHEMA_VERSION } = require('../utils/result-schema-version');
+const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 
 /** @returns {object} this module's collaborators, gathered so a caller can override them in tests */
 function loadDeps() {
@@ -95,10 +96,24 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     }
   }
   lines.push('');
+  // F1: an unavailable catalog cannot be checked for updates at all -- that is
+  // a different fact from "checked, nothing found" and must not print the
+  // reassuring "nothing to review" line.
+  if (!view.catalogAvailable) {
+    lines.push('  catalog unavailable — cannot check for updates (amicus models --refresh)');
+    return lines.join('\n') + '\n';
+  }
   const n = view.proposals.length;
   lines.push(n === 0
     ? '  nothing to review — amicus aliases --review'
     : `  ${n} update${n === 1 ? '' : 's'} available — amicus aliases --review`);
+  // F1: the catalog is available but stale -- name its age so a user who
+  // never runs --review still learns the background refresh isn't keeping up.
+  const fetchedAt = view.catalogInfo && view.catalogInfo.fetchedAt;
+  if (typeof fetchedAt === 'number' && (Date.now() - fetchedAt) > DEFAULT_MAX_AGE_MS) {
+    const days = Math.floor((Date.now() - fetchedAt) / DEFAULT_MAX_AGE_MS);
+    lines.push(`  (catalog is ${days} day${days === 1 ? '' : 's'} old — amicus models --refresh)`);
+  }
   return lines.join('\n') + '\n';
 }
 

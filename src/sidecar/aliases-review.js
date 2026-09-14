@@ -237,6 +237,13 @@ async function runReview(args, deps) {
       });
     }
     const view = await d.collectAliasView({});
+    // F1: no catalog at all means no proposal was ever judged -- that is not
+    // the same fact as "judged them all, nothing to review" (below), so it
+    // gets its own refusal, before that check ever runs.
+    if (!view.catalogAvailable) {
+      d.write('  no catalog — cannot review; run amicus models --refresh\n');
+      return 1;
+    }
     const now = (d.now || Date.now)();
     const fetchedAt = view.catalogInfo && view.catalogInfo.fetchedAt;
     const fresh = isFresh(fetchedAt, now);

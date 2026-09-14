@@ -163,6 +163,16 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
   });
 
+  test('F1: no catalog at all refuses to review before "Nothing to review", exit 1, no writes', async () => {
+    const t = makeDeps({ proposals: [], rows: [], models: [] });
+    expect(await runReview({}, t.deps)).toBe(1);
+    expect(t.out()).toContain('no catalog — cannot review; run amicus models --refresh');
+    expect(t.out()).not.toContain('Nothing to review');
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.writes.removeAlias).toEqual([]);
+    expect(t.writes.recordDismissal).toEqual([]);
+  });
+
   test('M3: "choose another" typed with the shipped id follows, never pins a redundant copy', async () => {
     const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.3'], models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
     expect(await runReview({}, t.deps)).toBe(0);

@@ -62,8 +62,23 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
     expect(out).toContain('following');
-    expect(out).toContain('nothing to review');
     expect(catalogCalls).toEqual([]);
+  });
+  // F1: an unavailable catalog cannot be checked for updates -- that is a
+  // different fact from "checked, nothing found" and must say so instead of
+  // the reassuring "nothing to review" line.
+  test('F1: no cache at all -> footer says catalog unavailable, never "nothing to review", exit 0', async () => {
+    catalogCache = null;
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('catalog unavailable — cannot check for updates (amicus models --refresh)');
+    expect(out).not.toContain('nothing to review');
+  });
+  test('F1: a catalog older than 24h gets a second footer line naming its age', async () => {
+    catalogCache = { ...CATALOG, fetchedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 };
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('(catalog is 3 days old — amicus models --refresh)');
   });
   test('normalizes on entry: a seeded key equal to the shipped pin is dropped with a Notice', async () => {
     const shipped = cfg.getDefaultAliases();
