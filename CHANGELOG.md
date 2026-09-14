@@ -13,7 +13,12 @@ All notable changes to Amicus are documented here. Format follows
   choose another catalog id, skip, or never ask again — no copy-paste); `--json` for scripts.
   Without a terminal `--review` prints the list, says it is interactive, and exits 1;
   `--unpin <name>` removes a pin (a curated name goes back to following, a custom name is
-  deleted). (#238)
+  deleted); refuses instead when `name` is also your (non-curated) `config.default`, so a
+  delete can never leave the default dangling on a key that no longer resolves — pick a new
+  default first. The sibling comparator behind "newer same-tier sibling" (and shared by
+  `models --check`'s CI pin audit) never reads a size/variant token glued to a number (`20b`,
+  `8x22b`) as a version, so a differently-sized variant is never offered as a sibling of
+  another. (#238, #249)
 
 ### Changed
 
