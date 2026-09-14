@@ -6,10 +6,14 @@
  * src/utils/alias-groups.js (issue 238 PR1 fix wave F5): `src/sidecar/aliases.js`
  * (the CLI `amicus aliases` list) needed the same grouping, and `src/`
  * requiring from `electron/` is a layering violation the whole-branch review
- * caught. This file re-exports every moved symbol so
+ * caught. This file re-exports exactly those five symbols -- groupAliases,
+ * aliasVendorOf, vendorLabel, titleCaseVendor, PREFERRED_VENDOR_ORDER -- so
  * electron/setup-ui-aliases.js, electron/setup-ui-alias-script.js and every
- * existing test keep working untouched, and keeps its own genuinely
- * UI-only export (NEW_ROUTES_GROUP_LABEL) defined here.
+ * existing test keep working untouched, and keeps its own genuinely UI-only
+ * export (NEW_ROUTES_GROUP_LABEL) defined here. `ALIAS_VENDOR_LABELS` (the
+ * vendor -> display-name table `vendorLabel` looks up) stayed
+ * module-private to alias-groups.js -- it is not one of the five and
+ * nothing imports it directly (#249 r1 D2).
  *
  * SHARED-WITH-THE-BROWSER NOTE (still applies to the grouping rule, wherever
  * it lives) — deliberately NOT shared. The wizard's inline script cannot
