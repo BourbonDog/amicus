@@ -13,13 +13,14 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.9.8** (2026-09-13). Each 4.x rev below leads with the benefit, not the
-plumbing; the patch releases since v4.9.0 carry no section of their own, because each corrected a
+Amicus is at **v4.10.0** (2026-09-14). Each 4.x rev below leads with the benefit, not the
+plumbing; the v4.9.x patch releases carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census) it did so to
-make an existing promise true, not to widen it. See `CHANGELOG.md` for what each one contained.
+make an existing promise true, not to widen it. v4.10.0 adds a surface (`amicus aliases`) and so
+gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.9.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
+**Status:** v4.0 through **v4.10.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -446,6 +447,33 @@ a verdict about a review that never happened.
 > **Lineage.** v4.6 through v4.8 each made the council *more honest about a run it already knew how
 > to do* — announcing losses, counting money, attributing seats. v4.9 changes what a council can be
 > asked for in the first place, which is a different kind of rev and is scoped as one.
+
+## v4.10 — "Your aliases follow the pins" *(follow-or-pin aliases — #238 Phase 1)* — ✅ SHIPPED v4.10.0, 2026-09-14
+**Benefit:** a curated alias tracks the pin amicus ships until you deliberately pin it, and
+`amicus aliases` shows which is which and walks every worthwhile change in a numbered picker —
+no more copy-pasting `--add-alias` lines out of `models --check`.
+
+- **★ `amicus aliases`** — every alias as `following` (the shipped pin, moves with releases) or
+  `pinned` (yours), grouped by vendor; `--review` proposes one change per pinned alias (a strictly
+  newer same-tier sibling, the shipped pin, a same-vendor replacement for an id gone from the
+  catalog) and accepts, skips or dismisses it in place; `--json` for scripts; `--unpin <name>`
+  removes a pin (a curated name goes back to following, a custom name is deleted, the alias your
+  default points at is refused). **Closes the user half of #238** *(L)*
+- **Absence is follow** — a name absent from `config.aliases` resolves to the shipped pin, a
+  present key is a pin, and a key equal to the shipped pin is dropped on save with a Notice; the
+  setup wizard stops seeding the 21 curated ids and pins only the default you chose, and only when
+  its live flagship differs from the shipped one *(M)*
+- **The drift report cannot propose a downgrade** — `models --check`'s fallback-drift line ignores
+  non-authoritative catalog rows and is silent when the OpenRouter namespace was rejected *(S)*
+- **The sibling comparator is tier-safe** — lifted out of the CI alias-pin drift gate and shared
+  with it; a size or variant token glued to a number (`20b`, `8x22b`, `4o`) is never read as a
+  version, so a differently-sized model is never offered as a "newer" sibling *(S)*
+> Why here: the two council rounds on #249 (16 + 13 findings) shaped the release — the typed
+> shipped id follows without a catalog, the comparator's size rule, the `--unpin` default guard
+> and the terminal-escape sanitizer on every alias surface all came out of them. Phases 2–4 of
+> the #238 design (owner mode with `curated-pins.json`, the Electron "Needs review" section, the
+> quiet update notice) are unscheduled; the spec that scopes them ships in the repo under
+> `docs/superpowers/specs/`.
 
 ## Backlog (tracked, not scheduled)
 
