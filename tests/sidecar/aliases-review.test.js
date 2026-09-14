@@ -7,22 +7,22 @@ function makeDeps({ proposals, rows = [], fetchedAt = Date.now(), answers = [], 
   const out = [];
   const err = [];
   const writes = { addAlias: [], removeAlias: [], recordDismissal: [] };
+  const calls = { collectAliasView: [] };
   const queue = [...answers];
   return {
     deps: {
       isTTY: true,
       write: (s) => out.push(String(s)),
       ask: async () => { if (queue.length === 0) { throw new Error('no more scripted answers'); } return queue.shift(); },
-      collectAliasView: async () => ({ rows, proposals, catalogInfo: { models, fetchedAt, providerFailures: [] }, catalogAvailable: models.length > 0 }),
+      collectAliasView: async (opts) => { calls.collectAliasView.push(opts); return { rows, proposals, catalogInfo: { models, fetchedAt, providerFailures: [] }, catalogAvailable: models.length > 0 }; },
       renderAliasList: () => 'LIST\n',
       addAlias: (a, id) => writes.addAlias.push([a, id]),
       removeAlias: (a) => { writes.removeAlias.push(a); return true; },
       recordDismissal: (k) => writes.recordDismissal.push(k),
-      deriveFreeAlias: (id, taken) => `free-${id.split('/').pop()}`,
       effectiveAliasNames: () => new Set(rows.map(r => r.alias)),
       stderr: (s) => err.push(String(s)),
     },
-    out: () => out.join(''), err: () => err.join(''), writes,
+    out: () => out.join(''), err: () => err.join(''), writes, calls,
   };
 }
 
@@ -101,10 +101,73 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.writes.addAlias).toEqual([]);
     expect(t.writes.removeAlias).toEqual(['glm']);
   });
-  test('notable accept adds the alias, deriving a free name when the suggested one is taken', async () => {
+  test('notable accept adds the alias, suffixing -2 when the suggested name is already taken (M4)', async () => {
     const t = makeDeps({ proposals: [atlas], rows: [{ alias: 'atlas', id: 'x/z' }], answers: ['1'], models: [{ id: 'openrouter/newco/atlas-1' }] });
     await runReview({}, t.deps);
-    expect(t.writes.addAlias).toEqual([['free-atlas-1', 'openrouter/newco/atlas-1']]);
+    expect(t.writes.addAlias).toEqual([['atlas-2', 'openrouter/newco/atlas-1']]);
     expect(t.out()).toContain('[1] add atlas → openrouter/newco/atlas-1');
+    expect(t.out()).toContain('✓ atlas-2 → openrouter/newco/atlas-1 (pinned)');
+  });
+
+  test('IMPORTANT 1: no cache at all (fetchedAt: null) shows the no-cache banner, never a bogus day count; follow still works, accept refused', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['1', '2'], fetchedAt: null, models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('no catalog cache and it could not be fetched');
+    expect(t.out()).not.toContain('days old');
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.writes.removeAlias).toEqual(['glm']);
+  });
+
+  test('IMPORTANT 2a: a stale catalog also gates "choose another" — a catalog-valid id is still refused, not pinned', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.4', '4'], fetchedAt: Date.now() - 3 * DAY, models: [{ id: 'openrouter/z-ai/glm-5.4' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).toContain('cannot accept: the catalog is not fresh');
+  });
+
+  test('IMPORTANT 2b: collectAliasView is called with { maxAgeMs: Infinity } off a TTY and {} on a TTY', async () => {
+    const t1 = makeDeps({ proposals: [], rows: [], models: [] });
+    t1.deps.isTTY = false;
+    await runReview({}, t1.deps);
+    expect(t1.calls.collectAliasView).toEqual([{ maxAgeMs: Number.POSITIVE_INFINITY }]);
+
+    const t2 = makeDeps({ proposals: [], rows: [{ alias: 'gemini' }], models: [{ id: 'x/y' }] });
+    await runReview({}, t2.deps);
+    expect(t2.calls.collectAliasView).toEqual([{}]);
+  });
+
+  test('IMPORTANT 2c: a blank answer to "choose another" cancels back to the menu with no write', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', '', '4'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
+  });
+
+  test('M1: an aborted ask (Ctrl-C/D mid-prompt) does not exit silently — it interrupts with a running summary and exit 1', async () => {
+    const t = makeDeps({ proposals: [glm, { ...glm, alias: 'glm2', dismissKey: 'glm2@x' }], models: [{ id: 'x/y' }] });
+    let calls = 0;
+    t.deps.ask = async () => {
+      calls += 1;
+      if (calls === 2) { const e = new Error('aborted'); e.code = 'REVIEW_ABORTED'; throw e; }
+      return '4';
+    };
+    expect(await runReview({}, t.deps)).toBe(1);
+    expect(t.out()).toContain('review interrupted — 0 accepted, 1 skipped, 0 dismissed so far');
+  });
+
+  test('M2: a throwing write does not abort the review — it reports and re-shows the menu, then continues', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['1', '4'], models: [{ id: 'openrouter/z-ai/glm-5.4' }] });
+    t.deps.addAlias = () => { throw new Error('disk full'); };
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('could not write: disk full');
+    expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
+  });
+
+  test('M3: "choose another" typed with the shipped id follows, never pins a redundant copy', async () => {
+    const t = makeDeps({ proposals: [glm], answers: ['3', 'openrouter/z-ai/glm-5.3'], models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.writes.removeAlias).toEqual(['glm']);
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).toContain('✓ glm now follows the shipped recommendation (openrouter/z-ai/glm-5.3)');
   });
 });
