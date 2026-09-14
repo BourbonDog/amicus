@@ -84,16 +84,17 @@ describe('alias-proposals — one proposal per alias, pinned only (#238 D1/D7/§
   test('a stale curated pin with no matching sibling: follow first, then replacements', () => {
     const [p] = run({ glm: 'openrouter/z-ai/glm-x1' });
     expect(p.reasons).toEqual(['stale', 'differs-from-shipped']);
-    // suggestReplacements (alias-audit.js, unmodified by this task) ranks by
-    // same-vendor similarity, not recency, and is not deduped against
-    // `follow` — 5.3 legitimately appears twice (once as the shipped pin,
-    // once as a same-vendor replacement candidate); that overlap is outside
-    // Finding 3's ruling, which only dedupes a sibling against `follow`.
+    // Fix round 2 (ruling: DEDUPE): suggestReplacements (alias-audit.js,
+    // unmodified by this task) ranks by same-vendor similarity, not recency,
+    // and on its own would repeat glm-5.3 (already shown as `follow`) as a
+    // third "replacement" — the same id under two rationales reads as a
+    // picker bug, so the engine drops any replacement id already present
+    // earlier in `candidates`. Only the two genuinely new same-vendor ids
+    // survive.
     expect(p.candidates).toEqual([
       { id: 'openrouter/z-ai/glm-5.3', why: 'follow', evidence: {} },
       { id: 'openrouter/z-ai/glm-5.4:free', why: 'replacement', evidence: {} },
       { id: 'openrouter/z-ai/glm-5.4', why: 'replacement', evidence: {} },
-      { id: 'openrouter/z-ai/glm-5.3', why: 'replacement', evidence: {} },
     ]);
     expect(p.dismissKey).toBe('glm@openrouter/z-ai/glm-5.3');
   });

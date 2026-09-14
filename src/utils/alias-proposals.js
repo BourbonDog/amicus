@@ -10,7 +10,8 @@
  * come from a non-authoritative row or a rejected namespace, and a sibling
  * (model-id-siblings.js) is always strictly newer. A stale pin's
  * `replacement` candidates are ranked by similarity (not recency) and sit
- * after `follow` for a curated alias. The WRITE gate (a fresh catalog) is the
+ * after `follow` for a curated alias. A replacement never repeats an id
+ * already listed as `follow`. The WRITE gate (a fresh catalog) is the
  * renderer's, at accept time.
  *
  * Own keys only: a `__proto__`/`toString` alias is a custom row here as it is
@@ -56,7 +57,15 @@ function proposeForRow(r, ctx) {
   if (sibling && !sameModel(sibling, r.shipped)) { candidates.push({ id: sibling, why: 'newer-sibling', evidence: {} }); }
   if (differs) { candidates.push({ id: r.shipped, why: 'follow', evidence: {} }); }
   if (stale && !sibling) {
-    for (const id of suggestReplacements(r.id, ctx.candidates)) { candidates.push({ id, why: 'replacement', evidence: {} }); }
+    // Fix round 2 (ruling: DEDUPE): a replacement never repeats an id
+    // already listed (in practice, `follow`'s) — the same id under two
+    // rationales reads as a picker bug. `suggestReplacements` still caps its
+    // OWN output at up to 3; dropping a duplicate here can leave fewer than
+    // 3, never more (no backfill).
+    const seen = new Set(candidates.map(c => c.id));
+    for (const id of suggestReplacements(r.id, ctx.candidates)) {
+      if (!seen.has(id)) { candidates.push({ id, why: 'replacement', evidence: {} }); }
+    }
   }
   const dismissKey = `${r.alias}@${candidates.length ? candidates[0].id : r.id}`;
   if (own(ctx.dismissed, dismissKey)) { return null; }
