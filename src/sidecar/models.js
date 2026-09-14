@@ -202,7 +202,11 @@ async function runCheck(args) {
       process.stdout.write(`STALE: ${s.alias} -> ${s.model} (${s.source})\n`);
       if (s.suggestions.length > 0) {
         process.stdout.write(`  candidates: ${s.suggestions.join(', ')}\n`);
-        process.stdout.write(`  fix: amicus setup --add-alias ${s.alias}=${s.suggestions[0]}\n`);
+        // #238 D4: a user-config row is reviewable in the picker; a shipped pin
+        // that went stale can only be pinned OVER until the next release.
+        process.stdout.write(s.source === 'user-config'
+          ? '  fix: amicus aliases --review\n'
+          : `  fix: amicus setup --add-alias ${s.alias}=${s.suggestions[0]}  (pins over the stale shipped default)\n`);
       } else {
         process.stdout.write('  no same-vendor candidates in catalog\n');
       }
@@ -210,7 +214,7 @@ async function runCheck(args) {
   }
   for (const dr of drifted) {
     process.stdout.write(`DRIFTED: ${dr.alias} -> ${dr.stored} (stored; current resolution: ${dr.current})\n`);
-    process.stdout.write(`  stored aliases don't follow catalog updates — refresh: amicus setup --add-alias ${dr.alias}=${dr.current}\n`);
+    process.stdout.write('  stored aliases don\'t follow catalog updates — review: amicus aliases --review\n');
   }
   if (driftLines.length > 0) {
     process.stdout.write('Pinned fallback drift:\n');

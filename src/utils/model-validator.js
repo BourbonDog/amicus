@@ -159,7 +159,7 @@ async function validateAgainstCatalog(resolvedModel, alias) {
   throw new Error(
     `Model '${resolvedModel}' not found in the OpenRouter catalog.\n` +
     (list ? `Did you mean:\n${list}\n` : '') +
-    `Fix: amicus setup --add-alias ${alias || '<alias>'}=${relevant[0] ? relevant[0].id : 'openrouter/provider/model'}\n` +
+    `Fix: amicus aliases --review  (or pin directly: amicus setup --add-alias ${alias || '<alias>'}=${relevant[0] ? relevant[0].id : 'openrouter/provider/model'})\n` +
     'Run \'amicus models --refresh\' to update the catalog, or pass --no-validate-model to skip.'
   );
 }
