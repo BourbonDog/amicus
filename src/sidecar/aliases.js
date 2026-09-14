@@ -151,14 +151,32 @@ function buildAliasesDoc(view) {
 /**
  * `amicus aliases --unpin <name>` (#238 F6, R1): "unpin" and "delete" are one
  * operation -- remove the key -- whose meaning is decided by whether the
- * name is curated (D1).
- * @param {string} name @returns {number} exit code
+ * name is curated (D1). The name is trimmed before every use -- for the
+ * `removeAlias` lookup, the `isCurated` check and both success messages --
+ * so a padded name neither crashes nor mis-reports which branch fired
+ * (#249 r1 R1). Blank/whitespace/literal-'null' names are refused here, and
+ * `removeAlias` is called under try/catch so any other throw (its own name
+ * guard included) becomes a clean exit 1, never an uncaught crash.
+ * @param {*} rawName whatever `args.unpin` parsed to
+ * @returns {number} exit code
  */
-function handleUnpin(name) {
+function handleUnpin(rawName) {
+  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  if (!name || name === 'null') {
+    process.stderr.write('Error: --unpin requires an alias name\n');
+    return 1;
+  }
   const { removeAlias } = require('../utils/alias-store');
   const { isCurated } = require('../utils/alias-state');
   const defaults = require('../utils/config').getDefaultAliases();
-  if (!removeAlias(name)) {
+  let removed;
+  try {
+    removed = removeAlias(name);
+  } catch (err) {
+    process.stderr.write(`Error: ${err.message}\n`);
+    return 1;
+  }
+  if (!removed) {
     process.stderr.write(`Error: '${name}' is not pinned (see: amicus aliases)\n`);
     return 1;
   }
@@ -179,11 +197,7 @@ async function handleAliases(args) {
       process.stderr.write('Error: --unpin cannot be combined with --review or --json\n');
       return 1;
     }
-    if (typeof args.unpin !== 'string') {
-      process.stderr.write('Error: --unpin requires an alias name\n');
-      return 1;
-    }
-    return handleUnpin(args.unpin);
+    return handleUnpin(args.unpin);           // handleUnpin trims/validates (R1): true, 42, '', '  ', 'null' all land the same error
   }
   if (args.review) { return require('./aliases-review').runReview(args); }
   const d = loadDeps();

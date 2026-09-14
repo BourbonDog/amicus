@@ -196,6 +196,37 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       expect(code).toBe(1);
       expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('Error: --unpin requires an alias name'))).toBe(true);
     });
+
+    // R1 (#249 r1 A5/C4/D1): empty/whitespace/literal-'null' names must be the
+    // same clean argument error, never an uncaught throw from alias-store.js's
+    // own name guard.
+    test.each([[''], ['   '], ['null']])('--unpin %j is the argument error, never a throw', async (value) => {
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: value }));
+      expect(code).toBe(1);
+      expect(out).toBe('');
+      expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('Error: --unpin requires an alias name'))).toBe(true);
+    });
+
+    // R1: a padded name must use the TRIMMED name throughout -- for the
+    // removeAlias lookup, the isCurated check, and the success message --
+    // instead of mis-reporting a curated unpin as a bare "removed".
+    test('a padded name unpinning a curated alias still reports "now follows", named without the padding', async () => {
+      cfg.saveConfig({ aliases: { glm: 'openrouter/z-ai/glm-5.4' } });
+      const shipped = cfg.getDefaultAliases();
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: ' glm' }));
+      expect(code).toBe(0);
+      expect(out).toBe(`✓ glm now follows the shipped recommendation (${shipped.glm})\n`);
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('glm');
+    });
+    test('a padded name unpinning a custom alias reports "removed", named without the padding', async () => {
+      cfg.saveConfig({ aliases: { mine: 'openrouter/z-ai/glm-5.4' } });
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: ' mine ' }));
+      expect(code).toBe(0);
+      expect(out).toBe('✓ mine removed\n');
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('mine');
+    });
   });
 });
 
