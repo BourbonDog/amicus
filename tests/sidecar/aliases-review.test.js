@@ -351,4 +351,44 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     // the WRITE itself stays raw -- only the terminal line is sanitized.
     expect(t.writes.addAlias).toEqual([[HOSTILE_ALIAS, HOSTILE_ID]]);
   });
+
+  // F5(a) (#249 r2 review): the committed R3 renderScreen test used
+  // `current: null, curated: false`, so `safeFragment(p.current)` and
+  // `safeFragment(p.shipped)` were never exercised -- p.current is the
+  // config-PINNED id, the most common third-party fragment on this screen.
+  test('F5(a): renderScreen sanitizes a hostile p.current, alongside a clean shipped line', async () => {
+    const hostile = {
+      alias: 'mine', state: 'pinned', current: HOSTILE_ID, shipped: 'openrouter/x/y', curated: true,
+      reasons: ['differs-from-shipped'],
+      candidates: [{ id: 'openrouter/x/y', why: 'follow', evidence: {} }],
+      dismissKey: 'mine@openrouter/x/y',
+    };
+    // menu: [1] follow the shipped pin (openrouter/x/y), [2] choose another, [3] skip, [4] never ask again
+    const t = makeDeps({ proposals: [hostile], answers: ['3'], models: [{ id: 'openrouter/x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    const out = t.out();
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('currently');
+    expect(out).toContain('shipped');
+    expect(out).toContain('evil');
+  });
+
+  // F5(b) (#249 r2 review): notVerifiedLine had no hostile test at all --
+  // dropping its safeFragment prints a raw RLO with no test going red.
+  test('F5(b): notVerifiedLine sanitizes a hostile typed id present in the catalog but not verified', async () => {
+    const t = makeDeps({
+      proposals: [glm], answers: ['3', HOSTILE_ID, '', '4'],
+      models: [{ id: HOSTILE_ID, authoritative: false }, { id: 'x/y' }],
+    });
+    expect(await runReview({}, t.deps)).toBe(0);
+    const out = t.out();
+    expect(out).not.toContain(HOSTILE_ESC);
+    expect(out).not.toContain(HOSTILE_RLO);
+    expect(out).not.toMatch(/^Notice: forged/m);
+    expect(out).toContain('is in the catalog but was not verified');
+    expect(out).toContain('evil');
+    expect(t.writes.addAlias).toEqual([]);
+  });
 });
