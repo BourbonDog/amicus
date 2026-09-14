@@ -185,6 +185,7 @@ src/
 │   ├── activity-poller.js
 │   ├── agent-mapping.js  # Agent Mapping Module
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
+│   ├── alias-proposals.js  # The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── alias-shadow-writer.js  # The alias-shadow notice's WRITE half: say it without ever sinking the run.
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
@@ -653,6 +654,7 @@ evals/
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
+| `utils/alias-proposals.js` | The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns | `buildAliasProposals()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
