@@ -9,7 +9,9 @@
  * so all it can ask is whether the pinned id still EXISTS. It does — which is
  * exactly how a pin sits two releases behind while every gate stays green.
  *
- * This script asks the other question: is there a NEWER sibling of each pin?
+ * This script asks the other question — is there a NEWER sibling of each pin? —
+ * through `src/utils/model-id-siblings.js`, which also serves the alias review
+ * engine (#238).
  * A sibling shares the pin's vendor path, its pre-version prefix and its
  * post-version suffix, and differs only in the version number. That keeps
  * tier/variant lines apart — `gpt-5.6-terra` is never compared against
@@ -25,64 +27,7 @@ const { resolve } = require('node:path');
 
 const MAP_PATH = resolve(__dirname, '..', '.github', 'amicus-ci-aliases.json');
 
-/**
- * Split a model id into the parts a sibling comparison needs.
- * `openrouter/z-ai/glm-5.3` -> vendor `openrouter/z-ai`, prefix `glm-`,
- * version [5,3], suffix ``. Returns null when the tail carries no numeric
- * version (nothing to compare) or the id is an OpenRouter floating pointer,
- * whose `~` forms name no concrete release.
- * @param {string} id
- * @returns {{vendor:string, prefix:string, version:number[], suffix:string}|null}
- */
-function parsePin(id) {
-  if (typeof id !== 'string' || id.includes('~')) { return null; }
-  const cut = id.lastIndexOf('/');
-  if (cut === -1) { return null; }
-  const vendor = id.slice(0, cut);
-  const tail = id.slice(cut + 1);
-  // First pure numeric-dotted run in the tail is the version. Anything before
-  // it is the family prefix, anything after is the tier/variant suffix.
-  const m = /^(.*?)(\d+(?:\.\d+)*)(.*)$/.exec(tail);
-  if (!m) { return null; }
-  return { vendor, prefix: m[1], version: m[2].split('.').map(Number), suffix: m[3] };
-}
-
-/** @returns {number} >0 when a is newer than b, <0 when older, 0 when equal */
-function compareVersions(a, b) {
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const diff = (a[i] || 0) - (b[i] || 0);
-    if (diff !== 0) { return diff; }
-  }
-  return 0;
-}
-
-/**
- * @param {string} pinned a fully-qualified model id
- * @param {string[]} catalogIds every id in the live catalog
- * @returns {string|null} the newest strictly-newer sibling, or null
- */
-function newestSibling(pinned, catalogIds) {
-  const pin = parsePin(pinned);
-  if (!pin) { return null; }
-  let best = null;
-  let bestVersion = pin.version;
-  for (const id of catalogIds) {
-    // No blanket `:` skip. `:free` / `:batch` land in `suffix`, so the
-    // suffix equality below ALREADY refuses to bump a plain pin to a billing
-    // variant — while a blanket skip additionally blinded the checker to a
-    // pin that is ITSELF a variant (a `:free` pin could never find a `:free`
-    // sibling, and went quietly unwatched forever). Council finding D3.
-    const other = parsePin(id);
-    if (!other) { continue; }
-    if (other.vendor !== pin.vendor) { continue; }
-    if (other.prefix !== pin.prefix || other.suffix !== pin.suffix) { continue; }
-    if (compareVersions(other.version, bestVersion) > 0) {
-      best = id;
-      bestVersion = other.version;
-    }
-  }
-  return best;
-}
+const { parsePin, compareVersions, newestSibling } = require('../src/utils/model-id-siblings');
 
 /**
  * @param {Object<string,string>} aliases alias -> pinned id

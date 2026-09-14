@@ -252,6 +252,7 @@ src/
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
+│   ├── model-id-siblings.js  # The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor
 │   ├── model-input-default.js
 │   ├── model-output-limit.js  # Issue #218 — the per-model `limit` descriptor amicus hands opencode.
 │   ├── model-shortlist.js  # Vendor model shortlist (#138) -- the family -> model second level.
@@ -717,6 +718,7 @@ evals/
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `fetchAllModelsDetailed()`, `fetchModelsFromProviderDetailed()`, `providersToFetch()` |
+| `utils/model-id-siblings.js` | The tier-safe sibling comparator (#238 D7). A sibling shares a pin's vendor | `parsePin()`, `compareVersions()`, `newestSibling()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-output-limit.js` | Issue #218 — the per-model `limit` descriptor amicus hands opencode. | `normalizeOutputBudget()`, `buildLimitLookup()`, `computeModelLimit()`, `positiveCount()` |
 | `utils/model-shortlist.js` | Vendor model shortlist (#138) -- the family -> model second level. | `buildModelShortlist()`, `compareShortlistRows()`, `SHORTLIST_LIMIT()` |
