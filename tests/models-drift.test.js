@@ -20,7 +20,9 @@ describe('buildFallbackDriftReport', () => {
   // #238 §5: a REJECTED openrouter namespace leaves the catalog missing the
   // rows that would make a pin look current; reporting drift from that
   // catalog proposes a downgrade. Named mutant "FAILEDNS" — drop the
-  // providerFailures guard.
+  // providerFailures guard; measured red 2026-09-14, reddens
+  // 'buildFallbackDriftReport › silent when the openrouter namespace was
+  // rejected (providerFailures)'.
   test('silent when the openrouter namespace was rejected (providerFailures)', () => {
     const info = {
       models: [row('openrouter/google/gemini-9.9-flash')],
