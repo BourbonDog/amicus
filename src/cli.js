@@ -519,6 +519,8 @@ Options for 'aliases':
   --review                     Interactive picker: accept, choose, skip or dismiss each
                                proposal (stale pin, newer sibling, differs from the
                                shipped pin). Needs a terminal.
+  --unpin <alias>              Remove a pin: a curated name goes back to following, a
+                               custom name is deleted
   --json                       Machine-readable document (aliases + proposals)
 `,
   list: `

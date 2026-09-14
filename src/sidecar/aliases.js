@@ -148,11 +148,42 @@ function buildAliasesDoc(view) {
   };
 }
 
+/**
+ * `amicus aliases --unpin <name>` (#238 F6, R1): "unpin" and "delete" are one
+ * operation -- remove the key -- whose meaning is decided by whether the
+ * name is curated (D1).
+ * @param {string} name @returns {number} exit code
+ */
+function handleUnpin(name) {
+  const { removeAlias } = require('../utils/alias-store');
+  const { isCurated } = require('../utils/alias-state');
+  const defaults = require('../utils/config').getDefaultAliases();
+  if (!removeAlias(name)) {
+    process.stderr.write(`Error: '${name}' is not pinned (see: amicus aliases)\n`);
+    return 1;
+  }
+  process.stdout.write(isCurated(name, defaults)
+    ? `✓ ${name} now follows the shipped recommendation (${defaults[name]})\n`
+    : `✓ ${name} removed\n`);
+  return 0;
+}
+
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleAliases(args) {
   if (args.review && (args.json || args.quiet)) {
     process.stderr.write('Error: --review is interactive; use `amicus aliases --json` for machine output\n');
     return 1;
+  }
+  if (args.unpin !== undefined) {
+    if (args.review || args.json) {
+      process.stderr.write('Error: --unpin cannot be combined with --review or --json\n');
+      return 1;
+    }
+    if (typeof args.unpin !== 'string') {
+      process.stderr.write('Error: --unpin requires an alias name\n');
+      return 1;
+    }
+    return handleUnpin(args.unpin);
   }
   if (args.review) { return require('./aliases-review').runReview(args); }
   const d = loadDeps();

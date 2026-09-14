@@ -147,6 +147,52 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(b.code).toBe(1);
     expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('--review is interactive'))).toBe(true);
   });
+
+  describe('--unpin (#238 PR1 fix wave F6)', () => {
+    test('unpinning a curated name reverts it to following and says so', async () => {
+      cfg.saveConfig({ aliases: { glm: 'openrouter/z-ai/glm-5.4' } });
+      const shipped = cfg.getDefaultAliases();
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm' }));
+      expect(code).toBe(0);
+      expect(out).toBe(`✓ glm now follows the shipped recommendation (${shipped.glm})\n`);
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('glm');
+    });
+    test('unpinning a custom (non-curated) name deletes it', async () => {
+      cfg.saveConfig({ aliases: { mycustom: 'openrouter/z-ai/glm-5.4' } });
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'mycustom' }));
+      expect(code).toBe(0);
+      expect(out).toBe('✓ mycustom removed\n');
+      const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
+      expect(onDisk.aliases).not.toHaveProperty('mycustom');
+    });
+    test('unpinning a name that is not pinned is an error', async () => {
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'nope' }));
+      expect(code).toBe(1);
+      expect(out).toBe('');
+      expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes("Error: 'nope' is not pinned (see: amicus aliases)"))).toBe(true);
+    });
+    test('--unpin combined with --review or --json is an argument error', async () => {
+      const a = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm', review: true }));
+      expect(a.code).toBe(1);
+      expect(a.out).toBe('');
+      const b = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm', json: true }));
+      expect(b.code).toBe(1);
+      expect(b.out).toBe('');
+      expect(process.stderr.write.mock.calls.filter(c => String(c[0]).includes('--unpin cannot be combined')).length).toBe(2);
+    });
+    test('--unpin with no value (parsed as true) is an argument error', async () => {
+      const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: true }));
+      expect(code).toBe(1);
+      expect(out).toBe('');
+      expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('Error: --unpin requires an alias name'))).toBe(true);
+    });
+    test('a non-string --unpin value is the same argument error', async () => {
+      const { code } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 42 }));
+      expect(code).toBe(1);
+      expect(process.stderr.write.mock.calls.some(c => String(c[0]).includes('Error: --unpin requires an alias name'))).toBe(true);
+    });
+  });
 });
 
 describe('aliases is a registered command with a --review flag', () => {
@@ -160,5 +206,17 @@ describe('aliases is a registered command with a --review flag', () => {
     const parsed = parseArgs(['aliases', '--review', 'stray']);
     expect(parsed.review).toBe(true);
     expect(parsed._).toEqual(['aliases', 'stray']);
+  });
+
+  // F6: --unpin is a VALUE flag, not boolean -- it must consume the
+  // following token rather than swallowing it as a stray positional.
+  test('usage names --unpin, getKnownFlags knows it, parseArgs treats it as a value flag (#238 F6)', () => {
+    const { getUsage, parseArgs } = require('../../src/cli');
+    expect(getUsage('aliases')).toContain('--unpin');
+    const { getKnownFlags } = require('../../src/utils/known-flags');
+    expect(getKnownFlags().has('unpin')).toBe(true);
+    const parsed = parseArgs(['aliases', '--unpin', 'glm']);
+    expect(parsed.unpin).toBe('glm');
+    expect(parsed._).toEqual(['aliases']);
   });
 });
