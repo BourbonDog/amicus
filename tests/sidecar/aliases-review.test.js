@@ -163,6 +163,18 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
   });
 
+  test('F3: a candidate-less stale proposal explains why, instead of showing no reason at all', async () => {
+    const ghost = {
+      alias: 'ghost', state: 'pinned', current: 'openrouter/nobody/thing-1', shipped: null, curated: false,
+      reasons: ['stale'], candidates: [], dismissKey: 'ghost@openrouter/nobody/thing-1',
+    };
+    const t = makeDeps({ proposals: [ghost], answers: ['2'], models: [{ id: 'x/y' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('stale      current id is gone from the catalog — no same-vendor replacement found');
+    expect(t.writes.addAlias).toEqual([]);
+    expect(t.out()).toContain('Reviewed 1 proposal: 0 accepted, 1 skipped, 0 dismissed.');
+  });
+
   test('F1: no catalog at all refuses to review before "Nothing to review", exit 1, no writes', async () => {
     const t = makeDeps({ proposals: [], rows: [], models: [] });
     expect(await runReview({}, t.deps)).toBe(1);

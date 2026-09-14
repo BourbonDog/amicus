@@ -73,7 +73,16 @@ function renderScreen(p, i, n, items) {
     : '    not mapped yet');
   if (p.curated) { lines.push(`    ${'shipped'.padEnd(LABEL_WIDTH)}${p.shipped}`); }
   const top = p.candidates[0];
-  if (top) { lines.push(`    ${'proposed'.padEnd(LABEL_WIDTH)}${top.id}   ${reasonPhrase(top)}`); }
+  if (top) {
+    lines.push(`    ${'proposed'.padEnd(LABEL_WIDTH)}${top.id}   ${reasonPhrase(top)}`);
+  } else if ((p.reasons || []).includes('stale')) {
+    // F3: a stale pin with no same-vendor replacement and no sibling still
+    // has something to say -- silently showing no reason at all read as the
+    // engine finding nothing wrong, when what happened is the opposite.
+    lines.push(`    ${'stale'.padEnd(LABEL_WIDTH)}current id is gone from the catalog — no same-vendor replacement found`);
+  } else {
+    lines.push(`    ${'reason'.padEnd(LABEL_WIDTH)}${(p.reasons || []).join(', ')}`);
+  }
   lines.push('');
   lines.push(menuLineText(items));
   return lines.join('\n') + '\n';
