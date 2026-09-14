@@ -61,6 +61,20 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(out).toMatch(/glm\s+→\s+openrouter\/z-ai\/glm-5\.4\s+pinned\s+differs from shipped/);
     expect(out).toMatch(/ghost\s+→\s+openrouter\/nobody\/thing-1\s+pinned\s+⚠ gone from catalog/);
   });
+  // R4 (#249 r1 C1): a pin that names the shipped model under another
+  // gateway form gets no proposal (it is not stale and does not "differ" --
+  // alias-proposals.js's own sameModel already treats it as identical), so
+  // without a note it renders exactly like an arbitrary custom pin. This
+  // is a truthful-transparency note, not a warning: no ⚠, and the footer
+  // still says "nothing to review" since there genuinely is nothing to fix.
+  test('R4: a pin that is the shipped model under another gateway form gets a truthful note, not a bare "pinned"', async () => {
+    cfg.saveConfig({ aliases: { gemini: 'openrouter/google/gemini-3.6-flash' } });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toMatch(/gemini\s+→\s+openrouter\/google\/gemini-3\.6-flash\s+pinned\s+same model as shipped, other gateway/);
+    expect(out).not.toContain('⚠');
+    expect(out).toContain('nothing to review');
+  });
   test('list with nothing pinned says so and does not network', async () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);

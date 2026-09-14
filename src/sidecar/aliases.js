@@ -15,6 +15,7 @@
 
 const { SCHEMA_VERSION } = require('../utils/result-schema-version');
 const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
+const { stripGatewayPrefix } = require('../utils/curated-models');
 
 /** @returns {object} this module's collaborators, gathered so a caller can override them in tests */
 function loadDeps() {
@@ -95,6 +96,22 @@ function rowFlag(reasons) {
   return '   differs from shipped';
 }
 
+/**
+ * R4 (#249 r1 C1): a pinned curated row that names the shipped model under a
+ * DIFFERENT gateway form gets no proposal at all -- alias-proposals.js's own
+ * `sameModel` already treats it as identical to the shipped pin, so it is
+ * neither stale nor "differing". Without this note it renders identically
+ * to an arbitrary custom pin, losing the fact that it is the shipped
+ * recommendation in a different form. Truthful transparency, not a warning.
+ * @param {{state:string, curated:boolean, id:string, shipped:string|null}} r
+ * @returns {string} the row suffix, or '' when the note does not apply
+ */
+function sameGatewayNote(r) {
+  if (r.state !== 'pinned' || !r.curated || typeof r.id !== 'string' || typeof r.shipped !== 'string') { return ''; }
+  if (r.id === r.shipped) { return ''; }
+  return stripGatewayPrefix(r.id) === stripGatewayPrefix(r.shipped) ? '   same model as shipped, other gateway' : '';
+}
+
 /** @param {{rows: Array, proposals: Array}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
 function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const byAlias = new Map(view.rows.map(r => [r.alias, r]));
@@ -108,7 +125,7 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     for (const key of g.keys) {
       const r = byAlias.get(key);
       const p = proposalByAlias.get(key);
-      const flag = p ? rowFlag(p.reasons) : '';
+      const flag = p ? rowFlag(p.reasons) : sameGatewayNote(r);
       lines.push(`    ${key.padEnd(width)}  → ${r.id.padEnd(44)} ${r.state}${flag}`);
     }
   }
