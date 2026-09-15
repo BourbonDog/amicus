@@ -22,13 +22,12 @@
  * closing the window writes nothing.
  *
  * The §5 WRITE gate rides the document's `fresh` flag: when the catalog is
- * older than 24 h and the inline refresh failed, every candidate but
- * "follow" and the "choose…" control are disabled and the banner says why —
- * "follow" removes a key and needs no catalog. An unavailable catalog or a
- * handler error renders the section with the banner alone — never a silent
- * "nothing to review". A proposal for an alias the user already edited this
- * session is not rendered: the engine reads DISK, the page's staged edit
- * wins.
+ * older than 24 h and the inline refresh failed, every candidate but "follow"
+ * and the "choose…" control are disabled and the banner says why — "follow"
+ * removes a key and needs no catalog. An unavailable catalog or a handler error
+ * renders the section with the banner alone — never a silent "nothing to
+ * review". A proposal for an alias the user already edited this session is not
+ * rendered: the engine reads DISK, the page's staged edit wins.
  */
 
 'use strict';
@@ -284,10 +283,12 @@ function buildAliasReviewScript() {
 
   // issue 238 D9: fetched on FIRST entry to the Routing step, never at page load --
   // the Workspace's Settings child window must not network on open (main.js).
-  // ensureCatalogLoaded memoizes its in-flight request (issue 238), so calling
-  // it here while showStep(3) is already loading the catalog shares that one
-  // fetch instead of racing a second -- the memo is what prevents the
-  // concurrent refresh; chaining order alone would not.
+  // ensureCatalogLoaded (issue 238) memoizes its in-flight request, so this call
+  // and showStep(3)'s direct call share ONE fetch instead of racing two. The review
+  // fetch is chained AFTER the catalog load because sidecar:get-alias-review reads
+  // the catalog at the default age too (a stale cache refreshes inline in main)
+  // and model-catalog.js has no in-flight dedupe -- the memo in setup-ui.js dedupes
+  // get-catalog callers; the chain serializes the two different reads.
   var aliasReviewLoaded = false;
   function ensureAliasReviewLoaded() {
     if (aliasReviewLoaded) { return Promise.resolve(); }

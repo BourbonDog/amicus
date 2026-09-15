@@ -290,7 +290,7 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     await flush();                                            // issue 238 D9: no fetch at page load
     expect(p.calls).toEqual([]);
     await p.fns.ensureAliasReviewLoaded();
-    expect(p.calls).toEqual(['catalog', 'sidecar:get-alias-review']);   // issue 238: catalog load precedes the review fetch (mutant: chain dropped)
+    expect(p.calls).toEqual(['catalog', 'sidecar:get-alias-review']);   // issue 238: catalog load precedes the review fetch (mutant: chain dropped — two concurrent refreshes)
     await p.fns.ensureAliasReviewLoaded();                     // the loaded flag: still exactly one
     expect(p.calls).toEqual(['catalog', 'sidecar:get-alias-review']);
     p.refresh.click();

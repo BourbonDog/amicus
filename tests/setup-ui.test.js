@@ -972,14 +972,18 @@ describe('setup-ui wizard', () => {
       // because finishPlan sees Step 3 already staged this alias, so
       // collectAliasWrites gets no selected alias for it (the fix-wave A2
       // override this test used to name is gone -- it can no longer fire).
+      // defaultAliases.gemini MUST differ from the Step 2 route's resolved
+      // id (google/gemini-x): if it equalled it, foldShippedWrites would fold
+      // the OLD code's clobber to null too, and old vs new code would render
+      // the identical line -- non-vacuous fixture, re-review 2026-09-15.
       it('a Step 3 unpin/follow on the CHOSEN default is shown in the Review, not overridden by the Step 2 route pick', () => {
         const e = els();
         extractBuildReview()({
           modelChoicesData: twoCardData, savedAliases: { gemini: 'google/gemini-x' },
           aliasEdits: { gemini: null }, document: docWith(e, 'gemini'), window: { customDefaultModel: null },
-          restoredDefault: 'gemini', defaultTouched: true, defaultAliases: { gemini: 'google/gemini-x' },
+          restoredDefault: 'gemini', defaultTouched: true, defaultAliases: { gemini: 'google/gemini-old' },
         })();
-        expect(e['review-routing'].textContent).toBe('gemini → (now follows google/gemini-x)');
+        expect(e['review-routing'].textContent).toBe('gemini → (now follows google/gemini-old)');
         expect(e['review-aliases'].textContent).toBe('1 alias(es) modified');
       });
     });
@@ -1357,5 +1361,19 @@ describe('the parked double-fetch: ensureCatalogLoaded memoizes its in-flight re
     expect(getCatalogRows()).toBeTruthy();
     await ensureCatalogLoaded();        // rows already loaded -- short-circuits
     expect(calls).toEqual(['sidecar:get-catalog']);   // still just the one
+  });
+
+  it('a rejected invoke still clears the memo, so a later call retries (mutant: dropping catalogLoad = null in the final .then)', async () => {
+    const calls = [];
+    const fakeInvoke = jest.fn((channel) => {
+      calls.push(channel);
+      return Promise.reject(new Error('offline'));
+    });
+    const { ensureCatalogLoaded, getCatalogRows } = extractEnsureCatalogLoaded()({ sidecarSetup: { invoke: fakeInvoke } });
+    await ensureCatalogLoaded();   // the invoke rejects; .catch swallows it -- this resolves, not rejects
+    expect(getCatalogRows()).toBeFalsy();             // never loaded
+    expect(calls).toEqual(['sidecar:get-catalog']);
+    await ensureCatalogLoaded();   // the memo was cleared on settlement (success OR failure) -- retries
+    expect(calls).toEqual(['sidecar:get-catalog', 'sidecar:get-catalog']);
   });
 });
