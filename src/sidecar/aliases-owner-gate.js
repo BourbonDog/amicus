@@ -12,6 +12,12 @@
  * scratch dir never blocks; R-P2-4, mutant DIRTYTREE). Refused = one reason
  * string, never thrown, so the caller prints it and exits 1 with nothing
  * read or written.
+ *
+ * `isSourceCheckout` — the git-work-tree-root half of this gate, without the
+ * TTY/clean-tree requirements `ownerGate` layers on top — also serves
+ * `doctor`'s `curated-pins` row (#238 Phase 2 follow-up), which only needs
+ * to know whether owner mode COULD ever run here, not whether it may run
+ * right now.
  */
 
 'use strict';

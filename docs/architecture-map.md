@@ -218,7 +218,7 @@ src/
 │   ├── doctor-alias-check.js
 │   ├── doctor-base-url-check.js  # v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row.
 │   ├── doctor-credit-check.js  # The `openrouter-credit` doctor row (#43), split out of
-│   ├── doctor-curated-pins-check.js  # `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up): how
+│   ├── doctor-curated-pins-check.js  # `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up).
 │   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
@@ -699,7 +699,7 @@ evals/
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
 | `utils/doctor-credit-check.js` | The `openrouter-credit` doctor row (#43), split out of | `evaluateOpenRouterCredit()` |
-| `utils/doctor-curated-pins-check.js` | `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up): how | `evaluateCuratedPins()` |
+| `utils/doctor-curated-pins-check.js` | `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up). | `evaluateCuratedPins()` |
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |

@@ -28,9 +28,22 @@
  *     (exactly 2, both in this file): evaluateCuratedPins > "source
  *     checkout, drift: warn with the owner command as the hint (mutant
  *     DRIFTWARN)"; and evaluateCuratedPins > "the real shipped file + the
- *     real drift report over a synthetic cache: 21 pins, verified up to
- *     2026-09-05, and glm-5.4 counts as behind". Every test in the other
- *     four files, and the rest of this file, stayed green.
+ *     real drift report over a synthetic cache: a derived newer sibling of
+ *     the shipped glm pin counts as behind" (renamed post-review to drop the
+ *     hardcoded pin count/date/version the owner's reset would otherwise
+ *     redden; same test, same measurement). Every test in the other four
+ *     files, and the rest of this file, stayed green.
+ *
+ * Review follow-up (2026-09-15, same commit range): a §5-gated openrouter
+ * rejection made `buildFallbackDriftReport` return `[]` for a reason (it
+ * cannot check ANY route without that namespace) indistinguishable from
+ * "checked, none behind" — a correct-but-silent degrade. Fixed in
+ * doctor-curated-pins-check.js (never call the drift report when openrouter
+ * was rejected; say drift is unknown instead) with the three tests above
+ * ("openrouter rejected …" ×2, "a rejection naming a DIFFERENT provider …").
+ * Not re-measured against CHECKOUTGATE/DRIFTWARN — those two RED sets above
+ * describe commit 99937105 and may undercount by one or two tests now that
+ * this branch exists; the fix itself is covered directly by dedicated tests.
  */
 const { evaluateCuratedPins } = require('../src/utils/doctor-curated-pins-check');
 
@@ -76,14 +89,52 @@ describe('evaluateCuratedPins', () => {
     expect(r.status).toBe('ok');
     expect(r.message).toBe(`3 pins, verified up to 2026-09-05 (catalog not cached — drift unknown) — reset with: ${CMD}`);
   });
+  // §5: buildFallbackDriftReport itself returns [] the instant openrouter is
+  // rejected — reading that as "none behind" would be a correct-but-silent
+  // degrade for pins that may genuinely be behind. Installed copy and
+  // checkout variants both below; a non-openrouter rejection is unaffected.
+  test('openrouter rejected at the last refresh: drift unknown, never computed, no command (installed copy)', () => {
+    const drift = jest.fn(() => ['x']);
+    const rejected = { ...CACHE, providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }] };
+    const r = evaluateCuratedPins(deps({ readCache: () => rejected, buildFallbackDriftReport: drift }));
+    expect(drift).not.toHaveBeenCalled();
+    expect(r.status).toBe('ok');
+    expect(r.message).toBe('3 pins, verified up to 2026-09-05 (openrouter rows rejected at the last refresh — drift unknown)');
+    expect(r.hint).toBeNull();
+  });
+  test('openrouter rejected at the last refresh, source checkout: still ok, command lives in the message, drift never computed', () => {
+    const drift = jest.fn(() => ['x']);
+    const rejected = { ...CACHE, providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }] };
+    const r = evaluateCuratedPins(deps({ isSourceCheckout: () => true, readCache: () => rejected, buildFallbackDriftReport: drift }));
+    expect(drift).not.toHaveBeenCalled();
+    expect(r.status).toBe('ok');
+    expect(r.message).toBe(`3 pins, verified up to 2026-09-05 (openrouter rows rejected at the last refresh — drift unknown) — reset with: ${CMD}`);
+    expect(r.hint).toBeNull();
+  });
+  test('a rejection naming a DIFFERENT provider (google) still computes drift normally', () => {
+    const calls = [];
+    const rejected = { ...CACHE, providerFailures: [{ provider: 'google', reason: 'http-status', status: 500 }] };
+    const r = evaluateCuratedPins(deps({ readCache: () => rejected, buildFallbackDriftReport: (info) => { calls.push(info); return ['x']; } }));
+    expect(calls[0]).toEqual({ models: CACHE.models, providerFailures: rejected.providerFailures });
+    expect(r.message).toBe('3 pins, verified up to 2026-09-05; 1 behind the catalog — a newer amicus will move them');
+  });
   test('a single pin pluralizes as "1 pin"; a pin without a parseable date reads "unknown"', () => {
     const one = { version: 1, pins: { glm: { routes: { openrouter: 'openrouter/z-ai/glm-5.3' } } }, retired: {}, notable: [] };
     expect(evaluateCuratedPins(deps({ loadCuratedPins: () => one })).message).toBe('1 pin, verified up to unknown, none behind the catalog');
   });
-  test('the real shipped file + the real drift report over a synthetic cache: 21 pins, verified up to 2026-09-05, and glm-5.4 counts as behind', () => {
+  test('the real shipped file + the real drift report over a synthetic cache: a derived newer sibling of the shipped glm pin counts as behind', () => {
     const { loadCuratedPins } = require('../src/utils/curated-pins');
     const { buildFallbackDriftReport } = require('../src/sidecar/models');
-    const models = Object.values(loadCuratedPins().pins).map(p => ({ id: p.routes.openrouter })).concat([{ id: 'openrouter/z-ai/glm-5.4' }]);
+    const { parsePin } = require('../src/utils/model-id-siblings');
+    // Never hardcode the shipped glm version: the owner's reset (the row this
+    // check exists to point at) moves it, and a hardcoded sibling would redden
+    // the instant that happens. Bump the LAST version component of whatever
+    // is CURRENTLY shipped instead, robust to any pin shape.
+    const glmPin = parsePin(loadCuratedPins().pins.glm.routes.openrouter);
+    const bumped = [...glmPin.version];
+    bumped[bumped.length - 1] += 1;
+    const sibling = `${glmPin.vendor}/${glmPin.prefix}${bumped.join('.')}${glmPin.suffix}`;
+    const models = Object.values(loadCuratedPins().pins).map(p => ({ id: p.routes.openrouter })).concat([{ id: sibling }]);
     const r = evaluateCuratedPins({ loadCuratedPins, buildFallbackDriftReport, isSourceCheckout: () => true, readCache: () => ({ fetchedAt: Date.now(), models, providerFailures: [] }) });
     expect(r.status).toBe('warn');
     expect(r.message).toMatch(/^\d+ pins, verified up to \d{4}-\d{2}-\d{2}; 1 behind the catalog$/);
