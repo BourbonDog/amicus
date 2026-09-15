@@ -41,19 +41,6 @@ function loadWith(docFactory) {
   return require('../src/utils/curated-models');
 }
 
-// FIRST, before any doMock in this file (jest.doMock survives resetModules):
-// the live shipped file produces the same outputs as the fixture TODAY. This
-// documents "no pin has moved yet" and is meant to be DELETED in the D3
-// baseline commit, the first commit that legitimately moves a shipped pin.
-describe('the live shipped file today', () => {
-  test('produces the b803a2a gateway routes (delete this test in the D3 baseline commit)', () => {
-    jest.dontMock('../src/utils/curated-pins');
-    jest.resetModules();
-    const cm = require('../src/utils/curated-models');
-    expect(JSON.stringify(cm.toGatewayRoutes())).toBe(JSON.stringify(JSON.parse(fs.readFileSync(OUTPUT, 'utf8')).routes));
-  });
-});
-
 describe('curated-models over the b803a2a data file', () => {
   const input = () => JSON.parse(fs.readFileSync(INPUT, 'utf8'));
   test('every builder is byte-identical to the pre-move source (spec §6.8)', () => {

@@ -40,6 +40,11 @@ All notable changes to Amicus are documented here. Format follows
   known provider keys on every route; rulings are stored as one sanitized line; route ids must be
   concrete releases in the pinnable charset (`A-Za-z0-9._:/-`), and OpenRouter `~…-latest`
   pointers are refused by name. (#238 D8, Appendix A)
+- **Shipped pins moved (the first `aliases --review --owner` baseline, 2026-09-15):** `gemini` →
+  gemini-3.8-flash (both routes), `fable` → claude-fable-5.1 (OpenRouter) / claude-fable-5-1
+  (Anthropic direct, authored by hand), `qwen-flash` → qwen3.8-flash, `minimax` → minimax-m3,
+  `grok` → grok-4.20. A following alias picks these up on upgrade; a pinned one is offered them
+  by `amicus aliases --review`. (#238 D3)
 
 ## [4.10.0] - 2026-09-14
 

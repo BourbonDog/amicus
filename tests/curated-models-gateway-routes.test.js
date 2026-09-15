@@ -15,13 +15,13 @@ test('non-divergent Anthropic (sonnet-5) has matching forms', () => {
 });
 test('fable carries BOTH gateway forms (direct route authored 2026-08-05, ruling R2)', () => {
   expect(r.fable).toEqual({
-    direct: 'anthropic/claude-fable-5',
-    openrouter: 'openrouter/anthropic/claude-fable-5',
+    direct: 'anthropic/claude-fable-5-1',
+    openrouter: 'openrouter/anthropic/claude-fable-5.1',
   });
 });
 test('direct-capable non-divergent vendor derives both forms', () => {
   expect(r.gpt).toEqual({ direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' });
 });
 test('gateway-only vendor is openrouter-only', () => {
-  expect(r.grok).toEqual({ openrouter: 'openrouter/x-ai/grok-4.3' });
+  expect(r.grok).toEqual({ openrouter: 'openrouter/x-ai/grok-4.20' });
 });

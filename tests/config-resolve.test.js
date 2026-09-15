@@ -133,13 +133,13 @@ describe('Sidecar Config Module - Model Resolution', () => {
       fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
       const config = loadModule();
       const result = config.resolveModel('grok');
-      expect(result).toBe('openrouter/x-ai/grok-4.3');
+      expect(result).toBe('openrouter/x-ai/grok-4.20');
     });
 
     it('should resolve default alias (grok) with no config file at all', () => {
       const config = loadModule();
       const result = config.resolveModel('grok');
-      expect(result).toBe('openrouter/x-ai/grok-4.3');
+      expect(result).toBe('openrouter/x-ai/grok-4.20');
     });
 
     it('should resolve default from DEFAULT_ALIASES when user config default points to a built-in alias', () => {
@@ -147,7 +147,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
       const config = loadModule();
       const result = config.resolveModel(undefined);
-      expect(result).toBe('openrouter/x-ai/grok-4.3');
+      expect(result).toBe('openrouter/x-ai/grok-4.20');
     });
 
     it('should still throw for truly unknown aliases not in defaults or user config', () => {
@@ -189,7 +189,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.6-flash');
+      expect(result).toBe('google/gemini-3.8-flash');
     });
 
     it('returns the stored bare id unchanged when OPENAI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
@@ -222,13 +222,13 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.6-flash');
+      expect(result).toBe('google/gemini-3.8-flash');
     });
 
     it('returns the stored bare id unchanged when neither key is set', () => {
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.6-flash');
+      expect(result).toBe('google/gemini-3.8-flash');
     });
 
     it('returns explicit model strings with slash unchanged regardless of env keys', () => {
@@ -252,7 +252,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel(undefined);
-      expect(result).toBe('google/gemini-3.6-flash');
+      expect(result).toBe('google/gemini-3.8-flash');
     });
 
     it('returns explicit default model strings unchanged regardless of env keys', () => {

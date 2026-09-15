@@ -31,7 +31,7 @@ describe('curated-models v2 (families)', () => {
     // Direct-capable vendors (Task 8.1a) resolve to the BARE canonical id so
     // the gateway router can route direct-first; gateway-only vendors keep
     // their openrouter/ prefix since OpenRouter is their only route.
-    expect(defaults.gemini).toBe('google/gemini-3.6-flash');
+    expect(defaults.gemini).toBe('google/gemini-3.8-flash');
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
@@ -47,7 +47,7 @@ describe('curated-models v2 (families)', () => {
     // sibling — retargeted off gpt-5.5-pro ahead of the 5.5 line's sunset.
     expect(defaults['gpt-pro']).toBe('openai/gpt-5.6-sol-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
-    expect(defaults.gemini).toBe('google/gemini-3.6-flash');
+    expect(defaults.gemini).toBe('google/gemini-3.8-flash');
     expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     // Anthropic is a DIVERGENT vendor: its direct-API ids differ from
@@ -60,18 +60,18 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     // fable: direct route authored 2026-08-05 (ruling R2) — /v1/models lists
     // claude-fable-5 and a live direct leg served. Pinned direct-first.
-    expect(defaults.fable).toBe('anthropic/claude-fable-5');
+    expect(defaults.fable).toBe('anthropic/claude-fable-5-1');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
-    expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
+    expect(defaults.grok).toBe('openrouter/x-ai/grok-4.20');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
     expect(defaults['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
-    expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
+    expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.8-flash');
     expect(defaults.glm).toBe('openrouter/z-ai/glm-5.3');
     expect(defaults.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
     // devstral: dropped 2026-08-04 (owner ruling) — OpenRouter delisted the
     // devstral family entirely, and the alias had no other route.
     expect(defaults.devstral).toBeUndefined();
-    expect(defaults.minimax).toBe('openrouter/minimax/minimax-m2.7');
+    expect(defaults.minimax).toBe('openrouter/minimax/minimax-m3');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k3');
     expect(defaults.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
   });
@@ -81,7 +81,7 @@ describe('curated-models v2 (families)', () => {
     expect(routes).toContainEqual(
       { alias: 'deepseek', provider: 'deepseek', model: 'deepseek/deepseek-v4-pro' });
     expect(routes).toContainEqual(
-      { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.6-flash' });
+      { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.8-flash' });
   });
 
   test('family openrouter fallbacks match their own idPattern (self-consistency)', () => {

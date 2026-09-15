@@ -13,14 +13,15 @@ const { httpGetText } = require('./http-get');
  * GENUINELY serves — classifyModel() returns 'valid' on a floor HIT before
  * it ever checks `authoritative`, so a speculative row would mislabel a
  * dead direct-API request as valid. (fable joined 2026-08-05 after live
- * verification — /v1/models lists claude-fable-5 and a direct smoke leg
- * served; v4.6.3 spec §3.)
+ * verification — /v1/models listed claude-fable-5 and a direct smoke leg
+ * served; v4.6.3 spec §3. D3 baseline, 2026-09-15: /v1/models now lists
+ * claude-fable-5-1 — the row moved to match, same live-genuinely-served bar.)
  */
 const ANTHROPIC_MODELS = [
   { id: 'anthropic/claude-opus-5', name: 'Claude Opus 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-opus-4-8', name: 'Claude Opus 4.8', contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', contextLength: null, pricing: null },
-  { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-fable-5-1', name: 'Claude Fable 5.1', contextLength: null, pricing: null },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
   // Dated snapshot: the id Anthropic's /v1/models actually lists, and the
   // `haiku` direct route curated-pins.json authors

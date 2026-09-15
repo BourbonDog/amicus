@@ -36,7 +36,7 @@ function mockPins({ retired = {}, notable = [] } = {}) {
 describe('amicus aliases (#238 D4 — list and --json)', () => {
   let cfg, handleAliases;
   const CATALOG = {
-    models: [{ id: 'openrouter/z-ai/glm-5.3' }, { id: 'openrouter/z-ai/glm-5.4' }, { id: 'google/gemini-3.6-flash' }, { id: 'openrouter/google/gemini-3.6-flash' }],
+    models: [{ id: 'openrouter/z-ai/glm-5.3' }, { id: 'openrouter/z-ai/glm-5.4' }, { id: 'google/gemini-3.8-flash' }, { id: 'openrouter/google/gemini-3.8-flash' }],
     fetchedAt: 1, lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [], ceilingEnrichment: null,
   };
   let catalogCalls;
@@ -66,7 +66,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     cfg.saveConfig({ default: 'gemini', aliases: { glm: 'openrouter/z-ai/glm-5.2', mine: 'openrouter/z-ai/glm-5.4' } });
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
-    expect(out).toMatch(/gemini\s+→\s+google\/gemini-3\.6-flash\s+following/);
+    expect(out).toMatch(/gemini\s+→\s+google\/gemini-3\.8-flash\s+following/);
     expect(out).toMatch(/glm\s+→\s+openrouter\/z-ai\/glm-5\.2\s+pinned\s+⚠ newer available/);
     expect(out).toMatch(/mine\s+→\s+openrouter\/z-ai\/glm-5\.4\s+pinned/);
     expect(out).toContain('1 to review — amicus aliases --review');
@@ -90,10 +90,10 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
   // is a truthful-transparency note, not a warning: no ⚠, and the footer
   // still says "nothing to review" since there genuinely is nothing to fix.
   test('R4: a pin that is the shipped model under another gateway form gets a truthful note, not a bare "pinned"', async () => {
-    cfg.saveConfig({ aliases: { gemini: 'openrouter/google/gemini-3.6-flash' } });
+    cfg.saveConfig({ aliases: { gemini: 'openrouter/google/gemini-3.8-flash' } });
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
-    expect(out).toMatch(/gemini\s+→\s+openrouter\/google\/gemini-3\.6-flash\s+pinned\s+same model as shipped, other gateway/);
+    expect(out).toMatch(/gemini\s+→\s+openrouter\/google\/gemini-3\.8-flash\s+pinned\s+same model as shipped, other gateway/);
     expect(out).not.toContain('⚠');
     expect(out).toContain('nothing to review');
   });

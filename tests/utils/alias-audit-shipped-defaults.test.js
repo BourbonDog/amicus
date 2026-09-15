@@ -66,9 +66,10 @@ describe('shipped defaults never go stale against the shipped Anthropic floor', 
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
     // fable's direct route is now AUTHORED (owner ruling R2, v4.6.3 spec §3,
-    // 2026-08-05): the direct API serves claude-fable-5, so the pinned
-    // default routes to the authored direct id, same as opus/haiku above.
-    expect(defaults.fable).toBe('anthropic/claude-fable-5');
+    // 2026-08-05; moved to 5.1 in the D3 baseline, 2026-09-15): the direct
+    // API serves claude-fable-5-1, so the pinned default routes to the
+    // authored direct id, same as opus/haiku above.
+    expect(defaults.fable).toBe('anthropic/claude-fable-5-1');
   });
 
   it('the shipped gpt-pro default NEVER reports stale (and thus never yields a retarget fix:) — gpt-pro is gatewayOnly, so this holds even before checking live coverage — the 2026-08-05 release-gate false positive', () => {

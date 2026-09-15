@@ -173,10 +173,10 @@ describe('Sidecar Config Module', () => {
     // Task 8.1a: direct-capable vendors (openai/anthropic/google/deepseek)
     // resolve to the BARE canonical id (policy-routed, direct-first) rather
     // than the openrouter/ literal — see src/utils/curated-models.js.
-    it('should map gemini to google/gemini-3.6-flash (bare, direct-capable)', () => {
+    it('should map gemini to google/gemini-3.8-flash (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gemini).toBe('google/gemini-3.6-flash');
+      expect(aliases.gemini).toBe('google/gemini-3.8-flash');
     });
 
     it('should map claude to anthropic/claude-sonnet-5 (bare, direct-capable)', () => {
@@ -197,7 +197,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
       expect(aliases.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
-      expect(aliases.fable).toBe('anthropic/claude-fable-5');
+      expect(aliases.fable).toBe('anthropic/claude-fable-5-1');
     });
 
     it('should map gpt to openai/gpt-5.6-terra (bare, direct-capable)', () => {
@@ -217,7 +217,7 @@ describe('Sidecar Config Module', () => {
       const aliases = config.getDefaultAliases();
       expect(aliases.qwen).toBe('openrouter/qwen/qwen3.8-max-0902');
       expect(aliases['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
-      expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
+      expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.8-flash');
     });
 
     it('should map mistral correctly and drop the delisted devstral alias', () => {
@@ -232,8 +232,8 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
       expect(aliases.glm).toBe('openrouter/z-ai/glm-5.3');
-      expect(aliases.minimax).toBe('openrouter/minimax/minimax-m2.7');
-      expect(aliases.grok).toBe('openrouter/x-ai/grok-4.3');
+      expect(aliases.minimax).toBe('openrouter/minimax/minimax-m3');
+      expect(aliases.grok).toBe('openrouter/x-ai/grok-4.20');
       expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k3');
       expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
       expect(aliases.inkling).toBe('openrouter/thinkingmachines/inkling');
@@ -249,7 +249,7 @@ describe('Sidecar Config Module', () => {
     it('should return defaults when no config exists', () => {
       const config = loadModule();
       const aliases = config.getEffectiveAliases();
-      expect(aliases.gemini).toBe('google/gemini-3.6-flash');
+      expect(aliases.gemini).toBe('google/gemini-3.8-flash');
       expect(aliases.opus).toBe('anthropic/claude-opus-5');
     });
 
@@ -390,8 +390,8 @@ describe('Sidecar Config Module', () => {
       const result = config.buildProviderModels();
       expect(result).toHaveProperty('openrouter');
       expect(result.openrouter).toHaveProperty('models');
-      expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
-      expect(result.google.models['gemini-3.6-flash']).toBeDefined();
+      expect(result.openrouter.models['x-ai/grok-4.20']).toBeDefined();
+      expect(result.google.models['gemini-3.8-flash']).toBeDefined();
     });
 
     it('should include all default alias models', () => {
@@ -432,7 +432,7 @@ describe('Sidecar Config Module', () => {
     it('keeps the prefix-style mirror for non-divergent aliases', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
-      expect(result.openrouter.models['google/gemini-3.6-flash']).toBeDefined();
+      expect(result.openrouter.models['google/gemini-3.8-flash']).toBeDefined();
       expect(result.openrouter.models['openai/gpt-5.6-terra']).toBeDefined();
       expect(result.openrouter.models['deepseek/deepseek-v4-pro']).toBeDefined();
     });
@@ -483,7 +483,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       expect(result).toHaveProperty('openrouter');
-      expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
+      expect(result.openrouter.models['x-ai/grok-4.20']).toBeDefined();
       // gpt/opus are bare canonical ids (Task 8.1a) — grouped under their own
       // direct provider, not nested inside openrouter.
       expect(result.anthropic.models['claude-opus-5']).toBeDefined();
@@ -549,7 +549,7 @@ describe('Sidecar Config Module', () => {
       // grok has no direct integration (x-ai isn't a direct-capable vendor) —
       // openrouter is its only route, already covered by the normal alias
       // loop; the broadening must not invent an 'x-ai' top-level bucket.
-      expect(result.openrouter.models['x-ai/grok-4.3']).toEqual({});
+      expect(result.openrouter.models['x-ai/grok-4.20']).toEqual({});
       expect(result['x-ai']).toBeUndefined();
     });
   });

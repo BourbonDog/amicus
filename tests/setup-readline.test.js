@@ -134,7 +134,7 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     const { resolveQuickPicks } = require('../src/utils/quick-picks');
     resolveQuickPicks.mockReturnValueOnce([
       { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context', vendorPath: 'google',
-        source: 'live', routes: { openrouter: 'openrouter/google/gemini-3.6-flash' } },
+        source: 'live', routes: { openrouter: 'openrouter/google/gemini-3.8-flash' } },
     ]);
     const { loadConfig, saveConfig } = require('../src/utils/config');
     loadConfig.mockReturnValue(null);

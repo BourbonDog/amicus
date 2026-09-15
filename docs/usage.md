@@ -431,7 +431,7 @@ Each stored alias resolves to one of three outcomes:
 
 | Outcome | Example line | Meaning |
 |---------|--------------|---------|
-| `SERVED` | `SERVED: gemini -> openrouter/google/gemini-3.6-flash ($0.0004)` | The model answered; cost shown in parens. |
+| `SERVED` | `SERVED: gemini -> openrouter/google/gemini-3.8-flash ($0.0004)` | The model answered; cost shown in parens. |
 | `SILENT` (`accepted-but-silent`) | `SILENT: probetest -> anthropic/claude-opus-4-8 — NO_OUTPUT_BACKSTOP: … (no output within the probe window)` | Nothing arrived at all within the probe's 30 s backstop window — shorter than the ordinary 300 s leg default, and not tunable. ⚠️ `accepted-but-silent` is the CLASSIFICATION's name, not a proven fact about the endpoint: a fired backstop shows only that no output, reasoning or tool call arrived in the window, which a stalled gateway or a dropped connection produces just as readily as a model that accepted and then said nothing. Either way it is the "listed but not actually serving" failure this check exists to catch. |
 | `ERROR` | `ERROR:  gpt -> openai/gpt-5.6-terra — 402 Payment Required` | Routing, auth, or provider failure; the raw error is printed. |
 

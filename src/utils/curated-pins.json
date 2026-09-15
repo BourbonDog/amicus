@@ -3,10 +3,11 @@
   "pins": {
     "gemini": {
       "routes": {
-        "openrouter": "openrouter/google/gemini-3.6-flash",
-        "google": "google/gemini-3.6-flash"
+        "openrouter": "openrouter/google/gemini-3.8-flash",
+        "google": "google/gemini-3.8-flash"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-09-15",
+      "ruling": "Calibration for 9.15.2026"
     },
     "gemini-pro": {
       "routes": {
@@ -73,11 +74,11 @@
     },
     "fable": {
       "routes": {
-        "openrouter": "openrouter/anthropic/claude-fable-5",
-        "anthropic": "anthropic/claude-fable-5"
+        "openrouter": "openrouter/anthropic/claude-fable-5.1",
+        "anthropic": "anthropic/claude-fable-5-1"
       },
-      "verifiedOn": "2026-08-05",
-      "ruling": "direct route authored 2026-08-05 (v4.6.3 spec §3, owner ruling R2): Anthropic /v1/models lists claude-fable-5 and the direct route served in live smoke wave 47278069 — the entry was OpenRouter-only at authoring"
+      "verifiedOn": "2026-09-15",
+      "ruling": "Calibration for 9.15.2026 — openrouter route moved to 5.1 in the D3 baseline session; direct route anthropic/claude-fable-5-1 authored by hand from the catalog (divergent vendor: the picker cannot compare Anthropic's dash ids). Direct route first authored 2026-08-05 (v4.6.3 spec §3, owner ruling R2)."
     },
     "qwen": {
       "routes": {
@@ -94,9 +95,10 @@
     },
     "qwen-flash": {
       "routes": {
-        "openrouter": "openrouter/qwen/qwen3.6-flash"
+        "openrouter": "openrouter/qwen/qwen3.8-flash"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-09-15",
+      "ruling": "Calibration for 9.15.2026"
     },
     "mistral": {
       "routes": {
@@ -112,15 +114,17 @@
     },
     "minimax": {
       "routes": {
-        "openrouter": "openrouter/minimax/minimax-m2.7"
+        "openrouter": "openrouter/minimax/minimax-m3"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-09-15",
+      "ruling": "Calibration for 9.15.2026"
     },
     "grok": {
       "routes": {
-        "openrouter": "openrouter/x-ai/grok-4.3"
+        "openrouter": "openrouter/x-ai/grok-4.20"
       },
-      "verifiedOn": "2026-08-04"
+      "verifiedOn": "2026-09-15",
+      "ruling": "Calibration for 9.15.2026"
     },
     "kimi": {
       "routes": {
