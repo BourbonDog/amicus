@@ -502,11 +502,11 @@ describe('amicus aliases --ui (#238 D4, Phase 3)', () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ui: true }));
     expect(code).toBe(1);
     expect(out).toBe('');
-    expect(process.stderr.write).toHaveBeenCalledWith('Setup window closed without completing\n');
+    expect(process.stderr.write).toHaveBeenCalledWith('Setup window closed without completing\nTerminal alternative: amicus aliases --review\n');
   });
 
   test.each([
-    [{ ui: true, json: true }], [{ ui: true, review: true }], [{ ui: true, review: true, owner: true }], [{ ui: true, unpin: 'glm' }],
+    [{ ui: true, json: true }], [{ ui: true, review: true }], [{ ui: true, owner: true }], [{ ui: true, review: true, owner: true }], [{ ui: true, unpin: 'glm' }],
   ])('%o is an argument error: nothing launched, exit 1', async (flags) => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ...flags }));
     expect(code).toBe(1);

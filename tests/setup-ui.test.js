@@ -1166,6 +1166,7 @@ describe('#238 D4: initialPane lands the wizard on a step', () => {
     const callIdx = script.indexOf('if (INITIAL_STEP !== 1) { showStep(INITIAL_STEP); }');
     expect(callIdx).toBeGreaterThan(script.indexOf('function buildModelSelect('));   // after the alias fragment
     expect(callIdx).toBeGreaterThan(script.lastIndexOf('addEventListener('));        // after the last listener wiring
+    expect(script.trim().endsWith('if (INITIAL_STEP !== 1) { showStep(INITIAL_STEP); }')).toBe(true);
   });
   it('an unknown pane is step 1', () => {
     expect(buildSetupHTML({ initialPane: 'keys' })).toContain('var INITIAL_STEP = 1;');
