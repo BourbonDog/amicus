@@ -222,6 +222,23 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(added.closest('[data-new-routes]')).not.toBeNull();
     expect(added.querySelector('.alias-state').textContent).toBe('pinned');
     expect(added.querySelector('.alias-delete').getAttribute('data-kind')).toBe('delete');
+    // ↻ must not re-offer a proposal already accepted under a free name this
+    // session (R-P3-11); undoing the add (× on the New-routes row) returns it.
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    delete p.aliasEdits['atlas-2'];
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+  });
+
+  it('the notable-add row is shaped for the production remove handler: data-alias on the row AND its button, under [data-new-routes]', async () => {
+    const p = loadPage({ proposals: [NOTABLE], rows: [{ alias: 'atlas', model: 'openrouter/other/atlas', state: 'pinned', curated: false }] });
+    await p.fns.loadAliasReview(); await flush();
+    p.list.querySelector('.alias-review-accept').click();
+    const added = p.fns.aliasRowFor('atlas-2');
+    expect(added.getAttribute('data-alias')).toBe('atlas-2');
+    expect(added.querySelector('.alias-delete').getAttribute('data-alias')).toBe('atlas-2');
+    expect(added.closest('[data-new-routes]')).not.toBeNull();
   });
 
   it('dismiss stages the dismissKey (written by Finish) and removes the proposal (mutant DISMISSNOW: write immediately)', async () => {
@@ -231,6 +248,12 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(p.fns.stagedDismissals()).toEqual(['glm@openrouter/z-ai/glm-5.4']);
     expect(p.calls.filter(c => c !== 'sidecar:get-alias-review')).toEqual([]);   // no IPC write
     expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    // ↻ must not resurrect a dismissed proposal, and dismissing twice must
+    // not duplicate the staged key (R-P3-11).
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    p.fns.dismissProposal(SIBLING);
+    expect(p.fns.stagedDismissals()).toEqual(['glm@openrouter/z-ai/glm-5.4']);
   });
 
   it('choose… offers the candidates first, then only §5-gated catalog ids (plus current and shipped); picking stages, picking current cancels (mutant UNGATEDCHOOSE)', async () => {

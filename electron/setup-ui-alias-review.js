@@ -1,6 +1,7 @@
 /**
  * @module electron/setup-ui-alias-review
- * The wizard's "Needs review" section (issue 238 D9): the review engine's
+ * Setup UI - Alias Review section (issue 238 D9)
+ * The wizard's "Needs review" section: the review engine's
  * proposals rendered ABOVE the Model Routing list, so a proposal is never
  * buried in a collapsed vendor group. `buildAliasReviewHTML` is the
  * server-rendered skeleton (no data in it); `buildAliasReviewScript` is the
@@ -151,7 +152,7 @@ function buildAliasReviewScript() {
   }
 
   function dismissProposal(p) {
-    if (p.dismissKey) { stagedDismissals.push(p.dismissKey); }
+    if (p.dismissKey && stagedDismissals.indexOf(p.dismissKey) === -1) { stagedDismissals.push(p.dismissKey); }
     removeProposalRow(p.alias);
   }
 
@@ -177,7 +178,14 @@ function buildAliasReviewScript() {
       opt.value = c.id; opt.textContent = candidateText(p, c);
       proposed.appendChild(opt);
     });
-    if (proposed.children.length > 0) { select.insertBefore(proposed, select.firstChild); }
+    if (proposed.children.length > 0) {
+      select.insertBefore(proposed, select.firstChild);
+      var proposedIds = Object.create(null);
+      (p.candidates || []).forEach(function(c) { proposedIds[c.id] = true; });
+      // the candidates already lead in Proposed -- drop the now-duplicate copy elsewhere.
+      select.querySelectorAll('option').forEach(function(opt) { if (opt.parentNode !== proposed && proposedIds[opt.value]) { opt.remove(); } });
+      select.querySelectorAll('optgroup').forEach(function(g) { if (g.querySelectorAll('option').length === 0) { g.remove(); } });
+    }
     select.value = p.current || '';
     chooseBtn.replaceWith(select);
     select.focus();
@@ -244,6 +252,8 @@ function buildAliasReviewScript() {
     (view.proposals || []).forEach(function(p) {
       if (!p || typeof p.alias !== 'string') { return; }
       if (Object.prototype.hasOwnProperty.call(aliasEdits, p.alias)) { return; }   // staged this session: the page wins
+      if (p.dismissKey && stagedDismissals.indexOf(p.dismissKey) !== -1) { return; }   // dismissed this session: staged, not on disk yet
+      if (p.state === 'unmapped' && (p.candidates || []).some(function(c) { return Object.keys(aliasEdits).some(function(k) { return aliasEdits[k] === c.id; }); })) { return; }   // already added this session under a free name (an undo via × deletes that key, so the proposal returns)
       var row = renderProposalRow(p, view);
       aliasReviewRows[p.alias] = row;
       list.appendChild(row);
@@ -257,7 +267,7 @@ function buildAliasReviewScript() {
     return window.sidecarSetup.invoke('sidecar:get-alias-review')
       .then(renderAliasReview)
       .catch(function(err) {
-        renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, gatedIds: [], error: String((err && err.message) || err) });
+        renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, gatedIds: [], error: String((err && err.message) || err || 'unknown error') });
       });
   }
 
@@ -266,11 +276,12 @@ function buildAliasReviewScript() {
     aliasReviewRefresh.addEventListener('click', async function() {
       aliasReviewRefresh.disabled = true;
       try {
-        var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
-        applyCatalog(info);                       // Step 2's meta line and Step 3's picker see the refresh too
-      } catch (_e) { /* the re-fetch below reports whatever the cache now holds */ }
-      await loadAliasReview();
-      aliasReviewRefresh.disabled = false;
+        try {
+          var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
+          applyCatalog(info);                     // Step 2's meta line and Step 3's picker see the refresh too
+        } catch (_e) { /* the re-fetch below reports whatever the cache now holds */ }
+        await loadAliasReview();
+      } finally { aliasReviewRefresh.disabled = false; }   // re-enable even if the re-fetch above somehow throws
     });
   }
   loadAliasReview();`;
