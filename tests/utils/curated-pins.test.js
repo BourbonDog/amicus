@@ -53,6 +53,23 @@ describe('validateCuratedPins — one refusal per rule', () => {
   test('pin without an openrouter route', () => refuses(d => { d.pins.glm.routes = { google: 'google/x' }; }, "pin 'glm' has no openrouter route"));
   test('route id must live in its key\'s namespace', () => refuses(d => { d.pins.gemini.routes.google = 'openrouter/google/gemini-3.6-flash'; }, "pin 'gemini' route 'google' must be a 'google/…' id"));
   test('route id must have a model segment', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id"));
+  // carry-in from T1 review, added in fix round 1: `inNamespace` admitted a
+  // bare 2-segment openrouter id (vendor only, no model) — validatePin must
+  // refuse it, not just setPinRoute.
+  test('an openrouter route needs all 3 segments — vendor AND model, not just a bare vendor', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/z-ai'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id (got \"openrouter/z-ai\")"));
+  // fix round 1 (Important): a bare `<provider>/` route (no model segment at
+  // all) must be refused for a DIRECT provider too, not just openrouter.
+  test('a bare provider/ route (no model segment) is refused for a direct provider too', () => refuses(d => { d.pins.gemini.routes.google = 'google/'; }, "pin 'gemini' route 'google' must be a 'google/…' id"));
+  // fix round 1 (Important): the reviewer's counter-case — `inNamespace` must
+  // NOT require exactly 2 segments for a direct provider, since some
+  // providers' own model ids contain `/` (togetherai/fireworks-ai/huggingface/
+  // deepinfra-style: `togetherai/meta-llama/llama-4`). Only openrouter is
+  // segment-counted exactly.
+  test('a 3-segment direct-provider route (model id containing a slash) validates', () => {
+    const doc = good();
+    doc.pins.glm.routes.togetherai = 'togetherai/meta-llama/llama-4';
+    expect(() => validateCuratedPins(doc)).not.toThrow();
+  });
   test('verifiedOn is required', () => refuses(d => { delete d.pins.glm.verifiedOn; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   test('verifiedOn must be an ISO date', () => refuses(d => { d.pins.glm.verifiedOn = 'yesterday'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   test('ruling, when present, is a non-empty string', () => refuses(d => { d.pins.glm.ruling = ''; }, "pin 'glm' ruling must be a non-empty string"));
@@ -121,6 +138,9 @@ describe('loadCuratedPins', () => {
     fs.writeFileSync(p, '{not valid json');
     expect(() => loadCuratedPins(p)).toThrow(/^curated-pins\.json: /);
     expect(() => loadCuratedPins(p)).toThrow(p);
+    // fix round 1: the malformed case alone left the missing-file branch of
+    // the same try/catch unexercised.
+    expect(() => loadCuratedPins(path.join(dir, 'nope.json'))).toThrow(/^curated-pins\.json: .*ENOENT/);
   });
 });
 
@@ -140,7 +160,13 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
   const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require(MOD);
   let dir;
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curated-pins-w-')); });
-  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    // fix round 1: the round-trip test below leaves a `jest.doMock` on this
+    // module in force for the rest of the Jest process — undo it here so
+    // this describe block is order-independent of whatever runs after it.
+    jest.dontMock('../../src/utils/curated-pins');
+  });
 
   test('saveCuratedPins writes the canonical format to the given path and the loader reads it back equal', () => {
     const p = path.join(dir, 'pins.json');
@@ -175,6 +201,15 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     // the rule via the same helper, so a 2-segment id must be refused too.
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai', '2026-09-20')).toThrow("'openrouter/z-ai' is not in the openrouter/ namespace");
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', 'today')).toThrow("verifiedOn must be YYYY-MM-DD (got 'today')");
+  });
+  // fix round 1 (Important): setPinRoute must accept a 3-segment direct-
+  // provider id too — only openrouter is segment-counted exactly.
+  test('setPinRoute accepts a 3-segment direct-provider id (model id containing a slash)', () => {
+    const doc = good();
+    doc.pins.glm.routes.togetherai = 'togetherai/placeholder';
+    const after = setPinRoute(doc, 'glm', 'togetherai', 'togetherai/meta-llama/llama-4', '2026-09-20');
+    expect(after.pins.glm.routes.togetherai).toBe('togetherai/meta-llama/llama-4');
+    expect(after.pins.glm.verifiedOn).toBe('2026-09-20');
   });
   test('setPinRuling sets a trimmed ruling on a copy; blank or unknown alias refused', () => {
     const before = good();

@@ -43,7 +43,7 @@ const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('./atomic-write');
 
-/** @type {string} absolute path to the shipped curated-pins.json (T2's saveCuratedPins default; owner-mode messages). */
+/** @type {string} absolute path to the shipped curated-pins.json (T2's saveCuratedPins default). */
 const CURATED_PINS_PATH = path.join(__dirname, 'curated-pins.json');
 const SHIPPED = require('./curated-pins.json');
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,18 +64,19 @@ function checkName(name, where) {
 
 /**
  * @param {string} id @param {string} provider
- * @returns {boolean} true when `id` is `<provider>/<model>` with a non-empty
- *   model segment — or, when `provider` is `openrouter`,
- *   `openrouter/<vendor>/<model>` with all three segments non-empty.
- *   `curated-models.js :: vendorOf` parses the vendor segment of an
- *   openrouter id positionally, so a 2-segment `openrouter/<x>` id (no model
- *   segment) must be refused here rather than silently mis-parsed there.
+ * @returns {boolean} true when `id` starts with `<provider>/` and every
+ *   segment is non-empty: `openrouter` must be exactly 3 segments
+ *   (`openrouter/<vendor>/<model>` — `curated-models.js :: vendorOf` parses
+ *   the vendor segment positionally, so a 2-segment id would be silently
+ *   mis-parsed rather than refused); every other provider needs only 2+,
+ *   since a direct provider's own model id may itself contain `/` (e.g.
+ *   `togetherai/meta-llama/llama-4`, `fireworks-ai/accounts/...`).
  */
 function inNamespace(id, provider) {
   if (typeof id !== 'string') { return false; }
   const segments = id.split('/');
-  const wanted = provider === 'openrouter' ? 3 : 2;
-  return segments.length === wanted && segments[0] === provider && segments.every(s => s.length > 0);
+  if (segments[0] !== provider || !segments.every(s => s.length > 0)) { return false; }
+  return provider === 'openrouter' ? segments.length === 3 : segments.length >= 2;
 }
 
 function validatePin(alias, pin) {
