@@ -782,21 +782,29 @@ describe('setup-ui wizard', () => {
       const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
       const collectMatch = script.match(/function collectAliasWrites\([^)]*\) \{[\s\S]*?\n {2}\}/);
       const buildReviewMatch = script.match(/function buildReview\(\) \{[\s\S]*?\n {2}\}/);
+      // issue 238 Q9: buildReview now reads finishPlan() (setup-ui-alias-state.js).
+      const stateFns = ['isCuratedAlias', 'defaultWasChosen', 'foldShippedWrites', 'finishPlan']
+        .map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
       expect(pickRouteForMatch).toBeTruthy();
       expect(collectMatch).toBeTruthy();
       expect(buildReviewMatch).toBeTruthy();
+      stateFns.forEach(m => expect(m).toBeTruthy());
       // eslint-disable-next-line no-new-func
       const build = new Function(
         'routingChoices', 'configuredKeys', 'explicitRouteChoices',
         'modelChoiceIds', 'modelOpenrouterIds', 'aliasEdits', 'modelChoicesData',
         'savedAliases', 'document', 'window',
-        `${pickRouteForMatch[0]}\n${collectMatch[0]}\n${buildReviewMatch[0]}\nreturn buildReview;`
+        'defaultAliases', 'restoredDefault', 'defaultTouched', 'stagedDismissals',
+        `${pickRouteForMatch[0]}\n${collectMatch[0]}\n${stateFns.map(m => m[0]).join('\n')}\n${buildReviewMatch[0]}\nreturn buildReview;`
       );
       return (opts = {}) => build(
         opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
         opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
         opts.aliasEdits || {}, opts.modelChoicesData || [],
-        opts.savedAliases || {}, opts.document, opts.window
+        opts.savedAliases || {}, opts.document, opts.window,
+        Object.assign(Object.create(null), opts.defaultAliases || {}),
+        opts.restoredDefault === undefined ? null : opts.restoredDefault,
+        !!opts.defaultTouched, opts.stagedDismissals || []
       );
     }
 
@@ -922,6 +930,42 @@ describe('setup-ui wizard', () => {
       expect(els['review-routing'].textContent).toBe('No alias changes');
       expect(els['review-aliases'].textContent).toBe('No changes');
     });
+
+    describe('issue 238 Q9: the wizard writes only what the user chose, and says so', () => {
+      const els = () => ({ 'review-keys': fakeEl(), 'review-model': fakeEl(), 'review-routing': fakeEl(), 'review-aliases': fakeEl() });
+      const docWith = (e, radioValue) => ({ getElementById: (id) => e[id], querySelector: () => (radioValue ? { value: radioValue } : null) });
+
+      it('a RESTORED, untouched default writes nothing for its alias (mutant RESTOREDWRITE)', () => {
+        const e = els();
+        extractBuildReview()({ modelChoicesData: twoCardData, savedAliases: {}, document: docWith(e, 'gemini'), window: { customDefaultModel: null }, restoredDefault: 'gemini' })();
+        expect(e['review-routing'].textContent).toBe('No alias changes');
+      });
+      it('a CHOSEN default (touched) writes its live route — as before', () => {
+        const e = els();
+        extractBuildReview()({ modelChoicesData: twoCardData, savedAliases: {}, document: docWith(e, 'gemini'), window: { customDefaultModel: null }, restoredDefault: 'gemini', defaultTouched: true })();
+        expect(e['review-routing'].textContent).toBe('gemini → google/gemini-x');
+      });
+      it('a live pick EQUAL to the shipped pin folds to follow and is not a change when the alias already follows (mutant FOLD)', () => {
+        const e = els();
+        extractBuildReview()({ modelChoicesData: twoCardData, savedAliases: {}, document: docWith(e, 'gemini'), window: { customDefaultModel: null }, defaultAliases: { gemini: 'google/gemini-x' } })();
+        expect(e['review-routing'].textContent).toBe('No alias changes');
+      });
+      it('…and reads "(now follows …)" when it clears an old pin; a custom removal reads "(deleted)"; dismissals are counted', () => {
+        const e = els();
+        extractBuildReview()({
+          modelChoicesData: twoCardData, savedAliases: { gemini: 'google/gemini-old', mine: 'openrouter/x/y' },
+          aliasEdits: { mine: null }, document: docWith(e, 'gemini'), window: { customDefaultModel: null },
+          defaultAliases: { gemini: 'google/gemini-x' }, stagedDismissals: ['glm@openrouter/z-ai/glm-5.4'],
+        })();
+        expect(e['review-routing'].textContent).toBe('mine → (deleted), gemini → (now follows google/gemini-x)');
+        expect(e['review-aliases'].textContent).toBe('2 alias(es) modified, 1 proposal(s) dismissed');
+      });
+      it('a drill-down pick still pins (§6.5), chosen or not', () => {
+        const e = els();
+        extractBuildReview()({ modelChoicesData: twoCardData, modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }, savedAliases: {}, document: docWith(e, 'gemini'), window: { customDefaultModel: null }, restoredDefault: 'gemini' })();
+        expect(e['review-routing'].textContent).toBe('deepseek → deepseek/deepseek-r1');
+      });
+    });
   });
 
   describe('Step 3 - Alias Editor', () => {
@@ -1046,18 +1090,25 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const script = localHtml.match(/<script>([\s\S]*)<\/script>/)[1];
     const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
     const updateMatch = script.match(/function updateWritePreviews\(\) \{[\s\S]*?\n {2}\}/);
+    // issue 238 Q9: the note text comes from describeDefaultWrite / defaultWasChosen (setup-ui-alias-state.js).
+    const noteFns = ['isCuratedAlias', 'describeDefaultWrite', 'defaultWasChosen'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
     expect(pickRouteForMatch).toBeTruthy();
     expect(updateMatch).toBeTruthy();
+    noteFns.forEach(m => expect(m).toBeTruthy());
     // eslint-disable-next-line no-new-func
     const build = new Function(
       'routingChoices', 'configuredKeys', 'explicitRouteChoices',
-      'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window',
-      `${pickRouteForMatch[0]}\n${updateMatch[0]}\nreturn updateWritePreviews;`
+      'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window', 'defaultAliases',
+      'restoredDefault', 'defaultTouched',
+      `${pickRouteForMatch[0]}\n${noteFns.map(m => m[0]).join('\n')}\n${updateMatch[0]}\nreturn updateWritePreviews;`
     );
     return (opts = {}) => build(
       opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
       opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
-      opts.modelChoicesData || [], opts.document, opts.window
+      opts.modelChoicesData || [], opts.document, opts.window,
+      Object.assign(Object.create(null), opts.defaultAliases || {}),
+      opts.restoredDefault === undefined ? null : opts.restoredDefault,
+      !!opts.defaultTouched
     );
   }
 
@@ -1115,6 +1166,46 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const deepseekEl = modelResolvedEls.find(el => el.getAttribute('data-alias') === 'deepseek');
     expect(deepseekEl.textContent).toBe('deepseek/deepseek-v4-pro'); // canonicalised bare form
   });
+
+  test('issue 238 Q9: the selected card\'s note names the shipped id when the live pick differs, or says it follows', () => {
+    const notes = {};
+    const previewEl = (alias) => ({
+      getAttribute: (n) => (n === 'data-alias' ? alias : null),
+      classList: { toggle: () => {} },
+      querySelector: (sel) => (sel === '.write-preview-note' ? (notes[alias] = notes[alias] || { textContent: '' }) : { textContent: '' }),
+    });
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }),
+      querySelectorAll: (selector) => (selector === '.write-preview' ? [previewEl('gemini'), previewEl('deepseek')] : []),
+    };
+    const run = (defaultAliases) => extractUpdateWritePreviews()({ modelChoicesData: twoCardData, document: fakeDocument, window: { customDefaultModel: null }, defaultAliases })();
+    run({ gemini: 'google/gemini-x' });
+    expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
+    run({ gemini: 'google/gemini-old' });
+    expect(notes.gemini.textContent).toBe('live flagship differs from the shipped google/gemini-old — pinned');
+    expect(notes.deepseek).toBeUndefined();   // only the selected card gets a note
+  });
+
+  test('issue 238 Q9 ruling: a RESTORED, untouched default says so instead of claiming a pin it will not make', () => {
+    const notes = {};
+    const previewEl = (alias) => ({
+      getAttribute: (n) => (n === 'data-alias' ? alias : null),
+      classList: { toggle: () => {} },
+      querySelector: (sel) => (sel === '.write-preview-note' ? (notes[alias] = notes[alias] || { textContent: '' }) : { textContent: '' }),
+    });
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }),
+      querySelectorAll: (selector) => (selector === '.write-preview' ? [previewEl('gemini')] : []),
+    };
+    const run = (restoredDefault, defaultTouched) => extractUpdateWritePreviews()({
+      modelChoicesData: twoCardData, document: fakeDocument, window: { customDefaultModel: null },
+      defaultAliases: { gemini: 'google/gemini-x' }, restoredDefault, defaultTouched,
+    })();
+    run('gemini', false);
+    expect(notes.gemini.textContent).toBe('restored from your config — not re-written unless you choose it');
+    run('gemini', true);
+    expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
+  });
 });
 
 // F11: `grep -rn finishBtn tests/` returned 0 repo-wide before this fix --
@@ -1147,10 +1238,16 @@ describe('F11: the Finish handler is bound to collectAliasWrites (not a stand-in
     expect(nameIdx).toBeGreaterThan(-1);
     const openParenIdx = nameIdx + 'finishBtn.addEventListener'.length;
     const call = balancedParens(script, openParenIdx);
-    expect(call).toMatch(/\bcollectAliasWrites\(/);
-    // A mutant that computes aliasWrites but never sends it (or sends a
-    // stand-in constant) must also fail -- bound the IPC call too.
-    expect(call).toMatch(/sidecar:save-config['"],\s*dm,\s*aliasWrites/);
+    expect(call).toMatch(/\bfinishPlan\(/);
+    expect(call).toMatch(/sidecar:save-config['"],\s*plan\.defaultModel,\s*plan\.writes,[\s\S]*?plan\.dismissals\)/);
+  });
+
+  test('finishPlan is bound to collectAliasWrites — the stand-in-constant mutant still fails', () => {
+    const html = buildSetupHTML();
+    const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+    const planSrc = script.match(/function finishPlan\(\) \{[\s\S]*?\n {2}\}/)[0];
+    expect(planSrc).toMatch(/foldShippedWrites\(collectAliasWrites\(selected, isCustom\)\)/);
+    expect(planSrc).toContain('defaultWasChosen()');
   });
 });
 
@@ -1171,5 +1268,16 @@ describe('#238 D4: initialPane lands the wizard on a step', () => {
   });
   it('an unknown pane is step 1', () => {
     expect(buildSetupHTML({ initialPane: 'keys' })).toContain('var INITIAL_STEP = 1;');
+  });
+});
+
+describe('issue 238: setup-ui.js reads rows through the state helpers', () => {
+  it('applyAliasEditsToUI no longer builds a selector by interpolating the alias name', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).not.toMatch(/\.alias-row\[data-alias="' \+/);
+  });
+  it('updateAliasRoutes reads the staged value through stagedValueFor', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).toContain('stagedValueFor(row)');
   });
 });

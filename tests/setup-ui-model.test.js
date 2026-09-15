@@ -292,6 +292,10 @@ describe('setup-ui-model', () => {
       expect(html).toContain('data-alias="gemini"');
       expect(html).toContain('will set');
     });
+    test('issue 238 Q9: each write-preview carries an empty note span the page fills from describeDefaultWrite', () => {
+      const html = buildModelStepHTML(PICKS);
+      expect((html.match(/<span class="write-preview-note"><\/span>/g) || []).length).toBe(PICKS.length);
+    });
     test('fallback rows carry the offline badge', () => {
       const html = buildModelStepHTML(PICKS, 'gemini', { openrouter: true });
       expect(html).toContain('class="pick-badge"');

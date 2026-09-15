@@ -414,6 +414,7 @@ function __rawWizardCSS() {
   .model-resolved { display: block; font-size: 11px; opacity: 0.6; font-family: var(--font-mono); }
   .write-preview { display: none; font-size: 11px; margin-top: 4px; }
   .write-preview-active { display: block; }
+  .write-preview-note { color: var(--text-muted); font-size: 11px; margin-left: 4px; }
 
   /* Free council picker (Step 2) */
   .council-section { margin-top: 14px; }
