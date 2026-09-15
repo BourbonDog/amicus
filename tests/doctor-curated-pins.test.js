@@ -2,9 +2,35 @@
 'use strict';
 /**
  * `doctor`'s `curated-pins` row: facts for everyone, the owner-mode command
- * only in the source checkout. Named mutants (measured red): CHECKOUTGATE —
- * `isSourceCheckout` ignored (command shown to an installed copy); DRIFTWARN —
- * `status: 'ok'` regardless of `behind`.
+ * only in the source checkout.
+ *
+ * Named mutants, MEASURED red 2026-09-15 on the committed tree (commit
+ * 99937105, `feat/doctor-shipped-pins`), one mutant applied to
+ * src/utils/doctor-curated-pins-check.js at a time and restored after each
+ * with `git checkout -- src/utils/doctor-curated-pins-check.js` (safe:
+ * committed before measuring; `git status --porcelain` confirmed clean after
+ * both restores). Command: `npx jest tests/doctor-curated-pins.test.js
+ * tests/doctor-output-budget.test.js tests/cli-handlers-doctor.test.js
+ * tests/doctor-handler.test.js tests/sidecar/aliases-owner.test.js`.
+ *   CHECKOUTGATE — `if (!d.isSourceCheckout())` replaced with `if (false)`,
+ *     so the checkout gate is ignored and the owner-mode command reaches an
+ *     installed copy. RED (exactly 4, all in this file):
+ *     evaluateCuratedPins > "installed copy, no drift: ok, facts only, no
+ *     command anywhere"; evaluateCuratedPins > "installed copy, drift: still
+ *     ok, says a newer amicus moves them, no command (mutant CHECKOUTGATE)";
+ *     evaluateCuratedPins > "a single pin pluralizes as \"1 pin\"; a pin
+ *     without a parseable date reads \"unknown\""; and doctor registration >
+ *     "runDoctorChecks carries the curated-pins row right after
+ *     output-budget, ok on the base fixture". Every test in the other four
+ *     files, and the rest of this file, stayed green.
+ *   DRIFTWARN — the `behind > 0` branch's `status: 'warn'` hardcoded to
+ *     `'ok'` (the hint/message stay correct; only the status lies). RED
+ *     (exactly 2, both in this file): evaluateCuratedPins > "source
+ *     checkout, drift: warn with the owner command as the hint (mutant
+ *     DRIFTWARN)"; and evaluateCuratedPins > "the real shipped file + the
+ *     real drift report over a synthetic cache: 21 pins, verified up to
+ *     2026-09-05, and glm-5.4 counts as behind". Every test in the other
+ *     four files, and the rest of this file, stayed green.
  */
 const { evaluateCuratedPins } = require('../src/utils/doctor-curated-pins-check');
 
