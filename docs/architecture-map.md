@@ -393,6 +393,7 @@ electron/
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
+├── ipc-aliases.js  # IPC for the setup wizard's "Needs review" section (issue 238 D9, Phase 3).
 ├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
