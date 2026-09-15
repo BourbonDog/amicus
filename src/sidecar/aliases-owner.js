@@ -5,15 +5,11 @@
  * shipped pins in src/utils/curated-pins.json instead of the user's config
  * — the owner's baseline reset (D3).
  *
- * Rows are ROUTES, not aliases (R-P2-1): each route is judged in its own
- * gateway namespace (`openrouter/google/gemini-…` against the openrouter
- * rows, `google/gemini-…` against the google rows). One `runReview` pass per
- * namespace (openrouter first, then each direct namespace in file order); a
+ * Rows are ROUTES, not aliases, one `runReview` pass per gateway namespace
+ * (openrouter first, then each direct namespace in file order; R-P2-1). A
  * namespace with no authoritative catalog row, or in `providerFailures`, is
- * announced and NOT reviewed, never "up to date". Every row is a custom pin
- * to the engine: no `follow`, no `never ask again` (no dismissal state —
- * `dismissKey` is nulled so a declined sibling returns next session; R-P2-2),
- * no notable (that list is for users to map).
+ * announced and NOT reviewed, never "up to date". Every row is a custom pin:
+ * no `follow`, no `never ask again` (R-P2-2), no notable.
  *
  * Gate (D8, split into aliases-owner-gate.js): a git source checkout with a
  * clean tree and a TTY. Refused = one stderr line, exit 1, nothing read or
@@ -27,8 +23,11 @@
  * session loaded it. After the last pass each touched pin is prompted for an
  * optional ruling (enter keeps the current text; R-P2-9); `routeDisagreements`
  * names every non-divergent pin whose direct route no longer matches the
- * derived form of its openrouter route (R-P2-10). Ctrl-C/EOF skips the
- * rulings but the summary still prints; nothing here spends.
+ * derived form of its openrouter route (R-P2-10). Review residual: Ctrl-C/EOF
+ * in a raw-mode terminal (stdout a TTY) surfaces as the prompt's own
+ * REVIEW_ABORTED (aliases-review-prompt.js) — rulings are skipped but the
+ * summary still prints; with stdout piped, Ctrl-C is the ordinary process
+ * signal instead and nothing further runs. Nothing here spends.
  */
 
 'use strict';
@@ -111,9 +110,7 @@ function routeDisagreements(pins) {
 
 /**
  * A touched alias whose pin ALSO has a route in a DIVERGENT_VENDORS namespace
- * this session never touched is called out for the owner to verify by hand
- * (the comparator's dash-version limit means an anthropic pass can never
- * propose the matching move for a sibling accepted on openrouter).
+ * this session never touched is called out for the owner to verify by hand.
  * @param {object} pins the (possibly updated) document's pins
  * @param {Set<string>} touched alias names touched this session
  * @param {Set<string>} touchedRoutes `<alias>::<provider>` pairs actually written this session
@@ -143,9 +140,8 @@ function namespaceGap(provider, catalogInfo) {
 /**
  * The picker's view for ONE namespace: every route in `map` is a custom
  * pinned row; proposals carry no dismissKey (R-P2-2). F9: `catalogAvailable`/
- * `retired` now match the view CONTRACT (computed, not hardcoded) — harmless
- * today, since an owner row can never itself be a retired alias (disjoint by
- * validateCuratedPins).
+ * `retired` match the view CONTRACT (computed, not hardcoded) — harmless
+ * today (an owner row can never be retired, disjoint by validateCuratedPins).
  */
 function ownerView(map, catalogInfo, doc, d) {
   const rows = Object.keys(map).map(alias => ({ alias, id: map[alias], state: 'pinned', curated: false, shipped: null }));
@@ -161,17 +157,16 @@ function ownerView(map, catalogInfo, doc, d) {
 /**
  * Compare-and-swap write (#238 council r1 F1): refuse (throw, nothing
  * written) when curated-pins.json changed on disk since this session loaded
- * it — a concurrent session or a hand edit mid-walk must never be clobbered.
- * On success, advances the in-memory doc and the CAS baseline together, so a
- * later write in the SAME session compares against what THIS write landed.
- * Shared by the sink (`addAlias`) and `askRulings`; both print `could not
- * write: …` on refusal rather than aborting the review. Mutant NOCAS: drop
- * the comparison.
- * @param {{doc: object, diskBytes: string}} state mutated in place on success
+ * it. On success, advances the in-memory doc and the CAS baseline together,
+ * so a later write in the SAME session compares against what THIS write
+ * landed. Shared by the sink (`addAlias`) and `askRulings`; both print
+ * `could not write: …` on refusal. Mutant NOCAS: drop the comparison.
+ * @param {{doc: object, diskBytes: string, casRefused?: boolean}} state mutated in place
  */
 function commit(state, next, d) {
   const onDisk = d.readCuratedPinsBytes();
   if (onDisk !== state.diskBytes) {
+    state.casRefused = true; // review residual: the closing summary reports this instead of "no pin changed" -- that line is false once the file changed under us
     throw new Error('curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
   }
   d.saveCuratedPins(next);          // Mutant SAVEFIRST: assign state.doc before this line
@@ -230,11 +225,11 @@ async function runOwnerReview(args, deps) {
   let state;
   try {
     state = { doc: d.loadCuratedPins(), touched: new Set(), touchedRoutes: new Set() };
+    state.diskBytes = d.readCuratedPinsBytes(); // F1: the CAS baseline this session's writes compare against -- I/O, so it shares the load's guard (review residual: this used to sit AFTER the try, unguarded)
   } catch (err) {
     d.stderr(`Error: ${collapseExcerpt(err.message)}\n`);
     return 1;
   }
-  state.diskBytes = d.readCuratedPinsBytes(); // F1: the CAS baseline this session's writes compare against
   const groups = routesByProvider(state.doc.pins);
   const routeCount = Object.values(groups).reduce((n, g) => n + Object.keys(g).length, 0);
   d.write(`  owner mode — reviewing the shipped pins in ${DATA_FILE} (${Object.keys(state.doc.pins).length} pins, ${routeCount} routes)\n`);
@@ -280,6 +275,11 @@ async function runOwnerReview(args, deps) {
   }
   for (const line of routeDisagreements(state.doc.pins)) { d.write(line + '\n'); }
   for (const line of divergentVendorNotices(state.doc.pins, state.touched, state.touchedRoutes)) { d.write(line + '\n'); }
+  // review residual: "no pin changed" is false once a CAS refusal proves the file WAS changed externally -- name that instead and fail.
+  if (state.casRefused) {
+    d.write('  curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review\n');
+    return 1;
+  }
   const k = state.touched.size;
   d.write(k === 0
     ? `  no pin changed — ${DATA_FILE} is untouched\n`

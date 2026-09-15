@@ -44,17 +44,28 @@
  *     no "never ask again" (owner mode, #238 Phase 2; mutant NODISMISS)'.
  *
  * Council round 1 (#238 PR #250, F1) MEASURED 2026-09-15 on the committed
- * tree (`npx jest tests/sidecar/aliases-owner.test.js
- * tests/sidecar/aliases-review.test.js`, restored via `git checkout --
- * src/sidecar/aliases-owner.js`; `git status --porcelain` clean after):
- *   NOCAS — commit()'s disk-bytes comparison deleted (write unconditionally).
- *     RED (exactly 2, both in runOwnerReview): "F1(a) (#238 council r1 B1): a
- *     mid-walk external edit refuses the accept with a CAS message, the file
- *     keeps the edit, exit 0 with no pin changed (mutant NOCAS)"; "F1(c)
- *     (#238 council r1 B1): the rulings phase refuses a write the same way
- *     when the file changed after the walk (mutant NOCAS)". Every other test
+ * tree, RE-MEASURED same day after the round-1 review's residuals landed
+ * (`npx jest tests/sidecar/aliases-owner.test.js
+ * tests/sidecar/aliases-review.test.js`; restored from a scratchpad backup
+ * copy, not `git checkout --`, since the residuals were uncommitted at
+ * measurement time — restoring via checkout would have discarded them; `git
+ * diff` empty against the backup after):
+ *   NOCAS — commit()'s disk-bytes comparison deleted (write unconditionally,
+ *     `onDisk` computed but unused). RED (exactly 2, both in runOwnerReview):
+ *     "F1(a) (#238 council r1 B1): a mid-walk external edit refuses the
+ *     accept with a CAS message, the file keeps the edit, and the session
+ *     exits 1 with a restart notice, never "no pin changed" (mutant NOCAS)";
+ *     "F1(c) (#238 council r1 B1): the rulings phase refuses a write the same
+ *     way when the file changed after the walk, exits 1 with the restart
+ *     notice instead of "N pin(s) changed" (mutant NOCAS)". Every other test
  *     in both files, including SAVEFIRST's own test (a mocked saveCuratedPins
- *     throw still short-circuits before the CAS-only regression), stayed green.
+ *     throw still short-circuits before the CAS-only regression), stayed
+ *     green. Also verified (scratch mutant, not committed): moving `const
+ *     prompt = d.ask ? null : d.createPrompt();`'s effective call earlier —
+ *     before the F3 load/catalog guards — reddens all three
+ *     "…no write, no prompt" tests once `ask` is deleted from their deps
+ *     (review item 2: the assertion is vacuous while `ask` stays injected,
+ *     since `createPrompt` is then dead code regardless of guard order).
  */
 const fs = require('fs');
 const os = require('os');
@@ -216,10 +227,18 @@ describe('runOwnerReview', () => {
     expect(h.log).not.toContain('SAVE');
   });
 
+  // Review residual: `harness()` always injects `ask`, so `d.ask ? null :
+  // d.createPrompt()` never calls createPrompt regardless of WHERE the guard
+  // sits -- `not.toHaveBeenCalled()` was vacuous (a scratch mutant moving
+  // prompt creation earlier still passed it, since `ask` truthy short-
+  // circuits the call either way). Deleting `ask` and stubbing `createPrompt`
+  // to a real ask/close pair makes the assertion load-bearing: it only stays
+  // green if the guard truly returns before that line is ever reached.
   test('F3 (#238 council r1 C1): a throwing loadCuratedPins is a named error on stderr, exit 1, no write, no prompt', async () => {
     h = harness({ catalog: EMPTY_CATALOG }); // never reached
     h.deps.loadCuratedPins = () => { throw new Error('ENOENT: no such file'); };
-    h.deps.createPrompt = jest.fn();
+    delete h.deps.ask;
+    h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.err()).toContain('ERR:Error: ENOENT: no such file');
     expect(h.out()).toBe('');
@@ -230,9 +249,25 @@ describe('runOwnerReview', () => {
   test('F3 (#238 council r1 C1): a throwing getCatalogInfo is a named error on stderr, exit 1, no write, no prompt', async () => {
     h = harness({ catalog: EMPTY_CATALOG });
     h.deps.getCatalogInfo = async () => { throw new Error('ETIMEDOUT'); };
-    h.deps.createPrompt = jest.fn();
+    delete h.deps.ask;
+    h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.err()).toContain('ERR:Error: catalog unavailable (ETIMEDOUT) — run amicus models --refresh');
+    expect(h.log).not.toContain('SAVE');
+    expect(h.deps.createPrompt).not.toHaveBeenCalled();
+  });
+
+  // Review residual, item 1: `state.diskBytes = d.readCuratedPinsBytes()`
+  // used to sit AFTER the load's try/catch, unguarded -- a throw there
+  // escaped uncaught. Moved inside the same try; this is its test.
+  test('F3 residual: a throwing readCuratedPinsBytes is a named error on stderr, exit 1, no write, no prompt', async () => {
+    h = harness({ catalog: EMPTY_CATALOG });
+    h.deps.readCuratedPinsBytes = () => { throw new Error('EACCES: permission denied'); };
+    delete h.deps.ask;
+    h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(h.err()).toContain('ERR:Error: EACCES: permission denied');
+    expect(h.out()).toBe('');
     expect(h.log).not.toContain('SAVE');
     expect(h.deps.createPrompt).not.toHaveBeenCalled();
   });
@@ -343,7 +378,11 @@ describe('runOwnerReview', () => {
     expect(doc.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the failed accept never reached disk through the later save
   });
 
-  test('F1(a) (#238 council r1 B1): a mid-walk external edit refuses the accept with a CAS message, the file keeps the edit, exit 0 with no pin changed (mutant NOCAS)', async () => {
+  // Review residual, item 3: a CAS refusal used to still close with "no pin
+  // changed -- untouched" and exit 0, which is FALSE (the file WAS changed,
+  // externally) and indistinguishable from a genuine no-op session. Both
+  // tests below now assert the dedicated restart notice and exit 1 instead.
+  test('F1(a) (#238 council r1 B1): a mid-walk external edit refuses the accept with a CAS message, the file keeps the edit, and the session exits 1 with a restart notice, never "no pin changed" (mutant NOCAS)', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
     h = harness({ catalog });
     let calls = 0;
@@ -359,16 +398,17 @@ describe('runOwnerReview', () => {
       }
       return '3'; // skip, once the accept is refused and the menu redisplays
     };
-    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.out()).toContain('could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
     const onDisk = h.read();
     expect(onDisk.pins.glm.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
     expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the refused accept never landed
-    expect(h.out()).toContain('no pin changed — src/utils/curated-pins.json is untouched');
+    expect(h.out()).toContain('curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review');
+    expect(h.out()).not.toContain('no pin changed');
     expect(h.log).not.toContain('SAVE');
   });
 
-  test('F1(c) (#238 council r1 B1): the rulings phase refuses a write the same way when the file changed after the walk (mutant NOCAS)', async () => {
+  test('F1(c) (#238 council r1 B1): the rulings phase refuses a write the same way when the file changed after the walk, exits 1 with the restart notice instead of "N pin(s) changed" (mutant NOCAS)', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
     h = harness({ catalog });
     let calls = 0;
@@ -381,13 +421,14 @@ describe('runOwnerReview', () => {
       fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
       return 'terra tier confirmed live 2026-09-20'; // the ruling answer for glm
     };
-    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.out()).toContain('    could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
     const onDisk = h.read();
     expect(onDisk.pins.grok.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
     expect(onDisk.pins.glm.ruling).toBe('why glm'); // the ruling write never landed
     expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.4'); // the walk's own accept DID land before the external edit
-    expect(h.out()).toContain('1 pin changed — review with: git diff src/utils/curated-pins.json'); // the walk's accept still counts
+    expect(h.out()).toContain('curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review');
+    expect(h.out()).not.toContain('pin changed — review with');
   });
 
   test('Ctrl-C mid-walk: tally, exit 1, no ruling prompts, summary still prints', async () => {

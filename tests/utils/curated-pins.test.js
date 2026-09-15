@@ -289,6 +289,12 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     expect(() => setPinRuling(good(), 'gemini', '   ')).toThrow("ruling for 'gemini' must be a non-empty string");
     expect(() => setPinRuling(good(), 'nope', 'x')).toThrow("'nope' is not a shipped pin");
   });
+  // Review residual: collapseExcerpt's String() coercion would otherwise turn
+  // a non-string ruling into the literal text "[object Object]" instead of
+  // refusing it, keeping the @param {string} JSDoc honest.
+  test('setPinRuling refuses a non-string ruling instead of coercing it', () => {
+    expect(() => setPinRuling(good(), 'gemini', {})).toThrow("ruling for 'gemini' must be a non-empty string");
+  });
   // F5(a) (#238 council r1 A1/B4/D2): a ruling is free text typed at an
   // interactive prompt and rendered back later -- sanitize at the INPUT
   // boundary so a stored ruling can never carry a newline, an ANSI escape or

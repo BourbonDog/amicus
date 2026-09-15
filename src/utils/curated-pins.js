@@ -212,6 +212,8 @@ function setPinRoute(doc, alias, provider, id, today) {
  */
 function setPinRuling(doc, alias, ruling) {
   if (!isPlainObject(doc) || !isPlainObject(doc.pins) || !own(doc.pins, alias)) { fail(`'${alias}' is not a shipped pin`); }
+  // Review residual: collapseExcerpt coerces any value via String(), so a non-string (e.g. {}) would otherwise silently become "[object Object]" instead of being refused.
+  if (typeof ruling !== 'string') { fail(`ruling for '${alias}' must be a non-empty string`); }
   const text = collapseExcerpt(ruling, Number.POSITIVE_INFINITY).trim();
   if (!text) { fail(`ruling for '${alias}' must be a non-empty string`); }
   const next = JSON.parse(JSON.stringify(doc));
