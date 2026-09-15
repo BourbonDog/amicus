@@ -480,3 +480,67 @@ describe('aliases is a registered command with a --review flag', () => {
     expect(parsed._).toEqual(['aliases']);
   });
 });
+
+describe('amicus aliases --ui (#238 D4, Phase 3)', () => {
+  let launch, cfg, handleAliases;
+  beforeEach(() => {
+    jest.resetModules();
+    process.env.AMICUS_CONFIG_DIR = path.join(os.tmpdir(), `amicus-aliases-ui-${process.pid}-${Date.now()}`);
+    fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
+    launch = jest.fn(async () => ({ success: true }));
+    jest.doMock('../../src/sidecar/setup-window', () => ({ launchSetupWindow: launch }));
+    jest.doMock('../../src/utils/model-catalog', () => ({
+      getCatalogInfo: jest.fn(async () => ({ models: [], fetchedAt: null, providerFailures: [] })),
+      readCache: jest.fn(() => null),
+      DEFAULT_MAX_AGE_MS: 24 * 60 * 60 * 1000,
+    }));
+    jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    cfg = require('../../src/utils/config');
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+  });
+  afterEach(() => {
+    process.stderr.write.mockRestore();
+    fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
+    jest.dontMock('../../src/sidecar/setup-window');
+  });
+
+  test('opens the setup window on the Routing step and reports the save', async () => {
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ui: true }));
+    expect(launch).toHaveBeenCalledWith({ pane: 'aliases' });
+    expect(code).toBe(0);
+    expect(out).toBe('Aliases saved.\n');
+  });
+
+  test('closed without Finish / launch failure: the reason on stderr, exit 1 (R-P3-12)', async () => {
+    launch.mockResolvedValueOnce({ success: false, error: 'Setup window closed without completing' });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ui: true }));
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(process.stderr.write).toHaveBeenCalledWith('Setup window closed without completing\nTerminal alternative: amicus aliases --review\n');
+  });
+
+  test.each([
+    [{ ui: true, json: true }], [{ ui: true, review: true }], [{ ui: true, owner: true }], [{ ui: true, review: true, owner: true }], [{ ui: true, unpin: 'glm' }],
+  ])('%o is an argument error: nothing launched, exit 1', async (flags) => {
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ...flags }));
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(launch).not.toHaveBeenCalled();
+    expect(process.stderr.write).toHaveBeenCalledWith('Error: --ui opens the setup window at the Routing step; it cannot be combined with --json, --review, --owner or --unpin\n');
+  });
+
+  test('normalizes the config on entry like every aliases form (D6) BEFORE the window opens (mutant UINORMALIZE)', async () => {
+    const shipped = cfg.getDefaultAliases();
+    const [alias] = Object.keys(shipped);
+    const file = path.join(process.env.AMICUS_CONFIG_DIR, 'config.json');
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ default: alias, aliases: { [alias]: shipped[alias] } }, null, 2));
+    launch.mockImplementationOnce(async () => {
+      expect(JSON.parse(fs.readFileSync(file, 'utf8')).aliases[alias]).toBeUndefined();   // already gone when the window opens
+      return { success: true };
+    });
+    const { code } = await captureStdout(() => handleAliases({ _: ['aliases'], ui: true }));
+    expect(code).toBe(0);
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+});

@@ -7,6 +7,7 @@
  *   amicus aliases --json     versioned document: rows + proposals
  *   amicus aliases --review --owner   maintainers: the same picker over the SHIPPED pins (aliases-owner.js)
  *   amicus aliases --unpin <name>   remove a pin (aliases-unpin.js)
+ *   amicus aliases --ui       open the setup window on the Routing step (aliases-ui.js)
  *
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
@@ -247,6 +248,9 @@ function buildAliasesDoc(view) {
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleAliases(args) {
+  if (args.ui) {
+    return require('./aliases-ui').handleAliasesUi(args, () => normalizeOnEntry(loadDeps()));   // #238 D4: the Electron form lives in aliases-ui.js
+  }
   if (args.owner && !args.review) {
     process.stderr.write('Error: --owner requires --review (amicus aliases --review --owner)\n');
     return 1;

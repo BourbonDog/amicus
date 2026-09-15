@@ -113,6 +113,7 @@ src/
 │   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
 │   ├── aliases-review-render.js  # Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4),
 │   ├── aliases-review.js  # `amicus aliases --review` (#238 §4): a numbered readline picker over the
+│   ├── aliases-ui.js  # `amicus aliases --ui` (#238 D4): the Electron setup window opened on the
 │   ├── aliases-unpin.js  # `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of
 │   ├── aliases.js  # `amicus aliases` (#238 D4) — the user's alias map as a standing command.
 │   ├── budget.js
@@ -598,6 +599,7 @@ evals/
 | `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |
 | `sidecar/aliases-review-render.js` | Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4), | `ageLabel()`, `menuFor()`, `menuLineText()`, `renderScreen()`, `refreshingCatalogLine()` |
 | `sidecar/aliases-review.js` | `amicus aliases --review` (#238 §4): a numbered readline picker over the | `runReview()` |
+| `sidecar/aliases-ui.js` | `amicus aliases --ui` (#238 D4): the Electron setup window opened on the | `handleAliasesUi()` |
 | `sidecar/aliases-unpin.js` | `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of | `handleUnpin()` |
 | `sidecar/aliases.js` | `amicus aliases` (#238 D4) — the user's alias map as a standing command. | `handleAliases()`, `collectAliasView()`, `renderAliasList()`, `buildAliasesDoc()`, `loadDeps()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |

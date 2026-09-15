@@ -192,4 +192,28 @@ describe('setup-window', () => {
     const result = await freshLaunch();
     expect(result).toEqual({ success: false, error: 'Electron not installed' });
   });
+
+  it('#238 D4: launchSetupWindow({ pane: "aliases" }) lands the window on the Routing step via AMICUS_SETUP_PANE', async () => {
+    // spawn's mock.calls accumulate across this file's tests (jest.restoreAllMocks()
+    // in afterEach is a no-op for an auto-mock, not a jest.spyOn() spy) -- clear first
+    // so calls[0] below is THIS test's call, matching the established pattern at the
+    // "--remote-debugging-port" test above.
+    spawn.mockClear();
+    const promise = launchSetupWindow({ pane: 'aliases' });
+    await flush();
+    expect(spawn.mock.calls[0][2].env.AMICUS_SETUP_PANE).toBe('aliases');
+    expect(spawn.mock.calls[0][2].env.AMICUS_MODE).toBe('setup');
+    mockProcess.on.mock.calls.find(c => c[0] === 'close')[1](0);
+    await promise;
+  });
+
+  it('no pane (the plain wizard) and an unknown pane both send an EMPTY token', async () => {
+    spawn.mockClear();   // see the note in the test above
+    launchSetupWindow();
+    await flush();
+    expect(spawn.mock.calls[0][2].env.AMICUS_SETUP_PANE).toBe('');
+    launchSetupWindow({ pane: 'keys' });
+    await flush();
+    expect(spawn.mock.calls[1][2].env.AMICUS_SETUP_PANE).toBe('');
+  });
 });

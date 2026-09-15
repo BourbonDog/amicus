@@ -525,6 +525,8 @@ Options for 'aliases':
                                the amicus source checkout, a clean tree and a terminal.
   --unpin <alias>              Remove a pin: a curated name goes back to following, a
                                custom name is deleted
+  --ui                         Open the setup window on the Routing step: the same alias
+                               editor, plus a "Needs review" section for the proposals
   --json                       Machine-readable document (aliases + proposals)
 `,
   list: `

@@ -31,6 +31,7 @@ const { PROVIDER_FAMILY_NAMES } = require('../src/utils/model-fetcher');
  *   so a user's custom aliases had no row at all. The config that arrives later
  *   over IPC cannot repair that -- applyAliasEditsToUI only rewrites the model
  *   text of rows that ALREADY exist (`if (!row) { return; }`).
+ * @param {''|'aliases'} [options.initialPane=''] - issue 238 D4: 'aliases' lands the wizard on the Routing step (amicus aliases --ui)
  */
 function buildSetupHTML(options = {}) {
   const {
@@ -38,6 +39,7 @@ function buildSetupHTML(options = {}) {
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
     shortlists = {},
     aliases = getDefaultAliases(),               // issue 213
+    initialPane = '',
   } = options;
   // Council A1 (PR 215): a pick reaching the page WITHOUT canonicalRoutes makes
   // pickRouteFor fall back to the raw openrouter/... route, which this codebase
@@ -80,11 +82,11 @@ function buildSetupHTML(options = {}) {
     </div>
   </div>
   <div class="footer"><div class="footer-brand"><svg width="15" height="15" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg> ${brandName}</div><div class="footer-nav"><button class="nav-btn" id="back-btn" style="display:none">Back</button><button class="nav-btn primary" id="next-btn" disabled>Next</button><button class="nav-btn primary" id="finish-btn" style="display:none">Finish</button></div></div>
-${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson)}
+${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson, initialPane === 'aliases' ? 3 : 1)}
 </body></html>`;
 }
 
-function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson) {
+function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson, initialStep = 1) {
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
   const councilJs = buildCouncilScript();
@@ -96,6 +98,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
 
   var providers = ${providersJson};
   var currentStep = 1, configuredKeys = {}, keyHints = {};
+  var INITIAL_STEP = ${initialStep};
   var selectedProvider = null;
   var modelChoicesData = ${modelChoicesJson};
   var providerNamesData = ${providerNamesJson};
@@ -143,6 +146,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         window.configuredKeys = configuredKeys;
         window.refreshCouncilGating && window.refreshCouncilGating();
         updateNextState();
+        if (currentStep === 3) { updateAliasRoutes(); }
         if (data.imported && data.imported.length > 0) {
           var notice = document.getElementById('import-notice');
           if (notice) {
@@ -802,6 +806,11 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   ${providerDefaultJs}
 
   ${localJs}
+
+  // issue 238 D4 (amicus aliases --ui): land on the Routing step. LAST on
+  // purpose -- showStep(3) runs updateAliasRoutes and ensureCatalogLoaded,
+  // which every fragment above must have defined. 1 for the plain wizard.
+  if (INITIAL_STEP !== 1) { showStep(INITIAL_STEP); }
 </script>`;
 }
 

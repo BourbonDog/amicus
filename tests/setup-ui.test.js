@@ -1153,3 +1153,22 @@ describe('F11: the Finish handler is bound to collectAliasWrites (not a stand-in
     expect(call).toMatch(/sidecar:save-config['"],\s*dm,\s*aliasWrites/);
   });
 });
+
+describe('#238 D4: initialPane lands the wizard on a step', () => {
+  it('defaults to step 1 and never calls showStep at load', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).toContain('var INITIAL_STEP = 1;');
+    expect(script).toMatch(/if \(INITIAL_STEP !== 1\) \{ showStep\(INITIAL_STEP\); \}/);
+  });
+  it('initialPane: "aliases" → step 3, and the call sits AFTER every fragment (so the step hooks it runs are defined)', () => {
+    const script = buildSetupHTML({ initialPane: 'aliases' }).match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).toContain('var INITIAL_STEP = 3;');
+    const callIdx = script.indexOf('if (INITIAL_STEP !== 1) { showStep(INITIAL_STEP); }');
+    expect(callIdx).toBeGreaterThan(script.indexOf('function buildModelSelect('));   // after the alias fragment
+    expect(callIdx).toBeGreaterThan(script.lastIndexOf('addEventListener('));        // after the last listener wiring
+    expect(script.trim().endsWith('if (INITIAL_STEP !== 1) { showStep(INITIAL_STEP); }')).toBe(true);
+  });
+  it('an unknown pane is step 1', () => {
+    expect(buildSetupHTML({ initialPane: 'keys' })).toContain('var INITIAL_STEP = 1;');
+  });
+});
