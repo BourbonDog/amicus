@@ -405,4 +405,13 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(await runReview({}, t.deps)).toBe(0);
     expect(t.out()).toContain('Nothing to review — 2 aliases, all following or up to date.');
   });
+
+  test('a proposal without a dismissKey offers no "never ask again" (owner mode, #238 Phase 2; mutant NODISMISS)', async () => {
+    // `models` non-empty, or runReview refuses with "no catalog" before any menu renders
+    const t = makeDeps({ proposals: [{ ...glm, dismissKey: null }], answers: ['4'], models: [{ id: 'openrouter/z-ai/glm-5.3' }, { id: 'openrouter/z-ai/glm-5.4' }] }); // [1] accept [2] follow [3] choose another [4] skip
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).not.toContain('never ask again');
+    expect(t.out()).toContain('[4] skip');
+    expect(t.out()).not.toContain('[5]');
+  });
 });

@@ -75,7 +75,11 @@ function menuFor(p) {
   });
   items.push({ label: 'choose another', action: 'choose' });
   items.push({ label: 'skip', action: 'skip' });
-  items.push({ label: 'never ask again', action: 'dismiss' });
+  // #238 Phase 2 (owner mode): a proposal with no dismissKey cannot be
+  // dismissed -- the shipped pin set carries no dismissal state -- so the item
+  // is not offered rather than offered and refused. Mutant NODISMISS: push it
+  // unconditionally.
+  if (p.dismissKey) { items.push({ label: 'never ask again', action: 'dismiss' }); }
   return items;
 }
 

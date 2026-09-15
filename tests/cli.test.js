@@ -1135,6 +1135,15 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('aliases command', () => {
+    test('--owner is a boolean flag alongside --review, positionals intact', () => {
+      const args = parseArgs(['aliases', '--review', '--owner']);
+      expect(args.owner).toBe(true);
+      expect(args.review).toBe(true);
+      expect(args._).toEqual(['aliases']);
+    });
+  });
+
   describe('usage text includes new options', () => {
     test('--no-mcp appears in usage', () => {
       const { getUsage } = require('../src/cli');

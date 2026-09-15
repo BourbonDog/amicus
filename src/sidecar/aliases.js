@@ -5,6 +5,8 @@
  *   amicus aliases            list: following / pinned, grouped by vendor
  *   amicus aliases --review   picker over every proposal (aliases-review.js)
  *   amicus aliases --json     versioned document: rows + proposals
+ *   amicus aliases --review --owner   maintainers: the same picker over the SHIPPED pins (aliases-owner.js)
+ *   amicus aliases --unpin <name>   remove a pin (aliases-unpin.js)
  *
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
@@ -141,7 +143,9 @@ function sameGatewayNote(r) {
  * gets. The date rides the row; the ruling follows on a continuation line.
  * Provenance (#249 r2 C4 rule): `retired` is the shipped data file authored
  * by the owner — house bytes, not third-party, so it is printed as-is.
- * Mutant RETIREDFLAG: return '' unconditionally.
+ * Mutant RETIREDFLAG: return { flag: '', ruling: null } unconditionally.
+ * @param {{alias:string, state:string}} r
+ * @param {object|undefined} retired
  * @returns {{flag: string, ruling: string|null}} the row suffix and the ruling line, or empties
  */
 function retiredNote(r, retired) {
@@ -217,6 +221,10 @@ function buildAliasesDoc(view) {
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleAliases(args) {
+  if (args.owner && !args.review) {
+    process.stderr.write('Error: --owner requires --review (amicus aliases --review --owner)\n');
+    return 1;
+  }
   if (args.review && (args.json || args.quiet)) {
     process.stderr.write('Error: --review is interactive; use `amicus aliases --json` for machine output\n');
     return 1;
@@ -228,7 +236,11 @@ async function handleAliases(args) {
     }
     return require('./aliases-unpin').handleUnpin(args.unpin);           // handleUnpin trims/validates (R1): true, 42, '', '  ', 'null' all land the same error
   }
-  if (args.review) { return require('./aliases-review').runReview(args); }
+  if (args.review) {
+    return args.owner
+      ? require('./aliases-owner').runOwnerReview(args)
+      : require('./aliases-review').runReview(args);
+  }
   const d = loadDeps();
   const view = await collectAliasView({ maxAgeMs: Number.POSITIVE_INFINITY }, d);
   if (args.json) {
