@@ -5,6 +5,7 @@ const { buildAliasEditorHTML } = require('./setup-ui-aliases');
 const { buildWizardCSS } = require('./setup-ui-styles');
 const { buildKeysScript } = require('./setup-ui-keys-script');
 const { buildAliasScript } = require('./setup-ui-alias-script');
+const { buildAliasStateScript } = require('./setup-ui-alias-state');
 const { buildCouncilSectionHTML, buildCouncilScript } = require('./setup-ui-council');
 const { buildProviderDefaultSectionHTML, buildProviderDefaultScript } = require('./setup-ui-provider-default');
 const { buildLocalSectionHTML } = require('./setup-ui-local');
@@ -87,6 +88,7 @@ ${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultA
 function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson) {
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
+  const aliasStateJs = buildAliasStateScript();
   const councilJs = buildCouncilScript();
   const providerDefaultJs = buildProviderDefaultScript();
   const localJs = buildLocalScript();
@@ -794,6 +796,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   });
 
   ${aliasJs}
+
+  ${aliasStateJs}
 
   ${keysJs}
 

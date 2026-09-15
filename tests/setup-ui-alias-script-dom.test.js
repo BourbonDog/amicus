@@ -143,3 +143,78 @@ describe('emitted alias script', () => {
     expect(() => new Function(buildAliasScript())).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// issue 238 D1/R1 (Phase 3): the remove handler's three shapes of row. Before
+// this, the non-default branch ran `delete aliasEdits[alias]`, which stages
+// NOTHING -- so × on a SAVED custom alias struck the row through and the
+// alias survived Finish (a silent no-op). Mutant CUSTOMDELETE: put `delete`
+// back.
+// ---------------------------------------------------------------------------
+const { createFakeDocument } = require('./helpers/fake-dom');
+const { buildAliasStateScript } = require('../electron/setup-ui-alias-state');
+
+function loadRemoveHandler({ aliasEdits, defaultAliases, document }) {
+  const aliasSrc = buildAliasScript();
+  const stateSrc = buildAliasStateScript();
+  const handler = aliasSrc.match(/ {2}\/\/ Alias editor: remove[\s\S]*?\n {2}\}\);/);
+  const counts = aliasSrc.match(/ {2}function refreshAliasCounts\(\) \{[\s\S]*?\n {2}\}/);
+  expect(handler).toBeTruthy();
+  expect(counts).toBeTruthy();
+  // eslint-disable-next-line no-new-func
+  new Function('aliasEdits', 'defaultAliases', 'document', 'window', '$',
+    `${stateSrc}\n${counts[0]}\n${handler[0]}`)(aliasEdits, defaultAliases, document, {}, (id) => document.getElementById(id));
+}
+
+function rowWith(document, { alias, model, kind, inNewRoutes = false }) {
+  const group = document.createElement('details'); group.className = 'alias-group';
+  if (inNewRoutes) { group.setAttribute('data-new-routes', '1'); }
+  const count = document.createElement('span'); count.className = 'alias-count'; group.appendChild(count);
+  const row = document.createElement('div'); row.className = 'alias-row'; row.setAttribute('data-alias', alias); row.setAttribute('data-state', 'pinned');
+  const m = document.createElement('span'); m.className = 'alias-model'; m.textContent = model;
+  const s = document.createElement('span'); s.className = 'alias-state alias-state-pinned'; s.textContent = 'pinned';
+  const b = document.createElement('button'); b.className = 'alias-delete'; b.setAttribute('data-alias', alias); b.setAttribute('data-kind', kind); b.textContent = kind === 'unpin' ? 'unpin' : '×';
+  row.appendChild(m); row.appendChild(s); row.appendChild(b);
+  group.appendChild(row);
+  document.body.appendChild(group);
+  return { row, btn: b, group };
+}
+
+describe('alias editor remove handler (issue 238 R1)', () => {
+  const defaultAliases = Object.assign(Object.create(null), { glm: 'openrouter/z-ai/glm-5.3' });
+
+  it('× on a SAVED custom row stages null (the key is removed at Finish) and strikes the row out', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'mine', model: 'openrouter/x/y', kind: 'delete' });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(aliasEdits.mine).toBeNull();                       // CUSTOMDELETE dies here
+    expect(Object.prototype.hasOwnProperty.call(aliasEdits, 'mine')).toBe(true);
+    expect(row.classList.contains('alias-deleted')).toBe(true);
+  });
+
+  it('[unpin] on a curated pin stages null, shows the shipped id and labels the row following — no strike-through', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'glm', model: 'openrouter/z-ai/glm-5.2', kind: 'unpin' });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(aliasEdits.glm).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('openrouter/z-ai/glm-5.3');
+    expect(row.getAttribute('data-state')).toBe('following');
+    expect(row.classList.contains('alias-deleted')).toBe(false);
+    expect(btn.hidden).toBe(true);
+  });
+
+  it('× on a row added THIS session removes the row and stages nothing (it was never on disk)', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.assign(Object.create(null), { fresh: 'openrouter/x/new' });
+    const { row, btn, group } = rowWith(document, { alias: 'fresh', model: 'openrouter/x/new', kind: 'delete', inNewRoutes: true });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(Object.prototype.hasOwnProperty.call(aliasEdits, 'fresh')).toBe(false);
+    expect(row.parentNode).toBeNull();
+    expect(group.parentNode).toBeNull();                      // refreshAliasCounts drops the empty new-routes group
+  });
+});
