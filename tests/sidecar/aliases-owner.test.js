@@ -18,14 +18,30 @@
  * b803a2a.json` snapshot, which never moves, plus one cheap assertion that
  * the LIVE shipped file also holds the invariant today.
  *
- * Named mutants (measured red against this file — see the table in the
- * fix-round-1 section of task-3-report.md for the full command + suite/test
- * names):
+ * Named mutants, MEASURED red (fix round 1, command:
+ * `npx jest tests/sidecar/aliases-owner.test.js tests/sidecar/aliases-review.test.js`,
+ * one mutant applied at a time, restored on the committed tree after each):
  *   GATEPREFIX — ownerGate ignores a non-empty `--show-prefix`.
+ *     RED: aliases-owner.test.js > ownerGate > "refuses an installed copy — a
+ *     non-empty --show-prefix (mutant GATEPREFIX)".
  *   DIRTYTREE  — ownerGate ignores a non-empty `status --porcelain`.
+ *     RED: aliases-owner.test.js > ownerGate > "refuses a dirty tree — a
+ *     non-empty porcelain status (mutant DIRTYTREE)".
  *   PROVREFUSE — the sink calls setPinRoute with providerOf(id) instead of the pass's namespace.
- *   NODISMISS  — menuFor pushes `never ask again` unconditionally.
+ *     RED: aliases-owner.test.js > runOwnerReview > "choose another with an
+ *     id from another namespace is refused by the sink in EITHER direction,
+ *     document unchanged (mutant PROVREFUSE)" — visibly: gemini's GOOGLE
+ *     route is silently rewritten while the openrouter pass is refusing it.
  *   SAVEFIRST  — the sink assigns `doc = next` before saveCuratedPins (a failed write would be kept in memory).
+ *     RED: aliases-owner.test.js > runOwnerReview > "a failed write keeps the
+ *     in-memory document unchanged, so a later accept does not carry it
+ *     (mutant SAVEFIRST)".
+ *   NODISMISS  — menuFor pushes `never ask again` unconditionally.
+ *     RED (2 tests): aliases-owner.test.js > runOwnerReview > "one pass per
+ *     namespace: a namespace with no authoritative row is announced and
+ *     skipped; a failed one too"; and aliases-review.test.js > "aliases
+ *     --review (#238 §4, Q2, Q4)" > 'a proposal without a dismissKey offers
+ *     no "never ask again" (owner mode, #238 Phase 2; mutant NODISMISS)'.
  */
 const fs = require('fs');
 const os = require('os');
