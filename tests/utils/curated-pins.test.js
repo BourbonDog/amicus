@@ -181,6 +181,15 @@ describe('loadCuratedPins', () => {
 });
 
 describe('the SHIPPED file — a JSON syntax error is a loud, named load-time failure (F2, #238 council r1 B2/C2/D4)', () => {
+  // The mock MUST clear even if the assertion below fails, or a `jest.doMock`
+  // this specific ('.../curated-pins.json') leaks into every later test in
+  // this file that freshly requires curated-pins.js -- MEASURED: an
+  // unguarded `jest.dontMock` placed after a failing `expect` never runs
+  // (the throw aborts the rest of the test body first), and the very next
+  // describe block's "round trip" test then fails collaterally because its
+  // OWN `jest.requireActual('../../src/utils/curated-pins')` transitively
+  // re-requires the still-mocked, still-throwing '.../curated-pins.json'.
+  afterEach(() => { jest.dontMock('../../src/utils/curated-pins.json'); });
   test('a require() SyntaxError on the shipped file is wrapped with the curated-pins.json: prefix and path, never a silent empty pin set', () => {
     jest.isolateModules(() => {
       jest.doMock('../../src/utils/curated-pins.json', () => {
@@ -188,7 +197,6 @@ describe('the SHIPPED file — a JSON syntax error is a loud, named load-time fa
       });
       expect(() => require('../../src/utils/curated-pins')).toThrow(/^curated-pins\.json: .*Unexpected token/);
     });
-    jest.dontMock('../../src/utils/curated-pins.json');
   });
 });
 
