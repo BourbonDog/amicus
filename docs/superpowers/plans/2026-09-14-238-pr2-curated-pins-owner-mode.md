@@ -517,7 +517,7 @@ describe('curated-models over the b803a2a data file', () => {
 - [ ] **Step 8: Run it to verify it fails**
 
 Run: `npx jest tests/curated-models-move.test.js`
-Expected: the byte-identity test PASSES already (the real module ignores the mocked loader today — a preservation pin is green by construction, see Global Constraints), and `a family without a pin…` FAILS (nothing throws yet). That is the expected split; the mutants in Step 11 prove the green one.
+Expected split (the loader from Step 5 exists, so the mock installs; `curated-models.js` is still the OLD module, which never calls it): `the live shipped file today`, `every builder is byte-identical…` (a preservation pin — green by construction, see Global Constraints), `the b803a2a fixtures still describe…` and `Appendix A field presence` PASS; `a family without a pin…` (nothing throws yet) and `a family pin may carry gatewayOnly…` (the old module ignores the data file) FAIL. The mutants in Step 11 prove the green ones.
 
 - [ ] **Step 9: Rewrite `src/utils/curated-models.js`**
 
