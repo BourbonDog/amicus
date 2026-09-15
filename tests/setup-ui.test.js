@@ -1090,8 +1090,8 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const script = localHtml.match(/<script>([\s\S]*)<\/script>/)[1];
     const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
     const updateMatch = script.match(/function updateWritePreviews\(\) \{[\s\S]*?\n {2}\}/);
-    // issue 238 Q9: the note text comes from describeDefaultWrite (setup-ui-alias-state.js).
-    const noteFns = ['isCuratedAlias', 'describeDefaultWrite'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
+    // issue 238 Q9: the note text comes from describeDefaultWrite / defaultWasChosen (setup-ui-alias-state.js).
+    const noteFns = ['isCuratedAlias', 'describeDefaultWrite', 'defaultWasChosen'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
     expect(pickRouteForMatch).toBeTruthy();
     expect(updateMatch).toBeTruthy();
     noteFns.forEach(m => expect(m).toBeTruthy());
@@ -1099,13 +1099,16 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const build = new Function(
       'routingChoices', 'configuredKeys', 'explicitRouteChoices',
       'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window', 'defaultAliases',
+      'restoredDefault', 'defaultTouched',
       `${pickRouteForMatch[0]}\n${noteFns.map(m => m[0]).join('\n')}\n${updateMatch[0]}\nreturn updateWritePreviews;`
     );
     return (opts = {}) => build(
       opts.routingChoices || {}, opts.configuredKeys || {}, opts.explicitRouteChoices || {},
       opts.modelChoiceIds || {}, opts.modelOpenrouterIds || {},
       opts.modelChoicesData || [], opts.document, opts.window,
-      Object.assign(Object.create(null), opts.defaultAliases || {})
+      Object.assign(Object.create(null), opts.defaultAliases || {}),
+      opts.restoredDefault === undefined ? null : opts.restoredDefault,
+      !!opts.defaultTouched
     );
   }
 
@@ -1182,6 +1185,27 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     expect(notes.gemini.textContent).toBe('live flagship differs from the shipped google/gemini-old — pinned');
     expect(notes.deepseek).toBeUndefined();   // only the selected card gets a note
   });
+
+  test('issue 238 Q9 ruling: a RESTORED, untouched default says so instead of claiming a pin it will not make', () => {
+    const notes = {};
+    const previewEl = (alias) => ({
+      getAttribute: (n) => (n === 'data-alias' ? alias : null),
+      classList: { toggle: () => {} },
+      querySelector: (sel) => (sel === '.write-preview-note' ? (notes[alias] = notes[alias] || { textContent: '' }) : { textContent: '' }),
+    });
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }),
+      querySelectorAll: (selector) => (selector === '.write-preview' ? [previewEl('gemini')] : []),
+    };
+    const run = (restoredDefault, defaultTouched) => extractUpdateWritePreviews()({
+      modelChoicesData: twoCardData, document: fakeDocument, window: { customDefaultModel: null },
+      defaultAliases: { gemini: 'google/gemini-x' }, restoredDefault, defaultTouched,
+    })();
+    run('gemini', false);
+    expect(notes.gemini.textContent).toBe('restored from your config — not re-written unless you choose it');
+    run('gemini', true);
+    expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
+  });
 });
 
 // F11: `grep -rn finishBtn tests/` returned 0 repo-wide before this fix --
@@ -1243,5 +1267,16 @@ describe('#238 D4: initialPane lands the wizard on a step', () => {
   });
   it('an unknown pane is step 1', () => {
     expect(buildSetupHTML({ initialPane: 'keys' })).toContain('var INITIAL_STEP = 1;');
+  });
+});
+
+describe('issue 238: setup-ui.js reads rows through the state helpers', () => {
+  it('applyAliasEditsToUI no longer builds a selector by interpolating the alias name', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).not.toMatch(/\.alias-row\[data-alias="' \+/);
+  });
+  it('updateAliasRoutes reads the staged value through stagedValueFor', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).toContain('stagedValueFor(row)');
   });
 });

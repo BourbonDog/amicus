@@ -128,10 +128,19 @@ function buildAliasStateScript() {
 
   document.addEventListener('change', function(e) {
     var t = e.target;
-    if (t && (t.name === 'default-model' || (t.closest && t.closest('.model-pick')))) { defaultTouched = true; }
+    if (t && (t.name === 'default-model' || (t.closest && t.closest('.model-pick')))) {
+      defaultTouched = true;
+      // issue 238 Q9 ruling: setup-ui.js's OWN change handler already called
+      // updateWritePreviews() before this listener flips defaultTouched --
+      // refresh again now so the note reflects the touch immediately.
+      if (typeof updateWritePreviews === 'function') { updateWritePreviews(); }
+    }
   });
   document.addEventListener('click', function(e) {
-    if (e.target && e.target.closest && e.target.closest('.route-pill')) { defaultTouched = true; }
+    if (e.target && e.target.closest && e.target.closest('.route-pill')) {
+      defaultTouched = true;
+      if (typeof updateWritePreviews === 'function') { updateWritePreviews(); }
+    }
   });
 
   // The default was CHOSEN this session when the user touched Step 2's

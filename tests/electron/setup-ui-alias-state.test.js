@@ -167,7 +167,13 @@ describe('defaultWasChosen — Q9: a restored default is not a choice (R-P3-6)',
   it('the page listeners flip defaultTouched on a radio change, a drill-down change and a route-pill click', () => {
     const { document } = createFakeDocument();
     const { fns } = loadStateScript({ document, restoredDefault: 'gemini' });
-    const r = document.createElement('input'); r.name = 'default-model'; document.body.appendChild(r);
+    const r = document.createElement('input');
+    // fake-dom has no attribute/property reflection (only `id` gets it) --
+    // set the attribute (so the :checked/[name=] selector finds it) AND the
+    // plain property (so the listener's own `t.name` check fires), matching
+    // what a real <input name="..."> gives both code paths for free.
+    r.setAttribute('name', 'default-model'); r.name = 'default-model'; r.value = 'gemini'; r.checked = true;
+    document.body.appendChild(r);
     expect(fns.defaultWasChosen()).toBe(false);
     r.dispatch('change');
     expect(fns.defaultWasChosen()).toBe(true);
@@ -193,6 +199,14 @@ describe('foldShippedWrites — Q4 applied to a write map (mutant FOLD: return w
     expect(out.mine).toBe('openrouter/x/y');
     expect(out.gone).toBeNull();
     expect(Object.getPrototypeOf(out)).toBeNull();
+  });
+  it('folding is keyed to the WRITTEN alias\'s own shipped id, never any other alias\'s', () => {
+    // a custom name is never curated, even when its value happens to equal
+    // some OTHER alias's shipped id -- a custom alias always pins (Q4).
+    expect(fns.foldShippedWrites({ mine: 'google/gemini-x' }).mine).toBe('google/gemini-x');
+    // glm is curated, but 'google/gemini-x' is gemini's shipped id, not glm's
+    // own ('openrouter/z-ai/glm-5.3') -- must not fold against the wrong key.
+    expect(fns.foldShippedWrites({ glm: 'google/gemini-x' }).glm).toBe('google/gemini-x');
   });
 });
 

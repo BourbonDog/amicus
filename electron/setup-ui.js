@@ -278,6 +278,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var row = aliasRowFor(k);
       if (!row) { return; }
       if (aliasEdits[k] === null) {
+        var span = row.querySelector('.alias-model');
+        if (span) { span.textContent = defaultAliases[k] || ''; }
         if (!isCuratedAlias(k)) { row.classList.add('alias-deleted'); }
         refreshAliasRowState(row);
         return;
@@ -480,15 +482,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
     document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
-    // F4 + N1 (council review, PR 196) + issue 238 Q9: the Review step must
-    // show EXACTLY what Finish sends, so both call finishPlan() (setup-ui-
-    // alias-state.js) -- collectAliasWrites gated on a CHOSEN default and
+    // F4 + N1 + N-b (council review, PR 196) + issue 238 Q9: the Review step
+    // must show EXACTLY what Finish sends, so both call finishPlan() (setup-
+    // ui-alias-state.js) -- collectAliasWrites gated on a CHOSEN default and
     // folded through Q4's encoding -- and this screen shows only entries that
     // differ from what is on disk (savedAliases), because a value-identical
     // re-write is the normal case on a plain reopen and must not read as
     // "N alias(es) modified" on the one screen with no confirmation after it.
     // N-b: a key absent from savedAliases reads as null, so a removal of a
     // never-saved key compares equal to "still absent".
+    // saveConfig drops null/falsy alias values (src/utils/config.js), so such a write is a true
+    // no-op on disk and the review must agree; every other savedAliases value here is a non-empty string.
     var plan = finishPlan();
     var aliasWritesPreview = plan.writes;
     // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
@@ -550,12 +554,14 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // default was merely restored, not chosen, and its Step 2 stage must not
   // run), the selected alias's resolved route -- the ONE place clobbering an
   // aliasEdits entry is permitted (user-locked decision #2). Then every
-  // OTHER alias whose drill-down <select> fired change (or that F3's init
+  // OTHER alias whose drill-down <select> fired change (without this stage a
+  // drilled-down pick on a card that is NOT the checked default would
+  // silently vanish -- issue 138 fix round 1, Finding 1) (or that F3's init
   // restore seeded from cfg.aliases -- the normal reopen case, a
   // value-identical write), written only when Step 3 left it untouched
-  // (hasOwnProperty, not \`in\`: aliasEdits[alias] === null is a MEANINGFUL
-  // delete). finishPlan folds the result through Q4's encoding; buildReview
-  // hides value-identical entries.
+  // (hasOwnProperty, not a truthiness check: aliasEdits[alias] === null is a
+  // MEANINGFUL delete). finishPlan folds the result through Q4's encoding;
+  // buildReview hides value-identical entries.
   function collectAliasWrites(selectedAlias, isCustomDefault) {
     // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
     var aliasWrites = Object.create(null);
@@ -727,9 +733,11 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var routeId = pickRouteFor(mc);
       var idEl = el.querySelector('.write-preview-id');
       if (idEl && routeId) { idEl.textContent = routeId; }
-      // issue 238 Q9: name the shipped id when the live pick differs from it.
+      // issue 238 Q9: name the shipped id when the live pick differs from it --
+      // but a restored, untouched default writes NOTHING for it (finishPlan),
+      // so its note must say that instead of claiming a pin it will not make.
       var noteEl = el.querySelector('.write-preview-note');
-      if (noteEl) { noteEl.textContent = describeDefaultWrite(alias, routeId); }
+      if (noteEl) { noteEl.textContent = defaultWasChosen() ? describeDefaultWrite(alias, routeId) : 'restored from your config \\u2014 not re-written unless you choose it'; }
     });
     // issue 138: keep the resolved-id line in step with the route/model choice.
     document.querySelectorAll('.model-resolved').forEach(function(el) {
