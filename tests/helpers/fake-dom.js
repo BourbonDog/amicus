@@ -6,14 +6,15 @@
  * exactly what electron/setup-ui-alias-*.js use: createElement, append /
  * insertBefore / remove / replaceWith, closest / querySelector(All) over
  * simple selectors (`tag`, `#id`, `.cls`, `[attr]`, `[attr="v"]`, `:not(.cls)`,
- * compound and descendant combinations), classList, get/set/hasAttribute,
- * addEventListener + a bubbling `dispatch`, `hidden`, `open`, `disabled`,
- * `value`, `textContent` (leaf text only — never composed from children).
+ * `:checked`, compound and descendant combinations), classList,
+ * get/set/hasAttribute, addEventListener + a bubbling `dispatch`, `hidden`,
+ * `open`, `disabled`, `checked`, `value`, `textContent` (leaf text only —
+ * never composed from children).
  */
 
 function parseCompound(sel) {
-  const out = { tag: null, id: null, classes: [], attrs: [], not: [] };
-  const re = /^([a-z]+)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\]|:not\(\.([\w-]+)\)/g;
+  const out = { tag: null, id: null, classes: [], attrs: [], not: [], checked: false };
+  const re = /^([a-z]+)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\]|:not\(\.([\w-]+)\)|:checked/g;
   let m;
   let consumed = 0;
   while ((m = re.exec(sel)) !== null) {
@@ -27,6 +28,7 @@ function parseCompound(sel) {
     else if (m[3]) { out.classes.push(m[3]); }
     else if (m[4]) { out.attrs.push([m[4], m[5]]); }
     else if (m[6]) { out.not.push(m[6]); }
+    else if (m[0] === ':checked') { out.checked = true; }
   }
   if (consumed !== sel.length) { throw new Error('fake-dom: unsupported selector: ' + sel); }
   return out;
@@ -38,6 +40,7 @@ function matchesCompound(el, c) {
   if (c.id && el.getAttribute('id') !== c.id) { return false; }
   if (c.classes.some(k => !el.classList.contains(k))) { return false; }
   if (c.not.some(k => el.classList.contains(k))) { return false; }
+  if (c.checked && !el.checked) { return false; }
   return c.attrs.every(([name, value]) => (value === undefined ? el.hasAttribute(name) : el.getAttribute(name) === value));
 }
 
@@ -76,6 +79,7 @@ class FakeElement {
     this.open = false;
     this.disabled = false;
     this.selected = false;
+    this.checked = false;
     const classes = new Set();
     this.classList = {
       add: (...ks) => ks.forEach(k => classes.add(k)),

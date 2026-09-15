@@ -14,14 +14,22 @@ const { createFakeDocument } = require('../helpers/fake-dom');
 const DEFAULTS = { gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.3' };
 
 /** Extracts every named function declaration of the fragment and binds the page globals. */
-function loadStateScript({ aliasEdits = Object.create(null), defaultAliases = DEFAULTS, document } = {}) {
+function loadStateScript({ aliasEdits = Object.create(null), defaultAliases = DEFAULTS, document, window = {}, restoredDefault = null, defaultTouched = false, collectAliasWrites = () => Object.create(null) } = {}) {
   const src = buildAliasStateScript();
   const names = [...src.matchAll(/^ {2}function (\w+)\(/gm)].map(m => m[1]);
-  expect(names).toEqual(expect.arrayContaining(['isCuratedAlias', 'aliasStateFor', 'aliasRowFor', 'stagedValueFor', 'refreshAliasRowState', 'unpinAliasRow', 'stageAliasWrite']));
+  expect(names).toEqual(expect.arrayContaining(['isCuratedAlias', 'aliasStateFor', 'aliasRowFor', 'stagedValueFor', 'refreshAliasRowState', 'unpinAliasRow', 'stageAliasWrite',
+    'defaultWasChosen', 'foldShippedWrites', 'describeDefaultWrite', 'finishPlan']));
+  // The fragment declares restoredDefault/defaultTouched/stagedDismissals itself; the
+  // harness seeds them AFTER the declarations run, through the returned setters.
   // eslint-disable-next-line no-new-func
-  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', `${src}\nreturn { ${names.join(', ')} };`);
+  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', 'collectAliasWrites',
+    `${src}\nreturn { ${names.join(', ')}, set: function(k, v) { if (k === 'restoredDefault') { restoredDefault = v; } if (k === 'defaultTouched') { defaultTouched = v; } if (k === 'stagedDismissals') { stagedDismissals = v; } }, stagedDismissals: function() { return stagedDismissals; } };`);
   const defaults = Object.assign(Object.create(null), defaultAliases);
-  return { fns: factory(aliasEdits, defaults, document, {}), aliasEdits };
+  const doc = document || { querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {} };
+  const fns = factory(aliasEdits, defaults, doc, window, collectAliasWrites);
+  fns.set('restoredDefault', restoredDefault);
+  fns.set('defaultTouched', defaultTouched);
+  return { fns, aliasEdits };
 }
 
 /** A server-shaped row: name, arrow, model, state label, control by kind. */
@@ -144,5 +152,86 @@ describe('stageAliasWrite — Q4: the shipped id means follow', () => {
     const { fns } = loadStateScript({ aliasEdits, document });
     expect(fns.stageAliasWrite('atlas', 'openrouter/x/atlas-1')).toBe('pinned');
     expect(aliasEdits.atlas).toBe('openrouter/x/atlas-1');
+  });
+});
+
+describe('defaultWasChosen — Q9: a restored default is not a choice (R-P3-6)', () => {
+  const radio = (value) => ({ querySelector: (sel) => (sel === 'input[name="default-model"]:checked' ? { value } : null), querySelectorAll: () => [], addEventListener: () => {} });
+  it('restored and untouched → false; a different radio → true; touched → true; fresh config (nothing restored) → true (mutant RESTOREDWRITE)', () => {
+    expect(loadStateScript({ document: radio('gemini'), restoredDefault: 'gemini' }).fns.defaultWasChosen()).toBe(false);
+    expect(loadStateScript({ document: radio('deepseek'), restoredDefault: 'gemini' }).fns.defaultWasChosen()).toBe(true);
+    expect(loadStateScript({ document: radio('gemini'), restoredDefault: 'gemini', defaultTouched: true }).fns.defaultWasChosen()).toBe(true);
+    expect(loadStateScript({ document: radio('gemini'), restoredDefault: null }).fns.defaultWasChosen()).toBe(true);
+    expect(loadStateScript({ document: radio(undefined), restoredDefault: 'gemini' }).fns.defaultWasChosen()).toBe(true); // a radio with no value is still "not the restored one"
+  });
+  it('the page listeners flip defaultTouched on a radio change, a drill-down change and a route-pill click', () => {
+    const { document } = createFakeDocument();
+    const { fns } = loadStateScript({ document, restoredDefault: 'gemini' });
+    const r = document.createElement('input'); r.name = 'default-model'; document.body.appendChild(r);
+    expect(fns.defaultWasChosen()).toBe(false);
+    r.dispatch('change');
+    expect(fns.defaultWasChosen()).toBe(true);
+    const { document: d2 } = createFakeDocument();
+    const { fns: f2 } = loadStateScript({ document: d2, restoredDefault: 'gemini' });
+    const pill = d2.createElement('span'); pill.className = 'route-pill'; d2.body.appendChild(pill);
+    pill.click();
+    expect(f2.defaultWasChosen()).toBe(true);
+    const { document: d3 } = createFakeDocument();
+    const { fns: f3 } = loadStateScript({ document: d3, restoredDefault: 'gemini' });
+    const sel = d3.createElement('select'); sel.className = 'model-pick'; d3.body.appendChild(sel);
+    sel.dispatch('change');
+    expect(f3.defaultWasChosen()).toBe(true);
+  });
+});
+
+describe('foldShippedWrites — Q4 applied to a write map (mutant FOLD: return writes unchanged)', () => {
+  const { fns } = loadStateScript();
+  it('a curated write equal to the shipped id becomes null; other writes pass through; the result is null-prototype', () => {
+    const out = fns.foldShippedWrites({ gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.4', mine: 'openrouter/x/y', gone: null });
+    expect(out.gemini).toBeNull();
+    expect(out.glm).toBe('openrouter/z-ai/glm-5.4');
+    expect(out.mine).toBe('openrouter/x/y');
+    expect(out.gone).toBeNull();
+    expect(Object.getPrototypeOf(out)).toBeNull();
+  });
+});
+
+describe('describeDefaultWrite — the Step 2 announcement names both ids (§6.5)', () => {
+  const { fns } = loadStateScript();
+  it('equal → follows; different → live flagship + the shipped id + pinned; custom → pinned; empty → empty', () => {
+    expect(fns.describeDefaultWrite('gemini', 'google/gemini-x')).toBe('follows the shipped recommendation');
+    expect(fns.describeDefaultWrite('gemini', 'google/gemini-y')).toBe('live flagship differs from the shipped google/gemini-x — pinned');
+    expect(fns.describeDefaultWrite('mine', 'openrouter/x/y')).toBe('pinned');
+    expect(fns.describeDefaultWrite('gemini', '')).toBe('');
+    expect(fns.describeDefaultWrite('gemini', null)).toBe('');
+  });
+});
+
+describe('finishPlan — one computation for the Review step and the Finish button', () => {
+  const radio = (value) => ({ querySelector: (sel) => (sel === 'input[name="default-model"]:checked' ? (value ? { value } : null) : null), querySelectorAll: () => [], addEventListener: () => {} });
+  it('a restored, untouched default hands collectAliasWrites NO selected alias; a chosen one hands it the radio', () => {
+    const collect = jest.fn(() => Object.create(null));
+    loadStateScript({ document: radio('gemini'), restoredDefault: 'gemini', collectAliasWrites: collect }).fns.finishPlan();
+    expect(collect).toHaveBeenCalledWith(null, false);
+    loadStateScript({ document: radio('gemini'), restoredDefault: null, collectAliasWrites: collect }).fns.finishPlan();
+    expect(collect).toHaveBeenLastCalledWith('gemini', false);
+  });
+  it('a custom (searched) default skips the selected-alias stage and is the defaultModel', () => {
+    const collect = jest.fn(() => Object.create(null));
+    const plan = loadStateScript({ document: radio(null), window: { customDefaultModel: 'openrouter/x/searched' }, collectAliasWrites: collect }).fns.finishPlan();
+    expect(collect).toHaveBeenCalledWith(null, true);
+    expect(plan.defaultModel).toBe('openrouter/x/searched');
+  });
+  it('folds the writes and copies the staged dismissals', () => {
+    const collect = () => Object.assign(Object.create(null), { gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.4' });
+    const { fns } = loadStateScript({ document: radio('gemini'), restoredDefault: null, collectAliasWrites: collect });
+    fns.stagedDismissals().push('glm@openrouter/z-ai/glm-5.4');
+    const plan = fns.finishPlan();
+    expect(plan.defaultModel).toBe('gemini');
+    expect(plan.writes.gemini).toBeNull();
+    expect(plan.writes.glm).toBe('openrouter/z-ai/glm-5.4');
+    expect(plan.dismissals).toEqual(['glm@openrouter/z-ai/glm-5.4']);
+    plan.dismissals.push('x@y');
+    expect(fns.stagedDismissals()).toHaveLength(1);   // a copy, not the live list
   });
 });

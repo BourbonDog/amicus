@@ -119,6 +119,68 @@ function buildAliasStateScript() {
       if (group) { group.open = true; }
     }
     return s.state;
+  }
+
+  // ---- issue 238 Q9: what Finish writes for the Step 2 default ----
+  var restoredDefault = null;     // cfg.default as restored by init (setup-ui.js), null on a fresh config
+  var defaultTouched = false;     // a radio / route-pill / drill-down interaction happened this session
+  var stagedDismissals = [];      // "never ask again" keys the review section staged; Finish writes them
+
+  document.addEventListener('change', function(e) {
+    var t = e.target;
+    if (t && (t.name === 'default-model' || (t.closest && t.closest('.model-pick')))) { defaultTouched = true; }
+  });
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.closest && e.target.closest('.route-pill')) { defaultTouched = true; }
+  });
+
+  // The default was CHOSEN this session when the user touched Step 2's
+  // controls, or the checked radio is not the one init restored -- a fresh
+  // config restores nothing, so its auto-checked card counts, and its
+  // write-preview announces the pin. A restored, untouched default is not a
+  // choice: the wizard writes only what the user actively chose (Q9).
+  function defaultWasChosen() {
+    if (defaultTouched) { return true; }
+    var r = document.querySelector('input[name="default-model"]:checked');
+    return !!r && r.value !== restoredDefault;
+  }
+
+  // Q4's encoding over a whole write map: a write equal to the shipped id
+  // becomes null (remove the key = follow). saveConfig would normalize it
+  // away anyway; folding HERE keeps the Review step truthful -- "(now
+  // follows …)" or nothing, never "1 alias(es) modified" for a write that
+  // leaves disk unchanged.
+  function foldShippedWrites(writes) {
+    var out = Object.create(null);
+    Object.keys(writes).forEach(function(alias) {
+      var v = writes[alias];
+      out[alias] = (typeof v === 'string' && isCuratedAlias(alias) && v === defaultAliases[alias]) ? null : v;
+    });
+    return out;
+  }
+
+  // The Step 2 announcement (Q9, spec §6.5): both ids when the live pick
+  // differs from the shipped pin -- the readline wizard's sentence.
+  function describeDefaultWrite(alias, routeId) {
+    if (!routeId) { return ''; }
+    if (!isCuratedAlias(alias)) { return 'pinned'; }
+    if (routeId === defaultAliases[alias]) { return 'follows the shipped recommendation'; }
+    return 'live flagship differs from the shipped ' + defaultAliases[alias] + ' \\u2014 pinned';
+  }
+
+  // Everything Finish sends, computed ONE way for the Review step and the
+  // Finish button (F4: the review must never under-report the write).
+  // collectAliasWrites is unchanged: it gets NO selected alias when the
+  // default was merely restored, so its Step 2 stage does not run.
+  function finishPlan() {
+    var r = document.querySelector('input[name="default-model"]:checked');
+    var isCustom = !!window.customDefaultModel;
+    var selected = (!isCustom && r && defaultWasChosen()) ? r.value : null;
+    return {
+      defaultModel: window.customDefaultModel || (r ? r.value : null),
+      writes: foldShippedWrites(collectAliasWrites(selected, isCustom)),
+      dismissals: stagedDismissals.slice(),
+    };
   }`;
 }
 

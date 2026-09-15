@@ -172,6 +172,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     try {
       var cfg = await window.sidecarSetup.invoke('sidecar:get-config');
       if (cfg && cfg.default) {
+        // issue 238 Q9: a RESTORED default is not a choice (setup-ui-alias-state.js :: defaultWasChosen)
+        restoredDefault = cfg.default;
         document.querySelectorAll('input[name="default-model"]').forEach(function(r) {
           r.checked = (r.value === cfg.default);
         });
@@ -267,15 +269,19 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
 
   function applyAliasEditsToUI() {
     Object.keys(aliasDisplay).forEach(function(k) {
-      var row = document.querySelector('.alias-row[data-alias="' + k + '"]');
+      var row = aliasRowFor(k);
       if (!row) { return; }
       var modelSpan = row.querySelector('.alias-model');
       if (modelSpan) { modelSpan.textContent = aliasDisplay[k]; }
     });
     Object.keys(aliasEdits).forEach(function(k) {
-      var row = document.querySelector('.alias-row[data-alias="' + k + '"]');
+      var row = aliasRowFor(k);
       if (!row) { return; }
-      if (aliasEdits[k] === null) { row.classList.add('alias-deleted'); return; }
+      if (aliasEdits[k] === null) {
+        if (!isCuratedAlias(k)) { row.classList.add('alias-deleted'); }
+        refreshAliasRowState(row);
+        return;
+      }
       var modelSpan = row.querySelector('.alias-model');
       if (modelSpan) { modelSpan.textContent = aliasEdits[k]; }
     });
@@ -456,7 +462,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var modelSpan = row.querySelector('.alias-model');
       if (!modelSpan) { return; }
       // Check if the model's provider has a configured key
-      var model = aliasEdits[alias] || aliasDisplay[alias] || modelSpan.textContent;
+      var model = stagedValueFor(row);
       var prefix = model.split('/')[0];
       var noKey = false;
       if (prefix === 'openrouter') {
@@ -474,38 +480,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
     document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
-    // F4: mirror the EXACT call Finish makes (collectAliasWrites), not just
-    // the checked radio, so Step 4 can never under-report what Finish is
-    // about to write. Before this fix, buildReview re-derived "writes" from
-    // the checked radio alone -- a drilled-down pick on a card that was NOT
-    // the checked default (or any drilled pick at all, under a custom
-    // default) was invisible here and fell through to the literal 'No
-    // alias changes', even though Finish wrote it. sidecar:save-config has
-    // no confirmation step, so this review IS the only gate.
-    var aliasWritesPreview = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
-    // N1: aliasWritesPreview is EVERY alias Finish would write, including
-    // ones whose value is already what's on disk -- after the F1 fix that
-    // is the NORMAL case on a plain reopen (init below seeds modelChoiceIds
-    // from cfg.aliases, so the drilled-down alias, the recommendedId, and
-    // the saved value are now the same string by construction). Finish
-    // still writes the full map (a value-identical write is harmless), but
-    // this review must only SHOW entries that actually differ from
-    // savedAliases -- otherwise a no-op reopen reports "N alias(es)
-    // modified" on the one screen that has no confirmation step after it.
-    // N-b (council review, PR 196): an alias that was NEVER in savedAliases
-    // reads as undefined there, while a delete-write (Step 3's delete
-    // button, for one of the five default aliases -- see aliasEdits[alias]
-    // = null in setup-ui-alias-script.js) is null. null !== undefined is
-    // true, so without this normalization a default alias that was never
-    // explicitly saved (a config written by an older/partial flow that
-    // skipped default-seeding -- addAlias() in src/sidecar/setup.js is one
-    // such path) would show "alias -> (deleted)" for deleting something
-    // that was never there. saveConfig() already drops falsy alias values
-    // (src/utils/config.js), so that write is a true no-op on disk; the
-    // review must agree. Reading savedAliases[alias] as null (not
-    // undefined) when the key is absent makes "delete of an absent alias"
-    // compare equal to "still absent" without changing any other case --
-    // every other savedAliases value here is a non-empty string.
+    // F4 + N1 (council review, PR 196) + issue 238 Q9: the Review step must
+    // show EXACTLY what Finish sends, so both call finishPlan() (setup-ui-
+    // alias-state.js) -- collectAliasWrites gated on a CHOSEN default and
+    // folded through Q4's encoding -- and this screen shows only entries that
+    // differ from what is on disk (savedAliases), because a value-identical
+    // re-write is the normal case on a plain reopen and must not read as
+    // "N alias(es) modified" on the one screen with no confirmation after it.
+    // N-b: a key absent from savedAliases reads as null, so a removal of a
+    // never-saved key compares equal to "still absent".
+    var plan = finishPlan();
+    var aliasWritesPreview = plan.writes;
     // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
     var changedWrites = Object.create(null);
     Object.keys(aliasWritesPreview).forEach(function(alias) {
@@ -516,14 +501,16 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     });
     var writes = Object.keys(changedWrites).map(function(alias) {
       var val = changedWrites[alias];
-      return alias + ' \\u2192 ' + (val === null ? '(deleted)' : val);
+      // issue 238 D1: a removed key means "follows" for a curated name, "deleted" for a custom one.
+      return alias + ' \\u2192 ' + (val === null ? (isCuratedAlias(alias) ? '(now follows ' + defaultAliases[alias] + ')' : '(deleted)') : val);
     });
     document.getElementById('review-routing').textContent =
       writes.length > 0 ? writes.join(', ') : 'No alias changes';
     var editCount = Object.keys(changedWrites).length;
     var reviewAliases = document.getElementById('review-aliases');
     if (reviewAliases) {
-      reviewAliases.textContent = editCount > 0 ? editCount + ' alias(es) modified' : 'No changes';
+      reviewAliases.textContent = (editCount > 0 ? editCount + ' alias(es) modified' : 'No changes') +
+        (plan.dismissals.length > 0 ? ', ' + plan.dismissals.length + ' proposal(s) dismissed' : '');
     }
   }
 
@@ -556,41 +543,19 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     updateWritePreviews();
   });
 
-  // issue 138 (fix round 1, Finding 1; precedence description corrected in
-  // the F2/F6 fix wave; modelChoiceIds provenance corrected in the N2 fix
-  // wave): assemble aliasWrites for Finish -- the aliasEdits (Step 3)
-  // overlay first; THEN, only for a checked quick-pick default (not a
-  // custom/searched one -- isCustomDefault skips this stage entirely), the
-  // selected alias's resolved route; then every OTHER alias whose
-  // drill-down <select> fired change -- "every OTHER" means every alias
-  // but the selected one ONLY when that earlier stage ran, so under a
-  // custom default the selected alias (if it has a drilled pick) is
-  // handled by THIS stage instead, not skipped. Before the Task-3 dropdown
-  // existed there was nothing to lose by writing only the selected alias;
-  // now a drilled-down pick on a card that is NOT the checked default
-  // would silently vanish without this. Precedence is NOT uniform across
-  // the two groups, unlike an earlier version of this comment claimed:
-  // only the selected alias clobbers its aliasEdits entry (the ONE place
-  // that's permitted -- user-locked decision #2); every OTHER drilled-down
-  // alias defers to aliasEdits and is written only when Step 3 left it
-  // untouched (see the hasOwnProperty guard below and ruling R6a, which
-  // already described the real behaviour correctly).
-  //
-  // modelChoiceIds is populated from TWO places, not one, unlike an
-  // earlier version of this comment claimed: the change handler above
-  // (a live drill-down pick), AND the init restore block (F3) -- which
-  // seeds it from cfg.aliases for every card whose SAVED value already
-  // names one of its shortlist rows, reading the id back out of that
-  // card's own server-rendered <option> elements. After the F1 fix that is
-  // the NORMAL case, not an edge case: a card the user never touched in
-  // THIS session routinely lands in modelChoiceIds anyway, because its
-  // saved value already matches its recommendedId. That is still correct
-  // to iterate here -- collectAliasWrites' job is to compute what Finish
-  // SHOULD write, and a value-identical write is harmless -- but it does
-  // mean this function can no longer be read as "only ever fires for
-  // aliases the user actually changed this session". buildReview is the
-  // layer responsible for not SHOWING those value-identical entries as
-  // changes (see its own N1 comment).
+  // issue 138 (fix round 1 F1; R6a; N2) + issue 238 Q9: assemble aliasWrites.
+  // The aliasEdits overlay (Step 3, incl. the review section) comes first.
+  // THEN, only for a checked quick-pick default that finishPlan() handed us
+  // (isCustomDefault=false AND selectedAlias non-null -- null means the
+  // default was merely restored, not chosen, and its Step 2 stage must not
+  // run), the selected alias's resolved route -- the ONE place clobbering an
+  // aliasEdits entry is permitted (user-locked decision #2). Then every
+  // OTHER alias whose drill-down <select> fired change (or that F3's init
+  // restore seeded from cfg.aliases -- the normal reopen case, a
+  // value-identical write), written only when Step 3 left it untouched
+  // (hasOwnProperty, not \`in\`: aliasEdits[alias] === null is a MEANINGFUL
+  // delete). finishPlan folds the result through Q4's encoding; buildReview
+  // hides value-identical entries.
   function collectAliasWrites(selectedAlias, isCustomDefault) {
     // T3: keyed by user alias names -- null-prototype (see aliasEdits above)
     var aliasWrites = Object.create(null);
@@ -633,12 +598,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   finishBtn.addEventListener('click', async function() {
     finishBtn.disabled = true; finishBtn.textContent = 'Saving...';
     try {
-      var r = document.querySelector('input[name="default-model"]:checked');
-      var dm = window.customDefaultModel || (r ? r.value : null);
-      var aliasWrites = collectAliasWrites(r ? r.value : null, !!window.customDefaultModel);
-      await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites, (window.collectCouncilPicks && window.collectCouncilPicks()) || []);
+      var plan = finishPlan();   // issue 238 Q9: the same computation the Review step showed
+      await window.sidecarSetup.invoke('sidecar:save-config', plan.defaultModel, plan.writes, (window.collectCouncilPicks && window.collectCouncilPicks()) || [], plan.dismissals);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
-      await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
+      await window.sidecarSetup.invoke('sidecar:setup-done', plan.defaultModel, kc);
     } catch (_e) { finishBtn.disabled = false; finishBtn.textContent = 'Finish'; }
   });
 
@@ -764,6 +727,9 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var routeId = pickRouteFor(mc);
       var idEl = el.querySelector('.write-preview-id');
       if (idEl && routeId) { idEl.textContent = routeId; }
+      // issue 238 Q9: name the shipped id when the live pick differs from it.
+      var noteEl = el.querySelector('.write-preview-note');
+      if (noteEl) { noteEl.textContent = describeDefaultWrite(alias, routeId); }
     });
     // issue 138: keep the resolved-id line in step with the route/model choice.
     document.querySelectorAll('.model-resolved').forEach(function(el) {
