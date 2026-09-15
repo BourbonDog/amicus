@@ -101,6 +101,15 @@ describe('runCheck drift wiring', () => {
   });
 });
 
+// Named mutant "SIBLINGGATE": replace `const gated = gatedCatalogIds(info);`
+// in buildFallbackDriftReport with `const gated = catalog.map(m => m && m.id)
+// .filter(Boolean);` (feeds the sibling scan every catalog id instead of the
+// §5-gated set). Measured red 2026-09-14: reddens exactly one test — 'a
+// sibling on a non-authoritative row, or in a rejected namespace, is never
+// named (§5 rules 1–2; mutant SIBLINGGATE)' (its first assertion, the
+// non-authoritative floor row; the second assertion, the rejected-namespace
+// case, is caught earlier by the providerFailures guard and stays green under
+// this mutant). Restored after measurement — see the commit history.
 describe('buildFallbackDriftReport — #238 Q7 newer-sibling lines for cardless pins', () => {
   const { buildFallbackDriftReport } = require('../src/sidecar/models');
   const { loadCuratedPins } = require('../src/utils/curated-pins');
