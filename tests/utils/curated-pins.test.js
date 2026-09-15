@@ -65,13 +65,30 @@ describe('validateCuratedPins — one refusal per rule', () => {
   // providers' own model ids contain `/` (togetherai/fireworks-ai/huggingface/
   // deepinfra-style: `togetherai/meta-llama/llama-4`). Only openrouter is
   // segment-counted exactly.
+  // F7 (#238 council r1 D5) note: the route KEY must now be a registered
+  // provider (openrouter or a direct provider from provider-registry.js).
+  // 'togetherai' was a placeholder for "some provider whose OWN ids contain a
+  // slash" and is not itself registered, so this fixture moved to 'deepseek'
+  // (a real registered direct provider) — still proving the id-SHAPE
+  // leniency (`inNamespace`'s segment-count rule), not provider identity,
+  // which the new test right below covers.
   test('a 3-segment direct-provider route (model id containing a slash) validates', () => {
     const doc = good();
-    doc.pins.glm.routes.togetherai = 'togetherai/meta-llama/llama-4';
+    doc.pins.glm.routes.deepseek = 'deepseek/some/nested-id';
     expect(() => validateCuratedPins(doc)).not.toThrow();
   });
+  test('F7: a route key that is not openrouter or a registered direct provider is refused (typo: anthropc)', () => refuses(d => { d.pins.glm.routes.anthropc = 'anthropc/x-1'; }, "pin 'glm' route 'anthropc' is not a known provider (openrouter or a direct provider)"));
   test('verifiedOn is required', () => refuses(d => { delete d.pins.glm.verifiedOn; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   test('verifiedOn must be an ISO date', () => refuses(d => { d.pins.glm.verifiedOn = 'yesterday'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
+  // F6 (#238 council r1 A2): the shape check alone admits an impossible
+  // calendar date -- round-trip through Date and require it unchanged.
+  test('F6: verifiedOn refuses an impossible calendar date (2026-02-31)', () => refuses(d => { d.pins.glm.verifiedOn = '2026-02-31'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
+  test('F6: verifiedOn refuses an out-of-range month/day (2026-99-99)', () => refuses(d => { d.pins.glm.verifiedOn = '2026-99-99'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
+  test('F6: verifiedOn accepts a real leap day (2024-02-29)', () => {
+    const doc = good();
+    doc.pins.glm.verifiedOn = '2024-02-29';
+    expect(() => validateCuratedPins(doc)).not.toThrow();
+  });
   test('ruling, when present, is a non-empty string', () => refuses(d => { d.pins.glm.ruling = ''; }, "pin 'glm' ruling must be a non-empty string"));
   test('gatewayOnly may only be true', () => refuses(d => { d.pins.glm.gatewayOnly = false; }, "pin 'glm' gatewayOnly may only be true"));
   // `d.pins.__proto__ = …` would SET the prototype, not add an own key; JSON.parse is how a file smuggles the name in as an own property
@@ -81,9 +98,13 @@ describe('validateCuratedPins — one refusal per rule', () => {
   test('an alias cannot be both pinned and retired', () => refuses(d => { d.retired.glm = { on: '2026-01-01', ruling: 'x' }; }, "'glm' is both pinned and retired"));
   test('retired entry has exactly on + ruling', () => refuses(d => { d.retired.devstral.note = 'x'; }, "retired 'devstral' must have exactly on + ruling"));
   test('retired.on is an ISO date', () => refuses(d => { d.retired.devstral.on = '2026-8-4'; }, "retired 'devstral' needs on as YYYY-MM-DD"));
+  test('F6: retired.on refuses an impossible calendar date (2026-02-31)', () => refuses(d => { d.retired.devstral.on = '2026-02-31'; }, "retired 'devstral' needs on as YYYY-MM-DD"));
   test('retired needs a ruling', () => refuses(d => { d.retired.devstral.ruling = ''; }, "retired 'devstral' needs a ruling"));
   test('notable must be an array', () => refuses(d => { d.notable = {}; }, 'notable must be an array'));
   test('notable entry needs a provider/model id', () => refuses(d => { d.notable[0].id = 'atlas'; }, 'notable[0] needs a provider/model id'));
+  // F8 (#238 council r1 D3): a MISSING suggestedAlias used to fall through to
+  // checkName(undefined, …), reporting "'undefined' is not a valid name".
+  test('F8: notable entry without suggestedAlias is refused by name, not by an "undefined" value', () => refuses(d => { delete d.notable[0].suggestedAlias; }, 'notable[0] needs a suggestedAlias'));
   test('notable suggestedAlias must not be a pin or retired', () => refuses(d => { d.notable[0].suggestedAlias = 'glm'; }, "notable[0] suggestedAlias 'glm' is already a pin or retired"));
   test('notable note must be a string', () => refuses(d => { d.notable[0].note = 3; }, 'notable[0] note must be a string'));
   test('notable entry with an unknown field', () => refuses(d => { d.notable[0].why = 'x'; }, "notable[0] has an unknown field 'why'"));
@@ -159,6 +180,18 @@ describe('loadCuratedPins', () => {
   });
 });
 
+describe('the SHIPPED file — a JSON syntax error is a loud, named load-time failure (F2, #238 council r1 B2/C2/D4)', () => {
+  test('a require() SyntaxError on the shipped file is wrapped with the curated-pins.json: prefix and path, never a silent empty pin set', () => {
+    jest.isolateModules(() => {
+      jest.doMock('../../src/utils/curated-pins.json', () => {
+        throw new SyntaxError('Unexpected token } in JSON at position 42');
+      });
+      expect(() => require('../../src/utils/curated-pins')).toThrow(/^curated-pins\.json: .*Unexpected token/);
+    });
+    jest.dontMock('../../src/utils/curated-pins.json');
+  });
+});
+
 // MEASURED 2026-09-14 (`npx jest tests/utils/curated-pins.test.js`, restored via
 // `git checkout -- src/utils/curated-pins.js`; `git status --porcelain` clean
 // after both):
@@ -228,6 +261,8 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     // the rule via the same helper, so a 2-segment id must be refused too.
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai', '2026-09-20')).toThrow("'openrouter/z-ai' is not in the openrouter/ namespace");
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', 'today')).toThrow("verifiedOn must be YYYY-MM-DD (got 'today')");
+    // F6 (#238 council r1 A2): a shape-valid but impossible calendar date is refused the same way as a non-date string.
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', '2026-02-31')).toThrow("verifiedOn must be YYYY-MM-DD (got '2026-02-31')");
   });
   // fix round 1 (Important): setPinRoute must accept a 3-segment direct-
   // provider id too — only openrouter is segment-counted exactly.
@@ -245,6 +280,17 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     expect(before.pins.gemini.ruling).toBeUndefined();
     expect(() => setPinRuling(good(), 'gemini', '   ')).toThrow("ruling for 'gemini' must be a non-empty string");
     expect(() => setPinRuling(good(), 'nope', 'x')).toThrow("'nope' is not a shipped pin");
+  });
+  // F5(a) (#238 council r1 A1/B4/D2): a ruling is free text typed at an
+  // interactive prompt and rendered back later -- sanitize at the INPUT
+  // boundary so a stored ruling can never carry a newline, an ANSI escape or
+  // a bidi control that could forge a line or reorder a rendered screen.
+  test('setPinRuling sanitizes a hostile ruling (newline, ANSI escape, bidi control) into one clean line', () => {
+    const ESC = String.fromCharCode(0x1b);
+    const RLO = String.fromCharCode(0x202e); // right-to-left override
+    const hostile = `line one\n${ESC}[31mred${ESC}[0m ${RLO}evil`;
+    const after = setPinRuling(good(), 'gemini', hostile);
+    expect(after.pins.gemini.ruling).toBe('line one red evil');
   });
   test('a setPinRoute → saveCuratedPins → loadCuratedPins round trip through curated-models yields the new gateway routes', () => {
     // #238 whole-branch review Important #1(b)(iii): the written glm-5.4

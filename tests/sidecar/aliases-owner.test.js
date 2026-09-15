@@ -98,6 +98,8 @@ function harness({ answers = [], catalog, git = () => '', isTTY = true, today = 
     readCache: () => catalog,
     loadCuratedPins: () => loadCuratedPins(file),
     saveCuratedPins: (d) => { log.push('SAVE'); saveCuratedPins(d, file); },
+    // F1 (#238 council r1 B1): the CAS baseline, bound to the SAME temp file every other dep reads/writes.
+    readCuratedPinsBytes: () => fs.readFileSync(file, 'utf8'),
   };
   return { deps, file, dir, out: () => log.filter(l => !l.startsWith('ERR:')).join(''), err: () => log.filter(l => l.startsWith('ERR:')).join(''), log, read: () => JSON.parse(fs.readFileSync(file, 'utf8')), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
@@ -201,6 +203,41 @@ describe('runOwnerReview', () => {
     expect(h.log).not.toContain('SAVE');
   });
 
+  test('F3 (#238 council r1 C1): a throwing loadCuratedPins is a named error on stderr, exit 1, no write, no prompt', async () => {
+    h = harness({ catalog: EMPTY_CATALOG }); // never reached
+    h.deps.loadCuratedPins = () => { throw new Error('ENOENT: no such file'); };
+    h.deps.createPrompt = jest.fn();
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(h.err()).toContain('ERR:Error: ENOENT: no such file');
+    expect(h.out()).toBe('');
+    expect(h.log).not.toContain('SAVE');
+    expect(h.deps.createPrompt).not.toHaveBeenCalled();
+  });
+
+  test('F3 (#238 council r1 C1): a throwing getCatalogInfo is a named error on stderr, exit 1, no write, no prompt', async () => {
+    h = harness({ catalog: EMPTY_CATALOG });
+    h.deps.getCatalogInfo = async () => { throw new Error('ETIMEDOUT'); };
+    h.deps.createPrompt = jest.fn();
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(h.err()).toContain('ERR:Error: catalog unavailable (ETIMEDOUT) — run amicus models --refresh');
+    expect(h.log).not.toContain('SAVE');
+    expect(h.deps.createPrompt).not.toHaveBeenCalled();
+  });
+
+  test('F11 (#238 council r1 C4): every namespace lacking catalog coverage exits 1 with its own line, nothing written', async () => {
+    // every DOC route present, but ONLY as a floor row (authoritative: false)
+    // -- namespaceGap reads that as "no authoritative rows" for every namespace,
+    // so nothing is ever reviewable.
+    const catalog = { models: docRouteIds().map(id => ({ id, authoritative: false })), fetchedAt: Date.now(), lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [] };
+    h = harness({ catalog });
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    const out = h.out();
+    expect(out).toContain('openrouter routes (6): no authoritative rows in the catalog (no key?) — not reviewed');
+    expect(out).toContain('nothing could be reviewed — no namespace had catalog coverage (keys? fetch failures above)');
+    expect(out).not.toContain('no pin changed'); // F11 exits before the ordinary closing summary
+    expect(h.log).not.toContain('SAVE');
+  });
+
   test('round-1 review Small 3: a stale readCache does not repeat the refreshing-catalog banner once per namespace pass', async () => {
     // Every DOC route lives in the catalog (nothing to propose anywhere), so
     // all four passes run clean with zero `ask` calls -- isolating whether
@@ -228,7 +265,9 @@ describe('runOwnerReview', () => {
     expect(out).toContain('openrouter routes (6):');
     expect(out).toContain('[1/1] glm');
     expect(out).toContain('google routes (1):');
-    expect(out).toContain('Nothing to review — 1 alias, all following or up to date.'); // T4's wording; the google route is live
+    // F10 (#238 council r1 B6): owner rows are all `pinned`, never `following`
+    // -- "1 pin, all up to date." replaces the misleading user-mode wording.
+    expect(out).toContain('Nothing to review — 1 pin, all up to date.'); // the google route is live
     expect(out).toContain('anthropic routes (1): provider fetch failed this run — not reviewed');
     expect(out).toContain('deepseek routes (1): no authoritative rows in the catalog (no key?) — not reviewed');
     expect(out).not.toContain('never ask again'); // mutant NODISMISS
@@ -291,6 +330,53 @@ describe('runOwnerReview', () => {
     expect(doc.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the failed accept never reached disk through the later save
   });
 
+  test('F1(a) (#238 council r1 B1): a mid-walk external edit refuses the accept with a CAS message, the file keeps the edit, exit 0 with no pin changed (mutant NOCAS)', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
+    h = harness({ catalog });
+    let calls = 0;
+    h.deps.ask = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // simulate a concurrent session or a hand edit landing on disk between
+        // this session's load and its first write attempt
+        const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+        external.pins.glm.verifiedOn = '2099-01-01';
+        fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
+        return '1'; // accept -- but the disk now disagrees with what this session loaded
+      }
+      return '3'; // skip, once the accept is refused and the menu redisplays
+    };
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain('could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
+    const onDisk = h.read();
+    expect(onDisk.pins.glm.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
+    expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the refused accept never landed
+    expect(h.out()).toContain('no pin changed — src/utils/curated-pins.json is untouched');
+    expect(h.log).not.toContain('SAVE');
+  });
+
+  test('F1(c) (#238 council r1 B1): the rulings phase refuses a write the same way when the file changed after the walk (mutant NOCAS)', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
+    h = harness({ catalog });
+    let calls = 0;
+    h.deps.ask = async () => {
+      calls += 1;
+      if (calls === 1) { return '1'; } // walk: accept glm-5.4 -- this DOES land, its own commit runs first
+      // something else writes the file between the walk's own commit and the rulings prompt
+      const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+      external.pins.grok.verifiedOn = '2099-01-01';
+      fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
+      return 'terra tier confirmed live 2026-09-20'; // the ruling answer for glm
+    };
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain('    could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
+    const onDisk = h.read();
+    expect(onDisk.pins.grok.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
+    expect(onDisk.pins.glm.ruling).toBe('why glm'); // the ruling write never landed
+    expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.4'); // the walk's own accept DID land before the external edit
+    expect(h.out()).toContain('1 pin changed — review with: git diff src/utils/curated-pins.json'); // the walk's accept still counts
+  });
+
   test('Ctrl-C mid-walk: tally, exit 1, no ruling prompts, summary still prints', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'openrouter/x-ai/grok-4.4'] });
     h = harness({ catalog });
@@ -337,6 +423,41 @@ describe('runOwnerReview', () => {
     h = harness({ catalog, answers: ['1', ''] }); // accept glm-5.4; ruling: enter
     expect(await runOwnerReview({}, h.deps)).toBe(0);
     expect(h.out()).not.toContain('not compared (divergent vendor)');
+  });
+
+  // F4 (#238 council r1 D1 test gap; mechanism held -- the prompt can only
+  // ever throw REVIEW_ABORTED, see aliases-review-prompt.js :: abortedError):
+  // an interruption AFTER a successful walk accept, at the ruling prompt
+  // itself, was untested. Same setup as the ℹ-notice test above (opus is
+  // DOC's own divergent-vendor pin), so the routes-disagree/ℹ summary has
+  // something concrete to print through the interruption.
+  test('F4: an interrupted rulings phase after a successful accept still prints the ℹ summary and the closing line, exit 1', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/anthropic/claude-opus-5.1'] });
+    h = harness({ catalog });
+    let calls = 0;
+    h.deps.ask = async () => {
+      calls += 1;
+      if (calls === 1) { return '1'; } // openrouter pass: opus -> accept 5.1
+      throw aborted(); // Ctrl-C/EOF at the ruling prompt
+    };
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(h.out()).toContain('rulings interrupted — edit them by hand');
+    expect(h.out()).toContain('  ℹ opus: anthropic route anthropic/claude-opus-5 not compared (divergent vendor) — verify it by hand');
+    expect(h.out()).toContain('1 pin changed — review with: git diff src/utils/curated-pins.json');
+    expect(h.read().pins.opus.routes.openrouter).toBe('openrouter/anthropic/claude-opus-5.1'); // the walk's own accept still landed
+  });
+});
+
+describe('ownerView (#238 council r1 F9 — the picker view contract)', () => {
+  const { ownerView } = require('../../src/sidecar/aliases-owner');
+  test('catalogAvailable reflects the catalog actually given (not hardcoded), and retired carries the document\'s retired map', () => {
+    const doc = { ...DOC, retired: { devstral: { on: '2026-08-04', ruling: 'gone' } } };
+    const d = { buildAliasProposals: () => [] };
+    const withModels = ownerView({}, { models: [{ id: 'x/y' }] }, doc, d);
+    expect(withModels.catalogAvailable).toBe(true);
+    expect(withModels.retired).toEqual({ devstral: { on: '2026-08-04', ruling: 'gone' } });
+    expect(ownerView({}, { models: [] }, doc, d).catalogAvailable).toBe(false);
+    expect(ownerView({}, {}, doc, d).catalogAvailable).toBe(false);
   });
 });
 

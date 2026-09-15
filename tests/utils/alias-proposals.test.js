@@ -246,6 +246,24 @@ describe('alias-proposals — dismissal, retired, notable', () => {
     expect(out[0].alias).toBe('glm');
     expect(out[0].state).toBe('pinned');
   });
+  // F12 (#238 council r1 D6, singleton): every proposal this engine builds
+  // carries a non-empty string dismissKey by construction (proposeForRow's
+  // and proposeNotable's own template-literal composition) -- the picker's
+  // menuFor only omits "never ask again" for a NULLED key (owner mode's own
+  // doing, aliases-owner.js, not the engine's), so a real engine proposal
+  // must never hand out a falsy one. Mechanism held (D6); this pins it.
+  test('F12: every proposal — a pinned-row one and a notable-unmapped one — carries a non-empty string dismissKey', () => {
+    const pinned = run({ glm: 'openrouter/z-ai/glm-5.2' });
+    expect(pinned).toHaveLength(1);
+    expect(typeof pinned[0].dismissKey).toBe('string');
+    expect(pinned[0].dismissKey.length).toBeGreaterThan(0);
+
+    const notable = [{ id: 'openrouter/mistralai/mistral-medium-3-5', suggestedAlias: 'mistral', note: 'flagship' }];
+    const unmapped = run({}, { notable });
+    expect(unmapped).toHaveLength(1);
+    expect(typeof unmapped[0].dismissKey).toBe('string');
+    expect(unmapped[0].dismissKey.length).toBeGreaterThan(0);
+  });
   test('prototype-named aliases are ordinary custom rows', () => {
     const out = run({ toString: 'openrouter/z-ai/glm-5.2' }, { catalogInfo: info([...CATALOG, row('openrouter/z-ai/glm-5.2')]) });
     expect(out).toHaveLength(1);

@@ -135,6 +135,23 @@ describe('buildFallbackDriftReport — #238 Q7 newer-sibling lines for cardless 
     expect(lines.find(l => l.includes('pinned fallback drift: gemini'))).toContain('— amicus aliases --review --owner (a family match');
     expect(lines.some(l => l.includes('update curated-models.js'))).toBe(false);
   });
+  // F5 (#238 council r1 A1/B4/D2): `live`/`newer` are CATALOG-derived
+  // (third-party); the pinned/fallback id beside them is house bytes from
+  // curated-pins.json and is printed as-is. The sibling comparator requires
+  // vendor/prefix/suffix to match EXACTLY (only the version may differ), so a
+  // hostile candidate can only ever match a pin that carries the identical
+  // suffix -- mutating the (test-local, mocked) pin to also carry it is the
+  // only way to exercise a genuine sibling match here, and it doubles as
+  // proof the two sides are sanitized asymmetrically by provenance.
+  test('a hostile catalog id in the sibling position is stripped in the "(catalog: …)" segment; the house-authored pinned id beside it is untouched', () => {
+    const ESC = String.fromCharCode(0x1b);
+    const hostileSuffix = `${ESC}[31m`;
+    doc.pins.glm.routes.openrouter = `openrouter/z-ai/glm-5.3${hostileSuffix}`;
+    const candidateHostile = `openrouter/z-ai/glm-5.4${hostileSuffix}`; // same vendor/prefix/suffix as the (mutated) pin, strictly newer version
+    const lines = build({ models: [...current(), row(candidateHostile)], providerFailures: [] });
+    const line = lines.find(l => l.startsWith('  newer sibling: glm'));
+    expect(line).toBe(`  newer sibling: glm → openrouter/z-ai/glm-5.3${hostileSuffix} (catalog: openrouter/z-ai/glm-5.4) — amicus aliases --review --owner`);
+  });
   test('silent for the current pins alone, and a family is never given a sibling line (its idPattern rule speaks for it)', () => {
     expect(build({ models: current(), providerFailures: [] })).toEqual([]);
     const lines = build({ models: [...current(), row('openrouter/openai/gpt-5.7-terra')], providerFailures: [] });
