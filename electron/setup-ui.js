@@ -6,6 +6,7 @@ const { buildWizardCSS } = require('./setup-ui-styles');
 const { buildKeysScript } = require('./setup-ui-keys-script');
 const { buildAliasScript } = require('./setup-ui-alias-script');
 const { buildAliasStateScript } = require('./setup-ui-alias-state');
+const { buildAliasReviewHTML, buildAliasReviewScript } = require('./setup-ui-alias-review');
 const { buildCouncilSectionHTML, buildCouncilScript } = require('./setup-ui-council');
 const { buildProviderDefaultSectionHTML, buildProviderDefaultScript } = require('./setup-ui-provider-default');
 const { buildLocalSectionHTML } = require('./setup-ui-local');
@@ -55,7 +56,7 @@ function buildSetupHTML(options = {}) {
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
   const modelHtml = buildModelStepHTML(picks, undefined, undefined, shortlists);
-  const aliasHtml = buildAliasEditorHTML(aliases);
+  const aliasHtml = buildAliasEditorHTML(aliases, { reviewHtml: buildAliasReviewHTML() });
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
   const modelChoicesJson = JSON.stringify(picks);
@@ -91,6 +92,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
   const aliasStateJs = buildAliasStateScript();
+  const aliasReviewJs = buildAliasReviewScript();
   const councilJs = buildCouncilScript();
   const providerDefaultJs = buildProviderDefaultScript();
   const localJs = buildLocalScript();
@@ -802,6 +804,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   ${aliasJs}
 
   ${aliasStateJs}
+
+  ${aliasReviewJs}
 
   ${keysJs}
 
