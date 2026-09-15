@@ -317,6 +317,11 @@ function __rawWizardCSS() {
   .alias-row.alias-no-key .alias-model::after {
     content: ' (no key)'; color: var(--text-faint); font-style: italic; font-size: 10px;
   }
+  /* issue 238 D1: following / pinned per row; the remove control by kind */
+  .alias-state { font-size: 10px; color: var(--text-faint); letter-spacing: 0.3px; }
+  .alias-state-pinned { color: var(--accent); }
+  .alias-delete[hidden] { display: none; }
+  .alias-delete[data-kind="unpin"] { font-size: 10px; color: var(--text-muted); }
 
   /* Import notice banner */
   .import-notice {
