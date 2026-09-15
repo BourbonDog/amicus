@@ -100,3 +100,91 @@ describe('runCheck drift wiring', () => {
     writeSpy.mockRestore();
   });
 });
+
+describe('buildFallbackDriftReport — #238 Q7 newer-sibling lines for cardless pins', () => {
+  const { buildFallbackDriftReport } = require('../src/sidecar/models');
+  const { loadCuratedPins } = require('../src/utils/curated-pins');
+  const current = () => Object.values(loadCuratedPins().pins).map(p => row(p.routes.openrouter));
+  test('a strictly newer same-tier sibling of a cardless pin is named with the owner-mode hint; the exit-code-free family line points there too', () => {
+    const lines = buildFallbackDriftReport({ models: [...current(), row('openrouter/z-ai/glm-5.4'), row('openrouter/google/gemini-9.9-flash')], providerFailures: [] });
+    expect(lines).toContain('  newer sibling: glm → openrouter/z-ai/glm-5.3 (catalog: openrouter/z-ai/glm-5.4) — amicus aliases --review --owner');
+    expect(lines.find(l => l.includes('pinned fallback drift: gemini'))).toMatch(/— amicus aliases --review --owner$/);
+    expect(lines.some(l => l.includes('update curated-models.js'))).toBe(false);
+  });
+  test('silent for the current pins alone, and a family is never given a sibling line (its idPattern rule speaks for it)', () => {
+    expect(buildFallbackDriftReport({ models: current(), providerFailures: [] })).toEqual([]);
+    const lines = buildFallbackDriftReport({ models: [...current(), row('openrouter/openai/gpt-5.7-terra')], providerFailures: [] });
+    expect(lines.filter(l => l.startsWith('  newer sibling:'))).toEqual([]);
+    expect(lines.some(l => l.includes('pinned fallback drift: gpt'))).toBe(true);
+  });
+  test('a sibling on a non-authoritative row, or in a rejected namespace, is never named (§5 rules 1–2; mutant SIBLINGGATE)', () => {
+    const floor = { id: 'openrouter/z-ai/glm-5.4', authoritative: false };
+    expect(buildFallbackDriftReport({ models: [...current(), floor], providerFailures: [] }).filter(l => l.includes('glm'))).toEqual([]);
+    expect(buildFallbackDriftReport({ models: [...current(), row('openrouter/z-ai/glm-5.4')], providerFailures: [{ provider: 'openrouter', reason: 'http-status', status: 403 }] })).toEqual([]);
+  });
+  test('a different tier or a glued size token is not a sibling (the comparator rules are inherited, not re-implemented)', () => {
+    // gpt-5.7-luna-pro: suffix -luna-pro ≠ gpt-pro's -sol-pro; kimi-k30b: `30` glued to `b` is never a version — both measured null on 2026-09-14.
+    // (gpt-5.7-sol-pro WOULD be gpt-pro's sibling — measured — so it is deliberately not used here.)
+    const lines = buildFallbackDriftReport({ models: [...current(), row('openrouter/openai/gpt-5.7-luna-pro'), row('openrouter/moonshotai/kimi-k30b')], providerFailures: [] });
+    expect(lines.filter(l => l.startsWith('  newer sibling:'))).toEqual([]);
+  });
+  test('a bare models array (older callers) still works', () => {
+    expect(buildFallbackDriftReport([...current(), row('openrouter/x-ai/grok-4.4')])).toContain('  newer sibling: grok → openrouter/x-ai/grok-4.3 (catalog: openrouter/x-ai/grok-4.4) — amicus aliases --review --owner');
+  });
+});
+
+describe('runCheck exit code — #238 Q7 sibling lines are informational only', () => {
+  // handleModels-level invariant (no prior test covered this): the new
+  // "newer sibling" lines are computed after runCheck's exit-code math and
+  // must never move it, with or without --strict. Only model-catalog is
+  // mocked — alias-audit, alias-shadow and gateway-route-audit run for real
+  // against the hermetic empty config (tests/setup/hermetic-config-dir.js),
+  // so this also proves the real pipeline stays quiet (no stale/drifted/
+  // gateway findings) for the current pins plus one cardless newer sibling
+  // (measured 2026-09-14: sources=32, stale=[], drifted=[], gatewayFindings=[]).
+  // The explicit unmock matters: 'runCheck drift wiring' above calls
+  // jest.mock('../src/utils/alias-audit', ...) inside ITS beforeEach, and a
+  // jest.mock() registration outlives jest.resetModules()/restoreAllMocks()
+  // for the rest of the file — without this line collectAliasSources() would
+  // silently resolve to that earlier test's empty-array mock instead of the
+  // real module (measured: sources.length 0 instead of 32).
+  beforeEach(() => {
+    jest.unmock('../src/utils/alias-audit');
+    jest.resetModules();
+    jest.mock('../src/utils/model-catalog', () => {
+      const { loadCuratedPins } = require('../src/utils/curated-pins');
+      const currentModels = () => Object.values(loadCuratedPins().pins).map(p => ({ id: p.routes.openrouter }));
+      return {
+        getCatalogInfo: async () => ({
+          models: [...currentModels(), { id: 'openrouter/z-ai/glm-5.4' }],
+          fetchedAt: Date.now(),
+          providerFailures: [],
+        }),
+        refreshCatalog: async () => [],
+        catalogPath: () => '/mock/path/model-catalog.json',
+      };
+    });
+  });
+
+  afterEach(() => {
+    jest.resetModules();
+    jest.restoreAllMocks();
+  });
+
+  test('exit code is 0 with the sibling line present, and stays 0 under --strict', async () => {
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const { handleModels } = require('../src/sidecar/models');
+
+    const exitCode = await handleModels({ _: ['models'], check: true });
+    const output = writeSpy.mock.calls.map(c => c[0]).join('');
+    expect(exitCode).toBe(0);
+    expect(output).toContain('  newer sibling: glm → openrouter/z-ai/glm-5.3 (catalog: openrouter/z-ai/glm-5.4) — amicus aliases --review --owner');
+
+    writeSpy.mockClear();
+
+    const strictExitCode = await handleModels({ _: ['models'], check: true, strict: true });
+    expect(strictExitCode).toBe(0);
+
+    writeSpy.mockRestore();
+  });
+});
