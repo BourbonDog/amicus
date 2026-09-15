@@ -24,6 +24,15 @@ function captureStdout(fn) {
     .then(code => ({ code, out: writes.join('') }));
 }
 
+/** Mock the shipped pin file with extra `retired`/`notable` entries; must run BEFORE `require('../../src/sidecar/aliases')` in a test. */
+function mockPins({ retired = {}, notable = [] } = {}) {
+  const real = jest.requireActual('../../src/utils/curated-pins');
+  jest.doMock('../../src/utils/curated-pins', () => ({
+    ...real,
+    loadCuratedPins: () => { const d = real.loadCuratedPins(); return { ...d, retired: { ...d.retired, ...retired }, notable: [...d.notable, ...notable] }; },
+  }));
+}
+
 describe('amicus aliases (#238 D4 — list and --json)', () => {
   let cfg, handleAliases;
   const CATALOG = {
@@ -50,6 +59,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
   afterEach(() => {
     process.stderr.write.mockRestore();
     fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
+    jest.dontMock('../../src/utils/curated-pins');
   });
 
   test('list: following vs pinned per row, grouped by vendor, a pinned alias behind a sibling is flagged, footer counts proposals', async () => {
@@ -375,6 +385,51 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
       const onDisk = JSON.parse(fs.readFileSync(cfg.getConfigPath(), 'utf-8'));
       expect(onDisk.aliases).not.toHaveProperty('mine');
     });
+  });
+
+  test('a pin naming a RETIRED alias is flagged with the date and the ruling on a continuation line, and gets no proposal (#238 D8; mutant RETIREDFLAG)', async () => {
+    mockPins({ retired: { devstral: { on: '2026-08-04', ruling: 'OpenRouter delisted the whole devstral family.' } } });
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+    cfg.saveConfig({ default: 'gemini', aliases: { devstral: 'openrouter/mistralai/devstral-medium' } });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(code).toBe(0);
+    expect(out).toMatch(/devstral\s+→\s+openrouter\/mistralai\/devstral-medium\s+pinned\s+⚠ retired 2026-08-04\n\s+↳ OpenRouter delisted the whole devstral family\./);
+    expect(out).toContain('nothing to review');
+  });
+  test('--json carries `retired` and a retired pin still appears as a plain pinned row', async () => {
+    mockPins({ retired: { devstral: { on: '2026-08-04', ruling: 'delisted' } } });
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+    cfg.saveConfig({ default: 'gemini', aliases: { devstral: 'openrouter/mistralai/devstral-medium' } });
+    const { out } = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
+    const doc = JSON.parse(out);
+    expect(doc.retired.devstral).toEqual({ on: '2026-08-04', ruling: 'delisted' });
+    expect(doc.aliases.find(r => r.alias === 'devstral').state).toBe('pinned');
+    expect(doc.proposals.find(p => p.alias === 'devstral')).toBeUndefined();
+  });
+  test('a notable entry in the shipped file surfaces as an unmapped proposal end-to-end (R-P2-8)', async () => {
+    mockPins({ notable: [{ id: 'openrouter/z-ai/glm-5.4', suggestedAlias: 'glm-next', note: 'next glm' }] });
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+    cfg.saveConfig({ default: 'gemini', aliases: {} });
+    const { out } = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
+    const doc = JSON.parse(out);
+    const p = doc.proposals.find(x => x.alias === 'glm-next');
+    expect(p).toEqual(expect.objectContaining({ state: 'unmapped', reasons: ['notable-unmapped'] }));
+    expect(p.candidates[0]).toEqual({ id: 'openrouter/z-ai/glm-5.4', why: 'notable', evidence: { note: 'next glm' } });
+  });
+  test('the shipped file today has no notable entry and only devstral retired, so nothing above changes the default listing', async () => {
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+    cfg.saveConfig({ default: 'gemini', aliases: {} });
+    const { out } = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
+    const doc = JSON.parse(out);
+    expect(Object.keys(doc.retired)).toEqual(['devstral']);
+    expect(doc.proposals).toEqual([]);
+  });
+  test('--unpin still works after the move to aliases-unpin.js (the whole existing --unpin block below is the regression net)', async () => {
+    ({ handleAliases } = require('../../src/sidecar/aliases'));
+    cfg.saveConfig({ default: 'gemini', aliases: { glm: 'openrouter/z-ai/glm-5.2' } });
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], unpin: 'glm' }));
+    expect(code).toBe(0);
+    expect(out).toContain('glm now follows the shipped recommendation');
   });
 });
 

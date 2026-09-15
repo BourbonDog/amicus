@@ -30,12 +30,11 @@
 
 'use strict';
 
-const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
 const { stripGatewayPrefix } = require('../utils/curated-models');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 const { menuFor, menuLineText, renderScreen, refreshingCatalogLine } = require('./aliases-review-render');
-const { classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner } = require('./aliases-review-gate');
+const { isFresh, classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner } = require('./aliases-review-gate');
 
 /**
  * Real-CLI collaborators. Requires are lazy/function-scoped (not top-level)
@@ -60,16 +59,6 @@ function defaultDeps() {
     effectiveAliasNames: () => new Set(Object.keys(d.config.getEffectiveAliases())),
     now: () => Date.now(),
   };
-}
-
-/**
- * The §5 WRITE gate (mirrors doctor-alias-check.js's unexported
- * `isCatalogFresh`). R3: `age >= 0` is required too, so a future `fetchedAt`
- * (clock skew) is explicitly not fresh rather than indefinitely so.
- * @returns {boolean} true when `fetchedAt` is a number, not in the future, and no older than 24h
- */
-function isFresh(fetchedAt, now) {
-  return typeof fetchedAt === 'number' && (now - fetchedAt) >= 0 && (now - fetchedAt) <= DEFAULT_MAX_AGE_MS;
 }
 
 /** @returns {boolean} true when two ids name the same model once gateway prefixes are normalized */
@@ -258,7 +247,14 @@ async function runReview(args, deps) {
     const fresh = isFresh(fetchedAt, now);
     const proposals = Array.isArray(view.proposals) ? view.proposals : [];
     if (proposals.length === 0) {
-      d.write(`  Nothing to review — ${(view.rows || []).length} aliases, all following or up to date.\n`);
+      // R-P2-11: a pin that names a RETIRED alias gets no proposal (the engine
+      // suppresses retired names), so "all up to date" would be false for it.
+      const rows = Array.isArray(view.rows) ? view.rows : [];
+      const dead = rows.filter(r => r && r.state === 'pinned' && view.retired && Object.prototype.hasOwnProperty.call(view.retired, r.alias)).length;
+      const tail = dead
+        ? `; ${dead} pin${dead === 1 ? '' : 's'} name${dead === 1 ? 's' : ''} a retired alias (see amicus aliases), the rest follow or are up to date.`
+        : ', all following or up to date.';
+      d.write(`  Nothing to review — ${rows.length} alias${rows.length === 1 ? '' : 'es'}${tail}\n`);
       return 0;
     }
     // M5: the stale/no-cache/clock-skew banner only ever prints once there is
