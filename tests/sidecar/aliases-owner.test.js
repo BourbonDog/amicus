@@ -42,6 +42,19 @@
  *     skipped; a failed one too"; and aliases-review.test.js > "aliases
  *     --review (#238 §4, Q2, Q4)" > 'a proposal without a dismissKey offers
  *     no "never ask again" (owner mode, #238 Phase 2; mutant NODISMISS)'.
+ *
+ * Council round 1 (#238 PR #250, F1) MEASURED 2026-09-15 on the committed
+ * tree (`npx jest tests/sidecar/aliases-owner.test.js
+ * tests/sidecar/aliases-review.test.js`, restored via `git checkout --
+ * src/sidecar/aliases-owner.js`; `git status --porcelain` clean after):
+ *   NOCAS — commit()'s disk-bytes comparison deleted (write unconditionally).
+ *     RED (exactly 2, both in runOwnerReview): "F1(a) (#238 council r1 B1): a
+ *     mid-walk external edit refuses the accept with a CAS message, the file
+ *     keeps the edit, exit 0 with no pin changed (mutant NOCAS)"; "F1(c)
+ *     (#238 council r1 B1): the rulings phase refuses a write the same way
+ *     when the file changed after the walk (mutant NOCAS)". Every other test
+ *     in both files, including SAVEFIRST's own test (a mocked saveCuratedPins
+ *     throw still short-circuits before the CAS-only regression), stayed green.
  */
 const fs = require('fs');
 const os = require('os');
