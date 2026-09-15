@@ -14,8 +14,8 @@
  *
  * Gateway-only vendors (no direct API integration — provider-registry
  * `isDirectProvider` false) have no tier regexes here: OpenRouter is their
- * only route, and curated-models' CARDLESS/family-fallback entries don't
- * carry a per-alias match pattern the way FAMILIES does, so there is no
+ * only route, and curated-pins.json's family-fallback and cardless entries
+ * don't carry a per-alias match pattern the way FAMILIES does, so there is no
  * live-catalog rule to reuse for them. All three tiers resolve to the same
  * curated flagship — the static canonical pin `toDefaultAliases()` already
  * maintains for that vendor's alias (the same pin `resolveQuickPicks` falls
