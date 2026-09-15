@@ -57,14 +57,19 @@ function hasStrippableAliasValue(aliases) {
  * drops a value equal to the shipped default, so a garbage value would
  * otherwise sit on disk forever -- `saveConfig`'s own stripper removes it,
  * with its own Notice.
+ * `write === false` (issue 238 D9: the Electron wizard's IPC view,
+ * electron/ipc-aliases.js) returns the same normalized view and skips the
+ * save — the wizard writes config from Finish only.
+ * @param {object} d collaborators from `loadDeps`
+ * @param {boolean} [write=true] false = never touch disk
  * @returns {object} the user alias map after normalization
  */
-function normalizeOnEntry(d) {
+function normalizeOnEntry(d, write = true) {
   const cfg = d.config.loadConfig();
   const defaults = d.config.getDefaultAliases();
   if (!cfg || !cfg.aliases || typeof cfg.aliases !== 'object') { return {}; }
   const probe = d.normalizeAliases(cfg.aliases, defaults);
-  if (probe.removed.length > 0 || hasStrippableAliasValue(cfg.aliases)) {
+  if (write && (probe.removed.length > 0 || hasStrippableAliasValue(cfg.aliases))) {
     try { d.config.saveConfig(cfg); }                              // saveConfig prints the Notices
     catch (err) { process.stderr.write(`Notice: could not normalize aliases (${collapseExcerpt(err.message)}) — keys left on disk; every alias still resolves to the same id\n`); }
   }
@@ -72,11 +77,12 @@ function normalizeOnEntry(d) {
 }
 
 /**
- * @param {{maxAgeMs?: number}} [opts] `Number.POSITIVE_INFINITY` = cache only
+ * @param {{maxAgeMs?: number, write?: boolean}} [opts] `maxAgeMs: Number.POSITIVE_INFINITY` = cache only;
+ *   `write: false` = normalize in memory only (the wizard's IPC view)
  * @returns {Promise<{rows: Array, proposals: Array, catalogInfo: object, catalogAvailable: boolean, retired: object}>}
  */
 async function collectAliasView(opts = {}, d = loadDeps()) {
-  const userAliases = normalizeOnEntry(d);
+  const userAliases = normalizeOnEntry(d, opts.write !== false);
   const defaults = d.config.getDefaultAliases();
   const { retired, notable } = d.loadCuratedPins();
   let catalogInfo = { models: [], fetchedAt: null, providerFailures: [] };

@@ -439,6 +439,20 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(code).toBe(0);
     expect(out).toContain('glm now follows the shipped recommendation');
   });
+  it('collectAliasView({ write: false }) normalizes in memory only — the seeded key stays on disk (mutant WIZARDWRITE: ignore the option)', async () => {
+    const shipped = cfg.getDefaultAliases();
+    const [alias] = Object.keys(shipped);
+    // A seeded key equal to the shipped id, written WITHOUT saveConfig (whose normalizer would drop it).
+    const file = path.join(process.env.AMICUS_CONFIG_DIR, 'config.json');
+    fs.mkdirSync(process.env.AMICUS_CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ default: alias, aliases: { [alias]: shipped[alias] } }, null, 2));
+    const aliases = require('../../src/sidecar/aliases');
+    const view = await aliases.collectAliasView({ maxAgeMs: Number.POSITIVE_INFINITY, write: false }, aliases.loadDeps());
+    expect(view.rows.find(r => r.alias === alias).state).toBe('following');   // the in-memory view IS normalized…
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).aliases[alias]).toBe(shipped[alias]);   // …and disk is untouched
+    await aliases.collectAliasView({ maxAgeMs: Number.POSITIVE_INFINITY }, aliases.loadDeps());
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).aliases[alias]).toBeUndefined();        // the default path still normalizes on entry (D6)
+  });
 });
 
 describe('aliases is a registered command with a --review flag', () => {

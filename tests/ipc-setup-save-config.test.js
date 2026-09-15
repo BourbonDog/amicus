@@ -15,6 +15,11 @@ jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => []),
   getCatalogInfo: jest.fn(async () => ({ models: [], providerFailures: [] })),
 }));
+jest.mock('../electron/ipc-aliases', () => ({
+  registerAliasHandlers: jest.fn(),
+  recordDismissals: jest.fn(() => 0),
+}));
+const { recordDismissals } = require('../electron/ipc-aliases');
 
 const { loadConfig, saveConfig } = require('../src/utils/config');
 const { registerSetupHandlers } = require('../electron/ipc-setup');
@@ -87,5 +92,31 @@ describe('sidecar:save-config (council picks)', () => {
     saveConfig.mockImplementation(c => written.push(JSON.parse(JSON.stringify(c))));
     await save('gemini', {});
     expect(written[written.length - 1].councils).toBeUndefined();
+  });
+});
+
+// recordDismissals is a shared jest.fn: clearAllMocks resets call history, not implementations, so per-test behaviour is one-shot.
+describe('sidecar:save-config (issue 238 D9: staged dismissals ride the 4th argument)', () => {
+  test('dismissals are recorded AFTER the alias writes are saved', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: { glm: 'openrouter/z-ai/glm-5.3' } });
+    const order = [];
+    saveConfig.mockImplementation(() => order.push('save'));
+    recordDismissals.mockImplementationOnce((keys) => { order.push('dismiss:' + keys.join(',')); return keys.length; });
+    await save('gemini', { glm: 'openrouter/z-ai/glm-5.4' }, [], ['glm@openrouter/z-ai/glm-5.4']);
+    expect(order).toEqual(['save', 'dismiss:glm@openrouter/z-ai/glm-5.4']);
+  });
+
+  test('no 4th argument: recordDismissals still runs with undefined (records nothing) — the old 3-argument call keeps working', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    await save('gemini', {}, []);
+    expect(recordDismissals).toHaveBeenCalledWith(undefined);
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test('a dismissal failure rejects the invoke (the renderer re-enables Finish) — after the aliases were saved', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    recordDismissals.mockImplementationOnce(() => { throw new Error('bad key'); });
+    await expect(save('gemini', {}, [], ['bad'])).rejects.toThrow('bad key');
+    expect(saveConfig).toHaveBeenCalledTimes(1);
   });
 });

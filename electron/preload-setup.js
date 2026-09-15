@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('sidecarSetup', {
       'sidecar:get-api-keys',
       'sidecar:get-catalog',
       'sidecar:refresh-catalog',
+      'sidecar:get-alias-review',
       'sidecar:fetch-free-models',
       'sidecar:set-provider-default',
       'setup:probe-local',
