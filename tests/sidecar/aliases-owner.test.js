@@ -114,6 +114,12 @@ describe('ownerGate', () => {
   test('refuses when git fails (not a checkout)', () => {
     expect(ownerGate({ isTTY: true, git: () => { throw new Error('fatal: not a git repository'); } })).toMatch(/not inside a git work tree/);
   });
+  // whole-branch review Minor #6: a missing git binary is a different defect
+  // from "not a checkout" and must say so, not be folded into that message.
+  test('refuses with a distinct message when git itself is not installed (ENOENT)', () => {
+    const git = () => { const e = new Error('spawn git ENOENT'); e.code = 'ENOENT'; throw e; };
+    expect(ownerGate({ isTTY: true, git })).toBe('git is not installed or not on PATH — owner mode needs it');
+  });
   test('refuses an installed copy — a non-empty --show-prefix (mutant GATEPREFIX)', () => {
     const git = (args) => (args[1] === '--show-prefix' ? 'node_modules/amicus/' : '');
     expect(ownerGate({ isTTY: true, git })).toMatch(/not an installed copy .*node_modules\/amicus\//);
@@ -143,6 +149,14 @@ describe('routesByProvider / routeDisagreements (pinned to a frozen shipped-pins
     expect(Object.keys(g.anthropic)).toEqual(['opus', 'claude', 'sonnet', 'haiku', 'fable']);
     expect(Object.getPrototypeOf(g)).toBeNull();
     expect(Object.getPrototypeOf(g.openrouter)).toBeNull();
+  });
+  // whole-branch review Minor #7: the docblock promises "openrouter first",
+  // but without seeding it that was only true because every pin HAPPENS to
+  // list openrouter first in its own JSON key order today — a pin whose own
+  // key order lists another provider first must not change the OUTPUT order.
+  test('openrouter is always first, even when the first pin lists another provider first in its own key order', () => {
+    const pins = { gemini: { routes: { google: 'google/gemini-3.6-flash', openrouter: 'openrouter/google/gemini-3.6-flash' }, verifiedOn: '2026-08-04' } };
+    expect(Object.keys(routesByProvider(pins))[0]).toBe('openrouter');
   });
   test('the frozen shipped pins have no route disagreements; a non-divergent mismatch is named; a divergent vendor never is', () => {
     const pins = frozenPins();
@@ -283,6 +297,10 @@ describe('runOwnerReview', () => {
     h.deps.ask = (() => { const q = ['1']; return async () => { if (q.length) { return q.shift(); } throw aborted(); }; })(); // glm accepted, then Ctrl-C on grok's menu
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.out()).toContain('review interrupted — 1 accepted, 0 skipped, 0 dismissed so far');
+    // whole-branch review Minor #4: the `!== 0` branch prints its own line
+    // before breaking out of the namespace loop (the REVIEW_ABORTED tally
+    // above is the picker's own; this one covers any other non-zero return).
+    expect(h.out()).toContain('  pass ended early — rulings skipped');
     expect(h.out()).not.toContain('rulings — a sentence on WHY');
     expect(h.out()).toContain('1 pin changed — review with: git diff');
     expect(h.read().pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.4');
@@ -301,6 +319,24 @@ describe('runOwnerReview', () => {
     await runOwnerReview({}, h.deps);
     expect(h.out()).not.toContain('follow the shipped pin');
     expect(h.out()).not.toMatch(/^\s+shipped\s/m);
+  });
+
+  // whole-branch review Minor #3: the comparator's dash-version limit means
+  // the anthropic pass can never propose the matching move for a sibling
+  // accepted on openrouter (the smoke's `fable → claude-fable-5.1` on
+  // openrouter only is the live case) — opus (openrouter + anthropic) is
+  // DOC's own divergent-vendor pin.
+  test('a touched alias whose pin also has an untouched divergent-vendor route gets an ℹ notice to verify by hand', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/anthropic/claude-opus-5.1'] });
+    h = harness({ catalog, answers: ['1', ''] }); // openrouter pass: opus -> accept 5.1; anthropic pass: nothing; ruling: enter
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain('  ℹ opus: anthropic route anthropic/claude-opus-5 not compared (divergent vendor) — verify it by hand');
+  });
+  test('a touched alias with no divergent-vendor route at all gets no ℹ notice', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
+    h = harness({ catalog, answers: ['1', ''] }); // accept glm-5.4; ruling: enter
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).not.toContain('not compared (divergent vendor)');
   });
 });
 

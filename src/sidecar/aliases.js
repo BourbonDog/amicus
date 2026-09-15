@@ -153,6 +153,18 @@ function retiredNote(r, retired) {
   return { flag: `   ⚠ retired ${retired[r.alias].on}`, ruling: retired[r.alias].ruling };
 }
 
+/**
+ * #238 whole-branch review Minor #5: how many PINNED rows are flagged `⚠
+ * retired` above -- when there is nothing to review, the footer's reassuring
+ * "nothing to review" is misleading if a row above is still flagged.
+ * @param {{rows: Array, retired?: object}} view
+ * @returns {number}
+ */
+function retiredFlaggedCount(view) {
+  if (!view.retired) { return 0; }
+  return view.rows.filter(r => r.state === 'pinned' && Object.prototype.hasOwnProperty.call(view.retired, r.alias)).length;
+}
+
 /** @param {{rows: Array, proposals: Array, retired?: object}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
 function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const byAlias = new Map(view.rows.map(r => [r.alias, r]));
@@ -191,8 +203,11 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     return lines.join('\n') + '\n';
   }
   const n = view.proposals.length;
+  const retiredCount = n === 0 ? retiredFlaggedCount(view) : 0;
   lines.push(n === 0
-    ? '  nothing to review — amicus aliases --review'
+    ? (retiredCount > 0
+        ? `  nothing to review (${retiredCount} retired pin${retiredCount === 1 ? '' : 's'} flagged above) — amicus aliases --review`
+        : '  nothing to review — amicus aliases --review')
     : `  ${n} to review — amicus aliases --review`);
   // F1: the catalog is available but stale -- name its age so a user who
   // never runs --review still learns the background refresh isn't keeping up.

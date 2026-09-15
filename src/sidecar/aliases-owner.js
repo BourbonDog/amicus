@@ -79,7 +79,10 @@ function ownerGate(d) {
   if (!d.isTTY) { return 'aliases --review --owner is interactive: run it in a terminal'; }
   let prefix;
   try { prefix = d.git(['rev-parse', '--show-prefix']); }
-  catch { return `owner mode needs the amicus source checkout (${PKG_ROOT} is not inside a git work tree)`; }
+  catch (err) {
+    if (err && err.code === 'ENOENT') { return 'git is not installed or not on PATH — owner mode needs it'; }
+    return `owner mode needs the amicus source checkout (${PKG_ROOT} is not inside a git work tree)`;
+  }
   // Mutant GATEPREFIX: drop this check and an npm-installed copy inside a
   // consumer's repo passes (setup-hooks.js documents that exact trap).
   if (prefix !== '') { return `owner mode needs the amicus source checkout, not an installed copy (${PKG_ROOT} sits ${prefix} below its repository root)`; }
@@ -93,11 +96,13 @@ function ownerGate(d) {
 
 /**
  * @param {object} pins `loadCuratedPins().pins`
- * @returns {Object<string, Object<string,string>>} provider → { alias → id }, both null-prototype; providers in
- *   first-seen order walking the pins in file order (every pin has an openrouter route, so openrouter is first)
+ * @returns {Object<string, Object<string,string>>} provider → { alias → id }, both null-prototype;
+ *   `openrouter` is always first (seeded before the walk — a pin's own JSON key order is not
+ *   guaranteed to list its openrouter route first), the rest in first-seen order walking the pins
+ *   in file order
  */
 function routesByProvider(pins) {
-  const out = { __proto__: null };
+  const out = { __proto__: null, openrouter: { __proto__: null } };
   for (const alias of Object.keys(pins)) {
     for (const [provider, id] of Object.entries(pins[alias].routes)) {
       if (!own(out, provider)) { out[provider] = { __proto__: null }; }
@@ -127,6 +132,30 @@ function routeDisagreements(pins) {
     for (const [provider, id] of Object.entries(routes)) {
       if (provider === 'openrouter' || DIVERGENT_VENDORS.has(provider)) { continue; }
       if (id !== derived) { lines.push(`  ⚠ ${safeFragment(alias)}: ${provider} route ${safeFragment(id)} ≠ ${safeFragment(derived)} derived from its openrouter route — reconcile by hand in ${DATA_FILE}`); }
+    }
+  }
+  return lines;
+}
+
+/**
+ * Whole-branch review Minor #3: the comparator's dash-version limit means an
+ * anthropic pass can never propose the matching move for a sibling accepted
+ * on openrouter (the smoke's `fable → claude-fable-5.1` on openrouter only is
+ * the live case) — so a touched alias whose pin ALSO has a route in a
+ * DIVERGENT_VENDORS namespace this session never touched is called out for
+ * the owner to verify by hand.
+ * @param {object} pins the (possibly updated) document's pins
+ * @param {Set<string>} touched alias names touched this session
+ * @param {Set<string>} touchedRoutes `<alias>::<provider>` pairs actually written this session
+ * @returns {string[]} one ℹ line per such alias/route
+ */
+function divergentVendorNotices(pins, touched, touchedRoutes) {
+  const lines = [];
+  for (const alias of touched) {
+    for (const [provider, id] of Object.entries(pins[alias].routes)) {
+      if (!DIVERGENT_VENDORS.has(provider)) { continue; }
+      if (touchedRoutes.has(alias + '::' + provider)) { continue; }
+      lines.push(`  ℹ ${safeFragment(alias)}: ${provider} route ${safeFragment(id)} not compared (divergent vendor) — verify it by hand`);
     }
   }
   return lines;
@@ -184,6 +213,7 @@ function passDeps(provider, map, catalogInfo, state, ask, d) {
       d.saveCuratedPins(next);        // Mutant SAVEFIRST: assign state.doc before this line
       state.doc = next;
       state.touched.add(alias);
+      state.touchedRoutes.add(alias + '::' + provider); // keyed on this PASS's namespace, so an untouched divergent sibling namespace can be told apart
     },
     removeAlias: () => { throw new Error('owner mode never unpins — the shipped set has nothing to follow'); },
     recordDismissal: () => { throw new Error('owner mode has no dismissals'); },
@@ -200,7 +230,7 @@ async function runOwnerReview(args, deps) {
   const d = { ...defaultDeps(), ...(deps || {}) };
   const refusal = ownerGate(d);
   if (refusal) { d.stderr(`Error: ${refusal}\n`); return 1; }
-  const state = { doc: d.loadCuratedPins(), touched: new Set() };
+  const state = { doc: d.loadCuratedPins(), touched: new Set(), touchedRoutes: new Set() };
   const groups = routesByProvider(state.doc.pins);
   const routeCount = Object.values(groups).reduce((n, g) => n + Object.keys(g).length, 0);
   d.write(`  owner mode — reviewing the shipped pins in ${DATA_FILE} (${Object.keys(state.doc.pins).length} pins, ${routeCount} routes)\n`);
@@ -221,7 +251,7 @@ async function runOwnerReview(args, deps) {
       const gap = namespaceGap(provider, catalogInfo);
       if (gap) { d.write(`  ${provider} routes (${n}): ${gap} — not reviewed\n`); continue; }
       d.write(`  ${provider} routes (${n}):\n`);
-      if (await d.runReview(args, passDeps(provider, groups[provider], catalogInfo, state, ask, d)) !== 0) { interrupted = true; break; }
+      if (await d.runReview(args, passDeps(provider, groups[provider], catalogInfo, state, ask, d)) !== 0) { interrupted = true; d.write('  pass ended early — rulings skipped\n'); break; }
     }
     if (!interrupted) { await askRulings(state, ask, d); }
   } catch (err) {
@@ -232,6 +262,7 @@ async function runOwnerReview(args, deps) {
     if (prompt) { prompt.close(); }
   }
   for (const line of routeDisagreements(state.doc.pins)) { d.write(line + '\n'); }
+  for (const line of divergentVendorNotices(state.doc.pins, state.touched, state.touchedRoutes)) { d.write(line + '\n'); }
   const k = state.touched.size;
   d.write(k === 0
     ? `  no pin changed — ${DATA_FILE} is untouched\n`

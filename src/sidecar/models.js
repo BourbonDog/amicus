@@ -264,7 +264,7 @@ function buildFallbackDriftReport(catalogOrInfo) {
   for (const f of families) {
     const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);
     if (live && f.fallback.openrouter && live !== f.fallback.openrouter) {
-      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${live}) — amicus aliases --review --owner`);
+      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${live}) — amicus aliases --review --owner (a family match is not always a same-tier sibling; when the picker offers nothing, edit src/utils/curated-pins.json by hand)`);
     }
   }
   const familyAliases = new Set(families.map(f => f.alias));

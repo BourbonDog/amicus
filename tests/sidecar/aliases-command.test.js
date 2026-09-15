@@ -400,7 +400,9 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
     expect(out).toMatch(/devstral\s+→\s+openrouter\/mistralai\/devstral-medium\s+pinned\s+⚠ retired 2026-08-04\n\s+↳ OpenRouter delisted the whole devstral family\./);
-    expect(out).toContain('nothing to review');
+    // whole-branch review Minor #5: the footer names the retired-flagged
+    // count instead of the bare (misleading-by-omission) "nothing to review".
+    expect(out).toContain('nothing to review (1 retired pin flagged above) — amicus aliases --review');
   });
   test('--json carries `retired` and a retired pin still appears as a plain pinned row', async () => {
     mockPins({ retired: { devstral: { on: '2026-08-04', ruling: 'delisted' } } });

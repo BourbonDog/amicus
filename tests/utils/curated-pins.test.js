@@ -102,24 +102,39 @@ describe('loadCuratedPins', () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curated-pins-')); });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
-  test('the shipped file validates and carries the 21 curated aliases + retired.devstral + an empty notable list', () => {
+  // #238 whole-branch review Important #1(b)(i): no longer welded to literals
+  // of the LIVE file (a pin count, or the first five alias names, is exactly
+  // what the D3 baseline session is about to change) — the 21-pins/first-five
+  // invariants stay pinned on the FROZEN b803a2a fixture instead, in
+  // tests/curated-models-move.test.js, which is where they belong.
+  test('the shipped file validates, and every family alias has a shipped pin', () => {
     const doc = loadCuratedPins();
-    expect(Object.keys(doc.pins)).toHaveLength(21);
-    expect(Object.keys(doc.pins).slice(0, 5)).toEqual(['gemini', 'gemini-pro', 'gpt', 'opus', 'deepseek']);
-    expect(doc.retired.devstral.on).toBe('2026-08-04');
-    expect(doc.notable).toEqual([]);
     expect(() => validateCuratedPins(doc)).not.toThrow();
+    expect(Object.keys(doc.pins).length).toBeGreaterThan(0);
+    const { getFamilies } = require('../../src/utils/curated-models');
+    for (const alias of getFamilies().map(f => f.alias)) {
+      expect(Object.prototype.hasOwnProperty.call(doc.pins, alias)).toBe(true);
+    }
+    expect(typeof doc.retired).toBe('object');
+    expect(doc.retired).not.toBeNull();
+    expect(Array.isArray(doc.retired)).toBe(false);
+    expect(Array.isArray(doc.notable)).toBe(true);
   });
   test('the shipped file is in canonical format (JSON.stringify(doc, null, 2) + LF) so an unchanged owner write leaves no diff', () => {
     const raw = fs.readFileSync(SHIPPED_PATH, 'utf8');
     expect(raw).toBe(JSON.stringify(JSON.parse(raw), null, 2) + '\n');
   });
   test('every call returns a fresh deep copy — mutating one never reaches the next (mutant CLONE)', () => {
+    // #238 whole-branch review Important #1(b)(ii): the mutated-to value is
+    // derived from a live read, not a literal of it — only the ORIGINAL
+    // value (captured once, before the mutation) is asserted, so a moved glm
+    // pin cannot redden this.
+    const orig = loadCuratedPins().pins.glm.routes.openrouter;
     const a = loadCuratedPins();
-    a.pins.glm.routes.openrouter = 'openrouter/z-ai/glm-9.9';
+    a.pins.glm.routes.openrouter = orig + '-mutated';
     a.retired.zzz = { on: '2026-01-01', ruling: 'x' };
     const b = loadCuratedPins();
-    expect(b.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3');
+    expect(b.pins.glm.routes.openrouter).toBe(orig);
     expect(b.retired.zzz).toBeUndefined();
   });
   test('an explicit path reads THAT file, fresh, and validates it', () => {
@@ -232,13 +247,20 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     expect(() => setPinRuling(good(), 'nope', 'x')).toThrow("'nope' is not a shipped pin");
   });
   test('a setPinRoute → saveCuratedPins → loadCuratedPins round trip through curated-models yields the new gateway routes', () => {
+    // #238 whole-branch review Important #1(b)(iii): the written glm-5.4
+    // value is this test's OWN literal (it writes it, then reads it back) —
+    // fine regardless of live data. The untouched-pin assertion below is not:
+    // captured from a live read (`before`) rather than hardcoded, so a moved
+    // gemini pin cannot redden it.
+    const before = loadCuratedPins();
     const p = path.join(dir, 'pins.json');
-    saveCuratedPins(setPinRoute(loadCuratedPins(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', '2026-09-20'), p);
+    saveCuratedPins(setPinRoute(before, 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', '2026-09-20'), p);
     jest.resetModules();
     const real = jest.requireActual('../../src/utils/curated-pins');
     jest.doMock('../../src/utils/curated-pins', () => ({ ...real, loadCuratedPins: () => real.loadCuratedPins(p) }));
     const cm = require('../../src/utils/curated-models');
     expect(cm.toGatewayRoutes().glm).toEqual({ openrouter: 'openrouter/z-ai/glm-5.4' });
-    expect(cm.toDefaultAliases().gemini).toBe('google/gemini-3.6-flash'); // untouched pins unchanged
+    // toDefaultAliases prefers the authored direct form (gemini's google route).
+    expect(cm.toDefaultAliases().gemini).toBe(before.pins.gemini.routes.google); // untouched pins unchanged
   });
 });
