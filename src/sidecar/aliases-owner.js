@@ -44,7 +44,8 @@ const { execFileSync } = require('child_process');
 const { DIVERGENT_VENDORS, stripGatewayPrefix } = require('../utils/curated-models');
 const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require('../utils/curated-pins');
 const { refreshingCatalogLine } = require('./aliases-review-render');
-const { collapseExcerpt } = require('../utils/text-sanitize');
+const { gatedCatalogIds } = require('../utils/alias-proposals');
+const { collapseExcerpt, safeFragment } = require('../utils/text-sanitize');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
 const DATA_FILE = 'src/utils/curated-pins.json';
@@ -117,9 +118,15 @@ function routeDisagreements(pins) {
   for (const alias of Object.keys(pins)) {
     const routes = pins[alias].routes;
     const derived = stripGatewayPrefix(routes.openrouter);
+    // Round-1 review Small 5: a vendor stripGatewayPrefix does not recognize
+    // (not a registered direct provider) returns the route UNCHANGED, so
+    // `derived` would equal `routes.openrouter` itself -- nothing to compare
+    // any direct route against, so skip the whole pin rather than manufacture
+    // a false disagreement.
+    if (derived === routes.openrouter) { continue; }
     for (const [provider, id] of Object.entries(routes)) {
       if (provider === 'openrouter' || DIVERGENT_VENDORS.has(provider)) { continue; }
-      if (id !== derived) { lines.push(`  ⚠ ${alias}: ${provider} route ${id} ≠ ${derived} derived from its openrouter route — reconcile by hand in ${DATA_FILE}`); }
+      if (id !== derived) { lines.push(`  ⚠ ${safeFragment(alias)}: ${provider} route ${safeFragment(id)} ≠ ${safeFragment(derived)} derived from its openrouter route — reconcile by hand in ${DATA_FILE}`); }
     }
   }
   return lines;
@@ -129,8 +136,9 @@ function routeDisagreements(pins) {
 function namespaceGap(provider, catalogInfo) {
   const failures = Array.isArray(catalogInfo.providerFailures) ? catalogInfo.providerFailures : [];
   if (failures.some(f => f && f.provider === provider)) { return 'provider fetch failed this run'; }
-  const models = Array.isArray(catalogInfo.models) ? catalogInfo.models : [];
-  const covered = models.some(m => m && typeof m.id === 'string' && m.authoritative !== false && providerOf(m.id) === provider);
+  // Round-1 review Small 4: reuse the §5 gate's own id set (alias-proposals.js)
+  // instead of re-implementing its authoritative/failure filter here.
+  const covered = gatedCatalogIds(catalogInfo).some(id => providerOf(id) === provider);
   return covered ? null : 'no authoritative rows in the catalog (no key?)';
 }
 
@@ -148,7 +156,7 @@ async function askRulings(state, ask, d) {
   d.write('  rulings — a sentence on WHY, stored beside the pin (enter keeps the current text):\n');
   for (const alias of state.touched) {
     const pin = state.doc.pins[alias];
-    d.write(`  ${alias} → ${Object.values(pin.routes).join(', ')}\n    current: ${pin.ruling || '(none)'}\n`);
+    d.write(`  ${alias} → ${Object.values(pin.routes).map(safeFragment).join(', ')}\n    current: ${pin.ruling || '(none)'}\n`);
     const ans = String((await ask('    ruling: ')) || '').trim();
     if (!ans) { continue; }
     try {
@@ -163,6 +171,10 @@ async function askRulings(state, ask, d) {
 function passDeps(provider, map, catalogInfo, state, ask, d) {
   return {
     ...d, ask, isTTY: true,
+    // Round-1 review Small 3: the owner module already printed the
+    // refreshing-catalog banner once (if stale) before the first pass; a
+    // per-namespace runReview must not repeat it on every pass.
+    readCache: null,
     collectAliasView: async () => ownerView(map, catalogInfo, state.doc, d),
     renderAliasList: () => '',
     addAlias: (alias, id) => {

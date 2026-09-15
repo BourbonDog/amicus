@@ -7,7 +7,20 @@
  * src/utils/curated-pins.json; in CI the real gate would pass). The picker
  * (aliases-review.js :: runReview) and the engine run for real.
  *
- * Named mutants (measured red against this file):
+ * Round-1 review Important: the walk tests are NOT welded to the live
+ * shipped src/utils/curated-pins.json — the feature's first real use (the
+ * owner's D3 baseline session, right after this merges) changes those pins
+ * and would redden every number/string a live-data test hardcodes. Every
+ * `runOwnerReview` test below runs against the SYNTHETIC `DOC` fixture
+ * (6 pins, 9 routes, the same four namespaces in the same file-order as the
+ * shipped file); `routesByProvider`/`routeDisagreements`'s shipped-data
+ * invariants are pinned instead to the FROZEN `tests/fixtures/curated-pins-
+ * b803a2a.json` snapshot, which never moves, plus one cheap assertion that
+ * the LIVE shipped file also holds the invariant today.
+ *
+ * Named mutants (measured red against this file — see the table in the
+ * fix-round-1 section of task-3-report.md for the full command + suite/test
+ * names):
  *   GATEPREFIX — ownerGate ignores a non-empty `--show-prefix`.
  *   DIRTYTREE  — ownerGate ignores a non-empty `status --porcelain`.
  *   PROVREFUSE — the sink calls setPinRoute with providerOf(id) instead of the pass's namespace.
@@ -17,22 +30,43 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { DEFAULT_MAX_AGE_MS } = require('../../src/utils/model-catalog');
 
-const SHIPPED = path.resolve(__dirname, '../../src/utils/curated-pins.json');
+const FROZEN_SHIPPED = path.resolve(__dirname, '../fixtures/curated-pins-b803a2a.json');
 const pinsModule = () => require('../../src/utils/curated-pins');
 
-/** Every shipped route id, so a pass finds its routes LIVE unless a test omits them — a route absent from a namespace the catalog covers reads as STALE and would flood the pass with proposals. */
-const shippedRouteIds = () => Object.values(pinsModule().loadCuratedPins().pins).flatMap(p => Object.values(p.routes));
+/**
+ * Synthetic baseline (round-1 review Important, item 1): 6 pins, 9 routes,
+ * across the same four namespaces (openrouter, google, anthropic, deepseek)
+ * in the same file-order the shipped file happens to use today — but this
+ * object, not that file, is what every walk test below is welded to.
+ */
+const DOC = {
+  version: 1,
+  pins: {
+    gemini: { routes: { openrouter: 'openrouter/google/gemini-3.6-flash', google: 'google/gemini-3.6-flash' }, verifiedOn: '2026-08-04' },
+    glm: { routes: { openrouter: 'openrouter/z-ai/glm-5.3' }, verifiedOn: '2026-08-04', ruling: 'why glm' },
+    gpt: { routes: { openrouter: 'openrouter/openai/gpt-5.6-terra' }, verifiedOn: '2026-08-04', ruling: 'tracks the terra (mid) tier' },
+    grok: { routes: { openrouter: 'openrouter/x-ai/grok-4.3' }, verifiedOn: '2026-08-04' },
+    opus: { routes: { openrouter: 'openrouter/anthropic/claude-opus-5', anthropic: 'anthropic/claude-opus-5' }, verifiedOn: '2026-08-04' },
+    deepseek: { routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' }, verifiedOn: '2026-08-04' },
+  },
+  retired: {},
+  notable: [],
+};
+
+/** Every DOC route id, so a pass finds its routes LIVE unless a test omits them — a route absent from a namespace the catalog covers reads as STALE and would flood the pass with proposals. */
+const docRouteIds = () => Object.values(DOC.pins).flatMap(p => Object.values(p.routes));
 function catalogWith({ extra = [], omit = () => false, failures = [], fetchedAt = Date.now() } = {}) {
-  const base = shippedRouteIds().filter(id => !omit(id)).map(id => ({ id }));
+  const base = docRouteIds().filter(id => !omit(id)).map(id => ({ id }));
   return { models: [...base, ...extra.map(e => (typeof e === 'string' ? { id: e } : e))], fetchedAt, lastRefreshAttempt: null, lastRefreshError: null, providerFailures: failures };
 }
 const EMPTY_CATALOG = { models: [], fetchedAt: null, lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [] };
 
-function harness({ answers = [], catalog, git = () => '', isTTY = true, today = '2026-09-20', doc } = {}) {
+function harness({ answers = [], catalog, git = () => '', isTTY = true, today = '2026-09-20', doc = DOC } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aliases-owner-'));
   const file = path.join(dir, 'curated-pins.json');
-  fs.writeFileSync(file, doc ? JSON.stringify(doc, null, 2) + '\n' : fs.readFileSync(SHIPPED));
+  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   const log = [];
   const queue = [...answers];
   const { loadCuratedPins, saveCuratedPins } = pinsModule();
@@ -80,10 +114,12 @@ describe('ownerGate', () => {
   });
 });
 
-describe('routesByProvider / routeDisagreements', () => {
+describe('routesByProvider / routeDisagreements (pinned to a frozen shipped-pins snapshot, never the live file)', () => {
   const { routesByProvider, routeDisagreements } = require('../../src/sidecar/aliases-owner');
+  const frozenPins = () => JSON.parse(fs.readFileSync(FROZEN_SHIPPED, 'utf8')).pins;
+
   test('groups every route by its namespace, openrouter first, file order within', () => {
-    const { pins } = pinsModule().loadCuratedPins();
+    const pins = frozenPins();
     const g = routesByProvider(pins);
     expect(Object.keys(g)).toEqual(['openrouter', 'google', 'anthropic', 'deepseek']);
     expect(Object.keys(g.openrouter)).toHaveLength(21);
@@ -92,8 +128,8 @@ describe('routesByProvider / routeDisagreements', () => {
     expect(Object.getPrototypeOf(g)).toBeNull();
     expect(Object.getPrototypeOf(g.openrouter)).toBeNull();
   });
-  test('the shipped pins have no route disagreements; a non-divergent mismatch is named; a divergent vendor never is', () => {
-    const { pins } = pinsModule().loadCuratedPins();
+  test('the frozen shipped pins have no route disagreements; a non-divergent mismatch is named; a divergent vendor never is', () => {
+    const pins = frozenPins();
     expect(routeDisagreements(pins)).toEqual([]);
     const bent = JSON.parse(JSON.stringify(pins));
     bent.gemini.routes.openrouter = 'openrouter/google/gemini-3.7-flash';
@@ -101,6 +137,16 @@ describe('routesByProvider / routeDisagreements', () => {
     const lines = routeDisagreements(bent);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('gemini: google route google/gemini-3.6-flash ≠ google/gemini-3.7-flash');
+  });
+  test('the LIVE shipped file also has no route disagreements today (a genuine invariant of the shipped data, cheap to check)', () => {
+    expect(routeDisagreements(pinsModule().loadCuratedPins().pins)).toEqual([]);
+  });
+  test('round-1 review Small 5: a route under a vendor stripGatewayPrefix cannot derive (not a registered direct provider) is never read as a disagreement', () => {
+    // 'z-ai' has no direct-API integration (curated-models.js's DIVERGENT_VENDORS/provider-registry
+    // do not know it), so stripGatewayPrefix returns the openrouter route unchanged; a hand-authored
+    // extra route under that same vendor name must not manufacture a false "disagreement".
+    const pins = { widget: { routes: { openrouter: 'openrouter/z-ai/glm-5.3', 'z-ai': 'z-ai/glm-5.3' }, verifiedOn: '2026-08-04' } };
+    expect(routeDisagreements(pins)).toEqual([]);
   });
 });
 
@@ -125,8 +171,22 @@ describe('runOwnerReview', () => {
     expect(h.log).not.toContain('SAVE');
   });
 
+  test('round-1 review Small 3: a stale readCache does not repeat the refreshing-catalog banner once per namespace pass', async () => {
+    // Every DOC route lives in the catalog (nothing to propose anywhere), so
+    // all four passes run clean with zero `ask` calls -- isolating whether
+    // the banner (from a stale cache the "refresh" never actually updated)
+    // prints once overall or once per pass.
+    const stale = catalogWith({ fetchedAt: Date.now() - (3 * DEFAULT_MAX_AGE_MS) });
+    h = harness({ catalog: stale });
+    h.deps.readCache = () => stale;
+    h.deps.getCatalogInfo = async () => stale;
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    const matches = h.out().match(/refreshing catalog/g) || [];
+    expect(matches).toHaveLength(1);
+  });
+
   test('one pass per namespace: a namespace with no authoritative row is announced and skipped; a failed one too', async () => {
-    // every shipped route live, plus a newer glm sibling; the deepseek namespace only as a FLOOR row; anthropic rejected
+    // every DOC route live, plus a newer glm sibling; the deepseek namespace only as a FLOOR row; anthropic rejected
     const catalog = catalogWith({
       extra: ['openrouter/z-ai/glm-5.4', { id: 'deepseek/deepseek-v4-pro', authoritative: false }],
       omit: id => id.startsWith('deepseek/'),
@@ -134,39 +194,39 @@ describe('runOwnerReview', () => {
     h = harness({ catalog, answers: ['3'] }); // glm: [1] accept 5.4 [2] choose another [3] skip
     expect(await runOwnerReview({}, h.deps)).toBe(0);
     const out = h.out();
-    expect(out).toContain('owner mode — reviewing the shipped pins in src/utils/curated-pins.json (21 pins, 28 routes)');
-    expect(out).toContain('openrouter routes (21):');
+    expect(out).toContain('owner mode — reviewing the shipped pins in src/utils/curated-pins.json (6 pins, 9 routes)');
+    expect(out).toContain('openrouter routes (6):');
     expect(out).toContain('[1/1] glm');
     expect(out).toContain('google routes (1):');
     expect(out).toContain('Nothing to review — 1 alias, all following or up to date.'); // T4's wording; the google route is live
-    expect(out).toContain('anthropic routes (5): provider fetch failed this run — not reviewed');
+    expect(out).toContain('anthropic routes (1): provider fetch failed this run — not reviewed');
     expect(out).toContain('deepseek routes (1): no authoritative rows in the catalog (no key?) — not reviewed');
     expect(out).not.toContain('never ask again'); // mutant NODISMISS
     expect(out).toContain('no pin changed — src/utils/curated-pins.json is untouched');
     expect(h.log).not.toContain('SAVE');
   });
 
-  test('accept: the route is replaced in ITS namespace, verifiedOn stamped with the injected UTC date, the write lands BEFORE the ✓, canonical format, ruling prompt keeps on enter', async () => {
+  test('accept: the route is replaced in ITS namespace, verifiedOn stamped with the injected UTC date, the write lands BEFORE the ✓, canonical format, ruling prompt keeps the current text on enter', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4'] });
     h = harness({ catalog, answers: ['1', ''] }); // accept glm-5.4 (the only proposal across all four passes); ruling: enter keeps
     expect(await runOwnerReview({}, h.deps)).toBe(0);
     const doc = h.read();
     expect(doc.pins.glm.routes).toEqual({ openrouter: 'openrouter/z-ai/glm-5.4' });
     expect(doc.pins.glm.verifiedOn).toBe('2026-09-20');
-    expect(doc.pins.glm.ruling).toBeUndefined();
-    expect(doc.pins.gemini).toEqual(pinsModule().loadCuratedPins().pins.gemini); // untouched
+    expect(doc.pins.glm.ruling).toBe('why glm'); // pre-existing ruling: blank answer KEEPS it, does not clear it
+    expect(doc.pins.gemini).toEqual(DOC.pins.gemini); // untouched
     expect(fs.readFileSync(h.file, 'utf8')).toBe(JSON.stringify(doc, null, 2) + '\n');
     const saveAt = h.log.indexOf('SAVE');
     const tickAt = h.log.findIndex(l => l.includes('✓ glm → openrouter/z-ai/glm-5.4'));
     expect(saveAt).toBeGreaterThan(-1);
     expect(saveAt).toBeLessThan(tickAt);
     expect(h.out()).toContain('rulings — a sentence on WHY');
-    expect(h.out()).toContain('current: (none)');
+    expect(h.out()).toContain('current: why glm');
     expect(h.out()).toContain('1 pin changed — review with: git diff src/utils/curated-pins.json');
   });
 
-  test('ruling typed after the walk is trimmed and written; the current ruling is shown first', async () => {
-    const catalog = catalogWith({ extra: ['openrouter/openai/gpt-5.7-terra'] }); // gpt's sibling; not gpt-pro's (suffix -sol-pro) — measured
+  test('ruling typed after the walk is trimmed and written; the current (pre-existing) ruling is shown first', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/openai/gpt-5.7-terra'] }); // gpt's sibling
     h = harness({ catalog, answers: ['1', '  terra tier confirmed live 2026-09-20  '] });
     expect(await runOwnerReview({}, h.deps)).toBe(0);
     expect(h.out()).toContain('current: tracks the terra (mid) tier');
@@ -175,13 +235,16 @@ describe('runOwnerReview', () => {
     expect(h.log.filter(l => l === 'SAVE')).toHaveLength(2);
   });
 
-  test('choose another with an id from another namespace is refused by the sink and the menu returns (mutant PROVREFUSE)', async () => {
-    const catalog = catalogWith({ extra: ['google/gemini-3.7-flash', 'openrouter/z-ai/glm-5.4'] });
-    // openrouter pass: glm proposal → [2] choose another → type a google id (a real, gated catalog row, so only the sink can refuse it) → refused → [3] skip; google pass: gemini has a newer sibling → [3] skip
-    h = harness({ catalog, answers: ['2', 'google/gemini-3.7-flash', '3', '3'] });
+  test('choose another with an id from another namespace is refused by the sink in EITHER direction, document unchanged (mutant PROVREFUSE)', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'google/gemini-3.7-flash', 'openrouter/google/gemini-3.7-flash'] });
+    // openrouter pass: gemini (sibling of its OWN openrouter route) -> [2] choose another -> type a GOOGLE id (real, gated) -> refused -> [3] skip;
+    //                  glm (sibling) -> [3] skip;
+    // google pass:     gemini (sibling of its OWN google route) -> [2] choose another -> type an OPENROUTER id (real, gated) -> refused -> [3] skip.
+    h = harness({ catalog, answers: ['2', 'google/gemini-3.7-flash', '3', '3', '2', 'openrouter/google/gemini-3.7-flash', '3'] });
     expect(await runOwnerReview({}, h.deps)).toBe(0);
     expect(h.out()).toContain("could not write: curated-pins.json: 'google/gemini-3.7-flash' is not in the openrouter/ namespace");
-    expect(h.read()).toEqual(pinsModule().loadCuratedPins());
+    expect(h.out()).toContain("could not write: curated-pins.json: 'openrouter/google/gemini-3.7-flash' is not in the google/ namespace");
+    expect(h.read()).toEqual(DOC);
     expect(h.log).not.toContain('SAVE');
   });
 
@@ -228,18 +291,22 @@ describe('runOwnerReview', () => {
 describe('handleAliases dispatch', () => {
   test('--owner without --review is an argument error (exit 1) and never loads owner mode', async () => {
     jest.resetModules();
+    jest.doMock('../../src/sidecar/aliases-owner', () => { throw new Error('must not load aliases-owner.js'); });
     const { handleAliases } = require('../../src/sidecar/aliases');
     const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(await handleAliases({ _: ['aliases'], owner: true })).toBe(1);
     expect(err.mock.calls.map(c => c[0]).join('')).toContain('--owner requires --review');
     err.mockRestore();
+    jest.dontMock('../../src/sidecar/aliases-owner');
   });
   test('--review --owner --json is still the --review argument error', async () => {
     jest.resetModules();
+    jest.doMock('../../src/sidecar/aliases-owner', () => { throw new Error('must not load aliases-owner.js'); });
     const { handleAliases } = require('../../src/sidecar/aliases');
     const err = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     expect(await handleAliases({ _: ['aliases'], review: true, owner: true, json: true })).toBe(1);
     expect(err.mock.calls.map(c => c[0]).join('')).toContain('--review is interactive');
     err.mockRestore();
+    jest.dontMock('../../src/sidecar/aliases-owner');
   });
 });

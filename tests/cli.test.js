@@ -1136,11 +1136,15 @@ describe('CLI Argument Parser', () => {
   });
 
   describe('aliases command', () => {
-    test('--owner is a boolean flag alongside --review, positionals intact', () => {
-      const args = parseArgs(['aliases', '--review', '--owner']);
+    // round-1 review item 9: with `--owner` as the LAST token, the generic
+    // "options with values" branch already defaults it to `true` (nothing
+    // follows to swallow) regardless of BOOLEAN_FLAGS membership, so that
+    // form cannot go red without the registration. A following bare
+    // positional is the real proof: an unregistered flag would swallow it.
+    test('--owner is a boolean flag: a following positional is not swallowed as its value', () => {
+      const args = parseArgs(['aliases', '--owner', 'x']);
       expect(args.owner).toBe(true);
-      expect(args.review).toBe(true);
-      expect(args._).toEqual(['aliases']);
+      expect(args._).toEqual(['aliases', 'x']);
     });
   });
 
