@@ -8701,7 +8701,7 @@ Filed past-tense in the same commit as each fix, per the falsified-record rule.
   filed above (render constants without `()`, and either raise the cap or mark truncation), after
   which no module's export order is load-bearing for anything.
 
-## v4.9.9 candidates — follow-ups from the v4.9.8 cut (2026-09-13)
+## Next-patch candidates — follow-ups from the v4.9.8 cut (2026-09-13; filed as "v4.9.9 candidates" — v4.10.0 shipped #238 Phase 1 on 2026-09-14 without any of them, all still open)
 
 Filed from the three council-leg-completion PRs (#246 idle-gate veto, #247 per-run seat tools,
 #248 unverified/refused census — three rounds on #248, every seat completed) and the v4.9.8
@@ -8730,3 +8730,31 @@ whose seat was refused `.env` by `read[*.env]=deny` and `bash` as "not available
   yet diagnosed.
 - [ ] **`report.js` sits at exactly 300/300 lines** (the sixth src file at the cap); its next edit
   needs a split.
+
+## v4.10.0 cut — #238 Phase 1 dispositions (2026-09-14)
+
+Shipped as v4.10.0 from PR #249 (two council rounds, 16 + 13 Confirmed; the round-2 fix wave
+merged on an in-branch review at the owner's call). Left open, in the order the spec scopes them:
+
+- [ ] **#238 Phase 2 — owner mode.** `src/utils/curated-pins.json` (pins + `retired` + `notable`,
+  D8; `curated-models.js` sits at exactly 300 lines), `models --check` gains the newer-sibling line
+  through `model-id-siblings.js` (spec §8 Q7 — when it lands, the CHANGELOG 4.10.0 clause "shared
+  with the CI alias-pin drift gate" and the module docblock's `models --check` sentence both go
+  stale), the D3 baseline session. The engine already accepts `retired`/`notable`; `amicus aliases`
+  supplies neither until this ships.
+- [ ] **#238 Phase 3 — Electron "Needs review" section** above the alias list; pins visible,
+  unpin/delete on the GUI surface (D9). The editor already renders from `getEffectiveAliases()`.
+- [ ] **#238 Phase 4 — the quiet update notice** on the update-notifier rail + the detached
+  opportunistic catalog refresh (D5), and the notable list's editorial half.
+- [ ] Parked test-only nits from the round-2 re-review: a hostile `shipped` fixture so
+  `renderScreen`'s `p.shipped` wrap is load-bearing; a hostile `getCatalogInfo`-throw test for
+  `aliases.js`'s catalog-unavailable Notice; a `closed` peek before `renderScreen` so a Ctrl-C
+  during the inline refresh does not paint one screen before the tally.
+- [ ] Round-1 C7 follow-up: a one-line summary above N Notices on the first save after upgrade
+  (today one Notice per converted key — three on the owner's own config at the cut).
+- [ ] `amicus aliases` list: ids longer than the 44-column pad (the 67-char
+  `dolphin-mistral-24b-venice-edition`) push the state column right; cosmetic.
+- [ ] Prod audit at the cut (`npm audit --omit=dev`, unchanged since v4.9.8's lock): `extract-zip`
+  (high, no fix; amicus's own Electron extraction refuses symlink/traversal entries in
+  `electron-refuse.js`) and `hono ≤4.13.4` (moderate, fix available) — take the hono bump in a
+  reviewed PR, not at a cut.
