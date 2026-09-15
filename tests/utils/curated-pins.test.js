@@ -124,6 +124,18 @@ describe('loadCuratedPins', () => {
   });
 });
 
+// MEASURED 2026-09-14 (`npx jest tests/utils/curated-pins.test.js`, restored via
+// `git checkout -- src/utils/curated-pins.js`; `git status --porcelain` clean
+// after both):
+//   STAMP (delete the `next.pins[alias].verifiedOn = today;` line in
+//   setPinRoute) — RED (1): "setPinRoute replaces exactly that route, stamps
+//   verifiedOn, and returns a COPY (mutant STAMP: skip the stamp)"; every
+//   other test in this file stays green.
+//   PROVMATCH (in setPinRoute, replace `if (!inNamespace(id, provider))` with
+//   `if (typeof id !== 'string')`) — RED (1): "setPinRoute refuses an unknown
+//   alias, a namespace the pin has no route in, an id outside the namespace,
+//   and a bad date (mutant PROVMATCH: drop the namespace check)"; every other
+//   test in this file stays green.
 describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mode, #238 D8)', () => {
   const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require(MOD);
   let dir;
