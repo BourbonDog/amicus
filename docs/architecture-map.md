@@ -209,7 +209,7 @@ src/
 │   ├── config.js  # Amicus Config Module
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3).
-│   ├── curated-pins.js  # The shipped pin set (#238 D8) — `src/utils/curated-pins.json`: one entry per
+│   ├── curated-pins.js  # The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here.
 │   ├── curated-pins.json
 │   ├── degrade.js
 │   ├── doctor-alias-check.js
@@ -687,7 +687,7 @@ evals/
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
-| `utils/curated-pins.js` | The shipped pin set (#238 D8) — `src/utils/curated-pins.json`: one entry per | `loadCuratedPins()`, `validateCuratedPins()`, `CURATED_PINS_PATH()` |
+| `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
