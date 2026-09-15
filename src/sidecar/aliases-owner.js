@@ -77,7 +77,7 @@ function defaultDeps() {
 }
 
 /**
- * @param {object} pins `loadCuratedPins().pins`
+ * @param {object} pins the pins map (`state.doc.pins`)
  * @returns {Object<string, Object<string,string>>} provider → { alias → id }, both null-prototype;
  *   `openrouter` is always first (seeded before the walk), the rest in first-seen file order
  */
@@ -215,7 +215,15 @@ async function runOwnerReview(args, deps) {
   try {
     state = { touched: new Set(), touchedRoutes: new Set() };
     state.diskBytes = d.readCuratedPinsBytes();
-    const doc = JSON.parse(state.diskBytes);
+    let doc;
+    try {
+      doc = JSON.parse(state.diskBytes);
+    } catch (err) {
+      // Review residual: name the file, same shape as validateCuratedPins'
+      // own `fail()` ("curated-pins.json: <path>: <reason>"), so a malformed
+      // read reads exactly like every other named defect from this file.
+      throw new Error(`curated-pins.json: ${DATA_FILE}: ${err.message}`);
+    }
     validateCuratedPins(doc);
     state.doc = doc;
   } catch (err) {

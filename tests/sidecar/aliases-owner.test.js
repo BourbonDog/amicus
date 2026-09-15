@@ -72,22 +72,9 @@
  * (safe: committed before measuring). `commit`/`askRulings` now live in
  * aliases-owner-sink.js (the round-2 size-budget split).
  *   SKEW — runOwnerReview rebuilds `state.doc` from `d.loadCuratedPins()`
- *     instead of parsing `state.diskBytes`. RED, TARGETED run only
- *     (`npx jest tests/sidecar/aliases-owner.test.js -t "G1: the CAS
- *     baseline"`): "G1: the CAS baseline and the in-memory doc come from the
- *     SAME read — a stale loadCuratedPins is never consulted (mutant SKEW)".
- *     SAFETY NOTE: do NOT run this mutant across the whole file (or
- *     un-targeted) — every OTHER test that does not itself inject
- *     `loadCuratedPins` silently falls through to `aliases.js :: loadDeps()`'s
- *     REAL one (owner mode's own `defaultDeps()` no longer sets it, but the
- *     `...base` spread still carries it), which reads and validates the
- *     ACTUAL SHIPPED 21-pin file — producing a `state.doc` wildly mismatched
- *     against each test's tiny synthetic catalog/temp file, so nearly every
- *     route reads as "stale" and the walk explodes into far more proposals
- *     than any test's scripted answers cover. MEASURED: this reliably
- *     times out / OOMs a full-file run; it is not a flaw in G1's fix, only a
- *     hazard of this specific mutant against this harness. The targeted run
- *     above is the safe, sufficient measurement.
+ *     instead of parsing `state.diskBytes`. RE-MEASURED round 3 (see below)
+ *     with the FULL-file command once the mocks that made it unsafe were
+ *     hardened; RED (exactly 20 of 77, full list in the round-3 note).
  *   NOBREAK — askRulings' `if (state.casRefused) { break; }` removed.
  *     RED, verified pre-commit (scratch mutant, not committed): "G2(a): a CAS
  *     refusal during the first ruling stops askRulings before asking for the
@@ -105,6 +92,46 @@
  *     RED, verified pre-commit (scratch mutant, not committed): "G4:
  *     askRulings' alias line rides safeFragment (a 100-char alias renders
  *     truncated with a trailing ellipsis)".
+ *
+ * Council round 3 (#238 PR #250, adversarial review of round 2) MEASURED
+ * 2026-09-15 on the committed tree; restored via `git checkout --
+ * src/sidecar/aliases-owner.js`.
+ *   Root cause of round 2's SKEW "hang" located: NOT a defect in G1, but two
+ *   test mocks (`F1(c)`, `G2(a)`) that ended with an unconditional trailing
+ *   `return '<constant>'`. Under SKEW, every test that does not itself
+ *   inject `loadCuratedPins` falls through to `aliases.js :: loadDeps()`'s
+ *   REAL one (the `...base` spread in `defaultDeps()` still carries it),
+ *   which reads the ACTUAL 21-pin shipped file -- producing a `state.doc`
+ *   mismatched against each test's tiny synthetic catalog, so routes read as
+ *   "stale" and the walk explodes into extra proposals. When one of THOSE
+ *   extra prompts is a MENU (not a ruling) and receives the hardcoded
+ *   constant as its answer, `reviewOne`'s own `for(;;)` treats it as
+ *   non-numeric and re-asks -- and because the mock resolves immediately
+ *   (no real I/O), this becomes a microtask chain fast enough that Jest's
+ *   timeout never gets scheduled (MEASURED: ~200k iterations/10ms, heap
+ *   exhausted by ~5s). Both mocks now `throw` past their last scripted
+ *   answer instead (matching `G2(b)`'s pre-existing shape) -- unreachable
+ *   under correct code, a fast clean failure otherwise.
+ *   SKEW re-measured with the FULL-file command now that this is safe
+ *   (`npx jest tests/sidecar/aliases-owner.test.js
+ *   tests/sidecar/aliases-review.test.js`, 0.7s, no hang):
+ *   RED (exactly 20 of 77): "G1: the CAS baseline …" (the intended signal)
+ *   plus 19 COLLATERAL failures, every one of them a test that does not
+ *   inject its own `loadCuratedPins` and so silently runs against the real
+ *   21-pin shipped file instead of the 6-pin synthetic `DOC` -- "G1:
+ *   malformed bytes …", "G1: an invalid document …", "F11 …", "round-1
+ *   review Small 3 …", "one pass per namespace …", "accept: the route is
+ *   replaced …", "ruling typed after the walk …", "G4: askRulings' alias
+ *   line …", "choose another with an id from another namespace …",
+ *   "choosing a ~-floating-pointer id …", "a failed write keeps …", "F1(c)
+ *   …", "G2(a) …", "Ctrl-C mid-walk …", "the routes-disagree summary …",
+ *   "never offers follow, never unpins …", "a touched alias whose pin also
+ *   has an untouched divergent-vendor route …", "a touched alias with no
+ *   divergent-vendor route at all …", "F4: an interrupted rulings phase …".
+ *   The other 57 tests (including every `ownerGate`, `routesByProvider`/
+ *   `routeDisagreements`, `ownerView`, and `handleAliases dispatch` test,
+ *   none of which reach the mutated line, plus every `curated-pins.test.js`
+ *   test in the separate file) stayed green.
  */
 const fs = require('fs');
 const os = require('os');
@@ -288,7 +315,8 @@ describe('runOwnerReview', () => {
     delete h.deps.ask;
     h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
     expect(await runOwnerReview({}, h.deps)).toBe(1);
-    expect(h.err()).toMatch(/^ERR:Error: /);
+    // Review residual: names the file, same shape as every other named defect from this module.
+    expect(h.err()).toMatch(/^ERR:Error: curated-pins\.json: /);
     expect(h.out()).toBe('');
     expect(h.log).not.toContain('SAVE');
     expect(h.deps.createPrompt).not.toHaveBeenCalled();
@@ -439,6 +467,19 @@ describe('runOwnerReview', () => {
     expect(h.log).not.toContain('SAVE');
   });
 
+  // Owner ruling (#238 council r2 review item 1): a floating pointer typed
+  // through "choose another" is refused BY NAME at the sink, same as a
+  // hand-edited one in the file -- proving the check applies to the accept
+  // path an owner actually drives, not just validateCuratedPins.
+  test('choosing a ~-floating-pointer id in "choose another" is refused, nothing written', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'openrouter/~z-ai/glm-latest'] });
+    h = harness({ catalog, answers: ['2', 'openrouter/~z-ai/glm-latest', '3'] }); // glm's only proposal (sibling 5.4) -> choose another -> type the floating pointer -> refused -> skip
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain("could not write: curated-pins.json: 'openrouter/~z-ai/glm-latest' is a floating pointer (~) — the shipped pins name concrete releases");
+    expect(h.read()).toEqual(DOC);
+    expect(h.log).not.toContain('SAVE');
+  });
+
   test('a failed write keeps the in-memory document unchanged, so a later accept does not carry it (mutant SAVEFIRST)', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'openrouter/x-ai/grok-4.4'] });
     h = harness({ catalog, answers: ['1', '3', '1', ''] }); // glm (file order: before grok) accept → write FAILS → menu again → skip; grok accept (write ok); ruling enter
@@ -498,7 +539,7 @@ describe('runOwnerReview', () => {
         fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
         return '1'; // accept -- but the disk now disagrees with what this session loaded
       }
-      return '3'; // skip, once the accept is refused and the menu redisplays
+      return '3'; // dead in practice under G2: the wrapped ask() aborts (REVIEW_ABORTED) on this call before it is ever consumed; kept as a harmless fallback value
     };
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.out()).toContain('could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
@@ -517,11 +558,21 @@ describe('runOwnerReview', () => {
     h.deps.ask = async () => {
       calls += 1;
       if (calls === 1) { return '1'; } // walk: accept glm-5.4 -- this DOES land, its own commit runs first
-      // something else writes the file between the walk's own commit and the rulings prompt
-      const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
-      external.pins.grok.verifiedOn = '2099-01-01';
-      fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
-      return 'terra tier confirmed live 2026-09-20'; // the ruling answer for glm
+      if (calls === 2) {
+        // something else writes the file between the walk's own commit and the rulings prompt
+        const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+        external.pins.grok.verifiedOn = '2099-01-01';
+        fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
+        return 'terra tier confirmed live 2026-09-20'; // the ruling answer for glm
+      }
+      // Review residual (item 4, the real cause of an earlier SKEW-measurement
+      // hang): an unconditional trailing `return` would let a THIRD call reach
+      // a menu prompt, where a non-numeric answer spins reviewOne's own
+      // for(;;) retry loop -- an immediately-resolving async mock turns that
+      // into a microtask storm no timeout can interrupt (measured: ~200k
+      // iterations/10ms, OOM by 5s). Throw instead: unreachable under correct
+      // code (only 1 touched pin here), and a fast, clean failure otherwise.
+      throw new Error('ask() called past its last scripted answer');
     };
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.out()).toContain('    could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
@@ -552,7 +603,11 @@ describe('runOwnerReview', () => {
         fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
         return 'glm ruling text';
       }
-      return 'SECOND RULING SHOULD NEVER BE ASKED'; // grok's ruling, if the break is missing
+      // Review residual (item 4): throw rather than return a re-askable
+      // constant -- see F1(c)'s identical comment for the measured hang this
+      // avoids. Unreachable under correct code (the break stops the loop
+      // before a 4th call); a fast, clean failure if the break is missing.
+      throw new Error('ask() called a 4th time -- the second ruling must never be asked after a CAS refusal');
     };
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(calls).toBe(3); // the second ruling (grok) was never asked

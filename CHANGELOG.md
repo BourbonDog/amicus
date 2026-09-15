@@ -33,8 +33,9 @@ All notable changes to Amicus are documented here. Format follows
   No behaviour change: every builder is byte-identical over the same data (frozen fixtures), and
   `curated-models.js` keeps the match rules. The `retired`/`notable` inputs the review engine
   already accepted are now supplied from the file. The validator checks calendar-valid dates and
-  known provider keys on every route; rulings are stored as one sanitized line. (#238 D8,
-  Appendix A)
+  known provider keys on every route; rulings are stored as one sanitized line; route ids must be
+  concrete releases in the pinnable charset (`A-Za-z0-9._:/-`), and OpenRouter `~…-latest`
+  pointers are refused by name. (#238 D8, Appendix A)
 
 ## [4.10.0] - 2026-09-14
 

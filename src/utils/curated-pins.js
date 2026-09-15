@@ -112,6 +112,13 @@ function validatePin(alias, pin) {
     checkName(provider, `pin '${alias}' routes`);
     // F7: a route key must name a real gateway/provider, or a typo (`anthropc`) ships as an inert, never-matched route.
     if (provider !== 'openrouter' && !isDirectProvider(provider)) { fail(`pin '${alias}' route '${provider}' is not a known provider (openrouter or a direct provider)`); }
+    // Owner ruling (#238 council r2 review item 1): a following alias must
+    // resolve to a STATIC pin (spec D2) -- model-id-siblings.js :: parsePin
+    // cannot watch a moving `~vendor/…-latest` pointer, and the CI alias map
+    // is a different pin set. Named BEFORE the charset test (ROUTE_ID_RE
+    // would otherwise refuse it too, but with the generic, misleading
+    // "not in the namespace" reason).
+    if (typeof id === 'string' && id.includes('~')) { fail(`pin '${alias}' route '${provider}' must name a concrete release — OpenRouter's ~vendor/…-latest floating pointers are not pinnable (got ${JSON.stringify(id)})`); }
     if (!inNamespace(id, provider)) { fail(`pin '${alias}' route '${provider}' must be a '${provider}/…' id (got ${JSON.stringify(id)})`); }
   }
   if (!isValidDate(pin.verifiedOn)) { fail(`pin '${alias}' needs verifiedOn as YYYY-MM-DD`); }
@@ -202,6 +209,9 @@ function setPinRoute(doc, alias, provider, id, today) {
   if (!isPlainObject(doc) || !isPlainObject(doc.pins) || !own(doc.pins, alias)) { fail(`'${alias}' is not a shipped pin`); }
   const routes = isPlainObject(doc.pins[alias].routes) ? doc.pins[alias].routes : {};
   if (!own(routes, provider)) { fail(`'${alias}' has no ${provider} route to replace (routes: ${Object.keys(routes).join(', ')})`); }
+  // Owner ruling (#238 council r2 review item 1): named ahead of the charset
+  // test -- see validatePin's identical check for the rationale.
+  if (typeof id === 'string' && id.includes('~')) { fail(`'${id}' is a floating pointer (~) — the shipped pins name concrete releases`); }
   if (!inNamespace(id, provider)) { fail(`'${id}' is not in the ${provider}/ namespace`); }
   if (!isValidDate(today)) { fail(`verifiedOn must be YYYY-MM-DD (got '${today}')`); }
   const next = JSON.parse(JSON.stringify(doc));

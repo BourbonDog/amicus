@@ -85,6 +85,11 @@ describe('validateCuratedPins — one refusal per rule', () => {
   test('G3: a route id with an ANSI escape is refused', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/z-ai/glm-5.3\x1b[31m'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id"));
   test('G3: a route id with a space is refused', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/z-ai/glm 5.3'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id"));
   test('G3: a pin name with a newline is refused', () => refuses(d => { d.pins['hostile\nname'] = { routes: { openrouter: 'openrouter/a/b' }, verifiedOn: '2026-01-01' }; }, "is not a valid name"));
+  // Owner ruling (#238 council r2 review item 1): OpenRouter's `~vendor/…`
+  // floating pointers (18 such rows in the live catalog) must be refused BY
+  // NAME, not by the generic charset/namespace message -- a following alias
+  // has to resolve to a STATIC pin (spec D2).
+  test('a ~-floating-pointer route id is refused by name, not the generic namespace message', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/~z-ai/glm-latest'; }, "pin 'glm' route 'openrouter' must name a concrete release — OpenRouter's ~vendor/…-latest floating pointers are not pinnable (got \"openrouter/~z-ai/glm-latest\")"));
   test('verifiedOn is required', () => refuses(d => { delete d.pins.glm.verifiedOn; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   test('verifiedOn must be an ISO date', () => refuses(d => { d.pins.glm.verifiedOn = 'yesterday'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   // F6 (#238 council r1 A2): the shape check alone admits an impossible
@@ -283,6 +288,11 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
   test('G3: setPinRoute refuses an id with an ANSI escape or a space', () => {
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4\x1b[31m', '2026-09-20')).toThrow("is not in the openrouter/ namespace");
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm 5.4', '2026-09-20')).toThrow("is not in the openrouter/ namespace");
+  });
+  // Owner ruling (#238 council r2 review item 1): the accept path names a
+  // ~-floating-pointer refusal too, not the generic namespace message.
+  test('setPinRoute refuses a ~-floating-pointer id by name', () => {
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/~z-ai/glm-latest', '2026-09-20')).toThrow("'openrouter/~z-ai/glm-latest' is a floating pointer (~) — the shipped pins name concrete releases");
   });
   // fix round 1 (Important): setPinRoute must accept a 3-segment direct-
   // provider id too — only openrouter is segment-counted exactly.

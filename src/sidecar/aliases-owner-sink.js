@@ -7,11 +7,8 @@
  *
  * `commit()` is the ONE compare-and-swap write every owner-mode write goes
  * through (#238 council r1 F1): refuse (throw, nothing written) when
- * curated-pins.json changed on disk since this session loaded it. HELD
- * (#238 council r2 B1/A3): not atomic end-to-end — a write landing in the
- * microseconds between the read and `saveCuratedPins`'s rename is not
- * detected (inherent to a lock-free file CAS, same property as this repo's
- * other atomic-write stores; `git diff` still surfaces it).
+ * curated-pins.json changed on disk since this session loaded it (see its
+ * own docblock for the HELD non-atomicity caveat).
  *
  * `askRulings()` walks every touched pin after the review passes, prompting
  * for an optional one-line ruling; a CAS refusal is STICKY (the disk will
@@ -33,7 +30,11 @@ const { collapseExcerpt, safeFragment } = require('../utils/text-sanitize');
  * later write in the SAME session compares against what THIS write landed.
  * Shared by the sink (`aliases-owner.js :: passDeps`'s `addAlias`) and
  * `askRulings`; both print `could not write: …` on refusal. Mutant NOCAS:
- * drop the comparison.
+ * drop the comparison. HELD (#238 council r2 B1/A3): not atomic end-to-end —
+ * a write landing in the microseconds between the read above and
+ * `saveCuratedPins`'s rename is not detected (inherent to a lock-free file
+ * CAS, same property as this repo's other atomic-write stores; `git diff`
+ * still surfaces it).
  * @param {{doc: object, diskBytes: string, casRefused?: boolean}} state mutated in place
  * @param {object} next the new document to write
  * @param {{readCuratedPinsBytes: () => string, saveCuratedPins: (doc: object) => void}} d
@@ -54,7 +55,7 @@ function commit(state, next, d) {
  * current text; each answer is written at once.
  * @param {{doc: object, touched: Set<string>, diskBytes: string, casRefused?: boolean}} state
  * @param {(q: string) => Promise<string>} ask
- * @param {{write: (s: string) => void}} d
+ * @param {{write: (s: string) => void, readCuratedPinsBytes: () => string, saveCuratedPins: (doc: object) => void}} d
  */
 async function askRulings(state, ask, d) {
   if (state.touched.size === 0) { return; }
