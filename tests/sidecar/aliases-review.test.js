@@ -391,4 +391,18 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(out).toContain('evil');
     expect(t.writes.addAlias).toEqual([]);
   });
+
+  test('"Nothing to review" names pins that name a RETIRED alias instead of calling them up to date (R-P2-11), and pluralizes 1 alias', async () => {
+    const rows = [{ alias: 'devstral', id: 'openrouter/mistralai/devstral-medium', state: 'pinned', curated: false, shipped: null }];
+    const t = makeDeps({ proposals: [], rows, models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    t.deps.collectAliasView = async () => ({ rows, proposals: [], catalogInfo: { models: [{ id: 'x/y' }], fetchedAt: Date.now(), providerFailures: [] }, catalogAvailable: true, retired: { devstral: { on: '2026-08-04', ruling: 'gone' } } });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('Nothing to review — 1 alias; 1 pin names a retired alias (see amicus aliases), the rest follow or are up to date.');
+  });
+  test('"Nothing to review" without retired pins keeps the old sentence', async () => {
+    const rows = [{ alias: 'gemini', id: 'google/gemini-3.6-flash', state: 'following', curated: true, shipped: 'google/gemini-3.6-flash' }, { alias: 'glm', id: 'openrouter/z-ai/glm-5.3', state: 'following', curated: true, shipped: 'openrouter/z-ai/glm-5.3' }];
+    const t = makeDeps({ proposals: [], rows, models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('Nothing to review — 2 aliases, all following or up to date.');
+  });
 });
