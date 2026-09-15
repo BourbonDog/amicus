@@ -8758,3 +8758,28 @@ merged on an in-branch review at the owner's call). Left open, in the order the 
   (high, no fix; amicus's own Electron extraction refuses symlink/traversal entries in
   `electron-refuse.js`) and `hono ≤4.13.4` (moderate, fix available) — take the hono bump in a
   reviewed PR, not at a cut.
+
+## Council infrastructure — observed on PR #250's two rounds (2026-09-15)
+
+Filed while #238 Phase 2 was under review; the leg deaths themselves are #251 (consult the
+session status before the backstop kills; size the Stage-1 window to the briefing) on top of
+#202's frequency record. Two things the rounds showed that are NOT leg failures:
+
+- [ ] **A reasoning seat that reasons zero is a quality signal the tally does not see.**
+  `openrouter/deepseek/deepseek-v4-flash-0731` produced the strongest round-1 review with 20.6 k
+  reasoning tokens; in round 2 the same seat, same briefing shape, returned `reasoning: 0` (prompt
+  served from cache, 60 k `cacheRead`), reviewed a hallucinated artifact ("the diff gives me only
+  the comment block", "I am not to read files"), needed three repair legs, and its Stage-2 judge
+  block was 139 tokens (unparseable → `thin-cross-review`). The tally ranked it 3rd; nothing flagged
+  the zero. Candidate: treat `reasoning === 0` on a seat whose model is known to reason (previous
+  legs in the ledger show > 0) as a degrade channel (`reasoning-absent`) that the chair packet
+  names and the ranking down-weights — and record whether OpenRouter's cache hit correlates.
+  Evidence: run 34969014154 `runStats`/`spend-ledger.jsonl`.
+- [ ] **The chair's prose re-tiers findings past the tally's own tiers.** Round 2: `verdict.json`
+  tiers gpt's B1 as `Singleton`; the chair synthesis calls it "Confirmed – Blocker" and builds the
+  verdict on it. Round 1: deepseek's B3 (rated `minor` by its raiser) became "critical data loss"
+  in the chair text. The human reads the chair's prose first and the wrong severity sticks.
+  Candidate: the chair packet carries each finding's computed tier and raiser severity, and the
+  synthesis prompt forbids re-tiering (it may argue, not relabel); `report.html` should render the
+  tally's tier beside the chair's sentence so a mismatch is visible. Evidence: runs 34931984881
+  and 34969014154, `chair-output.md` vs `verdict.json.findings[].tier`.
