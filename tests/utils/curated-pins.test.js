@@ -70,10 +70,21 @@ describe('validateCuratedPins — one refusal per rule', () => {
   test('notable suggestedAlias must not be a pin or retired', () => refuses(d => { d.notable[0].suggestedAlias = 'glm'; }, "notable[0] suggestedAlias 'glm' is already a pin or retired"));
   test('notable note must be a string', () => refuses(d => { d.notable[0].note = 3; }, 'notable[0] note must be a string'));
   test('notable entry with an unknown field', () => refuses(d => { d.notable[0].why = 'x'; }, "notable[0] has an unknown field 'why'"));
+  // carry-in from T1 review: the unknown-field loop must run BEFORE suggestedAlias
+  // validation, or a typo'd key (missing the real suggestedAlias) is misreported
+  // as an invalid-name defect on `undefined` instead of the actual typo.
+  test('a typo\'d suggestedAlias is reported as an unknown field, not a bad name', () => refuses(d => {
+    d.notable[0].suggestedalias = d.notable[0].suggestedAlias;
+    delete d.notable[0].suggestedAlias;
+  }, "notable[0] has an unknown field 'suggestedalias'"));
 });
 
 describe('loadCuratedPins', () => {
   const { loadCuratedPins, validateCuratedPins } = require(MOD);
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curated-pins-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
   test('the shipped file validates and carries the 21 curated aliases + retired.devstral + an empty notable list', () => {
     const doc = loadCuratedPins();
     expect(Object.keys(doc.pins)).toHaveLength(21);
@@ -95,12 +106,80 @@ describe('loadCuratedPins', () => {
     expect(b.retired.zzz).toBeUndefined();
   });
   test('an explicit path reads THAT file, fresh, and validates it', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curated-pins-'));
     const p = path.join(dir, 'pins.json');
     fs.writeFileSync(p, JSON.stringify(good()));
     expect(Object.keys(loadCuratedPins(p).pins)).toEqual(['gemini', 'glm', 'gpt-pro']);
     fs.writeFileSync(p, JSON.stringify({ ...good(), version: 3 }));
     expect(() => loadCuratedPins(p)).toThrow('unsupported version 3');
-    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  // carry-in from T1 review: an explicit-path read/parse failure must carry the
+  // same `curated-pins.json: ` prefix as every other defect, plus the path, so
+  // a caller can't tell a missing/malformed file apart from a validation defect
+  // by message shape alone.
+  test('a missing or malformed explicit file throws curated-pins.json: <path>: <reason>', () => {
+    const p = path.join(dir, 'bad.json');
+    fs.writeFileSync(p, '{not valid json');
+    expect(() => loadCuratedPins(p)).toThrow(/^curated-pins\.json: /);
+    expect(() => loadCuratedPins(p)).toThrow(p);
+  });
+});
+
+describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mode, #238 D8)', () => {
+  const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require(MOD);
+  let dir;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'curated-pins-w-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  test('saveCuratedPins writes the canonical format to the given path and the loader reads it back equal', () => {
+    const p = path.join(dir, 'pins.json');
+    saveCuratedPins(good(), p);
+    expect(fs.readFileSync(p, 'utf8')).toBe(JSON.stringify(good(), null, 2) + '\n');
+    expect(loadCuratedPins(p)).toEqual(good());
+  });
+  test('saveCuratedPins validates BEFORE writing — an invalid document leaves the file untouched', () => {
+    const p = path.join(dir, 'pins.json');
+    saveCuratedPins(good(), p);
+    const bad = good(); delete bad.pins.glm.verifiedOn;
+    expect(() => saveCuratedPins(bad, p)).toThrow("pin 'glm' needs verifiedOn");
+    expect(loadCuratedPins(p)).toEqual(good());
+    expect(fs.readdirSync(dir)).toEqual(['pins.json']); // no temp file left behind
+  });
+  test('setPinRoute replaces exactly that route, stamps verifiedOn, and returns a COPY (mutant STAMP: skip the stamp)', () => {
+    const before = good();
+    const after = setPinRoute(before, 'gemini', 'openrouter', 'openrouter/google/gemini-3.7-flash', '2026-09-20');
+    expect(after.pins.gemini.routes).toEqual({ openrouter: 'openrouter/google/gemini-3.7-flash', google: 'google/gemini-3.6-flash' });
+    expect(after.pins.gemini.verifiedOn).toBe('2026-09-20');
+    expect(before.pins.gemini.routes.openrouter).toBe('openrouter/google/gemini-3.6-flash');
+    expect(before.pins.gemini.verifiedOn).toBe('2026-08-04');
+    expect(Object.keys(after.pins.gemini)).toEqual(['routes', 'verifiedOn']); // key order preserved
+  });
+  test('setPinRoute refuses an unknown alias, a namespace the pin has no route in, an id outside the namespace, and a bad date (mutant PROVMATCH: drop the namespace check)', () => {
+    expect(() => setPinRoute(good(), 'atlas', 'openrouter', 'openrouter/a/b', '2026-09-20')).toThrow("'atlas' is not a shipped pin");
+    expect(() => setPinRoute(good(), 'glm', 'google', 'google/x', '2026-09-20')).toThrow("'glm' has no google route to replace (routes: openrouter)");
+    expect(() => setPinRoute(good(), 'gemini', 'openrouter', 'google/gemini-3.7-flash', '2026-09-20')).toThrow("'google/gemini-3.7-flash' is not in the openrouter/ namespace");
+    expect(() => setPinRoute(good(), 'gemini', 'openrouter', 'openrouter/', '2026-09-20')).toThrow("'openrouter/' is not in the openrouter/ namespace");
+    // carry-in from T1 review: inNamespace now requires all 3 openrouter
+    // segments (vendor/model, not just a bare vendor) — setPinRoute inherits
+    // the rule via the same helper, so a 2-segment id must be refused too.
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai', '2026-09-20')).toThrow("'openrouter/z-ai' is not in the openrouter/ namespace");
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', 'today')).toThrow("verifiedOn must be YYYY-MM-DD (got 'today')");
+  });
+  test('setPinRuling sets a trimmed ruling on a copy; blank or unknown alias refused', () => {
+    const before = good();
+    const after = setPinRuling(before, 'gemini', '  flash tier, verified live  ');
+    expect(after.pins.gemini.ruling).toBe('flash tier, verified live');
+    expect(before.pins.gemini.ruling).toBeUndefined();
+    expect(() => setPinRuling(good(), 'gemini', '   ')).toThrow("ruling for 'gemini' must be a non-empty string");
+    expect(() => setPinRuling(good(), 'nope', 'x')).toThrow("'nope' is not a shipped pin");
+  });
+  test('a setPinRoute → saveCuratedPins → loadCuratedPins round trip through curated-models yields the new gateway routes', () => {
+    const p = path.join(dir, 'pins.json');
+    saveCuratedPins(setPinRoute(loadCuratedPins(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', '2026-09-20'), p);
+    jest.resetModules();
+    const real = jest.requireActual('../../src/utils/curated-pins');
+    jest.doMock('../../src/utils/curated-pins', () => ({ ...real, loadCuratedPins: () => real.loadCuratedPins(p) }));
+    const cm = require('../../src/utils/curated-models');
+    expect(cm.toGatewayRoutes().glm).toEqual({ openrouter: 'openrouter/z-ai/glm-5.4' });
+    expect(cm.toDefaultAliases().gemini).toBe('google/gemini-3.6-flash'); // untouched pins unchanged
   });
 });

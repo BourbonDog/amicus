@@ -1,7 +1,7 @@
 /**
  * @module utils/curated-pins
- * The shipped pin set (#238 D8) — `src/utils/curated-pins.json`: one entry per
- * curated alias (`pins`: per-gateway `routes`, the `verifiedOn` date, an
+ * The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here.
+ * One entry per curated alias (`pins`: per-gateway `routes`, the `verifiedOn` date, an
  * optional owner `ruling`, `gatewayOnly` where the openrouter-only route is a
  * deliberate choice), the aliases deliberately dropped (`retired`, with the
  * date and the ruling — neither the sibling scan nor the notable list can
@@ -28,12 +28,20 @@
  * Every read validates (`validateCuratedPins`, fail-closed: the first defect
  * is named) and returns a deep copy, so a caller mutating what it got back
  * can never leak into the next builder call.
+ *
+ * The two edits owner mode makes are PURE functions over a document
+ * (`setPinRoute`, `setPinRuling` — each returns a deep copy); `saveCuratedPins`
+ * validates again and writes atomically (utils/atomic-write.js) in the ONE
+ * canonical format, `JSON.stringify(doc, null, 2)` + LF, so an owner session
+ * that changes nothing leaves no diff. A write never happens on an invalid
+ * document, so the shipped file can never be left unloadable.
  */
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic-write');
 
 /** @type {string} absolute path to the shipped curated-pins.json (T2's saveCuratedPins default; owner-mode messages). */
 const CURATED_PINS_PATH = path.join(__dirname, 'curated-pins.json');
@@ -54,9 +62,20 @@ function checkName(name, where) {
   }
 }
 
-/** @param {string} id @param {string} provider @returns {boolean} true when `id` is `<provider>/<something>` */
+/**
+ * @param {string} id @param {string} provider
+ * @returns {boolean} true when `id` is `<provider>/<model>` with a non-empty
+ *   model segment — or, when `provider` is `openrouter`,
+ *   `openrouter/<vendor>/<model>` with all three segments non-empty.
+ *   `curated-models.js :: vendorOf` parses the vendor segment of an
+ *   openrouter id positionally, so a 2-segment `openrouter/<x>` id (no model
+ *   segment) must be refused here rather than silently mis-parsed there.
+ */
 function inNamespace(id, provider) {
-  return typeof id === 'string' && id.startsWith(`${provider}/`) && id.length > provider.length + 1;
+  if (typeof id !== 'string') { return false; }
+  const segments = id.split('/');
+  const wanted = provider === 'openrouter' ? 3 : 2;
+  return segments.length === wanted && segments[0] === provider && segments.every(s => s.length > 0);
 }
 
 function validatePin(alias, pin) {
@@ -83,11 +102,12 @@ function validateRetired(alias, r, pins) {
 }
 
 function validateNotable(n, i, doc) {
-  if (!isPlainObject(n) || typeof n.id !== 'string' || !n.id.includes('/')) { fail(`notable[${i}] needs a provider/model id`); }
+  if (!isPlainObject(n)) { fail(`notable[${i}] needs a provider/model id`); }
+  for (const k of Object.keys(n)) { if (!NOTABLE_KEYS.has(k)) { fail(`notable[${i}] has an unknown field '${k}'`); } }
+  if (typeof n.id !== 'string' || !n.id.includes('/')) { fail(`notable[${i}] needs a provider/model id`); }
   checkName(n.suggestedAlias, `notable[${i}] suggestedAlias`);
   if (own(doc.pins, n.suggestedAlias) || own(doc.retired, n.suggestedAlias)) { fail(`notable[${i}] suggestedAlias '${n.suggestedAlias}' is already a pin or retired`); }
   if (own(n, 'note') && typeof n.note !== 'string') { fail(`notable[${i}] note must be a string`); }
-  for (const k of Object.keys(n)) { if (!NOTABLE_KEYS.has(k)) { fail(`notable[${i}] has an unknown field '${k}'`); } }
 }
 
 /**
@@ -111,12 +131,70 @@ function validateCuratedPins(doc) {
  *   shipped file through `require` (see the module docblock for why)
  * @returns {{version: 1, pins: object, retired: object, notable: Array}} a
  *   validated deep copy
- * @throws {Error} on a missing/unparsable file or any validation defect
+ * @throws {Error} `curated-pins.json: <filePath>: <reason>` on a missing or
+ *   unparsable explicit file, or `curated-pins.json: <defect>` on any
+ *   validation defect (shipped or explicit path alike)
  */
 function loadCuratedPins(filePath) {
-  const raw = filePath === undefined ? SHIPPED : JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  let raw;
+  if (filePath === undefined) {
+    raw = SHIPPED;
+  } else {
+    try {
+      raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (err) {
+      fail(`${filePath}: ${err.message}`);
+    }
+  }
   validateCuratedPins(raw);
   return JSON.parse(JSON.stringify(raw));
 }
 
-module.exports = { loadCuratedPins, validateCuratedPins, CURATED_PINS_PATH };
+/**
+ * @param {object} doc a document `validateCuratedPins` accepts
+ * @param {string} [filePath] defaults to the shipped file
+ * @throws {Error} a validation defect (nothing written) or the write error
+ */
+function saveCuratedPins(doc, filePath = CURATED_PINS_PATH) {
+  validateCuratedPins(doc);
+  writeFileAtomic(filePath, JSON.stringify(doc, null, 2) + '\n');
+}
+
+/**
+ * Replace ONE route of ONE pin and stamp it verified today (#238 D8 owner
+ * sink). Pure: the input is untouched and a deep copy is returned.
+ * @param {object} doc
+ * @param {string} alias a pin name
+ * @param {string} provider the route key being replaced — must already exist on the pin
+ * @param {string} id the new executable id, `<provider>/<model>`
+ * @param {string} today `YYYY-MM-DD`
+ * @returns {object} the new document
+ */
+function setPinRoute(doc, alias, provider, id, today) {
+  if (!isPlainObject(doc) || !isPlainObject(doc.pins) || !own(doc.pins, alias)) { fail(`'${alias}' is not a shipped pin`); }
+  const routes = isPlainObject(doc.pins[alias].routes) ? doc.pins[alias].routes : {};
+  if (!own(routes, provider)) { fail(`'${alias}' has no ${provider} route to replace (routes: ${Object.keys(routes).join(', ')})`); }
+  if (!inNamespace(id, provider)) { fail(`'${id}' is not in the ${provider}/ namespace`); }
+  if (typeof today !== 'string' || !DATE_RE.test(today)) { fail(`verifiedOn must be YYYY-MM-DD (got '${today}')`); }
+  const next = JSON.parse(JSON.stringify(doc));
+  next.pins[alias].routes[provider] = id;
+  next.pins[alias].verifiedOn = today;
+  return next;
+}
+
+/**
+ * @param {object} doc
+ * @param {string} alias a pin name
+ * @param {string} ruling free text; trimmed, must be non-empty
+ * @returns {object} a deep copy with `pins[alias].ruling` replaced
+ */
+function setPinRuling(doc, alias, ruling) {
+  if (!isPlainObject(doc) || !isPlainObject(doc.pins) || !own(doc.pins, alias)) { fail(`'${alias}' is not a shipped pin`); }
+  const text = typeof ruling === 'string' ? ruling.trim() : '';
+  if (!text) { fail(`ruling for '${alias}' must be a non-empty string`); }
+  const next = JSON.parse(JSON.stringify(doc));
+  next.pins[alias].ruling = text;
+  return next;
+}
+
+module.exports = { loadCuratedPins, validateCuratedPins, saveCuratedPins, setPinRoute, setPinRuling };
