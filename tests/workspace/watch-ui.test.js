@@ -66,14 +66,19 @@ describe('amicus watch --ui branch', () => {
   // error, just dead weight), and a second usage line would read as a doc bug.
   // Pin the exact count directly against the source text so a regression
   // (re-adding either piece) is caught even though parseArgs()/getUsage()
-  // would behave identically with a duplicate present.
+  // would behave identically with a duplicate present. `--ui` also belongs to
+  // `aliases` since issue 238 Phase 3, so the count is per block: one shared
+  // booleanFlags entry (file-wide — both commands reuse the same registration),
+  // but each usage block gets its own `--ui` line, checked within that block only.
   test('--ui is registered exactly once in cli.js: one booleanFlags entry, one usage line', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.join(__dirname, '../../src/cli.js'), 'utf-8');
     const booleanFlagEntries = src.match(/^\s*'ui',/gm) || [];
-    const usageLines = src.match(/^\s*--ui\s/gm) || [];
     expect(booleanFlagEntries.length).toBe(1);
-    expect(usageLines.length).toBe(1);
+    const watchBlock = src.slice(src.indexOf("Options for 'watch':"), src.indexOf('`,', src.indexOf("Options for 'watch':")));
+    expect((watchBlock.match(/^\s*--ui\s/gm) || []).length).toBe(1);
+    const aliasesBlock = src.slice(src.indexOf("Options for 'aliases':"), src.indexOf('`,', src.indexOf("Options for 'aliases':")));
+    expect((aliasesBlock.match(/^\s*--ui\s/gm) || []).length).toBe(1);
   });
 });
