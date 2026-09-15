@@ -251,10 +251,16 @@ async function runReview(args, deps) {
       // suppresses retired names), so "all up to date" would be false for it.
       const rows = Array.isArray(view.rows) ? view.rows : [];
       const dead = rows.filter(r => r && r.state === 'pinned' && view.retired && Object.prototype.hasOwnProperty.call(view.retired, r.alias)).length;
+      // F10: "all FOLLOWING or up to date" is false when no row ever follows
+      // (owner mode's rows are all `pinned` -- R-P2-1 has no `follow` here).
+      // The retired-tail wording (dead > 0) is untouched either way -- "the
+      // rest follow or are up to date" already covers the up-to-date-only case.
+      const anyFollowing = rows.some(r => r && r.state === 'following');
+      const noun = (dead > 0 || anyFollowing) ? `alias${rows.length === 1 ? '' : 'es'}` : `pin${rows.length === 1 ? '' : 's'}`;
       const tail = dead
         ? `; ${dead} pin${dead === 1 ? '' : 's'} name${dead === 1 ? 's' : ''} a retired alias (see amicus aliases), the rest follow or are up to date.`
-        : ', all following or up to date.';
-      d.write(`  Nothing to review — ${rows.length} alias${rows.length === 1 ? '' : 'es'}${tail}\n`);
+        : (anyFollowing ? ', all following or up to date.' : ', all up to date.');
+      d.write(`  Nothing to review — ${rows.length} ${noun}${tail}\n`);
       return 0;
     }
     // M5: the stale/no-cache/clock-skew banner only ever prints once there is

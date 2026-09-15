@@ -141,8 +141,12 @@ function sameGatewayNote(r) {
  * them), so without this note a dead pin would render as a plain custom pin
  * with no warning — worse than the `⚠ gone from catalog` any other stale pin
  * gets. The date rides the row; the ruling follows on a continuation line.
- * Provenance (#249 r2 C4 rule): `retired` is the shipped data file authored
- * by the owner — house bytes, not third-party, so it is printed as-is.
+ * Provenance (#249 r2 C4 rule; updated #238 council r1 F5): `retired` itself
+ * is the shipped data file authored by the owner — house bytes, not
+ * third-party. The ruling text is still house bytes, but it is now TYPED
+ * through an interactive prompt (aliases-owner.js :: askRulings) and
+ * accumulates over sessions, so the render site (below) collapses it like
+ * any other terminal-bound value, rather than printing it raw.
  * Mutant RETIREDFLAG: return { flag: '', ruling: null } unconditionally.
  * @param {{alias:string, state:string}} r
  * @param {object|undefined} retired
@@ -191,7 +195,8 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
       const dead = p ? { flag: '', ruling: null } : retiredNote(r, view.retired);
       const flag = p ? rowFlag(p.reasons) : (dead.flag || sameGatewayNote(r));
       lines.push(`    ${safeFragment(key).padEnd(width)}  → ${safeFragment(r.id).padEnd(44)} ${r.state}${flag}`);
-      if (dead.ruling) { lines.push(`    ${''.padEnd(width)}    ↳ ${dead.ruling}`); }
+      // F5 (#238 council r1 A1/B4/D2): the ruling is typed through a prompt now (see retiredNote's docblock) -- collapse before it reaches the terminal.
+      if (dead.ruling) { lines.push(`    ${''.padEnd(width)}    ↳ ${collapseExcerpt(dead.ruling)}`); }
     }
   }
   lines.push('');

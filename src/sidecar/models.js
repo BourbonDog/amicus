@@ -22,6 +22,7 @@ const { pickCurrent } = require('../utils/quick-picks');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { newestSibling } = require('../utils/model-id-siblings');
 const { loadCuratedPins } = require('../utils/curated-pins');
+const { safeFragment } = require('../utils/text-sanitize');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
@@ -264,7 +265,8 @@ function buildFallbackDriftReport(catalogOrInfo) {
   for (const f of families) {
     const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);
     if (live && f.fallback.openrouter && live !== f.fallback.openrouter) {
-      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${live}) — amicus aliases --review --owner (a family match is not always a same-tier sibling; when the picker offers nothing, edit src/utils/curated-pins.json by hand)`);
+      // F5: `live` is catalog-derived (third-party); `f.fallback.openrouter` is the shipped pin (house bytes) -- only the former rides the sanitizer.
+      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${safeFragment(live)}) — amicus aliases --review --owner (a family match is not always a same-tier sibling; when the picker offers nothing, edit src/utils/curated-pins.json by hand)`);
     }
   }
   const familyAliases = new Set(families.map(f => f.alias));
@@ -274,7 +276,7 @@ function buildFallbackDriftReport(catalogOrInfo) {
     if (familyAliases.has(alias)) { continue; } // a family's idPattern rule speaks for it above
     const pinned = pins[alias].routes.openrouter;
     const newer = newestSibling(pinned, gated);
-    if (newer) { lines.push(`  newer sibling: ${alias} → ${pinned} (catalog: ${newer}) — amicus aliases --review --owner`); }
+    if (newer) { lines.push(`  newer sibling: ${alias} → ${pinned} (catalog: ${safeFragment(newer)}) — amicus aliases --review --owner`); }
   }
   return lines;
 }

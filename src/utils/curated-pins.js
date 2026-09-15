@@ -12,18 +12,17 @@
  * and `git diff` is the review surface — a pin reaches users only after a
  * human accepted it and committed the JSON.
  *
- * The shipped file is loaded with `require`, not `fs.readFileSync`, on
- * purpose: it is reached at LOAD time through config.js (DEFAULT_ALIASES is
- * computed at require), and 22 unit suites mock `fs` wholesale. MEASURED
- * 2026-09-14 on main @ cd6b8cfb: a `readFileSync` at curated-models load
- * reddened tests/headless-output-length.test.js (the mocked read threw inside
- * `require('./utils/config')`, headless.js swallowed it, the output budget
- * became undefined and a leg's error text changed); a `require` of the same
- * bytes passed every one of the 22. `require` rides the module loader's own
- * file access, immune to those mocks. It is also cached for the process —
- * fine, because the one writer (owner mode) keeps working from its own
- * in-memory document and never re-reads. An explicit `filePath` (tests, temp
- * copies) reads fresh through fs instead.
+ * The shipped file is loaded with `require`, not `fs.readFileSync`: it is
+ * reached at LOAD time through config.js (DEFAULT_ALIASES is computed at
+ * require) and 22 unit suites mock `fs` wholesale — MEASURED 2026-09-14 on
+ * main @ cd6b8cfb, a `readFileSync` at load reddened one of them, a `require`
+ * passed all 22 (immune: it rides the module loader's own file access). Also
+ * cached for the process — fine, since the one writer (owner mode) works from
+ * its own in-memory document and never re-reads. An explicit `filePath`
+ * (tests, temp copies) reads fresh through fs instead. A JSON syntax error in
+ * the shipped file is a loud, named failure AT LOAD TIME, by design (#238
+ * council r1 F2): fail-closed, never a silent empty pin set — every alias
+ * resolution depends on DEFAULT_ALIASES.
  *
  * Every read validates (`validateCuratedPins`, fail-closed: the first defect
  * is named) and returns a deep copy, so a caller mutating what it got back
@@ -42,10 +41,17 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('./atomic-write');
+const { collapseExcerpt } = require('./text-sanitize');
+const { isDirectProvider } = require('./provider-registry');
 
 /** @type {string} absolute path to the shipped curated-pins.json (T2's saveCuratedPins default). */
 const CURATED_PINS_PATH = path.join(__dirname, 'curated-pins.json');
-const SHIPPED = require('./curated-pins.json');
+let SHIPPED;
+try {
+  SHIPPED = require('./curated-pins.json');
+} catch (err) {
+  throw new Error(`curated-pins.json: ${CURATED_PINS_PATH}: ${err.message} — the shipped pin file failed to parse; fix the JSON by hand or restore it (git checkout -- src/utils/curated-pins.json)`);
+}
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const PIN_KEYS = new Set(['routes', 'verifiedOn', 'ruling', 'gatewayOnly']);
 const TOP_KEYS = new Set(['version', 'pins', 'retired', 'notable']);
@@ -53,6 +59,13 @@ const NOTABLE_KEYS = new Set(['id', 'suggestedAlias', 'note']);
 const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const fail = (msg) => { throw new Error(`curated-pins.json: ${msg}`); };
+
+/** F6: `DATE_RE`'s shape check alone admits an impossible calendar date (`2026-02-31`) -- round-trip through UTC `Date` and require the ISO date unchanged. @param {*} s @returns {boolean} */
+function isValidDate(s) {
+  if (typeof s !== 'string' || !DATE_RE.test(s)) { return false; }
+  const d = new Date(s + 'T00:00:00Z');
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
 
 /** @param {*} name an alias or route key @param {string} where names the site for the message */
 function checkName(name, where) {
@@ -87,9 +100,11 @@ function validatePin(alias, pin) {
   if (!own(pin.routes, 'openrouter')) { fail(`pin '${alias}' has no openrouter route`); }
   for (const [provider, id] of Object.entries(pin.routes)) {
     checkName(provider, `pin '${alias}' routes`);
+    // F7: a route key must name a real gateway/provider, or a typo (`anthropc`) ships as an inert, never-matched route.
+    if (provider !== 'openrouter' && !isDirectProvider(provider)) { fail(`pin '${alias}' route '${provider}' is not a known provider (openrouter or a direct provider)`); }
     if (!inNamespace(id, provider)) { fail(`pin '${alias}' route '${provider}' must be a '${provider}/…' id (got ${JSON.stringify(id)})`); }
   }
-  if (typeof pin.verifiedOn !== 'string' || !DATE_RE.test(pin.verifiedOn)) { fail(`pin '${alias}' needs verifiedOn as YYYY-MM-DD`); }
+  if (!isValidDate(pin.verifiedOn)) { fail(`pin '${alias}' needs verifiedOn as YYYY-MM-DD`); }
   if (own(pin, 'ruling') && (typeof pin.ruling !== 'string' || pin.ruling.length === 0)) { fail(`pin '${alias}' ruling must be a non-empty string`); }
   if (own(pin, 'gatewayOnly') && pin.gatewayOnly !== true) { fail(`pin '${alias}' gatewayOnly may only be true (omit it otherwise)`); }
 }
@@ -98,7 +113,7 @@ function validateRetired(alias, r, pins) {
   checkName(alias, 'retired');
   if (own(pins, alias)) { fail(`'${alias}' is both pinned and retired`); }
   if (!isPlainObject(r) || Object.keys(r).some(k => k !== 'on' && k !== 'ruling')) { fail(`retired '${alias}' must have exactly on + ruling`); }
-  if (typeof r.on !== 'string' || !DATE_RE.test(r.on)) { fail(`retired '${alias}' needs on as YYYY-MM-DD`); }
+  if (!isValidDate(r.on)) { fail(`retired '${alias}' needs on as YYYY-MM-DD`); }
   if (typeof r.ruling !== 'string' || r.ruling.length === 0) { fail(`retired '${alias}' needs a ruling`); }
 }
 
@@ -106,6 +121,8 @@ function validateNotable(n, i, doc) {
   if (!isPlainObject(n)) { fail(`notable[${i}] needs a provider/model id`); }
   for (const k of Object.keys(n)) { if (!NOTABLE_KEYS.has(k)) { fail(`notable[${i}] has an unknown field '${k}'`); } }
   if (typeof n.id !== 'string' || !n.id.includes('/')) { fail(`notable[${i}] needs a provider/model id`); }
+  // F8: a MISSING suggestedAlias used to fall through to checkName(undefined, …) -- "'undefined' is not a valid name".
+  if (!own(n, 'suggestedAlias')) { fail(`notable[${i}] needs a suggestedAlias`); }
   checkName(n.suggestedAlias, `notable[${i}] suggestedAlias`);
   if (own(doc.pins, n.suggestedAlias) || own(doc.retired, n.suggestedAlias)) { fail(`notable[${i}] suggestedAlias '${n.suggestedAlias}' is already a pin or retired`); }
   if (own(n, 'note') && typeof n.note !== 'string') { fail(`notable[${i}] note must be a string`); }
@@ -176,7 +193,7 @@ function setPinRoute(doc, alias, provider, id, today) {
   const routes = isPlainObject(doc.pins[alias].routes) ? doc.pins[alias].routes : {};
   if (!own(routes, provider)) { fail(`'${alias}' has no ${provider} route to replace (routes: ${Object.keys(routes).join(', ')})`); }
   if (!inNamespace(id, provider)) { fail(`'${id}' is not in the ${provider}/ namespace`); }
-  if (typeof today !== 'string' || !DATE_RE.test(today)) { fail(`verifiedOn must be YYYY-MM-DD (got '${today}')`); }
+  if (!isValidDate(today)) { fail(`verifiedOn must be YYYY-MM-DD (got '${today}')`); }
   const next = JSON.parse(JSON.stringify(doc));
   next.pins[alias].routes[provider] = id;
   next.pins[alias].verifiedOn = today;
@@ -184,14 +201,18 @@ function setPinRoute(doc, alias, provider, id, today) {
 }
 
 /**
+ * F5(a): a ruling is free text typed at an interactive prompt and rendered
+ * back on every future review -- sanitized at this INPUT boundary
+ * (`collapseExcerpt`, uncapped: one line, ANSI/bidi/control stripped) so a
+ * stored ruling can never forge a line or reorder a screen, then trimmed.
  * @param {object} doc
  * @param {string} alias a pin name
- * @param {string} ruling free text; trimmed, must be non-empty
+ * @param {string} ruling free text; sanitized and trimmed, must be non-empty
  * @returns {object} a deep copy with `pins[alias].ruling` replaced
  */
 function setPinRuling(doc, alias, ruling) {
   if (!isPlainObject(doc) || !isPlainObject(doc.pins) || !own(doc.pins, alias)) { fail(`'${alias}' is not a shipped pin`); }
-  const text = typeof ruling === 'string' ? ruling.trim() : '';
+  const text = collapseExcerpt(ruling, Number.POSITIVE_INFINITY).trim();
   if (!text) { fail(`ruling for '${alias}' must be a non-empty string`); }
   const next = JSON.parse(JSON.stringify(doc));
   next.pins[alias].ruling = text;

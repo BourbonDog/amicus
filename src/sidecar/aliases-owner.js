@@ -7,38 +7,33 @@
  *
  * Rows are ROUTES, not aliases (R-P2-1): each route is judged in its own
  * gateway namespace (`openrouter/google/gemini-…` against the openrouter
- * rows, `google/gemini-…` against the google rows), matching how
- * model-id-siblings.js keys a sibling's vendor and alias-proposals.js gates
- * on the id's provider. One `runReview` pass per namespace (openrouter
- * first, then each direct namespace in file order); a namespace with no
- * authoritative catalog row, or listed in `providerFailures`, is announced
- * and NOT reviewed, never "up to date". Every row is a custom pin to the
- * engine (`defaults` empty): no `follow`, no `never ask again` (no
- * dismissal state — `dismissKey` is nulled so a declined sibling returns
- * next session; R-P2-2), no notable (that list is for users to map).
+ * rows, `google/gemini-…` against the google rows). One `runReview` pass per
+ * namespace (openrouter first, then each direct namespace in file order); a
+ * namespace with no authoritative catalog row, or in `providerFailures`, is
+ * announced and NOT reviewed, never "up to date". Every row is a custom pin
+ * to the engine: no `follow`, no `never ask again` (no dismissal state —
+ * `dismissKey` is nulled so a declined sibling returns next session; R-P2-2),
+ * no notable (that list is for users to map).
  *
- * Gate (D8): the package root must BE a git work-tree root (`git rev-parse
- * --show-prefix` empty — scripts/setup-hooks.js's guard) with a clean tree
- * (`git status --porcelain --untracked-files=no` empty, so an untracked
- * scratch dir never blocks; R-P2-4) and a TTY. Refused = one stderr line,
- * exit 1, nothing read or written.
+ * Gate (D8, split into aliases-owner-gate.js): a git source checkout with a
+ * clean tree and a TTY. Refused = one stderr line, exit 1, nothing read or
+ * written; a throwing load/catalog fetch is refused the same way (F3).
  *
  * Sink: an accept replaces the route under review via `setPinRoute` scoped
- * to the PASS's namespace — an id typed from another namespace is refused
- * as the picker's own `could not write: …` line (R-P2-5) — and stamps
- * `verifiedOn` with today's UTC date (R-P2-12); the write is validated and
- * atomic BEFORE the picker's ✓, so only a SUCCESSFUL write replaces the
- * in-memory document. After the last pass each touched pin is prompted for
- * an optional ruling (enter keeps the current text; R-P2-9);
- * `routeDisagreements` then names every non-divergent pin whose direct
- * route no longer matches the derived form of its openrouter route, for the
- * owner to reconcile by hand (R-P2-10). Ctrl-C/EOF skips the rulings but the
- * summary still prints; nothing here spends (the one catalog refresh is the
- * same keyed model-list call the user picker makes, §5 write gate).
+ * to the PASS's namespace — an id from another namespace is refused as the
+ * picker's own `could not write: …` line (R-P2-5) — and stamps `verifiedOn`
+ * (R-P2-12) through `commit()`'s compare-and-swap (#238 council r1 F1):
+ * refused, nothing written, if curated-pins.json changed on disk since this
+ * session loaded it. After the last pass each touched pin is prompted for an
+ * optional ruling (enter keeps the current text; R-P2-9); `routeDisagreements`
+ * names every non-divergent pin whose direct route no longer matches the
+ * derived form of its openrouter route (R-P2-10). Ctrl-C/EOF skips the
+ * rulings but the summary still prints; nothing here spends.
  */
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { DIVERGENT_VENDORS, stripGatewayPrefix } = require('../utils/curated-models');
@@ -46,6 +41,7 @@ const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require(
 const { refreshingCatalogLine } = require('./aliases-review-render');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { collapseExcerpt, safeFragment } = require('../utils/text-sanitize');
+const { ownerGate } = require('./aliases-owner-gate');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
 const DATA_FILE = 'src/utils/curated-pins.json';
@@ -64,6 +60,8 @@ function defaultDeps() {
     git: (args) => execFileSync('git', args, { cwd: PKG_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(),
     loadCuratedPins,
     saveCuratedPins,
+    // F1: the CAS baseline, read through fs (never `require`, which caches) so a concurrent edit is visible; tests inject one bound to a temp file.
+    readCuratedPinsBytes: () => fs.readFileSync(path.join(PKG_ROOT, 'src/utils/curated-pins.json'), 'utf8'),
     today: () => new Date().toISOString().slice(0, 10),
     now: () => Date.now(),
     runReview: (args, d) => require('./aliases-review').runReview(args, d),
@@ -72,34 +70,9 @@ function defaultDeps() {
 }
 
 /**
- * @param {{isTTY: boolean, git: (args: string[]) => string}} d
- * @returns {string|null} the refusal reason, or null when owner mode may run
- */
-function ownerGate(d) {
-  if (!d.isTTY) { return 'aliases --review --owner is interactive: run it in a terminal'; }
-  let prefix;
-  try { prefix = d.git(['rev-parse', '--show-prefix']); }
-  catch (err) {
-    if (err && err.code === 'ENOENT') { return 'git is not installed or not on PATH — owner mode needs it'; }
-    return `owner mode needs the amicus source checkout (${PKG_ROOT} is not inside a git work tree)`;
-  }
-  // Mutant GATEPREFIX: drop this check and an npm-installed copy inside a
-  // consumer's repo passes (setup-hooks.js documents that exact trap).
-  if (prefix !== '') { return `owner mode needs the amicus source checkout, not an installed copy (${PKG_ROOT} sits ${prefix} below its repository root)`; }
-  let status;
-  try { status = d.git(['status', '--porcelain', '--untracked-files=no']); }
-  catch (err) { return `owner mode could not read the working tree (${collapseExcerpt(err.message)})`; }
-  // Mutant DIRTYTREE: drop this check and `git diff` stops being a clean review surface.
-  if (status !== '') { return `owner mode needs a clean working tree — commit or stash first (git status shows ${status.split('\n').length} changed file(s))`; }
-  return null;
-}
-
-/**
  * @param {object} pins `loadCuratedPins().pins`
  * @returns {Object<string, Object<string,string>>} provider → { alias → id }, both null-prototype;
- *   `openrouter` is always first (seeded before the walk — a pin's own JSON key order is not
- *   guaranteed to list its openrouter route first), the rest in first-seen order walking the pins
- *   in file order
+ *   `openrouter` is always first (seeded before the walk), the rest in first-seen file order
  */
 function routesByProvider(pins) {
   const out = { __proto__: null, openrouter: { __proto__: null } };
@@ -114,9 +87,8 @@ function routesByProvider(pins) {
 
 /**
  * @param {object} pins
- * @returns {string[]} one line per NON-divergent pin whose authored direct route differs from the derived form
- *   of its openrouter route (`stripGatewayPrefix`) — such a pair routes different models depending on which key
- *   a user holds. Divergent vendors (anthropic) author both forms by ruling and are never compared.
+ * @returns {string[]} one line per NON-divergent pin whose direct route differs from its openrouter route's
+ *   derived form (`stripGatewayPrefix`) — divergent vendors (anthropic) author both forms and are never compared
  */
 function routeDisagreements(pins) {
   const lines = [];
@@ -138,12 +110,10 @@ function routeDisagreements(pins) {
 }
 
 /**
- * Whole-branch review Minor #3: the comparator's dash-version limit means an
- * anthropic pass can never propose the matching move for a sibling accepted
- * on openrouter (the smoke's `fable → claude-fable-5.1` on openrouter only is
- * the live case) — so a touched alias whose pin ALSO has a route in a
- * DIVERGENT_VENDORS namespace this session never touched is called out for
- * the owner to verify by hand.
+ * A touched alias whose pin ALSO has a route in a DIVERGENT_VENDORS namespace
+ * this session never touched is called out for the owner to verify by hand
+ * (the comparator's dash-version limit means an anthropic pass can never
+ * propose the matching move for a sibling accepted on openrouter).
  * @param {object} pins the (possibly updated) document's pins
  * @param {Set<string>} touched alias names touched this session
  * @param {Set<string>} touchedRoutes `<alias>::<provider>` pairs actually written this session
@@ -165,18 +135,48 @@ function divergentVendorNotices(pins, touched, touchedRoutes) {
 function namespaceGap(provider, catalogInfo) {
   const failures = Array.isArray(catalogInfo.providerFailures) ? catalogInfo.providerFailures : [];
   if (failures.some(f => f && f.provider === provider)) { return 'provider fetch failed this run'; }
-  // Round-1 review Small 4: reuse the §5 gate's own id set (alias-proposals.js)
-  // instead of re-implementing its authoritative/failure filter here.
+  // Reuses the §5 gate's own id set (alias-proposals.js) instead of re-implementing its filter.
   const covered = gatedCatalogIds(catalogInfo).some(id => providerOf(id) === provider);
   return covered ? null : 'no authoritative rows in the catalog (no key?)';
 }
 
-/** The picker's view for ONE namespace: every route in `map` is a custom pinned row; proposals carry no dismissKey. */
+/**
+ * The picker's view for ONE namespace: every route in `map` is a custom
+ * pinned row; proposals carry no dismissKey (R-P2-2). F9: `catalogAvailable`/
+ * `retired` now match the view CONTRACT (computed, not hardcoded) — harmless
+ * today, since an owner row can never itself be a retired alias (disjoint by
+ * validateCuratedPins).
+ */
 function ownerView(map, catalogInfo, doc, d) {
   const rows = Object.keys(map).map(alias => ({ alias, id: map[alias], state: 'pinned', curated: false, shipped: null }));
   const proposals = d.buildAliasProposals({ userAliases: map, defaults: { __proto__: null }, catalogInfo, retired: doc.retired, notable: [], dismissed: {} })
     .map(p => ({ ...p, dismissKey: null }));
-  return { rows, proposals, catalogInfo, catalogAvailable: true };
+  return {
+    rows, proposals, catalogInfo,
+    catalogAvailable: Array.isArray(catalogInfo.models) && catalogInfo.models.length > 0,
+    retired: doc.retired,
+  };
+}
+
+/**
+ * Compare-and-swap write (#238 council r1 F1): refuse (throw, nothing
+ * written) when curated-pins.json changed on disk since this session loaded
+ * it — a concurrent session or a hand edit mid-walk must never be clobbered.
+ * On success, advances the in-memory doc and the CAS baseline together, so a
+ * later write in the SAME session compares against what THIS write landed.
+ * Shared by the sink (`addAlias`) and `askRulings`; both print `could not
+ * write: …` on refusal rather than aborting the review. Mutant NOCAS: drop
+ * the comparison.
+ * @param {{doc: object, diskBytes: string}} state mutated in place on success
+ */
+function commit(state, next, d) {
+  const onDisk = d.readCuratedPinsBytes();
+  if (onDisk !== state.diskBytes) {
+    throw new Error('curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
+  }
+  d.saveCuratedPins(next);          // Mutant SAVEFIRST: assign state.doc before this line
+  state.diskBytes = JSON.stringify(next, null, 2) + '\n';
+  state.doc = next;
 }
 
 /** After the walk: one optional ruling per touched pin; enter keeps the current text; each answer is written at once. */
@@ -185,13 +185,12 @@ async function askRulings(state, ask, d) {
   d.write('  rulings — a sentence on WHY, stored beside the pin (enter keeps the current text):\n');
   for (const alias of state.touched) {
     const pin = state.doc.pins[alias];
-    d.write(`  ${alias} → ${Object.values(pin.routes).map(safeFragment).join(', ')}\n    current: ${pin.ruling || '(none)'}\n`);
+    // F5: a ruling is free text from an interactive prompt, rendered back later -- sanitize before showing it.
+    d.write(`  ${alias} → ${Object.values(pin.routes).map(safeFragment).join(', ')}\n    current: ${pin.ruling ? collapseExcerpt(pin.ruling) : '(none)'}\n`);
     const ans = String((await ask('    ruling: ')) || '').trim();
     if (!ans) { continue; }
     try {
-      const next = setPinRuling(state.doc, alias, ans);
-      d.saveCuratedPins(next);
-      state.doc = next;
+      commit(state, setPinRuling(state.doc, alias, ans), d);
     } catch (err) { d.write(`    could not write: ${collapseExcerpt(err.message)}\n`); }
   }
 }
@@ -200,18 +199,15 @@ async function askRulings(state, ask, d) {
 function passDeps(provider, map, catalogInfo, state, ask, d) {
   return {
     ...d, ask, isTTY: true,
-    // Round-1 review Small 3: the owner module already printed the
-    // refreshing-catalog banner once (if stale) before the first pass; a
-    // per-namespace runReview must not repeat it on every pass.
+    // The owner module already printed the refreshing-catalog banner once (if
+    // stale); a per-namespace runReview must not repeat it on every pass.
     readCache: null,
     collectAliasView: async () => ownerView(map, catalogInfo, state.doc, d),
     renderAliasList: () => '',
     addAlias: (alias, id) => {
-      // Mutant PROVREFUSE: pass providerOf(id) here and a typed id from another
-      // namespace rewrites THAT route instead of being refused.
+      // Mutant PROVREFUSE: pass providerOf(id) here and a typed id from another namespace rewrites THAT route.
       const next = setPinRoute(state.doc, alias, provider, id, d.today());
-      d.saveCuratedPins(next);        // Mutant SAVEFIRST: assign state.doc before this line
-      state.doc = next;
+      commit(state, next, d);         // F1/NOCAS, SAVEFIRST: both guarded inside commit()
       state.touched.add(alias);
       state.touchedRoutes.add(alias + '::' + provider); // keyed on this PASS's namespace, so an untouched divergent sibling namespace can be told apart
     },
@@ -230,14 +226,28 @@ async function runOwnerReview(args, deps) {
   const d = { ...defaultDeps(), ...(deps || {}) };
   const refusal = ownerGate(d);
   if (refusal) { d.stderr(`Error: ${refusal}\n`); return 1; }
-  const state = { doc: d.loadCuratedPins(), touched: new Set(), touchedRoutes: new Set() };
+  // F3: loadCuratedPins/getCatalogInfo are real I/O that can throw -- name it and refuse, before any prompt is created.
+  let state;
+  try {
+    state = { doc: d.loadCuratedPins(), touched: new Set(), touchedRoutes: new Set() };
+  } catch (err) {
+    d.stderr(`Error: ${collapseExcerpt(err.message)}\n`);
+    return 1;
+  }
+  state.diskBytes = d.readCuratedPinsBytes(); // F1: the CAS baseline this session's writes compare against
   const groups = routesByProvider(state.doc.pins);
   const routeCount = Object.values(groups).reduce((n, g) => n + Object.keys(g).length, 0);
   d.write(`  owner mode — reviewing the shipped pins in ${DATA_FILE} (${Object.keys(state.doc.pins).length} pins, ${routeCount} routes)\n`);
   if (typeof d.readCache === 'function') {
     try { const line = refreshingCatalogLine(d.readCache(), d.now()); if (line) { d.write(line); } } catch { /* banner only */ }
   }
-  const catalogInfo = await d.getCatalogInfo({}); // the §5 write gate's refresh, once, shared by every pass
+  let catalogInfo;
+  try {
+    catalogInfo = await d.getCatalogInfo({}); // the §5 write gate's refresh, once, shared by every pass
+  } catch (err) {
+    d.stderr(`Error: catalog unavailable (${collapseExcerpt(err.message)}) — run amicus models --refresh\n`);
+    return 1;
+  }
   if (!Array.isArray(catalogInfo.models) || catalogInfo.models.length === 0) {
     d.write('  no catalog — cannot review; run amicus models --refresh\n');
     return 1;
@@ -245,11 +255,13 @@ async function runOwnerReview(args, deps) {
   const prompt = d.ask ? null : d.createPrompt();
   const ask = d.ask || prompt.ask;
   let interrupted = false;
+  let reviewed = 0; // F11: namespaces actually reviewed (not gapped) -- see the zero-namespace check below
   try {
     for (const provider of Object.keys(groups)) {
       const n = Object.keys(groups[provider]).length;
       const gap = namespaceGap(provider, catalogInfo);
       if (gap) { d.write(`  ${provider} routes (${n}): ${gap} — not reviewed\n`); continue; }
+      reviewed += 1;
       d.write(`  ${provider} routes (${n}):\n`);
       if (await d.runReview(args, passDeps(provider, groups[provider], catalogInfo, state, ask, d)) !== 0) { interrupted = true; d.write('  pass ended early — rulings skipped\n'); break; }
     }
@@ -261,6 +273,11 @@ async function runOwnerReview(args, deps) {
   } finally {
     if (prompt) { prompt.close(); }
   }
+  // F11: every namespace gapped is a distinct failure from "reviewed, nothing changed" -- say so and fail.
+  if (reviewed === 0) {
+    d.write('  nothing could be reviewed — no namespace had catalog coverage (keys? fetch failures above)\n');
+    return 1;
+  }
   for (const line of routeDisagreements(state.doc.pins)) { d.write(line + '\n'); }
   for (const line of divergentVendorNotices(state.doc.pins, state.touched, state.touchedRoutes)) { d.write(line + '\n'); }
   const k = state.touched.size;
@@ -270,4 +287,4 @@ async function runOwnerReview(args, deps) {
   return interrupted ? 1 : 0;
 }
 
-module.exports = { runOwnerReview, ownerGate, routesByProvider, routeDisagreements };
+module.exports = { runOwnerReview, ownerGate, routesByProvider, routeDisagreements, ownerView };
