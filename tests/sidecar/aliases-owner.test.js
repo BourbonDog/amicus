@@ -66,6 +66,45 @@
  *     "…no write, no prompt" tests once `ask` is deleted from their deps
  *     (review item 2: the assertion is vacuous while `ask` stays injected,
  *     since `createPrompt` is then dead code regardless of guard order).
+ *
+ * Council round 2 (#238 PR #250, G1/G2/G4) MEASURED 2026-09-15 on the
+ * committed tree; restored via `git checkout -- src/sidecar/aliases-owner.js`
+ * (safe: committed before measuring). `commit`/`askRulings` now live in
+ * aliases-owner-sink.js (the round-2 size-budget split).
+ *   SKEW — runOwnerReview rebuilds `state.doc` from `d.loadCuratedPins()`
+ *     instead of parsing `state.diskBytes`. RED, TARGETED run only
+ *     (`npx jest tests/sidecar/aliases-owner.test.js -t "G1: the CAS
+ *     baseline"`): "G1: the CAS baseline and the in-memory doc come from the
+ *     SAME read — a stale loadCuratedPins is never consulted (mutant SKEW)".
+ *     SAFETY NOTE: do NOT run this mutant across the whole file (or
+ *     un-targeted) — every OTHER test that does not itself inject
+ *     `loadCuratedPins` silently falls through to `aliases.js :: loadDeps()`'s
+ *     REAL one (owner mode's own `defaultDeps()` no longer sets it, but the
+ *     `...base` spread still carries it), which reads and validates the
+ *     ACTUAL SHIPPED 21-pin file — producing a `state.doc` wildly mismatched
+ *     against each test's tiny synthetic catalog/temp file, so nearly every
+ *     route reads as "stale" and the walk explodes into far more proposals
+ *     than any test's scripted answers cover. MEASURED: this reliably
+ *     times out / OOMs a full-file run; it is not a flaw in G1's fix, only a
+ *     hazard of this specific mutant against this harness. The targeted run
+ *     above is the safe, sufficient measurement.
+ *   NOBREAK — askRulings' `if (state.casRefused) { break; }` removed.
+ *     RED, verified pre-commit (scratch mutant, not committed): "G2(a): a CAS
+ *     refusal during the first ruling stops askRulings before asking for the
+ *     second (no break -> mutant)".
+ *   NOABORT — passDeps' casRefused-checking `ask` wrapper removed (ask passed
+ *     through unwrapped). RED, verified pre-commit (scratch mutant, not
+ *     committed): "G2(b): a CAS refusal on the first accept aborts the walk
+ *     immediately — the menu is not re-shown for a second answer" — fails
+ *     FAST (a thrown Error from the test's own mock on its 2nd call), by
+ *     design: the mock throws rather than returning a non-numeric answer,
+ *     which would otherwise spin reviewOne's own `for(;;)` retry loop
+ *     forever (MEASURED: the first draft of this test, returning a garbage
+ *     string instead of throwing, OOMed a real run under this exact mutant).
+ *   (askRulings' alias line reverted to raw `${alias}`, no safeFragment):
+ *     RED, verified pre-commit (scratch mutant, not committed): "G4:
+ *     askRulings' alias line rides safeFragment (a 100-char alias renders
+ *     truncated with a trailing ellipsis)".
  */
 const fs = require('fs');
 const os = require('os');
