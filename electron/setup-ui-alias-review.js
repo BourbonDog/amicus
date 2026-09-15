@@ -56,9 +56,6 @@ function buildAliasReviewScript() {
   return `
   var aliasReviewView = null;                     // the last sidecar:get-alias-review document
   var aliasReviewRows = Object.create(null);      // alias -> the proposal row on screen
-  // setup-ui-alias-state.js declares stagedDismissals (Task 4); until it does,
-  // declare it here -- a duplicate \`var\` in one script is harmless.
-  var stagedDismissals = (typeof stagedDismissals === 'undefined') ? [] : stagedDismissals;
 
   // Why the section cannot be acted on, or null when it can. Mirrors the CLI's
   // staleCatalogBanner (aliases-review-gate.js): error and unavailability
