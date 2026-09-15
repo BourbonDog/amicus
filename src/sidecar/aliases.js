@@ -7,6 +7,7 @@
  *   amicus aliases --json     versioned document: rows + proposals
  *   amicus aliases --review --owner   maintainers: the same picker over the SHIPPED pins (aliases-owner.js)
  *   amicus aliases --unpin <name>   remove a pin (aliases-unpin.js)
+ *   amicus aliases --ui       open the setup window on the Routing step (the same editor, plus the "Needs review" section)
  *
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
@@ -241,6 +242,25 @@ function buildAliasesDoc(view) {
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleAliases(args) {
+  if (args.ui) {
+    // #238 D4: `--ui` opens the Electron setup window on the Routing step --
+    // the same alias editor, with the "Needs review" section (electron/
+    // setup-ui-alias-review.js). Interactive-only, so it combines with none
+    // of the machine or terminal forms (R-P3-12).
+    if (args.json || args.review || args.owner || args.unpin !== undefined) {
+      process.stderr.write('Error: --ui opens the setup window at the Routing step; it cannot be combined with --json, --review, --owner or --unpin\n');
+      return 1;
+    }
+    normalizeOnEntry(loadDeps());                     // D6: every `amicus aliases` form normalizes on entry
+    const { launchSetupWindow } = require('./setup-window');
+    const res = await launchSetupWindow({ pane: 'aliases' });
+    if (!res || !res.success) {
+      process.stderr.write(`${(res && res.error) || 'Setup window closed without completing'}\n`);
+      return 1;
+    }
+    process.stdout.write('Aliases saved.\n');
+    return 0;
+  }
   if (args.owner && !args.review) {
     process.stderr.write('Error: --owner requires --review (amicus aliases --review --owner)\n');
     return 1;
