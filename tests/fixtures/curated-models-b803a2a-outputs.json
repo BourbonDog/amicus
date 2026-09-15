@@ -1,0 +1,399 @@
+{
+  "routes": {
+    "gemini": {
+      "openrouter": "openrouter/google/gemini-3.6-flash",
+      "direct": "google/gemini-3.6-flash"
+    },
+    "gemini-pro": {
+      "openrouter": "openrouter/google/gemini-3.1-pro-preview",
+      "direct": "google/gemini-3.1-pro-preview"
+    },
+    "gpt": {
+      "openrouter": "openrouter/openai/gpt-5.6-terra",
+      "direct": "openai/gpt-5.6-terra"
+    },
+    "opus": {
+      "openrouter": "openrouter/anthropic/claude-opus-5",
+      "direct": "anthropic/claude-opus-5"
+    },
+    "deepseek": {
+      "openrouter": "openrouter/deepseek/deepseek-v4-pro",
+      "direct": "deepseek/deepseek-v4-pro"
+    },
+    "gpt-pro": {
+      "openrouter": "openrouter/openai/gpt-5.6-sol-pro",
+      "direct": "openai/gpt-5.6-sol-pro"
+    },
+    "codex": {
+      "openrouter": "openrouter/openai/gpt-5.3-codex",
+      "direct": "openai/gpt-5.3-codex"
+    },
+    "claude": {
+      "openrouter": "openrouter/anthropic/claude-sonnet-5",
+      "direct": "anthropic/claude-sonnet-5"
+    },
+    "sonnet": {
+      "openrouter": "openrouter/anthropic/claude-sonnet-5",
+      "direct": "anthropic/claude-sonnet-5"
+    },
+    "haiku": {
+      "openrouter": "openrouter/anthropic/claude-haiku-4.5",
+      "direct": "anthropic/claude-haiku-4-5-20251001"
+    },
+    "fable": {
+      "openrouter": "openrouter/anthropic/claude-fable-5",
+      "direct": "anthropic/claude-fable-5"
+    },
+    "qwen": {
+      "openrouter": "openrouter/qwen/qwen3.8-max-0902"
+    },
+    "qwen-coder": {
+      "openrouter": "openrouter/qwen/qwen3-coder-next"
+    },
+    "qwen-flash": {
+      "openrouter": "openrouter/qwen/qwen3.6-flash"
+    },
+    "mistral": {
+      "openrouter": "openrouter/mistralai/mistral-medium-3-5"
+    },
+    "glm": {
+      "openrouter": "openrouter/z-ai/glm-5.3"
+    },
+    "minimax": {
+      "openrouter": "openrouter/minimax/minimax-m2.7"
+    },
+    "grok": {
+      "openrouter": "openrouter/x-ai/grok-4.3"
+    },
+    "kimi": {
+      "openrouter": "openrouter/moonshotai/kimi-k3"
+    },
+    "seed": {
+      "openrouter": "openrouter/bytedance-seed/seed-2.0-lite"
+    },
+    "inkling": {
+      "openrouter": "openrouter/thinkingmachines/inkling"
+    }
+  },
+  "defaults": {
+    "gemini": "google/gemini-3.6-flash",
+    "gemini-pro": "google/gemini-3.1-pro-preview",
+    "gpt": "openai/gpt-5.6-terra",
+    "opus": "anthropic/claude-opus-5",
+    "deepseek": "deepseek/deepseek-v4-pro",
+    "gpt-pro": "openai/gpt-5.6-sol-pro",
+    "codex": "openai/gpt-5.3-codex",
+    "claude": "anthropic/claude-sonnet-5",
+    "sonnet": "anthropic/claude-sonnet-5",
+    "haiku": "anthropic/claude-haiku-4-5-20251001",
+    "fable": "anthropic/claude-fable-5",
+    "qwen": "openrouter/qwen/qwen3.8-max-0902",
+    "qwen-coder": "openrouter/qwen/qwen3-coder-next",
+    "qwen-flash": "openrouter/qwen/qwen3.6-flash",
+    "mistral": "openrouter/mistralai/mistral-medium-3-5",
+    "glm": "openrouter/z-ai/glm-5.3",
+    "minimax": "openrouter/minimax/minimax-m2.7",
+    "grok": "openrouter/x-ai/grok-4.3",
+    "kimi": "openrouter/moonshotai/kimi-k3",
+    "seed": "openrouter/bytedance-seed/seed-2.0-lite",
+    "inkling": "openrouter/thinkingmachines/inkling"
+  },
+  "provenance": {
+    "gemini": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "gemini-pro": {
+      "directForm": "derived",
+      "gatewayOnly": false
+    },
+    "gpt": {
+      "directForm": "derived",
+      "gatewayOnly": false
+    },
+    "opus": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "deepseek": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "gpt-pro": {
+      "directForm": "derived",
+      "gatewayOnly": true
+    },
+    "codex": {
+      "directForm": "derived",
+      "gatewayOnly": false
+    },
+    "claude": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "sonnet": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "haiku": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "fable": {
+      "directForm": "authored",
+      "gatewayOnly": false
+    },
+    "qwen": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "qwen-coder": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "qwen-flash": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "mistral": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "glm": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "minimax": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "grok": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "kimi": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "seed": {
+      "directForm": "none",
+      "gatewayOnly": false
+    },
+    "inkling": {
+      "directForm": "none",
+      "gatewayOnly": false
+    }
+  },
+  "curatedRoutes": [
+    {
+      "alias": "gemini",
+      "provider": "openrouter",
+      "model": "openrouter/google/gemini-3.6-flash"
+    },
+    {
+      "alias": "gemini",
+      "provider": "google",
+      "model": "google/gemini-3.6-flash"
+    },
+    {
+      "alias": "gemini-pro",
+      "provider": "openrouter",
+      "model": "openrouter/google/gemini-3.1-pro-preview"
+    },
+    {
+      "alias": "gpt",
+      "provider": "openrouter",
+      "model": "openrouter/openai/gpt-5.6-terra"
+    },
+    {
+      "alias": "opus",
+      "provider": "openrouter",
+      "model": "openrouter/anthropic/claude-opus-5"
+    },
+    {
+      "alias": "opus",
+      "provider": "anthropic",
+      "model": "anthropic/claude-opus-5"
+    },
+    {
+      "alias": "deepseek",
+      "provider": "openrouter",
+      "model": "openrouter/deepseek/deepseek-v4-pro"
+    },
+    {
+      "alias": "deepseek",
+      "provider": "deepseek",
+      "model": "deepseek/deepseek-v4-pro"
+    },
+    {
+      "alias": "gpt-pro",
+      "provider": "openrouter",
+      "model": "openrouter/openai/gpt-5.6-sol-pro"
+    },
+    {
+      "alias": "codex",
+      "provider": "openrouter",
+      "model": "openrouter/openai/gpt-5.3-codex"
+    },
+    {
+      "alias": "claude",
+      "provider": "openrouter",
+      "model": "openrouter/anthropic/claude-sonnet-5"
+    },
+    {
+      "alias": "claude",
+      "provider": "anthropic",
+      "model": "anthropic/claude-sonnet-5"
+    },
+    {
+      "alias": "sonnet",
+      "provider": "openrouter",
+      "model": "openrouter/anthropic/claude-sonnet-5"
+    },
+    {
+      "alias": "sonnet",
+      "provider": "anthropic",
+      "model": "anthropic/claude-sonnet-5"
+    },
+    {
+      "alias": "haiku",
+      "provider": "openrouter",
+      "model": "openrouter/anthropic/claude-haiku-4.5"
+    },
+    {
+      "alias": "haiku",
+      "provider": "anthropic",
+      "model": "anthropic/claude-haiku-4-5-20251001"
+    },
+    {
+      "alias": "fable",
+      "provider": "openrouter",
+      "model": "openrouter/anthropic/claude-fable-5"
+    },
+    {
+      "alias": "fable",
+      "provider": "anthropic",
+      "model": "anthropic/claude-fable-5"
+    },
+    {
+      "alias": "qwen",
+      "provider": "openrouter",
+      "model": "openrouter/qwen/qwen3.8-max-0902"
+    },
+    {
+      "alias": "qwen-coder",
+      "provider": "openrouter",
+      "model": "openrouter/qwen/qwen3-coder-next"
+    },
+    {
+      "alias": "qwen-flash",
+      "provider": "openrouter",
+      "model": "openrouter/qwen/qwen3.6-flash"
+    },
+    {
+      "alias": "mistral",
+      "provider": "openrouter",
+      "model": "openrouter/mistralai/mistral-medium-3-5"
+    },
+    {
+      "alias": "glm",
+      "provider": "openrouter",
+      "model": "openrouter/z-ai/glm-5.3"
+    },
+    {
+      "alias": "minimax",
+      "provider": "openrouter",
+      "model": "openrouter/minimax/minimax-m2.7"
+    },
+    {
+      "alias": "grok",
+      "provider": "openrouter",
+      "model": "openrouter/x-ai/grok-4.3"
+    },
+    {
+      "alias": "kimi",
+      "provider": "openrouter",
+      "model": "openrouter/moonshotai/kimi-k3"
+    },
+    {
+      "alias": "seed",
+      "provider": "openrouter",
+      "model": "openrouter/bytedance-seed/seed-2.0-lite"
+    },
+    {
+      "alias": "inkling",
+      "provider": "openrouter",
+      "model": "openrouter/thinkingmachines/inkling"
+    }
+  ],
+  "families": [
+    {
+      "alias": "gemini",
+      "label": "Gemini Flash-class",
+      "blurb": "fast, large context",
+      "vendorPath": "google",
+      "idPattern": "/^gemini-[\\d.]+-flash(-preview|-exp|-latest)?$/",
+      "directProviders": [
+        "google"
+      ],
+      "fallback": {
+        "openrouter": "openrouter/google/gemini-3.6-flash",
+        "google": "google/gemini-3.6-flash"
+      }
+    },
+    {
+      "alias": "gemini-pro",
+      "label": "Gemini Pro-class",
+      "blurb": "advanced reasoning",
+      "vendorPath": "google",
+      "idPattern": "/^gemini-[\\d.]+-pro(-preview|-exp|-latest)?$/",
+      "directProviders": [
+        "google"
+      ],
+      "fallback": {
+        "openrouter": "openrouter/google/gemini-3.1-pro-preview"
+      }
+    },
+    {
+      "alias": "gpt",
+      "label": "GPT flagship",
+      "blurb": "strong coding",
+      "vendorPath": "openai",
+      "idPattern": "/^gpt-[\\d.]+(-terra)?$/",
+      "directProviders": [
+        "openai"
+      ],
+      "fallback": {
+        "openrouter": "openrouter/openai/gpt-5.6-terra"
+      }
+    },
+    {
+      "alias": "opus",
+      "label": "Claude Opus-class",
+      "blurb": "deep analysis",
+      "vendorPath": "anthropic",
+      "idPattern": "/^claude-opus-[\\d.-]+$/",
+      "directProviders": [
+        "anthropic"
+      ],
+      "fallback": {
+        "openrouter": "openrouter/anthropic/claude-opus-5",
+        "anthropic": "anthropic/claude-opus-5"
+      }
+    },
+    {
+      "alias": "deepseek",
+      "label": "DeepSeek flagship",
+      "blurb": "open-source",
+      "vendorPath": "deepseek",
+      "idPattern": "/^deepseek-v[\\d.]+(-pro)?$/",
+      "directProviders": [
+        "deepseek"
+      ],
+      "fallback": {
+        "openrouter": "openrouter/deepseek/deepseek-v4-pro",
+        "deepseek": "deepseek/deepseek-v4-pro"
+      }
+    }
+  ]
+}

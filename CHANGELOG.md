@@ -3,6 +3,40 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **`amicus aliases --review --owner`** (maintainers) — the same picker over the SHIPPED pins:
+  every route of every pin, one pass per gateway namespace, judged against the live catalog;
+  accept writes `src/utils/curated-pins.json` (validated, atomic) and stamps `verifiedOn`; an
+  optional ruling per changed pin is prompted after the walk; a routes-disagree summary closes
+  it. The write refuses (compare-and-swap) when the file changed on disk since the session
+  loaded it, and the session then exits 1 and asks for a restart; a run in which no namespace
+  could be reviewed also exits 1. Gated on the amicus source checkout + a clean working tree + a
+  terminal, so `git diff` is the review surface and nothing ships until it is committed. No
+  follow, no dismiss in owner mode. (#238 D3/D4/D8)
+- **`amicus aliases`** flags a pin that names a RETIRED alias (`⚠ retired <date>`, ruling on the
+  next line) instead of rendering it as a plain custom pin; `--json` carries `retired`; the
+  picker's "Nothing to review" line counts such pins instead of calling them up to date. (#238 D8)
+- **`amicus models --check`** prints an informational `newer sibling:` line for each cardless
+  shipped pin with a strictly newer same-tier sibling in the catalog (over the §5-gated ids), and
+  its shipped-pin drift hints now point at `amicus aliases --review --owner`. Exit code and
+  `--strict` unchanged. The sibling comparator (`model-id-siblings.js`) is now consumed by the
+  picker, the CI pin gate AND `models --check`. (#238 Q7)
+
+### Changed
+
+- The shipped pins, the retired list and the (empty) notable list moved from
+  `src/utils/curated-models.js` into the data file `src/utils/curated-pins.json` (`pins` with
+  per-gateway `routes` + `verifiedOn` + optional `ruling`/`gatewayOnly`; `retired`; `notable`).
+  No behaviour change: every builder is byte-identical over the same data (frozen fixtures), and
+  `curated-models.js` keeps the match rules. The `retired`/`notable` inputs the review engine
+  already accepted are now supplied from the file. The validator checks calendar-valid dates and
+  known provider keys on every route; rulings are stored as one sanitized line; route ids must be
+  concrete releases in the pinnable charset (`A-Za-z0-9._:/-`), and OpenRouter `~…-latest`
+  pointers are refused by name. (#238 D8, Appendix A)
+
 ## [4.10.0] - 2026-09-14
 
 ### Added

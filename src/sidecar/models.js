@@ -19,6 +19,10 @@ const { auditGatewayRoutes } = require('../utils/gateway-route-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
 const { getFamilies } = require('../utils/curated-models');
 const { pickCurrent } = require('../utils/quick-picks');
+const { gatedCatalogIds } = require('../utils/alias-proposals');
+const { newestSibling } = require('../utils/model-id-siblings');
+const { loadCuratedPins } = require('../utils/curated-pins');
+const { safeFragment } = require('../utils/text-sanitize');
 const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 const { fmtRow, fmtGatewayFinding, fmtProbeLine, fmtProviderFailure } = require('./models-render');
@@ -236,13 +240,17 @@ async function runCheck(args) {
 }
 
 /**
- * Non-blocking drift report: pinned family fallbacks vs live resolution.
- * Accepts a catalogInfo (`{models, providerFailures}`) or a bare models array
- * (older callers). Empty catalog → [] (cannot check). #238 §5: when the
- * openrouter namespace itself was REJECTED this run, the catalog is missing the
- * rows that make a pin look current, and a drift line computed from it would
- * propose a downgrade — so the report is empty for that catalog. Never affects
- * the exit code.
+ * Non-blocking drift report: pinned family fallbacks vs live resolution, and
+ * (#238 Q7) a newer same-tier sibling of each CARDLESS pin. Accepts a
+ * catalogInfo (`{models, providerFailures}`) or a bare models array (older
+ * callers). Empty catalog → [] (cannot check). #238 §5: when the openrouter
+ * namespace itself was REJECTED this run, the catalog is missing the rows that
+ * make a pin look current, and a drift line computed from it would propose a
+ * downgrade — so the report is empty for that catalog. The sibling lines use
+ * the §5-gated ids (authoritative rows, no rejected namespace) — the same gate
+ * that keeps the picker from offering a floor row; mutant SIBLINGGATE feeds it
+ * every catalog id instead. Never affects the exit code; every line points at
+ * owner mode, the flow that moves a shipped pin.
  * @param {{models: Array<{id:string}>, providerFailures?: Array<{provider:string}>}|Array<{id:string}>} catalogOrInfo
  * @returns {string[]} human-readable warning lines
  */
@@ -253,12 +261,22 @@ function buildFallbackDriftReport(catalogOrInfo) {
   const failures = Array.isArray(info.providerFailures) ? info.providerFailures : [];
   if (failures.some(f => f && f.provider === 'openrouter')) { return []; }
   const lines = [];
-  for (const f of getFamilies()) {
+  const families = getFamilies();
+  for (const f of families) {
     const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);
     if (live && f.fallback.openrouter && live !== f.fallback.openrouter) {
-      lines.push(
-        `  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${live}) — update curated-models.js`);
+      // F5: `live` is catalog-derived (third-party); `f.fallback.openrouter` is the shipped pin (house bytes) -- only the former rides the sanitizer.
+      lines.push(`  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${safeFragment(live)}) — amicus aliases --review --owner (a family match is not always a same-tier sibling; when the picker offers nothing, edit src/utils/curated-pins.json by hand)`);
     }
+  }
+  const familyAliases = new Set(families.map(f => f.alias));
+  const gated = gatedCatalogIds(info);
+  const { pins } = loadCuratedPins();
+  for (const alias of Object.keys(pins)) {
+    if (familyAliases.has(alias)) { continue; } // a family's idPattern rule speaks for it above
+    const pinned = pins[alias].routes.openrouter;
+    const newer = newestSibling(pinned, gated);
+    if (newer) { lines.push(`  newer sibling: ${alias} → ${pinned} (catalog: ${safeFragment(newer)}) — amicus aliases --review --owner`); }
   }
   return lines;
 }

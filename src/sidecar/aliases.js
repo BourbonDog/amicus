@@ -5,6 +5,8 @@
  *   amicus aliases            list: following / pinned, grouped by vendor
  *   amicus aliases --review   picker over every proposal (aliases-review.js)
  *   amicus aliases --json     versioned document: rows + proposals
+ *   amicus aliases --review --owner   maintainers: the same picker over the SHIPPED pins (aliases-owner.js)
+ *   amicus aliases --unpin <name>   remove a pin (aliases-unpin.js)
  *
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
@@ -13,7 +15,7 @@
  * #249 r2 C4: `renderAliasList`'s alias names, ids and vendor-group labels
  * (an unmapped vendor's label is `titleCaseVendor` of a config VALUE's
  * segment — still third-party, per review F1), and the typed name in
- * `handleUnpin`'s messages, are quoted onto a terminal and ride `safeFragment`
+ * `aliases-unpin.js`'s messages, are quoted onto a terminal and ride `safeFragment`
  * (the house sanitizer, `utils/text-sanitize.js`) — the fragment, never the
  * composed line, per `alias-shadow.js :: formatAliasShadow`'s rule. A caught
  * `err.message` is a sentence, not an id, so it rides `collapseExcerpt` at
@@ -39,6 +41,7 @@ function loadDeps() {
     getCatalogInfo: require('../utils/model-catalog').getCatalogInfo,
     readCache: require('../utils/model-catalog').readCache,
     groupAliases: require('../utils/alias-groups').groupAliases,
+    loadCuratedPins: require('../utils/curated-pins').loadCuratedPins,
   };
 }
 
@@ -70,11 +73,12 @@ function normalizeOnEntry(d) {
 
 /**
  * @param {{maxAgeMs?: number}} [opts] `Number.POSITIVE_INFINITY` = cache only
- * @returns {Promise<{rows: Array, proposals: Array, catalogInfo: object, catalogAvailable: boolean}>}
+ * @returns {Promise<{rows: Array, proposals: Array, catalogInfo: object, catalogAvailable: boolean, retired: object}>}
  */
 async function collectAliasView(opts = {}, d = loadDeps()) {
   const userAliases = normalizeOnEntry(d);
   const defaults = d.config.getDefaultAliases();
+  const { retired, notable } = d.loadCuratedPins();
   let catalogInfo = { models: [], fetchedAt: null, providerFailures: [] };
   try {
     if (opts.maxAgeMs === Number.POSITIVE_INFINITY) {
@@ -95,8 +99,8 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
     }
   } catch (err) { process.stderr.write(`Notice: catalog unavailable (${collapseExcerpt(err.message)}) — no proposals\n`); }
   const rows = d.listAliasRows(userAliases, defaults);
-  const proposals = d.buildAliasProposals({ userAliases, defaults, catalogInfo, dismissed: d.readDismissals() });
-  return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0 };
+  const proposals = d.buildAliasProposals({ userAliases, defaults, catalogInfo, retired, notable, dismissed: d.readDismissals() });
+  return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0, retired };
 }
 
 /**
@@ -131,7 +135,41 @@ function sameGatewayNote(r) {
   return stripGatewayPrefix(r.id) === stripGatewayPrefix(r.shipped) ? '   same model as shipped, other gateway' : '';
 }
 
-/** @param {{rows: Array, proposals: Array}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
+/**
+ * #238 D8: a PINNED row whose name is in the shipped `retired` map gets no
+ * proposal at all (alias-proposals.js suppresses retired names before judging
+ * them), so without this note a dead pin would render as a plain custom pin
+ * with no warning — worse than the `⚠ gone from catalog` any other stale pin
+ * gets. The date rides the row; the ruling follows on a continuation line.
+ * Provenance (#249 r2 C4 rule; updated #238 council r1 F5): `retired` itself
+ * is the shipped data file authored by the owner — house bytes, not
+ * third-party. The ruling text is still house bytes, but it is now TYPED
+ * through an interactive prompt (aliases-owner.js :: askRulings) and
+ * accumulates over sessions, so the render site (below) collapses it like
+ * any other terminal-bound value, rather than printing it raw.
+ * Mutant RETIREDFLAG: return { flag: '', ruling: null } unconditionally.
+ * @param {{alias:string, state:string}} r
+ * @param {object|undefined} retired
+ * @returns {{flag: string, ruling: string|null}} the row suffix and the ruling line, or empties
+ */
+function retiredNote(r, retired) {
+  if (!retired || !r || r.state !== 'pinned' || !Object.prototype.hasOwnProperty.call(retired, r.alias)) { return { flag: '', ruling: null }; }
+  return { flag: `   ⚠ retired ${retired[r.alias].on}`, ruling: retired[r.alias].ruling };
+}
+
+/**
+ * #238 whole-branch review Minor #5: how many PINNED rows are flagged `⚠
+ * retired` above -- when there is nothing to review, the footer's reassuring
+ * "nothing to review" is misleading if a row above is still flagged.
+ * @param {{rows: Array, retired?: object}} view
+ * @returns {number}
+ */
+function retiredFlaggedCount(view) {
+  if (!view.retired) { return 0; }
+  return view.rows.filter(r => r.state === 'pinned' && Object.prototype.hasOwnProperty.call(view.retired, r.alias)).length;
+}
+
+/** @param {{rows: Array, proposals: Array, retired?: object}} view @param {Function} [groupAliases] injectable for tests; defaults to loadDeps().groupAliases so the published `(view) => string` signature works standalone @returns {string} */
 function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
   const byAlias = new Map(view.rows.map(r => [r.alias, r]));
   const proposalByAlias = new Map(view.proposals.map(p => [p.alias, p]));
@@ -154,8 +192,11 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     for (const key of g.keys) {
       const r = byAlias.get(key);
       const p = proposalByAlias.get(key);
-      const flag = p ? rowFlag(p.reasons) : sameGatewayNote(r);
+      const dead = p ? { flag: '', ruling: null } : retiredNote(r, view.retired);
+      const flag = p ? rowFlag(p.reasons) : (dead.flag || sameGatewayNote(r));
       lines.push(`    ${safeFragment(key).padEnd(width)}  → ${safeFragment(r.id).padEnd(44)} ${r.state}${flag}`);
+      // F5 (#238 council r1 A1/B4/D2): the ruling is typed through a prompt now (see retiredNote's docblock) -- collapse before it reaches the terminal.
+      if (dead.ruling) { lines.push(`    ${''.padEnd(width)}    ↳ ${collapseExcerpt(dead.ruling)}`); }
     }
   }
   lines.push('');
@@ -167,8 +208,11 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
     return lines.join('\n') + '\n';
   }
   const n = view.proposals.length;
+  const retiredCount = n === 0 ? retiredFlaggedCount(view) : 0;
   lines.push(n === 0
-    ? '  nothing to review — amicus aliases --review'
+    ? (retiredCount > 0
+        ? `  nothing to review (${retiredCount} retired pin${retiredCount === 1 ? '' : 's'} flagged above) — amicus aliases --review`
+        : '  nothing to review — amicus aliases --review')
     : `  ${n} to review — amicus aliases --review`);
   // F1: the catalog is available but stale -- name its age so a user who
   // never runs --review still learns the background refresh isn't keeping up.
@@ -191,69 +235,16 @@ function buildAliasesDoc(view) {
     aliases: view.rows,
     proposalCount: view.proposals.length,
     proposals: view.proposals,
+    retired: view.retired || {},
   };
-}
-
-/**
- * `amicus aliases --unpin <name>` (#238 F6, R1): "unpin" and "delete" are one
- * operation -- remove the key -- whose meaning is decided by whether the
- * name is curated (D1). The name is trimmed before every use -- for the
- * `removeAlias` lookup, the `isCurated` check and both success messages --
- * so a padded name neither crashes nor mis-reports which branch fired
- * (#249 r1 R1). Blank/whitespace/literal-'null' names are refused here, and
- * `removeAlias` is called under try/catch so any other throw (its own name
- * guard included) becomes a clean exit 1, never an uncaught crash.
- *
- * R4 (#249 r2 D2): refused BEFORE any write when `name` is also
- * `config.default` and NOT curated -- deleting it would leave the default
- * dangling on a key that no longer resolves (`resolveModel` throws), and
- * silently doing that fails the product principle (never a silent dangling
- * default) as hard as a crash. Precedent: `cli-handlers-provider.js ::
- * doRemove` re-points `config.default` when a provider goes away; here the
- * user is deleting one alias on purpose, so refusing and naming the fix is
- * the transparent choice instead. A CURATED default is unaffected -- it
- * keeps resolving from the shipped table after the unpin, same as any other
- * curated unpin. `config.default` may also be a bare model id rather than
- * an alias name (`start-helpers.js` resolves either); the guard compares
- * against the literal `name` argument, so a default that merely happens to
- * RESOLVE to the same id as this alias is not what it's checking.
- * @param {*} rawName whatever `args.unpin` parsed to
- * @returns {number} exit code
- */
-function handleUnpin(rawName) {
-  const name = typeof rawName === 'string' ? rawName.trim() : '';
-  if (!name || name === 'null') {
-    process.stderr.write('Error: --unpin requires an alias name\n');
-    return 1;
-  }
-  const { removeAlias } = require('../utils/alias-store');
-  const { isCurated } = require('../utils/alias-state');
-  const config = require('../utils/config');
-  const defaults = config.getDefaultAliases();
-  const cfg = config.loadConfig();
-  if (cfg && cfg.default === name && !isCurated(name, defaults)) {
-    process.stderr.write(`Error: '${safeFragment(name)}' is your default model (config.default) — pick another default first (amicus setup)\n`);
-    return 1;
-  }
-  let removed;
-  try {
-    removed = removeAlias(name);
-  } catch (err) {
-    process.stderr.write(`Error: ${collapseExcerpt(err.message)}\n`);
-    return 1;
-  }
-  if (!removed) {
-    process.stderr.write(`Error: '${safeFragment(name)}' is not pinned (see: amicus aliases)\n`);
-    return 1;
-  }
-  process.stdout.write(isCurated(name, defaults)
-    ? `✓ ${safeFragment(name)} now follows the shipped recommendation (${defaults[name]})\n`
-    : `✓ ${safeFragment(name)} removed\n`);
-  return 0;
 }
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleAliases(args) {
+  if (args.owner && !args.review) {
+    process.stderr.write('Error: --owner requires --review (amicus aliases --review --owner)\n');
+    return 1;
+  }
   if (args.review && (args.json || args.quiet)) {
     process.stderr.write('Error: --review is interactive; use `amicus aliases --json` for machine output\n');
     return 1;
@@ -263,9 +254,13 @@ async function handleAliases(args) {
       process.stderr.write('Error: --unpin cannot be combined with --review or --json\n');
       return 1;
     }
-    return handleUnpin(args.unpin);           // handleUnpin trims/validates (R1): true, 42, '', '  ', 'null' all land the same error
+    return require('./aliases-unpin').handleUnpin(args.unpin);           // handleUnpin trims/validates (R1): true, 42, '', '  ', 'null' all land the same error
   }
-  if (args.review) { return require('./aliases-review').runReview(args); }
+  if (args.review) {
+    return args.owner
+      ? require('./aliases-owner').runOwnerReview(args)
+      : require('./aliases-review').runReview(args);
+  }
   const d = loadDeps();
   const view = await collectAliasView({ maxAgeMs: Number.POSITIVE_INFINITY }, d);
   if (args.json) {

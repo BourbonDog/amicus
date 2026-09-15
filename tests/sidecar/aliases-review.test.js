@@ -391,4 +391,37 @@ describe('aliases --review (#238 §4, Q2, Q4)', () => {
     expect(out).toContain('evil');
     expect(t.writes.addAlias).toEqual([]);
   });
+
+  test('"Nothing to review" names pins that name a RETIRED alias instead of calling them up to date (R-P2-11), and pluralizes 1 alias', async () => {
+    const rows = [{ alias: 'devstral', id: 'openrouter/mistralai/devstral-medium', state: 'pinned', curated: false, shipped: null }];
+    const t = makeDeps({ proposals: [], rows, models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    t.deps.collectAliasView = async () => ({ rows, proposals: [], catalogInfo: { models: [{ id: 'x/y' }], fetchedAt: Date.now(), providerFailures: [] }, catalogAvailable: true, retired: { devstral: { on: '2026-08-04', ruling: 'gone' } } });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('Nothing to review — 1 alias; 1 pin names a retired alias (see amicus aliases), the rest follow or are up to date.');
+  });
+  test('"Nothing to review" without retired pins keeps the old sentence', async () => {
+    const rows = [{ alias: 'gemini', id: 'google/gemini-3.6-flash', state: 'following', curated: true, shipped: 'google/gemini-3.6-flash' }, { alias: 'glm', id: 'openrouter/z-ai/glm-5.3', state: 'following', curated: true, shipped: 'openrouter/z-ai/glm-5.3' }];
+    const t = makeDeps({ proposals: [], rows, models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('Nothing to review — 2 aliases, all following or up to date.');
+  });
+  // F10 (#238 council r1 B6): no row is ever `following` (every alias is a
+  // plain custom pin) -- "all following or up to date" would be false, so
+  // the sentence names them "pin(s)" and drops "following or".
+  test('"Nothing to review" with no following row at all says "pin(s), all up to date" instead of the misleading "following or"', async () => {
+    const rows = [{ alias: 'mine', id: 'openrouter/z-ai/glm-5.3', state: 'pinned', curated: false, shipped: null }];
+    const t = makeDeps({ proposals: [], rows, models: [{ id: 'openrouter/z-ai/glm-5.3' }] });
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).toContain('Nothing to review — 1 pin, all up to date.');
+    expect(t.out()).not.toContain('following');
+  });
+
+  test('a proposal without a dismissKey offers no "never ask again" (owner mode, #238 Phase 2; mutant NODISMISS)', async () => {
+    // `models` non-empty, or runReview refuses with "no catalog" before any menu renders
+    const t = makeDeps({ proposals: [{ ...glm, dismissKey: null }], answers: ['4'], models: [{ id: 'openrouter/z-ai/glm-5.3' }, { id: 'openrouter/z-ai/glm-5.4' }] }); // [1] accept [2] follow [3] choose another [4] skip
+    expect(await runReview({}, t.deps)).toBe(0);
+    expect(t.out()).not.toContain('never ask again');
+    expect(t.out()).toContain('[4] skip');
+    expect(t.out()).not.toContain('[5]');
+  });
 });

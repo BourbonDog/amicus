@@ -1,44 +1,47 @@
-/** Family definitions + pinned fallbacks for the wizard model picker (v2). */
+/** Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). */
 /*
  * Families are MATCH RULES over the live catalog, not pinned truths:
  * src/utils/quick-picks.js resolves each family to the current catalog
- * flagship at setup time. The pinned `fallback` ids are used only when
- * the catalog cannot resolve a route (offline / unkeyed provider) and to
- * derive the static DEFAULT_ALIASES (runtime alias resolution must never
- * wait on the network). `amicus models --check` audits every pinned route
- * here against the live catalog AND warns when a fallback falls behind
- * the live resolution.
+ * flagship at setup time. The pinned routes live in ./curated-pins.json
+ * (#238 D8 — `pins[alias].routes`, one executable id per gateway namespace,
+ * with the `verifiedOn` date and an optional owner `ruling` beside each);
+ * they are used only when the catalog cannot resolve a route (offline /
+ * unkeyed provider) and to derive the static DEFAULT_ALIASES (runtime alias
+ * resolution must never wait on the network). `amicus models --check` audits
+ * every pinned route against the live catalog, warns when a family fallback
+ * falls behind the live resolution, and names a newer same-tier sibling of a
+ * cardless pin (informational, #238 Q7); `amicus aliases --review --owner`
+ * (sidecar/aliases-owner.js) is the flow that MOVES a pin — a pin reaches
+ * users only after a human accepted it there and committed the JSON.
  */
 
 'use strict';
 
 const { isDirectProvider } = require('./provider-registry');
+const { loadCuratedPins } = require('./curated-pins');
 
 /**
  * Wizard quick-pick families. `idPattern` matches the model segment after
  * `<vendorPath>/` (openrouter ns) or `<provider>/` (direct ns).
  * `directProviders` lists direct namespaces the quick-picks resolver may
- * resolve live from the catalog. A per-provider `fallback` entry is
- * OPTIONAL: when absent and the catalog cannot resolve that namespace,
- * the direct route is omitted (no pinned guess is better than a wrong one).
+ * resolve live from the catalog. Beyond `openrouter`, a per-provider route
+ * in the family's pin (curated-pins.json) is OPTIONAL: when absent and the
+ * catalog cannot resolve that namespace, the direct route is omitted (no
+ * pinned guess is better than a wrong one).
  * `gpt`'s pattern intentionally matches a plain numeric flagship id
  * (gpt-5.5, gpt-6) OR that id's `-terra` tier variant (gpt-5.6-terra), and
  * excludes every other suffixed variant (-pro/-mini/-codex/-sol/-luna) —
  * see the tier-semantics comment on the entry below.
- * Pinned ids verified against the live catalog 2026-08-04.
  */
 const FAMILIES = [
   { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
     vendorPath: 'google',
     idPattern: /^gemini-[\d.]+-flash(-preview|-exp|-latest)?$/,
-    directProviders: ['google'],
-    fallback: { openrouter: 'openrouter/google/gemini-3.6-flash',
-                google: 'google/gemini-3.6-flash' } },
+    directProviders: ['google'] },
   { alias: 'gemini-pro', label: 'Gemini Pro-class', blurb: 'advanced reasoning',
     vendorPath: 'google',
     idPattern: /^gemini-[\d.]+-pro(-preview|-exp|-latest)?$/,
-    directProviders: ['google'],
-    fallback: { openrouter: 'openrouter/google/gemini-3.1-pro-preview' } },
+    directProviders: ['google'] },
   // 5.6 split the flagship into tiers: sol (premium, $5/$30), terra (mid,
   // $1/$6), luna (economy, $0.10/$0.60), each with a -pro sibling, plus the
   // unrelated gpt-5.3-codex family. Owner ruling: `gpt` tracks the TERRA
@@ -48,96 +51,63 @@ const FAMILIES = [
   { alias: 'gpt', label: 'GPT flagship', blurb: 'strong coding',
     vendorPath: 'openai',
     idPattern: /^gpt-[\d.]+(-terra)?$/,
-    directProviders: ['openai'],
-    fallback: { openrouter: 'openrouter/openai/gpt-5.6-terra' } },
+    directProviders: ['openai'] },
   { alias: 'opus', label: 'Claude Opus-class', blurb: 'deep analysis',
     vendorPath: 'anthropic',
     idPattern: /^claude-opus-[\d.-]+$/,
-    directProviders: ['anthropic'],
-    // claude-opus-5 has no dotted version segment, so the two forms coincide —
-    // the anthropic: route is still AUTHORED (DIVERGENT_VENDORS), never derived.
-    // Direct id verified against Anthropic docs 2026-08-04.
-    fallback: { openrouter: 'openrouter/anthropic/claude-opus-5',
-                anthropic: 'anthropic/claude-opus-5' } },
+    directProviders: ['anthropic'] },
   { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
     vendorPath: 'deepseek',
     idPattern: /^deepseek-v[\d.]+(-pro)?$/,
-    directProviders: ['deepseek'],
-    fallback: { openrouter: 'openrouter/deepseek/deepseek-v4-pro',
-                deepseek: 'deepseek/deepseek-v4-pro' } },
+    directProviders: ['deepseek'] },
 ];
+const FAMILY_ALIASES = new Set(FAMILIES.map(f => f.alias));
 
 /**
- * Alias-only entries (no wizard quick pick). Every entry authors an
- * openrouter route; entries whose vendor's direct API genuinely serves the
- * model also author a direct route (claude/sonnet/haiku/fable).
- * Refreshed against the live catalog 2026-08-04.
+ * @param {string} alias a family alias
+ * @param {object} pins `loadCuratedPins().pins`
+ * @returns {{routes: Object<string,string>, gatewayOnly?: true}} that family's pin
+ * @throws {Error} when the data file has no pin for the family — a shipped-file
+ *   defect that must be named, never a silently route-less family
  */
-const CARDLESS = [
-  // gpt-pro: the 5.6 premium (sol) tier's pro sibling, priced at its base
-  // tier ($5/$30 per Mtok). Owner ruling 2026-08-04: retargeted off
-  // gpt-5.5-pro ($30/$180 — still served, but expected to sunset with the
-  // 5.5 line). `gpt-pro` tracks SOL while the `gpt` family tracks terra —
-  // see the tier-semantics comment on the `gpt` family above.
-  // gatewayOnly (owner ruling 2026-08-05, recorded in the v4.6.3 spec): the
-  // openrouter-only route is a deliberate routing choice — OpenAI's direct
-  // namespace does not serve gpt-5.6-sol-pro, so the DERIVED direct form
-  // must never be audited as stale and no direct pairing may be suggested.
-  { alias: 'gpt-pro', gatewayOnly: true,
-    routes: { openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
-  // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
-  { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },
-  { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-5',
-                                anthropic: 'anthropic/claude-sonnet-5' } },
-  { alias: 'sonnet', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-5',
-                                anthropic: 'anthropic/claude-sonnet-5' } },
-  { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5',
-                              anthropic: 'anthropic/claude-haiku-4-5-20251001' } },
-  // fable: direct route authored 2026-08-05 (owner ruling R2, v4.6.3 spec §3).
-  // Anthropic's /v1/models lists claude-fable-5 AND the direct route serves
-  // (live smoke wave 47278069) — the entry was OpenRouter-only at authoring.
-  { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5',
-                              anthropic: 'anthropic/claude-fable-5' } },
-  // qwen/kimi refreshed 2026-08-26 (v4.9 W13); qwen again 2026-09-05, when
-  // OpenRouter and models.dev dropped the un-dated `qwen3.8-max` for the dated
-  // `qwen3.8-max-0902` (the #218 PR 2 probe caught it: F4 went silent). These are
-  // the FALLBACK FLOOR — a fork with no CI alias map resolves its bench here; the
-  // owner's machine and .github/amicus-ci-aliases.json (qwen3.8-27b) run newer ids.
-  // Cardless entries have no `idPattern`, so `models --check` only asks whether the
-  // OLD id still EXISTS (scripts/check-ci-alias-pins.js asks the other question).
-  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.8-max-0902' } },
-  { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
-  { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
-  { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-medium-3-5' } },
-  // devstral was dropped 2026-08-04 (owner ruling): OpenRouter delisted the
-  // whole devstral family and the alias had no other route. No retarget — no
-  // served model is a devstral successor ("no pinned guess is better than a
-  // wrong one"); `mistral` remains the vendor's alias.
-  { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5.3' } },
-  { alias: 'minimax', routes: { openrouter: 'openrouter/minimax/minimax-m2.7' } },
-  { alias: 'grok', routes: { openrouter: 'openrouter/x-ai/grok-4.3' } },
-  // kimi: see the qwen refresh note above (both moved 2026-08-26, v4.9 W13).
-  { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k3' } },
-  { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-lite' } },
-  // inkling added 2026-08-14: the council-review workflow's default bench
-  // names it, and this table is the FLOOR a runner falls back to when no
-  // alias map is provisioned (workflow_call callers, forks) — there, a
-  // locally defined alias still resolves to nothing. Pinned to the full
-  // model, not `inkling-small`: the bench seat wants the flagship's
-  // judgment. `:batch` is not pinned (wrong for an interactive council leg).
-  { alias: 'inkling', routes: { openrouter: 'openrouter/thinkingmachines/inkling' } },
-];
+function pinFor(alias, pins) {
+  if (!Object.prototype.hasOwnProperty.call(pins, alias)) {
+    throw new Error(`curated-pins.json: no pin for family '${alias}'`);
+  }
+  return pins[alias];
+}
 
 /**
- * @returns {Array} shallow-spread copies of the family definitions;
- * `idPattern` is intentionally a shared RegExp reference — safe because
- * none use the g/y flags (no lastIndex state) and callers treat it read-only.
+ * Alias-only entries (no wizard quick pick): every pin in curated-pins.json
+ * whose alias is not a family alias, in file order. Every entry authors an
+ * openrouter route; entries whose vendor's direct API genuinely serves the
+ * model also author a direct route (claude/sonnet/haiku/fable). These pins
+ * are the FALLBACK FLOOR — a fork with no CI alias map resolves its bench
+ * here; the owner's machine and .github/amicus-ci-aliases.json run newer ids.
+ * Cardless entries have no `idPattern`, so `models --check` asks whether the
+ * OLD id still EXISTS and (#238 Q7) whether a newer same-tier sibling is
+ * listed; scripts/check-ci-alias-pins.js asks the sibling question of the CI
+ * alias map.
+ * @param {object} pins `loadCuratedPins().pins`
+ * @returns {Array<{alias: string, routes: Object<string,string>, gatewayOnly?: true}>}
+ */
+function cardlessEntries(pins) {
+  return Object.keys(pins).filter(a => !FAMILY_ALIASES.has(a))
+    .map(a => ({ alias: a, routes: pins[a].routes, gatewayOnly: pins[a].gatewayOnly }));
+}
+
+/**
+ * @returns {Array} shallow-spread copies of the family definitions with
+ * `fallback` attached from the data file (`pins[alias].routes`); `idPattern`
+ * is intentionally a shared RegExp reference — safe because none use the g/y
+ * flags (no lastIndex state) and callers treat it read-only.
  */
 function getFamilies() {
+  const { pins } = loadCuratedPins();
   return FAMILIES.map(f => ({
     ...f,
     directProviders: [...f.directProviders],
-    fallback: { ...f.fallback },
+    fallback: { ...pinFor(f.alias, pins).routes },
   }));
 }
 
@@ -170,13 +140,14 @@ function stripGatewayPrefix(route) {
  * @returns {Array<{alias,provider,model}>} every pinned route, flattened (for the alias audit).
  */
 function listCuratedRoutes() {
+  const { pins } = loadCuratedPins();
   const out = [];
   for (const f of FAMILIES) {
-    for (const [provider, model] of Object.entries(f.fallback)) {
+    for (const [provider, model] of Object.entries(pinFor(f.alias, pins).routes)) {
       out.push({ alias: f.alias, provider, model });
     }
   }
-  for (const e of CARDLESS) {
+  for (const e of cardlessEntries(pins)) {
     for (const [provider, model] of Object.entries(e.routes)) {
       out.push({ alias: e.alias, provider, model });
     }
@@ -234,20 +205,22 @@ function gatewayRoutesFor(vendorPath, obj) {
  * auditors (alias-audit.js / gateway-route-audit.js): an AUTHORED direct
  * form absent from its namespace is stale; a DERIVED one is a computed
  * convenience whose absence is a routing fact, not staleness, while the
- * authoring openrouter route is live. `gatewayOnly` mirrors an entry's
- * explicit routing-choice annotation (owner-ruled): suppress derived-form
- * findings unconditionally and never suggest a direct pairing.
+ * authoring openrouter route is live. `gatewayOnly` mirrors a pin's
+ * explicit routing-choice annotation (owner-ruled, in curated-pins.json):
+ * suppress derived-form findings unconditionally and never suggest a direct
+ * pairing.
  * @returns {Object<string, {directForm: 'authored'|'derived'|'none', gatewayOnly: boolean}>}
  */
 function directFormProvenance() {
+  const { pins } = loadCuratedPins();
   const out = {};
   const entryProv = (vendorPath, obj, gatewayOnly) => {
     const direct = directFormFor(vendorPath, obj);
     const directForm = !direct ? 'none' : (obj[vendorPath] ? 'authored' : 'derived');
     return { directForm, gatewayOnly: gatewayOnly === true };
   };
-  for (const f of FAMILIES) { out[f.alias] = entryProv(f.vendorPath, f.fallback, f.gatewayOnly); }
-  for (const e of CARDLESS) { out[e.alias] = entryProv(vendorOf(e.routes.openrouter), e.routes, e.gatewayOnly); }
+  for (const f of FAMILIES) { const pin = pinFor(f.alias, pins); out[f.alias] = entryProv(f.vendorPath, pin.routes, pin.gatewayOnly); }
+  for (const e of cardlessEntries(pins)) { out[e.alias] = entryProv(vendorOf(e.routes.openrouter), e.routes, e.gatewayOnly); }
   return out;
 }
 
@@ -266,9 +239,10 @@ function toGatewayRoutes() {
   // autoRepairAlias`), which `getEffectiveAliases`'s own fix could never reach.
   // Full measurement + why THREE seeds were needed:
   // tests/council/preset-trim-mutants.js :: BUILDERPROTO (the named mutant).
+  const { pins } = loadCuratedPins();
   const out = { __proto__: null };
-  for (const f of FAMILIES) { out[f.alias] = gatewayRoutesFor(f.vendorPath, f.fallback); }
-  for (const e of CARDLESS) { out[e.alias] = gatewayRoutesFor(vendorOf(e.routes.openrouter), e.routes); }
+  for (const f of FAMILIES) { out[f.alias] = gatewayRoutesFor(f.vendorPath, pinFor(f.alias, pins).routes); }
+  for (const e of cardlessEntries(pins)) { out[e.alias] = gatewayRoutesFor(vendorOf(e.routes.openrouter), e.routes); }
   return out;
 }
 

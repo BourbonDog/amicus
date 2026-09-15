@@ -106,10 +106,14 @@ src/
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
+│   ├── aliases-owner-gate.js  # The refusal gate for `amicus aliases --review --owner` (#238 D8), split out
+│   ├── aliases-owner-sink.js  # The owner-mode write path for `amicus aliases --review --owner` (#238 D8),
+│   ├── aliases-owner.js  # `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as
 │   ├── aliases-review-gate.js  # Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split
 │   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
 │   ├── aliases-review-render.js  # Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4),
 │   ├── aliases-review.js  # `amicus aliases --review` (#238 §4): a numbered readline picker over the
+│   ├── aliases-unpin.js  # `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of
 │   ├── aliases.js  # `amicus aliases` (#238 D4) — the user's alias map as a standing command.
 │   ├── budget.js
 │   ├── child-sessions.js
@@ -207,7 +211,9 @@ src/
 │   ├── client-detect.js  # Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
 │   ├── config.js  # Amicus Config Module
 │   ├── council-presets.js  # Built-in council benches (B23).
-│   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
+│   ├── curated-models.js  # Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3).
+│   ├── curated-pins.js  # The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here.
+│   ├── curated-pins.json
 │   ├── degrade.js
 │   ├── doctor-alias-check.js
 │   ├── doctor-base-url-check.js  # v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row.
@@ -583,10 +589,14 @@ evals/
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
-| `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
+| `sidecar/aliases-owner-gate.js` | The refusal gate for `amicus aliases --review --owner` (#238 D8), split out | `ownerGate()` |
+| `sidecar/aliases-owner-sink.js` | The owner-mode write path for `amicus aliases --review --owner` (#238 D8), | `commit()`, `askRulings()` |
+| `sidecar/aliases-owner.js` | `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as | `runOwnerReview()`, `ownerGate()`, `routesByProvider()`, `routeDisagreements()`, `ownerView()` |
+| `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `isFresh()`, `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
 | `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |
 | `sidecar/aliases-review-render.js` | Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4), | `ageLabel()`, `menuFor()`, `menuLineText()`, `renderScreen()`, `refreshingCatalogLine()` |
 | `sidecar/aliases-review.js` | `amicus aliases --review` (#238 §4): a numbered readline picker over the | `runReview()` |
+| `sidecar/aliases-unpin.js` | `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of | `handleUnpin()` |
 | `sidecar/aliases.js` | `amicus aliases` (#238 D4) — the user's alias map as a standing command. | `handleAliases()`, `collectAliasView()`, `renderAliasList()`, `buildAliasesDoc()`, `loadDeps()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
@@ -682,7 +692,8 @@ evals/
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
-| `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
+| `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
+| `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |

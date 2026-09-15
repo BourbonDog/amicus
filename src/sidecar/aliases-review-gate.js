@@ -16,6 +16,17 @@
 
 const { ageLabel } = require('./aliases-review-render');
 const { safeFragment } = require('../utils/text-sanitize');
+const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
+
+/**
+ * The §5 WRITE gate (mirrors doctor-alias-check.js's unexported
+ * `isCatalogFresh`). R3: `age >= 0` is required too, so a future `fetchedAt`
+ * (clock skew) is explicitly not fresh rather than indefinitely so.
+ * @returns {boolean} true when `fetchedAt` is a number, not in the future, and no older than 24h
+ */
+function isFresh(fetchedAt, now) {
+  return typeof fetchedAt === 'number' && (now - fetchedAt) >= 0 && (now - fetchedAt) <= DEFAULT_MAX_AGE_MS;
+}
 
 /**
  * Classifies a typed "choose another" model id against the §5 display gate
@@ -62,4 +73,4 @@ function staleCatalogBanner(fetchedAt, now) {
   return '  no catalog cache and it could not be fetched — proposals are shown, but accepting is disabled until `amicus models --refresh` succeeds\n';
 }
 
-module.exports = { classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner };
+module.exports = { isFresh, classifyTypedId, notInCatalogLine, notVerifiedLine, staleCatalogBanner };

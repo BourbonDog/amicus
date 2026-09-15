@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "pins": {
+    "gemini": {
+      "routes": {
+        "openrouter": "openrouter/google/gemini-3.6-flash",
+        "google": "google/gemini-3.6-flash"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "gemini-pro": {
+      "routes": {
+        "openrouter": "openrouter/google/gemini-3.1-pro-preview"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "gpt": {
+      "routes": {
+        "openrouter": "openrouter/openai/gpt-5.6-terra"
+      },
+      "verifiedOn": "2026-08-04",
+      "ruling": "tracks the terra (mid) tier — owner ruling; see the idPattern comment in curated-models.js"
+    },
+    "opus": {
+      "routes": {
+        "openrouter": "openrouter/anthropic/claude-opus-5",
+        "anthropic": "anthropic/claude-opus-5"
+      },
+      "verifiedOn": "2026-08-04",
+      "ruling": "anthropic route authored (divergent vendor), never derived; direct id verified against Anthropic docs"
+    },
+    "deepseek": {
+      "routes": {
+        "openrouter": "openrouter/deepseek/deepseek-v4-pro",
+        "deepseek": "deepseek/deepseek-v4-pro"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "gpt-pro": {
+      "routes": {
+        "openrouter": "openrouter/openai/gpt-5.6-sol-pro"
+      },
+      "verifiedOn": "2026-08-05",
+      "gatewayOnly": true,
+      "ruling": "tracks the SOL (premium) tier's pro sibling, priced at its base tier ($5/$30 per Mtok); retargeted off gpt-5.5-pro 2026-08-04 ($30/$180 — still served, but expected to sunset with the 5.5 line); the gpt family tracks terra. gatewayOnly (owner ruling 2026-08-05, v4.6.3 spec): OpenAI's direct namespace does not serve gpt-5.6-sol-pro — never audit the derived direct form as stale, never suggest a direct pairing."
+    },
+    "codex": {
+      "routes": {
+        "openrouter": "openrouter/openai/gpt-5.3-codex"
+      },
+      "verifiedOn": "2026-06-09"
+    },
+    "claude": {
+      "routes": {
+        "openrouter": "openrouter/anthropic/claude-sonnet-5",
+        "anthropic": "anthropic/claude-sonnet-5"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "sonnet": {
+      "routes": {
+        "openrouter": "openrouter/anthropic/claude-sonnet-5",
+        "anthropic": "anthropic/claude-sonnet-5"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "haiku": {
+      "routes": {
+        "openrouter": "openrouter/anthropic/claude-haiku-4.5",
+        "anthropic": "anthropic/claude-haiku-4-5-20251001"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "fable": {
+      "routes": {
+        "openrouter": "openrouter/anthropic/claude-fable-5",
+        "anthropic": "anthropic/claude-fable-5"
+      },
+      "verifiedOn": "2026-08-05",
+      "ruling": "direct route authored 2026-08-05 (v4.6.3 spec §3, owner ruling R2): Anthropic /v1/models lists claude-fable-5 and the direct route served in live smoke wave 47278069 — the entry was OpenRouter-only at authoring"
+    },
+    "qwen": {
+      "routes": {
+        "openrouter": "openrouter/qwen/qwen3.8-max-0902"
+      },
+      "verifiedOn": "2026-09-05",
+      "ruling": "dated id: OpenRouter and models.dev dropped the un-dated qwen3.8-max for qwen3.8-max-0902 on 2026-09-05 (the #218 PR 2 probe caught it: F4 went silent)"
+    },
+    "qwen-coder": {
+      "routes": {
+        "openrouter": "openrouter/qwen/qwen3-coder-next"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "qwen-flash": {
+      "routes": {
+        "openrouter": "openrouter/qwen/qwen3.6-flash"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "mistral": {
+      "routes": {
+        "openrouter": "openrouter/mistralai/mistral-medium-3-5"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "glm": {
+      "routes": {
+        "openrouter": "openrouter/z-ai/glm-5.3"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "minimax": {
+      "routes": {
+        "openrouter": "openrouter/minimax/minimax-m2.7"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "grok": {
+      "routes": {
+        "openrouter": "openrouter/x-ai/grok-4.3"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "kimi": {
+      "routes": {
+        "openrouter": "openrouter/moonshotai/kimi-k3"
+      },
+      "verifiedOn": "2026-08-26"
+    },
+    "seed": {
+      "routes": {
+        "openrouter": "openrouter/bytedance-seed/seed-2.0-lite"
+      },
+      "verifiedOn": "2026-08-04"
+    },
+    "inkling": {
+      "routes": {
+        "openrouter": "openrouter/thinkingmachines/inkling"
+      },
+      "verifiedOn": "2026-08-14",
+      "ruling": "council-review bench default and the fallback floor for forks (workflow_call callers with no alias map resolve their bench here); the full model, not inkling-small — the bench seat wants the flagship's judgment; :batch deliberately not pinned (wrong for an interactive council leg)"
+    }
+  },
+  "retired": {
+    "devstral": {
+      "on": "2026-08-04",
+      "ruling": "OpenRouter delisted the whole devstral family and the alias had no other route. No retarget — no served model is a devstral successor (no pinned guess is better than a wrong one); mistral remains the vendor's alias."
+    }
+  },
+  "notable": []
+}

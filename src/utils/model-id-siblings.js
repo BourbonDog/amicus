@@ -6,10 +6,10 @@
  * `gpt-5.6-sol`, and `kimi-k3` never against `kimi-k2.7-code`. Lifted verbatim
  * from scripts/check-ci-alias-pins.js (which still consumes it) so the alias
  * review engine (alias-proposals.js) asks the user's pinned ids the SAME sibling
- * question the CI drift gate asks the CI alias map. `amicus models --check`
- * asks a DIFFERENT question of the same shipped pins — still-listed vs.
- * gone-from-the-catalog — through `alias-audit.js :: findStaleAliases`, not
- * this module (#249 r2 review F2: this line previously implied otherwise).
+ * question the CI drift gate asks the CI alias map, and `amicus models
+ * --check` (sidecar/models.js :: buildFallbackDriftReport, #238 Q7) asks it of
+ * the shipped CARDLESS pins, informationally. Its stale audit is a different
+ * question, still answered by `alias-audit.js :: findStaleAliases`.
  *
  * Known limits, both under-report by design (a suppressed sibling, never a
  * manufactured one) — INVARIANT: neither rule can ever turn two DIFFERENT
