@@ -23,9 +23,10 @@ const ANTHROPIC_MODELS = [
   { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
   // Dated snapshot: the id Anthropic's /v1/models actually lists, and the
-  // `haiku` direct route curated-models.js authors. Without it the floor
-  // (the only anthropic/ rows a keyless or OpenRouter-only user ever has)
-  // reports the shipped `haiku` default as stale.
+  // `haiku` direct route curated-pins.json authors
+  // (`pins.haiku.routes.anthropic`). Without it the floor (the only
+  // anthropic/ rows a keyless or OpenRouter-only user ever has) reports
+  // the shipped `haiku` default as stale.
   { id: 'anthropic/claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5 (2025-10-01)',
     contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null }
