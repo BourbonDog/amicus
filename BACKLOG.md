@@ -8736,7 +8736,7 @@ whose seat was refused `.env` by `read[*.env]=deny` and `bash` as "not available
 Shipped as v4.10.0 from PR #249 (two council rounds, 16 + 13 Confirmed; the round-2 fix wave
 merged on an in-branch review at the owner's call). Left open, in the order the spec scopes them:
 
-- [ ] **#238 Phase 2 — owner mode.** `src/utils/curated-pins.json` (pins + `retired` + `notable`,
+- [x] **#238 Phase 2 — owner mode.** SHIPPED to main 2026-09-15 (PR #250 → 985b6428, two council rounds; plus PR #252 → 8e877396, the `doctor` "Shipped pins" row naming the reset command). Unreleased — goes out in 4.11.0 with Phase 3. Original scope: `src/utils/curated-pins.json` (pins + `retired` + `notable`,
   D8; `curated-models.js` sits at exactly 300 lines), `models --check` gains the newer-sibling line
   through `model-id-siblings.js` (spec §8 Q7 — when it lands, the CHANGELOG 4.10.0 clause "shared
   with the CI alias-pin drift gate" and the module docblock's `models --check` sentence both go
