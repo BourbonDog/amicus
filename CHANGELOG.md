@@ -28,6 +28,21 @@ All notable changes to Amicus are documented here. Format follows
   `verifiedOn`, and how many shipped pins sit behind the catalog cache; in the amicus source
   checkout it names the reset command (`node bin/amicus.js aliases --review --owner`) so owner
   mode is one `doctor` away. Installed copies see the facts only. (#238 Phase 2 follow-up)
+- **Setup window — "Needs review" section and per-row state (Electron):** the Model Routing
+  step now shows every alias as `following` or `pinned` with the right remove control
+  (`unpin` on a curated pin, `×` on a custom alias — both remove the key), and a **Needs
+  review** section above the list renders the same proposals `amicus aliases --review`
+  walks, with the picker's choices as buttons (accept a newer sibling, follow the shipped
+  pin, use a replacement, add a notable model, choose… from the vouched catalog ids, dismiss).
+  Everything is staged and written by Finish through the wizard's one sink; the Review step
+  lists it. A stale catalog disables the catalog-vouched buttons and says why; an unavailable
+  catalog shows a banner, never an empty section. (#238 D9, R1)
+- **`amicus aliases --ui`** opens the setup window on the Routing step. (#238 D4)
+- **Electron wizard live-pick announcement (Q9):** the Models step's write-preview says
+  `follows the shipped recommendation` or `live flagship differs from the shipped <id> —
+  pinned` for the picked card, and a default merely restored on reopen is no longer re-written
+  to the live flagship on Finish — the wizard writes only what you actively chose, and a write
+  equal to the shipped pin is a follow (no key), on screen and on disk. (#238 Q9, §6.5)
 
 ### Changed
 
@@ -45,6 +60,13 @@ All notable changes to Amicus are documented here. Format follows
   (Anthropic direct, authored by hand), `qwen-flash` → qwen3.8-flash, `minimax` → minimax-m3,
   `grok` → grok-4.20. A following alias picks these up on upgrade; a pinned one is offered them
   by `amicus aliases --review`. (#238 D3)
+
+### Fixed
+
+- **Setup window: deleting a saved custom alias did nothing.** The `×` on a custom alias that
+  was already in `config.json` struck the row through but staged no write, so the alias
+  survived Finish (a silent no-op). It now stages the removal; a route added in the same
+  session is simply dropped. (#238 Phase 3, found while wiring R1)
 
 ## [4.10.0] - 2026-09-14
 
