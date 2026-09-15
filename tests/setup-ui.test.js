@@ -966,19 +966,21 @@ describe('setup-ui wizard', () => {
         expect(e['review-routing'].textContent).toBe('deepseek → deepseek/deepseek-r1');
       });
 
-      // issue 238 R-P3-13: Step 2's route pick for the CHOSEN default (decision #2)
-      // clobbers a same-alias Step 3 act before collectAliasWrites returns -- here it
-      // happens to land back on the value already on disk, so the disk-diff alone (pre-
-      // fix) reported "No alias changes" even though Step 3's unpin never took effect.
-      it('a Step 2 override of a Step-3-staged alias is shown, never silently swallowed by the disk diff', () => {
+      // issue 238 R-P3-13 (owner ruling 2026-09-15): the Routing step is the
+      // last word on an alias -- a Step 3 act on the CHOSEN default (here, an
+      // unpin/follow) now survives Finish; the Step 2 route pick is withheld
+      // because finishPlan sees Step 3 already staged this alias, so
+      // collectAliasWrites gets no selected alias for it (the fix-wave A2
+      // override this test used to name is gone -- it can no longer fire).
+      it('a Step 3 unpin/follow on the CHOSEN default is shown in the Review, not overridden by the Step 2 route pick', () => {
         const e = els();
         extractBuildReview()({
           modelChoicesData: twoCardData, savedAliases: { gemini: 'google/gemini-x' },
           aliasEdits: { gemini: null }, document: docWith(e, 'gemini'), window: { customDefaultModel: null },
-          restoredDefault: 'gemini', defaultTouched: true, defaultAliases: {},
+          restoredDefault: 'gemini', defaultTouched: true, defaultAliases: { gemini: 'google/gemini-x' },
         })();
-        expect(e['review-routing'].textContent).toBe('gemini → google/gemini-x');
-        expect(e['review-routing'].textContent).not.toBe('No alias changes');
+        expect(e['review-routing'].textContent).toBe('gemini → (now follows google/gemini-x)');
+        expect(e['review-aliases'].textContent).toBe('1 alias(es) modified');
       });
     });
   });
@@ -1316,5 +1318,44 @@ describe('issue 238: setup-ui.js reads rows through the state helpers', () => {
   it('updateAliasRoutes reads the staged value through stagedValueFor', () => {
     const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
     expect(script).toContain('stagedValueFor(row)');
+  });
+});
+
+describe('the parked double-fetch: ensureCatalogLoaded memoizes its in-flight request (issue 238)', () => {
+  // Extracts the REAL var catalogLoad + ensureCatalogLoaded pair via the same
+  // new Function pattern as extractBuildReview/extractUpdateWritePreviews
+  // above. applyCatalog is stubbed (not extracted -- it has its own heavy
+  // catalog/DOM deps) but lives in the SAME constructed-function scope so
+  // ensureCatalogLoaded's free reference to it resolves to the stub, exactly
+  // as it resolves to the real one in the page script.
+  function extractEnsureCatalogLoaded() {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    const ensureMatch = script.match(/var catalogLoad = null;[\s\S]*?function ensureCatalogLoaded\(\) \{[\s\S]*?\n {2}\}/);
+    expect(ensureMatch).toBeTruthy();
+    // eslint-disable-next-line no-new-func
+    const build = new Function(
+      'window',
+      `var catalogRows = null;\nfunction applyCatalog(info) { catalogRows = info || {}; }\n${ensureMatch[0]}\nreturn { ensureCatalogLoaded: ensureCatalogLoaded, getCatalogRows: function() { return catalogRows; } };`
+    );
+    return (win) => build(win);
+  }
+
+  it('two synchronous callers before the first resolves share ONE sidecar:get-catalog invoke; a later call after rows load makes no new invoke', async () => {
+    let resolveFetch;
+    const calls = [];
+    const fakeInvoke = jest.fn((channel) => {
+      calls.push(channel);
+      return new Promise((resolve) => { resolveFetch = resolve; });
+    });
+    const { ensureCatalogLoaded, getCatalogRows } = extractEnsureCatalogLoaded()({ sidecarSetup: { invoke: fakeInvoke } });
+    const p1 = ensureCatalogLoaded();   // e.g. showStep(3)'s direct call
+    const p2 = ensureCatalogLoaded();   // e.g. the review fetch's call, before either resolves
+    expect(calls).toEqual(['sidecar:get-catalog']);   // ONE invoke shared by both callers
+    resolveFetch({ models: [] });
+    await p1;
+    await p2;
+    expect(getCatalogRows()).toBeTruthy();
+    await ensureCatalogLoaded();        // rows already loaded -- short-circuits
+    expect(calls).toEqual(['sidecar:get-catalog']);   // still just the one
   });
 });

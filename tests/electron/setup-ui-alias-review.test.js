@@ -75,7 +75,11 @@ function loadPage({ proposals = [SIBLING], doc = view({ proposals }), rows = [],
   const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', 'CSS', '$', 'applyCatalog', 'Date', 'NEW_ROUTES_GROUP_LABEL', 'ensureCatalogLoaded',
     `${pieces}\n${stateSrc}\n${reviewSrc}\nreturn { ${names.join(', ')}, stagedDismissals: function() { return stagedDismissals; } };`);
   const fakeDate = { now: () => NOW };
-  const fns = factory(aliasEdits, defaultAliases, document, window, fakeCSS, (id) => document.getElementById(id), () => {}, fakeDate, NEW_ROUTES_GROUP_LABEL, () => Promise.resolve());
+  // issue 238: pushes into the SAME calls array as sidecarSetup.invoke, so a
+  // test can assert the catalog load precedes the review fetch (the memo in
+  // the real ensureCatalogLoaded lives in setup-ui.js, out of scope here --
+  // this stub only proves ensureAliasReviewLoaded still calls it first).
+  const fns = factory(aliasEdits, defaultAliases, document, window, fakeCSS, (id) => document.getElementById(id), () => {}, fakeDate, NEW_ROUTES_GROUP_LABEL, () => { calls.push('catalog'); return Promise.resolve(); });
   return { fns, document, section, list, count, banner, refresh, aliasEdits, calls, group };
 }
 
@@ -286,12 +290,12 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     await flush();                                            // issue 238 D9: no fetch at page load
     expect(p.calls).toEqual([]);
     await p.fns.ensureAliasReviewLoaded();
-    expect(p.calls).toEqual(['sidecar:get-alias-review']);
+    expect(p.calls).toEqual(['catalog', 'sidecar:get-alias-review']);   // issue 238: catalog load precedes the review fetch (mutant: chain dropped)
     await p.fns.ensureAliasReviewLoaded();                     // the loaded flag: still exactly one
-    expect(p.calls).toEqual(['sidecar:get-alias-review']);
+    expect(p.calls).toEqual(['catalog', 'sidecar:get-alias-review']);
     p.refresh.click();
     await flush(); await flush(); await flush();
-    expect(p.calls.slice(1)).toEqual(['sidecar:refresh-catalog', 'sidecar:get-alias-review']);
+    expect(p.calls.slice(2)).toEqual(['sidecar:refresh-catalog', 'sidecar:get-alias-review']);
     expect(p.refresh.disabled).toBe(false);
   });
 

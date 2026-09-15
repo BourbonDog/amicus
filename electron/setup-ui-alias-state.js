@@ -186,7 +186,12 @@ function buildAliasStateScript() {
   function finishPlan() {
     var r = document.querySelector('input[name="default-model"]:checked');
     var isCustom = !!window.customDefaultModel;
-    var selected = (!isCustom && r && defaultWasChosen()) ? r.value : null;
+    // issue 238 R-P3-13 (owner ruling 2026-09-15): the Routing step is the last
+    // word on an alias. The Step 2 route pick is applied to the chosen default
+    // ONLY when Step 3 staged nothing for it -- otherwise collectAliasWrites
+    // gets no selected alias and the staged entry survives (issue 138's
+    // decision #2 now stops at the alias editor).
+    var selected = (!isCustom && r && defaultWasChosen() && !Object.prototype.hasOwnProperty.call(aliasEdits, r.value)) ? r.value : null;
     return {
       defaultModel: window.customDefaultModel || (r ? r.value : null),
       selected: selected,

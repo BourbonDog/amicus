@@ -283,9 +283,11 @@ function buildAliasReviewScript() {
   }
 
   // issue 238 D9: fetched on FIRST entry to the Routing step, never at page load --
-  // the Workspace's Settings child window must not network on open (main.js),
-  // and the catalog load runs first so the two reads never refresh the cache
-  // concurrently (model-catalog.js has no in-flight dedupe).
+  // the Workspace's Settings child window must not network on open (main.js).
+  // ensureCatalogLoaded memoizes its in-flight request (issue 238), so calling
+  // it here while showStep(3) is already loading the catalog shares that one
+  // fetch instead of racing a second -- the memo is what prevents the
+  // concurrent refresh; chaining order alone would not.
   var aliasReviewLoaded = false;
   function ensureAliasReviewLoaded() {
     if (aliasReviewLoaded) { return Promise.resolve(); }

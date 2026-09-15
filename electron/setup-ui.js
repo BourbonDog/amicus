@@ -507,12 +507,6 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         changedWrites[alias] = aliasWritesPreview[alias];
       }
     });
-    // issue 238 R-P3-13: Step 2's route pick for the CHOSEN default wins over a same-alias
-    // Step 3 act (issue 138 decision #2) -- but never silently; show what Finish writes if they differ.
-    if (plan.selected && Object.prototype.hasOwnProperty.call(aliasEdits, plan.selected) &&
-        aliasEdits[plan.selected] !== aliasWritesPreview[plan.selected]) {
-      changedWrites[plan.selected] = aliasWritesPreview[plan.selected];
-    }
     var writes = Object.keys(changedWrites).map(function(alias) {
       var val = changedWrites[alias];
       // issue 238 D1: a removed key means "follows" for a curated name, "deleted" for a custom one.
@@ -562,8 +556,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   // THEN, only for a checked quick-pick default that finishPlan() handed us
   // (isCustomDefault=false AND selectedAlias non-null -- null means the
   // default was merely restored, not chosen, and its Step 2 stage must not
-  // run), the selected alias's resolved route -- the ONE place clobbering an
-  // aliasEdits entry is permitted (user-locked decision #2). Then every
+  // run), the selected alias's resolved route -- the ONE place an aliasEdits
+  // entry may be overwritten -- and finishPlan withholds the selected alias
+  // whenever Step 3 staged it (issue 238 R-P3-13, owner ruling), so in practice
+  // it only ever fills in an untouched default. Then every
   // OTHER alias whose drill-down <select> fired change (without this stage a
   // drilled-down pick on a card that is NOT the checked default would
   // silently vanish -- issue 138 fix round 1, Finding 1) (or that F3's init
@@ -628,12 +624,13 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var catalogLastRefreshAttempt = null, catalogLastRefreshError = null;
   window.customDefaultModel = null;
 
-  async function ensureCatalogLoaded() {
-    if (catalogRows) { return; }
-    try {
-      var info = await window.sidecarSetup.invoke('sidecar:get-catalog');
-      applyCatalog(info);
-    } catch (_e) {}
+  var catalogLoad = null;   // the in-flight get-catalog; a second caller shares it (issue 238: showStep(3) and the review fetch both ask)
+  function ensureCatalogLoaded() {
+    if (catalogRows) { return Promise.resolve(); }
+    if (!catalogLoad) {
+      catalogLoad = window.sidecarSetup.invoke('sidecar:get-catalog').then(applyCatalog).catch(function() {}).then(function() { catalogLoad = null; });
+    }
+    return catalogLoad;
   }
 
   // Re-derive Step 3's grouped {family, models} shape from the flat catalog

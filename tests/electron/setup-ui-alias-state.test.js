@@ -257,4 +257,16 @@ describe('finishPlan — one computation for the Review step and the Finish butt
     plan.dismissals.push('x@y');
     expect(fns.stagedDismissals()).toHaveLength(1);   // a copy, not the live list
   });
+
+  // issue 238 R-P3-13 (owner ruling 2026-09-15): the Routing step is the last
+  // word on an alias -- Step 3 staging the CHOSEN default withholds it from
+  // collectAliasWrites (mutant: the old code always handed collectAliasWrites
+  // the checked radio's value). Untouched, behaviour is unchanged.
+  it('a Step 3 stage on the CHOSEN default withholds it from collectAliasWrites; untouched still hands it the radio', () => {
+    const collect = jest.fn(() => Object.create(null));
+    loadStateScript({ document: radio('gemini'), restoredDefault: null, aliasEdits: { gemini: null }, collectAliasWrites: collect }).fns.finishPlan();
+    expect(collect).toHaveBeenCalledWith(null, false);   // mutant: the old r.value
+    loadStateScript({ document: radio('gemini'), restoredDefault: null, aliasEdits: {}, collectAliasWrites: collect }).fns.finishPlan();
+    expect(collect).toHaveBeenLastCalledWith('gemini', false);
+  });
 });
