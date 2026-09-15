@@ -225,8 +225,8 @@ function buildAliasScript() {
     var alias = btn.getAttribute('data-alias');
     var row = btn.closest('.alias-row');
     if (!row) { return; }
-    // 1. a row added THIS session (the client-side "New routes" group) was
-    //    never on disk: drop the staged write and the row, stage nothing.
+    // 1. added THIS session (client-side "New routes" group), never on disk:
+    //    drop the staged write and the row -- stage nothing.
     if (row.closest('[data-new-routes]')) {
       if (alias) { delete aliasEdits[alias]; }
       row.remove();
@@ -234,15 +234,13 @@ function buildAliasScript() {
       return;
     }
     if (!alias) { return; }
-    // 2. a curated pin: back to FOLLOWING -- the row shows the shipped id it
-    //    will resolve to; the alias still exists, so no strike-through.
-    //    Decided by the NAME (isCuratedAlias), not data-kind: a rename can
-    //    cross the curated/custom boundary and refreshAliasRowState is what
-    //    keeps data-kind truthful for the rendered label and CSS.
+    // 2. a curated pin: back to FOLLOWING -- shows the shipped id it resolves to;
+    //    the alias still exists, so no strike-through. Decided by the NAME
+    //    (isCuratedAlias), not data-kind: a rename can cross the curated/custom
+    //    boundary, and refreshAliasRowState is what keeps data-kind truthful.
     if (isCuratedAlias(alias)) { unpinAliasRow(row); return; }
-    // 3. a saved custom alias: strike it out and stage the delete. Until
-    //    issue 238 Phase 3 this ran \`delete aliasEdits[alias]\`, which stages
-    //    NOTHING -- the alias survived Finish (a silent no-op).
+    // 3. a saved custom alias: strike it out, stage the delete. Until issue 238
+    //    Phase 3 this ran 'delete aliasEdits[alias]', staging NOTHING -- a silent no-op.
     row.classList.add('alias-deleted');
     aliasEdits[alias] = null;
     // A3: server-rendered rows carry a heading count baked in at render time.
@@ -276,13 +274,16 @@ function buildAliasScript() {
         var m = modelSelect.value;
         if (n && m) {
           aliasEdits[n] = m;
-          row.setAttribute('data-alias', n);
+          row.setAttribute('data-alias', n); row.setAttribute('data-state', 'pinned');
           var ns = document.createElement('span');
           ns.className = 'alias-name'; ns.textContent = n;
           nameInput.replaceWith(ns);
           var ms = document.createElement('span');
           ms.className = 'alias-model'; ms.textContent = m;
           modelSelect.replaceWith(ms);
+          var st = document.createElement('span');
+          st.className = 'alias-state alias-state-pinned'; st.textContent = 'pinned';
+          row.insertBefore(st, delBtn);
           delBtn.setAttribute('data-alias', n);
         }
       }

@@ -281,7 +281,17 @@ function buildAliasReviewScript() {
       } finally { aliasReviewRefresh.disabled = false; }   // re-enable even if the re-fetch above somehow throws
     });
   }
-  loadAliasReview();`;
+
+  // issue 238 D9: fetched on FIRST entry to the Routing step, never at page load --
+  // the Workspace's Settings child window must not network on open (main.js),
+  // and the catalog load runs first so the two reads never refresh the cache
+  // concurrently (model-catalog.js has no in-flight dedupe).
+  var aliasReviewLoaded = false;
+  function ensureAliasReviewLoaded() {
+    if (aliasReviewLoaded) { return Promise.resolve(); }
+    aliasReviewLoaded = true;
+    return Promise.resolve(typeof ensureCatalogLoaded === 'function' ? ensureCatalogLoaded() : null).then(loadAliasReview);
+  }`;
 }
 
 module.exports = { buildAliasReviewHTML, buildAliasReviewScript };

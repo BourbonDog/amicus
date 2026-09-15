@@ -1,7 +1,7 @@
 /**
  * @module sidecar/aliases-ui
- * `amicus aliases --ui` (#238 D4): the Electron setup window opened on the
- * Routing step — the same alias editor, plus the "Needs review" section
+ * `amicus aliases --ui` (#238 D4): the Electron setup window opened on the Routing step.
+ * The same alias editor, plus the "Needs review" section
  * (electron/setup-ui-alias-review.js). Owns the form the way aliases-unpin.js
  * owns `--unpin`: aliases.js sits near the 300-line gate. Interactive-only,
  * so it combines with none of the machine or terminal forms (R-P3-12). Like

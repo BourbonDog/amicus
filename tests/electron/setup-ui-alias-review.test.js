@@ -72,10 +72,10 @@ function loadPage({ proposals = [SIBLING], doc = view({ proposals }), rows = [],
   const names = [...(stateSrc + '\n' + reviewSrc).matchAll(/^ {2}function (\w+)\(/gm)].map(m => m[1]);
   const fakeCSS = { escape: (s) => String(s).replace(/["\\]/g, '\\$&') };
   // eslint-disable-next-line no-new-func
-  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', 'CSS', '$', 'applyCatalog', 'Date', 'NEW_ROUTES_GROUP_LABEL',
+  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', 'CSS', '$', 'applyCatalog', 'Date', 'NEW_ROUTES_GROUP_LABEL', 'ensureCatalogLoaded',
     `${pieces}\n${stateSrc}\n${reviewSrc}\nreturn { ${names.join(', ')}, stagedDismissals: function() { return stagedDismissals; } };`);
   const fakeDate = { now: () => NOW };
-  const fns = factory(aliasEdits, defaultAliases, document, window, fakeCSS, (id) => document.getElementById(id), () => {}, fakeDate, NEW_ROUTES_GROUP_LABEL);
+  const fns = factory(aliasEdits, defaultAliases, document, window, fakeCSS, (id) => document.getElementById(id), () => {}, fakeDate, NEW_ROUTES_GROUP_LABEL, () => Promise.resolve());
   return { fns, document, section, list, count, banner, refresh, aliasEdits, calls, group };
 }
 
@@ -283,12 +283,31 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
 
   it('↻ refreshes the catalog through sidecar:refresh-catalog and re-fetches the review', async () => {
     const p = loadPage();
-    await flush();                                            // the fragment's own load-time fetch
+    await flush();                                            // issue 238 D9: no fetch at page load
+    expect(p.calls).toEqual([]);
+    await p.fns.ensureAliasReviewLoaded();
+    expect(p.calls).toEqual(['sidecar:get-alias-review']);
+    await p.fns.ensureAliasReviewLoaded();                     // the loaded flag: still exactly one
     expect(p.calls).toEqual(['sidecar:get-alias-review']);
     p.refresh.click();
     await flush(); await flush(); await flush();
     expect(p.calls.slice(1)).toEqual(['sidecar:refresh-catalog', 'sidecar:get-alias-review']);
     expect(p.refresh.disabled).toBe(false);
+  });
+
+  it('B1: a LIST-row action drops that alias\'s proposal row from the "Needs review" section', async () => {
+    const p = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    p.fns.unpinAliasRow(p.fns.aliasRowFor('glm'));
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    expect(p.section.hidden).toBe(true);
+
+    const p2 = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
+    await p2.fns.loadAliasReview(); await flush();
+    p2.fns.stageAliasWrite('glm', 'openrouter/z-ai/glm-4.9');
+    expect(p2.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    expect(p2.section.hidden).toBe(true);
   });
 });
 

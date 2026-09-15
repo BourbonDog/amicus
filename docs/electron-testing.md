@@ -608,8 +608,9 @@ amicus against amicus. The workflow does the same removal for the same reason.
 `AMICUS_DEBUG_PORT=9333 node bin/amicus.js aliases --ui` opens the setup window on the Routing
 step with CDP enabled. To see a proposal without touching your real config, point
 `AMICUS_CONFIG_DIR` at a scratch dir holding a copy of `model-catalog.json` (fresher than
-24 h) and a `config.json` such as `{ "aliases": { "glm": "openrouter/z-ai/glm-5.3" } }` —
-the section proposes the newer sibling the catalog lists. The page's rows are `.alias-row`
+24 h) and a `config.json` such as `{ "aliases": { "glm": "openrouter/z-ai/glm-5.2" } }` —
+an OLDER sibling of the shipped pin: the section proposes following the shipped pin (or
+accepting a newer sibling when the catalog lists one). The page's rows are `.alias-row`
 (`data-alias`, `data-state`), the section is `#alias-review` (`.alias-review-row` per
 proposal, `.alias-review-accept/-choose/-dismiss` buttons), and nothing reaches disk until
 Finish. The unit suite drives the same page functions against `tests/helpers/fake-dom.js`

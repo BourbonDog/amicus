@@ -187,6 +187,15 @@ describe('defaultWasChosen — Q9: a restored default is not a choice (R-P3-6)',
     const sel = d3.createElement('select'); sel.className = 'model-pick'; d3.body.appendChild(sel);
     sel.dispatch('change');
     expect(f3.defaultWasChosen()).toBe(true);
+    // C2: clicking an ALREADY-checked radio fires no native 'change' event, so the
+    // click listener must also recognise it directly (not just the '.route-pill').
+    const { document: d4 } = createFakeDocument();
+    const { fns: f4 } = loadStateScript({ document: d4, restoredDefault: 'gemini' });
+    const r2 = d4.createElement('input');
+    r2.setAttribute('name', 'default-model'); r2.name = 'default-model'; r2.value = 'gemini'; r2.checked = true;
+    d4.body.appendChild(r2);
+    r2.click();
+    expect(f4.defaultWasChosen()).toBe(true);
   });
 });
 

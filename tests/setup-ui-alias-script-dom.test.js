@@ -261,4 +261,32 @@ describe('alias editor remove handler (issue 238 R1)', () => {
     expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // shows the shipped id
     expect(row.classList.contains('alias-deleted')).toBe(false);                   // no strike-through
   });
+
+  // A4: the handler must decide by the alias NAME (isCuratedAlias), never by
+  // reading data-kind straight off the button -- a curated row can carry a
+  // STALE data-kind="delete" (e.g. never refreshed since some earlier state)
+  // and must still take the unpin path. Mutant DATAKIND: decide by data-kind.
+  it('a curated row with a STALE data-kind="delete" (never refreshed) still takes the unpin path, decided by NAME', () => {
+    const { document } = createFakeDocument();
+    const curatedDefaults = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'gemini', model: 'google/gemini-y', kind: 'delete' });
+    loadRemoveHandler({ aliasEdits, defaultAliases: curatedDefaults, document });
+    btn.click();
+    expect(aliasEdits.gemini).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // shows the shipped id
+    expect(row.classList.contains('alias-deleted')).toBe(false);                   // unpin, not a strike-through
+  });
+});
+
+// C7: the add-custom-flow's committed row must carry the same "pinned" state
+// markup appendStagedRow gives a review-accepted "add" row (setup-ui-alias-review.js).
+describe('commitNew (add-custom flow) — the committed row is labelled pinned like appendStagedRow\'s', () => {
+  it('sets data-state="pinned" and an alias-state-pinned span before the delete button', () => {
+    const script = buildAliasScript();
+    const commitNewSrc = script.match(/function commitNew\(\) \{[\s\S]*?\n {6}\}/);
+    expect(commitNewSrc).toBeTruthy();
+    expect(commitNewSrc[0]).toContain("data-state', 'pinned'");
+    expect(commitNewSrc[0]).toContain("'alias-state alias-state-pinned'");
+  });
 });

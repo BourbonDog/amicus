@@ -20,7 +20,7 @@ const HOUR = 60 * 60 * 1000;
 const FETCHED_AT = 1_000_000;
 
 // A hand-built engine view (the proposal shape is alias-proposals.js's
-// docblock contract) — never the live shipped pins (#53).
+// docblock contract) — never the live shipped pins.
 const VIEW = {
   rows: [],
   proposals: [{
@@ -79,6 +79,13 @@ describe('buildAliasReviewResponse (sidecar:get-alias-review)', () => {
 
   it('a fetchedAt in the future (clock skew) is not fresh', async () => {
     const doc = await buildAliasReviewResponse(deps({ now: () => FETCHED_AT - 1 }));
+    expect(doc.fresh).toBe(false);
+  });
+
+  it('catalogAvailable false overrides an otherwise-fresh fetchedAt (mutant FRESHNOCATALOG)', async () => {
+    const doc = await buildAliasReviewResponse(deps({
+      collectAliasView: jest.fn(async () => ({ ...VIEW, catalogAvailable: false })),
+    }));
     expect(doc.fresh).toBe(false);
   });
 

@@ -10,9 +10,9 @@
  * 24 h), and the §5-gated id set the page's "choose…" control may offer
  * (`alias-proposals.js :: gatedCatalogIds`, the same set the CLI checks a
  * typed id against). The view is collected with `write: false`: the wizard
- * writes config from Finish ONLY (`sidecar:save-config`), so the on-entry
- * normalization every `amicus aliases` form performs is skipped here — the
- * page's labels already show the post-normalization state
+ * writes config from Finish ONLY (`sidecar:save-config`), so only the on-entry
+ * normalization's SAVE is skipped here — the view itself is still normalized
+ * in memory, so the page's labels already show the post-normalization state
  * (setup-ui-alias-state.js). The default catalog age applies, so a stale
  * cache refreshes inline exactly as the picker's does.
  *
@@ -58,7 +58,7 @@ async function buildAliasReviewResponse(deps = defaultDeps()) {
       proposals: Array.isArray(view.proposals) ? view.proposals : [],
       catalogAvailable: !!view.catalogAvailable,
       fetchedAt,
-      fresh: deps.isFresh(fetchedAt, deps.now()),
+      fresh: !!view.catalogAvailable && deps.isFresh(fetchedAt, deps.now()),
       gatedIds: deps.gatedCatalogIds(info),
     };
   } catch (err) {

@@ -19,6 +19,7 @@ jest.mock('../electron/ipc-aliases', () => ({
   registerAliasHandlers: jest.fn(),
   recordDismissals: jest.fn(() => 0),
 }));
+jest.mock('../src/utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 const { recordDismissals } = require('../electron/ipc-aliases');
 
 const { loadConfig, saveConfig } = require('../src/utils/config');

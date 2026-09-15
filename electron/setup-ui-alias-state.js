@@ -98,6 +98,7 @@ function buildAliasStateScript() {
     var span = row.querySelector('.alias-model');
     if (span) { span.textContent = defaultAliases[alias] || ''; }
     refreshAliasRowState(row);
+    if (typeof removeProposalRow === 'function') { removeProposalRow(alias); }
   }
 
   // Stage "alias -> id" the way Q4 encodes it: the shipped id means FOLLOW
@@ -118,6 +119,7 @@ function buildAliasStateScript() {
       var group = row.closest('.alias-group');
       if (group) { group.open = true; }
     }
+    if (typeof removeProposalRow === 'function') { removeProposalRow(alias); }
     return s.state;
   }
 
@@ -137,7 +139,7 @@ function buildAliasStateScript() {
     }
   });
   document.addEventListener('click', function(e) {
-    if (e.target && e.target.closest && e.target.closest('.route-pill')) {
+    if (e.target && e.target.closest && (e.target.closest('.route-pill') || e.target.closest('input[name="default-model"]'))) {
       defaultTouched = true;
       if (typeof updateWritePreviews === 'function') { updateWritePreviews(); }
     }
@@ -187,6 +189,7 @@ function buildAliasStateScript() {
     var selected = (!isCustom && r && defaultWasChosen()) ? r.value : null;
     return {
       defaultModel: window.customDefaultModel || (r ? r.value : null),
+      selected: selected,
       writes: foldShippedWrites(collectAliasWrites(selected, isCustom)),
       dismissals: stagedDismissals.slice(),
     };

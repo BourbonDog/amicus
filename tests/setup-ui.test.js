@@ -965,6 +965,21 @@ describe('setup-ui wizard', () => {
         extractBuildReview()({ modelChoicesData: twoCardData, modelChoiceIds: { deepseek: 'deepseek/deepseek-r1' }, savedAliases: {}, document: docWith(e, 'gemini'), window: { customDefaultModel: null }, restoredDefault: 'gemini' })();
         expect(e['review-routing'].textContent).toBe('deepseek → deepseek/deepseek-r1');
       });
+
+      // issue 238 R-P3-13: Step 2's route pick for the CHOSEN default (decision #2)
+      // clobbers a same-alias Step 3 act before collectAliasWrites returns -- here it
+      // happens to land back on the value already on disk, so the disk-diff alone (pre-
+      // fix) reported "No alias changes" even though Step 3's unpin never took effect.
+      it('a Step 2 override of a Step-3-staged alias is shown, never silently swallowed by the disk diff', () => {
+        const e = els();
+        extractBuildReview()({
+          modelChoicesData: twoCardData, savedAliases: { gemini: 'google/gemini-x' },
+          aliasEdits: { gemini: null }, document: docWith(e, 'gemini'), window: { customDefaultModel: null },
+          restoredDefault: 'gemini', defaultTouched: true, defaultAliases: {},
+        })();
+        expect(e['review-routing'].textContent).toBe('gemini → google/gemini-x');
+        expect(e['review-routing'].textContent).not.toBe('No alias changes');
+      });
     });
   });
 
@@ -1188,10 +1203,15 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
 
   test('issue 238 Q9 ruling: a RESTORED, untouched default says so instead of claiming a pin it will not make', () => {
     const notes = {};
+    const verbs = {};
     const previewEl = (alias) => ({
       getAttribute: (n) => (n === 'data-alias' ? alias : null),
       classList: { toggle: () => {} },
-      querySelector: (sel) => (sel === '.write-preview-note' ? (notes[alias] = notes[alias] || { textContent: '' }) : { textContent: '' }),
+      querySelector: (sel) => {
+        if (sel === '.write-preview-note') { return notes[alias] = notes[alias] || { textContent: '' }; }
+        if (sel === '.write-preview-verb') { return verbs[alias] = verbs[alias] || { textContent: '' }; }
+        return { textContent: '' };
+      },
     });
     const fakeDocument = {
       querySelector: () => ({ value: 'gemini' }),
@@ -1203,8 +1223,10 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     })();
     run('gemini', false);
     expect(notes.gemini.textContent).toBe('restored from your config — not re-written unless you choose it');
+    expect(verbs.gemini.textContent).toBe('current default:');
     run('gemini', true);
     expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
+    expect(verbs.gemini.textContent).toBe('will set');
   });
 });
 
@@ -1268,6 +1290,21 @@ describe('#238 D4: initialPane lands the wizard on a step', () => {
   });
   it('an unknown pane is step 1', () => {
     expect(buildSetupHTML({ initialPane: 'keys' })).toContain('var INITIAL_STEP = 1;');
+  });
+});
+
+describe('issue 238 D9: the review fetch happens on first entry to Step 3, never at page load', () => {
+  it('showStep\'s step === 3 block calls ensureAliasReviewLoaded()', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    const showStepMatch = script.match(/function showStep\(step\) \{[\s\S]*?\n {2}\}/);
+    expect(showStepMatch).toBeTruthy();
+    const step3Block = showStepMatch[0].match(/if \(step === 3\) \{[\s\S]*?\n {4}\}/);
+    expect(step3Block).toBeTruthy();
+    expect(step3Block[0]).toContain('ensureAliasReviewLoaded()');
+  });
+  it('the page script has no bare loadAliasReview(); statement at top level (it is fetched lazily, not at load)', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).not.toMatch(/^\s*loadAliasReview\(\);\s*$/m);
   });
 });
 

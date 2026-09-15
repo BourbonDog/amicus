@@ -296,6 +296,10 @@ describe('setup-ui-model', () => {
       const html = buildModelStepHTML(PICKS);
       expect((html.match(/<span class="write-preview-note"><\/span>/g) || []).length).toBe(PICKS.length);
     });
+    test('B2: each write-preview carries a write-preview-verb span the page re-labels ("will set" vs "current default:")', () => {
+      const html = buildModelStepHTML(PICKS);
+      expect((html.match(/<span class="write-preview-verb">will set<\/span>/g) || []).length).toBe(PICKS.length);
+    });
     test('fallback rows carry the offline badge', () => {
       const html = buildModelStepHTML(PICKS, 'gemini', { openrouter: true });
       expect(html).toContain('class="pick-badge"');

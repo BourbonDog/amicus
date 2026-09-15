@@ -179,6 +179,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         document.querySelectorAll('input[name="default-model"]').forEach(function(r) {
           r.checked = (r.value === cfg.default);
         });
+        updateWritePreviews();
       }
       if (cfg && cfg.default && cfg.default.indexOf('/') !== -1) {
         // F5: a search-picked full model id matches no radio — restore it so
@@ -311,6 +312,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       // in-page cache: ensureCatalogLoaded no-ops if Step 2 already loaded
       // it) instead of a separate live sidecar:fetch-models round-trip.
       ensureCatalogLoaded();
+      ensureAliasReviewLoaded(); // issue 238 D9: fetch on first entry, not at page load
     }
     updateNextState();
   }
@@ -505,6 +507,12 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         changedWrites[alias] = aliasWritesPreview[alias];
       }
     });
+    // issue 238 R-P3-13: Step 2's route pick for the CHOSEN default wins over a same-alias
+    // Step 3 act (issue 138 decision #2) -- but never silently; show what Finish writes if they differ.
+    if (plan.selected && Object.prototype.hasOwnProperty.call(aliasEdits, plan.selected) &&
+        aliasEdits[plan.selected] !== aliasWritesPreview[plan.selected]) {
+      changedWrites[plan.selected] = aliasWritesPreview[plan.selected];
+    }
     var writes = Object.keys(changedWrites).map(function(alias) {
       var val = changedWrites[alias];
       // issue 238 D1: a removed key means "follows" for a curated name, "deleted" for a custom one.
@@ -740,6 +748,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       // so its note must say that instead of claiming a pin it will not make.
       var noteEl = el.querySelector('.write-preview-note');
       if (noteEl) { noteEl.textContent = defaultWasChosen() ? describeDefaultWrite(alias, routeId) : 'restored from your config \\u2014 not re-written unless you choose it'; }
+      var verbEl = el.querySelector('.write-preview-verb'); if (verbEl) { verbEl.textContent = defaultWasChosen() ? 'will set' : 'current default:'; }
     });
     // issue 138: keep the resolved-id line in step with the route/model choice.
     document.querySelectorAll('.model-resolved').forEach(function(el) {
