@@ -15,6 +15,7 @@ const localProvidersCheck = require('./utils/doctor-local-providers-check');
 // v4.6.2 PR1 (spec §4) — the 'anthropic-base-url' check body.
 const baseUrlCheck = require('./utils/doctor-base-url-check');
 const outputBudgetCheck = require('./utils/doctor-output-budget-check'); // #218 PR 2 — the 'output-budget' row.
+const curatedPinsCheck = require('./utils/doctor-curated-pins-check'); // #238 Phase 2 follow-up — the 'curated-pins' row.
 // B3 (council review of PR 198, issue 195) — the 'aliases' check body,
 // including its --fix repair of fabricated bare ids. Same split rationale.
 const aliasCheck = require('./utils/doctor-alias-check');
@@ -46,6 +47,9 @@ function realDeps() {
     resolveModel: () => require('./utils/config').resolveModel(),
     readCache: () => require('./utils/model-catalog').readCache(),
     collectAliasSources: () => require('./utils/alias-audit').collectAliasSources(),
+    loadCuratedPins: () => require('./utils/curated-pins').loadCuratedPins(),
+    buildFallbackDriftReport: (info) => require('./sidecar/models').buildFallbackDriftReport(info),
+    isSourceCheckout: () => require('./sidecar/aliases-owner-gate').isSourceCheckout(),
     readOutputBudgetRaw: () => (require('./utils/config').loadConfig() || {}).outputBudget, // #218 PR 2: as stored, so a malformed value is echoed
     findStaleAliases: (s, c) => require('./utils/alias-audit').findStaleAliases(s, c),
     findDriftedStoredAliases: (s, c) => require('./utils/alias-audit').findDriftedStoredAliases(s, c),
@@ -174,6 +178,7 @@ async function runDoctorChecks(depsOverride = {}) {
   // findFabricatedAliasRepairs for the detection rule.
   checks.push(guard('aliases', 'Model aliases', () => aliasCheck.evaluateAliasesCheck(d)));
   checks.push(guard('output-budget', 'Output budget', () => outputBudgetCheck.evaluateOutputBudget(d))); // #218 PR 2
+  checks.push(guard('curated-pins', 'Shipped pins', () => curatedPinsCheck.evaluateCuratedPins(d))); // #238 Phase 2: the owner-mode reset, one doctor away
 
   checks.push(guard('anthropic-base-url', 'ANTHROPIC_BASE_URL',
     () => baseUrlCheck.evaluateAnthropicBaseUrl(d)));

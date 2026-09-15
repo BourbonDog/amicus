@@ -42,13 +42,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 const { DIVERGENT_VENDORS, stripGatewayPrefix } = require('../utils/curated-models');
 const { validateCuratedPins, saveCuratedPins, setPinRoute } = require('../utils/curated-pins');
 const { refreshingCatalogLine } = require('./aliases-review-render');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { collapseExcerpt, safeFragment } = require('../utils/text-sanitize');
-const { ownerGate } = require('./aliases-owner-gate');
+const { ownerGate, defaultGit } = require('./aliases-owner-gate');
 const { commit, askRulings } = require('./aliases-owner-sink');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
@@ -65,7 +64,7 @@ function defaultDeps() {
     write: (s) => process.stdout.write(s),
     stderr: (s) => process.stderr.write(s),
     // stderr ignored: the gate prints its own reason, git's "fatal: …" would double it
-    git: (args) => execFileSync('git', args, { cwd: PKG_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(),
+    git: defaultGit,
     saveCuratedPins,
     // F1: the CAS baseline, read through fs (never `require`, which caches) so a concurrent edit is visible; tests inject one bound to a temp file.
     readCuratedPinsBytes: () => fs.readFileSync(path.join(PKG_ROOT, 'src/utils/curated-pins.json'), 'utf8'),

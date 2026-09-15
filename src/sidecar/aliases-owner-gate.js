@@ -17,9 +17,28 @@
 'use strict';
 
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { collapseExcerpt } = require('../utils/text-sanitize');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
+
+/** @param {string[]} args @returns {string} git's trimmed stdout, run at the package root; stderr ignored (callers print their own reason) */
+function defaultGit(args) {
+  return execFileSync('git', args, { cwd: PKG_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+}
+
+/**
+ * The first half of `ownerGate`, on its own for `doctor`'s shipped-pins row:
+ * true when the package root IS a git work-tree root — the dev checkout or a
+ * linked worktree of it — false for an npm-installed copy (`--show-prefix`
+ * prints `node_modules/amicus/`), a tarball with no repo, or no git at all.
+ * Never throws.
+ * @param {(args: string[]) => string} [git] injectable runner (tests)
+ * @returns {boolean}
+ */
+function isSourceCheckout(git = defaultGit) {
+  try { return git(['rev-parse', '--show-prefix']) === ''; } catch { return false; }
+}
 
 /**
  * @param {{isTTY: boolean, git: (args: string[]) => string}} d
@@ -44,4 +63,4 @@ function ownerGate(d) {
   return null;
 }
 
-module.exports = { ownerGate };
+module.exports = { ownerGate, isSourceCheckout, defaultGit };
