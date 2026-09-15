@@ -11,12 +11,22 @@
  * live file, so the shipped pins may move (the D3 baseline session) without
  * touching this proof.
  *
- * Named mutants (each measured red against this file):
- *   LOOPORDER — in toGatewayRoutes/listCuratedRoutes/directFormProvenance walk
- *               the cardless entries BEFORE the families: key order changes,
- *               the stringified snapshot differs.
+ * Named mutants — MEASURED RED sets (2026-09-14, `npx jest
+ * tests/curated-models-move.test.js` after each mutation, restored via
+ * `git checkout --` between mutants):
+ *   LOOPORDER — in toGatewayRoutes swap the two `for` lines (cardless loop
+ *               first). RED (2): "the live shipped file today" › "produces
+ *               the b803a2a gateway routes (delete this test in the D3
+ *               baseline commit)"; "curated-models over the b803a2a data
+ *               file" › "every builder is byte-identical to the pre-move
+ *               source (spec §6.8)". Both consume toGatewayRoutes()'s
+ *               insertion order via JSON.stringify, so both see it change.
  *   FAMILYPIN — pinFor returns `{ routes: {} }` instead of throwing when a
- *               family has no pin: the throw test goes red.
+ *               family has no pin. RED (1): "curated-models over the
+ *               b803a2a data file" › "a family without a pin is a named
+ *               defect, never a route-less family (mutant FAMILYPIN)". The
+ *               byte-identical test stays green — it never deletes a pin,
+ *               so pinFor's fallback branch is never exercised there.
  */
 const fs = require('fs');
 const path = require('path');

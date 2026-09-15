@@ -4,9 +4,16 @@
  * #238 D8 — the shipped pin set's loader and validator. The validator's rules
  * are enumerated one refusal per test (fail-closed: every defect the file can
  * carry has a named message), and `loadCuratedPins` is proven to hand out a
- * COPY (mutant CLONE: return the cached object instead — the isolation test
- * goes red). The shipped file itself must validate and be in canonical
- * format, so an owner-mode write of an unchanged document leaves no diff.
+ * COPY (mutant CLONE: in loadCuratedPins, `return raw` instead of
+ * `return JSON.parse(JSON.stringify(raw))` — for the no-argument path `raw`
+ * IS the module-cached SHIPPED object, so this is literally "return the
+ * cached object instead"). MEASURED 2026-09-14 (`npx jest
+ * tests/utils/curated-pins.test.js`, restored via `git checkout --`): RED
+ * (1) — "loadCuratedPins" › "every call returns a fresh deep copy —
+ * mutating one never reaches the next (mutant CLONE)"; every other test in
+ * this file (including the canonical-format and explicit-path tests) stays
+ * green. The shipped file itself must validate and be in canonical format,
+ * so an owner-mode write of an unchanged document leaves no diff.
  */
 const fs = require('fs');
 const os = require('os');
