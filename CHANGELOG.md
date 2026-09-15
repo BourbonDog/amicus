@@ -24,6 +24,10 @@ All notable changes to Amicus are documented here. Format follows
   its shipped-pin drift hints now point at `amicus aliases --review --owner`. Exit code and
   `--strict` unchanged. The sibling comparator (`model-id-siblings.js`) is now consumed by the
   picker, the CI pin gate AND `models --check`. (#238 Q7)
+- **`amicus doctor`** gains a `curated-pins` ("Shipped pins") row: pin count, newest
+  `verifiedOn`, and how many shipped pins sit behind the catalog cache; in the amicus source
+  checkout it names the reset command (`node bin/amicus.js aliases --review --owner`) so owner
+  mode is one `doctor` away. Installed copies see the facts only. (#238 Phase 2 follow-up)
 
 ### Changed
 

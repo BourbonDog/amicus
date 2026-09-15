@@ -218,6 +218,7 @@ src/
 │   ├── doctor-alias-check.js
 │   ├── doctor-base-url-check.js  # v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row.
 │   ├── doctor-credit-check.js  # The `openrouter-credit` doctor row (#43), split out of
+│   ├── doctor-curated-pins-check.js  # `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up).
 │   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
@@ -589,7 +590,7 @@ evals/
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
-| `sidecar/aliases-owner-gate.js` | The refusal gate for `amicus aliases --review --owner` (#238 D8), split out | `ownerGate()` |
+| `sidecar/aliases-owner-gate.js` | The refusal gate for `amicus aliases --review --owner` (#238 D8), split out | `ownerGate()`, `isSourceCheckout()`, `defaultGit()` |
 | `sidecar/aliases-owner-sink.js` | The owner-mode write path for `amicus aliases --review --owner` (#238 D8), | `commit()`, `askRulings()` |
 | `sidecar/aliases-owner.js` | `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as | `runOwnerReview()`, `ownerGate()`, `routesByProvider()`, `routeDisagreements()`, `ownerView()` |
 | `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `isFresh()`, `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
@@ -698,6 +699,7 @@ evals/
 | `utils/doctor-alias-check.js` |  | `evaluateAliasesCheck()`, `repairAlias()` |
 | `utils/doctor-base-url-check.js` | v4.6.2 PR1 (spec §4): the 'anthropic-base-url' doctor row. | `evaluateAnthropicBaseUrl()` |
 | `utils/doctor-credit-check.js` | The `openrouter-credit` doctor row (#43), split out of | `evaluateOpenRouterCredit()` |
+| `utils/doctor-curated-pins-check.js` | `doctor`'s `curated-pins` row ("Shipped pins", #238 Phase 2 follow-up). | `evaluateCuratedPins()` |
 | `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |

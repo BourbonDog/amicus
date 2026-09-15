@@ -78,6 +78,13 @@ function makeBaseDeps({ omit = [], ...overrides } = {}) {
     // absent (not null — null would be "set to null", a malformed value) so the
     // base fixture stays healthy regardless of the host's real config.json.
     readOutputBudgetRaw: () => undefined,
+    // #238 Phase 2 follow-up: the curated-pins row's facts come from the
+    // shipped-pin loader and the catalog cache above (readCache, already
+    // pinned); isSourceCheckout stays false so this "pure doctor suite"
+    // fixture never claims to be the source checkout.
+    loadCuratedPins: () => ({ version: 1, pins: { gemini: { routes: { openrouter: 'openrouter/google/gemini-3.5-flash' }, verifiedOn: '2026-08-04' } }, retired: {}, notable: [] }),
+    buildFallbackDriftReport: () => [],
+    isSourceCheckout: () => false,
     // B3 (council review of PR 198): deterministic no-repair fixture — the
     // 'defaults'-sourced row above would fall through to [] via the real
     // alias-audit module anyway (not 'user-config'), but pinning it explicitly
