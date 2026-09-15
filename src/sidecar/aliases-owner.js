@@ -18,13 +18,21 @@
  * Sink: an accept replaces the route under review via `setPinRoute` scoped
  * to the PASS's namespace — an id from another namespace is refused as the
  * picker's own `could not write: …` line (R-P2-5) — and stamps `verifiedOn`
- * (R-P2-12) through `commit()`'s compare-and-swap (#238 council r1 F1):
- * refused, nothing written, if curated-pins.json changed on disk since this
- * session loaded it. After the last pass each touched pin is prompted for an
- * optional ruling (enter keeps the current text; R-P2-9); `routeDisagreements`
- * names every non-divergent pin whose direct route no longer matches the
- * derived form of its openrouter route (R-P2-10). Review residual: Ctrl-C/EOF
- * in a raw-mode terminal (stdout a TTY) surfaces as the prompt's own
+ * (R-P2-12) through `aliases-owner-sink.js :: commit()`'s compare-and-swap
+ * (#238 council r1 F1): refused, nothing written, if curated-pins.json
+ * changed on disk since this session loaded it — a refusal is STICKY
+ * (`state.casRefused`), so the very next prompt aborts the walk/rulings
+ * instead of asking for more doomed writes (#238 council r2 G2), and the
+ * closing summary names it instead of the ordinary "no pin changed"/"N
+ * pin(s) changed" line. The CAS baseline and the in-memory doc come from the
+ * SAME disk read (#238 council r2 G1) — owner mode never calls
+ * `loadCuratedPins`, so an edit landing before this session's read can never
+ * be silently adopted as the doc while missing from the baseline (or vice
+ * versa). After the last pass each touched pin is prompted for an optional
+ * ruling (enter keeps the current text; R-P2-9); `routeDisagreements` names
+ * every non-divergent pin whose direct route no longer matches the derived
+ * form of its openrouter route (R-P2-10). Review residual: Ctrl-C/EOF in a
+ * raw-mode terminal (stdout a TTY) surfaces as the prompt's own
  * REVIEW_ABORTED (aliases-review-prompt.js) — rulings are skipped but the
  * summary still prints; with stdout piped, Ctrl-C is the ordinary process
  * signal instead and nothing further runs. Nothing here spends.
@@ -36,11 +44,12 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { DIVERGENT_VENDORS, stripGatewayPrefix } = require('../utils/curated-models');
-const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require('../utils/curated-pins');
+const { validateCuratedPins, saveCuratedPins, setPinRoute } = require('../utils/curated-pins');
 const { refreshingCatalogLine } = require('./aliases-review-render');
 const { gatedCatalogIds } = require('../utils/alias-proposals');
 const { collapseExcerpt, safeFragment } = require('../utils/text-sanitize');
 const { ownerGate } = require('./aliases-owner-gate');
+const { commit, askRulings } = require('./aliases-owner-sink');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
 const DATA_FILE = 'src/utils/curated-pins.json';
@@ -57,7 +66,6 @@ function defaultDeps() {
     stderr: (s) => process.stderr.write(s),
     // stderr ignored: the gate prints its own reason, git's "fatal: …" would double it
     git: (args) => execFileSync('git', args, { cwd: PKG_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(),
-    loadCuratedPins,
     saveCuratedPins,
     // F1: the CAS baseline, read through fs (never `require`, which caches) so a concurrent edit is visible; tests inject one bound to a temp file.
     readCuratedPinsBytes: () => fs.readFileSync(path.join(PKG_ROOT, 'src/utils/curated-pins.json'), 'utf8'),
@@ -154,46 +162,21 @@ function ownerView(map, catalogInfo, doc, d) {
   };
 }
 
-/**
- * Compare-and-swap write (#238 council r1 F1): refuse (throw, nothing
- * written) when curated-pins.json changed on disk since this session loaded
- * it. On success, advances the in-memory doc and the CAS baseline together,
- * so a later write in the SAME session compares against what THIS write
- * landed. Shared by the sink (`addAlias`) and `askRulings`; both print
- * `could not write: …` on refusal. Mutant NOCAS: drop the comparison.
- * @param {{doc: object, diskBytes: string, casRefused?: boolean}} state mutated in place
- */
-function commit(state, next, d) {
-  const onDisk = d.readCuratedPinsBytes();
-  if (onDisk !== state.diskBytes) {
-    state.casRefused = true; // review residual: the closing summary reports this instead of "no pin changed" -- that line is false once the file changed under us
-    throw new Error('curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
-  }
-  d.saveCuratedPins(next);          // Mutant SAVEFIRST: assign state.doc before this line
-  state.diskBytes = JSON.stringify(next, null, 2) + '\n';
-  state.doc = next;
-}
-
-/** After the walk: one optional ruling per touched pin; enter keeps the current text; each answer is written at once. */
-async function askRulings(state, ask, d) {
-  if (state.touched.size === 0) { return; }
-  d.write('  rulings — a sentence on WHY, stored beside the pin (enter keeps the current text):\n');
-  for (const alias of state.touched) {
-    const pin = state.doc.pins[alias];
-    // F5: a ruling is free text from an interactive prompt, rendered back later -- sanitize before showing it.
-    d.write(`  ${alias} → ${Object.values(pin.routes).map(safeFragment).join(', ')}\n    current: ${pin.ruling ? collapseExcerpt(pin.ruling) : '(none)'}\n`);
-    const ans = String((await ask('    ruling: ')) || '').trim();
-    if (!ans) { continue; }
-    try {
-      commit(state, setPinRuling(state.doc, alias, ans), d);
-    } catch (err) { d.write(`    could not write: ${collapseExcerpt(err.message)}\n`); }
-  }
-}
-
 /** @returns {object} the deps one namespace pass hands to runReview: the owner view and the owner sink */
 function passDeps(provider, map, catalogInfo, state, ask, d) {
   return {
-    ...d, ask, isTTY: true,
+    ...d,
+    // G2 (#238 council r2 A4/B2): casRefused is STICKY -- the disk will never
+    // re-match this session's baseline again, so every further prompt is
+    // guaranteed to fail. The very next ask() aborts through the picker's own
+    // REVIEW_ABORTED path instead of asking for more doomed writes.
+    // aliases-review-prompt.js's abortedError() isn't exported, so the same
+    // shape is built locally.
+    ask: async (q) => {
+      if (state.casRefused) { throw Object.assign(new Error('aliases --review interrupted'), { code: 'REVIEW_ABORTED' }); }
+      return ask(q);
+    },
+    isTTY: true,
     // The owner module already printed the refreshing-catalog banner once (if
     // stale); a per-namespace runReview must not repeat it on every pass.
     readCache: null,
@@ -221,11 +204,20 @@ async function runOwnerReview(args, deps) {
   const d = { ...defaultDeps(), ...(deps || {}) };
   const refusal = ownerGate(d);
   if (refusal) { d.stderr(`Error: ${refusal}\n`); return 1; }
-  // F3: loadCuratedPins/getCatalogInfo are real I/O that can throw -- name it and refuse, before any prompt is created.
+  // F3/G1 (#238 council r2 A2): ONE read for both the CAS baseline and the
+  // in-memory doc -- loadCuratedPins (the require-cached SHIPPED, parsed at
+  // process boot) and a fresh disk read could disagree on an edit landing
+  // between boot and this read, silently adopting it as the baseline while
+  // the doc still lacked it (the session's first accept then clobbered it
+  // with no CAS mismatch). Owner mode no longer calls loadCuratedPins.
+  // Real I/O, so JSON.parse and validateCuratedPins share the same guard.
   let state;
   try {
-    state = { doc: d.loadCuratedPins(), touched: new Set(), touchedRoutes: new Set() };
-    state.diskBytes = d.readCuratedPinsBytes(); // F1: the CAS baseline this session's writes compare against -- I/O, so it shares the load's guard (review residual: this used to sit AFTER the try, unguarded)
+    state = { touched: new Set(), touchedRoutes: new Set() };
+    state.diskBytes = d.readCuratedPinsBytes();
+    const doc = JSON.parse(state.diskBytes);
+    validateCuratedPins(doc);
+    state.doc = doc;
   } catch (err) {
     d.stderr(`Error: ${collapseExcerpt(err.message)}\n`);
     return 1;

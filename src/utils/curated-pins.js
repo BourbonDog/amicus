@@ -50,7 +50,7 @@ let SHIPPED;
 try {
   SHIPPED = require('./curated-pins.json');
 } catch (err) {
-  throw new Error(`curated-pins.json: ${CURATED_PINS_PATH}: ${err.message} — the shipped pin file failed to parse; fix the JSON by hand or restore it (git checkout -- src/utils/curated-pins.json)`);
+  throw new Error(`curated-pins.json: ${CURATED_PINS_PATH}: ${err.message} — the shipped pin file failed to parse; fix the JSON by hand; in a source checkout, git checkout -- src/utils/curated-pins.json restores it, and an installed copy is restored by reinstalling amicus`);
 }
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const PIN_KEYS = new Set(['routes', 'verifiedOn', 'ruling', 'gatewayOnly']);
@@ -67,26 +67,36 @@ function isValidDate(s) {
   return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
 
+// G3 (#238 council r2 A1): an accepted catalog id has the same biography as a
+// typed ruling (F5) — third-party bytes, chosen through the interactive
+// picker (which renders every candidate through safeFragment), rendered back
+// raw by `models --check` as trusted "house bytes". Charset-restrict at the
+// ONE function both validatePin (the file) and setPinRoute (an accept) call,
+// so the owner's eyeball approval and the stored bytes are the same bytes.
+const ROUTE_ID_RE = /^[A-Za-z0-9._:/-]+$/; // printable id charset; every shipped id passes; `:free`/`:batch` need `:`
+const NAME_RE = /^[A-Za-z0-9._-]+$/; // every shipped alias/provider name passes
+
 /** @param {*} name an alias or route key @param {string} where names the site for the message */
 function checkName(name, where) {
   if (typeof name !== 'string' || name.length === 0 || name.trim() !== name
-      || name === '__proto__' || name === 'constructor' || name === 'prototype') {
+      || name === '__proto__' || name === 'constructor' || name === 'prototype'
+      || !NAME_RE.test(name)) {
     fail(`${where}: '${name}' is not a valid name`);
   }
 }
 
 /**
  * @param {string} id @param {string} provider
- * @returns {boolean} true when `id` starts with `<provider>/` and every
- *   segment is non-empty: `openrouter` must be exactly 3 segments
- *   (`openrouter/<vendor>/<model>` — `curated-models.js :: vendorOf` parses
- *   the vendor segment positionally, so a 2-segment id would be silently
- *   mis-parsed rather than refused); every other provider needs only 2+,
- *   since a direct provider's own model id may itself contain `/` (e.g.
- *   `togetherai/meta-llama/llama-4`, `fireworks-ai/accounts/...`).
+ * @returns {boolean} true when `id` matches `ROUTE_ID_RE` and starts with
+ *   `<provider>/` with every segment non-empty: `openrouter` must be exactly
+ *   3 segments (`openrouter/<vendor>/<model>` — `curated-models.js ::
+ *   vendorOf` parses the vendor segment positionally, so a 2-segment id
+ *   would be silently mis-parsed rather than refused); every other provider
+ *   needs only 2+, since a direct provider's own model id may itself contain
+ *   `/` (e.g. `togetherai/meta-llama/llama-4`, `fireworks-ai/accounts/...`).
  */
 function inNamespace(id, provider) {
-  if (typeof id !== 'string') { return false; }
+  if (typeof id !== 'string' || !ROUTE_ID_RE.test(id)) { return false; }
   const segments = id.split('/');
   if (segments[0] !== provider || !segments.every(s => s.length > 0)) { return false; }
   return provider === 'openrouter' ? segments.length === 3 : segments.length >= 2;

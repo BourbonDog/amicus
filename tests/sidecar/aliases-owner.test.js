@@ -103,13 +103,16 @@ function catalogWith({ extra = [], omit = () => false, failures = [], fetchedAt 
 }
 const EMPTY_CATALOG = { models: [], fetchedAt: null, lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [] };
 
+// `today` is an arbitrary injected date (#238 council r2 C2/C3, deepseek
+// misread made unmissable) -- tests assert the stamp equals what was
+// injected, nothing about the calendar.
 function harness({ answers = [], catalog, git = () => '', isTTY = true, today = '2026-09-20', doc = DOC } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aliases-owner-'));
   const file = path.join(dir, 'curated-pins.json');
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   const log = [];
   const queue = [...answers];
-  const { loadCuratedPins, saveCuratedPins } = pinsModule();
+  const { saveCuratedPins } = pinsModule();
   const deps = {
     isTTY,
     git,
@@ -120,9 +123,10 @@ function harness({ answers = [], catalog, git = () => '', isTTY = true, today = 
     ask: async () => { if (queue.length === 0) { throw new Error('no more scripted answers'); } return queue.shift(); },
     getCatalogInfo: async () => catalog,
     readCache: () => catalog,
-    loadCuratedPins: () => loadCuratedPins(file),
     saveCuratedPins: (d) => { log.push('SAVE'); saveCuratedPins(d, file); },
-    // F1 (#238 council r1 B1): the CAS baseline, bound to the SAME temp file every other dep reads/writes.
+    // G1 (#238 council r2 A2): the ONE read owner mode makes -- both the CAS
+    // baseline and the in-memory doc are parsed from these SAME bytes; there
+    // is no separate `loadCuratedPins` dependency any more (it is not called).
     readCuratedPinsBytes: () => fs.readFileSync(file, 'utf8'),
   };
   return { deps, file, dir, out: () => log.filter(l => !l.startsWith('ERR:')).join(''), err: () => log.filter(l => l.startsWith('ERR:')).join(''), log, read: () => JSON.parse(fs.readFileSync(file, 'utf8')), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
@@ -213,10 +217,10 @@ describe('runOwnerReview', () => {
 
   test('gate refusal: one stderr line, exit 1, nothing loaded or written', async () => {
     h = harness({ isTTY: false, catalog: EMPTY_CATALOG });
-    h.deps.loadCuratedPins = jest.fn();
+    h.deps.readCuratedPinsBytes = jest.fn();
     expect(await runOwnerReview({}, h.deps)).toBe(1);
     expect(h.err()).toMatch(/^ERR:Error: aliases --review --owner is interactive/);
-    expect(h.deps.loadCuratedPins).not.toHaveBeenCalled();
+    expect(h.deps.readCuratedPinsBytes).not.toHaveBeenCalled();
     expect(h.out()).toBe('');
   });
 
@@ -234,13 +238,29 @@ describe('runOwnerReview', () => {
   // circuits the call either way). Deleting `ask` and stubbing `createPrompt`
   // to a real ask/close pair makes the assertion load-bearing: it only stays
   // green if the guard truly returns before that line is ever reached.
-  test('F3 (#238 council r1 C1): a throwing loadCuratedPins is a named error on stderr, exit 1, no write, no prompt', async () => {
+  // G1 (#238 council r2 A2) retires the old "throwing loadCuratedPins" test:
+  // that dependency is no longer called at all, so injecting a throwing one
+  // would be vacuous. The two failure modes now live INSIDE the same guarded
+  // read -- a malformed JSON.parse and a validateCuratedPins defect -- get
+  // their own tests instead.
+  test('G1: malformed bytes from readCuratedPinsBytes (JSON.parse failure) is a named error on stderr, exit 1, no write, no prompt', async () => {
     h = harness({ catalog: EMPTY_CATALOG }); // never reached
-    h.deps.loadCuratedPins = () => { throw new Error('ENOENT: no such file'); };
+    h.deps.readCuratedPinsBytes = () => '{not valid json';
     delete h.deps.ask;
     h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
     expect(await runOwnerReview({}, h.deps)).toBe(1);
-    expect(h.err()).toContain('ERR:Error: ENOENT: no such file');
+    expect(h.err()).toMatch(/^ERR:Error: /);
+    expect(h.out()).toBe('');
+    expect(h.log).not.toContain('SAVE');
+    expect(h.deps.createPrompt).not.toHaveBeenCalled();
+  });
+  test('G1: an invalid document (fails validateCuratedPins) from readCuratedPinsBytes is a named error on stderr, exit 1, no write, no prompt', async () => {
+    h = harness({ catalog: EMPTY_CATALOG });
+    h.deps.readCuratedPinsBytes = () => JSON.stringify({ ...DOC, version: 2 });
+    delete h.deps.ask;
+    h.deps.createPrompt = jest.fn(() => ({ ask: async () => '3', close: jest.fn() }));
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(h.err()).toContain('ERR:Error: curated-pins.json: unsupported version 2 (expected 1)');
     expect(h.out()).toBe('');
     expect(h.log).not.toContain('SAVE');
     expect(h.deps.createPrompt).not.toHaveBeenCalled();
@@ -352,6 +372,21 @@ describe('runOwnerReview', () => {
     expect(h.log.filter(l => l === 'SAVE')).toHaveLength(2);
   });
 
+  // G4 (#238 council r2 A5): askRulings' alias line used to print the alias
+  // raw -- the only alias render site that skipped safeFragment. A genuinely
+  // hostile alias is refused at load now (G3), so prove the safeFragment call
+  // a different way: an alias past the 96-char fragment cap renders
+  // truncated with a trailing ellipsis.
+  test('G4: askRulings\' alias line rides safeFragment (a 100-char alias renders truncated with a trailing ellipsis)', async () => {
+    const longAlias = 'a'.repeat(100); // valid under G3's NAME_RE, but past safeFragment's 96-char cap
+    const doc = { version: 1, pins: { [longAlias]: { routes: { openrouter: 'openrouter/z-ai/glm-5.3' }, verifiedOn: '2026-08-04' } }, retired: {}, notable: [] };
+    const catalog = { models: [{ id: 'openrouter/z-ai/glm-5.3' }, { id: 'openrouter/z-ai/glm-5.4' }], fetchedAt: Date.now(), lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [] };
+    h = harness({ catalog, doc, answers: ['1', ''] }); // accept the sibling; ruling: enter
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain(`  ${'a'.repeat(95)}… → `);
+    expect(h.out()).not.toContain('a'.repeat(96));
+  });
+
   test('choose another with an id from another namespace is refused by the sink in EITHER direction, document unchanged (mutant PROVREFUSE)', async () => {
     const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'google/gemini-3.7-flash', 'openrouter/google/gemini-3.7-flash'] });
     // openrouter pass: gemini (sibling of its OWN openrouter route) -> [2] choose another -> type a GOOGLE id (real, gated) -> refused -> [3] skip;
@@ -376,6 +411,34 @@ describe('runOwnerReview', () => {
     const doc = h.read();
     expect(doc.pins.grok.routes.openrouter).toBe('openrouter/x-ai/grok-4.4');
     expect(doc.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the failed accept never reached disk through the later save
+  });
+
+  // G1 (#238 council r2 A2): the CAS baseline and the in-memory doc used to
+  // come from DIFFERENT reads -- state.doc from d.loadCuratedPins() (the
+  // require-cached SHIPPED, parsed at process boot) and state.diskBytes from
+  // a fresh disk read. An edit landing between boot and the baseline read was
+  // adopted as the baseline while missing from the doc, so the session's
+  // first accept silently reverted it with NO CAS mismatch. Now there is one
+  // read for both, and loadCuratedPins is not called at all.
+  test('G1: the CAS baseline and the in-memory doc come from the SAME read — a stale loadCuratedPins is never consulted (mutant SKEW)', async () => {
+    const freshDoc = JSON.parse(JSON.stringify(DOC));
+    freshDoc.pins.glm.routes.openrouter = 'openrouter/z-ai/glm-5.9'; // "an edit landed between boot and the baseline read"
+    const catalog = {
+      // every OTHER route from freshDoc is live (no proposals elsewhere), plus glm's own fresh route and a genuinely newer sibling
+      models: [
+        ...Object.entries(freshDoc.pins).filter(([a]) => a !== 'glm').flatMap(([, p]) => Object.values(p.routes)).map(id => ({ id })),
+        { id: 'openrouter/z-ai/glm-5.9' },
+        { id: 'openrouter/z-ai/glm-6.0' },
+      ],
+      fetchedAt: Date.now(), lastRefreshAttempt: null, lastRefreshError: null, providerFailures: [],
+    };
+    h = harness({ catalog, doc: freshDoc, answers: ['1', ''] }); // the temp file is seeded with freshDoc -- the edit already landed on disk
+    h.deps.loadCuratedPins = jest.fn(() => DOC); // the STALE doc a pre-fix loadCuratedPins would have returned (glm still at 5.3)
+    expect(await runOwnerReview({}, h.deps)).toBe(0);
+    expect(h.out()).toContain('currently  openrouter/z-ai/glm-5.9      (pinned)'); // the walk's proposal reflects the FRESH bytes, not the stale 5.3
+    const onDisk = h.read();
+    expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-6.0'); // the accept wrote on top of the fresh baseline -- the stale 5.3 is nowhere in the file
+    expect(h.deps.loadCuratedPins).not.toHaveBeenCalled();
   });
 
   // Review residual, item 3: a CAS refusal used to still close with "no pin
@@ -429,6 +492,74 @@ describe('runOwnerReview', () => {
     expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.4'); // the walk's own accept DID land before the external edit
     expect(h.out()).toContain('curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review');
     expect(h.out()).not.toContain('pin changed — review with');
+  });
+
+  // G2(a) (#238 council r2 A4/B2): casRefused is STICKY -- the disk will
+  // never re-match this session's baseline again, so a CAS refusal during
+  // the FIRST ruling must stop the loop before ever asking for the second
+  // (every remaining ruling is guaranteed to fail and discard typed text).
+  test('G2(a): a CAS refusal during the first ruling stops askRulings before asking for the second (no break -> mutant)', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'openrouter/x-ai/grok-4.4'] });
+    h = harness({ catalog });
+    let calls = 0;
+    h.deps.ask = async () => {
+      calls += 1;
+      if (calls === 1) { return '1'; } // walk: accept glm-5.4
+      if (calls === 2) { return '1'; } // walk: accept grok-4.4
+      if (calls === 3) {
+        // an external edit lands right as the FIRST ruling (glm, touched first) is being answered
+        const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+        external.pins.deepseek.verifiedOn = '2099-01-01';
+        fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
+        return 'glm ruling text';
+      }
+      return 'SECOND RULING SHOULD NEVER BE ASKED'; // grok's ruling, if the break is missing
+    };
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    expect(calls).toBe(3); // the second ruling (grok) was never asked
+    expect(h.out()).toContain('    could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
+    expect(h.out()).toContain('curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review');
+    const onDisk = h.read();
+    expect(onDisk.pins.deepseek.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
+    expect(onDisk.pins.glm.ruling).toBe('why glm'); // glm's own ruling write never landed either
+  });
+
+  // G2(b) (#238 council r2 A4/B2): a CAS refusal during the WALK must also
+  // end the session immediately -- the very next ask() aborts through the
+  // picker's own REVIEW_ABORTED path rather than re-showing the menu for a
+  // second (guaranteed-doomed) answer.
+  test('G2(b): a CAS refusal on the first accept aborts the walk immediately — the menu is not re-shown for a second answer', async () => {
+    const catalog = catalogWith({ extra: ['openrouter/z-ai/glm-5.4', 'openrouter/x-ai/grok-4.4'] });
+    h = harness({ catalog });
+    let calls = 0;
+    h.deps.ask = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // an external edit lands right as the FIRST proposal (glm) is being accepted
+        const external = JSON.parse(fs.readFileSync(h.file, 'utf8'));
+        external.pins.deepseek.verifiedOn = '2099-01-01';
+        fs.writeFileSync(h.file, JSON.stringify(external, null, 2) + '\n');
+        return '1'; // accept -- but the disk now disagrees
+      }
+      // A non-numeric answer would otherwise loop forever re-prompting "choose
+      // 1-N" (reviewOne's own for(;;)) -- throw instead, so a missing abort
+      // fails this test cleanly (a rejected runOwnerReview) rather than
+      // hanging/OOMing the run.
+      throw new Error('ask() called a second time -- the CAS-refusal abort did not fire');
+    };
+    expect(await runOwnerReview({}, h.deps)).toBe(1);
+    // Only ONE real ask() call ever happens: the wrapper in passDeps checks
+    // state.casRefused BEFORE delegating to the real ask, so the very next
+    // prompt aborts WITHOUT ever reaching this mock a second time.
+    expect(calls).toBe(1);
+    expect(h.out()).toContain('could not write: curated-pins.json changed on disk since this session loaded it — restart the review to pick up the change (nothing was written)');
+    expect(h.out()).toContain('review interrupted — 0 accepted, 0 skipped, 0 dismissed so far'); // the picker's own REVIEW_ABORTED tally
+    expect(h.out()).toContain('curated-pins.json changed on disk during this session — nothing from this session was written after that point; restart the review');
+    const onDisk = h.read();
+    expect(onDisk.pins.deepseek.verifiedOn).toBe('2099-01-01'); // the external edit survives, untouched
+    expect(onDisk.pins.glm.routes.openrouter).toBe('openrouter/z-ai/glm-5.3'); // the refused accept never landed
+    expect(onDisk.pins.grok.routes.openrouter).toBe('openrouter/x-ai/grok-4.3'); // grok's own pass never even started
+    expect(h.log).not.toContain('SAVE');
   });
 
   test('Ctrl-C mid-walk: tally, exit 1, no ruling prompts, summary still prints', async () => {

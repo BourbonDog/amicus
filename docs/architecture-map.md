@@ -107,6 +107,7 @@ src/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
 │   ├── aliases-owner-gate.js  # The refusal gate for `amicus aliases --review --owner` (#238 D8), split out
+│   ├── aliases-owner-sink.js  # The owner-mode write path for `amicus aliases --review --owner` (#238 D8),
 │   ├── aliases-owner.js  # `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as
 │   ├── aliases-review-gate.js  # Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split
 │   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
@@ -589,6 +590,7 @@ evals/
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/aliases-owner-gate.js` | The refusal gate for `amicus aliases --review --owner` (#238 D8), split out | `ownerGate()` |
+| `sidecar/aliases-owner-sink.js` | The owner-mode write path for `amicus aliases --review --owner` (#238 D8), | `commit()`, `askRulings()` |
 | `sidecar/aliases-owner.js` | `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as | `runOwnerReview()`, `ownerGate()`, `routesByProvider()`, `routeDisagreements()`, `ownerView()` |
 | `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `isFresh()`, `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
 | `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |

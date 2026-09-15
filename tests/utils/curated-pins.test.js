@@ -78,6 +78,13 @@ describe('validateCuratedPins — one refusal per rule', () => {
     expect(() => validateCuratedPins(doc)).not.toThrow();
   });
   test('F7: a route key that is not openrouter or a registered direct provider is refused (typo: anthropc)', () => refuses(d => { d.pins.glm.routes.anthropc = 'anthropc/x-1'; }, "pin 'glm' route 'anthropc' is not a known provider (openrouter or a direct provider)"));
+  // G3 (#238 council r2 A1): an accepted catalog id crosses the same trust
+  // boundary as a typed ruling (F5) -- charset-restrict it at inNamespace so
+  // the file can never store what the picker's own safeFragment rendering
+  // hid from the owner's eyeball approval.
+  test('G3: a route id with an ANSI escape is refused', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/z-ai/glm-5.3\x1b[31m'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id"));
+  test('G3: a route id with a space is refused', () => refuses(d => { d.pins.glm.routes.openrouter = 'openrouter/z-ai/glm 5.3'; }, "pin 'glm' route 'openrouter' must be a 'openrouter/…' id"));
+  test('G3: a pin name with a newline is refused', () => refuses(d => { d.pins['hostile\nname'] = { routes: { openrouter: 'openrouter/a/b' }, verifiedOn: '2026-01-01' }; }, "is not a valid name"));
   test('verifiedOn is required', () => refuses(d => { delete d.pins.glm.verifiedOn; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   test('verifiedOn must be an ISO date', () => refuses(d => { d.pins.glm.verifiedOn = 'yesterday'; }, "pin 'glm' needs verifiedOn as YYYY-MM-DD"));
   // F6 (#238 council r1 A2): the shape check alone admits an impossible
@@ -271,6 +278,11 @@ describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mod
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', 'today')).toThrow("verifiedOn must be YYYY-MM-DD (got 'today')");
     // F6 (#238 council r1 A2): a shape-valid but impossible calendar date is refused the same way as a non-date string.
     expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4', '2026-02-31')).toThrow("verifiedOn must be YYYY-MM-DD (got '2026-02-31')");
+  });
+  // G3 (#238 council r2 A1): the ACCEPT path refuses the same hostile bytes the validator does, at the same inNamespace check.
+  test('G3: setPinRoute refuses an id with an ANSI escape or a space', () => {
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm-5.4\x1b[31m', '2026-09-20')).toThrow("is not in the openrouter/ namespace");
+    expect(() => setPinRoute(good(), 'glm', 'openrouter', 'openrouter/z-ai/glm 5.4', '2026-09-20')).toThrow("is not in the openrouter/ namespace");
   });
   // fix round 1 (Important): setPinRoute must accept a 3-segment direct-
   // provider id too — only openrouter is segment-counted exactly.
