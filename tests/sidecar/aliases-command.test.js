@@ -387,6 +387,12 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     });
   });
 
+  // MEASURED 2026-09-14 (`npx jest tests/sidecar/aliases-command.test.js
+  // tests/sidecar/aliases-review.test.js`; mutant: `retiredNote` in
+  // src/sidecar/aliases.js body replaced with `return { flag: '', ruling:
+  // null };` unconditionally; restored via `git checkout --
+  // src/sidecar/aliases.js`, confirmed clean `git status --porcelain`):
+  // RED (1) — this test only; the other 71 tests across both files stay green.
   test('a pin naming a RETIRED alias is flagged with the date and the ruling on a continuation line, and gets no proposal (#238 D8; mutant RETIREDFLAG)', async () => {
     mockPins({ retired: { devstral: { on: '2026-08-04', ruling: 'OpenRouter delisted the whole devstral family.' } } });
     ({ handleAliases } = require('../../src/sidecar/aliases'));
