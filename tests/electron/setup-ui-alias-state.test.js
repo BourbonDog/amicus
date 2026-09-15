@@ -50,7 +50,10 @@ function pageWith(rows) {
 }
 
 describe('aliasStateFor — the state rule (R-P3-2)', () => {
-  const { fns } = loadStateScript();
+  let fns;
+  beforeAll(() => {
+    ({ fns } = loadStateScript());
+  });
   it('a curated alias holding the shipped id follows; any other value pins', () => {
     expect(fns.aliasStateFor('gemini', 'google/gemini-x')).toEqual({ curated: true, state: 'following' });
     expect(fns.aliasStateFor('gemini', 'google/gemini-y')).toEqual({ curated: true, state: 'pinned' });

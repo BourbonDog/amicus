@@ -162,8 +162,9 @@ function loadRemoveHandler({ aliasEdits, defaultAliases, document }) {
   expect(handler).toBeTruthy();
   expect(counts).toBeTruthy();
   // eslint-disable-next-line no-new-func
-  new Function('aliasEdits', 'defaultAliases', 'document', 'window', '$',
-    `${stateSrc}\n${counts[0]}\n${handler[0]}`)(aliasEdits, defaultAliases, document, {}, (id) => document.getElementById(id));
+  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', '$',
+    `${stateSrc}\n${counts[0]}\n${handler[0]}\nreturn { refreshAliasRowState: refreshAliasRowState };`);
+  return factory(aliasEdits, defaultAliases, document, {}, (id) => document.getElementById(id));
 }
 
 function rowWith(document, { alias, model, kind, inNewRoutes = false }) {
@@ -216,5 +217,48 @@ describe('alias editor remove handler (issue 238 R1)', () => {
     expect(Object.prototype.hasOwnProperty.call(aliasEdits, 'fresh')).toBe(false);
     expect(row.parentNode).toBeNull();
     expect(group.parentNode).toBeNull();                      // refreshAliasCounts drops the empty new-routes group
+  });
+
+  // Review round 1, IMPORTANT finding: a rename that crosses the curated/
+  // custom boundary (commitName rewrites data-alias on the row and button,
+  // but not the control's kind/text/title) left the remove control stale
+  // until refreshAliasRowState ran. Fixed both halves: the control is made
+  // truthful in refreshAliasRowState, and the remove handler now decides by
+  // the NAME (isCuratedAlias), never by reading the possibly-stale data-kind.
+  it('a curated→custom rename (commitName) leaves the control stale until refreshAliasRowState runs it truthful (repro A)', () => {
+    const { document } = createFakeDocument();
+    const defaultAliases = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'gemini', model: 'google/gemini-x', kind: 'unpin' });
+    const { refreshAliasRowState } = loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    // simulate commitName renaming gemini -> gemini2: it rewrites data-alias
+    // on the row AND the button, nothing else.
+    row.setAttribute('data-alias', 'gemini2');
+    btn.setAttribute('data-alias', 'gemini2');
+    refreshAliasRowState(row);
+    expect(btn.getAttribute('data-kind')).toBe('delete');
+    expect(btn.textContent).toBe('×');
+    btn.click();
+    expect(aliasEdits.gemini2).toBeNull();
+    expect(row.classList.contains('alias-deleted')).toBe(true);
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // untouched
+  });
+
+  it('a custom→curated rename (commitName) leaves the control stale until refreshAliasRowState runs it truthful (repro B)', () => {
+    const { document } = createFakeDocument();
+    const defaultAliases = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'mine', model: 'openrouter/x/y', kind: 'delete' });
+    const { refreshAliasRowState } = loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    // simulate commitName renaming mine -> gemini
+    row.setAttribute('data-alias', 'gemini');
+    btn.setAttribute('data-alias', 'gemini');
+    refreshAliasRowState(row);
+    expect(btn.getAttribute('data-kind')).toBe('unpin');
+    expect(btn.textContent).toBe('unpin');
+    btn.click();
+    expect(aliasEdits.gemini).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // shows the shipped id
+    expect(row.classList.contains('alias-deleted')).toBe(false);                   // no strike-through
   });
 });

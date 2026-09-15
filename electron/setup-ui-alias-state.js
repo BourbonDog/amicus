@@ -1,8 +1,7 @@
 /**
  * @module electron/setup-ui-alias-state
- * Inline page script: what an alias row MEANS (issue 238 D1/D9) and — Task 4
- * appends this half — what Finish writes for the Step 2 default (issue 238
- * Q9). Runs in the wizard page (no require()), in the same <script> as
+ * Inline page script: what an alias row MEANS (issue 238 D1/D9) and what Finish writes for the Step 2 default (issue 238 Q9).
+ * Runs in the wizard page (no require()), in the same <script> as
  * setup-ui.js's wizard script, so it reads the page's `aliasEdits`,
  * `defaultAliases` and `$`, and its function declarations are hoisted for
  * the fragments that call them (setup-ui-alias-script.js's remove handler,
@@ -82,7 +81,12 @@ function buildAliasStateScript() {
       label.className = 'alias-state alias-state-' + s.state;
     }
     var btn = row.querySelector('.alias-delete');
-    if (btn) { btn.hidden = s.curated && s.state === 'following'; }
+    if (btn) {
+      btn.setAttribute('data-kind', s.curated ? 'unpin' : 'delete');
+      btn.textContent = s.curated ? 'unpin' : '\\u00d7';
+      btn.title = s.curated ? 'Unpin: go back to following the shipped recommendation' : 'Delete this alias';
+      btn.hidden = s.curated && s.state === 'following';
+    }
     return s.state;
   }
 
@@ -109,6 +113,7 @@ function buildAliasStateScript() {
       var span = row.querySelector('.alias-model');
       if (span) { span.textContent = id; }
       row.classList.remove('alias-deleted');
+      if (typeof refreshAliasCounts === 'function') { refreshAliasCounts(); }
       refreshAliasRowState(row);
       var group = row.closest('.alias-group');
       if (group) { group.open = true; }

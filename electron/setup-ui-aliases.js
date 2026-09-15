@@ -1,8 +1,8 @@
 /**
  * Setup UI - Alias Editor
  *
- * Builds collapsible alias groups with search, inline editing,
- * delete, and add functionality for the setup wizard Step 3.
+ * Builds collapsible alias groups with search, state, inline editing,
+ * unpin / delete, and add functionality for the setup wizard Step 3.
  */
 
 const { groupAliases } = require('./setup-ui-alias-groups');

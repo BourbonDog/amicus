@@ -205,9 +205,10 @@ function buildAliasScript() {
         newSpan.textContent = newVal || origValue;
         select.replaceWith(newSpan);
         if (newVal && newVal !== origValue) {
-          aliasEdits[origAlias] = newVal;
+          stageAliasWrite(origAlias, newVal); // issue 238 D1: folds a re-pick of the shipped id to follow
+        } else {
+          refreshAliasRowState(row);
         }
-        refreshAliasRowState(row); // issue 238 D1: an edit can pin a following row (or un-pin it back)
       }
       select.addEventListener('change', commitModel);
       select.addEventListener('blur', commitModel);
@@ -215,8 +216,9 @@ function buildAliasScript() {
   });
 
   // Alias editor: remove (issue 238 D1/R1). "unpin" and "delete" are ONE
-  // operation -- remove the key -- whose meaning the button's data-kind
-  // already decided from whether the name is curated. Three shapes of row:
+  // operation -- remove the key -- whose meaning is decided by the NAME
+  // (isCuratedAlias), not data-kind (which a rename can leave stale until
+  // refreshAliasRowState runs). Three shapes of row:
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('.alias-delete');
     if (!btn) { return; }
@@ -234,7 +236,10 @@ function buildAliasScript() {
     if (!alias) { return; }
     // 2. a curated pin: back to FOLLOWING -- the row shows the shipped id it
     //    will resolve to; the alias still exists, so no strike-through.
-    if (btn.getAttribute('data-kind') === 'unpin') { unpinAliasRow(row); return; }
+    //    Decided by the NAME (isCuratedAlias), not data-kind: a rename can
+    //    cross the curated/custom boundary and refreshAliasRowState is what
+    //    keeps data-kind truthful for the rendered label and CSS.
+    if (isCuratedAlias(alias)) { unpinAliasRow(row); return; }
     // 3. a saved custom alias: strike it out and stage the delete. Until
     //    issue 238 Phase 3 this ran \`delete aliasEdits[alias]\`, which stages
     //    NOTHING -- the alias survived Finish (a silent no-op).

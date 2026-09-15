@@ -15,13 +15,20 @@ function parseCompound(sel) {
   const out = { tag: null, id: null, classes: [], attrs: [], not: [] };
   const re = /^([a-z]+)|#([\w-]+)|\.([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\]|:not\(\.([\w-]+)\)/g;
   let m;
+  let consumed = 0;
   while ((m = re.exec(sel)) !== null) {
+    // A gap means `re` skipped over something it doesn't support (`>`,
+    // `:first-child`, a single-quoted attribute value, ...) -- silently
+    // treating that as a wildcard is worse than a loud, named failure.
+    if (m.index !== consumed) { throw new Error('fake-dom: unsupported selector: ' + sel); }
+    consumed = re.lastIndex;
     if (m[1]) { out.tag = m[1].toUpperCase(); }
     else if (m[2]) { out.id = m[2]; }
     else if (m[3]) { out.classes.push(m[3]); }
     else if (m[4]) { out.attrs.push([m[4], m[5]]); }
     else if (m[6]) { out.not.push(m[6]); }
   }
+  if (consumed !== sel.length) { throw new Error('fake-dom: unsupported selector: ' + sel); }
   return out;
 }
 
@@ -87,6 +94,7 @@ class FakeElement {
   get options() { return this.querySelectorAll('option'); }
   appendChild(child) { if (child.parentNode) { child.remove(); } child.parentNode = this; this.children.push(child); return child; }
   insertBefore(child, ref) {
+    if (ref && this.children.indexOf(ref) === -1) { throw new Error('fake-dom: insertBefore ref is not a child'); }
     if (child.parentNode) { child.remove(); }
     child.parentNode = this;
     const i = ref ? this.children.indexOf(ref) : -1;
@@ -105,8 +113,14 @@ class FakeElement {
   /** Bubble `type` from this element to the document; the event carries `target` and `closest`-capable `target`. */
   dispatch(type, init = {}) {
     const event = { type, target: this, ...init };
+    // The propagation path is frozen BEFORE any listener runs (as a real
+    // browser computes it), so a listener that detaches an ancestor
+    // (e.g. `row.remove()`) mid-bubble cannot strand the event before it
+    // reaches `document`.
+    const path = [];
     let n = this;
-    while (n) { (n.listeners[type] || []).slice().forEach(fn => fn(event)); n = n.parentNode || (n === this.ownerDocument.body ? this.ownerDocument : null); }
+    while (n) { path.push(n); n = n.parentNode || (n === this.ownerDocument.body ? this.ownerDocument : null); }
+    path.forEach(node => (node.listeners[type] || []).slice().forEach(fn => fn(event)));
     return event;
   }
   click() { return this.dispatch('click'); }

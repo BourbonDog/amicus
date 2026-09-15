@@ -408,7 +408,7 @@ electron/
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-groups.js  # Setup UI - Alias grouping rule (issue 213)
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
-├── setup-ui-alias-state.js  # Inline page script: what an alias row MEANS (issue 238 D1/D9) and — Task 4
+├── setup-ui-alias-state.js  # Inline page script: what an alias row MEANS (issue 238 D1/D9) and what Finish writes for the Step 2 default (issue 238 Q9).
 ├── setup-ui-aliases.js  # Setup UI - Alias Editor
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
