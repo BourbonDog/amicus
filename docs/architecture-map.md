@@ -106,6 +106,7 @@ src/
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
+│   ├── aliases-owner.js  # `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as
 │   ├── aliases-review-gate.js  # Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split
 │   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
 │   ├── aliases-review-render.js  # Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4),
@@ -586,6 +587,7 @@ evals/
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
+| `sidecar/aliases-owner.js` | `amicus aliases --review --owner` (#238 D3/D4/D8): the SAME picker as | `runOwnerReview()`, `ownerGate()`, `routesByProvider()`, `routeDisagreements()` |
 | `sidecar/aliases-review-gate.js` | Pure §5-gate helpers for `amicus aliases --review` (#249 r1 R2/R3), split | `isFresh()`, `classifyTypedId()`, `notInCatalogLine()`, `notVerifiedLine()`, `staleCatalogBanner()` |
 | `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |
 | `sidecar/aliases-review-render.js` | Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4), | `ageLabel()`, `menuFor()`, `menuLineText()`, `renderScreen()`, `refreshingCatalogLine()` |

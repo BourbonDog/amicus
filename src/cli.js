@@ -155,6 +155,7 @@ const BOOLEAN_FLAGS = [
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
      'live',                 // models --check: opt-in probe of stored aliases with real engine legs (v4.6.2 PR3, spec §6)
      'review',               // aliases: interactive picker over the review proposals (#238 D4)
+     'owner',                // aliases --review: the shipped-pin sink (#238 D8, maintainers)
      'render',               // council verdict: also refresh report.html next to the decided verdict
      'claude',               // init: register for Claude Code only (Task 15)
      'desktop',              // init: register for Claude Desktop only (Task 15)
@@ -519,6 +520,9 @@ Options for 'aliases':
   --review                     Interactive picker: accept, choose, skip or dismiss each
                                proposal (stale pin, newer sibling, differs from the
                                shipped pin). Needs a terminal.
+  --owner                      With --review: the same picker over the SHIPPED pins
+                               (src/utils/curated-pins.json). Maintainers only — needs
+                               the amicus source checkout, a clean tree and a terminal.
   --unpin <alias>              Remove a pin: a curated name goes back to following, a
                                custom name is deleted
   --json                       Machine-readable document (aliases + proposals)
