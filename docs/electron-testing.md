@@ -602,3 +602,15 @@ node scripts/probe-darwin-extract.js
 The `rm -rf` is not cosmetic: `install.js` short-circuits on a populated `dist/`, and on a dev
 Mac that `dist/` may well be amicus's own self-heal output — which would make A4 compare
 amicus against amicus. The workflow does the same removal for the same reason.
+
+## Alias review pane (issue 238, Phase 3)
+
+`AMICUS_DEBUG_PORT=9333 node bin/amicus.js aliases --ui` opens the setup window on the Routing
+step with CDP enabled. To see a proposal without touching your real config, point
+`AMICUS_CONFIG_DIR` at a scratch dir holding a copy of `model-catalog.json` (fresher than
+24 h) and a `config.json` such as `{ "aliases": { "glm": "openrouter/z-ai/glm-5.3" } }` —
+the section proposes the newer sibling the catalog lists. The page's rows are `.alias-row`
+(`data-alias`, `data-state`), the section is `#alias-review` (`.alias-review-row` per
+proposal, `.alias-review-accept/-choose/-dismiss` buttons), and nothing reaches disk until
+Finish. The unit suite drives the same page functions against `tests/helpers/fake-dom.js`
+(there is no jsdom in this repo), so a CDP session is for eyes, not for assertions.
