@@ -156,6 +156,18 @@ describe('loadCuratedPins', () => {
 //   alias, a namespace the pin has no route in, an id outside the namespace,
 //   and a bad date (mutant PROVMATCH: drop the namespace check)"; every other
 //   test in this file stays green.
+// RE-MEASURED 2026-09-14, fix round 1 (`inNamespace` rewritten from a single
+// `segments.length === wanted` comparison to the `>= 2`/`=== 3` split; the
+// setPinRoute call site's line moved 177→178), same command/restore, clean
+// `git status --porcelain` after both:
+//   STAMP — RED widened to (2): the original test above, PLUS the new
+//   "setPinRoute accepts a 3-segment direct-provider id (model id containing
+//   a slash)" test below (it also asserts the stamped verifiedOn); every
+//   other test stays green.
+//   PROVMATCH — unchanged, still RED (1): only "setPinRoute refuses an
+//   unknown alias, a namespace the pin has no route in, an id outside the
+//   namespace, and a bad date (mutant PROVMATCH: drop the namespace check)";
+//   every other test, including both new fix-round-1 tests, stays green.
 describe('write half — saveCuratedPins / setPinRoute / setPinRuling (owner mode, #238 D8)', () => {
   const { loadCuratedPins, saveCuratedPins, setPinRoute, setPinRuling } = require(MOD);
   let dir;
