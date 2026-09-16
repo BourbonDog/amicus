@@ -311,6 +311,7 @@ more.
 | `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
 | `AMICUS_MAX_SESSIONS` | Maximum number of concurrent sessions the shared OpenCode server (`src/utils/shared-server.js`) will track before rejecting new ones. Renamed from `SIDECAR_MAX_SESSIONS` in v2.0.0. | `20` |
 | `AMICUS_BASE_URL_NORMALIZE` | Set `0` to stop amicus from carrying a host-form `ANTHROPIC_BASE_URL` into the engine as `<value>/v1`. Host-form is the Anthropic-SDK convention (the SDK appends `/v1`); OpenCode treats the value as a full prefix, so unnormalized host-form 404s every direct-Anthropic leg. | `1` |
+| `AMICUS_NO_NETWORK_PROBES` | Set `1` to turn off the live provider probes `amicus doctor` runs AND the weekly background catalog refresh + the once-a-day alias notice (#238 D5). Only the literal `1` counts. | *(unset)* |
 
 ---
 
@@ -540,7 +541,7 @@ amicus models --check && echo "aliases ok"
 
 ## Model Aliases
 
-Aliases are short names that resolve to full provider-prefixed model IDs. Amicus ships a curated set (`gemini`, `gpt`, `opus`, `deepseek`, `claude`, `glm`, …) that resolves to the pins the package ships — an alias you have not pinned FOLLOWS those pins and moves with each release. `amicus setup` no longer copies them into your config; it pins only the default alias you chose, and only when its live flagship differs from the shipped pin. See `amicus aliases` for what resolves on your machine. You add or override aliases with:
+Aliases are short names that resolve to full provider-prefixed model IDs. Amicus ships a curated set (`gemini`, `gpt`, `opus`, `deepseek`, `claude`, `glm`, …) that resolves to the pins the package ships — an alias you have not pinned FOLLOWS those pins and moves with each release. `amicus setup` no longer copies them into your config; it pins only the default alias you chose, and only when its live flagship differs from the shipped pin. See `amicus aliases` for what resolves on your machine. Amicus tells you once a day, after any command, when the cached catalog shows updates waiting, and refreshes that catalog in the background once a week — see [usage.md § Aliases](./usage.md#aliases-following-vs-pinned) for the notice, the refresh and the two ways to turn them off. You add or override aliases with:
 
 ```bash
 amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview
@@ -700,9 +701,16 @@ level includes everything above it.
     "tier_onboarded": true
   },
 
-  // Written by `amicus aliases --review`'s "never ask again" — keyed
-  // `alias@proposedId`; hand-delete a key here to be asked again.
+  // `dismissed` is written by `amicus aliases --review`'s "never ask again" —
+  // keyed `alias@proposedId`; hand-delete a key here to be asked again.
+  // `autoRefresh: false` turns off the weekly background catalog refresh AND
+  // the once-a-day "N alias updates available" notice (#238 D5) — only a
+  // literal false does; `AMICUS_NO_NETWORK_PROBES=1` or a CI environment
+  // turns both off without a config file. `lastNotified` (epoch ms) is
+  // written automatically when the notice fires — don't hand-edit it.
   "aliasReview": {
+    "autoRefresh": true,
+    "lastNotified": 1757980800000,
     "dismissed": { "glm@openrouter/z-ai/glm-5.4": "2026-09-14T00:00:00.000Z" }
   },
 
