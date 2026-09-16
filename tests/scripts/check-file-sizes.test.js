@@ -143,7 +143,7 @@ describe('check-file-sizes', () => {
       // path is dropped before the read and this would assert on an empty list.
       //
       // That makes this the one test in the suite that writes into a shipped
-      // source dir — and src/ is walked by three suites running in parallel jest
+      // source dir — and src/ is walked by five suites running in parallel jest
       // workers. They read through tests/helpers/read-if-present.js, so this file
       // vanishing between their listing and their read is a skip rather than an
       // ENOENT that kills the suite. Keep that seam in mind before adding another
