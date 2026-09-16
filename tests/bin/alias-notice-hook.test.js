@@ -55,6 +55,7 @@ describe('the exit hook, wired (#238 D5)', () => {
     expect(r.stderr.trimEnd().endsWith(LINE)).toBe(true);
     expect(r.stderr).toContain('Update available');            // the slot's other tenant printed first
     expect(config().aliasReview.lastNotified).toBeGreaterThanOrEqual(before);
+    expect(config().aliases).toEqual({ mine: 'openrouter/acme/model-1.0' });   // M8: the real saveConfig kept the alias
   });
   test('a second run within the day is silent and does not re-stamp (Q5)', () => {
     run(['list'], { tty: true });
@@ -84,6 +85,13 @@ describe('the exit hook, wired (#238 D5)', () => {
     const r = run([], { tty: true });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('Usage');
+    expect(r.stderr).not.toContain('alias update');
+    expect(config().aliasReview).toBeUndefined();
+  });
+  test('an unknown command (usage, exit 1) is not a run: nothing printed, nothing written (R-P4-12; mutant UNKNOWNCMD)', () => {
+    const r = run(['bogus'], { tty: true });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('Unknown command');
     expect(r.stderr).not.toContain('alias update');
     expect(config().aliasReview).toBeUndefined();
   });

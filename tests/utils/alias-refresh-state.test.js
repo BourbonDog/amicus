@@ -58,6 +58,7 @@ describe('exitHookAllowed — the per-invocation half, one term each', () => {
     expect(exitHookAllowed({ ...ok, args: { quiet: 'x' } })).toBe(false);
   });
   test('the mcp command (mutant MCPON)', () => { expect(exitHookAllowed({ ...ok, command: 'mcp' })).toBe(false); });
+  test('the update command — its exit runs after the install directory was replaced (R-P4-12; mutant UPDATEON)', () => { expect(exitHookAllowed({ ...ok, command: 'update' })).toBe(false); });
   test('no command — a bare `amicus` printing usage is not a run (R-P4-12; mutant NOCOMMAND)', () => {
     expect(exitHookAllowed({ ...ok, command: undefined })).toBe(false);
     expect(exitHookAllowed({ ...ok, command: '' })).toBe(false);

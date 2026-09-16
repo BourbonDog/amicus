@@ -15,9 +15,11 @@
  * (alias-proposals.js :: buildAliasProposals) over the in-memory normalized
  * aliases — the no-write probe sidecar/aliases.js :: normalizeOnEntry takes
  * with `write: false`. The notice path never networks and writes nothing but
- * `config.aliasReview.lastNotified` (`stampAliasReview`, the config.js ::
- * markMigrationNotified shape: load, set, save, swallow — and saveConfig's
- * own D6 normalization rides that write, once, visibly).
+ * `config.aliasReview.lastNotified`, mutated onto the config this exit
+ * already loaded and saved once (`stampAliasReview`) — never re-read, so a
+ * config that failed to load (missing or unparseable, R-P4-13) leaves the
+ * hook nothing to stamp and nothing to be told about; saveConfig's own D6
+ * normalization rides that write, once, visibly.
  *
  * The refresh is `amicus models --refresh` in a detached child of this very
  * binary — keys included, the SAME model-catalog.js :: refreshCatalog (a
@@ -27,13 +29,16 @@
  * out of libuv's kill-on-close job, `windowsHide` keeps a console window from
  * opening on Windows. Its stdin is not a terminal, so the child's own exit
  * hook is silent by `exitHookAllowed`'s first term: no recursion.
- * `runExitHook` stamps `config.aliasReview.lastRefreshSpawned` before it
- * spawns and never starts another child within a day of it (R-P4-11 —
- * `refreshCatalog` writes the cache only at its end, so `fetchedAt` alone
- * cannot tell a running refresh from a missing one); `refreshDue` also backs
- * off a day after a failed attempt (`lastRefreshAttempt`, model-catalog.js ::
- * writeRefreshFailure) for a config dir that cannot be written. A
- * future-dated stamp reads as never (a wrong clock self-heals).
+ * `runExitHook` stamps `config.aliasReview.lastRefreshSpawned` on that same
+ * loaded config before it spawns, and the spawn happens only when the stamp
+ * could be saved — no receipt, no spawn (R-P4-11): `refreshCatalog` writes
+ * the cache only at its end, so `fetchedAt` alone cannot tell a running
+ * refresh from a missing one, and a config dir that cannot be written must
+ * not spawn a child on every exit. `refreshDue` separately backs off a day
+ * after an attempt that ran and failed (`lastRefreshAttempt`,
+ * model-catalog.js :: writeRefreshFailure) — a different case from the
+ * unwritable directory the stamp receipt now covers. A future-dated stamp
+ * reads as never (a wrong clock self-heals).
  */
 
 'use strict';
@@ -81,17 +86,19 @@ function loadDeps() {
  * Cache-only proposal count (§5 display gate) over the normalized-in-memory aliases.
  * @param {object} [d] collaborators
  * @param {object|null} [cfg] the loaded config, when the caller already holds it
+ * @param {object|null} [doc] the cache document, when the caller already holds it
  * @returns {number} 0 on any failure — a count nobody can verify is not printed
  */
-function countProposals(d, cfg) {
+function countProposals(d, cfg, doc) {
   try {
     d = d || loadDeps();
     if (cfg === undefined) { cfg = d.loadConfig(); }
+    if (doc === undefined) { doc = d.readCache(); }
     const defaults = d.getDefaultAliases();
     const raw = cfg && cfg.aliases && typeof cfg.aliases === 'object' ? cfg.aliases : {};
     const userAliases = d.normalizeAliases(raw, defaults).aliases;
     const { retired, notable } = d.loadCuratedPins();
-    const catalogInfo = catalogInfoFromCache(d.readCache());
+    const catalogInfo = catalogInfoFromCache(doc);
     return d.buildAliasProposals({ userAliases, defaults, catalogInfo, retired, notable, dismissed: d.readDismissals() }).length;
   } catch { return 0; }
 }
@@ -129,19 +136,30 @@ function spawnDetachedRefresh(d) {
   } catch { return false; }
 }
 
-/** Best-effort `config.aliasReview[key] = now` — the config.js :: markMigrationNotified shape: load, set, save, swallow. */
-function stampAliasReview(key, now, d) {
+/**
+ * Best-effort `config.aliasReview[key] = now` on the config THIS exit already
+ * loaded — mutated in place and saved, never re-read (R-P4-13): config.js ::
+ * saveConfig is a plain truncate-and-write, so a second `loadConfig()` that came
+ * back null (a transient read failure, another amicus process mid-write) used
+ * to be saved as `{ aliasReview }`, wiping the user's config.
+ * @param {object} cfg the config `runExitHook` loaded — never null here
+ * @param {'lastNotified'|'lastRefreshSpawned'} key
+ * @param {number} now
+ * @param {object} d collaborators
+ * @returns {boolean} true when the save landed — the refresh's receipt (R-P4-11)
+ */
+function stampAliasReview(cfg, key, now, d) {
   try {
-    const cfg = d.loadConfig() || {};
     if (!cfg.aliasReview || typeof cfg.aliasReview !== 'object') { cfg.aliasReview = {}; }
     cfg.aliasReview[key] = now;
     d.saveConfig(cfg);
-  } catch { /* a persistence hiccup never touches the command that just finished */ }
+    return true;
+  } catch { return false; }   // a persistence hiccup never touches the command that just finished
 }
 
 /**
  * The exit hook. Decides, stamps, prints at most one line, spawns — or does nothing.
- * @param {{code: number, command: string, args: object, stdinIsTTY: boolean}} run the finished command
+ * @param {{code: number, command: string, args: object, stdinIsTTY: boolean}} [run] the finished command
  * @param {object} [d] collaborators
  * @returns {{notice: boolean, refresh: boolean}} what fired — never throws
  */
@@ -151,20 +169,25 @@ function runExitHook(run, d) {
     d = d || loadDeps();
     const { code, command, args, stdinIsTTY } = run || {};
     const cfg = d.loadConfig();
-    if (!exitHookAllowed({ command, args, stdinIsTTY, config: cfg, env: d.env })) { return out; }
+    // R-P4-13: no config (missing or unparseable) → nothing to be told about, nowhere to stamp.
+    if (!cfg || !exitHookAllowed({ command, args, stdinIsTTY, config: cfg, env: d.env })) { return out; }
     const now = d.now();
-    const ar = cfg && cfg.aliasReview && typeof cfg.aliasReview === 'object' ? cfg.aliasReview : {};
+    const doc = d.readCache();   // once per exit — the count and the refresh decision share it
+    const ar = cfg.aliasReview && typeof cfg.aliasReview === 'object' ? cfg.aliasReview : {};
     // `amicus aliases` IS the notice's destination and already prints the count — no echo behind it.
     if (command !== 'aliases' && expired(ar.lastNotified, NOTICE_INTERVAL_MS, now)) {
-      const n = countProposals(d, cfg);
+      const n = countProposals(d, cfg, doc);
       if (n > 0) {
-        stampAliasReview('lastNotified', now, d);   // first, so the notice is the last line on stderr (saveConfig may print D6 Notices)
+        stampAliasReview(cfg, 'lastNotified', now, d);   // first, so the notice is the last line on stderr (saveConfig may print D6 Notices)
         d.stderr.write(`\n  ${n} alias update${n === 1 ? '' : 's'} available — amicus aliases --review\n`);
         out.notice = true;
       }
     }
-    if (code === 0 && refreshDue(d.readCache(), now, ar.lastRefreshSpawned)) {
-      stampAliasReview('lastRefreshSpawned', now, d);   // R-P4-11: before the spawn — the child's own writes come only at its end
+    // R-P4-11: the start is stamped BEFORE the spawn and the spawn needs the receipt — on a
+    // config dir that cannot be written, neither this stamp nor the catalog's own
+    // lastRefreshAttempt can land, so "no receipt, no spawn" is what keeps one exit from
+    // becoming one child per exit.
+    if (code === 0 && refreshDue(doc, now, ar.lastRefreshSpawned) && stampAliasReview(cfg, 'lastRefreshSpawned', now, d)) {
       out.refresh = spawnDetachedRefresh(d);
     }
   } catch { /* best-effort: an awareness feature never fails a finished command */ }

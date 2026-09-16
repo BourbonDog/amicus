@@ -119,7 +119,8 @@ async function main() {
     // Registered after the update listener so the notice is the last line.
     const { runExitHook } = require('../src/utils/alias-notice');
     const stdinIsTTY = !!process.stdin.isTTY;
-    process.on('exit', (code) => { runExitHook({ code, command, args, stdinIsTTY }); });
+    const hookCommand = getCommandNames().includes(command) ? command : '';   // an unknown command prints usage and exits 1 — not a run either (R-P4-12)
+    process.on('exit', (code) => { runExitHook({ code, command: hookCommand, args, stdinIsTTY }); });
   }
 
   // `pack save` documents a per-pack `--pack-version <semver>`. `--version` is a

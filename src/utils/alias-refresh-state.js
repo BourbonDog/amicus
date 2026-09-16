@@ -1,8 +1,6 @@
 /**
  * @module utils/alias-refresh-state
- * #238 D5/Q8 — the ONE predicate behind the passive alias notice and the
- * opportunistic background catalog refresh, and the `amicus aliases` footer
- * line that names its standing half.
+ * #238 D5/Q8 — the one predicate behind the alias notice and the background refresh, and the aliases footer line.
  *
  * Two layers, one truth. `refreshState` is the STANDING half — what a user
  * can turn off and keep off: `config.aliasReview.autoRefresh: false` (only a
@@ -10,7 +8,7 @@
  * utils/live-probes.js :: liveProbesAllowed — the same literal '1'), or a CI
  * environment. `exitHookAllowed` adds the per-invocation half — a terminal on
  * stdin, a command (a bare `amicus` printing usage is not a run — R-P4-12),
- * not `--json`, not `--quiet`, not the `mcp` command — and is what
+ * not `--json`, not `--quiet`, not the `mcp` command, not `update` — and is what
  * bin/amicus.js's exit hook asks through utils/alias-notice.js. No new
  * environment variable (Q8).
  *
@@ -56,11 +54,13 @@ function refreshState({ config = null, env = process.env } = {}) {
 /**
  * The whole predicate — the notice and the refresh both hang on it (D5).
  * @param {{command: string, args: object, stdinIsTTY: boolean, config?: object|null, env?: object}} input
- * @param {string} input.command the dispatched command; absent (a bare `amicus` printing usage) is not a run
+ * @param {string} input.command the dispatched command; absent (a bare `amicus` printing usage) is not a
+ *   run, and neither is `mcp` (a JSON-RPC channel) or `update` (its exit runs after `npm install -g` has
+ *   replaced the install directory — a mixed-version module graph at exit)
  * @returns {boolean}
  */
 function exitHookAllowed({ command, args, stdinIsTTY, config = null, env = process.env }) {
-  if (!stdinIsTTY || typeof command !== 'string' || command.length === 0 || command === 'mcp') { return false; }
+  if (!stdinIsTTY || typeof command !== 'string' || command.length === 0 || command === 'mcp' || command === 'update') { return false; }
   if (args && (args.json || args.quiet)) { return false; }
   return refreshState({ config, env }).enabled;
 }

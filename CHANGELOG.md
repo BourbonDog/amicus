@@ -33,18 +33,21 @@ All notable changes to Amicus are documented here. Format follows
   --review` — when the cached catalog shows updates waiting (at most once per 24 h, stamped in
   `aliasReview.lastNotified`; never computed from the network). After a command that exits 0 with a
   cached catalog older than seven days, the same keyed refresh `amicus models --refresh` performs
-  runs detached in the background (at most one is started per day — `aliasReview.lastRefreshSpawned`;
-  a failed attempt is retried a day later, not per command; no cache at all is not refreshed —
+  runs detached in the background (at most one is started per day, and only when that start could
+  be recorded in `aliasReview.lastRefreshSpawned`; a failed attempt is retried a day later, not per
+  command; no cache at all is not refreshed —
   `setup`/`doctor`/`models` create it). One predicate gates both: a
   terminal on stdin, not `--json`/`--quiet`, not `amicus mcp`, not CI, `AMICUS_NO_NETWORK_PROBES`
-  unset, `aliasReview.autoRefresh` not `false` — no new environment variable. `amicus aliases`'
+  not `1`, `aliasReview.autoRefresh` not `false` — no new environment variable — and `amicus
+  aliases` itself, which shows the count in its own footer, gets no notice. `amicus aliases`'
   footer names the state (`background catalog refresh: on (weekly) — catalog is 3 days old`); the
   `amicus models --refresh` hint that line replaces now rides only when nothing else will refresh
   (off and older than a day, on and older than a week); `--json` carries
   `backgroundRefresh: { enabled, disabledBy }`.
 - **The notable list** (#238 D7, editorial half) — `curated-pins.json`'s `notable` entries are shipped
   `add <alias> → <id>` proposals for models no sibling rule can reach (a new vendor or family, never
-  a new version of a pinned model); the curation rule and the content gate that enforces its
+  a new version of a pinned model); the list ships empty — the rule and its gate are the
+  deliverable; the curation rule and the content gate that enforces its
   mechanical half live in docs/usage.md (Owner mode) and `tests/utils/curated-pins-notable.test.js`.
 - **Setup window — "Needs review" section and per-row state (Electron):** the Model Routing
   step now shows every alias as `following` or `pinned` with the right remove control

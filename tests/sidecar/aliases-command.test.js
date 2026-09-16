@@ -38,7 +38,15 @@ function mockPins({ retired = {}, notable = [] } = {}) {
 // restored after the whole file finishes, since a CI runner's own real CI
 // env would otherwise leak into (and out of) every test in this file.
 const savedCI = process.env.CI;
-afterAll(() => { if (savedCI === undefined) { delete process.env.CI; } else { process.env.CI = savedCI; } });
+// I2: collectAliasView reads process.env.AMICUS_NO_NETWORK_PROBES directly (Q8's env
+// escape hatch) -- an air-gapped machine's ambient AMICUS_NO_NETWORK_PROBES=1 would
+// otherwise read as "off (...)" and break the same footer/--json assertions a leaked
+// real CI env would.
+const savedNoNetworkProbes = process.env.AMICUS_NO_NETWORK_PROBES;
+afterAll(() => {
+  if (savedCI === undefined) { delete process.env.CI; } else { process.env.CI = savedCI; }
+  if (savedNoNetworkProbes === undefined) { delete process.env.AMICUS_NO_NETWORK_PROBES; } else { process.env.AMICUS_NO_NETWORK_PROBES = savedNoNetworkProbes; }
+});
 
 describe('amicus aliases (#238 D4 — list and --json)', () => {
   let cfg, handleAliases;
@@ -51,6 +59,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
   beforeEach(() => {
     jest.resetModules();
     process.env.CI = '0';   // Q8: a bare CI=true here would read as "off (CI)" and break the "on (weekly)" assertions
+    delete process.env.AMICUS_NO_NETWORK_PROBES;   // I2: hermetic against an ambient AMICUS_NO_NETWORK_PROBES=1
     process.env.AMICUS_CONFIG_DIR = path.join(os.tmpdir(), `amicus-aliases-cmd-${process.pid}-${Date.now()}`);
     fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
     catalogCalls = [];

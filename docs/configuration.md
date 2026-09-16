@@ -708,8 +708,8 @@ level includes everything above it.
   // literal false does; `AMICUS_NO_NETWORK_PROBES=1` or a CI environment
   // turns both off without a config file. `lastNotified` and
   // `lastRefreshSpawned` (epoch ms) are written automatically — when the
-  // notice fires, and when a background refresh is started — don't hand-edit
-  // them.
+  // notice fires, and when a background refresh is started (a refresh only
+  // starts if that stamp could be saved) — don't hand-edit them.
   "aliasReview": {
     "autoRefresh": true,
     "lastNotified": 1757980800000,

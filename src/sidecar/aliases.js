@@ -81,7 +81,7 @@ function normalizeOnEntry(d, write = true) {
 /**
  * @param {{maxAgeMs?: number, write?: boolean}} [opts] `maxAgeMs: Number.POSITIVE_INFINITY` = cache only;
  *   `write: false` = normalize in memory only (the wizard's IPC view)
- * @returns {Promise<{rows: Array, proposals: Array, catalogInfo: object, catalogAvailable: boolean, retired: object}>}
+ * @returns {Promise<{rows: Array, proposals: Array, catalogInfo: object, catalogAvailable: boolean, retired: object, refreshState: {enabled: boolean, disabledBy: null|string}}>}
  */
 async function collectAliasView(opts = {}, d = loadDeps()) {
   const userAliases = normalizeOnEntry(d, opts.write !== false);

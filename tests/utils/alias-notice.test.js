@@ -228,6 +228,41 @@ describe('runExitHook — the refresh', () => {
   });
 });
 
+describe('runExitHook — R-P4-13 (the stamp never re-reads) and R-P4-11 (no receipt, no spawn)', () => {
+  test('no config at all: a skipped exit, not a config created from nothing (mutant NULLCONFIG)', () => {
+    let reads = 0;
+    const { d, rec } = deps({ config: null, catalog: STALE, deps: { readCache: () => { reads += 1; return STALE; } } });
+    expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: false });
+    expect(rec.saves).toEqual([]);
+    expect(rec.spawns).toEqual([]);
+    expect(reads).toBe(0);
+  });
+  test('a loadConfig that only succeeds once: the stamp saves the config already in hand, never a re-read (mutant RELOAD, the C1 reproduction)', () => {
+    const full = { default: 'gemini', aliases: { mine: 'openrouter/z-ai/glm-5.2' }, routing: { prefer: 'direct' } };
+    let calls = 0;
+    const { d, rec } = deps({
+      config: full,
+      deps: { loadConfig: () => { calls += 1; return calls === 1 ? JSON.parse(JSON.stringify(full)) : null; } },
+    });
+    expect(runExitHook(RUN, d).notice).toBe(true);
+    expect(rec.saves).toHaveLength(1);
+    // a re-reading stamp would have saved `{ aliasReview: {...} }` — the second loadConfig() call
+    // returns null above, and a save of `{}` plus the stamp would fail this deep equality.
+    expect(rec.saves[0]).toEqual({ ...full, aliasReview: { lastNotified: NOW } });
+  });
+  test('a config dir that cannot be written spawns nothing: no receipt, no spawn (mutant NORECEIPT)', () => {
+    const { d, rec } = deps({ config: { aliases: {} }, catalog: STALE, deps: { saveConfig: () => { throw new Error('EROFS'); } } });
+    expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: false });
+    expect(rec.spawns).toEqual([]);
+  });
+  test('both fire in one exit: the catalog cache is read exactly once (mutant ONEREAD)', () => {
+    let reads = 0;
+    const { d } = deps({ catalog: STALE, deps: { readCache: () => { reads += 1; return STALE; } } });
+    expect(runExitHook(RUN, d)).toEqual({ notice: true, refresh: true });
+    expect(reads).toBe(1);
+  });
+});
+
 test('never throws: no arguments, a null run, a throwing loadConfig in countProposals', () => {
   // No deps supplied: runExitHook falls back to the real loadDeps()/loadConfig() (the
   // hermetic scratch config dir, per tests/setup/hermetic-config-dir.js) — reading an
