@@ -44,8 +44,9 @@ All notable changes to Amicus are documented here. Format follows
   `amicus models --refresh` hint that line replaces now rides only when nothing else will refresh
   (off and older than a day, on and older than a week); `--json` carries
   `backgroundRefresh: { enabled, disabledBy }`. The hook never writes `config.json` — its two
-  timestamps live in `alias-notice-state.json` beside the catalog cache (atomic writes; safe to
-  delete), and when that file cannot be written neither the notice nor the refresh runs.
+  timestamps live in `alias-notice-state/` beside the catalog cache (atomic writes; safe to
+  delete), and when that file cannot be written neither the notice nor the refresh runs (the
+  refresh's output lands in `last-refresh.log` there).
 - **The notable list** (#238 D7, editorial half) — `curated-pins.json`'s `notable` entries are shipped
   `add <alias> → <id>` proposals for models no sibling rule can reach (a new vendor or family, never
   a new version of a pinned model); the list ships empty — the rule and its gate are the

@@ -12,11 +12,13 @@
  * bin/amicus.js's exit hook asks through utils/alias-notice.js. No new
  * environment variable (Q8).
  *
- * The CI signal is `is-in-ci`'s — the check update-notifier honours (MIT,
- * sindresorhus/is-in-ci@1.0.0): `CI` set to anything but `0`/`false`,
- * `CONTINUOUS_INTEGRATION` set, or any `CI_*` variable. Re-stated here
- * because that package is ESM-only and `ci-info` reaches this tree only
- * through jest — a devDependency an installed copy does not have.
+ * The CI signal is `is-in-ci@1.0.0`'s — the version `update-notifier@7.3.1`
+ * resolves (`^1.0.0`) — restated verbatim: `CI` set to anything but
+ * `0`/`false`, `CONTINUOUS_INTEGRATION` set, or any `CI_*` variable.
+ * Re-stated here because that package is ESM-only and `ci-info` reaches this
+ * tree only through jest — a devDependency an installed copy does not have.
+ * `is-in-ci@2.0.0` dropped the `CI_*` scan and is not what the updater
+ * honours.
  *
  * `catalogInfoFromCache` is the cache-only (§5 display gate) read the list
  * (sidecar/aliases.js :: collectAliasView) and the notice share: whatever is

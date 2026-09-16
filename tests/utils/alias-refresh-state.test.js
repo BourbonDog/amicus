@@ -6,6 +6,8 @@
  * line (spec §4), and the cache-only catalogInfo read. Pure: env and config
  * are arguments, never process state.
  */
+const fs = require('fs');
+const path = require('path');
 const {
   refreshState, exitHookAllowed, refreshStateLine, catalogInfoFromCache, REFRESH_MAX_AGE_MS,
 } = require('../../src/utils/alias-refresh-state');
@@ -46,6 +48,52 @@ describe('refreshState — the standing half (config, env, CI)', () => {
     expect(refreshState({ config: { aliasReview: { autoRefresh: false } }, env }).disabledBy).toBe('config');
     expect(refreshState({ env }).disabledBy).toBe('env');
   });
+});
+
+describe('isInCi is the installed is-in-ci, by measurement (R-P4-21)', () => {
+  let resolved;
+  try {
+    resolved = require.resolve('is-in-ci');
+  } catch (err) {
+    test.skip(`is-in-ci is not installed in node_modules (${err.message})`, () => {});
+  }
+
+  if (resolved) {
+    // Re-derive the real predicate from the installed package's OWN source, so this test
+    // measures the actual dependency rather than trusting our restated docblock. The package
+    // is ESM (`import {env} from 'node:process'; ... export default isInCi;`) — strip both
+    // lines and evaluate the remainder as a function body over a parameter named `env`, which
+    // is exactly what the stripped `const isInCi = env.CI !== ...` expression closes over.
+    const src = fs.readFileSync(resolved, 'utf8')
+      .replace("import {env} from 'node:process';", '')
+      .replace('export default isInCi;', '');
+    const realIsInCi = new Function('env', `${src}\nreturn isInCi;`);
+
+    // require.resolve('is-in-ci/package.json') throws ERR_PACKAGE_PATH_NOT_EXPORTED — the
+    // package's "exports" map only publishes "." and "./index.d.ts" — so read the file
+    // directly out of the resolved package directory instead.
+    const installedVersion = JSON.parse(
+      fs.readFileSync(path.join(path.dirname(resolved), 'package.json'), 'utf8')
+    ).version;
+
+    const matrix = [
+      {}, { CI: 'true' }, { CI: '' }, { CI: '0' }, { CI: 'false' },
+      { CONTINUOUS_INTEGRATION: '1' }, { CI_NAME: 'x' }, { CI: '0', CI_NAME: 'x' },
+      { CI: 'false', CONTINUOUS_INTEGRATION: '1' }, { CIRCLE: '1' }, { GITHUB_ACTIONS: 'true' },
+    ];
+
+    test('refreshState({ env }).disabledBy === "ci" exactly when the installed is-in-ci says so', () => {
+      for (const env of matrix) {
+        const ours = refreshState({ env }).disabledBy === 'ci';
+        const theirs = !!realIsInCi(env);
+        expect({ env, ours }).toEqual({ env, ours: theirs });
+      }
+    });
+
+    test('the installed is-in-ci is a 1.x — the version update-notifier@7.3.1 resolves', () => {
+      expect(installedVersion).toMatch(/^1\./);
+    });
+  }
 });
 
 describe('exitHookAllowed — the per-invocation half, one term each', () => {

@@ -9,9 +9,12 @@
  * tests/utils/alias-refresh-state.test.js; here the predicate is one gate.
  * The engines (normalizeAliases, buildAliasProposals) are the real ones —
  * pure — over a synthetic `defaults` map (never the live shipped pins).
- * Council #254 round 1: the two stamps live in `alias-notice-state.json`,
- * never in config — `saveConfig` stays in the recorder only as a TRIPWIRE
- * (mutant CONFIGWRITE), asserted empty in every test below that fires.
+ * Council #254 rounds 1–2: the two stamps live one-per-file in
+ * `alias-notice-state/`, never in config — `saveConfig` stays in the
+ * recorder only as a TRIPWIRE (mutant CONFIGWRITE), asserted empty in every
+ * test below that fires. The refresh child's log open/close are recorded
+ * too (mutant LEAKFD: no close; mutant LOGREQUIRED: the log is best-effort,
+ * never a gate on the spawn).
  */
 const { runExitHook, countProposals, refreshDue, spawnDetachedRefresh } = require('../../src/utils/alias-notice');
 const { REFRESH_MAX_AGE_MS } = require('../../src/utils/alias-refresh-state');
@@ -39,6 +42,7 @@ function deps(over = {}) {
   };
   const rec = {
     saves: [], stateWrites: [], spawns: [], stderr: '', unrefs: 0, listened: [],
+    logOpens: [], logCloses: [],
     calls: { loadConfig: 0, readCache: 0, readNoticeState: 0 },
   };
   const d = {
@@ -52,6 +56,9 @@ function deps(over = {}) {
     readCache: () => { rec.calls.readCache += 1; return disk.catalog; },
     readNoticeState: () => { rec.calls.readNoticeState += 1; return { ...disk.state }; },
     writeNoticeState: (patch) => { rec.stateWrites.push({ ...patch }); Object.assign(disk.state, patch); return true; },
+    refreshLogPath: () => '/state/last-refresh.log',
+    openRefreshLog: (p) => { rec.logOpens.push(p); return 7; },
+    closeRefreshLog: (fd) => { rec.logCloses.push(fd); },
     spawn: (file, args, opts) => {
       rec.spawns.push({ file, args, opts });
       return { on: (ev) => { rec.listened.push(ev); }, unref: () => { rec.unrefs += 1; } };
@@ -119,20 +126,28 @@ describe('refreshDue — Q1 with the daily back-off', () => {
 });
 
 describe('spawnDetachedRefresh — the workspace-window.js shape', () => {
-  test("this binary, models --refresh, detached, silent, hidden, unref'd, error-listened", () => {
+  test("this binary, models --refresh, detached, hidden, unref'd, error-listened, logged (R-P4-19)", () => {
     const { d, rec } = deps();
     expect(spawnDetachedRefresh(d)).toBe(true);
     expect(rec.spawns).toEqual([{
       file: '/usr/bin/node',
       args: ['/repo/bin/amicus.js', 'models', '--refresh'],
-      opts: { detached: true, stdio: 'ignore', windowsHide: true, env: d.env },
+      opts: { detached: true, stdio: ['ignore', 7, 7], windowsHide: true, env: d.env },
     }]);
     expect(rec.unrefs).toBe(1);
     expect(rec.listened).toEqual(['error']);
+    expect(rec.logOpens).toEqual(['/state/last-refresh.log']);
+    expect(rec.logCloses).toEqual([7]);   // mutant LEAKFD: no close
   });
   test('a throwing spawn is false, not a throw', () => {
     const { d } = deps({ deps: { spawn: () => { throw new Error('ENOENT'); } } });
     expect(spawnDetachedRefresh(d)).toBe(false);
+  });
+  test('a throwing openRefreshLog still spawns, with stdio "ignore" (mutant LOGREQUIRED: return false when the log cannot open)', () => {
+    const { d, rec } = deps({ deps: { openRefreshLog: () => { throw new Error('EACCES'); } } });
+    expect(spawnDetachedRefresh(d)).toBe(true);
+    expect(rec.spawns[0].opts.stdio).toBe('ignore');
+    expect(rec.logCloses).toEqual([]);   // nothing was opened, so nothing to close
   });
 });
 
@@ -252,14 +267,12 @@ describe('runExitHook — the refresh', () => {
   });
 });
 
-describe('runExitHook — R-P4-13 (no config, nothing to tell) and R-P4-11 (no receipt, no spawn)', () => {
-  test('no config at all: a skipped exit, not a config created from nothing (mutant NULLCONFIG)', () => {
+describe('runExitHook — R-P4-20 (a missing config reads as {}) and R-P4-11 (no receipt, no spawn)', () => {
+  test('no config at all reads as {}: no pins to review, but the refresh still runs on an aging catalog (mutant NULLCONFIG-EMPTY)', () => {
     const { d, rec } = deps({ config: null, catalog: STALE });
-    expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: false });
+    expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: true });
     expect(rec.saves).toEqual([]);
-    expect(rec.spawns).toEqual([]);
-    expect(rec.calls.readCache).toBe(0);
-    expect(rec.calls.readNoticeState).toBe(0);
+    expect(rec.calls.readCache).toBe(1);
   });
   test('loadConfig is read exactly once, and the notice never lands through saveConfig (mutant CONFIGWRITE)', () => {
     const full = { default: 'gemini', aliases: { mine: 'openrouter/z-ai/glm-5.2' }, routing: { prefer: 'direct' } };

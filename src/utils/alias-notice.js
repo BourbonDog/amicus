@@ -11,22 +11,27 @@
  * a finished command into a failed or noisier one. The count comes from the
  * catalog CACHE at any age (§5 display gate) through the same engine the
  * list and the pickers use (alias-proposals.js :: buildAliasProposals) over
- * the in-memory normalized aliases — the no-write probe sidecar/aliases.js
- * :: normalizeOnEntry takes with `write: false`. The hook only ever READS
- * `config.json` (aliases, dismissals, `aliasReview.autoRefresh`); it never
- * writes it. Council #254 round 1 (A2/D5, A1/D3): the two timestamps this
- * hook used to stamp into config.json now live in their own machine-owned
- * file, `alias-notice-state.json` (utils/alias-notice-state.js), written
- * atomically — no more truncate-and-write of the user's config at the exit
- * of routine commands, and no more D6 normalization side effect riding the
- * first stamp. "No receipt, no spawn" (R-P4-11) becomes "no receipt, no
- * notice or spawn" (R-P4-15): a state-file write that fails leaves the
- * command silent rather than nagging on every exit, and a config that failed
- * to load (missing or unparseable, R-P4-13) leaves the hook nothing to
- * count and nothing to be told about. R-P4-17: the cheap per-invocation and
- * environment terms of the predicate run before `loadConfig` or either file
- * read, so a vetoed exit (no terminal, `--json`, `--quiet`, `mcp`, `update`)
- * touches no file at all.
+ * the in-memory normalized aliases — the same in-memory normalization
+ * `sidecar/aliases.js :: normalizeOnEntry` performs with `write: false`. The
+ * hook only ever READS `config.json` (aliases, dismissals,
+ * `aliasReview.autoRefresh`); it never writes it. Council #254 round 1
+ * (A2/D5, A1/D3) moved the two timestamps this hook used to stamp into
+ * config.json into their own machine-owned state; round 2 (R-P4-18/19)
+ * split that into a directory, `alias-notice-state/` (utils/alias-notice-state.js)
+ * — one file per stamp, `last-notified.json` and `last-refresh-spawned.json`,
+ * each written atomically — plus `last-refresh.log`, the detached refresh
+ * child's own stdout+stderr. No more truncate-and-write of the user's config
+ * at the exit of routine commands, no more D6 normalization side effect
+ * riding the first stamp, and no read-merge-write across the two stamps.
+ * "No receipt, no spawn" (R-P4-11) becomes "no receipt, no notice or spawn"
+ * (R-P4-15): a state-file write that fails leaves the command silent rather
+ * than nagging on every exit. A missing or unparseable config reads as `{}`
+ * (R-P4-20): no pins to review, so the notice stays silent, but the refresh
+ * still runs against an aging catalog regardless — a `config.json` problem
+ * must not also silence the unrelated background refresh. R-P4-17: the
+ * cheap per-invocation and environment terms of the predicate run before
+ * `loadConfig` or either file read, so a vetoed exit (no terminal, `--json`,
+ * `--quiet`, `mcp`, `update`) touches no file at all.
  *
  * The refresh is `amicus models --refresh` in a detached child of this very
  * binary — keys included, the SAME model-catalog.js :: refreshCatalog (a
@@ -36,22 +41,30 @@
  * out of libuv's kill-on-close job, `windowsHide` keeps a console window from
  * opening on Windows. Its stdin is not a terminal, so the child's own exit
  * hook is silent by `exitHookAllowed`'s first term: no recursion.
- * `runExitHook` writes `lastRefreshSpawned` to alias-notice-state.json
- * BEFORE it spawns, and the spawn happens only when that write returned true
- * — no receipt, no spawn (R-P4-11): `refreshCatalog` writes the cache only
- * at its end, so `fetchedAt` alone cannot tell a running refresh from a
- * missing one, and a config dir that cannot be written must not spawn a
- * child on every exit. A spawn that then fails SYNCHRONOUSLY (R-P4-16)
- * clears the stamp it just wrote, so the next exit retries rather than
- * waiting out a day it never actually started. `refreshDue` separately
- * backs off a day after an attempt that ran and failed
- * (`lastRefreshAttempt`, model-catalog.js :: writeRefreshFailure) — a
+ * `runExitHook` writes `lastRefreshSpawned` to its own file in
+ * `alias-notice-state/` BEFORE it spawns, and the spawn happens only when
+ * that write returned true — no receipt, no spawn (R-P4-11): `refreshCatalog`
+ * writes the cache only at its end, so `fetchedAt` alone cannot tell a
+ * running refresh from a missing one, and a config dir that cannot be
+ * written must not spawn a child on every exit. The child's stdout+stderr
+ * are redirected to `alias-notice-state/last-refresh.log` (truncated per
+ * run, R-P4-19), so a background refresh can be inspected after the fact;
+ * the parent opens that file, hands the descriptor to the child through
+ * `stdio`, and closes ITS OWN copy right after the spawn call returns (the
+ * child holds its own independent handle) — when the log cannot be opened
+ * the child still runs, silently, with `stdio: 'ignore'` (the log is
+ * best-effort, never a gate on the refresh itself). A spawn that then fails
+ * SYNCHRONOUSLY (R-P4-16) clears the stamp it just wrote, so the next exit
+ * retries rather than waiting out a day it never actually started.
+ * `refreshDue` separately backs off a day after an attempt that ran and
+ * failed (`lastRefreshAttempt`, model-catalog.js :: writeRefreshFailure) — a
  * different case from the unwritable state file the spawn receipt now
  * covers. A future-dated stamp reads as never (a wrong clock self-heals).
  */
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { exitHookAllowed, refreshState, catalogInfoFromCache, REFRESH_MAX_AGE_MS } = require('./alias-refresh-state');
 
@@ -84,6 +97,9 @@ function loadDeps() {
     readCache: require('./model-catalog').readCache,
     readNoticeState: noticeState.readNoticeState,
     writeNoticeState: noticeState.writeNoticeState,
+    refreshLogPath: noticeState.refreshLogPath,
+    openRefreshLog: (p) => { fs.mkdirSync(path.dirname(p), { recursive: true, mode: 0o700 }); return fs.openSync(p, 'w', 0o600); },
+    closeRefreshLog: (fd) => fs.closeSync(fd),
     spawn: require('child_process').spawn,
     execPath: process.execPath,
     binPath: BIN_PATH,
@@ -119,7 +135,7 @@ function countProposals(d, cfg, doc) {
  * No cache at all is NOT due: there is nothing to age, and setup/doctor/models create it.
  * @param {{fetchedAt?: number, lastRefreshAttempt?: number|null}|null} doc `readCache()`'s document
  * @param {number} [now]
- * @param {number|null} [lastSpawned] alias-notice-state.json's `lastRefreshSpawned`
+ * @param {number|null} [lastSpawned] `alias-notice-state/last-refresh-spawned.json`'s `at`
  * @returns {boolean}
  */
 function refreshDue(doc, now = Date.now(), lastSpawned = null) {
@@ -136,15 +152,21 @@ function refreshDue(doc, now = Date.now(), lastSpawned = null) {
  * @returns {boolean} true when the child was spawned (never that it succeeded)
  */
 function spawnDetachedRefresh(d) {
+  let fd = null;
   try {
     d = d || loadDeps();
+    // R-P4-19: the child's own lines (`Refreshed catalog: N models.` / `refresh failed (…)`) are
+    // its trace; when the log cannot be opened the child still runs, silently.
+    try { fd = d.openRefreshLog(d.refreshLogPath()); } catch { fd = null; }
+    const stdio = fd === null ? 'ignore' : ['ignore', fd, fd];
     const child = d.spawn(d.execPath, [d.binPath, 'models', '--refresh'],
-      { detached: true, stdio: 'ignore', windowsHide: true, env: d.env });
+      { detached: true, stdio, windowsHide: true, env: d.env });
     // An unlistened ChildProcess 'error' is an uncaught exception (workspace-window.js's note).
     if (child && typeof child.on === 'function') { child.on('error', () => {}); }
     if (child && typeof child.unref === 'function') { child.unref(); }
     return true;
   } catch { return false; }
+  finally { if (fd !== null) { try { d.closeRefreshLog(fd); } catch { /* the child holds its own handle */ } } }
 }
 
 /**
@@ -160,12 +182,13 @@ function runExitHook(run, d) {
     const { code, command, args, stdinIsTTY } = run || {};
     // R-P4-17: the per-invocation and environment terms first — a vetoed exit reads no file at all.
     if (!exitHookAllowed({ command, args, stdinIsTTY, config: null, env: d.env })) { return out; }
-    const cfg = d.loadConfig();
-    // R-P4-13: no config (missing or unparseable) → nothing to be told about; then the config term of the predicate.
-    if (!cfg || !refreshState({ config: cfg, env: d.env }).enabled) { return out; }
+    // R-P4-20: a missing or unparseable config reads as {} — no pins to review, but the refresh
+    // still runs on an aging catalog and the `aliases` footer's `on (weekly)` is then true.
+    const cfg = d.loadConfig() || {};
+    if (!refreshState({ config: cfg, env: d.env }).enabled) { return out; }
     const now = d.now();
     const doc = d.readCache();          // once per exit — the count and the refresh decision share it
-    const state = d.readNoticeState();  // the two stamps live in alias-notice-state.json, never in config (R-P4-14)
+    const state = d.readNoticeState();  // the two stamps live in alias-notice-state/, never in config (R-P4-14)
     // `amicus aliases` IS the notice's destination and already prints the count — no echo behind it.
     if (command !== 'aliases' && expired(state.lastNotified, NOTICE_INTERVAL_MS, now)) {
       const n = countProposals(d, cfg, doc);
