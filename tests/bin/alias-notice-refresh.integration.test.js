@@ -82,7 +82,10 @@ describeE2E('the detached weekly background refresh, live (#238 D5, qwen #1/D7)'
     while (Date.now() < deadline) {
       try {
         const doc = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'));
-        if (typeof doc.fetchedAt === 'number' && doc.fetchedAt > agedFetchedAt) { refreshed = true; break; }
+        // The child prints `Refreshed catalog:` a few ms AFTER the cache rename (models.js re-reads the
+        // cache first), so wait for both — the fresh stamp and the log line — before asserting.
+        const logged = fs.existsSync(logPath) && fs.readFileSync(logPath, 'utf-8').includes('Refreshed catalog:');
+        if (typeof doc.fetchedAt === 'number' && doc.fetchedAt > agedFetchedAt && logged) { refreshed = true; break; }
       } catch { /* the child may be mid-write; poll again */ }
       // eslint-disable-next-line no-await-in-loop -- a deliberate poll, not accidental serialization
       await new Promise((resolve) => { setTimeout(resolve, 2000); });

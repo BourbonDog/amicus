@@ -139,9 +139,10 @@ describe('spawnDetachedRefresh — the workspace-window.js shape', () => {
     expect(rec.logOpens).toEqual(['/state/last-refresh.log']);
     expect(rec.logCloses).toEqual([7]);   // mutant LEAKFD: no close
   });
-  test('a throwing spawn is false, not a throw', () => {
-    const { d } = deps({ deps: { spawn: () => { throw new Error('ENOENT'); } } });
+  test('a throwing spawn is false, not a throw — and the log descriptor is still closed (LEAKFD, failure path)', () => {
+    const { d, rec } = deps({ deps: { spawn: () => { throw new Error('ENOENT'); } } });
     expect(spawnDetachedRefresh(d)).toBe(false);
+    expect(rec.logCloses).toEqual([7]);
   });
   test('a throwing openRefreshLog still spawns, with stdio "ignore" (mutant LOGREQUIRED: return false when the log cannot open)', () => {
     const { d, rec } = deps({ deps: { openRefreshLog: () => { throw new Error('EACCES'); } } });
