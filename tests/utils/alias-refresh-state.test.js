@@ -58,6 +58,10 @@ describe('exitHookAllowed — the per-invocation half, one term each', () => {
     expect(exitHookAllowed({ ...ok, args: { quiet: 'x' } })).toBe(false);
   });
   test('the mcp command (mutant MCPON)', () => { expect(exitHookAllowed({ ...ok, command: 'mcp' })).toBe(false); });
+  test('no command — a bare `amicus` printing usage is not a run (R-P4-12; mutant NOCOMMAND)', () => {
+    expect(exitHookAllowed({ ...ok, command: undefined })).toBe(false);
+    expect(exitHookAllowed({ ...ok, command: '' })).toBe(false);
+  });
   test('the standing half is consulted: CI, env, config each veto', () => {
     expect(exitHookAllowed({ ...ok, env: { ...clean(), CI: 'true' } })).toBe(false);
     expect(exitHookAllowed({ ...ok, env: { ...clean(), AMICUS_NO_NETWORK_PROBES: '1' } })).toBe(false);

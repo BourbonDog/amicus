@@ -29,10 +29,11 @@ let dir;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-notice-hook-'));
   // A CUSTOM alias behind a newer sibling: one proposal whatever the shipped pins say (failure mode #53).
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ aliases: { mine: 'openrouter/z-ai/glm-5.2' } }));
+  // A vendor that can never ship (R-P4-12 review Minor 2): no residual weld to the real glm pin.
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ aliases: { mine: 'openrouter/acme/model-1.0' } }));
   fs.writeFileSync(path.join(dir, 'model-catalog.json'), JSON.stringify({
     schemaVersion: 2, fetchedAt: Date.now() - 60 * 60 * 1000,
-    models: [{ id: 'openrouter/z-ai/glm-5.2' }, { id: 'openrouter/z-ai/glm-5.4' }],
+    models: [{ id: 'openrouter/acme/model-1.0' }, { id: 'openrouter/acme/model-1.1' }],
   }));
 });
 afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
@@ -40,7 +41,8 @@ afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 function run(args, { tty }) {
   const env = { ...process.env, AMICUS_CONFIG_DIR: dir, AMICUS_ENV_DIR: dir, AMICUS_MOCK_UPDATE: 'success', CI: '0' };
   delete env.AMICUS_NO_NETWORK_PROBES;
-  const r = spawnSync(process.execPath, [...(tty ? ['-r', SHIM] : []), BIN, ...args, '--cwd', dir], { encoding: 'utf-8', env });
+  const r = spawnSync(process.execPath, [...(tty ? ['-r', SHIM] : []), BIN, ...args, '--cwd', dir], { encoding: 'utf-8', env, timeout: 30000 });
+  if (r.error) { throw r.error; }   // a spawn failure surfaces here, not as a TypeError on null streams below (review Minor 3)
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 const config = () => JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf-8'));
@@ -56,6 +58,7 @@ describe('the exit hook, wired (#238 D5)', () => {
   });
   test('a second run within the day is silent and does not re-stamp (Q5)', () => {
     run(['list'], { tty: true });
+    expect(config().aliasReview).toBeDefined();
     const stamp = config().aliasReview.lastNotified;
     const r = run(['list'], { tty: true });
     expect(r.stderr).not.toContain('alias update');
@@ -76,5 +79,21 @@ describe('the exit hook, wired (#238 D5)', () => {
     const r = run(['list', '--help'], { tty: true });
     expect(r.code).toBe(0);
     expect(r.stderr).not.toContain('alias update');
+  });
+  test('bare amicus (usage) is not a run: nothing printed, nothing written (R-P4-12; mutant NOCOMMAND)', () => {
+    const r = run([], { tty: true });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('Usage');
+    expect(r.stderr).not.toContain('alias update');
+    expect(config().aliasReview).toBeUndefined();
+  });
+  test('amicus aliases gets no echo of the hook behind its own footer (mutant COMMANDDROP)', () => {
+    const r = run(['aliases'], { tty: true });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain('1 to review — amicus aliases --review');
+    expect(r.stderr).not.toContain('alias update');
+    // the list normalizes on entry, so the config may be re-saved — only lastNotified must stay absent
+    const ar = config().aliasReview;
+    expect(ar ? ar.lastNotified : undefined).toBeUndefined();
   });
 });
