@@ -9,7 +9,8 @@
  * literal false), `AMICUS_NO_NETWORK_PROBES=1` (the live-probes escape hatch,
  * utils/live-probes.js :: liveProbesAllowed — the same literal '1'), or a CI
  * environment. `exitHookAllowed` adds the per-invocation half — a terminal on
- * stdin, not `--json`, not `--quiet`, not the `mcp` command — and is what
+ * stdin, a command (a bare `amicus` printing usage is not a run — R-P4-12),
+ * not `--json`, not `--quiet`, not the `mcp` command — and is what
  * bin/amicus.js's exit hook asks through utils/alias-notice.js. No new
  * environment variable (Q8).
  *
@@ -55,10 +56,11 @@ function refreshState({ config = null, env = process.env } = {}) {
 /**
  * The whole predicate — the notice and the refresh both hang on it (D5).
  * @param {{command: string, args: object, stdinIsTTY: boolean, config?: object|null, env?: object}} input
+ * @param {string} input.command the dispatched command; absent (a bare `amicus` printing usage) is not a run
  * @returns {boolean}
  */
 function exitHookAllowed({ command, args, stdinIsTTY, config = null, env = process.env }) {
-  if (!stdinIsTTY || command === 'mcp') { return false; }
+  if (!stdinIsTTY || typeof command !== 'string' || command.length === 0 || command === 'mcp') { return false; }
   if (args && (args.json || args.quiet)) { return false; }
   return refreshState({ config, env }).enabled;
 }

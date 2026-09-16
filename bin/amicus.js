@@ -109,6 +109,17 @@ async function main() {
         );
       });
     }
+
+    // #238 D5: the passive alias notice + the weekly background catalog
+    // refresh, from the same slot (utils/alias-notice.js decides; the Q8
+    // predicate lives in utils/alias-refresh-state.js). stdin's TTY-ness is
+    // read HERE, not in the listener — an 'exit' listener must not
+    // materialise a stream — and a non-TTY stdin (an MCP-spawned start, a
+    // pipe, the refresh child itself) is silent by the predicate's first term.
+    // Registered after the update listener so the notice is the last line.
+    const { runExitHook } = require('../src/utils/alias-notice');
+    const stdinIsTTY = !!process.stdin.isTTY;
+    process.on('exit', (code) => { runExitHook({ code, command, args, stdinIsTTY }); });
   }
 
   // `pack save` documents a per-pack `--pack-version <semver>`. `--version` is a
