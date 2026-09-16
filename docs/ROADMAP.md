@@ -13,14 +13,15 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.10.0** (2026-09-14). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.11.0** (2026-09-16). Each 4.x rev below leads with the benefit, not the
 plumbing; the v4.9.x patch releases carry no section of their own, because each corrected a
 defect rather than adding scope — where one added a surface (v4.9.4's `--thinking` refusals and
 `output-budget` doctor row, v4.9.5's Electron digest gate, v4.9.6's artifact custody, v4.9.7's dual name-table rescue boundary, v4.9.8's per-run seat tool allowlist and its unverified/refused seat census) it did so to
-make an existing promise true, not to widen it. v4.10.0 adds a surface (`amicus aliases`) and so
-gets a section. See `CHANGELOG.md` for what each one contained.
+make an existing promise true, not to widen it. v4.10.0 added a surface (`amicus aliases`) and
+v4.11.0 finished it (owner mode, the setup window's Needs-review section, the once-a-day notice),
+so each gets a section. See `CHANGELOG.md` for what each one contained.
 
-**Status:** v4.0 through **v4.10.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
+**Status:** v4.0 through **v4.11.0** have **shipped**, plus the v4.9.1–v4.9.8 patch releases —
 everything on this page is a record of what landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
@@ -471,9 +472,43 @@ no more copy-pasting `--add-alias` lines out of `models --check`.
 > Why here: the two council rounds on #249 (16 + 13 findings) shaped the release — the typed
 > shipped id follows without a catalog, the comparator's size rule, the `--unpin` default guard
 > and the terminal-escape sanitizer on every alias surface all came out of them. Phases 2–4 of
-> the #238 design (owner mode with `curated-pins.json`, the Electron "Needs review" section, the
-> quiet update notice) are unscheduled; the spec that scopes them ships in the repo under
-> `docs/superpowers/specs/`.
+> the #238 design shipped as v4.11.0 (next section); the spec that scopes all four phases ships in
+> the repo under `docs/superpowers/specs/`.
+
+## v4.11 — "The pins keep themselves current" *(#238 Phases 2–4 — owner mode, the setup window's Needs-review section, the once-a-day notice)* — ✅ SHIPPED v4.11.0, 2026-09-16
+**Benefit:** the shipped pins are data the maintainer re-baselines with the same picker users get,
+the setup window shows the same review the CLI walks and writes it in one Finish, and a user who
+never runs `amicus aliases` still hears — once a day, after any command — that updates are waiting,
+against a catalog that refreshes itself in the background once a week.
+
+- **★ Owner mode — `amicus aliases --review --owner`** — the shipped pins live in
+  `src/utils/curated-pins.json` (routes, `verifiedOn`, rulings; the retired and notable lists) and
+  the maintainer re-baselines them through the same picker, one pass per gateway namespace, with
+  a compare-and-swap write, gated on the source checkout, a clean tree and a terminal; `models
+  --check` names a newer same-tier sibling of each cardless pin and `doctor` shows the pins' state
+  and the reset command. The first baseline (2026-09-15) moved six routes. **Closes the owner
+  half of #238** *(L)*
+- **★ Setup window "Needs review"** — every alias row shows `following` or `pinned` with the
+  right remove control; a Needs-review section above the Routing list renders the picker's
+  proposals as buttons (accept, follow, use, add, choose…, dismiss), everything staged and written
+  by Finish in one write; `amicus aliases --ui` lands there; the Models step announces
+  `follows the shipped recommendation` or `live flagship differs — pinned`, never re-writes a
+  merely restored default, and yields to the Routing step's stage for the same alias *(L)*
+- **★ The once-a-day notice and the weekly background refresh** — one stderr line after any
+  terminal command when the cached catalog shows updates waiting (never computed from the
+  network), and a detached keyed `models --refresh` after an exit-0 run once the cache is a week
+  old; one predicate gates both (a terminal, not `--json`/`--quiet`, not `mcp`/`update`, not CI,
+  `AMICUS_NO_NETWORK_PROBES` unset, `aliasReview.autoRefresh` not `false`); the hook never writes
+  `config.json` — its stamps and the refresh's log live in `alias-notice-state/` beside the
+  catalog cache; the `aliases` footer names the state and `--json` carries it *(M)*
+- **The notable list** — the editorial half of the comparator: shipped `add <alias> → <id>`
+  proposals for models no sibling rule can reach, with a curation rule and a content gate; ships
+  empty *(S)*
+> Why here: seven council rounds across the three PRs (#250, #253, #254) shaped the release — the
+> compare-and-swap on the owner sink, the one-write Finish and the truthful Step 2 card, and the
+> move of the notice's timestamps out of `config.json` into a machine-owned state directory all
+> came out of them. The council's own leg failures during those rounds (the 480 s no-output
+> backstop, an OpenRouter credit refusal) are tracked in `BACKLOG.md`.
 
 ## Backlog (tracked, not scheduled)
 

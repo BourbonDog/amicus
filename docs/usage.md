@@ -412,7 +412,7 @@ amicus aliases --json     # the same document, for scripts
 amicus aliases --review --owner   # maintainers: the same picker over the SHIPPED pins — writes src/utils/curated-pins.json
 ```
 
-`--review` offers, per outdated pin: accept a newer same-tier sibling, follow the shipped pin again, choose another catalog id, skip, or never ask again for that pairing — it needs a terminal (without one it prints the list and exits 1). Picking "follow the shipped pin" removes the key from `config.aliases`, and typing that SAME shipped id into "choose another" follows too — unconditionally, whether or not the catalog carries it or is fresh, since it is the same `follow` action either way. A newer same-tier sibling is judged by vendor path, prefix and suffix around the version number; a size or variant token glued to a number (`20b`, `8x22b`) is never read as part of that version, so a differently-sized variant of a model is never offered as a "newer" sibling of it. `amicus setup` no longer seeds all 21 curated ids — it pins only the default alias you chose, and only when its live flagship differs from the shipped pin, and says so. The Electron wizard does the same: the Models step's write-preview says `follows the shipped recommendation` or `live flagship differs from the shipped <id> — pinned` for the card you pick, a default merely restored from your config on reopen is not re-written, and the Review step names every write before Finish.
+`--review` offers, per outdated pin: accept a newer same-tier sibling, follow the shipped pin again, choose another catalog id, skip, or never ask again for that pairing — it needs a terminal (without one it prints the list and exits 1). Picking "follow the shipped pin" removes the key from `config.aliases`, and typing that SAME shipped id into "choose another" follows too — unconditionally, whether or not the catalog carries it or is fresh, since it is the same `follow` action either way. A newer same-tier sibling is judged by vendor path, prefix and suffix around the version number; a size or variant token glued to a number (`20b`, `8x22b`) is never read as part of that version, so a differently-sized variant of a model is never offered as a "newer" sibling of it. `amicus setup` no longer seeds all 21 curated ids — it pins only the default alias you chose, and only when its live flagship differs from the shipped pin, and says so. The Electron wizard does the same: the Models step's write-preview says `follows the shipped recommendation` or `live flagship differs from the shipped <id> — pinned` for the card you pick, a default merely restored from your config on reopen is not re-written, and the Review step names every write before Finish. When the Routing step has staged anything for the alias your default names (an unpin, an accepted proposal, an edit), Finish keeps that and does not apply the Models step's pick over it — the Routing step is the last word on an alias.
 
 Accepting a catalog-vouched id needs a catalog fresher than 24 hours — the picker refreshes it inline first (an authenticated model-list call to each provider you hold a key for, the same call `amicus models --refresh` makes); `follow` never needs the catalog.
 
@@ -575,7 +575,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.10.0",
+  "version": "4.11.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
