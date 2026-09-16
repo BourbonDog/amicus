@@ -220,7 +220,7 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}, shortli
         <span class="model-resolved" data-alias="${escapedAlias}">${escapedPreviewId}</span>
         ${routeHtml}
         ${modelPickHtml}
-        <span class="write-preview" data-alias="${escapedAlias}">will set <code>${escapedAlias}</code> → <code class="write-preview-id">${escapedPreviewId}</code></span>
+        <span class="write-preview" data-alias="${escapedAlias}"><span class="write-preview-verb">will set</span> <code>${escapedAlias}</code> → <code class="write-preview-id">${escapedPreviewId}</code> <span class="write-preview-note"></span></span>
       </label>`;
   }).join('\n      ');
 

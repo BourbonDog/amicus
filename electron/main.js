@@ -382,7 +382,8 @@ async function createSetupWindow() {
     aliases = undefined;  // buildSetupHTML falls back to the defaults
   }
 
-  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists, aliases });
+  // issue 238 D4: `amicus aliases --ui` asks for the Routing step (setup-window.js sets the token).
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, shortlists, aliases, initialPane: process.env.AMICUS_SETUP_PANE || '' });
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 

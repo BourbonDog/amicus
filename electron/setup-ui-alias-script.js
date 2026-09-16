@@ -2,7 +2,7 @@
  * Setup UI - Alias Editor Script
  *
  * Returns the inline JS for alias search, inline edit,
- * delete, and add custom alias handlers.
+ * remove (unpin / delete), and add custom alias handlers.
  * Extracted from setup-ui.js to keep file sizes under 300 lines.
  */
 
@@ -190,6 +190,7 @@ function buildAliasScript() {
           var delBtn = row.querySelector('.alias-delete');
           if (delBtn) { delBtn.setAttribute('data-alias', newVal); }
         }
+        refreshAliasRowState(row);
       }
       input.addEventListener('blur', commitName);
       input.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') { input.blur(); } });
@@ -204,7 +205,9 @@ function buildAliasScript() {
         newSpan.textContent = newVal || origValue;
         select.replaceWith(newSpan);
         if (newVal && newVal !== origValue) {
-          aliasEdits[origAlias] = newVal;
+          stageAliasWrite(origAlias, newVal); // issue 238 D1: folds a re-pick of the shipped id to follow
+        } else {
+          refreshAliasRowState(row);
         }
       }
       select.addEventListener('change', commitModel);
@@ -212,23 +215,38 @@ function buildAliasScript() {
     }
   });
 
-  // Alias editor: delete
+  // Alias editor: remove (issue 238 D1/R1). "unpin" and "delete" are ONE
+  // operation -- remove the key -- whose meaning is decided by the NAME
+  // (isCuratedAlias), not data-kind (which a rename can leave stale until
+  // refreshAliasRowState runs). Three shapes of row:
   document.addEventListener('click', function(e) {
     var btn = e.target.closest('.alias-delete');
     if (!btn) { return; }
     var alias = btn.getAttribute('data-alias');
-    if (!alias) { return; }
     var row = btn.closest('.alias-row');
     if (!row) { return; }
-    row.classList.add('alias-deleted');
-    if (defaultAliases[alias]) {
-      aliasEdits[alias] = null;
-    } else {
-      delete aliasEdits[alias];
+    // 1. added THIS session (client-side "New routes" group), never on disk:
+    //    drop the staged write and the row -- stage nothing.
+    if (row.closest('[data-new-routes]')) {
+      if (alias) { delete aliasEdits[alias]; }
+      row.remove();
+      refreshAliasCounts();
+      return;
     }
-    // A3: this handler owns SERVER-rendered rows, whose group heading carries a
-    // count baked in at render time. Without this the heading kept counting a
-    // row the user had just struck out.
+    if (!alias) { return; }
+    // 2. a curated pin: back to FOLLOWING -- shows the shipped id it resolves to;
+    //    the alias still exists, so no strike-through. Decided by the NAME
+    //    (isCuratedAlias), not data-kind: a rename can cross the curated/custom
+    //    boundary, and refreshAliasRowState is what keeps data-kind truthful.
+    if (isCuratedAlias(alias)) { unpinAliasRow(row); return; }
+    // 3. a saved custom alias: strike it out, stage the delete. Until issue 238
+    //    Phase 3 this ran 'delete aliasEdits[alias]', staging NOTHING -- a silent
+    //    no-op. Its pending proposal row goes too (a LIST-row action drops the
+    //    alias's proposal -- B1; council review of PR 253, A1).
+    row.classList.add('alias-deleted');
+    aliasEdits[alias] = null;
+    if (typeof removeProposalRow === 'function') { removeProposalRow(alias); }
+    // A3: server-rendered rows carry a heading count baked in at render time.
     refreshAliasCounts();
   });
 
@@ -259,24 +277,21 @@ function buildAliasScript() {
         var m = modelSelect.value;
         if (n && m) {
           aliasEdits[n] = m;
-          row.setAttribute('data-alias', n);
+          row.setAttribute('data-alias', n); row.setAttribute('data-state', 'pinned');
           var ns = document.createElement('span');
           ns.className = 'alias-name'; ns.textContent = n;
           nameInput.replaceWith(ns);
           var ms = document.createElement('span');
           ms.className = 'alias-model'; ms.textContent = m;
           modelSelect.replaceWith(ms);
+          var st = document.createElement('span');
+          st.className = 'alias-state alias-state-pinned'; st.textContent = 'pinned';
+          row.insertBefore(st, delBtn);
           delBtn.setAttribute('data-alias', n);
         }
       }
       modelSelect.addEventListener('change', commitNew);
       nameInput.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') { nameInput.blur(); commitNew(); } });
-      delBtn.addEventListener('click', function() {
-        var a = row.getAttribute('data-alias');
-        if (a) { delete aliasEdits[a]; }
-        row.remove();
-        refreshAliasCounts();
-      });
     });
   }`;
 }

@@ -4,7 +4,7 @@
  * Extracted from main.js to keep file sizes under 300 lines.
  * Registers all setup-mode IPC handlers: validate-key, save-key,
  * remove-key, setup-done, save-config, get-config, get-api-keys,
- * get-catalog, and refresh-catalog.
+ * get-catalog, refresh-catalog, and (ipc-aliases.js) get-alias-review.
  * (sidecar:fetch-models was retired in B33/#12 — Step 3's alias editor now
  * shares the TTL-cached get-catalog data Step 2 loads instead of a second,
  * uncached live fetch.)
@@ -12,6 +12,7 @@
 
 const { logger } = require('../src/utils/logger');
 const { registerLocalProviderHandlers } = require('./ipc-setup-local');
+const { registerAliasHandlers, applyDismissals } = require('./ipc-aliases');
 
 /**
  * Register all setup-related IPC handlers
@@ -179,7 +180,8 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // aliasWrites values: string = set, null = delete. First run starts from
   // an empty alias map (issue 238 Q9).
   // councilPicks (optional): when length >= 2, seeds the free council via seedFreeCouncil.
-  ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites, councilPicks) => {
+  // dismissals (optional, issue 238 D9): the page's staged "never ask again" keys, stamped into the same save -- Finish is all-or-nothing.
+  ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites, councilPicks, dismissals) => {
     try {
       const { loadConfig, saveConfig } = require('../src/utils/config');
       let cfg = loadConfig();
@@ -198,6 +200,7 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
           else if (typeof model === 'string' && model) { cfg.aliases[alias] = model; }
         }
       }
+      applyDismissals(cfg, dismissals);   // before the save: a malformed key rejects with nothing written (council review of PR 253, B1/C4/A5/D3)
       saveConfig(cfg);
       if (Array.isArray(councilPicks) && councilPicks.length >= 2) {
         require('../src/sidecar/setup').seedFreeCouncil(councilPicks);
@@ -285,6 +288,7 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // Extracted to ipc-setup-local.js to keep this file under the size gate (see its
   // header comment); registered on the SAME (possibly injected) ipcMain as above.
   registerLocalProviderHandlers(ipcMain);
+  registerAliasHandlers(ipcMain); // issue 238 D9: the "Needs review" section's read channel (ipc-aliases.js)
 }
 
 module.exports = { registerSetupHandlers };

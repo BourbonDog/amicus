@@ -221,8 +221,14 @@ describe('setup-ui-aliases', () => {
       expect(html).toContain('class="alias-arrow"');
     });
 
-    it('should contain delete buttons', () => {
-      expect(html).toContain('class="alias-delete"');
+    it('every curated row carries an [unpin] control, hidden while the row follows (issue 238 D1/R1)', () => {
+      const rows = html.match(/<div class="alias-row"[^>]*>[\s\S]*?<\/div>/g);
+      expect(rows.length).toBe(Object.keys(getDefaultAliases()).length);
+      rows.forEach(row => {
+        expect(row).toContain('data-state="following"');
+        expect(row).toContain('<span class="alias-state alias-state-following">following</span>');
+        expect(row).toMatch(/<button class="alias-delete" data-alias="[^"]+" data-kind="unpin" title="[^"]+" hidden>unpin<\/button>/);
+      });
     });
 
     it('should contain an Add Custom Route button', () => {
@@ -399,5 +405,50 @@ describe('buildAliasScript - group counts stay true after a delete (A3)', () => 
     const f = script.indexOf('function refreshAliasCounts');
     const body = script.slice(f, f + 400);
     expect(body).toMatch(/rows === 0 && g\.hasAttribute\('data-new-routes'\)/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// issue 238 D1/D9 (Phase 3): following / pinned per row, and the remove
+// control by kind. `defaults` is injected -- never the live shipped pins (#53).
+// ---------------------------------------------------------------------------
+describe('buildAliasEditorHTML - row state and the control by kind', () => {
+  const defaults = { gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.3' };
+  const aliases = { gemini: 'google/gemini-x', glm: 'openrouter/z-ai/glm-5.2', mine: 'openrouter/x/y' };
+  const html = buildAliasEditorHTML(aliases, { defaults });
+  const rowOf = (alias) => html.match(new RegExp(`<div class="alias-row" data-alias="${alias}"[^>]*>[\\s\\S]*?</div>`))[0];
+
+  it('a curated alias holding the shipped id renders following, with [unpin] hidden', () => {
+    const row = rowOf('gemini');
+    expect(row).toContain('data-state="following"');
+    expect(row).toContain('alias-state-following">following<');
+    expect(row).toMatch(/data-kind="unpin"[^>]* hidden>unpin</);
+  });
+  it('a curated alias holding another id renders pinned, with [unpin] visible (mutant ALLFOLLOW: label every row following)', () => {
+    const row = rowOf('glm');
+    expect(row).toContain('data-state="pinned"');
+    expect(row).toContain('alias-state-pinned">pinned<');
+    expect(row).toMatch(/data-kind="unpin"[^>]*>unpin</);
+    expect(row).not.toMatch(/data-kind="unpin"[^>]* hidden>/);
+  });
+  it('a custom alias renders pinned with a × delete control, never [unpin]', () => {
+    const row = rowOf('mine');
+    expect(row).toContain('data-state="pinned"');
+    expect(row).toMatch(/data-kind="delete"[^>]*>×</);
+    expect(row).not.toContain('unpin');
+  });
+  it('escapes the alias name inside the control too', () => {
+    const h = buildAliasEditorHTML({ 'a"b': 'openrouter/x/y' }, { defaults });
+    expect(h).toContain('<button class="alias-delete" data-alias="a&quot;b" data-kind="delete"');
+  });
+  it('reviewHtml lands between the example box and the editor (T3 fills it)', () => {
+    const h = buildAliasEditorHTML(aliases, { defaults, reviewHtml: '<section id="alias-review-probe"></section>' });
+    const example = h.indexOf('class="routing-example"');
+    const probe = h.indexOf('id="alias-review-probe"');
+    const editor = h.indexOf('<div class="alias-editor">');
+    expect(example).toBeGreaterThan(-1);
+    expect(probe).toBeGreaterThan(example);
+    expect(editor).toBeGreaterThan(probe);
+    expect(buildAliasEditorHTML(aliases, { defaults })).not.toContain('alias-review-probe'); // default: nothing inserted
   });
 });
