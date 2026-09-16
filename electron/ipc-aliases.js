@@ -80,7 +80,9 @@ async function buildAliasReviewResponse(deps = defaultDeps()) {
 
 /**
  * Stamp the page's staged dismissals into `cfg` — no load, no save: the caller
- * (sidecar:save-config) saves `cfg` once, after this.
+ * (sidecar:save-config) saves `cfg` once, after this. The WHOLE batch is
+ * validated before the first stamp, so a malformed key leaves `cfg` exactly as
+ * it was (council round 2 of PR 253, A2): a caller that catches may reuse it.
  * @param {object} cfg the config object about to be saved (mutated)
  * @param {unknown} keys the page's staged dismissKeys (`alias@proposedId`), or nothing
  * @param {Date} [now]
@@ -91,6 +93,7 @@ function applyDismissals(cfg, keys, now = new Date()) {
   if (keys === undefined || keys === null) { return 0; }
   if (!Array.isArray(keys)) { throw new Error('dismissals must be an array of alias@proposedId keys'); }
   const { stampDismissal } = require('../src/utils/alias-store');
+  for (const key of keys) { stampDismissal({}, key, now); }   // validate all first, against a throwaway: a bad key throws before cfg changes
   let n = 0;
   for (const key of keys) { stampDismissal(cfg, key, now); n += 1; }
   return n;

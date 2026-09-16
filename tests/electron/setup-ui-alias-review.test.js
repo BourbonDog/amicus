@@ -415,6 +415,60 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(calls).toHaveLength(4);                                                  // REFRESHNOLATCH dies here (a fifth call)
   });
 
+  it('round 2 B1/A1: an older request that lands AFTER a newer one is dropped — the refreshed document stays on screen and the latch follows the latest (mutant LASTWRITER: render whatever resolves)', async () => {
+    let settleFirst = null;
+    const reviewCalls = [];
+    const invoke = (channel) => {
+      if (channel !== 'sidecar:get-alias-review') { return Promise.resolve({ models: [], fetchedAt: null }); }
+      reviewCalls.push(channel);
+      // the FIRST review request hangs until the test releases it; every later one answers at once
+      return reviewCalls.length === 1 ? new Promise(r => { settleFirst = r; }) : Promise.resolve(view());
+    };
+    const p = loadPage({ invoke });
+    const entry = p.fns.ensureAliasReviewLoaded();                                 // request 1 (entry fetch) in flight
+    await flush();
+    expect(reviewCalls).toHaveLength(1);
+    const later = p.fns.loadAliasReview();                                         // request 2 (what ↻ does) answers first
+    await later; await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    expect(p.banner.hidden).toBe(true);
+    // now the OLD request lands with an error document: it must not overwrite the newer render
+    settleFirst(view({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, freshUntil: null, error: 'stale answer' }));
+    await entry; await flush();
+    expect(p.banner.hidden).toBe(true);                                             // LASTWRITER dies here
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // the latch followed request 2 (true): no third fetch
+    expect(reviewCalls).toHaveLength(2);
+  });
+
+  it('round 2 B1/A1: the refresh control is disabled while an entry fetch is in flight, so the two never refresh the catalog concurrently (mutant LIVEREFRESH: leave it enabled)', async () => {
+    let release = null;
+    const invoke = (channel) => (channel === 'sidecar:get-alias-review' ? new Promise(r => { release = r; }) : Promise.resolve({ models: [], fetchedAt: null }));
+    const p = loadPage({ invoke });
+    expect(p.refresh.disabled).toBe(false);
+    const entry = p.fns.ensureAliasReviewLoaded();
+    expect(p.refresh.disabled).toBe(true);                                          // LIVEREFRESH dies here
+    await flush();
+    release(view());
+    await entry; await flush();
+    expect(p.refresh.disabled).toBe(false);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+  });
+
+  it('round 2 A3: a proposal without a dismissKey gets no dismiss control, and dismissProposal on it stages nothing and keeps the row (mutant HOLLOWDISMISS: drop the row anyway)', async () => {
+    const keyless = { ...SIBLING, dismissKey: undefined };
+    const p = loadPage({ proposals: [keyless] });
+    await p.fns.loadAliasReview(); await flush();
+    const row = p.list.querySelector('.alias-review-row');
+    expect(row).not.toBeNull();
+    expect(row.querySelector('.alias-review-dismiss')).toBeNull();
+    expect(row.querySelectorAll('.alias-review-accept')).toHaveLength(2);           // the other controls are unaffected
+    p.fns.dismissProposal(keyless);
+    expect(p.fns.stagedDismissals()).toEqual([]);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);           // HOLLOWDISMISS dies here
+    expect(p.section.hidden).toBe(false);
+  });
+
   it('A4: a choose… dropdown opened while fresh and committed past freshUntil stages nothing and re-renders with the banner (mutant OPENDROPDOWN: gate only at open time)', async () => {
     const p = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
     await p.fns.loadAliasReview(); await flush();
@@ -483,5 +537,12 @@ describe('page hygiene', () => {
     expect(src).toContain('function candidateText(');
     expect(src).toContain('function proposalWhy(');
     expect(src.indexOf('function viewIsFresh(')).toBeLessThan(src.indexOf('var aliasReviewView'));
+  });
+
+  it('the load sub-fragment (setup-ui-alias-review-load.js) is concatenated in after the section (mutant: forget the concatenation)', () => {
+    const src = buildAliasReviewScript();
+    ['loadAliasReview', 'settleAliasReview', 'ensureAliasReviewLoaded'].forEach(name => expect(src).toContain(`function ${name}(`));
+    expect(src.indexOf('function loadAliasReview(')).toBeGreaterThan(src.indexOf('function renderAliasReview('));
+    expect(src).toContain("invoke('sidecar:refresh-catalog')");
   });
 });

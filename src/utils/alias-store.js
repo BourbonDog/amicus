@@ -54,7 +54,9 @@ function readDismissals() {
 /**
  * Stamp one dismissal into `config` (no I/O): validates the key, ensures
  * `aliasReview.dismissed`, writes the ISO time. Throws BEFORE touching the
- * object on a malformed key, so a caller can reject a whole batch untouched.
+ * object on a malformed key — per key: a caller stamping a batch validates
+ * every key first (electron/ipc-aliases.js :: applyDismissals stamps a
+ * throwaway object before the real one) if the batch must stay untouched.
  * @param {object} config the config object to stamp (mutated and returned)
  * @param {string} dismissKey `alias@proposedId`
  * @param {Date} [now]

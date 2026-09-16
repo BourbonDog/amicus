@@ -180,4 +180,11 @@ describe('applyDismissals (Finish\'s never-ask-again step: stamps into the confi
     expect(cfg).toEqual({ aliases: {} });
     expect(saveConfig).not.toHaveBeenCalled();
   });
+
+  it('round 2 A2: a MIXED batch (good keys before a bad one) throws with cfg untouched — the whole batch is validated before the first stamp (mutant ONEPASS: stamp as you validate)', () => {
+    const cfg = { aliases: {} };
+    expect(() => applyDismissals(cfg, ['glm@openrouter/z-ai/glm-5.4', 'atlas@openrouter/x/atlas-1', 'no-at-sign'], NOW)).toThrow(/alias@proposedId/);
+    expect(cfg).toEqual({ aliases: {} });                                          // ONEPASS dies here: the two good keys were stamped
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
 });

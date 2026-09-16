@@ -409,6 +409,7 @@ electron/
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-groups.js  # Setup UI - Alias grouping rule (issue 213)
+├── setup-ui-alias-review-load.js  # Setup UI - the "Needs review" section's fetch lifecycle (issue 238 D9)
 ├── setup-ui-alias-review-text.js  # Setup UI - the words and the freshness rule of the "Needs review" section (issue 238 D9)
 ├── setup-ui-alias-review.js  # Setup UI - Alias Review section (issue 238 D9)
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script

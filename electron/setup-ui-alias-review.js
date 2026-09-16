@@ -9,7 +9,9 @@
  * same `collectAliasView` the CLI list and picker use) and renders it with
  * createElement/textContent only, never innerHTML: alias names, ids, notes and
  * error text are data. Its pure helpers (the words, the freshness rule) live
- * in setup-ui-alias-review-text.js, concatenated in front of this fragment.
+ * in setup-ui-alias-review-text.js, concatenated in front of this fragment;
+ * the fetch lifecycle (first-entry load, the latest-response guard, ↻) in
+ * setup-ui-alias-review-load.js, concatenated after it.
  *
  * Controls per proposal are the CLI picker's menu items (src/sidecar/
  * aliases-review-render.js :: menuFor): one button per candidate — "accept
@@ -32,7 +34,9 @@
  * with the banner instead of staging (council review of PR 253, A4). An
  * unavailable catalog or a handler error renders the section with the banner
  * alone — never a silent "nothing to review" — and a failed first fetch is
- * retried on the next Routing-step entry (C3/D2). A proposal for an alias the
+ * retried on the next Routing-step entry (C3/D2, in the load sub-fragment). A
+ * proposal without a dismissKey has no dismiss control: the page never shows
+ * a "never ask again" it cannot stage (round 2, A3). A proposal for an alias the
  * user already edited this session is not rendered: the engine reads DISK, the
  * page's staged edit wins; a notable added this session is hidden by the free
  * NAME its "add" staged, never by value (A3/D4).
@@ -41,6 +45,7 @@
 'use strict';
 
 const { buildAliasReviewTextScript } = require('./setup-ui-alias-review-text');
+const { buildAliasReviewLoadScript } = require('./setup-ui-alias-review-load');
 
 /**
  * @returns {string} the section's HTML skeleton, inserted by
@@ -124,8 +129,10 @@ function buildAliasReviewScript() {
     removeProposalRow(p.alias);
   }
 
+  // Nothing to stage without a dismissKey: the row STAYS (council round 2 of PR 253, A3).
   function dismissProposal(p) {
-    if (p.dismissKey && stagedDismissals.indexOf(p.dismissKey) === -1) { stagedDismissals.push(p.dismissKey); }
+    if (typeof p.dismissKey !== 'string' || !p.dismissKey) { return; }
+    if (stagedDismissals.indexOf(p.dismissKey) === -1) { stagedDismissals.push(p.dismissKey); }
     removeProposalRow(p.alias);
   }
 
@@ -215,11 +222,13 @@ function buildAliasReviewScript() {
     if (stale) { choose.disabled = true; choose.title = staleTitle; }
     choose.addEventListener('click', function() { chooseForProposal(p, choose); });
     actions.appendChild(choose);
-    var dismiss = document.createElement('button');
-    dismiss.type = 'button'; dismiss.className = 'alias-review-dismiss'; dismiss.textContent = '\\u00d7 dismiss';
-    dismiss.title = 'Never ask again about ' + (p.dismissKey || p.alias);
-    dismiss.addEventListener('click', function() { dismissProposal(p); });
-    actions.appendChild(dismiss);
+    if (typeof p.dismissKey === 'string' && p.dismissKey) {   // no key = no "never ask again" to stage, so no control (round 2, A3)
+      var dismiss = document.createElement('button');
+      dismiss.type = 'button'; dismiss.className = 'alias-review-dismiss'; dismiss.textContent = '\\u00d7 dismiss';
+      dismiss.title = 'Never ask again about ' + p.dismissKey;
+      dismiss.addEventListener('click', function() { dismissProposal(p); });
+      actions.appendChild(dismiss);
+    }
     row.appendChild(line); row.appendChild(actions);
     return row;
   }
@@ -247,52 +256,7 @@ function buildAliasReviewScript() {
     if (count) { count.textContent = '(' + shown + ')'; }
     section.hidden = shown === 0 && !text;
   }
-
-  // Resolves true when a usable document rendered, false on a rejection or an error document (the latch below follows it).
-  function loadAliasReview() {
-    return window.sidecarSetup.invoke('sidecar:get-alias-review')
-      .then(function(view) { renderAliasReview(view); return !(view && view.error); })
-      .catch(function(err) {
-        renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, freshUntil: null, gatedIds: [], error: String((err && err.message) || err || 'unknown error') });
-        return false;
-      });
-  }
-
-  var aliasReviewRefresh = $('alias-review-refresh');
-  if (aliasReviewRefresh) {
-    aliasReviewRefresh.addEventListener('click', async function() {
-      aliasReviewRefresh.disabled = true;
-      try {
-        try {
-          var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
-          applyCatalog(info);                     // Step 2's meta line and Step 3's picker see the refresh too
-        } catch (_e) { /* the re-fetch below reports whatever the cache now holds */ }
-        aliasReviewLoaded = await loadAliasReview();
-      } finally { aliasReviewRefresh.disabled = false; }   // re-enable even if the re-fetch above somehow throws
-    });
-  }
-
-  // issue 238 D9: fetched on FIRST entry to the Routing step, never at page load --
-  // the Workspace's Settings child window must not network on open (main.js).
-  // ensureCatalogLoaded (issue 238) memoizes its in-flight request, so this call
-  // and showStep(3)'s direct call share ONE fetch instead of racing two. The review
-  // fetch is chained AFTER the catalog load because sidecar:get-alias-review reads
-  // the catalog at the default age too (a stale cache refreshes inline in main)
-  // and model-catalog.js has no in-flight dedupe -- the memo in setup-ui.js dedupes
-  // get-catalog callers; the chain serializes the two different reads.
-  // Council review of PR 253, C3/D2: "fetched on first entry" must not mean "fetched
-  // once, ever" -- the latch is set synchronously (a second entry while in flight must
-  // not race a second fetch) and then FOLLOWS the outcome, so a failed fetch (rejection
-  // or an error document) is retried on the next Routing-step entry; the banner points
-  // at the refresh button, and re-entering the step is the other way back.
-  var aliasReviewLoaded = false;
-  function ensureAliasReviewLoaded() {
-    if (aliasReviewLoaded) { return Promise.resolve(); }
-    aliasReviewLoaded = true;
-    return Promise.resolve(typeof ensureCatalogLoaded === 'function' ? ensureCatalogLoaded() : null)
-      .then(loadAliasReview)
-      .then(function(ok) { aliasReviewLoaded = !!ok; });
-  }`;
+  ` + buildAliasReviewLoadScript();
 }
 
 module.exports = { buildAliasReviewHTML, buildAliasReviewScript };
