@@ -706,11 +706,14 @@ level includes everything above it.
   // `autoRefresh: false` turns off the weekly background catalog refresh AND
   // the once-a-day "N alias updates available" notice (#238 D5) — only a
   // literal false does; `AMICUS_NO_NETWORK_PROBES=1` or a CI environment
-  // turns both off without a config file. `lastNotified` (epoch ms) is
-  // written automatically when the notice fires — don't hand-edit it.
+  // turns both off without a config file. `lastNotified` and
+  // `lastRefreshSpawned` (epoch ms) are written automatically — when the
+  // notice fires, and when a background refresh is started — don't hand-edit
+  // them.
   "aliasReview": {
     "autoRefresh": true,
     "lastNotified": 1757980800000,
+    "lastRefreshSpawned": 1757980800000,
     "dismissed": { "glm@openrouter/z-ai/glm-5.4": "2026-09-14T00:00:00.000Z" }
   },
 
