@@ -707,9 +707,11 @@ level includes everything above it.
   // `autoRefresh: false` turns off the weekly background catalog refresh AND
   // the once-a-day "N alias updates available" notice (#238 D5) — only a
   // literal false does; `AMICUS_NO_NETWORK_PROBES=1` or a CI environment
-  // turns both off without a config file. The notice's own timestamps (last
-  // notified, last background refresh started) live in `alias-notice-state/`
-  // beside the catalog cache — never here.
+  // (`CI`, `CONTINUOUS_INTEGRATION` or any `CI_*` variable; `CI=0` or
+  // `CI=false` reads as not-CI, as `is-in-ci` does) turns both off without
+  // a config file. The notice's own timestamps (last notified, last
+  // background refresh started) live in `alias-notice-state/` beside the
+  // catalog cache — never here.
   "aliasReview": {
     "autoRefresh": true,
     "dismissed": { "glm@openrouter/z-ai/glm-5.4": "2026-09-14T00:00:00.000Z" }

@@ -29,7 +29,7 @@
 
 const { DEFAULT_MAX_AGE_MS } = require('./model-catalog');
 
-/** @type {number} A week in ms — Q1's refresh threshold; also the "on" hint threshold of refreshStateLine (R-P4-8). */
+/** @type {number} A week in ms — Q1's refresh threshold. */
 const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DISABLED_REASON = { config: 'aliasReview.autoRefresh: false', env: 'AMICUS_NO_NETWORK_PROBES=1', ci: 'CI' };
@@ -86,9 +86,12 @@ function catalogAgeText(fetchedAt, now = Date.now()) {
 
 /**
  * The `amicus aliases` footer line (spec §4). The `amicus models --refresh`
- * hint (Phase 1's F1) rides along exactly when nothing else will refresh the
- * catalog for the user: past 24 h when the background refresh is off, past
- * the weekly threshold when it is on and evidently not keeping up.
+ * hint (Phase 1's F1) rides only when nothing else will refresh the catalog
+ * for the user: past 24 h with the background refresh OFF. With it on, the
+ * hint never prints — a week-old catalog is exactly when the exit hook
+ * starts that refresh itself (R-P4-22), and a refresh that keeps failing
+ * shows in `alias-notice-state/last-refresh.log` and `amicus models`' stale
+ * memo.
  * @param {{enabled: boolean, disabledBy: null|string}} state from `refreshState`
  * @param {number|null} fetchedAt
  * @param {number} [now]
@@ -97,7 +100,7 @@ function catalogAgeText(fetchedAt, now = Date.now()) {
 function refreshStateLine(state, fetchedAt, now = Date.now()) {
   const head = state.enabled ? 'on (weekly)' : `off (${DISABLED_REASON[state.disabledBy] || state.disabledBy})`;
   const age = typeof fetchedAt === 'number' ? now - fetchedAt : 0;
-  const hint = age > (state.enabled ? REFRESH_MAX_AGE_MS : DEFAULT_MAX_AGE_MS) ? ' — amicus models --refresh' : '';
+  const hint = !state.enabled && age > DEFAULT_MAX_AGE_MS ? ' — amicus models --refresh' : '';
   return `  background catalog refresh: ${head} — ${catalogAgeText(fetchedAt, now)}${hint}`;
 }
 

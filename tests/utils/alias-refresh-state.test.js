@@ -137,13 +137,13 @@ describe('refreshStateLine — the amicus aliases footer (spec §4)', () => {
     expect(refreshStateLine({ enabled: false, disabledBy: 'env' }, NOW - H, NOW)).toContain('off (AMICUS_NO_NETWORK_PROBES=1)');
     expect(refreshStateLine({ enabled: false, disabledBy: 'ci' }, NOW - H, NOW)).toContain('off (CI)');
   });
-  test('the models --refresh hint rides exactly when nothing else will refresh: off past 24 h, on past a week (mutant HINTALWAYS)', () => {
+  test('the models --refresh hint rides only when nothing else will refresh: off past 24 h; never when on (mutant HINTALWAYS; R-P4-22)', () => {
     const off = { enabled: false, disabledBy: 'config' };
     expect(refreshStateLine(off, NOW - 25 * H, NOW)).toMatch(/ — amicus models --refresh$/);
     expect(refreshStateLine(off, NOW - 23 * H, NOW)).not.toContain('models --refresh');
     expect(refreshStateLine(on, NOW - 3 * D, NOW)).not.toContain('models --refresh');
-    expect(refreshStateLine(on, NOW - REFRESH_MAX_AGE_MS - 1, NOW)).toMatch(/catalog is 7 days old — amicus models --refresh$/);
-    expect(refreshStateLine(on, NOW - REFRESH_MAX_AGE_MS, NOW)).not.toContain('models --refresh');
+    expect(refreshStateLine(on, NOW - REFRESH_MAX_AGE_MS - 1, NOW)).not.toContain('models --refresh');
+    expect(refreshStateLine(on, NOW - REFRESH_MAX_AGE_MS - 1, NOW)).toMatch(/catalog is 7 days old$/);
   });
 });
 

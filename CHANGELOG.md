@@ -42,7 +42,7 @@ All notable changes to Amicus are documented here. Format follows
   aliases` itself, which shows the count in its own footer, gets no notice. `amicus aliases`'
   footer names the state (`background catalog refresh: on (weekly) — catalog is 3 days old`); the
   `amicus models --refresh` hint that line replaces now rides only when nothing else will refresh
-  (off and older than a day, on and older than a week); `--json` carries
+  (the background refresh off and the catalog older than a day); `--json` carries
   `backgroundRefresh: { enabled, disabledBy }`. The hook never writes `config.json` — its two
   timestamps live in `alias-notice-state/` beside the catalog cache (atomic writes; safe to
   delete), and when a stamp cannot be written there neither the notice nor the refresh runs (the
