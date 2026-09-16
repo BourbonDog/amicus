@@ -196,7 +196,7 @@ src/
 │   ├── agent-mapping.js  # Agent Mapping Module
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
 │   ├── alias-groups.js  # Vendor-derived alias grouping (issue 213). Moved VERBATIM out of
-│   ├── alias-notice.js  # #238 D5 — the passive alias notice and the opportunistic background catalog
+│   ├── alias-notice.js  # #238 D5 — the passive alias notice and the weekly background catalog refresh, run from bin/amicus.js's exit listener.
 │   ├── alias-proposals.js  # The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns
 │   ├── alias-refresh-state.js  # #238 D5/Q8 — the ONE predicate behind the passive alias notice and the
 │   ├── alias-resolver.js  # Alias Resolver Utilities
@@ -686,7 +686,7 @@ evals/
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
 | `utils/alias-groups.js` | Vendor-derived alias grouping (issue 213). Moved VERBATIM out of | `groupAliases()`, `aliasVendorOf()`, `vendorLabel()`, `titleCaseVendor()`, `PREFERRED_VENDOR_ORDER()` |
-| `utils/alias-notice.js` | #238 D5 — the passive alias notice and the opportunistic background catalog | `runExitHook()`, `countProposals()`, `refreshDue()`, `spawnDetachedRefresh()` |
+| `utils/alias-notice.js` | #238 D5 — the passive alias notice and the weekly background catalog refresh, run from bin/amicus.js's exit listener. | `runExitHook()`, `countProposals()`, `refreshDue()`, `spawnDetachedRefresh()` |
 | `utils/alias-proposals.js` | The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns | `buildAliasProposals()`, `gatedCatalogIds()` |
 | `utils/alias-refresh-state.js` | #238 D5/Q8 — the ONE predicate behind the passive alias notice and the | `refreshState()`, `exitHookAllowed()`, `refreshStateLine()`, `catalogInfoFromCache()`, `REFRESH_MAX_AGE_MS()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |

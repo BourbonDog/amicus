@@ -33,8 +33,9 @@ All notable changes to Amicus are documented here. Format follows
   --review` — when the cached catalog shows updates waiting (at most once per 24 h, stamped in
   `aliasReview.lastNotified`; never computed from the network). After a command that exits 0 with a
   cached catalog older than seven days, the same keyed refresh `amicus models --refresh` performs
-  runs detached in the background (a failed attempt is retried a day later, not per command; no
-  cache at all is not refreshed — `setup`/`doctor`/`models` create it). One predicate gates both: a
+  runs detached in the background (at most one is started per day — `aliasReview.lastRefreshSpawned`;
+  a failed attempt is retried a day later, not per command; no cache at all is not refreshed —
+  `setup`/`doctor`/`models` create it). One predicate gates both: a
   terminal on stdin, not `--json`/`--quiet`, not `amicus mcp`, not CI, `AMICUS_NO_NETWORK_PROBES`
   unset, `aliasReview.autoRefresh` not `false` — no new environment variable. `amicus aliases`'
   footer names the state (`background catalog refresh: on (weekly) — catalog is 3 days old`); the

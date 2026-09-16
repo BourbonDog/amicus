@@ -28,7 +28,7 @@ function deps(over = {}) {
     config: over.config === undefined ? { aliases: { mine: 'openrouter/z-ai/glm-5.2' } } : over.config,
     catalog: over.catalog === undefined ? CATALOG : over.catalog,
   };
-  const rec = { saves: [], spawns: [], stderr: '', unrefs: 0, errorListeners: 0 };
+  const rec = { saves: [], spawns: [], stderr: '', unrefs: 0, listened: [] };
   const d = {
     loadConfig: () => (disk.config === null ? null : JSON.parse(JSON.stringify(disk.config))),
     saveConfig: (c) => { rec.saves.push(JSON.parse(JSON.stringify(c))); disk.config = c; },
@@ -40,7 +40,7 @@ function deps(over = {}) {
     readCache: () => disk.catalog,
     spawn: (file, args, opts) => {
       rec.spawns.push({ file, args, opts });
-      return { on: () => { rec.errorListeners += 1; }, unref: () => { rec.unrefs += 1; } };
+      return { on: (ev) => { rec.listened.push(ev); }, unref: () => { rec.unrefs += 1; } };
     },
     execPath: '/usr/bin/node',
     binPath: '/repo/bin/amicus.js',
@@ -95,6 +95,12 @@ describe('refreshDue — Q1 with the daily back-off', () => {
     expect(refreshDue({ fetchedAt: old, lastRefreshAttempt: NOW - 2 * H }, NOW)).toBe(false);
     expect(refreshDue({ fetchedAt: old, lastRefreshAttempt: NOW - 25 * H }, NOW)).toBe(true);
     expect(refreshDue({ fetchedAt: old, lastRefreshAttempt: null }, NOW)).toBe(true);
+    expect(refreshDue({ fetchedAt: old, lastRefreshAttempt: NOW + D }, NOW)).toBe(true);   // future attempt = never
+  });
+  test('R-P4-11: a background refresh started within the last day is not started again; an older or FUTURE start is (mutant NOSPAWNSTAMP)', () => {
+    expect(refreshDue(STALE, NOW, NOW - H)).toBe(false);
+    expect(refreshDue(STALE, NOW, NOW - 25 * H)).toBe(true);
+    expect(refreshDue(STALE, NOW, NOW + D)).toBe(true);
   });
 });
 
@@ -108,7 +114,7 @@ describe('spawnDetachedRefresh — the workspace-window.js shape', () => {
       opts: { detached: true, stdio: 'ignore', windowsHide: true, env: d.env },
     }]);
     expect(rec.unrefs).toBe(1);
-    expect(rec.errorListeners).toBe(1);
+    expect(rec.listened).toEqual(['error']);
   });
   test('a throwing spawn is false, not a throw', () => {
     const { d } = deps({ deps: { spawn: () => { throw new Error('ENOENT'); } } });
@@ -146,6 +152,11 @@ describe('runExitHook — the notice', () => {
     const at = deps({ config: { aliases: { mine: 'openrouter/z-ai/glm-5.2' }, aliasReview: { lastNotified: NOW - D } } });
     expect(runExitHook(RUN, at.d).notice).toBe(true);
   });
+  test('a FUTURE lastNotified (wrong clock) does not silence the notice: it fires and re-stamps now (mutant FUTURESILENT)', () => {
+    const { d, rec } = deps({ config: { aliases: { mine: 'openrouter/z-ai/glm-5.2' }, aliasReview: { lastNotified: NOW + D } } });
+    expect(runExitHook(RUN, d).notice).toBe(true);
+    expect(rec.saves[0].aliasReview.lastNotified).toBe(NOW);
+  });
   test('nothing to review: no line, no stamp', () => {
     const { d, rec } = deps({ config: { aliases: {} } });
     expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: false });
@@ -178,16 +189,32 @@ describe('runExitHook — the notice', () => {
 
 describe('runExitHook — the refresh', () => {
   test('exit 0 with a cache older than a week spawns the detached refresh (mutant FAILEDRUN: code 1 would too)', () => {
-    const { d, rec } = deps({ config: { aliases: {} }, catalog: STALE });
+    const cfg = { aliases: {} };
+    const { d, rec } = deps({ config: cfg, catalog: STALE });
     expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: true });
     expect(rec.spawns).toHaveLength(1);
     expect(rec.spawns[0].args).toEqual(['/repo/bin/amicus.js', 'models', '--refresh']);
+    expect(rec.saves).toEqual([{ ...cfg, aliasReview: { lastRefreshSpawned: NOW } }]);
     expect(runExitHook({ ...RUN, code: 1 }, deps({ config: { aliases: {} }, catalog: STALE }).d).refresh).toBe(false);
   });
   test('a fresh cache, no cache, or a day-old failed attempt: no spawn', () => {
     expect(runExitHook(RUN, deps({ config: { aliases: {} } }).d).refresh).toBe(false);
     expect(runExitHook(RUN, deps({ config: { aliases: {} }, catalog: null }).d).refresh).toBe(false);
     expect(runExitHook(RUN, deps({ config: { aliases: {} }, catalog: { ...STALE, lastRefreshAttempt: NOW - H } }).d).refresh).toBe(false);
+  });
+  test('R-P4-11: a background refresh spawned within the last day is not started again; an older one is', () => {
+    const within = deps({ config: { aliases: {}, aliasReview: { lastRefreshSpawned: NOW - H } }, catalog: STALE });
+    expect(runExitHook(RUN, within.d).refresh).toBe(false);
+    expect(within.rec.saves).toEqual([]);
+    const at = deps({ config: { aliases: {}, aliasReview: { lastRefreshSpawned: NOW - 25 * H } }, catalog: STALE });
+    expect(runExitHook(RUN, at.d).refresh).toBe(true);
+  });
+  test('both fire in one exit: two saves, the second carries both stamps (the second load sees the first write)', () => {
+    const { d, rec } = deps({ catalog: STALE });
+    expect(runExitHook(RUN, d)).toEqual({ notice: true, refresh: true });
+    expect(rec.saves).toHaveLength(2);
+    expect(rec.saves[0].aliasReview).toEqual({ lastNotified: NOW });
+    expect(rec.saves[1].aliasReview).toEqual({ lastNotified: NOW, lastRefreshSpawned: NOW });
   });
   test('the standing half vetoes the refresh too: autoRefresh false, the env literal, CI', () => {
     expect(runExitHook(RUN, deps({ config: { aliases: {}, aliasReview: { autoRefresh: false } }, catalog: STALE }).d).refresh).toBe(false);
@@ -199,4 +226,16 @@ describe('runExitHook — the refresh', () => {
     expect(runExitHook(RUN, d)).toEqual({ notice: false, refresh: false });
     expect(rec.stderr).toBe('');
   });
+});
+
+test('never throws: no arguments, a null run, a throwing loadConfig in countProposals', () => {
+  // No deps supplied: runExitHook falls back to the real loadDeps()/loadConfig() (the
+  // hermetic scratch config dir, per tests/setup/hermetic-config-dir.js) — reading an
+  // empty scratch dir must still return both false, and print nothing.
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  expect(runExitHook()).toEqual({ notice: false, refresh: false });
+  expect(spy).not.toHaveBeenCalled();
+  spy.mockRestore();
+  expect(runExitHook(null, deps().d)).toEqual({ notice: false, refresh: false });
+  expect(countProposals({ ...deps().d, loadConfig: () => { throw new Error('boom'); } })).toBe(0);
 });
