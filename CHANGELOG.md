@@ -30,20 +30,22 @@ All notable changes to Amicus are documented here. Format follows
   mode is one `doctor` away. Installed copies see the facts only. (#238 Phase 2 follow-up)
 - **A once-a-day alias notice and a weekly background catalog refresh** (#238 D5, Q1/Q5/Q8). After
   any command run in a terminal, one stderr line — `2 alias updates available — amicus aliases
-  --review` — when the cached catalog shows updates waiting (at most once per 24 h, stamped in
-  `aliasReview.lastNotified`; never computed from the network). After a command that exits 0 with a
+  --review` — when the cached catalog shows updates waiting (at most once per 24 h; never computed
+  from the network). After a command that exits 0 with a
   cached catalog older than seven days, the same keyed refresh `amicus models --refresh` performs
   runs detached in the background (at most one is started per day, and only when that start could
-  be recorded in `aliasReview.lastRefreshSpawned`; a failed attempt is retried a day later, not per
+  be recorded; a failed attempt is retried a day later, not per
   command; no cache at all is not refreshed —
   `setup`/`doctor`/`models` create it). One predicate gates both: a
-  terminal on stdin, not `--json`/`--quiet`, not `amicus mcp`, not CI, `AMICUS_NO_NETWORK_PROBES`
+  terminal on stdin, not `--json`/`--quiet`, not `amicus mcp`/`update`, not CI, `AMICUS_NO_NETWORK_PROBES`
   not `1`, `aliasReview.autoRefresh` not `false` — no new environment variable — and `amicus
   aliases` itself, which shows the count in its own footer, gets no notice. `amicus aliases`'
   footer names the state (`background catalog refresh: on (weekly) — catalog is 3 days old`); the
   `amicus models --refresh` hint that line replaces now rides only when nothing else will refresh
   (off and older than a day, on and older than a week); `--json` carries
-  `backgroundRefresh: { enabled, disabledBy }`.
+  `backgroundRefresh: { enabled, disabledBy }`. The hook never writes `config.json` — its two
+  timestamps live in `alias-notice-state.json` beside the catalog cache (atomic writes; safe to
+  delete), and when that file cannot be written neither the notice nor the refresh runs.
 - **The notable list** (#238 D7, editorial half) — `curated-pins.json`'s `notable` entries are shipped
   `add <alias> → <id>` proposals for models no sibling rule can reach (a new vendor or family, never
   a new version of a pinned model); the list ships empty — the rule and its gate are the

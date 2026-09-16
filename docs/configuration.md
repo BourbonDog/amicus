@@ -583,6 +583,7 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 | `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`), `providers` (user-defined local / OpenAI-compatible providers added via `amicus provider add`, or by hand — id → `{type, baseURL, flavor, name?, apiKeyEnv?, pricing}`; see [`amicus provider`](./usage.md#amicus-provider)), `routing` (`prefer`: `"direct"` \| `"openrouter"`; `migration_notified`: per-vendor flags for the one-time direct-migration notice — see [Routing](#routing)). `0600` permissions. |
 | `.env` | `amicus setup` / `amicus key` | API keys (`OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`). `0600` permissions. |
 | `model-catalog.json` | `refreshCatalog()` (`src/utils/model-catalog.js`) | The cached provider model list, schema-versioned, with a **24-hour TTL**. Also carries refresh-outcome fields — `lastRefreshAttempt` and `lastRefreshError` — stamped on a *failed* refresh without touching the last-good `models`/`fetchedAt` (a bad fetch never clobbers a good cache). Human-readable JSON; safe to delete, it rebuilds on next use. |
+| `alias-notice-state.json` | the exit hook (`src/utils/alias-notice.js`, via `alias-notice-state.js`) | Machine state of the alias notice and the weekly background refresh: `lastNotified` and `lastRefreshSpawned` (epoch ms). Written atomically (temp + rename); never touches `config.json`. Safe to delete — the notice may fire once more and a refresh may start once more. |
 | `sessions-index.json` | `session-index.js` (`recordSession`, written at session start) | A **global** map of `taskId → project path`, consulted only when a per-project session lookup misses (e.g. an MCP server whose cwd differs from where the session was created). Navigation aid only, never authoritative — a corrupt index degrades to "no entry," never a crash. |
 | `council-ledger.jsonl` | `src/council/ledger.js` (`appendRun`), on every `council tally` | One row per distinct (council model, resolved executable) pair per run — findings raised, severity breakdown, street-cred, conformance. On an ordinary bench that is one row per council model; where **one alias** was served by one executable across more than one seat (a repeated alias, or a chair that is also a bench seat *when its chair and seat legs resolved to the same executable*) those seats collapse into a single row (v4.8), and an alias whose seats resolved differently gets one row per executable. Two *distinct* aliases sharing one resolution still write **two** rows — one per alias — which `amicus council stats` then aggregates into a single executable-keyed group. `runs` in `amicus council stats` counts distinct `meta.runId` values, not rows. At `LEDGER_SCHEMA_VERSION` **2** (v4.7 GOA-7), rows may also carry `resolvedModel` (the executable id that served); legacy-read, no migration — a row without one (all pre-v2 history, plus leg-less rows) aggregates under its alias, and a group is marked `legacy` only when every row in it lacks `resolvedModel`. Read back by `amicus council stats`. |
 | `spend-ledger.jsonl` | `src/utils/spend-ledger.js` (`appendSpend`), new in Phase 16 | One row per completed run/leg — tokens + resolved cost. Read back by `amicus spend` for the cross-run rollup. Append is best-effort and can never fail the run it's recording; safe to delete (starts fresh, loses history only). |
@@ -706,14 +707,11 @@ level includes everything above it.
   // `autoRefresh: false` turns off the weekly background catalog refresh AND
   // the once-a-day "N alias updates available" notice (#238 D5) — only a
   // literal false does; `AMICUS_NO_NETWORK_PROBES=1` or a CI environment
-  // turns both off without a config file. `lastNotified` and
-  // `lastRefreshSpawned` (epoch ms) are written automatically — when the
-  // notice fires, and when a background refresh is started (a refresh only
-  // starts if that stamp could be saved) — don't hand-edit them.
+  // turns both off without a config file. The notice's own timestamps (last
+  // notified, last background refresh started) live in `alias-notice-state.json`
+  // beside the catalog cache — never here.
   "aliasReview": {
     "autoRefresh": true,
-    "lastNotified": 1757980800000,
-    "lastRefreshSpawned": 1757980800000,
     "dismissed": { "glm@openrouter/z-ai/glm-5.4": "2026-09-14T00:00:00.000Z" }
   },
 
