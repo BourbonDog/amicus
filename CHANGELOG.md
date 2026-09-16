@@ -41,6 +41,10 @@ All notable changes to Amicus are documented here. Format follows
   `amicus models --refresh` hint that line replaces now rides only when nothing else will refresh
   (off and older than a day, on and older than a week); `--json` carries
   `backgroundRefresh: { enabled, disabledBy }`.
+- **The notable list** (#238 D7, editorial half) — `curated-pins.json`'s `notable` entries are shipped
+  `add <alias> → <id>` proposals for models no sibling rule can reach (a new vendor or family, never
+  a new version of a pinned model); the curation rule and the content gate that enforces its
+  mechanical half live in docs/usage.md (Owner mode) and `tests/utils/curated-pins-notable.test.js`.
 - **Setup window — "Needs review" section and per-row state (Electron):** the Model Routing
   step now shows every alias as `following` or `pinned` with the right remove control
   (`unpin` on a curated pin, `×` on a custom alias — both remove the key), and a **Needs
