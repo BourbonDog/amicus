@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.11.0] - 2026-09-16
 
 ### Added
 
@@ -67,7 +67,10 @@ All notable changes to Amicus are documented here. Format follows
   `follows the shipped recommendation` or `live flagship differs from the shipped <id> —
   pinned` for the picked card, and a default merely restored on reopen is no longer re-written
   to the live flagship on Finish — the wizard writes only what you actively chose, and a write
-  equal to the shipped pin is a follow (no key), on screen and on disk. (#238 Q9, §6.5)
+  equal to the shipped pin is a follow (no key), on screen and on disk. When the Routing step
+  has staged anything for the alias your default names (an unpin, an accepted proposal, an edit),
+  Finish keeps that and does not apply the Models step's pick over it — the Routing step is the
+  last word on an alias. (#238 Q9, §6.5; R-P3-13)
 
 ### Changed
 
@@ -84,7 +87,8 @@ All notable changes to Amicus are documented here. Format follows
   gemini-3.8-flash (both routes), `fable` → claude-fable-5.1 (OpenRouter) / claude-fable-5-1
   (Anthropic direct, authored by hand), `qwen-flash` → qwen3.8-flash, `minimax` → minimax-m3,
   `grok` → grok-4.20. A following alias picks these up on upgrade; a pinned one is offered them
-  by `amicus aliases --review`. (#238 D3)
+  by `amicus aliases --review`. The hardcoded Anthropic floor in `model-fetcher.js` (the ids the
+  direct API genuinely serves) moved with fable: `claude-fable-5` → `claude-fable-5-1`. (#238 D3)
 
 ### Fixed
 
