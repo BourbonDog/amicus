@@ -117,7 +117,9 @@ describe('reviewBanner — why the section cannot be acted on', () => {
     expect(fns.reviewBanner(view({ fresh: false, fetchedAt: null }), NOW)).toMatch(/^no catalog timestamp/);
   });
   it('A4: a document fresh at FETCH time but past its freshUntil reports the age — the flag alone is not the gate (mutant FROZENFRESH)', () => {
-    expect(fns.reviewBanner(view({ freshUntil: NOW - 1 }), NOW)).toMatch(/^catalog is 1 hour old and could not be refreshed/);
+    // re-review of the round-1 fix: nothing tried to refresh a document that aged in an open window, so the banner
+    // must not claim a refresh FAILED -- it says what to do (mutant WRONGREASON: the fetch-time wording on this path)
+    expect(fns.reviewBanner(view({ freshUntil: NOW - 1 }), NOW)).toBe('catalog is 1 hour old — ↻ to refresh; accepting is disabled until it succeeds (following the shipped pin is always allowed)');
     expect(fns.reviewBanner(view({ freshUntil: NOW }), NOW)).toBeNull();                       // the boundary is inclusive
     expect(fns.reviewBanner(view({ freshUntil: undefined }), NOW)).toMatch(/^catalog is 1 hour old/); // no bound = not provably fresh
     expect(fns.viewIsFresh(view(), NOW)).toBe(true);
@@ -362,7 +364,7 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     accept.click();
     expect(Object.prototype.hasOwnProperty.call(p.aliasEdits, 'glm')).toBe(false);  // FROZENFRESH dies here: nothing staged
     expect(p.banner.hidden).toBe(false);
-    expect(p.banner.textContent).toMatch(/^catalog is 2 days old and could not be refreshed/);
+    expect(p.banner.textContent).toMatch(/^catalog is 2 days old — ↻ to refresh; accepting is disabled until it succeeds/);   // WRONGREASON: not 'could not be refreshed'
     const [accept2, follow2, choose2, dismiss2] = p.list.querySelectorAll('.alias-review-actions button');
     expect(accept2.disabled).toBe(true);
     expect(choose2.disabled).toBe(true);
@@ -411,6 +413,22 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
     await p.fns.ensureAliasReviewLoaded(); await flush();                          // ↻ succeeded: latched
     expect(calls).toHaveLength(4);                                                  // REFRESHNOLATCH dies here (a fifth call)
+  });
+
+  it('A4: a choose… dropdown opened while fresh and committed past freshUntil stages nothing and re-renders with the banner (mutant OPENDROPDOWN: gate only at open time)', async () => {
+    const p = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
+    await p.fns.loadAliasReview(); await flush();
+    const actions = p.list.querySelector('.alias-review-actions');
+    actions.querySelector('.alias-review-choose').click();                         // fresh: the select opens
+    const select = actions.querySelector('.alias-review-select');
+    expect(select).not.toBeNull();
+    p.setNow(NOW + 48 * HOUR);                                                      // ...and sits open for two days
+    select.value = 'openrouter/z-ai/glm-4.9';
+    select.dispatch('change');
+    expect(Object.prototype.hasOwnProperty.call(p.aliasEdits, 'glm')).toBe(false);  // OPENDROPDOWN dies here
+    expect(p.banner.hidden).toBe(false);
+    expect(p.list.querySelector('.alias-review-select')).toBeNull();               // re-rendered: the dropdown is gone, the buttons are disabled
+    expect(p.list.querySelector('.alias-review-choose').disabled).toBe(true);
   });
 
   it('C5: choose… on an UNMAPPED proposal leads with a "— choose —" placeholder (value "") so the box is never blank; picking it cancels; a mapped proposal gets none', async () => {

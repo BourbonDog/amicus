@@ -173,6 +173,7 @@ function buildAliasReviewScript() {
     select.addEventListener('change', function() {
       var id = select.value;
       if (!id || id === p.current) { select.replaceWith(chooseBtn); return; }
+      if (!viewIsFresh(aliasReviewView, Date.now())) { renderAliasReview(aliasReviewView); return; }   // aged while the dropdown sat open: the banner, not a stage (A4)
       acceptProposal(p, id);
     });
     select.addEventListener('blur', function() { if (select.parentNode) { select.replaceWith(chooseBtn); } });

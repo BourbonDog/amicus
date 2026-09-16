@@ -46,6 +46,9 @@ function buildAliasReviewTextScript() {
     var days = Math.floor(ms / 86400000);
     var hours = Math.max(1, Math.floor(ms / 3600000));
     var age = days >= 1 ? days + ' day' + (days === 1 ? '' : 's') : hours + ' hour' + (hours === 1 ? '' : 's');
+    // fresh when fetched, aged past the gate in an open window: nothing has
+    // tried to refresh it yet, so say what to do, not that a refresh failed.
+    if (view.fresh) { return 'catalog is ' + age + ' old \\u2014 \\u21bb to refresh; accepting is disabled until it succeeds (following the shipped pin is always allowed)'; }
     return 'catalog is ' + age + ' old and could not be refreshed' + tail;
   }
 
