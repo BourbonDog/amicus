@@ -1,36 +1,46 @@
 /**
  * @module electron/setup-ui-alias-review
  * Setup UI - Alias Review section (issue 238 D9)
- * The wizard's "Needs review" section: the review engine's
- * proposals rendered ABOVE the Model Routing list, so a proposal is never
- * buried in a collapsed vendor group. `buildAliasReviewHTML` is the
- * server-rendered skeleton (no data in it); `buildAliasReviewScript` is the
- * page script that fetches ONE document over IPC (`sidecar:get-alias-review`,
- * electron/ipc-aliases.js — the same `collectAliasView` the CLI list and
- * picker use) and renders it with createElement/textContent only, never
- * innerHTML: alias names, ids, notes and error text are data.
+ * The wizard's "Needs review" section: the review engine's proposals rendered
+ * ABOVE the Model Routing list, so a proposal is never buried in a collapsed
+ * vendor group. `buildAliasReviewHTML` is the server-rendered skeleton (no
+ * data in it); `buildAliasReviewScript` is the page script that fetches ONE
+ * document over IPC (`sidecar:get-alias-review`, electron/ipc-aliases.js — the
+ * same `collectAliasView` the CLI list and picker use) and renders it with
+ * createElement/textContent only, never innerHTML: alias names, ids, notes and
+ * error text are data. Its pure helpers (the words, the freshness rule) live
+ * in setup-ui-alias-review-text.js, concatenated in front of this fragment.
  *
  * Controls per proposal are the CLI picker's menu items (src/sidecar/
  * aliases-review-render.js :: menuFor): one button per candidate — "accept
  * <id>" (newer sibling), "follow the shipped pin (<id>)", "use <id>"
- * (replacement), "add <alias> → <id>" (notable) — then "choose…" (a <select>
- * over the §5-gated catalog ids the IPC supplies, plus the candidates, the
- * current id and the shipped id) and "dismiss" (never ask again for that
- * alias@id pair). No "skip": a proposal left alone is skipped. Every action
- * is STAGED (`aliasEdits` / `stagedDismissals`, setup-ui-alias-state.js) and
- * written by Finish through sidecar:save-config, the wizard's one sink, so
+ * (replacement), "add <alias> → <id>" (notable) — then "choose…" (the Routing
+ * list's picker for that alias — its keyword matches, or every model when none
+ * match — narrowed to the §5-gated ids the IPC supplies, plus the candidates,
+ * the current id and the shipped id; narrower than the CLI's typed "choose
+ * another", which accepts any gated id) and "dismiss" (never ask again for
+ * that alias@id pair). No "skip": a proposal left alone is skipped. Every
+ * action is STAGED (`aliasEdits` / `stagedDismissals`, setup-ui-alias-state.js)
+ * and written by Finish through sidecar:save-config, the wizard's one sink, so
  * closing the window writes nothing.
  *
- * The §5 WRITE gate rides the document's `fresh` flag: when the catalog is
- * older than 24 h and the inline refresh failed, every candidate but "follow"
- * and the "choose…" control are disabled and the banner says why — "follow"
- * removes a key and needs no catalog. An unavailable catalog or a handler error
- * renders the section with the banner alone — never a silent "nothing to
- * review". A proposal for an alias the user already edited this session is not
- * rendered: the engine reads DISK, the page's staged edit wins.
+ * The §5 WRITE gate rides the document's `fresh` flag and its `freshUntil`
+ * (`viewIsFresh`): when the catalog is older than 24 h and the inline refresh
+ * failed, every candidate but "follow" and the "choose…" control are disabled
+ * and the banner says why — "follow" removes a key and needs no catalog. The
+ * gate is re-checked at ACTION time, so a wizard left open past it re-renders
+ * with the banner instead of staging (council review of PR 253, A4). An
+ * unavailable catalog or a handler error renders the section with the banner
+ * alone — never a silent "nothing to review" — and a failed first fetch is
+ * retried on the next Routing-step entry (C3/D2). A proposal for an alias the
+ * user already edited this session is not rendered: the engine reads DISK, the
+ * page's staged edit wins; a notable added this session is hidden by the free
+ * NAME its "add" staged, never by value (A3/D4).
  */
 
 'use strict';
+
+const { buildAliasReviewTextScript } = require('./setup-ui-alias-review-text');
 
 /**
  * @returns {string} the section's HTML skeleton, inserted by
@@ -52,44 +62,10 @@ function buildAliasReviewHTML() {
  * @returns {string} JavaScript source (no <script> tags)
  */
 function buildAliasReviewScript() {
-  return `
+  return buildAliasReviewTextScript() + `
   var aliasReviewView = null;                     // the last sidecar:get-alias-review document
   var aliasReviewRows = Object.create(null);      // alias -> the proposal row on screen
-
-  // Why the section cannot be acted on, or null when it can. Mirrors the CLI's
-  // staleCatalogBanner (aliases-review-gate.js): error and unavailability
-  // first, then the write gate's age.
-  function reviewBanner(view, now) {
-    if (view.error) { return 'could not check for updates \\u2014 ' + view.error; }
-    if (!view.catalogAvailable) { return 'catalog unavailable \\u2014 cannot check for updates (\\u21bb to retry)'; }
-    if (view.fresh) { return null; }
-    var tail = ' \\u2014 accepting is disabled until \\u21bb succeeds (following the shipped pin is always allowed)';
-    if (typeof view.fetchedAt !== 'number') { return 'no catalog timestamp' + tail; }
-    if (view.fetchedAt > now) { return 'catalog timestamp is in the future (clock skew?)' + tail; }
-    var ms = now - view.fetchedAt;
-    var days = Math.floor(ms / 86400000);
-    var hours = Math.max(1, Math.floor(ms / 3600000));
-    var age = days >= 1 ? days + ' day' + (days === 1 ? '' : 's') : hours + ' hour' + (hours === 1 ? '' : 's');
-    return 'catalog is ' + age + ' old and could not be refreshed' + tail;
-  }
-
-  // The CLI menu's words for one candidate (aliases-review-render.js :: menuFor).
-  function candidateText(p, c) {
-    if (c.why === 'follow') { return 'follow the shipped pin (' + c.id + ')'; }
-    if (c.why === 'notable') { return 'add ' + p.alias + ' \\u2192 ' + c.id; }
-    if (c.why === 'replacement') { return 'use ' + c.id; }
-    return 'accept ' + c.id;
-  }
-
-  // One line on the top candidate (the CLI's "proposed" line).
-  function proposalWhy(p) {
-    var top = p.candidates && p.candidates[0];
-    if (!top) { return (p.reasons || []).join(', '); }
-    if (top.why === 'newer-sibling') { return 'newer: ' + top.id + ' \\u00b7 newer sibling, same tier'; }
-    if (top.why === 'follow') { return 'differs from the shipped pin ' + top.id; }
-    if (top.why === 'replacement') { return 'gone from the catalog \\u00b7 replacement: ' + top.id; }
-    return (top.evidence && top.evidence.note) || 'notable model';
-  }
+  var stagedNotables = Object.create(null);       // proposal alias -> the free name its "add" staged (hide by that KEY, never by value -- council review of PR 253, A3/D4)
 
   // A free name for a notable's suggested alias: the CLI's numeric-suffix
   // rule (aliases-review.js :: freeSuffix) over the rows on screen plus the
@@ -140,6 +116,7 @@ function buildAliasReviewScript() {
     if (p.state === 'unmapped') {
       var name = freeAliasName(p.alias);
       aliasEdits[name] = id;
+      stagedNotables[p.alias] = name;
       appendStagedRow(name, id);
     } else {
       stageAliasWrite(p.alias, id);
@@ -158,6 +135,7 @@ function buildAliasReviewScript() {
   // alias -- the shipped id (Q4's follow, allowed even when the catalog lacks
   // it). The candidates lead in their own group. Picking the current id cancels.
   function chooseForProposal(p, chooseBtn) {
+    if (!viewIsFresh(aliasReviewView, Date.now())) { renderAliasReview(aliasReviewView); return; }   // A4: the gate at action time
     var select = buildModelSelect(p.current || '', 'alias-review-select', p.alias);
     var keep = Object.create(null);
     (p.candidates || []).forEach(function(c) { keep[c.id] = true; });
@@ -181,6 +159,13 @@ function buildAliasReviewScript() {
       // the candidates already lead in Proposed -- drop the now-duplicate copy elsewhere.
       select.querySelectorAll('option').forEach(function(opt) { if (opt.parentNode !== proposed && proposedIds[opt.value]) { opt.remove(); } });
       select.querySelectorAll('optgroup').forEach(function(g) { if (g.querySelectorAll('option').length === 0) { g.remove(); } });
+    }
+    if (!p.current) {
+      // C5: no current id to select -- without a matching option Chromium leaves selectedIndex -1,
+      // a blank box. Lead with an explicit placeholder; the change handler's !id branch cancels it.
+      var ph = document.createElement('option');
+      ph.value = ''; ph.textContent = '\\u2014 choose \\u2014';
+      select.insertBefore(ph, select.firstChild);
     }
     select.value = p.current || '';
     chooseBtn.replaceWith(select);
@@ -210,7 +195,7 @@ function buildAliasReviewScript() {
     line.appendChild(why);
     var actions = document.createElement('div');
     actions.className = 'alias-review-actions';
-    var stale = !view.fresh;
+    var stale = !viewIsFresh(view, Date.now());
     var staleTitle = stale ? (reviewBanner(view, Date.now()) || '') : '';
     (p.candidates || []).forEach(function(c) {
       var b = document.createElement('button');
@@ -218,7 +203,10 @@ function buildAliasReviewScript() {
       b.setAttribute('data-id', c.id); b.setAttribute('data-why', c.why);
       b.textContent = (c.why === 'follow' ? '\\u21a9 ' : '\\u2713 ') + candidateText(p, c);
       if (stale && c.why !== 'follow') { b.disabled = true; b.title = staleTitle; }
-      b.addEventListener('click', function() { acceptProposal(p, c.id); });
+      b.addEventListener('click', function() {   // A4: the gate at ACTION time -- past it, re-render (the banner says the age, the buttons disable), never a silent refusal
+        if (c.why !== 'follow' && !viewIsFresh(aliasReviewView, Date.now())) { renderAliasReview(aliasReviewView); return; }
+        acceptProposal(p, c.id);
+      });
       actions.appendChild(b);
     });
     var choose = document.createElement('button');
@@ -249,7 +237,7 @@ function buildAliasReviewScript() {
       if (!p || typeof p.alias !== 'string') { return; }
       if (Object.prototype.hasOwnProperty.call(aliasEdits, p.alias)) { return; }   // staged this session: the page wins
       if (p.dismissKey && stagedDismissals.indexOf(p.dismissKey) !== -1) { return; }   // dismissed this session: staged, not on disk yet
-      if (p.state === 'unmapped' && (p.candidates || []).some(function(c) { return Object.keys(aliasEdits).some(function(k) { return aliasEdits[k] === c.id; }); })) { return; }   // already added this session under a free name (an undo via × deletes that key, so the proposal returns)
+      if (p.state === 'unmapped' && stagedNotables[p.alias] && Object.prototype.hasOwnProperty.call(aliasEdits, stagedNotables[p.alias])) { return; }   // added this session under that free name (\\u00d7 on its row deletes the key, so the proposal returns)
       var row = renderProposalRow(p, view);
       aliasReviewRows[p.alias] = row;
       list.appendChild(row);
@@ -259,11 +247,13 @@ function buildAliasReviewScript() {
     section.hidden = shown === 0 && !text;
   }
 
+  // Resolves true when a usable document rendered, false on a rejection or an error document (the latch below follows it).
   function loadAliasReview() {
     return window.sidecarSetup.invoke('sidecar:get-alias-review')
-      .then(renderAliasReview)
+      .then(function(view) { renderAliasReview(view); return !(view && view.error); })
       .catch(function(err) {
-        renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, gatedIds: [], error: String((err && err.message) || err || 'unknown error') });
+        renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, freshUntil: null, gatedIds: [], error: String((err && err.message) || err || 'unknown error') });
+        return false;
       });
   }
 
@@ -276,7 +266,7 @@ function buildAliasReviewScript() {
           var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
           applyCatalog(info);                     // Step 2's meta line and Step 3's picker see the refresh too
         } catch (_e) { /* the re-fetch below reports whatever the cache now holds */ }
-        await loadAliasReview();
+        aliasReviewLoaded = await loadAliasReview();
       } finally { aliasReviewRefresh.disabled = false; }   // re-enable even if the re-fetch above somehow throws
     });
   }
@@ -289,11 +279,18 @@ function buildAliasReviewScript() {
   // the catalog at the default age too (a stale cache refreshes inline in main)
   // and model-catalog.js has no in-flight dedupe -- the memo in setup-ui.js dedupes
   // get-catalog callers; the chain serializes the two different reads.
+  // Council review of PR 253, C3/D2: "fetched on first entry" must not mean "fetched
+  // once, ever" -- the latch is set synchronously (a second entry while in flight must
+  // not race a second fetch) and then FOLLOWS the outcome, so a failed fetch (rejection
+  // or an error document) is retried on the next Routing-step entry; the banner points
+  // at the refresh button, and re-entering the step is the other way back.
   var aliasReviewLoaded = false;
   function ensureAliasReviewLoaded() {
     if (aliasReviewLoaded) { return Promise.resolve(); }
     aliasReviewLoaded = true;
-    return Promise.resolve(typeof ensureCatalogLoaded === 'function' ? ensureCatalogLoaded() : null).then(loadAliasReview);
+    return Promise.resolve(typeof ensureCatalogLoaded === 'function' ? ensureCatalogLoaded() : null)
+      .then(loadAliasReview)
+      .then(function(ok) { aliasReviewLoaded = !!ok; });
   }`;
 }
 

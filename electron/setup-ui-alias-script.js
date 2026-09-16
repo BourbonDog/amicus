@@ -240,9 +240,12 @@ function buildAliasScript() {
     //    boundary, and refreshAliasRowState is what keeps data-kind truthful.
     if (isCuratedAlias(alias)) { unpinAliasRow(row); return; }
     // 3. a saved custom alias: strike it out, stage the delete. Until issue 238
-    //    Phase 3 this ran 'delete aliasEdits[alias]', staging NOTHING -- a silent no-op.
+    //    Phase 3 this ran 'delete aliasEdits[alias]', staging NOTHING -- a silent
+    //    no-op. Its pending proposal row goes too (a LIST-row action drops the
+    //    alias's proposal -- B1; council review of PR 253, A1).
     row.classList.add('alias-deleted');
     aliasEdits[alias] = null;
+    if (typeof removeProposalRow === 'function') { removeProposalRow(alias); }
     // A3: server-rendered rows carry a heading count baked in at render time.
     refreshAliasCounts();
   });

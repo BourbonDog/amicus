@@ -7,7 +7,10 @@
  * so it combines with none of the machine or terminal forms (R-P3-12). Like
  * every `amicus aliases` form it normalizes the config on entry (D6) BEFORE
  * the window opens — the caller binds that step, because `normalizeOnEntry`
- * is aliases.js's private helper.
+ * is aliases.js's private helper. A launch that REJECTS (no Electron, spawn
+ * failure) takes the same exit-1 path as a refused one — the reason on
+ * stderr with the terminal alternative — instead of escaping as an unhandled
+ * rejection (council review of PR 253, B2; `setup --api-keys` catches too).
  */
 
 'use strict';
@@ -25,7 +28,9 @@ async function handleAliasesUi(args, normalizeOnEntry, deps = {}) {
   }
   normalizeOnEntry();
   const launch = deps.launchSetupWindow || require('./setup-window').launchSetupWindow;
-  const res = await launch({ pane: 'aliases' });
+  let res;
+  try { res = await launch({ pane: 'aliases' }); }
+  catch (err) { res = { success: false, error: 'Could not launch the setup window: ' + ((err && err.message) || err) }; }   // a rejected launch is the same exit-1 path as a refused one (R-P3-12 follows setup --api-keys, which catches too)
   if (!res || !res.success) {
     process.stderr.write(`${(res && res.error) || 'Setup window closed without completing'}\nTerminal alternative: amicus aliases --review\n`);
     return 1;

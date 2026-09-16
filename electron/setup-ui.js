@@ -280,10 +280,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     Object.keys(aliasEdits).forEach(function(k) {
       var row = aliasRowFor(k);
       if (!row) { return; }
-      if (aliasEdits[k] === null) {
+      if (aliasEdits[k] === null) {   // custom: struck through, its id kept (the click path keeps it -- A6); curated: shows the shipped id it now follows
+        if (!isCuratedAlias(k)) { row.classList.add('alias-deleted'); return; }
         var span = row.querySelector('.alias-model');
         if (span) { span.textContent = defaultAliases[k] || ''; }
-        if (!isCuratedAlias(k)) { row.classList.add('alias-deleted'); }
         refreshAliasRowState(row);
         return;
       }
@@ -738,14 +738,17 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       }
       if (!mc) { return; }
       var routeId = pickRouteFor(mc);
-      var idEl = el.querySelector('.write-preview-id');
-      if (idEl && routeId) { idEl.textContent = routeId; }
       // issue 238 Q9: name the shipped id when the live pick differs from it --
       // but a restored, untouched default writes NOTHING for it (finishPlan),
-      // so its note must say that instead of claiming a pin it will not make.
+      // so its note must say that instead of claiming a pin it will not make;
+      // and a Step 3 stage on this alias is what Finish keeps (R-P3-13), so
+      // the card announces the stage, not a route pick it will not apply.
+      var staged = stagedDefaultPreview(alias);
+      var idEl = el.querySelector('.write-preview-id');
+      if (idEl && (staged || routeId)) { idEl.textContent = staged ? staged.id : routeId; }
       var noteEl = el.querySelector('.write-preview-note');
-      if (noteEl) { noteEl.textContent = defaultWasChosen() ? describeDefaultWrite(alias, routeId) : 'restored from your config \\u2014 not re-written unless you choose it'; }
-      var verbEl = el.querySelector('.write-preview-verb'); if (verbEl) { verbEl.textContent = defaultWasChosen() ? 'will set' : 'current default:'; }
+      if (noteEl) { noteEl.textContent = staged ? staged.note : (defaultWasChosen() ? describeDefaultWrite(alias, routeId) : 'restored from your config \\u2014 not re-written unless you choose it'); }
+      var verbEl = el.querySelector('.write-preview-verb'); if (verbEl) { verbEl.textContent = staged ? 'will keep' : (defaultWasChosen() ? 'will set' : 'current default:'); }
     });
     // issue 138: keep the resolved-id line in step with the route/model choice.
     document.querySelectorAll('.model-resolved').forEach(function(el) {

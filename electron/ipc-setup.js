@@ -12,7 +12,7 @@
 
 const { logger } = require('../src/utils/logger');
 const { registerLocalProviderHandlers } = require('./ipc-setup-local');
-const { registerAliasHandlers, recordDismissals } = require('./ipc-aliases');
+const { registerAliasHandlers, applyDismissals } = require('./ipc-aliases');
 
 /**
  * Register all setup-related IPC handlers
@@ -180,7 +180,7 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // aliasWrites values: string = set, null = delete. First run starts from
   // an empty alias map (issue 238 Q9).
   // councilPicks (optional): when length >= 2, seeds the free council via seedFreeCouncil.
-  // dismissals (optional, issue 238 D9): the page's staged "never ask again" keys, recorded after the writes.
+  // dismissals (optional, issue 238 D9): the page's staged "never ask again" keys, stamped into the same save -- Finish is all-or-nothing.
   ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites, councilPicks, dismissals) => {
     try {
       const { loadConfig, saveConfig } = require('../src/utils/config');
@@ -200,11 +200,11 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
           else if (typeof model === 'string' && model) { cfg.aliases[alias] = model; }
         }
       }
+      applyDismissals(cfg, dismissals);   // before the save: a malformed key rejects with nothing written (council review of PR 253, B1/C4/A5/D3)
       saveConfig(cfg);
       if (Array.isArray(councilPicks) && councilPicks.length >= 2) {
         require('../src/sidecar/setup').seedFreeCouncil(councilPicks);
       }
-      recordDismissals(dismissals);
       return { success: true };
     } catch (err) {
       logger.error('save-config handler error', { error: err.message });

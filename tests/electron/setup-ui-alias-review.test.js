@@ -26,7 +26,7 @@ const NOTABLE = { alias: 'atlas', state: 'unmapped', current: null, shipped: nul
   reasons: ['notable-unmapped'], candidates: [{ id: 'openrouter/x/atlas-1', why: 'notable', evidence: { note: 'new frontier entrant' } }], dismissKey: 'atlas@openrouter/x/atlas-1' };
 
 const NOW = 5_000_000;
-const view = (over = {}) => ({ proposals: [SIBLING], catalogAvailable: true, fetchedAt: NOW - HOUR, fresh: true,
+const view = (over = {}) => ({ proposals: [SIBLING], catalogAvailable: true, fetchedAt: NOW - HOUR, fresh: true, freshUntil: NOW + 23 * HOUR,
   gatedIds: ['openrouter/z-ai/glm-5.2', 'openrouter/z-ai/glm-5.3', 'openrouter/z-ai/glm-5.4', 'openrouter/z-ai/glm-4.9'], ...over });
 
 /** Build the page: skeleton + the alias/state/review fragments, with a fake IPC. */
@@ -48,7 +48,7 @@ function loadPage({ proposals = [SIBLING], doc = view({ proposals }), rows = [],
     const row = document.createElement('div'); row.className = 'alias-row'; row.setAttribute('data-alias', r.alias); row.setAttribute('data-state', r.state);
     const m = document.createElement('span'); m.className = 'alias-model'; m.textContent = r.model;
     const s = document.createElement('span'); s.className = 'alias-state'; s.textContent = r.state;
-    const b = document.createElement('button'); b.className = 'alias-delete'; b.setAttribute('data-kind', r.curated ? 'unpin' : 'delete');
+    const b = document.createElement('button'); b.className = 'alias-delete'; b.setAttribute('data-kind', r.curated ? 'unpin' : 'delete'); b.setAttribute('data-alias', r.alias);
     row.appendChild(m); row.appendChild(s); row.appendChild(b); group.appendChild(row);
   });
   editor.appendChild(group);
@@ -67,20 +67,29 @@ function loadPage({ proposals = [SIBLING], doc = view({ proposals }), rows = [],
     .map(name => aliasSrc.match(new RegExp(` {2}function ${name}\\([\\s\\S]*?\\n {2}\\}`))[0]).join('\n');
   const stateSrc = buildAliasStateScript();
   const reviewSrc = buildAliasReviewScript();
+  // The production remove handler (A1: a LIST-row x must drop the alias's
+  // proposal row), extracted exactly as setup-ui-alias-script-dom.test.js ::
+  // loadRemoveHandler does; appended AFTER the review fragment it calls into.
+  const removeHandler = aliasSrc.match(/ {2}\/\/ Alias editor: remove[\s\S]*?\n {2}\}\);/);
+  expect(removeHandler).toBeTruthy();
   // Every function the two fragments declare is returned, so a test can reach
   // the state helpers (aliasRowFor) as well as the section's own.
   const names = [...(stateSrc + '\n' + reviewSrc).matchAll(/^ {2}function (\w+)\(/gm)].map(m => m[1]);
   const fakeCSS = { escape: (s) => String(s).replace(/["\\]/g, '\\$&') };
   // eslint-disable-next-line no-new-func
   const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', 'CSS', '$', 'applyCatalog', 'Date', 'NEW_ROUTES_GROUP_LABEL', 'ensureCatalogLoaded',
-    `${pieces}\n${stateSrc}\n${reviewSrc}\nreturn { ${names.join(', ')}, stagedDismissals: function() { return stagedDismissals; } };`);
-  const fakeDate = { now: () => NOW };
+    `${pieces}\n${stateSrc}\n${reviewSrc}\n${removeHandler[0]}\nreturn { ${names.join(', ')}, stagedDismissals: function() { return stagedDismissals; } };`);
+  // A4: the page reads Date.now() at ACTION time, so a test can move the clock
+  // after the render (a wizard left open past the 24 h gate).
+  let nowMs = NOW;
+  const fakeDate = { now: () => nowMs };
+  const setNow = (t) => { nowMs = t; };
   // issue 238: pushes into the SAME calls array as sidecarSetup.invoke, so a
   // test can assert the catalog load precedes the review fetch (the memo in
   // the real ensureCatalogLoaded lives in setup-ui.js, out of scope here --
   // this stub only proves ensureAliasReviewLoaded still calls it first).
   const fns = factory(aliasEdits, defaultAliases, document, window, fakeCSS, (id) => document.getElementById(id), () => {}, fakeDate, NEW_ROUTES_GROUP_LABEL, () => { calls.push('catalog'); return Promise.resolve(); });
-  return { fns, document, section, list, count, banner, refresh, aliasEdits, calls, group };
+  return { fns, document, section, list, count, banner, refresh, aliasEdits, calls, group, setNow };
 }
 
 const flush = () => new Promise(r => setImmediate(r));
@@ -106,6 +115,14 @@ describe('reviewBanner — why the section cannot be acted on', () => {
     expect(fns.reviewBanner(view({ fresh: false, fetchedAt: NOW - 2 * HOUR }), NOW)).toMatch(/^catalog is 2 hours old/);
     expect(fns.reviewBanner(view({ fresh: false, fetchedAt: NOW + 1 }), NOW)).toMatch(/^catalog timestamp is in the future \(clock skew\?\)/);
     expect(fns.reviewBanner(view({ fresh: false, fetchedAt: null }), NOW)).toMatch(/^no catalog timestamp/);
+  });
+  it('A4: a document fresh at FETCH time but past its freshUntil reports the age — the flag alone is not the gate (mutant FROZENFRESH)', () => {
+    expect(fns.reviewBanner(view({ freshUntil: NOW - 1 }), NOW)).toMatch(/^catalog is 1 hour old and could not be refreshed/);
+    expect(fns.reviewBanner(view({ freshUntil: NOW }), NOW)).toBeNull();                       // the boundary is inclusive
+    expect(fns.reviewBanner(view({ freshUntil: undefined }), NOW)).toMatch(/^catalog is 1 hour old/); // no bound = not provably fresh
+    expect(fns.viewIsFresh(view(), NOW)).toBe(true);
+    expect(fns.viewIsFresh(view({ fresh: false }), NOW)).toBe(false);
+    expect(fns.viewIsFresh(view(), NOW + 24 * HOUR)).toBe(false);
   });
   it('unavailable and error come first (R-P3-10)', () => {
     expect(fns.reviewBanner(view({ catalogAvailable: false, fresh: false, fetchedAt: null }), NOW)).toBe('catalog unavailable — cannot check for updates (↻ to retry)');
@@ -299,6 +316,124 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(p.refresh.disabled).toBe(false);
   });
 
+  it('A1: × on a SAVED custom alias (branch 3 of the remove handler) drops its proposal row and hides the section (mutant ORPHANROW: branch 3 without removeProposalRow)', async () => {
+    const p = loadPage({ proposals: [STALE], rows: [{ alias: 'mine', model: 'openrouter/x/gone-1', state: 'pinned', curated: false }] });
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    const row = p.fns.aliasRowFor('mine');
+    row.querySelector('.alias-delete').click();
+    expect(p.aliasEdits.mine).toBeNull();
+    expect(Object.prototype.hasOwnProperty.call(p.aliasEdits, 'mine')).toBe(true);   // staged as a delete (own key)
+    expect(row.classList.contains('alias-deleted')).toBe(true);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);         // ORPHANROW dies here
+    expect(p.count.textContent).toBe('(0)');
+    expect(p.section.hidden).toBe(true);
+  });
+
+  it('A3/D4 (a): a notable is hidden by the free NAME its add staged, never by value — another alias already holding the candidate id does not hide it (mutant VALUEHIDE)', async () => {
+    const p = loadPage({ proposals: [NOTABLE] });
+    p.aliasEdits.other = 'openrouter/x/atlas-1';          // a different alias, same id, staged BEFORE the fetch
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row').map(r => r.getAttribute('data-alias'))).toEqual(['atlas']);   // VALUEHIDE dies here
+    expect(p.count.textContent).toBe('(1)');
+  });
+
+  it('A3/D4 (b): add hides the notable under its free name; ↻ keeps it hidden; deleting THAT key (× on the New-routes row) brings it back even while another alias holds the id', async () => {
+    const p = loadPage({ proposals: [NOTABLE] });
+    p.aliasEdits.other = 'openrouter/x/atlas-1';
+    await p.fns.loadAliasReview(); await flush();
+    p.list.querySelector('.alias-review-accept').click();
+    expect(p.aliasEdits.atlas).toBe('openrouter/x/atlas-1');
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);           // hidden by the KEY it staged
+    delete p.aliasEdits.atlas;
+    await p.fns.loadAliasReview(); await flush();
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);           // back, although `other` still holds the id (VALUEHIDE would keep hiding it)
+  });
+
+  it('A4: the §5 gate is re-checked at ACTION time — past freshUntil, accept re-renders with the banner and stages nothing; follow still stages null (mutant FROZENFRESH: trust the fetch-time flag)', async () => {
+    const p = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
+    await p.fns.loadAliasReview(); await flush();
+    const accept = p.list.querySelector('.alias-review-accept');
+    expect(accept.disabled).toBe(false);                                            // fresh when rendered
+    expect(p.banner.hidden).toBe(true);
+    p.setNow(NOW + 48 * HOUR);                                                      // the window sat open for two days
+    accept.click();
+    expect(Object.prototype.hasOwnProperty.call(p.aliasEdits, 'glm')).toBe(false);  // FROZENFRESH dies here: nothing staged
+    expect(p.banner.hidden).toBe(false);
+    expect(p.banner.textContent).toMatch(/^catalog is 2 days old and could not be refreshed/);
+    const [accept2, follow2, choose2, dismiss2] = p.list.querySelectorAll('.alias-review-actions button');
+    expect(accept2.disabled).toBe(true);
+    expect(choose2.disabled).toBe(true);
+    expect(dismiss2.disabled).toBe(false);
+    p.fns.chooseForProposal(SIBLING, choose2);                                      // the same gate guards choose…
+    expect(p.list.querySelector('.alias-review-select')).toBeNull();
+    follow2.click();                                                                // follow never needs the catalog
+    expect(p.aliasEdits.glm).toBeNull();
+    expect(p.fns.aliasRowFor('glm').getAttribute('data-state')).toBe('following');
+  });
+
+  it('C3/D2: a REJECTED first fetch is retried on the next Routing-step entry; the success then latches (mutant LATCHFAIL: latch unconditionally)', async () => {
+    const reviewCalls = [];
+    const invoke = (channel) => {
+      if (channel !== 'sidecar:get-alias-review') { return Promise.resolve({ models: [], fetchedAt: null }); }
+      reviewCalls.push(channel);
+      return reviewCalls.length === 1 ? Promise.reject(new Error('ipc down')) : Promise.resolve(view());
+    };
+    const p = loadPage({ invoke });
+    await p.fns.ensureAliasReviewLoaded(); await flush();
+    expect(reviewCalls).toHaveLength(1);
+    expect(p.banner.textContent).toBe('could not check for updates — ipc down');
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // re-entering the step
+    expect(reviewCalls).toHaveLength(2);                                            // LATCHFAIL dies here
+    expect(p.banner.hidden).toBe(true);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // latched now
+    expect(reviewCalls).toHaveLength(2);
+  });
+
+  it('C3/D2: an ERROR document is a failed fetch too — retried on re-entry (mutant LATCHFAIL); a ↻ that then succeeds latches, so the next entry does not fetch again (mutant REFRESHNOLATCH: ↻ leaves the latch false)', async () => {
+    const calls = [];
+    const errorDoc = () => view({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, freshUntil: null, error: 'disk on fire' });
+    const docs = [errorDoc(), errorDoc(), view()];
+    const invoke = (channel) => { calls.push(channel); return Promise.resolve(channel === 'sidecar:get-alias-review' ? docs.shift() : { models: [], fetchedAt: null }); };
+    const p = loadPage({ invoke });
+    await p.fns.ensureAliasReviewLoaded(); await flush();
+    expect(p.banner.textContent).toBe('could not check for updates — disk on fire');
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // re-entering the step after an error document
+    expect(calls).toEqual(['sidecar:get-alias-review', 'sidecar:get-alias-review']);   // LATCHFAIL dies here
+    expect(p.banner.textContent).toBe('could not check for updates — disk on fire');
+    p.refresh.click();                                                              // ↻: the third fetch succeeds
+    await flush(); await flush(); await flush();
+    expect(calls.slice(2)).toEqual(['sidecar:refresh-catalog', 'sidecar:get-alias-review']);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // ↻ succeeded: latched
+    expect(calls).toHaveLength(4);                                                  // REFRESHNOLATCH dies here (a fifth call)
+  });
+
+  it('C5: choose… on an UNMAPPED proposal leads with a "— choose —" placeholder (value "") so the box is never blank; picking it cancels; a mapped proposal gets none', async () => {
+    const p = loadPage({ proposals: [NOTABLE] });
+    await p.fns.loadAliasReview(); await flush();
+    const actions = p.list.querySelector('.alias-review-actions');
+    actions.querySelector('.alias-review-choose').click();
+    const select = actions.querySelector('.alias-review-select');
+    const options = select.querySelectorAll('option');
+    expect(options[0].value).toBe('');
+    expect(options[0].textContent).toBe('— choose —');
+    expect(options[0].parentNode).toBe(select);                                     // a direct child, ahead of the Proposed group
+    expect(options[1].value).toBe('openrouter/x/atlas-1');                          // Proposed still leads the real choices
+    expect(select.value).toBe('');
+    select.dispatch('change');                                                      // the placeholder is selected: cancels
+    expect(actions.querySelector('.alias-review-choose')).not.toBeNull();
+    expect(Object.keys(p.aliasEdits)).toEqual([]);
+    const q = loadPage({ proposals: [SIBLING] });
+    await q.fns.loadAliasReview(); await flush();
+    q.list.querySelector('.alias-review-choose').click();
+    expect(q.list.querySelectorAll('option').map(o => o.value)).not.toContain('');
+  });
+
   it('B1: a LIST-row action drops that alias\'s proposal row from the "Needs review" section', async () => {
     const p = loadPage({ rows: [{ alias: 'glm', model: 'openrouter/z-ai/glm-5.2', state: 'pinned', curated: true }] });
     await p.fns.loadAliasReview(); await flush();
@@ -322,5 +457,13 @@ describe('page hygiene', () => {
     expect(src).not.toContain("slice('openrouter/'.length)");
     expect(src).not.toContain('openrouter/');
     expect(src).toContain("invoke('sidecar:get-alias-review')");
+  });
+  it('the text sub-fragment (setup-ui-alias-review-text.js) is concatenated in (mutant: forget the concatenation)', () => {
+    const src = buildAliasReviewScript();
+    expect(src).toContain('function reviewBanner(');
+    expect(src).toContain('function viewIsFresh(');
+    expect(src).toContain('function candidateText(');
+    expect(src).toContain('function proposalWhy(');
+    expect(src.indexOf('function viewIsFresh(')).toBeLessThan(src.indexOf('var aliasReviewView'));
   });
 });

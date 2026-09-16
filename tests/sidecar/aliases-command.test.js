@@ -519,6 +519,15 @@ describe('amicus aliases --ui (#238 D4, Phase 3)', () => {
     expect(process.stderr.write).toHaveBeenCalledWith('Setup window closed without completing\nTerminal alternative: amicus aliases --review\n');
   });
 
+  test('B2 (council review of PR 253): a launch that REJECTS is the same exit-1 path — reason on stderr once, with the terminal alternative; nothing on stdout (mutant ESCAPE: no try/catch, the promise rejects instead of resolving 1)', async () => {
+    launch.mockRejectedValueOnce(new Error('spawn ENOENT'));
+    const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'], ui: true }));   // ESCAPE dies here: the await rejects
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(process.stderr.write).toHaveBeenCalledTimes(1);
+    expect(process.stderr.write).toHaveBeenCalledWith('Could not launch the setup window: spawn ENOENT\nTerminal alternative: amicus aliases --review\n');
+  });
+
   test.each([
     [{ ui: true, json: true }], [{ ui: true, review: true }], [{ ui: true, owner: true }], [{ ui: true, review: true, owner: true }], [{ ui: true, unpin: 'glm' }],
   ])('%o is an argument error: nothing launched, exit 1', async (flags) => {

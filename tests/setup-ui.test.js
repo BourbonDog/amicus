@@ -1111,8 +1111,9 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const script = localHtml.match(/<script>([\s\S]*)<\/script>/)[1];
     const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n {2}\}/);
     const updateMatch = script.match(/function updateWritePreviews\(\) \{[\s\S]*?\n {2}\}/);
-    // issue 238 Q9: the note text comes from describeDefaultWrite / defaultWasChosen (setup-ui-alias-state.js).
-    const noteFns = ['isCuratedAlias', 'describeDefaultWrite', 'defaultWasChosen'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
+    // issue 238 Q9: the note text comes from describeDefaultWrite / defaultWasChosen (setup-ui-alias-state.js);
+    // C1 (council review of PR 253): stagedDefaultPreview reads the page's aliasEdits for a Step 3 stage on the alias.
+    const noteFns = ['isCuratedAlias', 'describeDefaultWrite', 'defaultWasChosen', 'stagedDefaultPreview'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
     expect(pickRouteForMatch).toBeTruthy();
     expect(updateMatch).toBeTruthy();
     noteFns.forEach(m => expect(m).toBeTruthy());
@@ -1120,7 +1121,7 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     const build = new Function(
       'routingChoices', 'configuredKeys', 'explicitRouteChoices',
       'modelChoiceIds', 'modelOpenrouterIds', 'modelChoicesData', 'document', 'window', 'defaultAliases',
-      'restoredDefault', 'defaultTouched',
+      'restoredDefault', 'defaultTouched', 'aliasEdits',
       `${pickRouteForMatch[0]}\n${noteFns.map(m => m[0]).join('\n')}\n${updateMatch[0]}\nreturn updateWritePreviews;`
     );
     return (opts = {}) => build(
@@ -1129,7 +1130,8 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
       opts.modelChoicesData || [], opts.document, opts.window,
       Object.assign(Object.create(null), opts.defaultAliases || {}),
       opts.restoredDefault === undefined ? null : opts.restoredDefault,
-      !!opts.defaultTouched
+      !!opts.defaultTouched,
+      Object.assign(Object.create(null), opts.aliasEdits || {})
     );
   }
 
@@ -1234,6 +1236,41 @@ describe('F10: updateWritePreviews keeps .model-resolved in step with the route/
     expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
     expect(verbs.gemini.textContent).toBe('will set');
   });
+
+  test('C1 (council review of PR 253): a Step 3 stage on the checked alias is what Finish keeps (R-P3-13) — the card says "will keep" + the staged id, never a route pick it will not apply (mutant STALEPREVIEW: ignore aliasEdits)', () => {
+    const ids = {}, notes = {}, verbs = {};
+    const previewEl = (alias) => ({
+      getAttribute: (n) => (n === 'data-alias' ? alias : null),
+      classList: { toggle: () => {} },
+      querySelector: (sel) => {
+        if (sel === '.write-preview-id') { return ids[alias] = ids[alias] || { textContent: '' }; }
+        if (sel === '.write-preview-note') { return notes[alias] = notes[alias] || { textContent: '' }; }
+        if (sel === '.write-preview-verb') { return verbs[alias] = verbs[alias] || { textContent: '' }; }
+        return { textContent: '' };
+      },
+    });
+    const fakeDocument = {
+      querySelector: () => ({ value: 'gemini' }),                                   // gemini is the checked radio
+      querySelectorAll: (selector) => (selector === '.write-preview' ? [previewEl('gemini'), previewEl('deepseek')] : []),
+    };
+    const run = (aliasEdits) => extractUpdateWritePreviews()({
+      modelChoicesData: twoCardData, document: fakeDocument, window: { customDefaultModel: null },
+      defaultAliases: { gemini: 'google/gemini-x' }, defaultTouched: true, aliasEdits,
+    })();
+    run({ gemini: null });                                                           // Step 3 unpinned it
+    expect(verbs.gemini.textContent).toBe('will keep');                              // STALEPREVIEW dies here ('will set')
+    expect(ids.gemini.textContent).toBe('google/gemini-x');
+    expect(notes.gemini.textContent).toBe('unpinned on the Routing step — follows the shipped recommendation; the route pick here is not applied');
+    run({ gemini: 'google/gemini-3.7-flash' });                                      // Step 3 pinned it
+    expect(verbs.gemini.textContent).toBe('will keep');
+    expect(ids.gemini.textContent).toBe('google/gemini-3.7-flash');
+    expect(notes.gemini.textContent).toBe('set on the Routing step — the route pick here is not applied');
+    run({});                                                                         // nothing staged: the Q9 announcement as before
+    expect(verbs.gemini.textContent).toBe('will set');
+    expect(ids.gemini.textContent).toBe('google/gemini-x');
+    expect(notes.gemini.textContent).toBe('follows the shipped recommendation');
+    expect(notes.deepseek).toBeUndefined();                                          // only the checked card
+  });
 });
 
 // F11: `grep -rn finishBtn tests/` returned 0 repo-wide before this fix --
@@ -1322,6 +1359,42 @@ describe('issue 238: setup-ui.js reads rows through the state helpers', () => {
   it('updateAliasRoutes reads the staged value through stagedValueFor', () => {
     const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
     expect(script).toContain('stagedValueFor(row)');
+  });
+
+  // A6 (council review of PR 253): the re-render path (applyAliasEditsToUI, run
+  // on init and after a config reload) must show what the click path shows -- a
+  // struck custom row keeps the id it had; an unpinned curated row shows the
+  // shipped id it now follows.
+  it('applyAliasEditsToUI keeps a struck custom row\'s id and shows the shipped id on an unpinned curated row (mutant BLANKROW: blank the custom id)', () => {
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    const stateFns = ['aliasRowFor', 'isCuratedAlias', 'refreshAliasRowState', 'aliasStateFor', 'stagedValueFor'].map(name => script.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n {2}\\}`)));
+    const applyMatch = script.match(/function applyAliasEditsToUI\(\) \{[\s\S]*?\n {2}\}/);
+    stateFns.forEach(m => expect(m).toBeTruthy());
+    expect(applyMatch).toBeTruthy();
+    const { createFakeDocument } = require('./helpers/fake-dom');
+    const { document } = createFakeDocument();
+    const row = (alias, model) => {
+      const r = document.createElement('div'); r.className = 'alias-row'; r.setAttribute('data-alias', alias); r.setAttribute('data-state', 'pinned');
+      const m = document.createElement('span'); m.className = 'alias-model'; m.textContent = model;
+      const s = document.createElement('span'); s.className = 'alias-state alias-state-pinned'; s.textContent = 'pinned';
+      const b = document.createElement('button'); b.className = 'alias-delete'; b.setAttribute('data-alias', alias);
+      r.appendChild(m); r.appendChild(s); r.appendChild(b); document.body.appendChild(r);
+      return r;
+    };
+    const mine = row('mine', 'openrouter/x/y');
+    const glm = row('glm', 'openrouter/z-ai/glm-5.2');
+    const DEFAULTS = Object.assign(Object.create(null), { glm: 'openrouter/z-ai/glm-5.3' });   // synthetic, never the live pins
+    const aliasEdits = Object.assign(Object.create(null), { mine: null, glm: null });
+    // eslint-disable-next-line no-new-func
+    const apply = new Function('aliasDisplay', 'aliasEdits', 'defaultAliases', 'document',
+      `${stateFns.map(m => m[0]).join('\n')}\n${applyMatch[0]}\nreturn applyAliasEditsToUI;`)(Object.create(null), aliasEdits, DEFAULTS, document);
+    apply();
+    expect(mine.classList.contains('alias-deleted')).toBe(true);
+    expect(mine.querySelector('.alias-model').textContent).toBe('openrouter/x/y');          // BLANKROW dies here
+    expect(glm.classList.contains('alias-deleted')).toBe(false);
+    expect(glm.querySelector('.alias-model').textContent).toBe('openrouter/z-ai/glm-5.3');
+    expect(glm.getAttribute('data-state')).toBe('following');
+    expect(glm.querySelector('.alias-delete').hidden).toBe(true);
   });
 });
 

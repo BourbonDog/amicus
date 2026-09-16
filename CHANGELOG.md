@@ -33,10 +33,11 @@ All notable changes to Amicus are documented here. Format follows
   (`unpin` on a curated pin, `×` on a custom alias — both remove the key), and a **Needs
   review** section above the list renders the same proposals `amicus aliases --review`
   walks, with the picker's choices as buttons (accept a newer sibling, follow the shipped
-  pin, use a replacement, add a notable model, choose… from the vouched catalog ids, dismiss).
-  Everything is staged and written by Finish through the wizard's one sink; the Review step
-  lists it. A stale catalog disables the catalog-vouched buttons and says why; an unavailable
-  catalog shows a banner, never an empty section. (#238 D9, R1)
+  pin, use a replacement, add a notable model, choose… from the alias's picker narrowed to the
+  vouched catalog ids, dismiss). Everything is staged and written by Finish through the wizard's
+  one sink — in one write: a rejected Finish has written nothing; the Review step lists it. A
+  stale catalog disables the catalog-vouched buttons and says why; an unavailable catalog shows a
+  banner, never an empty section. (#238 D9, R1)
 - **`amicus aliases --ui`** opens the setup window on the Routing step. (#238 D4)
 - **Electron wizard live-pick announcement (Q9):** the Models step's write-preview says
   `follows the shipped recommendation` or `live flagship differs from the shipped <id> —

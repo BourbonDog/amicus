@@ -18,7 +18,7 @@ function loadStateScript({ aliasEdits = Object.create(null), defaultAliases = DE
   const src = buildAliasStateScript();
   const names = [...src.matchAll(/^ {2}function (\w+)\(/gm)].map(m => m[1]);
   expect(names).toEqual(expect.arrayContaining(['isCuratedAlias', 'aliasStateFor', 'aliasRowFor', 'stagedValueFor', 'refreshAliasRowState', 'unpinAliasRow', 'stageAliasWrite',
-    'defaultWasChosen', 'foldShippedWrites', 'describeDefaultWrite', 'finishPlan']));
+    'defaultWasChosen', 'foldShippedWrites', 'describeDefaultWrite', 'stagedDefaultPreview', 'touchesCheckedDefault', 'finishPlan']));
   // The fragment declares restoredDefault/defaultTouched/stagedDismissals itself; the
   // harness seeds them AFTER the declarations run, through the returned setters.
   // eslint-disable-next-line no-new-func
@@ -164,38 +164,55 @@ describe('defaultWasChosen — Q9: a restored default is not a choice (R-P3-6)',
     expect(loadStateScript({ document: radio('gemini'), restoredDefault: null }).fns.defaultWasChosen()).toBe(true);
     expect(loadStateScript({ document: radio(undefined), restoredDefault: 'gemini' }).fns.defaultWasChosen()).toBe(true); // a radio with no value is still "not the restored one"
   });
-  it('the page listeners flip defaultTouched on a radio change, a drill-down change and a route-pill click', () => {
+  // A page with `gemini` checked (attribute AND property -- fake-dom has no
+  // attribute/property reflection, only `id` gets it: the attribute is what the
+  // :checked/[name=] selector finds, the property is what the listener's own
+  // `t.name` check reads, matching what a real <input name="..."> gives both
+  // code paths for free).
+  function pageWithCheckedGemini() {
     const { document } = createFakeDocument();
     const { fns } = loadStateScript({ document, restoredDefault: 'gemini' });
     const r = document.createElement('input');
-    // fake-dom has no attribute/property reflection (only `id` gets it) --
-    // set the attribute (so the :checked/[name=] selector finds it) AND the
-    // plain property (so the listener's own `t.name` check fires), matching
-    // what a real <input name="..."> gives both code paths for free.
     r.setAttribute('name', 'default-model'); r.name = 'default-model'; r.value = 'gemini'; r.checked = true;
     document.body.appendChild(r);
     expect(fns.defaultWasChosen()).toBe(false);
-    r.dispatch('change');
-    expect(fns.defaultWasChosen()).toBe(true);
-    const { document: d2 } = createFakeDocument();
-    const { fns: f2 } = loadStateScript({ document: d2, restoredDefault: 'gemini' });
-    const pill = d2.createElement('span'); pill.className = 'route-pill'; d2.body.appendChild(pill);
+    return { document, fns, r };
+  }
+  it('the page listeners flip defaultTouched on a radio change, and on a drill-down change or a route-pill click ON THE CHECKED CARD', () => {
+    const a = pageWithCheckedGemini();
+    a.r.dispatch('change');
+    expect(a.fns.defaultWasChosen()).toBe(true);
+    const b = pageWithCheckedGemini();
+    const pill = b.document.createElement('button'); pill.className = 'route-pill'; pill.setAttribute('data-alias', 'gemini'); b.document.body.appendChild(pill);
     pill.click();
-    expect(f2.defaultWasChosen()).toBe(true);
-    const { document: d3 } = createFakeDocument();
-    const { fns: f3 } = loadStateScript({ document: d3, restoredDefault: 'gemini' });
-    const sel = d3.createElement('select'); sel.className = 'model-pick'; d3.body.appendChild(sel);
+    expect(b.fns.defaultWasChosen()).toBe(true);
+    const c = pageWithCheckedGemini();
+    const sel = c.document.createElement('select'); sel.className = 'model-pick'; sel.setAttribute('data-alias', 'gemini'); c.document.body.appendChild(sel);
     sel.dispatch('change');
-    expect(f3.defaultWasChosen()).toBe(true);
-    // C2: clicking an ALREADY-checked radio fires no native 'change' event, so the
+    expect(c.fns.defaultWasChosen()).toBe(true);
+    // C2 (PR 250): clicking an ALREADY-checked radio fires no native 'change' event, so the
     // click listener must also recognise it directly (not just the '.route-pill').
-    const { document: d4 } = createFakeDocument();
-    const { fns: f4 } = loadStateScript({ document: d4, restoredDefault: 'gemini' });
-    const r2 = d4.createElement('input');
-    r2.setAttribute('name', 'default-model'); r2.name = 'default-model'; r2.value = 'gemini'; r2.checked = true;
-    d4.body.appendChild(r2);
-    r2.click();
-    expect(f4.defaultWasChosen()).toBe(true);
+    const d = pageWithCheckedGemini();
+    d.r.click();
+    expect(d.fns.defaultWasChosen()).toBe(true);
+  });
+  it('C2 (council review of PR 253): a drill-down or pill on ANOTHER card is inert for the write, so it does not turn a restored default into a chosen one (mutant ANYCARD: any card\'s touch counts)', () => {
+    const a = pageWithCheckedGemini();
+    const pill = a.document.createElement('button'); pill.className = 'route-pill'; pill.setAttribute('data-alias', 'deepseek'); a.document.body.appendChild(pill);
+    pill.click();
+    expect(a.fns.defaultWasChosen()).toBe(false);                                     // ANYCARD dies here
+    const b = pageWithCheckedGemini();
+    const sel = b.document.createElement('select'); sel.className = 'model-pick'; sel.setAttribute('data-alias', 'deepseek'); b.document.body.appendChild(sel);
+    sel.dispatch('change');
+    expect(b.fns.defaultWasChosen()).toBe(false);
+    // a click on an <option> inside the checked card's drill-down still counts (closest walks up to the .model-pick)
+    const c = pageWithCheckedGemini();
+    const sel2 = c.document.createElement('select'); sel2.className = 'model-pick'; sel2.setAttribute('data-alias', 'gemini'); c.document.body.appendChild(sel2);
+    const opt = c.document.createElement('option'); sel2.appendChild(opt);
+    opt.dispatch('change');
+    expect(c.fns.defaultWasChosen()).toBe(true);
+    expect(c.fns.touchesCheckedDefault(sel2)).toBe(true);
+    expect(c.fns.touchesCheckedDefault(sel)).toBe(false);
   });
 });
 
@@ -227,6 +244,17 @@ describe('describeDefaultWrite — the Step 2 announcement names both ids (§6.5
     expect(fns.describeDefaultWrite('mine', 'openrouter/x/y')).toBe('pinned');
     expect(fns.describeDefaultWrite('gemini', '')).toBe('');
     expect(fns.describeDefaultWrite('gemini', null)).toBe('');
+  });
+});
+
+describe('stagedDefaultPreview — the Step 2 card announces a Step 3 stage (R-P3-13; council review of PR 253, C1)', () => {
+  it('null when unstaged; a null stage names the shipped id and says unpinned; a string stage names it and says set', () => {
+    const { fns } = loadStateScript({ aliasEdits: Object.assign(Object.create(null), { gemini: null, glm: 'openrouter/z-ai/glm-5.4' }) });
+    expect(fns.stagedDefaultPreview('deepseek')).toBeNull();
+    expect(fns.stagedDefaultPreview('gemini')).toEqual({ id: 'google/gemini-x', note: 'unpinned on the Routing step — follows the shipped recommendation; the route pick here is not applied' });
+    expect(fns.stagedDefaultPreview('glm')).toEqual({ id: 'openrouter/z-ai/glm-5.4', note: 'set on the Routing step — the route pick here is not applied' });
+    const { fns: f2 } = loadStateScript({ aliasEdits: Object.assign(Object.create(null), { mine: null }) });
+    expect(f2.stagedDefaultPreview('mine').id).toBe('');                    // a custom alias has no shipped id to fall back to
   });
 });
 

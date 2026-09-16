@@ -128,9 +128,19 @@ function buildAliasStateScript() {
   var defaultTouched = false;     // a radio / route-pill / drill-down interaction happened this session
   var stagedDismissals = [];      // "never ask again" keys the review section staged; Finish writes them
 
+  // A Step 2 touch is a CHOICE only on the checked card (or the radio itself):
+  // a drill-down or pill on another card changes nothing Finish writes
+  // (collectAliasWrites reads the checked alias only), so it must not turn a
+  // restored default into a chosen one (Q9; council review of PR 253, C2).
+  // Controls carry data-alias; the checked radio's value is the alias.
+  function touchesCheckedDefault(el) {
+    var r = document.querySelector('input[name="default-model"]:checked');
+    return !!r && el.getAttribute('data-alias') === r.value;
+  }
   document.addEventListener('change', function(e) {
     var t = e.target;
-    if (t && (t.name === 'default-model' || (t.closest && t.closest('.model-pick')))) {
+    var pick = t && t.closest ? t.closest('.model-pick') : null;
+    if (t && (t.name === 'default-model' || (pick && touchesCheckedDefault(pick)))) {
       defaultTouched = true;
       // issue 238 Q9 ruling: setup-ui.js's OWN change handler already called
       // updateWritePreviews() before this listener flips defaultTouched --
@@ -139,7 +149,10 @@ function buildAliasStateScript() {
     }
   });
   document.addEventListener('click', function(e) {
-    if (e.target && e.target.closest && (e.target.closest('.route-pill') || e.target.closest('input[name="default-model"]'))) {
+    var t = e.target;
+    var pill = t && t.closest ? t.closest('.route-pill') : null;
+    // a click on an ALREADY-checked radio fires no change event, so it is recognised here too
+    if (t && t.closest && (t.closest('input[name="default-model"]') || (pill && touchesCheckedDefault(pill)))) {
       defaultTouched = true;
       if (typeof updateWritePreviews === 'function') { updateWritePreviews(); }
     }
@@ -177,6 +190,18 @@ function buildAliasStateScript() {
     if (!isCuratedAlias(alias)) { return 'pinned'; }
     if (routeId === defaultAliases[alias]) { return 'follows the shipped recommendation'; }
     return 'live flagship differs from the shipped ' + defaultAliases[alias] + ' \\u2014 pinned';
+  }
+
+  // issue 238 R-P3-13 on the Step 2 card (council review of PR 253, C1): when
+  // Step 3 staged the chosen alias, finishPlan keeps THAT and the route pick
+  // here is not applied -- so the card announces the stage, never a write it
+  // will not make. null = the key goes: a curated alias then follows the
+  // shipped id. Returns null when Step 3 staged nothing for the alias.
+  function stagedDefaultPreview(alias) {
+    if (!Object.prototype.hasOwnProperty.call(aliasEdits, alias)) { return null; }
+    var v = aliasEdits[alias];
+    if (v === null) { return { id: defaultAliases[alias] || '', note: 'unpinned on the Routing step \\u2014 follows the shipped recommendation; the route pick here is not applied' }; }
+    return { id: v, note: 'set on the Routing step \\u2014 the route pick here is not applied' };
   }
 
   // Everything Finish sends, computed ONE way for the Review step and the

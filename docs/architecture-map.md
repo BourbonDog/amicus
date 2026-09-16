@@ -409,6 +409,7 @@ electron/
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-groups.js  # Setup UI - Alias grouping rule (issue 213)
+├── setup-ui-alias-review-text.js  # Setup UI - the words and the freshness rule of the "Needs review" section (issue 238 D9)
 ├── setup-ui-alias-review.js  # Setup UI - Alias Review section (issue 238 D9)
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
 ├── setup-ui-alias-state.js  # Inline page script: what an alias row MEANS (issue 238 D1/D9) and what Finish writes for the Step 2 default (issue 238 Q9).
@@ -687,7 +688,7 @@ evals/
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/alias-state.js` | Following-vs-pinned state for model aliases (#238 D1) and the normalization | `normalizeAliases()`, `listAliasRows()`, `isCurated()` |
-| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `recordDismissal()` |
+| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `stampDismissal()`, `recordDismissal()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
