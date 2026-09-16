@@ -8825,10 +8825,10 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
   existing pin; an `add` proposal is not one. Revisit the line when `notable` is non-empty.
 - [ ] `catalogAgeText` floors at "1 hour old" (the Electron banner's arithmetic, kept identical) —
   a catalog refreshed a minute ago reads `catalog is 1 hour old` in the footer; cosmetic.
-- [ ] Release-ritual gap: the one Phase 4 item not observed at the cut is the absence of a console
+- [x] Release-ritual gap: the one Phase 4 item not observed at the cut was the absence of a console
   window flash when the detached refresh child starts from a REAL interactive terminal
   (`windowsHide: true` is pinned by the child-shape test; the live smokes ran in a hidden console).
-  Owner check: with a week-old catalog, run any command in a terminal.
+  CLOSED 2026-09-16 — the owner ran it in his own terminal after the release: no window flashed.
 
 **Council infrastructure**
 - [ ] OpenRouter credits: #254 round 3 lost its gpt leg to "This request would exceed your
