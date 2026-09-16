@@ -455,6 +455,37 @@ describe('acting on a proposal (everything is STAGED — R-P3-1)', () => {
     expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
   });
 
+  it('round 2 re-review: a settled ↻ request does not re-enable the control while a newer entry fetch is still in flight — the control follows the in-flight COUNT (mutant REENABLE: the ↻ handler re-enables unconditionally)', async () => {
+    const pending = [];                                                             // deferred review requests 2 and 3; request 1 fails
+    const reviewCalls = [];
+    const invoke = (channel) => {
+      if (channel !== 'sidecar:get-alias-review') { return Promise.resolve({ models: [], fetchedAt: null }); }
+      reviewCalls.push(channel);
+      if (reviewCalls.length === 1) { return Promise.reject(new Error('ipc down')); }
+      return new Promise(r => { pending.push(r); });
+    };
+    const p = loadPage({ invoke });
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // request 1 fails: latch false, banner + ↻ on
+    expect(p.refresh.disabled).toBe(false);
+    p.refresh.click();                                                              // ↻: request B (catalog refresh, then the review fetch)
+    await flush(); await flush(); await flush();
+    expect(reviewCalls).toHaveLength(2);
+    expect(p.refresh.disabled).toBe(true);
+    const entry = p.fns.ensureAliasReviewLoaded();                                 // re-entering the step while B is pending: request C
+    await flush();
+    expect(reviewCalls).toHaveLength(3);
+    pending[0](view());                                                             // B settles first: superseded by C, and C is still in flight
+    await flush(); await flush(); await flush();
+    expect(p.refresh.disabled).toBe(true);                                          // REENABLE dies here
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(0);          // B rendered nothing (superseded)
+    pending[1](view());                                                             // C settles: the latest renders and the control comes back
+    await entry; await flush();
+    expect(p.refresh.disabled).toBe(false);
+    expect(p.list.querySelectorAll('.alias-review-row')).toHaveLength(1);
+    await p.fns.ensureAliasReviewLoaded(); await flush();                          // latched by C
+    expect(reviewCalls).toHaveLength(3);
+  });
+
   it('round 2 A3: a proposal without a dismissKey gets no dismiss control, and dismissProposal on it stages nothing and keeps the row (mutant HOLLOWDISMISS: drop the row anyway)', async () => {
     const keyless = { ...SIBLING, dismissKey: undefined };
     const p = loadPage({ proposals: [keyless] });

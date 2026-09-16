@@ -18,9 +18,10 @@
  * overlap after a failed first fetch (the banner shows ↻ while re-entering
  * the step retries), and without the guard the older document could land
  * after the refreshed one and overwrite it — stale banner, disabled buttons
- * (council round 2 of PR 253, B1/A1). The ↻ control is also disabled while
- * an entry fetch is in flight, so the two never refresh the catalog
- * concurrently.
+ * (council round 2 of PR 253, B1/A1). The ↻ control is off while ANY request
+ * — an entry chain or a ↻ of its own — is still in flight (a count, not a
+ * flag: a settled request must not re-enable it under a newer one), so two
+ * never refresh the catalog concurrently.
  */
 
 'use strict';
@@ -33,20 +34,30 @@
 function buildAliasReviewLoadScript() {
   return `
   var aliasReviewGen = 0;          // the latest request; an older response landing later is dropped (never rendered, never settles the latch)
+  var aliasReviewInFlight = 0;     // requests (and a pending entry chain) not yet settled: the refresh control is off while any is
   var aliasReviewLoaded = false;   // set synchronously when an entry fetch starts (no second in-flight fetch), then FOLLOWS the latest outcome
   var aliasReviewRefresh = $('alias-review-refresh');
+
+  // The refresh control follows the in-flight COUNT: a settled request never
+  // re-enables it under a newer one (re-review of council round 2, PR 253).
+  function syncRefreshControl() {
+    if (aliasReviewRefresh) { aliasReviewRefresh.disabled = aliasReviewInFlight > 0; }
+  }
 
   // Resolves true when a usable document rendered, false on a rejection or an
   // error document, null when a newer request superseded this one.
   function loadAliasReview() {
     var gen = ++aliasReviewGen;
+    aliasReviewInFlight += 1;
+    syncRefreshControl();
     return window.sidecarSetup.invoke('sidecar:get-alias-review')
       .then(function(view) { if (gen !== aliasReviewGen) { return null; } renderAliasReview(view); return !(view && view.error); })
       .catch(function(err) {
         if (gen !== aliasReviewGen) { return null; }
         renderAliasReview({ proposals: [], catalogAvailable: false, fetchedAt: null, fresh: false, freshUntil: null, gatedIds: [], error: String((err && err.message) || err || 'unknown error') });
         return false;
-      });
+      })
+      .finally(function() { aliasReviewInFlight -= 1; syncRefreshControl(); });
   }
 
   // The latch follows the LATEST request only: a superseded one (null) says nothing.
@@ -56,14 +67,14 @@ function buildAliasReviewLoadScript() {
 
   if (aliasReviewRefresh) {
     aliasReviewRefresh.addEventListener('click', async function() {
-      aliasReviewRefresh.disabled = true;
+      aliasReviewRefresh.disabled = true;       // through the catalog refresh too, before loadAliasReview counts
       try {
         try {
           var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
           applyCatalog(info);                     // Step 2's meta line and Step 3's picker see the refresh too
         } catch (_e) { /* the re-fetch below reports whatever the cache now holds */ }
         settleAliasReview(await loadAliasReview());
-      } finally { aliasReviewRefresh.disabled = false; }   // re-enable even if the re-fetch above somehow throws
+      } finally { syncRefreshControl(); }         // back on only when nothing is in flight, even if the re-fetch above somehow throws
     });
   }
 
@@ -76,10 +87,12 @@ function buildAliasReviewLoadScript() {
   function ensureAliasReviewLoaded() {
     if (aliasReviewLoaded) { return Promise.resolve(); }
     aliasReviewLoaded = true;
-    if (aliasReviewRefresh) { aliasReviewRefresh.disabled = true; }
+    aliasReviewInFlight += 1;                   // the pending chain counts: the control is off through the catalog load too
+    syncRefreshControl();
     return Promise.resolve(typeof ensureCatalogLoaded === 'function' ? ensureCatalogLoaded() : null)
       .then(loadAliasReview)
-      .then(function(ok) { settleAliasReview(ok); if (aliasReviewRefresh) { aliasReviewRefresh.disabled = false; } });
+      .then(settleAliasReview)
+      .finally(function() { aliasReviewInFlight -= 1; syncRefreshControl(); });
   }`;
 }
 
