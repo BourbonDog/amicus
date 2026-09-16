@@ -8742,10 +8742,10 @@ merged on an in-branch review at the owner's call). Left open, in the order the 
   with the CI alias-pin drift gate" and the module docblock's `models --check` sentence both go
   stale), the D3 baseline session. The engine already accepts `retired`/`notable`; `amicus aliases`
   supplies neither until this ships.
-- [ ] **#238 Phase 3 — Electron "Needs review" section** above the alias list; pins visible,
-  unpin/delete on the GUI surface (D9). The editor already renders from `getEffectiveAliases()`.
-- [ ] **#238 Phase 4 — the quiet update notice** on the update-notifier rail + the detached
-  opportunistic catalog refresh (D5), and the notable list's editorial half.
+- [x] **#238 Phase 3 — Electron "Needs review" section** above the alias list; pins visible,
+  unpin/delete on the GUI surface (D9). SHIPPED to main 2026-09-16 (PR #253 → bd1cb2ba, two council rounds) and released in v4.11.0.
+- [x] **#238 Phase 4 — the quiet update notice** on the update-notifier rail + the detached
+  opportunistic catalog refresh (D5), and the notable list's editorial half. SHIPPED to main 2026-09-16 (PR #254 → e82127ef, three council rounds, merged on the owner's waiver) and released in v4.11.0 — the stamps live in `alias-notice-state/`, not `config.aliasReview` (R-P4-14, a ruled deviation from spec Q5).
 - [ ] Parked test-only nits from the round-2 re-review: a hostile `shipped` fixture so
   `renderScreen`'s `p.shipped` wrap is load-bearing; a hostile `getCatalogInfo`-throw test for
   `aliases.js`'s catalog-unavailable Notice; a `closed` peek before `renderScreen` so a Ctrl-C
@@ -8783,3 +8783,66 @@ session status before the backstop kills; size the Stage-1 window to the briefin
   synthesis prompt forbids re-tiering (it may argue, not relabel); `report.html` should render the
   tally's tier beside the chair's sentence so a mismatch is visible. Evidence: runs 34931984881
   and 34969014154, `chair-output.md` vs `verdict.json.findings[].tier`.
+
+## v4.11.0 cut — #238 Phases 2–4 dispositions (2026-09-16)
+
+Shipped as v4.11.0 from PRs #250 (owner mode), #252 (the `doctor` row), #253 (the setup window's
+Needs-review section) and #254 (the notice and the background refresh), plus the D3 baseline
+commit c8ff0150. Seven council rounds across the three PRs; #254's rounds never completed (stage 2
+degraded twice, round 3 lost quorum) and it merged on the owner's waiver — every finding was
+processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one line each:
+
+**Setup window (Phase 3, PR #253)**
+- [ ] `⌄ choose…` on a Needs-review row commits on the select's `change` event, so arrow-browsing
+  the options with the keyboard stages each step as it passes (mouse users are unaffected; the
+  stage is undone by choosing again, dismissing, or closing without Finish). Candidate: commit on
+  blur/Enter or behind a confirm control.
+- [ ] Pre-existing Jest "environment torn down" noise from `tests/electron/ipc-setup-catalog-snapshot.test.js`
+  (a timer fires after teardown; cosmetic, the suite passes).
+- [ ] `aliases --ui` opens the whole setup window landing on the Routing step; a pane-only
+  window (the alias editor alone) would be the tighter surface.
+- [ ] `commitNew` hardcodes `pinned` for a freshly added route — true by construction (a new
+  custom alias is always a pin) but the state should come from the same classifier the rows use.
+- [ ] No DOM test drives `commitModel` end-to-end (the choose… select's change → stage → the
+  Review step); the fake-DOM tests cover the pieces.
+- [ ] `seedFreeCouncil` after the single save is the one remaining partial-commit surface in the
+  wizard's sink (pre-existing): a failed seed after a successful save leaves the aliases written
+  and the council unseeded.
+- [ ] #212 waits for the `ipc-setup.js` split (294/300 at the cut; it cannot take #212's addition
+  without one).
+
+**The notice and the refresh (Phase 4, PR #254)**
+- [ ] `saveConfig` is a plain truncate-and-write — move it onto `atomic-write.js :: writeFileAtomic`
+  (council round 1, hard question 1: a crash mid-write truncates `config.json`). The exit hook no
+  longer writes config at all; every other writer still does.
+- [ ] The `Notice: alias '<x>' matches the shipped recommendation — now following` lines print
+  BEFORE `saveConfig`'s write (pre-existing), so a failed write reports conversions that did not
+  land.
+- [ ] The same-instant check-then-act race on the two stamps (two terminal exits within a few
+  milliseconds → one duplicate notice line or one duplicate idempotent refresh) is ACCEPTED and
+  documented (module docblock, usage.md); a lock file is the fix if it ever matters.
+- [ ] D6 wording when notable entrants ship: `N alias update(s) available` reads as an update to an
+  existing pin; an `add` proposal is not one. Revisit the line when `notable` is non-empty.
+- [ ] `catalogAgeText` floors at "1 hour old" (the Electron banner's arithmetic, kept identical) —
+  a catalog refreshed a minute ago reads `catalog is 1 hour old` in the footer; cosmetic.
+- [ ] Release-ritual gap: the one Phase 4 item not observed at the cut is the absence of a console
+  window flash when the detached refresh child starts from a REAL interactive terminal
+  (`windowsHide: true` is pinned by the child-shape test; the live smokes ran in a hidden console).
+  Owner check: with a week-old catalog, run any command in a terminal.
+
+**Council infrastructure**
+- [ ] OpenRouter credits: #254 round 3 lost its gpt leg to "This request would exceed your
+  available credits given your current in-flight requests" — a refused leg costs the round. Check
+  (or top up) the balance before the next council run; candidate: a preflight balance check in
+  the workflow that degrades loudly before any seat is dispatched.
+- [ ] The 480 s no-output backstop killed glm and qwen twice in that round (#251's class; #202's
+  frequency record).
+
+**Tests**
+- [ ] #224 src-walker flake: `tests/api-key-validation-structured.test.js`'s walker vs
+  `check-file-sizes.test.js`'s temp file — hardened on the owner's branch
+  `test/224-walker-read-if-present` (unpushed at the cut).
+- [ ] Prod audit at the cut (`npm audit --omit=dev`): the lockfile is unchanged since v4.9.8
+  except the version pin, so the same two advisories ship — `extract-zip` (high, no fix; the
+  in-house extraction refuses symlink/traversal entries) and `hono ≤4.13.4` (moderate, fix
+  available). Take the hono bump in a reviewed PR, not at a cut.
