@@ -33,6 +33,13 @@ function mockPins({ retired = {}, notable = [] } = {}) {
   }));
 }
 
+// Q8: the first describe below reads footer/--json text that depends on the
+// CI signal (utils/alias-refresh-state.js :: isInCi) -- saved once here and
+// restored after the whole file finishes, since a CI runner's own real CI
+// env would otherwise leak into (and out of) every test in this file.
+const savedCI = process.env.CI;
+afterAll(() => { if (savedCI === undefined) { delete process.env.CI; } else { process.env.CI = savedCI; } });
+
 describe('amicus aliases (#238 D4 — list and --json)', () => {
   let cfg, handleAliases;
   const CATALOG = {
@@ -43,6 +50,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
   let catalogCache;
   beforeEach(() => {
     jest.resetModules();
+    process.env.CI = '0';   // Q8: a bare CI=true here would read as "off (CI)" and break the "on (weekly)" assertions
     process.env.AMICUS_CONFIG_DIR = path.join(os.tmpdir(), `amicus-aliases-cmd-${process.pid}-${Date.now()}`);
     fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
     catalogCalls = [];
@@ -57,6 +65,7 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     ({ handleAliases } = require('../../src/sidecar/aliases'));
   });
   afterEach(() => {
+    delete process.env.CI;
     process.stderr.write.mockRestore();
     fs.rmSync(process.env.AMICUS_CONFIG_DIR, { recursive: true, force: true });
     jest.dontMock('../../src/utils/curated-pins');
@@ -121,11 +130,37 @@ describe('amicus aliases (#238 D4 — list and --json)', () => {
     expect(out).toContain('catalog unavailable — cannot check for updates (amicus models --refresh)');
     expect(out).not.toContain('nothing to review');
   });
-  test('F1: a catalog older than 24h gets a second footer line naming its age', async () => {
+  test("Q8 footer (F1 folded in): the standing refresh state and the catalog's age, in the spec's words", async () => {
     catalogCache = { ...CATALOG, fetchedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 };
     const { code, out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
     expect(code).toBe(0);
-    expect(out).toContain('(catalog is 3 days old — amicus models --refresh)');
+    expect(out).toContain('\n  background catalog refresh: on (weekly) — catalog is 3 days old\n');
+    expect(out).not.toContain('(catalog is 3 days old — amicus models --refresh)');
+    expect(out).not.toContain('models --refresh');   // on + 3 days is the weekly cadence working
+  });
+  test('Q8 footer: off by config names the key and the hint rides when stale; off by CI names CI (mutant STATELIE: "on" regardless)', async () => {
+    cfg.saveConfig({ aliases: {}, aliasReview: { autoRefresh: false } });
+    catalogCache = { ...CATALOG, fetchedAt: Date.now() - 3 * 24 * 60 * 60 * 1000 };
+    let r = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(r.out).toContain('\n  background catalog refresh: off (aliasReview.autoRefresh: false) — catalog is 3 days old — amicus models --refresh\n');
+    cfg.saveConfig({ aliases: {} });
+    process.env.CI = 'true';
+    r = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(r.out).toContain('  background catalog refresh: off (CI) — catalog is 3 days old');
+  });
+  test('Q8 footer: no catalog at all — no state line (nothing refreshes until a first fetch creates the cache; the unavailable line already names models --refresh)', async () => {
+    catalogCache = null;
+    const { out } = await captureStdout(() => handleAliases({ _: ['aliases'] }));
+    expect(out).toContain('catalog unavailable — cannot check for updates (amicus models --refresh)');
+    expect(out).not.toContain('background catalog refresh');
+  });
+  test('--json carries the state as backgroundRefresh (mutant JSONMISSING)', async () => {
+    cfg.saveConfig({ aliases: {}, aliasReview: { autoRefresh: false } });
+    const { out } = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
+    expect(JSON.parse(out).backgroundRefresh).toEqual({ enabled: false, disabledBy: 'config' });
+    cfg.saveConfig({ aliases: {} });
+    const on = await captureStdout(() => handleAliases({ _: ['aliases'], json: true }));
+    expect(JSON.parse(on.out).backgroundRefresh).toEqual({ enabled: true, disabledBy: null });
   });
   test('normalizes on entry: a seeded key equal to the shipped pin is dropped with a Notice', async () => {
     const shipped = cfg.getDefaultAliases();

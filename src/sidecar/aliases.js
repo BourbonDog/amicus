@@ -12,6 +12,7 @@
  * The LIST reads the catalog CACHE at any age and never networks (§5 display
  * gate); the picker refreshes inline when the cache is stale (write gate).
  * Every form normalizes the config on entry (D6), best-effort.
+ * The footer names the background refresh's standing state (Q8, utils/alias-refresh-state.js).
  *
  * #249 r2 C4: `renderAliasList`'s alias names, ids and vendor-group labels
  * (an unmapped vendor's label is `titleCaseVendor` of a config VALUE's
@@ -26,7 +27,7 @@
 'use strict';
 
 const { SCHEMA_VERSION } = require('../utils/result-schema-version');
-const { DEFAULT_MAX_AGE_MS } = require('../utils/model-catalog');
+const { refreshState, refreshStateLine, catalogInfoFromCache } = require('../utils/alias-refresh-state');
 const { stripGatewayPrefix } = require('../utils/curated-models');
 const { safeFragment, collapseExcerpt } = require('../utils/text-sanitize');
 
@@ -94,12 +95,7 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
       // check at all. `getCatalogInfo` cannot be reused here: it always
       // calls `getCatalog`, which refreshes (a real fetch) the moment
       // `readCache()` returns null, regardless of `maxAgeMs`.
-      const c = d.readCache();
-      catalogInfo = {
-        models: (c && Array.isArray(c.models)) ? c.models : [],
-        fetchedAt: c && typeof c.fetchedAt === 'number' ? c.fetchedAt : null,
-        providerFailures: (c && Array.isArray(c.providerFailures)) ? c.providerFailures : [],
-      };
+      catalogInfo = catalogInfoFromCache(d.readCache());
     } else {
       // The picker's default-age path (Task 8): a stale cache refreshes inline.
       catalogInfo = await d.getCatalogInfo(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs });
@@ -107,7 +103,8 @@ async function collectAliasView(opts = {}, d = loadDeps()) {
   } catch (err) { process.stderr.write(`Notice: catalog unavailable (${collapseExcerpt(err.message)}) — no proposals\n`); }
   const rows = d.listAliasRows(userAliases, defaults);
   const proposals = d.buildAliasProposals({ userAliases, defaults, catalogInfo, retired, notable, dismissed: d.readDismissals() });
-  return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0, retired };
+  const state = refreshState({ config: d.config.loadConfig(), env: process.env });   // Q8: the standing half, for the footer and --json
+  return { rows, proposals, catalogInfo, catalogAvailable: (catalogInfo.models || []).length > 0, retired, refreshState: state };
 }
 
 /**
@@ -221,13 +218,9 @@ function renderAliasList(view, groupAliases = loadDeps().groupAliases) {
         ? `  nothing to review (${retiredCount} retired pin${retiredCount === 1 ? '' : 's'} flagged above) — amicus aliases --review`
         : '  nothing to review — amicus aliases --review')
     : `  ${n} to review — amicus aliases --review`);
-  // F1: the catalog is available but stale -- name its age so a user who
-  // never runs --review still learns the background refresh isn't keeping up.
-  const fetchedAt = view.catalogInfo && view.catalogInfo.fetchedAt;
-  if (typeof fetchedAt === 'number' && (Date.now() - fetchedAt) > DEFAULT_MAX_AGE_MS) {
-    const days = Math.floor((Date.now() - fetchedAt) / DEFAULT_MAX_AGE_MS);
-    lines.push(`  (catalog is ${days} day${days === 1 ? '' : 's'} old — amicus models --refresh)`);
-  }
+  // Q8 (issue 238 D5): the background refresh's standing state with the catalog's
+  // age -- Phase 1's F1 line folded in; refreshStateLine says when the hint rides.
+  if (view.refreshState) { lines.push(refreshStateLine(view.refreshState, view.catalogInfo && view.catalogInfo.fetchedAt)); }
   return lines.join('\n') + '\n';
 }
 
@@ -243,6 +236,7 @@ function buildAliasesDoc(view) {
     proposalCount: view.proposals.length,
     proposals: view.proposals,
     retired: view.retired || {},
+    backgroundRefresh: view.refreshState || null,
   };
 }
 
