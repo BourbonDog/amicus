@@ -28,7 +28,8 @@
 
 const { DEFAULT_MAX_AGE_MS } = require('./model-catalog');
 
-const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;   // Q1: a week
+/** @type {number} A week in ms — Q1's refresh threshold; also the "on" hint threshold of refreshStateLine (R-P4-8). */
+const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DISABLED_REASON = { config: 'aliasReview.autoRefresh: false', env: 'AMICUS_NO_NETWORK_PROBES=1', ci: 'CI' };
 
