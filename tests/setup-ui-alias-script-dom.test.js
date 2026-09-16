@@ -143,3 +143,150 @@ describe('emitted alias script', () => {
     expect(() => new Function(buildAliasScript())).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// issue 238 D1/R1 (Phase 3): the remove handler's three shapes of row. Before
+// this, the non-default branch ran `delete aliasEdits[alias]`, which stages
+// NOTHING -- so × on a SAVED custom alias struck the row through and the
+// alias survived Finish (a silent no-op). Mutant CUSTOMDELETE: put `delete`
+// back.
+// ---------------------------------------------------------------------------
+const { createFakeDocument } = require('./helpers/fake-dom');
+const { buildAliasStateScript } = require('../electron/setup-ui-alias-state');
+
+function loadRemoveHandler({ aliasEdits, defaultAliases, document }) {
+  const aliasSrc = buildAliasScript();
+  const stateSrc = buildAliasStateScript();
+  const handler = aliasSrc.match(/ {2}\/\/ Alias editor: remove[\s\S]*?\n {2}\}\);/);
+  const counts = aliasSrc.match(/ {2}function refreshAliasCounts\(\) \{[\s\S]*?\n {2}\}/);
+  expect(handler).toBeTruthy();
+  expect(counts).toBeTruthy();
+  // eslint-disable-next-line no-new-func
+  const factory = new Function('aliasEdits', 'defaultAliases', 'document', 'window', '$',
+    `${stateSrc}\n${counts[0]}\n${handler[0]}\nreturn { refreshAliasRowState: refreshAliasRowState };`);
+  return factory(aliasEdits, defaultAliases, document, {}, (id) => document.getElementById(id));
+}
+
+function rowWith(document, { alias, model, kind, inNewRoutes = false }) {
+  const group = document.createElement('details'); group.className = 'alias-group';
+  if (inNewRoutes) { group.setAttribute('data-new-routes', '1'); }
+  const count = document.createElement('span'); count.className = 'alias-count'; group.appendChild(count);
+  const row = document.createElement('div'); row.className = 'alias-row'; row.setAttribute('data-alias', alias); row.setAttribute('data-state', 'pinned');
+  const m = document.createElement('span'); m.className = 'alias-model'; m.textContent = model;
+  const s = document.createElement('span'); s.className = 'alias-state alias-state-pinned'; s.textContent = 'pinned';
+  const b = document.createElement('button'); b.className = 'alias-delete'; b.setAttribute('data-alias', alias); b.setAttribute('data-kind', kind); b.textContent = kind === 'unpin' ? 'unpin' : '×';
+  row.appendChild(m); row.appendChild(s); row.appendChild(b);
+  group.appendChild(row);
+  document.body.appendChild(group);
+  return { row, btn: b, group };
+}
+
+describe('alias editor remove handler (issue 238 R1)', () => {
+  const defaultAliases = Object.assign(Object.create(null), { glm: 'openrouter/z-ai/glm-5.3' });
+
+  it('× on a SAVED custom row stages null (the key is removed at Finish) and strikes the row out', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'mine', model: 'openrouter/x/y', kind: 'delete' });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(aliasEdits.mine).toBeNull();                       // CUSTOMDELETE dies here
+    expect(Object.prototype.hasOwnProperty.call(aliasEdits, 'mine')).toBe(true);
+    expect(row.classList.contains('alias-deleted')).toBe(true);
+  });
+
+  it('[unpin] on a curated pin stages null, shows the shipped id and labels the row following — no strike-through', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'glm', model: 'openrouter/z-ai/glm-5.2', kind: 'unpin' });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(aliasEdits.glm).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('openrouter/z-ai/glm-5.3');
+    expect(row.getAttribute('data-state')).toBe('following');
+    expect(row.classList.contains('alias-deleted')).toBe(false);
+    expect(btn.hidden).toBe(true);
+  });
+
+  it('× on a row added THIS session removes the row and stages nothing (it was never on disk)', () => {
+    const { document } = createFakeDocument();
+    const aliasEdits = Object.assign(Object.create(null), { fresh: 'openrouter/x/new' });
+    const { row, btn, group } = rowWith(document, { alias: 'fresh', model: 'openrouter/x/new', kind: 'delete', inNewRoutes: true });
+    loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    btn.click();
+    expect(Object.prototype.hasOwnProperty.call(aliasEdits, 'fresh')).toBe(false);
+    expect(row.parentNode).toBeNull();
+    expect(group.parentNode).toBeNull();                      // refreshAliasCounts drops the empty new-routes group
+  });
+
+  // Review round 1, IMPORTANT finding: a rename that crosses the curated/
+  // custom boundary (commitName rewrites data-alias on the row and button,
+  // but not the control's kind/text/title) left the remove control stale
+  // until refreshAliasRowState ran. Fixed both halves: the control is made
+  // truthful in refreshAliasRowState, and the remove handler now decides by
+  // the NAME (isCuratedAlias), never by reading the possibly-stale data-kind.
+  it('a curated→custom rename (commitName) leaves the control stale until refreshAliasRowState runs it truthful (repro A)', () => {
+    const { document } = createFakeDocument();
+    const defaultAliases = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'gemini', model: 'google/gemini-x', kind: 'unpin' });
+    const { refreshAliasRowState } = loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    // simulate commitName renaming gemini -> gemini2: it rewrites data-alias
+    // on the row AND the button, nothing else.
+    row.setAttribute('data-alias', 'gemini2');
+    btn.setAttribute('data-alias', 'gemini2');
+    refreshAliasRowState(row);
+    expect(btn.getAttribute('data-kind')).toBe('delete');
+    expect(btn.textContent).toBe('×');
+    btn.click();
+    expect(aliasEdits.gemini2).toBeNull();
+    expect(row.classList.contains('alias-deleted')).toBe(true);
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // untouched
+  });
+
+  it('a custom→curated rename (commitName) leaves the control stale until refreshAliasRowState runs it truthful (repro B)', () => {
+    const { document } = createFakeDocument();
+    const defaultAliases = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'mine', model: 'openrouter/x/y', kind: 'delete' });
+    const { refreshAliasRowState } = loadRemoveHandler({ aliasEdits, defaultAliases, document });
+    // simulate commitName renaming mine -> gemini
+    row.setAttribute('data-alias', 'gemini');
+    btn.setAttribute('data-alias', 'gemini');
+    refreshAliasRowState(row);
+    expect(btn.getAttribute('data-kind')).toBe('unpin');
+    expect(btn.textContent).toBe('unpin');
+    btn.click();
+    expect(aliasEdits.gemini).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // shows the shipped id
+    expect(row.classList.contains('alias-deleted')).toBe(false);                   // no strike-through
+  });
+
+  // A4: the handler must decide by the alias NAME (isCuratedAlias), never by
+  // reading data-kind straight off the button -- a curated row can carry a
+  // STALE data-kind="delete" (e.g. never refreshed since some earlier state)
+  // and must still take the unpin path. Mutant DATAKIND: decide by data-kind.
+  it('a curated row with a STALE data-kind="delete" (never refreshed) still takes the unpin path, decided by NAME', () => {
+    const { document } = createFakeDocument();
+    const curatedDefaults = Object.assign(Object.create(null), { gemini: 'google/gemini-x' });
+    const aliasEdits = Object.create(null);
+    const { row, btn } = rowWith(document, { alias: 'gemini', model: 'google/gemini-y', kind: 'delete' });
+    loadRemoveHandler({ aliasEdits, defaultAliases: curatedDefaults, document });
+    btn.click();
+    expect(aliasEdits.gemini).toBeNull();
+    expect(row.querySelector('.alias-model').textContent).toBe('google/gemini-x'); // shows the shipped id
+    expect(row.classList.contains('alias-deleted')).toBe(false);                   // unpin, not a strike-through
+  });
+});
+
+// C7: the add-custom-flow's committed row must carry the same "pinned" state
+// markup appendStagedRow gives a review-accepted "add" row (setup-ui-alias-review.js).
+describe('commitNew (add-custom flow) — the committed row is labelled pinned like appendStagedRow\'s', () => {
+  it('sets data-state="pinned" and an alias-state-pinned span before the delete button', () => {
+    const script = buildAliasScript();
+    const commitNewSrc = script.match(/function commitNew\(\) \{[\s\S]*?\n {6}\}/);
+    expect(commitNewSrc).toBeTruthy();
+    expect(commitNewSrc[0]).toContain("data-state', 'pinned'");
+    expect(commitNewSrc[0]).toContain("'alias-state alias-state-pinned'");
+  });
+});

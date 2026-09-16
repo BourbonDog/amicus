@@ -11,6 +11,11 @@
  *
  * Dismissals are keyed `alias@proposedId` (Q5): permanent for that pair, and a
  * newer proposed id for the same alias is a new key that asks again.
+ * `stampDismissal` is the PURE half of `recordDismissal` — it validates the
+ * key and stamps it into a config object it is handed — so a caller already
+ * holding a config it is about to save (the wizard's Finish,
+ * electron/ipc-aliases.js :: applyDismissals) can fold dismissals into that
+ * same save instead of a second read-modify-write after it.
  */
 
 'use strict';
@@ -47,19 +52,35 @@ function readDismissals() {
 }
 
 /**
+ * Stamp one dismissal into `config` (no I/O): validates the key, ensures
+ * `aliasReview.dismissed`, writes the ISO time. Throws BEFORE touching the
+ * object on a malformed key — per key: a caller stamping a batch validates
+ * every key first (electron/ipc-aliases.js :: applyDismissals stamps a
+ * throwaway object before the real one) if the batch must stay untouched.
+ * @param {object} config the config object to stamp (mutated and returned)
+ * @param {string} dismissKey `alias@proposedId`
+ * @param {Date} [now]
+ * @returns {object} the same `config`
+ * @throws {Error} `Invalid dismissKey …` when the key is not `alias@proposedId`
+ */
+function stampDismissal(config, dismissKey, now = new Date()) {
+  if (typeof dismissKey !== 'string' || !dismissKey || !dismissKey.includes('@')) {
+    throw new Error(`Invalid dismissKey '${dismissKey}': expected alias@proposedId`);
+  }
+  if (!config.aliasReview || typeof config.aliasReview !== 'object') { config.aliasReview = {}; }
+  if (!config.aliasReview.dismissed || typeof config.aliasReview.dismissed !== 'object') { config.aliasReview.dismissed = {}; }
+  config.aliasReview.dismissed[dismissKey] = now.toISOString();
+  return config;
+}
+
+/**
+ * Read-modify-write of one dismissal: `stampDismissal` over the loaded config.
  * @param {string} dismissKey `alias@proposedId`
  * @param {Date} [now]
  */
 function recordDismissal(dismissKey, now = new Date()) {
-  if (typeof dismissKey !== 'string' || !dismissKey || !dismissKey.includes('@')) {
-    throw new Error(`Invalid dismissKey '${dismissKey}': expected alias@proposedId`);
-  }
   const { loadConfig, saveConfig } = require('./config');
-  const config = loadConfig() || {};
-  if (!config.aliasReview || typeof config.aliasReview !== 'object') { config.aliasReview = {}; }
-  if (!config.aliasReview.dismissed || typeof config.aliasReview.dismissed !== 'object') { config.aliasReview.dismissed = {}; }
-  config.aliasReview.dismissed[dismissKey] = now.toISOString();
-  saveConfig(config);
+  saveConfig(stampDismissal(loadConfig() || {}, dismissKey, now));
 }
 
-module.exports = { removeAlias, readDismissals, recordDismissal };
+module.exports = { removeAlias, readDismissals, stampDismissal, recordDismissal };

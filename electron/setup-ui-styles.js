@@ -317,6 +317,45 @@ function __rawWizardCSS() {
   .alias-row.alias-no-key .alias-model::after {
     content: ' (no key)'; color: var(--text-faint); font-style: italic; font-size: 10px;
   }
+  /* issue 238 D1: following / pinned per row; the remove control by kind */
+  .alias-state { font-size: 10px; color: var(--text-faint); letter-spacing: 0.3px; }
+  .alias-state-pinned { color: var(--accent); }
+  .alias-delete[hidden] { display: none; }
+  .alias-delete[data-kind="unpin"] { font-size: 10px; color: var(--text-muted); }
+
+  /* issue 238 D9: "Needs review" section above the alias list */
+  .alias-review {
+    margin-top: 16px; padding: 10px 12px; background: var(--surface);
+    border: 1px solid var(--accent); border-radius: var(--r-6);
+  }
+  .alias-review[hidden] { display: none; }
+  .alias-review-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .alias-review-title {
+    color: var(--accent); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.8px; text-transform: uppercase;
+  }
+  .alias-review-count { color: var(--text-faint); font-size: 11px; }
+  .alias-review-refresh {
+    margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: var(--r-4); cursor: pointer; font-size: 12px; padding: 0 6px;
+  }
+  .alias-review-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .alias-review-banner { color: var(--text-muted); font-size: 11px; margin-bottom: 6px; }
+  .alias-review-banner[hidden] { display: none; }
+  .alias-review-row { padding: 6px 0; border-top: 1px solid var(--border); }
+  .alias-review-row:first-child { border-top: none; }
+  .alias-review-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .alias-review-line .alias-model { flex: initial; white-space: normal; cursor: default; }
+  .alias-review-why { color: var(--text-muted); font-size: 11px; }
+  .alias-review-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .alias-review-actions button {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--r-4); cursor: pointer; font-size: 11px; padding: 2px 8px;
+    font-family: var(--font-mono);
+  }
+  .alias-review-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .alias-review-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .alias-review-select { font-size: 11px; max-width: 100%; }
 
   /* Import notice banner */
   .import-notice {
@@ -375,6 +414,7 @@ function __rawWizardCSS() {
   .model-resolved { display: block; font-size: 11px; opacity: 0.6; font-family: var(--font-mono); }
   .write-preview { display: none; font-size: 11px; margin-top: 4px; }
   .write-preview-active { display: block; }
+  .write-preview-note { color: var(--text-muted); font-size: 11px; margin-left: 4px; }
 
   /* Free council picker (Step 2) */
   .council-section { margin-top: 14px; }

@@ -16,9 +16,11 @@ const { ensureElectron } = require('./electron-ensure');
  * Launch the Electron setup window for API key entry.
  * Lazily PROVISIONS electron on first GUI use (#55) via ensureElectron() — the
  * one place network provisioning is allowed; getElectronPath() stays a pure probe.
+ * @param {{pane?: 'aliases'|''}} [opts] #238 D4: `pane: 'aliases'` lands the window on
+ *   the Routing step (`amicus aliases --ui`); anything else opens the wizard at step 1.
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
-async function launchSetupWindow() {
+async function launchSetupWindow({ pane = '' } = {}) {
   const ensured = await ensureElectron();
   if (!ensured.ok) {
     return { success: false, error: ensured.reason || 'Electron not installed' };
@@ -31,7 +33,8 @@ async function launchSetupWindow() {
 
     const env = {
       ...process.env,
-      AMICUS_MODE: 'setup'
+      AMICUS_MODE: 'setup',
+      AMICUS_SETUP_PANE: pane === 'aliases' ? 'aliases' : '',
     };
 
     const debugPort = process.env.AMICUS_DEBUG_PORT;

@@ -113,6 +113,7 @@ src/
 │   ├── aliases-review-prompt.js  # The real-readline prompt for `amicus aliases --review`, split out of
 │   ├── aliases-review-render.js  # Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4),
 │   ├── aliases-review.js  # `amicus aliases --review` (#238 §4): a numbered readline picker over the
+│   ├── aliases-ui.js  # `amicus aliases --ui` (#238 D4): the Electron setup window opened on the Routing step.
 │   ├── aliases-unpin.js  # `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of
 │   ├── aliases.js  # `amicus aliases` (#238 D4) — the user's alias map as a standing command.
 │   ├── budget.js
@@ -393,6 +394,7 @@ electron/
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
+├── ipc-aliases.js  # IPC for the setup wizard's "Needs review" section (issue 238 D9, Phase 3).
 ├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
@@ -407,7 +409,11 @@ electron/
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-groups.js  # Setup UI - Alias grouping rule (issue 213)
+├── setup-ui-alias-review-load.js  # Setup UI - the "Needs review" section's fetch lifecycle (issue 238 D9)
+├── setup-ui-alias-review-text.js  # Setup UI - the words and the freshness rule of the "Needs review" section (issue 238 D9)
+├── setup-ui-alias-review.js  # Setup UI - Alias Review section (issue 238 D9)
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
+├── setup-ui-alias-state.js  # Inline page script: what an alias row MEANS (issue 238 D1/D9) and what Finish writes for the Step 2 default (issue 238 Q9).
 ├── setup-ui-aliases.js  # Setup UI - Alias Editor
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
@@ -597,6 +603,7 @@ evals/
 | `sidecar/aliases-review-prompt.js` | The real-readline prompt for `amicus aliases --review`, split out of | `createPrompt()` |
 | `sidecar/aliases-review-render.js` | Pure, side-effect-free screen text for `amicus aliases --review` (#238 §4), | `ageLabel()`, `menuFor()`, `menuLineText()`, `renderScreen()`, `refreshingCatalogLine()` |
 | `sidecar/aliases-review.js` | `amicus aliases --review` (#238 §4): a numbered readline picker over the | `runReview()` |
+| `sidecar/aliases-ui.js` | `amicus aliases --ui` (#238 D4): the Electron setup window opened on the Routing step. | `handleAliasesUi()` |
 | `sidecar/aliases-unpin.js` | `amicus aliases --unpin <name>` (#238 F6, R1) — moved verbatim out of | `handleUnpin()` |
 | `sidecar/aliases.js` | `amicus aliases` (#238 D4) — the user's alias map as a standing command. | `handleAliases()`, `collectAliasView()`, `renderAliasList()`, `buildAliasesDoc()`, `loadDeps()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
@@ -682,7 +689,7 @@ evals/
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
 | `utils/alias-state.js` | Following-vs-pinned state for model aliases (#238 D1) and the normalization | `normalizeAliases()`, `listAliasRows()`, `isCurated()` |
-| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `recordDismissal()` |
+| `utils/alias-store.js` | The write sinks the alias review flow needs beyond `setup.js :: addAlias` | `removeAlias()`, `readDismissals()`, `stampDismissal()`, `recordDismissal()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `redactSecret()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |

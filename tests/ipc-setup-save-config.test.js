@@ -15,6 +15,12 @@ jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => []),
   getCatalogInfo: jest.fn(async () => ({ models: [], providerFailures: [] })),
 }));
+jest.mock('../electron/ipc-aliases', () => ({
+  registerAliasHandlers: jest.fn(),
+  applyDismissals: jest.fn(() => 0),
+}));
+jest.mock('../src/utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
+const { applyDismissals } = require('../electron/ipc-aliases');
 
 const { loadConfig, saveConfig } = require('../src/utils/config');
 const { registerSetupHandlers } = require('../electron/ipc-setup');
@@ -87,5 +93,44 @@ describe('sidecar:save-config (council picks)', () => {
     saveConfig.mockImplementation(c => written.push(JSON.parse(JSON.stringify(c))));
     await save('gemini', {});
     expect(written[written.length - 1].councils).toBeUndefined();
+  });
+});
+
+// applyDismissals is a shared jest.fn: clearAllMocks resets call history, not
+// implementations, so per-test behaviour is one-shot. Council review of PR 253
+// (B1/C4/A5/D3): Finish is ONE write — the dismissals are stamped into the
+// object saveConfig receives, BEFORE it runs, so a rejected Finish has written
+// nothing (the old order recorded them in a second write after the save).
+describe('sidecar:save-config (issue 238 D9: staged dismissals ride the 4th argument, into the same save)', () => {
+  test('the dismissals are stamped into the object saveConfig receives — one write (mutant PARTIALCOMMIT: record after the save)', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: { glm: 'openrouter/z-ai/glm-5.3' } });
+    const key = 'glm@openrouter/z-ai/glm-5.4';
+    const snapshots = [];                                                // what saveConfig SAW, frozen at call time
+    saveConfig.mockImplementation(c => snapshots.push(JSON.parse(JSON.stringify(c))));
+    applyDismissals.mockImplementationOnce((cfg, keys) => { cfg.aliasReview = { dismissed: { [keys[0]]: 'T' } }; return keys.length; });
+    await save('gemini', { glm: 'openrouter/z-ai/glm-5.4' }, [], [key]);
+    expect(applyDismissals).toHaveBeenCalledTimes(1);
+    expect(applyDismissals.mock.calls[0][1]).toEqual([key]);
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+    expect(applyDismissals.mock.calls[0][0]).toBe(saveConfig.mock.calls[0][0]);   // the SAME object
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].aliasReview.dismissed).toEqual({ [key]: 'T' });          // PARTIALCOMMIT dies here: stamped BEFORE the save
+    expect(snapshots[0].aliases.glm).toBe('openrouter/z-ai/glm-5.4');
+  });
+
+  test('no 4th argument: applyDismissals still runs with (cfg, undefined) (stamps nothing) — the old 3-argument call keeps working', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    await save('gemini', {}, []);
+    expect(applyDismissals).toHaveBeenCalledTimes(1);
+    expect(applyDismissals.mock.calls[0][1]).toBeUndefined();
+    expect(applyDismissals.mock.calls[0][0]).toBe(saveConfig.mock.calls[0][0]);
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test('a malformed dismissal rejects the invoke (the renderer re-enables Finish) and saveConfig was NEVER called — nothing reached disk (mutant PARTIALCOMMIT)', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    applyDismissals.mockImplementationOnce(() => { throw new Error('bad key'); });
+    await expect(save('gemini', { glm: 'openrouter/z-ai/glm-5.4' }, [], ['bad'])).rejects.toThrow('bad key');
+    expect(saveConfig).not.toHaveBeenCalled();                          // PARTIALCOMMIT dies here
   });
 });

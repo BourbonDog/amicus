@@ -162,7 +162,7 @@ const BOOLEAN_FLAGS = [
      'failed',               // spend: only non-complete (wasted) rows (v4.3 Task 4, spec §7.3)
      'rows',                 // spend: include matching raw rows, capped at 1000 (v4.3 Task 4)
      'plain',                // watch: milestone log lines instead of the refresh table (v4.3 Task 11)
-     'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
+     'ui',                   // watch: open the Council Workspace window; aliases: open the setup window on the Routing step (#238 D4)
      'follow',               // fanout / council run: stream this run's own events to stderr (v4.3 Task 13)
      'fallback',             // fanout / council run: opt-in cheaper-model substitution (v4.3 Task 18, spec 6.2); --no-fallback negates via the generic no-* catch-all below
 ];
@@ -525,6 +525,8 @@ Options for 'aliases':
                                the amicus source checkout, a clean tree and a terminal.
   --unpin <alias>              Remove a pin: a curated name goes back to following, a
                                custom name is deleted
+  --ui                         Open the setup window on the Routing step: the same alias
+                               editor, plus a "Needs review" section for the proposals
   --json                       Machine-readable document (aliases + proposals)
 `,
   list: `

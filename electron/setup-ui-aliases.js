@@ -1,17 +1,36 @@
 /**
  * Setup UI - Alias Editor
  *
- * Builds collapsible alias groups with search, inline editing,
- * delete, and add functionality for the setup wizard Step 3.
+ * Builds collapsible alias groups with search, state, inline editing,
+ * unpin / delete, and add functionality for the setup wizard Step 3.
  */
 
 const { groupAliases } = require('./setup-ui-alias-groups');
+const { getDefaultAliases } = require('../src/utils/config');
 
 /** Attribute/text-safe rendering of user-controlled alias names and routes. */
 function esc(value) {
   return String(value === undefined || value === null ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * The remove control by kind (issue 238 D1/R1): "unpin" and "delete" are ONE
+ * operation -- remove the key -- whose meaning is decided by whether the
+ * name is curated. A curated row ALWAYS carries [unpin], hidden while it
+ * follows (nothing to remove) so an inline edit that pins it can reveal it
+ * (setup-ui-alias-state.js :: refreshAliasRowState); a custom row carries ×.
+ * @param {string} key alias name
+ * @param {boolean} curated
+ * @param {'following'|'pinned'} state
+ * @returns {string}
+ */
+function rowControlHTML(key, curated, state) {
+  if (curated) {
+    return `<button class="alias-delete" data-alias="${esc(key)}" data-kind="unpin" title="Unpin: go back to following the shipped recommendation"${state === 'following' ? ' hidden' : ''}>unpin</button>`;
+  }
+  return `<button class="alias-delete" data-alias="${esc(key)}" data-kind="delete" title="Delete this alias">×</button>`;
 }
 
 /**
@@ -22,21 +41,31 @@ function esc(value) {
  * EVERY alias in `aliases` renders exactly once -- the old whitelist silently
  * dropped any name it did not list (12 of 25 in a real config).
  *
- * @param {Object<string,string>} aliases - Map of alias name to model string
+ * @param {Object<string,string>} aliases - Map of alias name to model string (the EFFECTIVE map)
+ * @param {object} [options]
+ * @param {Object<string,string>} [options.defaults] - the shipped map; injectable for tests (default getDefaultAliases())
+ * @param {string} [options.reviewHtml=''] - the "Needs review" section (setup-ui-alias-review.js), inserted above the editor
  * @returns {string} HTML fragment with search, groups, rows, and add button
  */
-function buildAliasEditorHTML(aliases) {
+function buildAliasEditorHTML(aliases, { defaults = getDefaultAliases(), reviewHtml = '' } = {}) {
   const searchInput = '<input type="text" id="alias-search" class="alias-search" placeholder="Search aliases..." autocomplete="off" spellcheck="false">';
 
   const groups = groupAliases(aliases).map(group => {
     const rows = group.keys
       .map(key => {
         const model = aliases[key];
-        return `<div class="alias-row" data-alias="${esc(key)}">` +
+        // issue 238 D1: following = the effective value IS the shipped id
+        // (exactly what saveConfig's normalizer keeps off disk); anything
+        // else is a pin. setup-ui-alias-state.js re-derives the same rule
+        // on the page after every edit.
+        const curated = Object.prototype.hasOwnProperty.call(defaults, key);
+        const state = (curated && model === defaults[key]) ? 'following' : 'pinned';
+        return `<div class="alias-row" data-alias="${esc(key)}" data-state="${state}">` +
           `<span class="alias-name">${esc(key)}</span>` +
           '<span class="alias-arrow">\u2192</span>' +
           `<span class="alias-model">${esc(model)}</span>` +
-          `<button class="alias-delete" data-alias="${esc(key)}">\u00d7</button>` +
+          `<span class="alias-state alias-state-${state}">${state}</span>` +
+          rowControlHTML(key, curated, state) +
           '</div>';
       }).join('\n        ');
 
@@ -78,6 +107,7 @@ function buildAliasEditorHTML(aliases) {
       <h1>Model Routing</h1>
       <p class="subtitle">When you ask Amicus for help, you can pick which LLM to collaborate with or offload tasks to. These names on the left route to the specific model on the right.</p>
       ${exampleBox}
+      ${reviewHtml}
       <div class="alias-editor">
         ${searchInput}
         ${groups}
