@@ -197,6 +197,7 @@ src/
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3).
 │   ├── alias-groups.js  # Vendor-derived alias grouping (issue 213). Moved VERBATIM out of
 │   ├── alias-proposals.js  # The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns
+│   ├── alias-refresh-state.js  # #238 D5/Q8 — the ONE predicate behind the passive alias notice and the
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── alias-shadow-writer.js  # The alias-shadow notice's WRITE half: say it without ever sinking the run.
 │   ├── alias-shadow.js  # Alias-shadow self-diagnosis — name a local alias that repoints a curated one.
@@ -685,6 +686,7 @@ evals/
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest for most classes; doctor --fix auto-repairs one narrow, mechanically-unambiguous class (B3). | `collectAliasSources()`, `findStaleAliases()`, `findDriftedStoredAliases()`, `suggestReplacements()`, `findFabricatedAliasRepairs()` |
 | `utils/alias-groups.js` | Vendor-derived alias grouping (issue 213). Moved VERBATIM out of | `groupAliases()`, `aliasVendorOf()`, `vendorLabel()`, `titleCaseVendor()`, `PREFERRED_VENDOR_ORDER()` |
 | `utils/alias-proposals.js` | The alias review ENGINE (#238 §2): pure, no I/O, no prompts. Turns | `buildAliasProposals()`, `gatedCatalogIds()` |
+| `utils/alias-refresh-state.js` | #238 D5/Q8 — the ONE predicate behind the passive alias notice and the | `refreshState()`, `exitHookAllowed()`, `refreshStateLine()`, `catalogInfoFromCache()`, `REFRESH_MAX_AGE_MS()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/alias-shadow-writer.js` | The alias-shadow notice's WRITE half: say it without ever sinking the run. | `safeWrite()`, `armStream()`, `writeNoticeToStderr()` |
 | `utils/alias-shadow.js` | Alias-shadow self-diagnosis — name a local alias that repoints a curated one. | `findAliasShadows()`, `formatAliasShadow()`, `noteAliasShadows()`, `auditAliasShadows()` |
