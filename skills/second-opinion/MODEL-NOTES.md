@@ -4,13 +4,15 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-08-25 (per-section fold-back, both directions — the `NO_OUTPUT_BACKSTOP`
-mechanism, conformance-vs-content plus the credit-exhaustion attribution correction, the
-inlined-source-pack technique, and per-model calibration nuances upstreamed from the field ledger;
-the `runStats` allowlist correction adopted back into the local ledger; see changelog). Prior:
-2026-08-03 (haiku "hard-404" re-diagnosed as a `/v1`-less `ANTHROPIC_BASE_URL`, pre-degrade-era
-claims re-grounded in the announcement contract, three model sections and the peer-consensus≠
-evidence rule upstreamed)._
+_Last updated: 2026-09-16 (the `NO_OUTPUT_BACKSTOP` global-rule and kimi-section bullets corrected —
+300s default, not 120s; the retry escalation formula; the tool-call disarm; `ttftMs` as the disarm
+moment; see changelog, #245). Prior: 2026-08-25 (per-section fold-back, both directions — the
+`NO_OUTPUT_BACKSTOP` mechanism, conformance-vs-content plus the credit-exhaustion attribution
+correction, the inlined-source-pack technique, and per-model calibration nuances upstreamed from
+the field ledger; the `runStats` allowlist correction adopted back into the local ledger; see
+changelog); 2026-08-03 (haiku "hard-404" re-diagnosed as a `/v1`-less `ANTHROPIC_BASE_URL`,
+pre-degrade-era claims re-grounded in the announcement contract, three model sections and the
+peer-consensus≠evidence rule upstreamed)._
 
 ## Global operating rules (all models)
 - **Fast path:** `council run` applies `--agent Plan` / `--no-context` / `--summary-length
@@ -47,18 +49,42 @@ evidence rule upstreamed)._
   (repair and judge legs failing together) and has been traced to billing, not model behavior. Tell:
   a cluster of legs failing in seconds with zero tokens, especially if OpenRouter-routed seats die
   while direct-routed seats on the same run keep working.
-- **`NO_OUTPUT_BACKSTOP` is a fixed no-first-token deadline (120s by default) — it kills slow
-  models, not just dead ones, and the once-only auto-retry cannot save them.** A model-agnostic
-  dead-man's switch arms at leg launch and disarms only on substantive activity (output growth,
-  reasoning-token growth, or a tool call); it is independent of `--timeout`, and the only override
-  is the env var `AMICUS_NO_OUTPUT_BACKSTOP_MS` — there is no CLI flag or per-model setting. The
-  retry reuses the same threshold, so a slow-but-alive model can burn its one retry for nothing and
-  still exit degraded. It fires identically on a genuinely dead route and on a live model that
-  simply thinks past 120s before its first token — **distinguish them with a solo re-run before
-  blaming the model.** Size an override from the *slowest observed leg × 2* with real headroom; a
-  merely-doubled setting has still been killed by the slowest legs seen in practice. It applies to
-  every leg in the process, so raising it loses the genuine dead-endpoint fast-fail for the whole
-  bench while it's set.
+- **`NO_OUTPUT_BACKSTOP` is a 300s no-FIRST-token deadline (NOT 120s — re-verified against v4.11.0
+  source 2026-09-16; every number in the pre-2026-09 version of this bullet was stale).** Read the
+  code, not this file, before tuning: `src/utils/no-output-backstop.js:23` is
+  `DEFAULT_NO_OUTPUT_BACKSTOP_MS = 300000`. The 120s figure was correct only through ~v4.6.2; CI
+  carried a `300000` override, the maintainer read that as evidence the default was wrong, and
+  300s became the default (CHANGELOG, "the default was wrong rather than merely conservative").
+  CI's `council-review.yml` runs 480s.
+  - **Arms at leg launch, disarms PERMANENTLY on the first substantive tick** — output growth,
+    reasoning-token growth, **or a tool call**. Independent of `--timeout`. The only knob is
+    `AMICUS_NO_OUTPUT_BACKSTOP_MS`; explicit `0` disables it (documented escape hatch, which is why
+    the resolver uses `envNumber` and not `Number(env) || default`).
+  - **A leg's recorded `ttftMs` IS the disarm moment** (`src/headless.js:1167` measures from the
+    backstop's own clock origin to the first `substantiveActivity` poll), so `runStats[].ttftMs` is
+    directly comparable to the window — you can read the margin straight off a finished run.
+    Measured 2026-09-16 (PR #254, CI, 480s window): the non-gpt seats first spoke at 282–468s;
+    one glm leg had 12s of margin.
+  - **The retry DOES escalate — the old "retry inherits the same threshold" claim is false.**
+    `src/council/run-retry.js:97` forwards `escalatedBackstopMs`, and
+    `src/council/run-retry-window.js:59` computes `min(2 × base, floor(legTimeoutMs × 0.95))` —
+    doubled, and clamped *strictly below* the leg cap rather than to it, deliberately: an
+    equal-deadline tie let the backstop win only by poll-loop ordering, and losing it would downgrade
+    a named `NO_OUTPUT_BACKSTOP` into a generic `timeout`. At defaults with `--timeout 20` the retry
+    window is 600s; in CI (480s, `--timeout 16`) it is 912s.
+  - **A tool call disarms this detector, so it cannot catch a tool wedge.** A model that immediately
+    fires a tool call disarms the backstop within seconds; only the separate
+    `TOOL_CALL_STALL_MS` (`src/headless.js:97`) can kill it after that, and *that* window is
+    not doubled on retry. Since v4.9.8 review-mode seats run with no tools at all (`council-seat`),
+    so this mostly concerns task mode and `--tools` opt-ins.
+  - The error text ("likely a listed-but-not-serving model or a dead endpoint") names the
+    mechanism's design target, not the case in front of you; it fires identically on a dead route
+    and on a live model that simply thinks past the window. **Distinguish with a solo re-run before
+    blaming the model.**
+  - Size an override from the *slowest observed leg's `ttftMs` × 2* with headroom. It applies to
+    every leg in the process, so raising it loses the genuine dead-endpoint fast-fail for the whole
+    bench.
+  Originally filed upstream as BourbonDog/amicus#129; corrected under #245.
 - **Transient provider errors** (502s, connection drops): re-run the affected leg (solo
   `amicus start --json`, same briefing file) or the wave — see per-model notes for
   model-specific signals. Never present a half-finished run as an answer.
@@ -276,10 +302,9 @@ evidence rule upstreamed)._
   precondition* rather than asserting it outright — a genuine calibration improvement worth
   crediting when it shows up.
 - **Its time-to-first-token now sits directly on the `NO_OUTPUT_BACKSTOP` cliff, not comfortably
-  under it** — observed legs have run well past the 120s default, and even a doubled 180-240s
-  override has been killed by the slowest of them. Size the override from the *slowest observed
-  leg × 2* with real headroom (see the Global `NO_OUTPUT_BACKSTOP` rule); it still gates wave
-  wall-clock either way.
+  under it** — observed legs have run past the 300s default (see the Global `NO_OUTPUT_BACKSTOP`
+  rule: 300s default, 480s in CI). Size any override from the run's own slowest observed leg's
+  `ttftMs` × 2 with real headroom; it still gates wave wall-clock either way.
 - Stalls on long agentic reads (poller "Incomplete" with only a preamble). Reserve for short-artifact work.
 
 ### Mistral  (`--model mistral` → via OpenRouter)
