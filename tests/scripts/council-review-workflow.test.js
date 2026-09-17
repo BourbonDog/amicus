@@ -857,7 +857,16 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
     test('blanking the value turns the experiment off — the step is skipped', () => {
       const step = routingStep();
-      expect(step).toContain("env.COUNCIL_PROVIDER_ROUTING != ''");
+      expect(step).toContain('env.COUNCIL_PROVIDER_ROUTING }}');
+      // Truthiness, NOT `!= ''` (round-1 review F5). GitHub's loose equality
+      // coerces numerically, so the value `0` — valid JSON, not a valid
+      // experiment — compares EQUAL to '' and would skip the step with no
+      // annotation at all: the "ran silently as no experiment" degrade every
+      // other malformed value is made to fail loudly on. The empty string is
+      // the only falsy string, so plain truthiness skips on blank (and on an
+      // absent key, which is also correct) and runs on any JSON document,
+      // leaving `0` to the jq gates below, which refuse it loudly.
+      expect(step).not.toContain("COUNCIL_PROVIDER_ROUTING != ''");
       // Gated on the secret like every other step in this job: a soft-skipped
       // fork PR must not announce an experiment that no council ran.
       expect(step).toContain("steps.gate.outputs.available == 'true'");
@@ -880,13 +889,51 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // The shape assertions the invariant argument rests on, not merely a
       // parse: a document carrying anything but the routing key would be inside
       // the agent-rendering surface with nothing measured about it.
-      expect(step).toContain('mkdir -p "$RUN_DIR"');
+      // Round-1 review F4: the run directory must be created at 0700, not the
+      // runner's 0755 umask. `fs.mkdirSync(runDir, { recursive: true, mode:
+      // 0o700 })` in src/council/run-state.js is a NO-OP on a directory that
+      // already exists — it never chmods — so pre-creating it here would
+      // silently downgrade the mode the council code asks for.
+      expect(step).toContain('(umask 077; mkdir -p "$RUN_DIR")');
       expect(step).toContain('::notice::');
+    });
+
+    test('the shape gate constrains the PROVIDER level too — not only the model entries', () => {
+      // Round-1 review F1, recorded as the document that passed the first three
+      // assertions: `provider.<name>.options` is the engine's own
+      // baseURL/apiKey channel — the exact channel PR #265's rig used to point
+      // the engine at its capture server (digest R3) — and it sits BETWEEN
+      // `provider.<name>` and `models`, which a models-only gate never reads.
+      const smuggled = {
+        provider: {
+          openrouter: {
+            options: { baseURL: 'http://elsewhere/api/v1' },
+            models: { 'qwen/qwen3.8-27b': { options: { provider: { only: ['reka'] } } } },
+          },
+        },
+      };
+      // It satisfies every other assertion the step makes …
+      expect(Object.keys(smuggled)).toEqual(['provider']);
+      for (const entry of Object.values(smuggled.provider.openrouter.models)) {
+        expect(Object.keys(entry)).toEqual(['options']);
+        expect(Object.keys(entry.options)).toEqual(['provider']);
+      }
+      // … and only a PROVIDER-level assertion can refuse it. Without one, the
+      // invariant sentence in the env comment ("the document carries ONLY the
+      // routing key") is a claim nothing asserts, and the probe measured
+      // nothing about a document of that shape.
+      expect(Object.keys(smuggled.provider.openrouter)).not.toEqual(['models']);
+      expect(routingStep()).toContain('[.provider[] | keys == ["models"]]');
     });
 
     test('the shipped default is a routing-ONLY document — the shape the probe measured', () => {
       const doc = JSON.parse(routingValue());
       expect(Object.keys(doc)).toEqual(['provider']);
+      // Round-1 review F1: nothing may sit between `provider.<name>` and
+      // `models` either — `options` there is the engine's baseURL/apiKey channel.
+      for (const provider of Object.values(doc.provider)) {
+        expect(Object.keys(provider)).toEqual(['models']);
+      }
       const models = doc.provider.openrouter.models;
       expect(Object.keys(models).length).toBeGreaterThan(0);
       for (const entry of Object.values(models)) {
@@ -903,13 +950,17 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // If the alias map drops qwen (or re-pins it to another id), this pin
       // silently stops applying to any seat — a routing experiment nobody is
       // running. Read the map rather than restating its ids here.
+      // Round-1 review F2: compared in GATEWAY form. Stripping the
+      // `openrouter/` prefix off the map's ids is the idiom .eslintrc.js's
+      // `no-restricted-syntax` rule bans outright (issue #214) — and no gate on
+      // this branch lints tests/scripts/, so nothing would have caught it. The
+      // routing document's keys are engine model ids, so the prefix is added to
+      // THEM instead of removed from the map.
       const map = JSON.parse(fs.readFileSync(
         path.join(__dirname, '..', '..', '.github', 'amicus-ci-aliases.json'), 'utf-8'));
-      const openrouterIds = Object.values(map.aliases)
-        .filter((id) => String(id).startsWith('openrouter/'))
-        .map((id) => String(id).slice('openrouter/'.length));
+      const aliasIds = new Set(Object.values(map.aliases).map(String));
       const models = JSON.parse(routingValue()).provider.openrouter.models;
-      for (const id of Object.keys(models)) { expect(openrouterIds).toContain(id); }
+      for (const id of Object.keys(models)) { expect(aliasIds).toContain(`openrouter/${id}`); }
     });
   });
 

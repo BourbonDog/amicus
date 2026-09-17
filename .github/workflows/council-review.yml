@@ -140,8 +140,11 @@ jobs:
       # a per-model `options.provider` block reaches the OpenRouter request body
       # verbatim, and an `opencode.json` written into the PER-CALL directory is
       # live — the engine walks UP from the session directory, so a file in
-      # $RUN_DIR reaches a Stage-1 seat (case R12) and one in a judge's
-      # `_scratch` child reaches a support leg (R14).
+      # $RUN_DIR reaches a Stage-1 seat, whose call is scoped at $RUN_DIR itself
+      # (case R12), and the SAME file still reaches a judge leg, whose call is
+      # scoped at $RUN_DIR/_scratch, a child (case R14 — the file sat at the
+      # scoped directory and the call at its `_scratch` child, which is exactly
+      # the geometry of the scope note above).
       #
       # WHY `only` AND NOT `order`. `only: ["reka"]` leaves exactly one upstream
       # able to serve the leg, which is what makes the result SELF-ATTRIBUTING
@@ -166,8 +169,11 @@ jobs:
       # surface the launch-time agent tripwire polices (verifyAgentRendering /
       # verifyAgentFields, rulings P2-R33/R44/R53): a tree's opencode.json CAN
       # move a council agent's permission rules. Three things hold it: the
-      # document carries ONLY the routing key (the step below asserts that shape
-      # with jq and fails the job otherwise); scripts/probe-council-agents.js's
+      # document carries ONLY the routing key — asserted by the step below at
+      # every level of the document, top-level, provider and model entry, each
+      # failing the job loudly (the provider level was added after round-1
+      # review finding F1, which found `provider.<name>.options.baseURL` passing
+      # a models-only gate); scripts/probe-council-agents.js's
       # PROBE_TREE_ROUTING_JSON case MEASURED on this engine that a document of
       # exactly this shape moves no rule, no rule order and none of the fields
       # verifyAgentFields reads; and the tripwire still reads every rendered
@@ -827,9 +833,24 @@ jobs:
         #
         # Gated on the secret like every other step in this job: a soft-skipped
         # fork PR must not announce an experiment that no council ran.
-        if: ${{ steps.gate.outputs.available == 'true' && env.COUNCIL_PROVIDER_ROUTING != '' }}
+        #
+        # TRUTHINESS, NOT `!= ''` (round-1 review F5). GitHub's `!=` coerces
+        # numerically, so the value `0` — valid JSON, not a valid experiment —
+        # compares EQUAL to '' and would skip this step with no annotation at
+        # all: exactly the "ran silently as no experiment" degrade the jq gates
+        # below exist to prevent. The empty string is the only falsy string, so
+        # bare truthiness still skips on a blanked (or absent) value and leaves
+        # `0` to be refused loudly below.
+        if: ${{ steps.gate.outputs.available == 'true' && env.COUNCIL_PROVIDER_ROUTING }}
         run: |
-          mkdir -p "$RUN_DIR"
+          # `umask 077`, not a bare mkdir (round-1 review F4). This step now
+          # creates council-run/ FIRST, and src/council/run-state.js's
+          # `fs.mkdirSync(runDir, { recursive: true, mode: 0o700 })` is a no-op
+          # on a directory that already exists — it never chmods — so a bare
+          # `mkdir -p` at the runner's 0755 umask would silently downgrade the
+          # mode the council code deliberately asks for. The subshell keeps the
+          # umask off every later command in this step.
+          (umask 077; mkdir -p "$RUN_DIR")
           # VALIDATE BEFORE WRITING. A malformed document is written, ignored by
           # the engine, and then read back later as "the experiment ran and
           # changed nothing" — a silent degrade that would poison every death
@@ -838,13 +859,26 @@ jobs:
             echo "::error::COUNCIL_PROVIDER_ROUTING is not valid JSON — nothing was written and no seat was dispatched; fix the value or blank it to disable the experiment"
             exit 1
           fi
-          # The two shape assertions the invariant argument rests on. The
-          # measured claim (PROBE_TREE_ROUTING_JSON) is about a document that
-          # carries the routing key and NOTHING else; a document carrying an
-          # `agent` block, a prompt or a permission block would sit inside the
-          # agent-rendering surface with nothing measured about it at all.
+          # The THREE shape assertions the invariant argument rests on — one per
+          # level of the document, because a gate that skips a level asserts
+          # nothing about it. The measured claim (PROBE_TREE_ROUTING_JSON) is
+          # about a document that carries the routing key and NOTHING else; a
+          # document carrying an `agent` block, a prompt or a permission block
+          # would sit inside the agent-rendering surface with nothing measured
+          # about it at all.
           if ! jq -e 'keys == ["provider"]' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
             echo "::error::COUNCIL_PROVIDER_ROUTING carries a top-level key other than 'provider' — refused: the #202 Lever 2 invariant is measured only for a routing-ONLY document"
+            exit 1
+          fi
+          # ⚠️ THE PROVIDER LEVEL, added after round-1 review finding F1. Without
+          # it a document could carry `provider.openrouter.options.baseURL`
+          # alongside `models` and pass every other assertion here. That is not a
+          # hypothetical key: `provider.<name>.options` is the engine's own
+          # baseURL/apiKey channel, and it is the exact channel PR #265's rig
+          # used to point the engine at its local capture server (digest case
+          # R3). A models-only gate never reads the level it sits on.
+          if ! jq -e '[.provider[] | keys == ["models"]] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
+            echo "::error::every COUNCIL_PROVIDER_ROUTING provider entry must carry 'models' and nothing else (no provider-level options/baseURL/apiKey), and there must be at least one — refused"
             exit 1
           fi
           if ! jq -e '[.provider[].models[] | (keys == ["options"]) and (.options | keys == ["provider"])] | (length > 0) and all' >/dev/null <<< "$COUNCIL_PROVIDER_ROUTING"; then
@@ -853,7 +887,10 @@ jobs:
           fi
           printf '%s' "$COUNCIL_PROVIDER_ROUTING" > "$RUN_DIR/opencode.json"
           PINNED=$(jq -r '[.provider[].models | keys[]] | join(", ")' <<< "$COUNCIL_PROVIDER_ROUTING")
-          ROUTING=$(jq -c '[.provider[].models[].options.provider] | add' <<< "$COUNCIL_PROVIDER_ROUTING")
+          # Keyed BY MODEL ID, not `[…] | add` (round-1 review F5, second half):
+          # `add` MERGES the per-model routing objects, so with two pins the
+          # notice would print one model's `only` list against both ids.
+          ROUTING=$(jq -c '[.provider[].models | to_entries[] | {(.key): .value.options.provider}] | add' <<< "$COUNCIL_PROVIDER_ROUTING")
           echo "::notice::#202 Lever 2 — OpenRouter provider routing in force for ${PINNED}: ${ROUTING}. Written to ${RUN_DIR}/opencode.json and shipped in the council-run evidence artifact. Nothing records the serving upstream, so read this run's leg errors for an OpenRouter 4xx before reading its stalls."
 
       - name: Run the adjudicated council (amicus council run, headless)
