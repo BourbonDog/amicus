@@ -163,13 +163,45 @@ describe('#256 decideCreditPreflight', () => {
       }
     });
 
-    test('a sub-cent remainder clamps to $0.00, which the run\'s own cost gate then stops loudly', () => {
-      // Not a refusal by the ruling (remaining > 0), and a $0 ceiling makes
-      // run-budget.js :: createBudget report overBudget immediately — exit 2
-      // with degrade notes, which is the loud bounded outcome, not a crash.
-      const d = decideCreditPreflight(checked({ limitRemaining: 0.004 }), 2);
+    /**
+     * Council #264 r1 round 2 — MEASURED, and it reverses what the first clamp
+     * asserted. A sub-cent limit floors to `0`, `finish` writes
+     * `effective_max_cost=0`, `'0'` is non-empty so the `${VAR:-$MAX_COST}`
+     * fallback does not fire, and the paid step runs `--max-cost "0"` — which
+     * `src/cli-handlers-council-run.js` rejects outright (`--max-cost must be a
+     * positive number`, BAD_ARGS, exit 1) long before `createBudget` is reached.
+     * The workflow then reports `::error::council run failed`: zero reviews, the
+     * exact outcome the clamp exists to prevent.
+     */
+    test('a sub-cent remainder REFUSES — a $0 ceiling is rejected by the CLI, not bounded by it', () => {
+      for (const limitRemaining of [0.004, 0.009, 0.0001]) {
+        const d = decideCreditPreflight(checked({ limitRemaining }), 2);
+        expect(d.outcome).toBe('refuse');
+        expect(d.effectiveMaxCost).toBeNull();
+        expect(d.message).toContain('below one cent');
+        expect(d.message).toContain('no seat was dispatched');
+      }
+    });
+
+    test('effectiveMaxCost is NEVER zero on a clamp — a zero ceiling would fail the job', () => {
+      // The whole-range guard, not three examples: anything that survives as a
+      // clamp must be a ceiling the CLI will accept.
+      for (let i = 1; i <= 400; i++) {
+        const limitRemaining = i / 400 * 1.5; // 0.00375 .. 1.5
+        const d = decideCreditPreflight(checked({ limitRemaining }), 2);
+        if (d.outcome === 'clamp') {
+          expect(d.effectiveMaxCost).toBeGreaterThan(0);
+        } else {
+          expect(d.outcome).toBe('refuse');
+          expect(limitRemaining).toBeLessThan(0.01);
+        }
+      }
+    });
+
+    test('exactly one cent still clamps — it is the smallest ceiling the CLI accepts', () => {
+      const d = decideCreditPreflight(checked({ limitRemaining: 0.01 }), 2);
       expect(d.outcome).toBe('clamp');
-      expect(d.effectiveMaxCost).toBe(0);
+      expect(d.effectiveMaxCost).toBe(0.01);
     });
 
     test('the clamp explains that the run continues on a smaller ceiling', () => {

@@ -368,6 +368,10 @@ jobs:
           # limit already below it, so that rule would have turned a partial
           # round into zero reviews. The clamp hands the paid step a ceiling the
           # key can fund and lets the run's own cost gate bound the spend.
+          # ⚠️ BUT a limit BELOW ONE CENT refuses rather than clamping to $0.00:
+          # `--max-cost 0` is a bad ARGUMENT, not a tight budget —
+          # cli-handlers-council-run.js rejects a non-positive ceiling with exit 1
+          # before any budget exists, which would fail the job outright.
           # ⚠️ NOTHING BUT A REFUSAL MAY FAIL THIS STEP (council #264 r1, finding
           # A1). Every path — including a synchronous throw, an unhandled
           # rejection, a missing or broken module and a renamed export — ends at
@@ -410,16 +414,33 @@ jobs:
             // max_cost is a workflow_call input — i.e. caller-controlled.
             const value = String(effective === null || effective === undefined ? MAX_COST : effective)
               .replace(/[\r\n]+/g, ' ');
+            // TWO WRITES, TWO TRIES (council #264 r1 round 2). Sharing one
+            // `try` let a failed $GITHUB_OUTPUT write still print "Run ceiling
+            // in force: $X" — an assertion about a value the paid step never
+            // received, i.e. two surfaces disagreeing about the same fact.
+            let published = false;
             try {
               if (process.env.GITHUB_OUTPUT) {
                 fs.appendFileSync(process.env.GITHUB_OUTPUT, 'effective_max_cost=' + value + '\n');
               }
+              published = true;
+            } catch (outputErr) {
+              console.log('::warning::the credit preflight could not publish effective_max_cost ('
+                + oneLine(outputErr) + ') — the paid step falls back to MAX_COST');
+            }
+            try {
               if (process.env.GITHUB_STEP_SUMMARY) {
+                // The ceiling line is a claim about what the PAID STEP will use,
+                // so it is printed only when the output write landed — and never
+                // on a refusal, which dispatches nothing and leaves no ceiling in
+                // force at all.
+                const ceilingLine = (published && level !== 'error')
+                  ? '\n\nRun ceiling in force: $' + value : '';
                 fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-                  '### OpenRouter credit preflight\n\n' + message + '\n\nRun ceiling in force: $' + value + '\n\n');
+                  '### OpenRouter credit preflight\n\n' + message + ceilingLine + '\n\n');
               }
-            } catch (bookkeepingErr) {
-              console.log('::warning::the credit preflight could not write its step files: ' + oneLine(bookkeepingErr));
+            } catch (summaryErr) {
+              console.log('::warning::the credit preflight could not write the step summary: ' + oneLine(summaryErr));
             }
             const line = '::' + level + '::' + message;
             if (level === 'error') { console.error(line); } else { console.log(line); }

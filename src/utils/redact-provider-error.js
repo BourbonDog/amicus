@@ -34,10 +34,14 @@ const KEY_PATH_ID = /(\/keys\/)([A-Za-z0-9_-]{32,})/g;
 
 /**
  * The other shape a key identifier actually arrives in: a query parameter
- * (council #264 r1, findings C3 and D1). Same ≥32-character floor, and the same
- * parameter family `api-key-validation.js :: redactSecret` masks on the
- * validation path — this module is the death-reason path, where no key is in
- * hand to match against.
+ * (council #264 r1, findings C3 and D1). Same ≥32-character floor.
+ *
+ * The two modules' families OVERLAP but are not identical, and saying so is the
+ * point: `api-key-validation.js :: redactSecret` masks `key`, `api_key` and
+ * `access_token` on the VALIDATION path, where the key is in hand and the name
+ * set only has to cover the endpoints amicus itself calls. This module runs on
+ * text a PROVIDER wrote, so it also covers the spellings a provider might use —
+ * `keys`, `apikey`, bare `token` — and matches case-insensitively.
  *
  * ⚠️ NOT EXTENDED TO BARE HEX IN PROSE, which D1 also raised. Deliberate: the
  * forensic record of this very incident is bare hex — run 35143585179, base sha
@@ -49,7 +53,7 @@ const KEY_PATH_ID = /(\/keys\/)([A-Za-z0-9_-]{32,})/g;
  * emitting a key id with no surrounding URL, that is a new measured shape and
  * gets its own rule — not a guess applied to every hex string.
  */
-const KEY_QUERY_ID = /([?&](?:keys?|api_key|apikey|token)=)([A-Za-z0-9_-]{32,})/gi;
+const KEY_QUERY_ID = /([?&](?:keys?|api_key|apikey|(?:access_)?token)=)([A-Za-z0-9_-]{32,})/gi;
 
 /**
  * Redact key-management identifiers from provider error text.

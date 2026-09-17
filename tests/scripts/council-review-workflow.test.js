@@ -1021,7 +1021,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
        */
       const run = async (o = {}) => {
         const out = { logs: [], errors: [], exits: [], files: {}, handlers: {} };
-        const append = (f, data) => { out.files[f] = (out.files[f] || '') + data; };
+        const append = (f, data) => {
+          if (o.failOutputWrite && f === 'OUT') { throw new Error('EACCES: read-only step file'); }
+          out.files[f] = (out.files[f] || '') + data;
+        };
         const stub = {
           'child_process': { execSync: () => `${FAKE_ROOT}\n` },
           'path': path,
@@ -1077,6 +1080,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(r.exits).toEqual([0]);
         expect(r.annotations[0]).toMatch(/^::warning::OpenRouter key limit is below this run's ceiling/);
         expect(r.files.OUT).toBe('effective_max_cost=0.42\n');
+        expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
+        expect(r.files.SUMMARY).toContain('Run ceiling in force: $0.42');
       });
 
       test('refuse: ::error:: on stderr, exit 1, and the output is STILL written', async () => {
@@ -1085,6 +1090,38 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(r.errors[0]).toMatch(/^::error::OpenRouter key cannot cover this run/);
         expect(r.logs.filter((l) => /^::/.test(l))).toHaveLength(0); // never on stdout
         expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
+        // The summary still carries the diagnosis, but NOT a ceiling: a refusal
+        // dispatches nothing, so no ceiling is "in force" (council #264 r1 nit 4).
+        expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
+        expect(r.files.SUMMARY).not.toContain('Run ceiling in force');
+      });
+
+      test('a SUB-CENT limit refuses — it must never reach the CLI as --max-cost 0', async () => {
+        // Council #264 r1 round 2. `--max-cost 0` is a BAD ARGUMENT, not a tight
+        // budget: cli-handlers-council-run.js rejects a non-positive ceiling with
+        // exit 1, so a $0.00 clamp would fail the job outright — zero reviews,
+        // the outcome the clamp exists to prevent.
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.004 }) });
+        expect(r.exits).toEqual([1]);
+        expect(r.errors[0]).toMatch(/^::error::OpenRouter key cannot cover this run/);
+        expect(r.errors[0]).toContain('below one cent');
+        // The published ceiling falls back to MAX_COST and is never '0'.
+        expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
+      });
+
+      test('when the output write FAILS, the summary does not claim a ceiling the paid step is not using', async () => {
+        // Council #264 r1 round 2, folded minor: the two surfaces shared one
+        // `try`, so a failed $GITHUB_OUTPUT write still printed "Run ceiling in
+        // force: $X" — an assertion about a value the paid step never received.
+        const r = await run({
+          modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }),
+          failOutputWrite: true,
+        });
+        expect(r.exits).toEqual([0]);
+        expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
+        expect(r.files.SUMMARY).not.toContain('Run ceiling in force');
+        // And it says so out loud, naming the fallback the paid step will take.
+        expect(r.logs.join('\n')).toContain('could not publish effective_max_cost');
       });
 
       test('A1: a probe that THROWS SYNCHRONOUSLY warns and exits 0', async () => {

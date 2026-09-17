@@ -67,7 +67,7 @@ describe('#256 redactProviderError', () => {
    * family `api-key-validation.js :: redactSecret` masks on the validation path.
    */
   describe('query-parameter key ids (council #264 r1 / C3 + D1)', () => {
-    for (const param of ['key', 'keys', 'api_key', 'apikey', 'token']) {
+    for (const param of ['key', 'keys', 'api_key', 'apikey', 'token', 'access_token']) {
       test(`?${param}=<id> is redacted, and so is &${param}=<id>`, () => {
         expect(redactProviderError(`https://x.test/a?${param}=${HEX64}`))
           .toBe(`https://x.test/a?${param}=<redacted>`);

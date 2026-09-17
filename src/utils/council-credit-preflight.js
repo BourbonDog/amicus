@@ -182,9 +182,21 @@ function decideCreditPreflight(result, maxCost) {
   if (remaining < ceiling) {
     // Rounded DOWN to cents: a clamped ceiling ABOVE the real remaining limit
     // would put the run straight back into the refusal this preflight exists to
-    // avoid. A sub-cent remainder therefore clamps to $0.00, and createBudget
-    // stops the run at once with a degrade note — bounded and loud, not a crash.
+    // avoid.
     const effective = Math.floor(remaining * 100) / 100;
+    // ⚠️ A SUB-CENT LIMIT REFUSES; it must never clamp to $0.00 (council #264 r1
+    // round 2, MEASURED). `--max-cost 0` is not a tight budget — it is a BAD
+    // ARGUMENT: cli-handlers-council-run.js rejects a non-positive ceiling with
+    // BAD_ARGS and exit 1, long before run-budget.js could bound anything, and
+    // the workflow reports `::error::council run failed`. That is zero reviews,
+    // the exact outcome the clamp exists to prevent — so the honest answer for a
+    // key with less than one cent is the same as for a key with nothing.
+    if (effective <= 0) {
+      return { outcome: 'refuse', effectiveMaxCost: null,
+        message: `OpenRouter key cannot cover this run: ${usd(remaining)} of the key's monthly `
+          + 'limit remains, below one cent — too little to give the run any usable ceiling; '
+          + "add credit or raise the key's monthly limit — no seat was dispatched" };
+    }
     return { outcome: 'clamp', effectiveMaxCost: effective,
       message: `OpenRouter key limit is below this run's ceiling: ${usd(remaining)} monthly limit `
         + `remaining vs a ${usd(ceiling)} ceiling — the run continues with its ceiling clamped to `
