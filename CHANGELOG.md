@@ -14,11 +14,12 @@ All notable changes to Amicus are documented here. Format follows
   `ttftMs` as the disarm moment usable to size an override. (#245)
 - `config.json` is written atomically (temp + rename), so a **process** crash mid-write can no
   longer truncate it — crash atomicity only; the temp and its directory are not fsync'd, so
-  power-loss durability is not claimed. A symlinked `config.json` is followed to its target
-  instead of being replaced by a regular file. The alias-conversion Notices print only after the
-  write lands, and the caller's config object is left untouched until then, so a failed write no
-  longer reports conversions that did not happen nor diverges memory from disk; a dead stderr
-  after a committed write no longer makes the save throw. (#258)
+  power-loss durability is not claimed. An existing (resolvable) symlinked `config.json` is
+  followed to its target instead of being replaced by a regular file; a dangling link is still
+  replaced. The alias-conversion Notices print only after the write lands, and the caller's config
+  object is left untouched until then, so a failed write no longer reports conversions that did not
+  happen nor diverges memory from disk; a dead stderr after a committed write no longer makes the
+  save throw. (#258)
 
 ## [4.11.0] - 2026-09-16
 

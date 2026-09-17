@@ -103,8 +103,10 @@ function saveConfig(configData) {
   // follow it here instead, so the temp lands beside the real TARGET and the
   // rename swaps that. Resolved in saveConfig, not in atomic-write.js — 25
   // other callers share that primitive and none of them asked for this.
-  // realpathSync throws when the path is absent (first save, or a dangling
-  // link): the lexical path is then the right destination.
+  // realpathSync throws when the path is absent (first save) — the lexical path
+  // is the destination; a DANGLING link also lands here and is replaced by a
+  // regular file (disclosed; an `lstat`+`readlink` fallback would preserve it —
+  // follow-up).
   let writePath = configPath;
   try { writePath = fs.realpathSync(configPath); } catch { /* absent — write the lexical path */ }
   // #258: temp + rename, not truncate-and-write. config.json is the user's
