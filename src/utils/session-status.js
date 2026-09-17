@@ -30,6 +30,20 @@
  * `sidecar/models-probe.js`'s `/^NO_OUTPUT_BACKSTOP:/` classification — a PREFIX
  * test — is unaffected either way.
  *
+ * #251 item 3 — THE FOURTH ARM, AND WHY IT IS NOT AN OBSERVATION. Rendering ''
+ * for an unreadable probe was right for byte-stability and wrong for
+ * diagnosis: ten `NO_OUTPUT_BACKSTOP` kills on PR #254 (2026-09-16) and five on
+ * PR #250 before them carried no clause at all, and the artifact could not say
+ * which of THREE different things happened — nobody asked, the read threw, the
+ * read timed out. Each points at a different fix; all three looked identical.
+ * `probeUnknown()` below builds the one shape that says so, and it renders as
+ * `unknown` — NEVER `idle`/`busy`/`retry`. A probe that timed out on a loaded
+ * engine is not evidence about the session (#219); the clause reports the
+ * PROBE's outcome and is marked as such by the `probe` field, which no engine
+ * status carries. An engine that one day publishes a real `{type:'unknown'}`
+ * arm still renders as the plain identifier — the opposite meaning, kept
+ * distinguishable by construction.
+ *
  * ⚠️ `message` is UNTRUSTED third-party text: it originates at the provider,
  * lands in run.json, and on CI is rendered into a sticky PR comment. It goes
  * through the house sanitizer (`text-sanitize.js :: collapseExcerpt`) at a short
@@ -43,6 +57,19 @@ const { collapseExcerpt } = require('./text-sanitize');
 
 /** Short cap: this is a clause on a one-line death report, not a log dump. */
 const MAX_STATUS_MESSAGE_CHARS = 200;
+
+/**
+ * #251 item 3: the PROBE's own outcome, in the shape the clause renders.
+ * The `probe` field is the marker that separates "we could not read the
+ * session" from "the engine said X" — nothing on the wire carries it, so the
+ * two can never be confused for one another.
+ * @param {'skipped'|'failed'|'no-status'} probe - which of the three happened
+ * @param {*} detail - why, verbatim; sanitized at RENDER time, never here
+ * @returns {{type: 'unknown', probe: string, detail: *}}
+ */
+function probeUnknown(probe, detail) {
+  return { type: 'unknown', probe, detail };
+}
 
 /**
  * The death-report clause for an engine session status.
@@ -62,6 +89,22 @@ function formatSessionStatusSuffix(status) {
   // job is display, not semantics. Only the exact published identifier routes.
   const type = collapseExcerpt(status.type, 40);
   if (!type) { return ''; }
+  // #251 item 3, BEFORE the generic arm: a probe result reports on the PROBE,
+  // so it must not render as the bare identifier an engine observation renders
+  // as. Gated on the `probe` marker, not on the type alone — see the docblock.
+  if (status.type === 'unknown' && typeof status.probe === 'string') {
+    const probe = collapseExcerpt(status.probe, 40);
+    // A probe arm that collapses to nothing would render ` — probe : …`, which
+    // names no arm at all; fall through to the plain identifier rather than emit
+    // a malformed clause. Same discipline as the empty-`type` guard above.
+    if (probe) {
+      // Same untrusted-text treatment as `message`: a probe detail can be a
+      // provider/engine error string, and it lands in run.json and the sticky PR
+      // comment by the same road.
+      const detail = collapseExcerpt(status.detail, MAX_STATUS_MESSAGE_CHARS);
+      return ` (session: unknown — probe ${probe}${detail ? `: ${detail}` : ''})`;
+    }
+  }
   // An unrecognised type is still reported. A future SDK arm must not read as
   // "no status was observed" — that silence is what this clause removes.
   if (status.type !== 'retry') { return ` (session: ${type})`; }
@@ -70,4 +113,4 @@ function formatSessionStatusSuffix(status) {
   return ` (session: retry${attempt}${raw ? ` — ${raw}` : ''})`;
 }
 
-module.exports = { formatSessionStatusSuffix, MAX_STATUS_MESSAGE_CHARS };
+module.exports = { formatSessionStatusSuffix, probeUnknown, MAX_STATUS_MESSAGE_CHARS };

@@ -3,6 +3,21 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **A `NO_OUTPUT_BACKSTOP` death report now says why the session probe answered nothing.** The
+  probe returned `null` when it was skipped, when the read threw or timed out, and when the
+  engine answered with nothing — and all four rendered as no clause at all, so ten of ten kills
+  on PR #254 said nothing about the engine and the only witness was a debug log CI never emits.
+  Each case now carries its own clause: `(session: unknown — probe skipped|failed|no-status:
+  <detail>)`. The type is always `unknown`, never `idle`/`busy` — a probe that timed out on a
+  loaded engine is not an observation about the session (#219) — so an artifact now separates
+  "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped the
+  same way the poll-loop probe already unwraps it, so that shape is no longer reported as
+  "the engine returned no status". (#251 item 3, #202)
+
 ## [4.11.0] - 2026-09-16
 
 ### Added

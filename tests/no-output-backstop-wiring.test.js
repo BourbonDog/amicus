@@ -176,18 +176,19 @@ describe('runHeadless no-output backstop wiring', () => {
  * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
  * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
  * so a backstop-killed leg read as an ordinary 'timeout'.
- * NO LONGER REACHABLE: headless.js:1147 now also requires `!backstopFired`
- * and headless.js:1165 requires `backstopFired`, so the two guards are
- * mutually exclusive by construction — see headless.js:1139-1146 for the
+ * NO LONGER REACHABLE: headless.js:1485 now also requires `!backstopFired`
+ * and headless.js:1503 requires `backstopFired`, so the two guards are
+ * mutually exclusive by construction — see headless.js:1471-1484 for the
  * race they close. The test below pins it: exactly one abort, never both.
  *
- * ⚠️ These three citations were RE-DERIVED a second time, against the final
- * PR #203 round-1 tree (2026-08-26). They had already rotted twice: once
- * before W13 (993/1011/985-992 pointed into the stable-idle gate), and again
- * when W13 shipped values that landed inside the explanatory comment rather
- * than on the two `if`s. A1's hoist then shifted them further. The gate cannot
- * catch this class: check-citations.js only proves NNN is IN RANGE, and every
- * stale value was. The two numbers above are now the `if` lines themselves.
+ * ⚠️ These three citations were RE-DERIVED a THIRD time, against this tree
+ * (#251 item 3, 2026-09-16) — 1147/1165/1139-1146 had rotted by ~313 lines
+ * and pointed into an unrelated TTFT comment. They had already rotted twice
+ * before that: once before W13 (993/1011/985-992 pointed into the stable-idle
+ * gate), and again when W13 shipped values that landed inside the explanatory
+ * comment rather than on the two `if`s. The gate cannot catch this class:
+ * check-citations.js only proves NNN is IN RANGE, and every stale value was.
+ * The two numbers above are the `if` lines themselves, re-read, not shifted.
  */
 describe('fix wave: the backstop and the ordinary --timeout must not both fire for one leg', () => {
   test('thresholds set close together: only the backstop fires, never both', async () => {
@@ -1030,9 +1031,10 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
    * beside `sessionId`/`watchdog`, outside that try, and the catch-all return
    * carries it emit-when-set like the two sibling returns.
    *
-   * The throw seam is `server.close()` on the success path (src/headless.js:1343
+   * The throw seam is `server.close()` on the success path (src/headless.js:1693
    * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
-   * guarded one in the handler): the leg polls, streams 'hello', its message
+   * guarded one in the handler; RE-DERIVED #251 item 3 — 1343 had rotted onto a
+   * `stuck()` comment): the leg polls, streams 'hello', its message
    * finalizes so it completes on the stable-finished path (spec 2026-09-11 §3:
    * with the suite's busy default an unfinalized fixture would now run to the
    * 2 s leg timeout instead), and only then does the close reject into the outer
@@ -1223,7 +1225,9 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockRejectedValue(new Error('connection refused'));
     const result = await run('sstatus4');
-    expect(result.error).toBe(base());          // byte-identical to pre-#202
+    // #251 item 3: the reason is still the mechanism's own, with the probe's
+    // failure APPENDED — not a stack, and not silence.
+    expect(result.error).toBe(`${base()} (session: unknown — probe failed: connection refused)`);
     expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
   }, 20000);
 
@@ -1231,7 +1235,11 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockImplementation(() => new Promise(() => {}));
     const result = await run('sstatus5');
-    expect(result.error).toBe(base());          // bounded, then dropped
+    // Bounded, and the bound is NAMED: the 50 ms here is the injected
+    // statusProbeMs, STATUS_PROBE_MS (5000) in the field. #251 item 3 — a
+    // timeout is the single most likely of the three and used to be invisible.
+    expect(result.error).toBe(`${base()} (session: unknown — probe failed: `
+      + 'getSessionStatus(death-report) timed out after 50ms)');
   }, 20000);
 
   test('S-W9 statusProbeMs 0 DISABLES the probe (#219 r2, deepseek)', async () => {
@@ -1245,7 +1253,10 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetSessionStatus.mockClear();
     const result = await run('sstatus9', { statusProbeMs: 0 });
     expect(mockGetSessionStatus).not.toHaveBeenCalled();
-    expect(result.error).toBe(base());   // byte-identical to pre-#202
+    // #251 item 3: still no call — but the report now says the probe was
+    // SKIPPED rather than leaving a reader to guess between "disabled" and
+    // "asked and heard nothing".
+    expect(result.error).toBe(`${base()} (session: unknown — probe skipped: no window)`);
   }, 20000);
 
   test('S-W8 a probe that fails LEAVES A TRACE — silence is not the same as no status', async () => {
@@ -1258,10 +1269,53 @@ describe('#202 — a zero-output death names the engine session status', () => {
     mockGetMessages.mockResolvedValue([]);
     mockGetSessionStatus.mockRejectedValue(new Error('connection refused'));
     const result = await run('sstatus8');
-    expect(result.error).toBe(base());                 // report unchanged
+    // #251 item 3 keeps the debug line AND puts the same fact in the artifact:
+    // ten kills on PR #254 proved the log alone is not a witness CI ever reads.
+    expect(result.error).toContain('probe failed: connection refused');
     const logged = [...mockLogger.debug.mock.calls, ...mockLogger.warn.mock.calls]
       .some((c) => JSON.stringify(c).includes('connection refused'));
     expect(logged).toBe(true);
+  }, 20000);
+
+  test('S-W10 an engine that answers with NO status is not reported as a failed probe', async () => {
+    // `getSessionStatus` returns `result.data || {}` (opencode-client.js) — so
+    // `{}` is a real wire shape, and it is a DIFFERENT fact from a probe that
+    // threw. Both used to render as the same silence.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockResolvedValue({});
+    const result = await run('sstatus10');
+    expect(result.error).toBe(
+      `${base()} (session: unknown — probe no-status: the engine returned no status)`);
+  }, 20000);
+
+  test('S-W11 a SESSION-KEYED status is unwrapped, exactly as the poll loop unwraps it', async () => {
+    // The poll-loop probe already reads `statusData[sessionId]` when the top
+    // level carries no `type` (headless.js :: the mirror.output gate). The
+    // death-report probe did not, so that shape would now be reported as
+    // "the engine returned no status" — a false statement ABOUT THE ENGINE,
+    // which is the exact defect class #251 item 3 exists to remove.
+    mockGetMessages.mockResolvedValue([]);
+    mockGetSessionStatus.mockImplementation(async (_c, sessionId) => (
+      { [sessionId]: { type: 'busy' } }));
+    const result = await run('sstatus11');
+    expect(result.error).toBe(`${base()} (session: busy)`);
+  }, 20000);
+
+  test('S-W12 no status READER at all is its own skip reason', async () => {
+    // A client module without `getSessionStatus` (an older or partial engine
+    // client) never asked — and the report says so rather than looking like an
+    // engine that answered nothing. runHeadless destructures the reader from
+    // the module at CALL time, so removing it here reaches the real branch.
+    const clientModule = require('../src/opencode-client');
+    const saved = clientModule.getSessionStatus;
+    clientModule.getSessionStatus = undefined;
+    try {
+      mockGetMessages.mockResolvedValue([]);
+      const result = await run('sstatus12');
+      expect(result.error).toBe(`${base()} (session: unknown — probe skipped: no status reader)`);
+    } finally {
+      clientModule.getSessionStatus = saved;
+    }
   }, 20000);
 
   test('S-W6 the PRE-SEND firing site gets the clause too (it dies upstream of the poll loop)', async () => {

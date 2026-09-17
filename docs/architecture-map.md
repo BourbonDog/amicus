@@ -799,7 +799,7 @@ evals/
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/session-metadata-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionMetadataTmpFiles()`, `unlinkSessionMetadataTmp()`, `evaluateSessionMetadataTmpSweep()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
-| `utils/session-status.js` | #202: render the engine's SESSION STATUS as a clause on a leg's death report. | `formatSessionStatusSuffix()`, `MAX_STATUS_MESSAGE_CHARS()` |
+| `utils/session-status.js` | #202: render the engine's SESSION STATUS as a clause on a leg's death report. | `formatSessionStatusSuffix()`, `probeUnknown()`, `MAX_STATUS_MESSAGE_CHARS()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |

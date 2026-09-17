@@ -26,7 +26,7 @@ const { engineErrorForSession } = require('./utils/engine-log');
 // v4.9 W10 (#133 piece 3): the standing engine version-skew record, if any.
 const { currentEngineSkew, formatSkewSuffix } = require('./utils/engine-skew');
 // #202: the session-status clause on a death report (see utils/session-status.js).
-const { formatSessionStatusSuffix } = require('./utils/session-status');
+const { formatSessionStatusSuffix, probeUnknown } = require('./utils/session-status');
 // v4.9 W13 Task A (PR #207 round 3, B3): the one honesty predicate every ttftMs
 // emit gate shares — see src/utils/ttft.js for why `typeof` was not it.
 const { isMeasuredTtft } = require('./utils/ttft');
@@ -100,8 +100,8 @@ const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 3000
 // wait on the same engine that just failed to produce anything.
 const STATUS_PROBE_MS = 5000;
 /**
- * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker (:~540) and
- * SDK-idle (:~568) fast paths break WITHOUT requiring `info.time.completed`, but
+ * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker (:~565) and
+ * SDK-idle (:~593) fast paths break WITHOUT requiring `info.time.completed`, but
  * OpenCode stamps `info.tokens`/`info.cost` at message finalization — so those
  * exits can win the race against the provider's usage payload and report a leg
  * as free. Measured on real paid legs: $0.00759441096 lost by 155 ms and
@@ -253,9 +253,13 @@ function formatNoOutputBackstopReason({ ms, fromEnv, engineLogExcerpt, engineSke
   const quoted = engineLogExcerpt ? `${observed} — engine log: ${engineLogExcerpt}` : observed;
   // Append-only for the same reason: no skew ⇒ formatSkewSuffix returns ''.
   // #202 adds a THIRD clause on the same terms, and LAST so both clauses above
-  // stay byte-stable: no status (or an unreadable one) ⇒ '' — see
-  // utils/session-status.js. With none of the three the string is byte-for-byte
-  // what it was before any of them existed.
+  // stay byte-stable: no status at all ⇒ '' — see utils/session-status.js. A
+  // caller that passes no `sessionStatus` still gets the byte-for-byte string it
+  // got before any of the three existed. ⚠️ #251 item 3: the death-report caller
+  // in runHeadless now ALWAYS passes one — `sessionStatusSafe` names its own
+  // failure instead of returning null — so a real backstop death always carries
+  // this clause. That is the point: a missing clause used to mean four different
+  // things and was reported as one.
   return `${quoted}${formatSkewSuffix(engineSkew)}${formatSessionStatusSuffix(sessionStatus)}`;
 }
 
@@ -302,34 +306,55 @@ function engineErrorExcerptSafe(sessionId, engineLogOptions) {
  * anything, so it must also be unable to HANG. Both belts are load-bearing and
  * both are pinned (S-W4 rejects, S-W5 hangs).
  *
- * A failed probe returns `null`, which `formatSessionStatusSuffix` renders as
- * '' — so a leg whose status could not be read carries the byte-for-byte reason
- * string it carried before #202, rather than a clause claiming nothing was
- * happening. Absence keeps its one meaning.
+ * #251 item 3 — WHY THIS NO LONGER RETURNS `null`. It used to, on all four of
+ * its non-answer paths, and `formatSessionStatusSuffix` rendered every one of
+ * them as ''. That kept the reason string byte-identical and made the probe
+ * itself unfalsifiable: ten `NO_OUTPUT_BACKSTOP` kills on PR #254 (2026-09-16)
+ * and five on PR #250 carried no clause, and nothing in the artifact could say
+ * whether the engine had been asked, had refused, or had answered nothing —
+ * three facts with three different fixes. Each path now returns a NAMED
+ * `probeUnknown(...)` result instead. The #219 ruling it was built on survives
+ * unchanged in the wording: the type is `unknown`, never `idle`/`busy`, because
+ * a probe that timed out on a loaded engine is not evidence about the session.
+ * The `logger.debug` line stays — the report gained a witness, the log did not
+ * lose one.
  *
  * `readStatus` is a parameter rather than a module import because
  * `getSessionStatus` is destructured inside runHeadless from the injectable
  * client module — taking it here keeps this helper pure and directly testable.
- * @returns {Promise<object|null>}
+ * @returns {Promise<object>} an SDK SessionStatus, or a `probeUnknown` result
  */
 async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
+  if (typeof readStatus !== 'function') { return probeUnknown('skipped', 'no status reader'); }
+  if (!sessionId) { return probeUnknown('skipped', 'no session id'); }
   // `!(ms > 0)` covers 0 (the documented disable), negatives and NaN — and it is
   // why 0 is never handed to withTimeout, which would read it as UNBOUNDED.
-  if (typeof readStatus !== 'function' || !sessionId || !(ms > 0)) { return null; }
+  if (!(ms > 0)) { return probeUnknown('skipped', 'no window'); }
   try {
-    return await withTimeout(
+    const raw = await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
+    // The SAME unwrap the poll-loop probe does (see the `mirror.output.length > 0`
+    // gate below): the engine answers either with the status or with a map keyed
+    // by session id. Without it a keyed answer would be reported as "the engine
+    // returned no status" — a false statement about the engine, which is the
+    // defect class this change exists to remove, only inverted.
+    const status = (raw && typeof raw.type === 'string') ? raw : (raw && raw[sessionId]);
+    if (!status || typeof status !== 'object' || typeof status.type !== 'string') {
+      // `getSessionStatus` returns `result.data || {}` (opencode-client.js), so
+      // an empty answer is a real wire shape and a DIFFERENT fact from a throw.
+      return probeUnknown('no-status', 'the engine returned no status');
+    }
+    return status;
   } catch (err) {
-    // #219 (council, deepseek minor): returning null is right for the REPORT —
-    // absence keeps its one meaning — but it made a probe that timed out on a
-    // loaded engine indistinguishable from a leg whose engine reported nothing,
-    // i.e. a silent revert to pre-#202 behaviour. The engine log is where that
-    // belongs: the death report stays byte-identical, and the degradation
-    // becomes diagnosable instead of invisible.
-    logger.debug('session-status probe failed; the death report will carry no session clause', {
+    // #219 (council, deepseek minor): the engine log was the first witness added
+    // for a probe that timed out on a loaded engine, because the death report
+    // was required to stay byte-identical. #251 item 3 lifted that requirement —
+    // ten CI kills proved a debug line CI never emits is not a witness — so the
+    // same fact now rides the report too. This line is kept, not replaced.
+    logger.debug('session-status probe failed; the death report names the failure', {
       sessionId, error: err && err.message,
     });
-    return null;
+    return probeUnknown('failed', (err && err.message) || 'the probe failed without a message');
   }
 }
 
@@ -742,7 +767,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // #202 (piece 4): the closure is now ASYNC, because the third clause costs
     // one bounded HTTP call. The engine's session status is asked for at
-    // :~1045 only when `mirror.output.length > 0` — a gate a zero-output leg
+    // :~1070 only when `mirror.output.length > 0` — a gate a zero-output leg
     // never satisfies — so the leg that most needs diagnosing was the only one
     // that never asked, and every silent death reported a window with no cause.
     // Asked for HERE instead, at the two firing sites and nowhere else, so a

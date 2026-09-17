@@ -1,7 +1,10 @@
 'use strict';
 
 /**
- * Guards the real src/headless.js:474 wiring (Task 8, BINDING DECISION 1).
+ * Guards the real src/headless.js:1037 wiring (Task 8, BINDING DECISION 1).
+ * ⚠️ RE-DERIVED #251 item 3 (2026-09-16): the number was 474, which had rotted
+ * onto the server-start lock-race retry — nothing to do with progress usage.
+ * 1037 is the 'receiving' flush that stamps `usage: sumPerMessageUsage(...)`.
  *
  * The other progress-usage tests exercise writeProgress/readProgress in
  * isolation and would still pass even if the headless poll loop never wired
