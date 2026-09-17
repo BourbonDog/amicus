@@ -44,6 +44,26 @@ All notable changes to Amicus are documented here. Format follows
   (`JEST_WORKER_ID` set, `AMICUS_ENV_DIR` unset, and the path inside the real user's amicus config
   dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
   user's credential. `AMICUS_ENV_DIR` is the opt-out. (#212)
+- **A `NO_OUTPUT_BACKSTOP` death report now says why the session probe answered nothing.** The
+  probe returned `null` when it was skipped, when the read threw or timed out, and when the
+  engine answered with nothing — and all four rendered as no clause at all, so ten of ten kills
+  on PR #254 said nothing about the engine and the only witness was a debug log CI never emits.
+  Each case now carries its own clause: `(session: unknown — probe skipped|failed|no-status:
+  <detail>)`. The type is always `unknown`, never `idle`/`busy` — a probe that timed out on a
+  loaded engine is not an observation about the session (#219) — so an artifact now separates
+  "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped like
+  the poll-loop probe, on a stricter bar: the top-level `type` must be a renderable string, so an
+  empty one can no longer hide a real keyed answer. The `no-status` detail names which of the
+  three shapes came back (empty status / unrenderable status type / a map with no entry for this
+  session). The clause's provenance marker is a private Symbol, so an engine status that happens
+  to carry a `probe` field renders as the engine status it is. (#251 item 3, #202)
+- **The `thin-cross-review` note counts judges that died, answered empty, answered unusably and
+  predate the marker** instead of always claiming "the other judges produced no parseable Stage-2
+  block" — on PR #254 round 1 all three missing judges had died at the backstop and none had
+  returned an unparseable block, which pointed the reader of `run.json` at the wrong fix. A judge
+  that ran to completion and said nothing is no longer reported as a dead process, a judge result
+  from a pre-#251 checkpoint is reported as outcome-unknown rather than as a claim, and a bench
+  too small to cross-review at all says that rather than blaming judges that never existed. (#202)
 
 ## [4.11.0] - 2026-09-16
 

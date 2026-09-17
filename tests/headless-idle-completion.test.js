@@ -390,6 +390,11 @@ describe('idle-detection exits classify as completed', () => {
     expect(result.error).toMatch(/^RETRY_BEYOND_DEADLINE: /);
     expect(result.error).toContain('attempt 3');
     expect(result.error).toContain('429 rate limited');
+    // #251 item 3: this site shares `formatSessionStatusSuffix` with the death
+    // report, and the report's new `unknown — probe …` arm must not reach it —
+    // here the status is a real ENGINE observation, so the clause is the one it
+    // always was. Pinned as the whole trailing clause, not a substring.
+    expect(result.error).toMatch(/ \(session: retry attempt 3 — 429 rate limited\)$/);
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       'Provider backoff exceeds the leg deadline; ending the leg now instead of waiting',
