@@ -60,6 +60,51 @@ describe('#256 redactProviderError', () => {
     }
   });
 
+  /**
+   * Council #264 r1 / C3 + D1: a key identifier can arrive in a URL shape other
+   * than a `/keys/` path segment. The query-parameter family is the one that
+   * actually carries credentials and ids in provider URLs, and it is the same
+   * family `api-key-validation.js :: redactSecret` masks on the validation path.
+   */
+  describe('query-parameter key ids (council #264 r1 / C3 + D1)', () => {
+    for (const param of ['key', 'keys', 'api_key', 'apikey', 'token']) {
+      test(`?${param}=<id> is redacted, and so is &${param}=<id>`, () => {
+        expect(redactProviderError(`https://x.test/a?${param}=${HEX64}`))
+          .toBe(`https://x.test/a?${param}=<redacted>`);
+        expect(redactProviderError(`https://x.test/a?b=1&${param}=${HEX64}&c=2`))
+          .toBe(`https://x.test/a?b=1&${param}=<redacted>&c=2`);
+      });
+    }
+
+    test('the parameter name is matched case-insensitively', () => {
+      expect(redactProviderError(`https://x.test/a?API_KEY=${HEX64}`))
+        .toBe('https://x.test/a?API_KEY=<redacted>');
+    });
+
+    test('a SHORT parameter value is not an identifier and survives', () => {
+      expect(redactProviderError('https://x.test/a?key=abc123')).toBe('https://x.test/a?key=abc123');
+    });
+
+    test('an unrelated parameter with a long value is untouched', () => {
+      const raw = `https://x.test/a?model=${HEX64}`;
+      expect(redactProviderError(raw)).toBe(raw);
+    });
+
+    test('a path id and a query id in one string are both redacted', () => {
+      expect(redactProviderError(`/keys/${HEX64} and ?token=${HEX64}`))
+        .toBe('/keys/<redacted> and ?token=<redacted>');
+    });
+  });
+
+  /**
+   * Council #264 r1 / D1 asked about "bare hex in prose" too. Deliberately NOT
+   * redacted — see the module header for the full reasoning.
+   */
+  test('bare hex in prose is NOT redacted — run ids and shas are the forensics', () => {
+    const raw = `run 35143585179 at ${HEX64} reproduced it`;
+    expect(redactProviderError(raw)).toBe(raw);
+  });
+
   test('plain error text with no URL at all is byte-identical', () => {
     const raw = 'This request would exceed your available credits given your current in-flight '
       + 'requests. Retry after in-flight requests settle, or add credits.';

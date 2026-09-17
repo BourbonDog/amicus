@@ -152,8 +152,14 @@ function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
   // An identical, empty or absent retry error keeps the text BYTE-IDENTICAL to
   // the pre-#256 wording: repeating one reason twice is noise, and several
   // suites pin that exact string.
+  // Council #264 r1 (C2 + D2): BOTH sides are trimmed. Trimming only the retry
+  // made the same reason with different whitespace compare unequal, so the note
+  // printed one reason twice — the byte-identity guarantee broken by the very
+  // comparison meant to uphold it. The RENDERED text still uses each side's own
+  // original bytes; only the comparison is normalised.
   const retryErr = typeof retryLeg.error === 'string' ? retryLeg.error.trim() : '';
-  const retryCause = (retryErr && retryErr !== (ff && ff.reason)) ? `: ${retryErr}` : '';
+  const firstReason = (ff && typeof ff.reason === 'string') ? ff.reason.trim() : '';
+  const retryCause = (retryErr && retryErr !== firstReason) ? `: ${retryErr}` : '';
   const why = ff && ff.class === 'wave'
     ? `its first wave ${ff.waveId} produced no legs (${ff.reason}); `
       + `its once-only retry leg ended '${retryLeg.status}'${retryCause} with no usable output`

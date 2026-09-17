@@ -49,6 +49,29 @@ describe('#256 retryLegStillDeadNote names the retry\'s own cause', () => {
         + 'its once-only retry also ended \'error\'');
     });
 
+    /**
+     * Council #264 r1 / C2 + D2. The comparison trimmed the RETRY's error but
+     * not the first failure's reason, so the same reason arriving with
+     * different whitespace compared unequal and got appended — the note then
+     * printed one reason twice, which is exactly the byte-identity guarantee
+     * this arm promises. Both sides are trimmed now.
+     */
+    test('the same reason with DIFFERENT whitespace is still the same reason', () => {
+      for (const padded of [`  ${BACKSTOP}`, `${BACKSTOP}  `, `\n${BACKSTOP}\t`]) {
+        const n = note({ class: 'leg', status: 'error', reason: padded },
+          { status: 'error', error: BACKSTOP });
+        expect(n.why).toBe(`the leg ended 'error': ${padded} with no usable output; `
+          + 'its once-only retry also ended \'error\'');
+        expect(n.why).not.toContain(`'error': ${BACKSTOP}`.replace("'error': ", "also ended 'error': "));
+      }
+    });
+
+    test('a padded retry error matched against a padded first reason is still suppressed', () => {
+      const n = note({ class: 'leg', status: 'error', reason: `  ${BACKSTOP}  ` },
+        { status: 'error', error: `\t${BACKSTOP}\n` });
+      expect(n.why.endsWith("its once-only retry also ended 'error'")).toBe(true);
+    });
+
     test('an empty, whitespace-only, null or absent retry error leaves the text unchanged', () => {
       const expected = `the leg ended 'error': ${BACKSTOP} with no usable output; `
         + 'its once-only retry also ended \'timeout\'';

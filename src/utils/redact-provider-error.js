@@ -19,7 +19,7 @@
  * Deliberately narrow. This runs on every provider error that reaches a death
  * reason, and an over-eager rule would eat the figures a reader needs ("can only
  * afford 56097") or the doc links that make an error actionable. It replaces the
- * id in a `/keys/<id>` path segment and nothing else.
+ * id in a `/keys/<id>` path segment or a key-ish query parameter, and nothing else.
  */
 
 'use strict';
@@ -31,6 +31,25 @@
  * redacting them would destroy a useful pointer while protecting nothing.
  */
 const KEY_PATH_ID = /(\/keys\/)([A-Za-z0-9_-]{32,})/g;
+
+/**
+ * The other shape a key identifier actually arrives in: a query parameter
+ * (council #264 r1, findings C3 and D1). Same ≥32-character floor, and the same
+ * parameter family `api-key-validation.js :: redactSecret` masks on the
+ * validation path — this module is the death-reason path, where no key is in
+ * hand to match against.
+ *
+ * ⚠️ NOT EXTENDED TO BARE HEX IN PROSE, which D1 also raised. Deliberate: the
+ * forensic record of this very incident is bare hex — run 35143585179, base sha
+ * 309862bf, the leg/session ids in every degrade note, and content hashes. A
+ * bare-hex rule would eat all of them on every death reason, destroying the
+ * evidence these artifacts exist to carry, while protecting nothing: an
+ * identifier that is dangerous is dangerous because a URL says what it names,
+ * and both URL shapes that do so are covered here. If a provider is later seen
+ * emitting a key id with no surrounding URL, that is a new measured shape and
+ * gets its own rule — not a guess applied to every hex string.
+ */
+const KEY_QUERY_ID = /([?&](?:keys?|api_key|apikey|token)=)([A-Za-z0-9_-]{32,})/gi;
 
 /**
  * Redact key-management identifiers from provider error text.
@@ -45,7 +64,7 @@ const KEY_PATH_ID = /(\/keys\/)([A-Za-z0-9_-]{32,})/g;
  */
 function redactProviderError(text) {
   if (typeof text !== 'string' || text.length === 0) { return text; }
-  return text.replace(KEY_PATH_ID, '$1<redacted>');
+  return text.replace(KEY_PATH_ID, '$1<redacted>').replace(KEY_QUERY_ID, '$1<redacted>');
 }
 
 module.exports = { redactProviderError };
