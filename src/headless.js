@@ -100,9 +100,10 @@ const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 3000
 // wait on the same engine that just failed to produce anything.
 const STATUS_PROBE_MS = 5000;
 /**
- * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker (:~565) and
- * SDK-idle (:~593) fast paths break WITHOUT requiring `info.time.completed`, but
- * OpenCode stamps `info.tokens`/`info.cost` at message finalization — so those
+ * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker fast path
+ * (headless.js:1208) and the SDK-idle break (headless.js:1293) exit
+ * WITHOUT requiring `info.time.completed`, but OpenCode stamps
+ * `info.tokens`/`info.cost` at message finalization — so those
  * exits can win the race against the provider's usage payload and report a leg
  * as free. Measured on real paid legs: $0.00759441096 lost by 155 ms and
  * $0.00690565716 by 29 ms. 3 × 400 ms bounds the worst case at ~1.2 s of extra
@@ -333,11 +334,15 @@ async function sessionStatusSafe(readStatus, client, sessionId, dirArgs, ms) {
   try {
     const raw = await withTimeout(
       readStatus(client, sessionId, ...(dirArgs || [])), ms, 'getSessionStatus(death-report)');
-    // The SAME unwrap the poll-loop probe does (see the `mirror.output.length > 0`
-    // gate below): the engine answers either with the status or with a map keyed
-    // by session id. Without it a keyed answer would be reported as "the engine
-    // returned no status" — a false statement about the engine, which is the
-    // defect class this change exists to remove, only inverted.
+    // The same READ the poll-loop probe does at headless.js:1264, with a
+    // STRICTER type check: that site takes `statusData` whenever `.type` is
+    // truthy, this one only when it is a STRING. A truthy non-string `type`
+    // therefore diverges — deliberately, because the renderer drops a
+    // non-string type and would render '' for it. The engine answers either
+    // with the status or with a map keyed by session id; without the unwrap a
+    // keyed answer would be reported as "the engine returned no status" — a
+    // false statement about the engine, which is the defect class this change
+    // exists to remove, only inverted.
     const status = (raw && typeof raw.type === 'string') ? raw : (raw && raw[sessionId]);
     if (!status || typeof status !== 'object' || typeof status.type !== 'string') {
       // `getSessionStatus` returns `result.data || {}` (opencode-client.js), so
@@ -767,9 +772,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     //
     // #202 (piece 4): the closure is now ASYNC, because the third clause costs
     // one bounded HTTP call. The engine's session status is asked for at
-    // :~1070 only when `mirror.output.length > 0` — a gate a zero-output leg
-    // never satisfies — so the leg that most needs diagnosing was the only one
-    // that never asked, and every silent death reported a window with no cause.
+    // headless.js:1264 only when `mirror.output.length > 0` — a gate a
+    // zero-output leg never satisfies — so the leg that most needs diagnosing
+    // was the only one that never asked, and every silent death reported a
+    // window with no cause.
     // Asked for HERE instead, at the two firing sites and nowhere else, so a
     // living leg still makes no extra call. The read is best-effort and
     // bounded: `sessionStatusSafe` can neither throw nor hang (S-W4/S-W5).

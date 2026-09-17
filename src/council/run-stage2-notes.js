@@ -28,9 +28,11 @@ const MIN_CROSS_REVIEW_JUDGES = 2;
  * Why fewer than two judges came back usable, in the judges' own terms.
  *
  * ⚠️ `died` is STAMPED by `run-stage2.js` from its own `legDied` predicate and
- * never re-derived here. That predicate ('complete' AND a non-empty summary)
- * is the one this codebase already shares between the DEAD_LEG classification
- * and the `stage2-judge` degrade; spelling it a third time is how the three
+ * never re-derived here. That predicate is `!(leg.status === 'complete' &&
+ * leg.summary)` (`run-stage2.js:181`) — died = NOT (complete WITH a non-empty
+ * summary), so a leg that completes with an EMPTY summary died too. It is the
+ * one this codebase already shares between the DEAD_LEG classification and the
+ * `stage2-judge` degrade; spelling it a third time is how the three
  * would drift into disagreeing about which judges died. An entry that carries
  * no `died` flag therefore counts as "answered, unusably" — the conservative
  * reading, and the only claim a bare `{ok:false}` supports.

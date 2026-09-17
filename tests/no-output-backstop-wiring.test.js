@@ -176,9 +176,9 @@ describe('runHeadless no-output backstop wiring', () => {
  * alongside result.error = 'NO_OUTPUT_BACKSTOP: ...'. That mattered because
  * result-schema.js :: statusFromResult checks `timedOut` BEFORE `error`,
  * so a backstop-killed leg read as an ordinary 'timeout'.
- * NO LONGER REACHABLE: headless.js:1485 now also requires `!backstopFired`
- * and headless.js:1503 requires `backstopFired`, so the two guards are
- * mutually exclusive by construction — see headless.js:1471-1484 for the
+ * NO LONGER REACHABLE: headless.js:1491 now also requires `!backstopFired`
+ * and headless.js:1509 requires `backstopFired`, so the two guards are
+ * mutually exclusive by construction — see headless.js:1477-1490 for the
  * race they close. The test below pins it: exactly one abort, never both.
  *
  * ⚠️ These three citations were RE-DERIVED a THIRD time, against this tree
@@ -1031,7 +1031,7 @@ describe('v4.9 W13 Task A: the TTFT probe', () => {
    * beside `sessionId`/`watchdog`, outside that try, and the catch-all return
    * carries it emit-when-set like the two sibling returns.
    *
-   * The throw seam is `server.close()` on the success path (src/headless.js:1693
+   * The throw seam is `server.close()` on the success path (src/headless.js:1699
    * — the one UNGUARDED close, deliberately so per v4.4.1 M2's note on the
    * guarded one in the handler; RE-DERIVED #251 item 3 — 1343 had rotted onto a
    * `stuck()` comment): the leg polls, streams 'hello', its message

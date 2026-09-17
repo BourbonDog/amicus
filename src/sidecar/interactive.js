@@ -224,7 +224,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       try { await server.close(); } catch { /* best-effort */ }
       logger.debug('OpenCode server closed after Electron exit');
       // #218 PR 4 whole-branch review (EP-4/REC-2/PRT-2): the level SENT rides the interactive
-      // result too (emit-when-sent, the derivation headless.js:836-839 makes), so start.js's
+      // result too (emit-when-sent, the derivation headless.js:849-852 makes), so start.js's
       // writers stamp `variant` / `variantUnverified` for the default GUI mode as well.
       // Named mutant "INTERACTIVEVARIANTDROPPED" (tests/sidecar/interactive-variant.test.js).
       if (sent) { result.variant = sent.variant; if (!sent.verified) { result.variantUnverified = true; } }
