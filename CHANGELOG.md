@@ -5,8 +5,19 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The setup window's key IPC handlers (`sidecar:validate-key`, `sidecar:save-key`) moved from
+  `electron/ipc-setup.js` to `electron/ipc-keys.js` (300-line size gate). Channel names, return
+  shapes and behaviour are unchanged. (#212)
+
 ### Fixed
 
+- **The shipped `second-opinion` skill's `MODEL-NOTES.md` `NO_OUTPUT_BACKSTOP` bullet said 120s
+  and claimed "the retry reuses the same threshold" — both stale since the default moved to 300s.**
+  Corrected to the v4.11.0 source: 300s default (`DEFAULT_NO_OUTPUT_BACKSTOP_MS`), the retry's
+  actual escalation rule (doubled, clamped strictly below the leg cap), the tool-call disarm, and
+  `ttftMs` as the disarm moment usable to size an override. (#245)
 - The setup window's `sidecar:save-key` IPC now validates the key in the MAIN process before it
   persists anything, mirroring `amicus key`'s rule exactly (only a 401 blocks a save; 403, 429,
   5xx, an unexpected status and an unanswered probe still save). The renderer's validate-then-save
@@ -18,12 +29,6 @@ All notable changes to Amicus are documented here. Format follows
   (`JEST_WORKER_ID` set, `AMICUS_ENV_DIR` unset, and the path inside the real user's amicus config
   dir), throwing `TEST_ENV_WRITE_REFUSED` before any write instead of silently overwriting a
   user's credential. (#212)
-
-### Changed
-
-- The setup window's key IPC handlers (`sidecar:validate-key`, `sidecar:save-key`) moved from
-  `electron/ipc-setup.js` to `electron/ipc-keys.js` (300-line size gate). Channel names, return
-  shapes and behaviour are unchanged. (#212)
 
 ## [4.11.0] - 2026-09-16
 
