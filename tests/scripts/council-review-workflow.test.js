@@ -844,6 +844,31 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(creditStep()).toContain("if: steps.gate.outputs.available == 'true'");
     });
 
+    test('it reads BOTH key facts and prices the bench\'s reservation (council #264 r2, HQ1 + HQ2)', () => {
+      const step = creditStep();
+      // HQ2: the key's monthly cap and the ACCOUNT balance are two facts, and
+      // the second one is what a key with `limit_remaining: null` hides.
+      expect(step).toContain('checkOpenRouterBalance');
+      // HQ1: the quantity OpenRouter refuses on is a per-request reservation,
+      // priced from the provisioned map's outputBudget and the live catalog.
+      expect(step).toContain('council-credit-reservation');
+      expect(step).toContain('fetchOpenRouterModelPrices');
+      expect(step).toContain('priceOneSeatReservation');
+      expect(step).toContain('resolveBenchIds');
+      expect(step).toContain('outputBudget');
+      // The SAME file the "Provision the alias map" step above wrote.
+      expect(step).toContain('AMICUS_CONFIG_DIR');
+      expect(step).toContain("'config.json'");
+    });
+
+    test('the step says what it guarantees and what it cannot', () => {
+      // Council #264 r2 read the earlier copy as a promise the probe cannot
+      // keep; the boundary now travels in the decision's own messages and in
+      // the step's documentation.
+      const step = creditStep();
+      expect(step).toContain('cannot prevent a per-request refusal');
+    });
+
     test('it calls the SHIPPED probe and the shipped decision module, resolved the way preflight.js resolves them', () => {
       const step = creditStep();
       // The workflow never checks out; `npm root -g` against the installed
@@ -885,7 +910,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // Two-arg `.then(onOk, onErr)`: a throw inside the SUCCESS handler must
       // not be swallowed by the probe's own error path — it belongs to the
       // unhandledRejection backstop, which is what makes the two distinguishable.
-      expect(step).toMatch(/\.then\(\(result\) => \{[\s\S]*?\}, \(err\) => \{/);
+      expect(step).toMatch(/\.then\(\([a-z]+\) => \{[\s\S]*?\}, \(err\) => \{/);
     });
 
     test('effective_max_cost is written on EVERY path, and the paid step is what uses it', () => {
@@ -908,7 +933,26 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // script-injection seam.
       expect(paid).toContain('--max-cost "$CEILING"');
       expect(paid).not.toContain('--max-cost "$MAX_COST"');
-      expect(paid).toContain('CEILING="${EFFECTIVE_MAX_COST:-$MAX_COST}"');
+    });
+
+    test('the paid step VALIDATES the ceiling before it echoes or uses it (council #264 r2, HQ3/A2)', () => {
+      // The ceiling reached a workflow command unvalidated, re-opening the exact
+      // injection the preflight neutralises one step earlier — and a `grep -E`
+      // on a multi-line value matches its FIRST LINE, so a regex alone is not a
+      // guard. The `case` rejects any character outside the dollar alphabet,
+      // newline included, before the shape is checked at all.
+      const y = yml();
+      const paid = y.slice(y.indexOf('Run the adjudicated council'), y.indexOf('Collect the spend receipt'));
+      expect(paid).toContain('valid_ceiling()');
+      expect(paid).toContain('*[!0-9.]*) return 1');
+      expect(paid).toContain("'^[0-9]+(\\.[0-9]{1,2})?$'");
+      // Falls back to MAX_COST, validated the SAME way, and refuses if neither is
+      // a dollar amount — a non-numeric ceiling is a caller bug, not a spend call.
+      expect(paid).toMatch(/valid_ceiling "\$CEILING"[\s\S]{0,400}CEILING="\$MAX_COST"/);
+      expect(paid).toMatch(/::error::[^\n]*ceiling[\s\S]{0,300}exit 1/);
+      // The invalid value is NEVER echoed — printing it is the injection.
+      const guard = paid.slice(paid.indexOf('valid_ceiling()'), paid.indexOf('BENCH='));
+      expect(guard).not.toMatch(/echo[^\n]*::error::[^\n]*\$(CEILING|MAX_COST)/);
     });
 
     test('the warning is mirrored into the step summary, not only into annotations', () => {
@@ -929,9 +973,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain("path.join(root, 'amicus', 'src', 'utils', file)");
       expect(step).toContain("load('openrouter-credit.js')");
       expect(step).toContain("load('council-credit-preflight.js')");
-      // EXACTLY ONE resolution shape. A second `path.join` would be a second
-      // spelling this pin does not cover — the trap `models` walked into.
-      expect(step.match(/path\.join\(/g)).toHaveLength(1);
+      // EXACTLY ONE MODULE resolution shape. A second `path.join(root,` would
+      // be a second spelling this pin does not cover — the trap `models` walked
+      // into. (The step also joins AMICUS_CONFIG_DIR for the alias map; that is
+      // a different base, pinned by its own test above.)
+      expect(step.match(/path\.join\(root,/g)).toHaveLength(1);
     });
 
     test('the bootstrap gap and a BROKEN module are reported as different facts, both exit 0', () => {
@@ -958,7 +1004,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain("'loading src/utils/' + file + ' failed: '");
       expect(step).toContain("replace(/\\s+/g, ' ').slice(0, 300)");
       // A renamed export throws nothing at require time; it is caught by shape.
-      expect(step).toContain("typeof checkOpenRouterCredit !== 'function'");
+      expect(step).toContain("typeof f !== 'function'");
       expect(step).toContain('does not export checkOpenRouterCredit/decideCreditPreflight');
       // Every load failure continues the review — both branches hand off to the
       // single exit point rather than exiting themselves (the exit code that
@@ -1028,7 +1074,21 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         const stub = {
           'child_process': { execSync: () => `${FAKE_ROOT}\n` },
           'path': path,
-          'fs': { appendFileSync: append },
+          'fs': {
+            appendFileSync: append,
+            // The provisioned alias map the earlier step wrote — where the
+            // reservation's outputBudget and bench ids come from.
+            readFileSync: (f) => {
+              out.reads = (out.reads || []).concat(f);
+              if (o.aliasMap === null) {
+                const e = new Error(`ENOENT: no such file or directory, open '${f}'`);
+                e.code = 'ENOENT';
+                throw e;
+              }
+              return typeof o.aliasMap === 'string' ? o.aliasMap
+                : JSON.stringify(o.aliasMap || DEFAULT_MAP);
+            },
+          },
         };
         const req = (id) => {
           if (Object.prototype.hasOwnProperty.call(stub, id)) { return stub[id]; }
@@ -1047,6 +1107,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
           console: { log: (m) => out.logs.push(m), error: (m) => out.errors.push(m) },
           process: {
             env: { MAX_COST: '2.00', OPENROUTER_API_KEY: 'sk-never-printed',
+              MODELS: 'glm,qwen,gpt,deepseek', CHAIR: 'gemini-pro',
+              AMICUS_CONFIG_DIR: path.join(path.sep, 'ws', 'amicus-cfg'),
               GITHUB_OUTPUT: 'OUT', GITHUB_STEP_SUMMARY: 'SUMMARY', ...(o.env || {}) },
             exit: (code) => { out.exits.push(code); },
             on: (name, fn) => { out.handlers[name] = fn; },
@@ -1058,34 +1120,71 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         return out;
       };
 
-      const probe = (result) => ({ checkOpenRouterCredit: () => Promise.resolve(result) });
-      const decide = () => require('../../src/utils/council-credit-preflight');
-      const shipped = (result) => ({
-        'openrouter-credit.js': probe(result),
-        'council-credit-preflight.js': decide(),
+      /** The bench and chair of the real CI map, priced so one seat reserves $0.96. */
+      const DEFAULT_MAP = {
+        outputBudget: 64000,
+        aliases: {
+          glm: 'openrouter/z-ai/glm-5.3', qwen: 'openrouter/qwen/qwen3.8-27b',
+          gpt: 'openrouter/openai/gpt-5.6-terra', deepseek: 'openrouter/deepseek/deepseek-v4-flash-0731',
+          'gemini-pro': 'openrouter/google/gemini-3.1-pro-preview',
+        },
+      };
+      const DEFAULT_PRICES = {
+        'z-ai/glm-5.3': 0.0000005, 'qwen/qwen3.8-27b': 0.0000002,
+        'openai/gpt-5.6-terra': 0.000015, 'deepseek/deepseek-v4-flash-0731': 0.0000003,
+        'google/gemini-3.1-pro-preview': 0.00001,
+      };
+
+      /**
+       * The three shipped modules the step loads. The two PURE ones are the real
+       * implementations — the harness exercises the same ruling CI will run; only
+       * the three network calls are stubbed.
+       */
+      const shipped = ({ credit = { checked: true, isFreeTier: false, limitRemaining: 50 },
+        balance = { checked: true, balanceRemaining: 50, totalCredits: null, totalUsage: null },
+        catalog = { checked: true, prices: DEFAULT_PRICES } } = {}) => ({
+        'openrouter-credit.js': {
+          checkOpenRouterCredit: () => Promise.resolve(credit),
+          checkOpenRouterBalance: () => Promise.resolve(balance),
+        },
+        'council-credit-preflight.js': require('../../src/utils/council-credit-preflight'),
+        'council-credit-reservation.js': {
+          ...require('../../src/utils/council-credit-reservation'),
+          fetchOpenRouterModelPrices: () => Promise.resolve(catalog),
+        },
       });
 
       test('ok: ::notice::, exit 0, and the ORIGINAL ceiling is written', async () => {
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 12.34 }) });
+        const r = await run({ modules: shipped() });
         expect(r.exits).toEqual([0]);
         expect(r.annotations).toHaveLength(1);
-        expect(r.annotations[0]).toMatch(/^::notice::OpenRouter key limit ok \(\$12\.34 /);
+        expect(r.annotations[0]).toMatch(/^::notice::OpenRouter credit ok/);
         expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
         expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
         expect(r.files.SUMMARY).toContain('Run ceiling in force: $2.00');
       });
 
+      test('the reservation is priced from the PROVISIONED map and the live catalog', async () => {
+        // Council #264 r2 / HQ1: 64000 tokens x the bench's dearest completion
+        // price ($0.000015) = $0.96 reserved by ONE seat, before it emits a token.
+        const r = await run({ modules: shipped(), env: { MAX_COST: '10.00' } });
+        expect(r.reads.join('|')).toContain(path.join('amicus-cfg', 'config.json'));
+        expect(r.annotations[0]).toContain('$3.84'); // 4 bench seats x $0.96
+      });
+
       test('clamp: ::warning::, exit 0, and the CLAMPED ceiling is what the paid step will read', async () => {
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }) });
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 5 },
+          balance: { checked: true, balanceRemaining: 5 },
+        }), env: { MAX_COST: '10.00' } });
         expect(r.exits).toEqual([0]);
-        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter key limit is below this run's ceiling/);
-        expect(r.files.OUT).toBe('effective_max_cost=0.42\n');
-        expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
-        expect(r.files.SUMMARY).toContain('Run ceiling in force: $0.42');
+        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter money is below this run's ceiling/);
+        expect(r.files.OUT).toBe('effective_max_cost=5\n');
+        expect(r.files.SUMMARY).toContain('Run ceiling in force: $5');
       });
 
       test('refuse: ::error:: on stderr, exit 1, and the output is STILL written', async () => {
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: true, limitRemaining: null }) });
+        const r = await run({ modules: shipped({ credit: { checked: true, isFreeTier: true, limitRemaining: null } }) });
         expect(r.exits).toEqual([1]);
         expect(r.errors[0]).toMatch(/^::error::OpenRouter key cannot cover this run/);
         expect(r.logs.filter((l) => /^::/.test(l))).toHaveLength(0); // never on stdout
@@ -1096,16 +1195,82 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(r.files.SUMMARY).not.toContain('Run ceiling in force');
       });
 
-      test('a SUB-CENT limit refuses — it must never reach the CLI as --max-cost 0', async () => {
+      test('HQ1 refuse-by-reservation: money below ONE seat\'s reservation exits 1', async () => {
+        // The motivating run's exact shape, in dollars: $0.80 left against a
+        // $0.96 per-seat reservation. No aggregate ceiling could ever see this.
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 0.8 },
+          balance: { checked: true, balanceRemaining: 0.8 },
+        }) });
+        expect(r.exits).toEqual([1]);
+        expect(r.errors[0]).toContain('ONE seat reserves $0.96');
+        expect(r.errors[0]).toContain('$0.80');
+      });
+
+      test('HQ1 warn-by-concurrency: money funds some seats but not the wave', async () => {
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 2 },
+          balance: { checked: true, balanceRemaining: 2 },
+        }), env: { MAX_COST: '2.00' } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter key may not fund the first wave/);
+        expect(r.annotations[0]).toContain('4 seats reserve $3.84');
+      });
+
+      test('HQ1 unpriced bench: the rule is skipped with a ::warning::, never an ok', async () => {
+        for (const modules of [
+          shipped({ catalog: { checked: false, prices: {} } }),               // catalog unreadable
+          shipped({ catalog: { checked: true, prices: { 'z-ai/glm-5.3': 0.1 } } }), // partial table
+        ]) {
+          const r = await run({ modules });
+          expect(r.exits).toEqual([0]);
+          expect(r.annotations[0]).toMatch(/^::warning::/);
+          expect(r.annotations[0]).toContain('could not price the bench');
+        }
+      });
+
+      test('HQ1 an alias the provisioned map does not carry leaves the bench unpriced', async () => {
+        const r = await run({ modules: shipped(), aliasMap: { outputBudget: 64000, aliases: { glm: 'openrouter/z-ai/glm-5.3' } } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toContain('could not price the bench');
+        expect(r.annotations[0]).toContain('qwen');
+      });
+
+      test('a missing or unreadable alias map does not crash the step', async () => {
+        for (const aliasMap of [null, 'not json {{{']) {
+          const r = await run({ modules: shipped(), aliasMap });
+          expect(r.exits).toEqual([0]);
+          expect(r.annotations[0]).toMatch(/^::warning::/);
+        }
+      });
+
+      test('HQ2 the ACCOUNT BALANCE is read, and an unchecked one can never be ok', async () => {
+        const r = await run({ modules: shipped({ balance: { checked: false, balanceRemaining: null } }) });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toMatch(/^::warning::/);
+        expect(r.annotations[0]).toContain('account balance');
+      });
+
+      test('HQ2 a key with NO monthly cap on a depleted balance refuses', async () => {
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: null },
+          balance: { checked: true, balanceRemaining: 0 },
+        }) });
+        expect(r.exits).toEqual([1]);
+        expect(r.errors[0]).toContain('account balance');
+      });
+
+      test('a SUB-CENT remainder refuses — it must never reach the CLI as --max-cost 0', async () => {
         // Council #264 r1 round 2. `--max-cost 0` is a BAD ARGUMENT, not a tight
         // budget: cli-handlers-council-run.js rejects a non-positive ceiling with
-        // exit 1, so a $0.00 clamp would fail the job outright — zero reviews,
-        // the outcome the clamp exists to prevent.
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.004 }) });
+        // exit 1, so a $0.00 clamp would fail the job outright.
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 0.004 },
+          balance: { checked: true, balanceRemaining: 0.004 },
+          catalog: { checked: true, prices: Object.fromEntries(Object.keys(DEFAULT_PRICES).map((k) => [k, 1e-9])) },
+        }) });
         expect(r.exits).toEqual([1]);
-        expect(r.errors[0]).toMatch(/^::error::OpenRouter key cannot cover this run/);
         expect(r.errors[0]).toContain('below one cent');
-        // The published ceiling falls back to MAX_COST and is never '0'.
         expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
       });
 
@@ -1114,7 +1279,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         // `try`, so a failed $GITHUB_OUTPUT write still printed "Run ceiling in
         // force: $X" — an assertion about a value the paid step never received.
         const r = await run({
-          modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }),
+          modules: shipped({
+            credit: { checked: true, isFreeTier: false, limitRemaining: 5 },
+            balance: { checked: true, balanceRemaining: 5 },
+          }),
+          env: { MAX_COST: '10.00' },
           failOutputWrite: true,
         });
         expect(r.exits).toEqual([0]);
@@ -1126,8 +1295,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
       test('A1: a probe that THROWS SYNCHRONOUSLY warns and exits 0', async () => {
         const r = await run({ modules: {
-          'openrouter-credit.js': { checkOpenRouterCredit: () => { throw new Error('boom sync'); } },
-          'council-credit-preflight.js': decide(),
+          ...shipped(),
+          'openrouter-credit.js': { checkOpenRouterCredit: () => { throw new Error('boom sync'); },
+            checkOpenRouterBalance: () => Promise.resolve({ checked: false }) },
         } });
         expect(r.exits).toEqual([0]);
         expect(r.annotations[0]).toContain('the preflight itself failed: boom sync');
@@ -1136,18 +1306,20 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
       test('A1: a probe that REJECTS warns and exits 0', async () => {
         const r = await run({ modules: {
-          'openrouter-credit.js': { checkOpenRouterCredit: () => Promise.reject(new Error('boom async')) },
-          'council-credit-preflight.js': decide(),
+          ...shipped(),
+          'openrouter-credit.js': { checkOpenRouterCredit: () => Promise.reject(new Error('boom async')),
+            checkOpenRouterBalance: () => Promise.resolve({ checked: false }) },
         } });
         expect(r.exits).toEqual([0]);
         expect(r.annotations[0]).toContain('the probe rejected: boom async');
       });
 
       test('A1: the unhandledRejection backstop warns and exits 0', async () => {
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 9 }) });
+        const r = await run({ modules: shipped() });
         expect(typeof r.handlers.unhandledRejection).toBe('function');
-        const fresh = await run({ modules: { 'openrouter-credit.js': { checkOpenRouterCredit: () => new Promise(() => {}) },
-          'council-credit-preflight.js': decide() } });
+        const fresh = await run({ modules: { ...shipped(),
+          'openrouter-credit.js': { checkOpenRouterCredit: () => new Promise(() => {}),
+            checkOpenRouterBalance: () => new Promise(() => {}) } } });
         expect(fresh.exits).toEqual([]); // still pending — nothing decided yet
         fresh.handlers.unhandledRejection(new Error('stray'));
         expect(fresh.exits).toEqual([0]);
@@ -1158,7 +1330,8 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       });
 
       test('A1: a module the release has not shipped yet warns and exits 0', async () => {
-        const r = await run({ modules: { 'openrouter-credit.js': probe({ checked: false }) } });
+        const all = shipped();
+        const r = await run({ modules: { 'openrouter-credit.js': all['openrouter-credit.js'] } });
         expect(r.exits).toEqual([0]);
         expect(r.annotations).toHaveLength(1);
         expect(r.annotations[0]).toContain('does not ship src/utils/council-credit-preflight.js yet');
@@ -1166,7 +1339,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
       test('A1: a BROKEN shipped module warns, exits 0, and is NOT called the bootstrap gap', async () => {
         const r = await run({ modules: {
-          'openrouter-credit.js': probe({ checked: false }),
+          ...shipped(),
           'council-credit-preflight.js': () => new SyntaxError('Unexpected identifier'),
         } });
         expect(r.exits).toEqual([0]);
@@ -1176,7 +1349,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
       test('A1: a RENAMED export warns and exits 0 instead of dying on a TypeError', async () => {
         const r = await run({ modules: {
-          'openrouter-credit.js': probe({ checked: false }),
+          ...shipped(),
           'council-credit-preflight.js': { decideCreditPreflightRenamed: () => ({}) },
         } });
         expect(r.exits).toEqual([0]);
@@ -1186,7 +1359,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       test('a newline in MAX_COST cannot open a second output key', async () => {
         // max_cost is a workflow_call input, so its value is caller-controlled.
         const r = await run({ env: { MAX_COST: '2.00\nADMIN=1' },
-          modules: shipped({ checked: true, isFreeTier: false, limitRemaining: null }) });
+          modules: shipped() });
         const lines = r.files.OUT.split('\n').filter(Boolean);
         expect(lines).toHaveLength(1);
         // The newline is neutralised, so the injected text survives only as part
@@ -1196,7 +1369,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       });
 
       test('the key never appears in anything the program writes or prints', async () => {
-        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }) });
+        const r = await run({ modules: shipped() });
         const everything = JSON.stringify([r.logs, r.errors, r.files]);
         expect(everything).not.toContain('sk-never-printed');
       });

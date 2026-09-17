@@ -377,12 +377,24 @@ jobs:
           # A1). Every path — including a synchronous throw, an unhandled
           # rejection, a missing or broken module and a renamed export — ends at
           # `finish`, which is the ONLY caller of process.exit.
-          # ⚠️ WHAT `ok` DOES NOT MEAN, and the notice says so out loud: this
-          # endpoint reports the key's MONTHLY LIMIT only — not the account
-          # balance, and not the in-flight max_tokens reservations that were the
-          # multiplier behind three of the four refusals in the motivating run
-          # (#218). A green preflight is not a promise that the run cannot be
-          # refused, and nobody debugging a later refusal should read it as one.
+          # ⚠️ WHAT THIS GUARANTEES AND WHAT IT CANNOT — every message says it out
+          # loud (council #264 r2 read the earlier copy as a promise the probe
+          # cannot keep):
+          #   GUARANTEES: refuses before any seat is dispatched when a refusal is
+          #   CERTAIN, warns when refusals are LIKELY, and bounds aggregate spend.
+          #   CANNOT: it cannot prevent a per-request refusal once seats are
+          #   dispatched — reservations are charged concurrently and settle
+          #   asynchronously, so the money available to leg four is not knowable
+          #   before legs one to three exist.
+          # TWO READS, because they are two facts (council #264 r2, HQ2):
+          # /api/v1/key reports the KEY's monthly cap, /api/v1/credits the
+          # ACCOUNT's balance. A key with no cap at all on a depleted account used
+          # to pass as `ok`. The smaller of the two governs; an unanswered balance
+          # read is never `ok`.
+          # THE RESERVATION, not the aggregate (council #264 r2, HQ1): OpenRouter
+          # refuses on ONE request's max_tokens reservation, never on --max-cost.
+          # outputBudget x the bench's dearest completion price is what a seat
+          # reserves before it emits a token; below that, nothing can run.
           #
           # The key is passed by env and read from process.env — it is never
           # expanded by the shell and never printed. Only figures are.
@@ -454,6 +466,9 @@ jobs:
             'OpenRouter credit could not be checked — an unhandled rejection: ' + oneLine(err) + '; continuing', null));
           try {
           const root = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          // The engine's own default when the provisioned map declares no
+          // outputBudget — the same number the bench pre-flight step prints.
+          const ENGINE_DEFAULT_OUTPUT_BUDGET = 32000;
           // ONE RESOLUTION SHAPE for both modules (pinned in
           // tests/scripts/council-review-workflow.test.js): a typo in this join
           // is the kind of defect that would otherwise warn green forever.
@@ -495,21 +510,54 @@ jobs:
               return {};
             }
           };
-          const { checkOpenRouterCredit } = load('openrouter-credit.js');
+          const { checkOpenRouterCredit, checkOpenRouterBalance } = load('openrouter-credit.js');
           const { decideCreditPreflight } = load('council-credit-preflight.js');
+          const { resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices } = load('council-credit-reservation.js');
           // A RENAMED EXPORT throws nothing at require time — it would reach the
           // call below as `undefined is not a function`, an uncaught TypeError
           // that exits non-zero and blocks the review. Named, warned, exit 0.
-          if (typeof checkOpenRouterCredit !== 'function' || typeof decideCreditPreflight !== 'function') {
+          const fns = [checkOpenRouterCredit, checkOpenRouterBalance, decideCreditPreflight,
+            resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices];
+          if (fns.some((f) => typeof f !== 'function')) {
             finish('warning', 'OpenRouter credit could not be checked — the installed amicus does not export checkOpenRouterCredit/decideCreditPreflight from src/utils; continuing', null);
           } else {
-          checkOpenRouterCredit(process.env.OPENROUTER_API_KEY).then((result) => {
-            const d = decideCreditPreflight(result, MAX_COST);
+          // The SAME alias map this job's own earlier step provisioned: the
+          // reservation has to be priced against the ids and the output budget
+          // the run will actually use, not against anything amicus ships.
+          let map = {};
+          try {
+            map = JSON.parse(fs.readFileSync(path.join(process.env.AMICUS_CONFIG_DIR || '', 'config.json'), 'utf8')) || {};
+          } catch (mapErr) {
+            map = {};
+          }
+          const outputBudget = (typeof map.outputBudget === 'number' && map.outputBudget > 0)
+            ? map.outputBudget : ENGINE_DEFAULT_OUTPUT_BUDGET;
+          const chair = String(process.env.CHAIR || '').trim();
+          // The bench is what launches CONCURRENTLY (the chair is excluded from
+          // it by the paid step and runs alone afterwards), but the chair's row
+          // still has to be PRICED — it reserves like any other seat.
+          const bench = String(process.env.MODELS || '').split(',').map((s) => s.trim()).filter(Boolean).filter((m) => m !== chair);
+          const bound = resolveBenchIds({ aliases: map.aliases, seats: bench.concat(chair ? [chair] : []) });
+          Promise.all([
+            checkOpenRouterCredit(process.env.OPENROUTER_API_KEY),
+            checkOpenRouterBalance(process.env.OPENROUTER_API_KEY),
+            fetchOpenRouterModelPrices(),
+          ]).then((answers) => {
+            const credit = answers[0];
+            const balance = answers[1];
+            const catalog = answers[2];
+            const unpriceable = (reason, unpriced) => ({ priced: false, oneSeatUsd: null, maxCompletionPrice: null, unpriced: unpriced || [], reason });
+            const reservation = !catalog.checked
+              ? unpriceable('the OpenRouter model catalog could not be read')
+              : bound.unresolved.length
+                ? unpriceable('these seats resolve to no model id in the provisioned alias map', bound.unresolved)
+                : priceOneSeatReservation({ prices: catalog.prices, ids: bound.ids, outputBudget });
+            const d = decideCreditPreflight({ credit, balance, reservation, seats: bench.length }, MAX_COST);
             finish(d.outcome === 'refuse' ? 'error' : (d.outcome === 'ok' ? 'notice' : 'warning'),
               d.message, d.effectiveMaxCost);
           }, (err) => {
-            // checkOpenRouterCredit resolves on every failure path by contract;
-            // this is the belt for a contract change, and it warns like one.
+            // Every probe resolves on failure by contract; this is the belt for a
+            // contract change, and it warns like one.
             finish('warning', 'OpenRouter credit could not be checked — the probe rejected: ' + oneLine(err) + '; continuing', null);
           });
           }
@@ -745,13 +793,35 @@ jobs:
           # script-injection seam.
           EFFECTIVE_MAX_COST: ${{ steps.credit.outputs.effective_max_cost }}
         run: |
+          # ⚠️ VALIDATE BEFORE USING OR ECHOING (council #264 r2, HQ3 / finding A2).
+          # The ceiling reached a workflow command unvalidated, re-opening the
+          # very injection the preflight neutralises one step earlier — max_cost
+          # is a workflow_call input, i.e. caller-controlled.
+          # The `case` comes FIRST and is the real guard: `grep -E` matches per
+          # LINE, so a multi-line value whose first line is `2.00` would sail
+          # through a regex alone. `*[!0-9.]*` rejects any character outside the
+          # dollar alphabet, newline included, and only then is the shape checked.
+          valid_ceiling() {
+            case "$1" in
+              ''|*[!0-9.]*) return 1 ;;
+            esac
+            printf '%s' "$1" | grep -Eq '^[0-9]+(\.[0-9]{1,2})?$'
+          }
           # The preflight writes `effective_max_cost` on every path it can reach,
           # but the fallback is what makes an EMPTY value harmless: parseFloat('')
           # is NaN, and createBudget treats a NaN ceiling as "never over budget" —
           # i.e. a silently disabled cost gate.
-          CEILING="${EFFECTIVE_MAX_COST:-$MAX_COST}"
+          CEILING="$EFFECTIVE_MAX_COST"
+          if ! valid_ceiling "$CEILING"; then CEILING="$MAX_COST"; fi
+          if ! valid_ceiling "$CEILING"; then
+            # The offending value is NEVER echoed: printing it IS the injection.
+            echo "::error::the run ceiling is not a dollar amount (expected digits with at most two decimals) — fix the max_cost input; no seat was dispatched"
+            exit 1
+          fi
           if [ "$CEILING" != "$MAX_COST" ]; then
-            echo "::notice::run ceiling clamped to \$${CEILING} (from \$${MAX_COST}) by the OpenRouter credit preflight — the key's remaining monthly limit is smaller than this run's ceiling"
+            # Only the VALIDATED value is echoed, and only as a spend bound: the
+            # clamp caps aggregate spend and does not prevent a per-request refusal.
+            echo "::notice::aggregate spend for this run is capped at \$${CEILING} by the OpenRouter credit preflight — the money left on the key is smaller than this run's ceiling"
           fi
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the

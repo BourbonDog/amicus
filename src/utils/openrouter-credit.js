@@ -97,8 +97,73 @@ function checkOpenRouterCredit(key) {
   });
 }
 
+/**
+ * Non-blocking ACCOUNT BALANCE check for an OpenRouter key.
+ *
+ * ⚠️ WHY THIS EXISTS BESIDE `checkOpenRouterCredit`, AND IS NOT PART OF IT
+ * (council #264 r2, HQ2 / findings A1 + D1). `/api/v1/key` reports the KEY's
+ * monthly usage cap — nothing more. A key with `limit_remaining: null` has no
+ * cap at all, the healthiest answer that endpoint can give, and it says nothing
+ * whatsoever about whether the ACCOUNT behind it has any money left. The CI
+ * preflight read the cap, saw `null`, and dispatched a whole bench against a
+ * depleted balance. Two different facts need two different reads.
+ *
+ * `GET /api/v1/credits` returns `{ data: { total_credits, total_usage } }`, both
+ * lifetime dollar figures; the remaining balance is their difference, and it is
+ * reported ONLY when both are finite numbers. A partial payload is not a
+ * balance of zero — it is no answer, and `checked: false` says so.
+ *
+ * `checkOpenRouterCredit`'s return shape is deliberately untouched: `amicus
+ * doctor`'s `openrouter-credit` row consumes it, and this is a new fact, not a
+ * reinterpretation of an old one.
+ *
+ * @param {string} key OpenRouter API key
+ * @returns {Promise<{checked: boolean, balanceRemaining: number|null,
+ *   totalCredits: number|null, totalUsage: number|null}>}
+ *   `checked` is false whenever no answer was obtained — the caller must treat
+ *   that as UNKNOWN, never as "the balance is fine".
+ */
+function checkOpenRouterBalance(key) {
+  const none = { checked: false, balanceRemaining: null, totalCredits: null, totalUsage: null };
+  if (!key || String(key).trim().length === 0) {
+    return Promise.resolve(none);
+  }
+  const headers = { 'Authorization': `Bearer ${String(key).trim()}` };
+
+  return new Promise((resolve) => {
+    const req = https.get('https://openrouter.ai/api/v1/credits', { headers }, (res) => {
+      let body = '';
+      // Same response-stream gap as checkOpenRouterCredit (#224): a mid-flight
+      // death must report "could not be checked", never fall through.
+      res.on('error', () => { resolve(none); });
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) { resolve(none); return; }
+        let data;
+        try {
+          data = (JSON.parse(body) || {}).data || {};
+        } catch (_e) {
+          resolve(none);
+          return;
+        }
+        const credits = data.total_credits;
+        const usage = data.total_usage;
+        if (!Number.isFinite(credits) || !Number.isFinite(usage)) { resolve(none); return; }
+        resolve({ checked: true, balanceRemaining: credits - usage,
+          totalCredits: credits, totalUsage: usage });
+      });
+    });
+    req.setTimeout(10000, () => {
+      req.destroy();
+      resolve(none);
+    });
+    req.on('error', () => { resolve(none); });
+  });
+}
+
 module.exports = {
   checkOpenRouterCredit,
+  checkOpenRouterBalance,
   OPENROUTER_NO_CREDIT_WARNING,
   OPENROUTER_FREE_TIER_WARNING,
 };

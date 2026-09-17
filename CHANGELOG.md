@@ -7,31 +7,38 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
-- **CI credit preflight** — `.github/workflows/council-review.yml` now checks the OpenRouter key's
-  remaining MONTHLY LIMIT before any seat is dispatched. Between the bench pre-flight and the paid
-  council step it calls the shipped probe (`src/utils/openrouter-credit.js`) and rules on the
-  answer with `src/utils/council-credit-preflight.js :: decideCreditPreflight`:
-  - a key that can fund **nothing** — free tier, or a monthly limit at or below zero — fails the
-    step with `::error::` and exits 1: zero spend, no seat dispatched;
-  - a limit that is merely **smaller than the run's ceiling** does not abort the run. It emits
-    `::warning::` and **clamps** the ceiling: the step publishes `effective_max_cost` and the paid
-    step passes it as `--max-cost`, so the run's own cost gate (exit 2 with degrade notes) bounds
-    the spend to what the key can fund instead of throwing away the reviews that would have
-    landed. `--max-cost` is a whole-run ceiling, not the expected spend;
-  - an unanswerable probe, an unreadable limit or an unusable ceiling emits `::warning::` and
-    continues, so a network blip never costs the repo a review;
-  - otherwise `::notice::` names the remaining figure and the run ceiling.
+- **CI credit preflight** — `.github/workflows/council-review.yml` now asks, before any seat is
+  dispatched, whether the money on the key can fund the reservation each seat makes. Between the
+  bench pre-flight and the paid council step it reads three things and rules on them with
+  `src/utils/council-credit-preflight.js :: decideCreditPreflight`:
+  - **two key facts, because they are two facts.** `GET /api/v1/key` reports the key's monthly
+    CAP; `GET /api/v1/credits` reports the ACCOUNT's balance
+    (`openrouter-credit.js :: checkOpenRouterBalance`). A key with no cap at all on a depleted
+    account is not healthy. The smaller of the two governs, and an unanswered balance read is
+    never `ok`.
+  - **the per-request RESERVATION, not the aggregate.** OpenRouter refuses on one request's
+    `max_tokens` reservation, never on `--max-cost`. `council-credit-reservation.js` prices it as
+    `outputBudget x the bench's dearest completion price`, taking the budget and the bench ids
+    from the alias map this job provisioned and the prices from a keyless `GET /api/v1/models`.
+  - **the run's own cost ceiling**, as a spend bound only.
 
-  A key with no monthly limit is never a refusal; a malformed limit is *unknown*, never "no
-  limit". Nothing but a genuine refusal can fail the step — a missing, broken or renamed module, a
-  probe that throws or rejects, and any unhandled rejection all warn and continue, and the warning
-  is mirrored into the run's step summary. The key never appears in any output.
-  **Boundary, stated in the notice itself:** `GET /api/v1/key` reports the monthly limit only — it
-  does not see the account balance or the in-flight `max_tokens` reservations that were the
-  multiplier behind three of the four refusals (#218), so a green preflight means "the monthly
-  limit is not what will refuse you", not "this run cannot be refused". Motivated by run
-  35143585179, where a low remaining limit had the provider refuse four of seven legs in 2–3 s,
-  consume their once-only retries and lose the round's quorum for $0.003. (#256)
+  The outcomes: **refuse** (`::error::`, exit 1, nothing dispatched) when the key can fund nothing
+  — free tier, money at or below zero or below one cent, or money below ONE seat's reservation;
+  **warn** (`::warning::`, exit 0) when refusals are likely (money below the whole first wave) or
+  when anything could not be read — an unanswered probe, an unpriced bench, an unreadable cap or
+  an unusable ceiling; **ok** otherwise. Separately, money below the run's ceiling **clamps**
+  `effective_max_cost`, which the paid step validates and passes as `--max-cost`.
+
+  **What this guarantees, stated in every message it prints:** it refuses when a refusal is
+  certain and warns when one is likely, and it bounds aggregate spend. **What it cannot do:**
+  prevent a per-request refusal once seats are dispatched — reservations are charged concurrently
+  and settle asynchronously, so the money available to leg four is not knowable before legs one to
+  three exist. Nothing but a genuine refusal can fail the step: a missing, broken or renamed
+  module, a probe that throws or rejects, and any unhandled rejection all warn and continue, and
+  every annotation is mirrored into the run's step summary. The key never appears in any output.
+  Motivated by run 35143585179, where four of seven legs were refused in 2–3 s — gpt's retry
+  saying `You requested up to 64000 tokens, but can only afford 56097` — consuming their once-only
+  retries and losing the round's quorum for $0.003. (#256)
 
 ### Changed
 
@@ -104,9 +111,13 @@ All notable changes to Amicus are documented here. Format follows
   inside the owner's account, not the key — was published unredacted inside the CI evidence
   artifact. `src/utils/redact-provider-error.js` replaces an id of 32 characters or more with
   `<redacted>` in a `/keys/<id>` path segment and in a `?key=`/`keys=`/`api_key=`/`apikey=`/
-  `token=` query parameter, and is applied at both seams where provider prose becomes a leg's
-  death reason in `src/headless.js` (the assistant message's error, and the engine-log excerpt on
-  a no-output backstop). Figures, doc links, short `/keys` paths and bare hex in prose — run ids,
+  `token=`/`access_token=` query parameter — both rules case-insensitive, and both admitting
+  percent-encoded ids — and is applied where engine-authored text ENTERS a leg's death reason in
+  `src/headless.js` (the assistant message's error, and the engine-log excerpt on a no-output
+  backstop). Every death-reason assignment site in `headless.js` and `sidecar/fanout-leg*.js` is
+  enumerated and classified by the origin of its text in
+  `tests/utils/redaction-perimeter.test.js`, so a new site fails the suite rather than quietly
+  bypassing redaction. Figures, doc links, short `/keys` paths and bare hex in prose — run ids,
   shas, session ids — are untouched. (#256)
 
 > Deferred from #256 to the verdict-surface PR: classifying a provider refusal distinctly in the

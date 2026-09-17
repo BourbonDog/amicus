@@ -216,6 +216,7 @@ src/
 │   ├── client-detect.js  # Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
 │   ├── config.js  # Amicus Config Module
 │   ├── council-credit-preflight.js  # #256: the ruling the CI council's credit preflight makes, as a pure function.
+│   ├── council-credit-reservation.js  # #256 / council #264 r2 (HQ1): price the thing OpenRouter actually refuses.
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3).
 │   ├── curated-pins.js  # The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here.
@@ -712,6 +713,7 @@ evals/
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-credit-preflight.js` | #256: the ruling the CI council's credit preflight makes, as a pure function. | `decideCreditPreflight()` |
+| `utils/council-credit-reservation.js` | #256 / council #264 r2 (HQ1): price the thing OpenRouter actually refuses. | `resolveBenchIds()`, `priceOneSeatReservation()`, `fetchOpenRouterModelPrices()`, `catalogKey()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
@@ -778,7 +780,7 @@ evals/
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `DEFAULT_NO_OUTPUT_BACKSTOP_MS()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
-| `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
+| `utils/openrouter-credit.js` | The OpenRouter credit/limit probe, split out of api-key-validation.js to keep | `checkOpenRouterCredit()`, `checkOpenRouterBalance()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
 | `utils/output-length.js` | #218 PR 3: name the "Mode 2" death. | `OUTPUT_LENGTH_PREFIX()`, `isOutputLengthDeath()`, `formatOutputLengthReason()` |
 | `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
