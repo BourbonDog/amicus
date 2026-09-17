@@ -14,19 +14,22 @@
  *
  * That is one request's `max_tokens` RESERVATION weighed against the money left
  * on the key. No aggregate appears in it. So the preflight has to compute the
- * same figure the provider will:
+ * same figures the provider will, one per seat:
  *
- *   oneSeatReservationUsd = outputBudget x max(pricing.completion over the bench)
+ *   seatReservationUsd = outputBudget x that row's pricing.completion
  *
  * `outputBudget` and the bench ids come from the alias map this job's own
  * earlier step provisioned (the credit step runs after it, and reads the same
  * file); the per-token completion prices come from a KEYLESS
  * `GET /api/v1/models`.
  *
- * The DEAREST row on the bench sets it, not the average: the reservation is
- * per-request, so the worst row decides whether a request can be admitted at
- * all. And a bench with ANY unpriced row is not priced — the missing row could
- * be the dearest one, so a max over the rest bounds nothing.
+ * ⚠️ FOUR FIGURES, not one (council #264 r3). Round 2 used a single `max` over
+ * bench AND chair and gated everything on it. `priceBenchReservation` below says
+ * why that was two errors at once; in short, the gate needs the CHEAPEST bench
+ * seat (below it nothing can run), the DEAREST (below it some seats certainly
+ * will not), the SUM over the bench (the concurrent first wave), and the CHAIR
+ * priced apart from all three. A bench with ANY unpriced row is still not priced
+ * — the missing row could be the cheapest, leaving the refuse gate no floor.
  *
  * SPLIT FROM `council-credit-preflight.js` for two reasons, not just the
  * 300-line gate: this module does I/O (a catalog fetch) while that one must stay
@@ -97,21 +100,58 @@ function resolveBenchIds({ aliases, seats } = {}) {
 }
 
 /**
- * What ONE seat reserves, in dollars, before it has produced a single token.
- *
- * @param {{prices: Object<string, number>, ids: string[], outputBudget: number}} o
- * @returns {{priced: boolean, oneSeatUsd: number|null, maxCompletionPrice: number|null,
- *   unpriced: string[], reason: string|null}}
+ * Price a list of rows, in dollars reserved per seat.
+ * @returns {{usd: number[], unpriced: string[]}}
  */
-function priceOneSeatReservation({ prices, ids, outputBudget } = {}) {
-  const none = (reason, unpriced = []) =>
-    ({ priced: false, oneSeatUsd: null, maxCompletionPrice: null, unpriced, reason });
+function priceRows(table, ids, outputBudget) {
+  const usd = [];
+  const unpriced = [];
+  for (const id of Array.isArray(ids) ? ids : []) {
+    const key = catalogKey(id);
+    const price = key === null ? undefined : table[key];
+    // A zero or negative price is not a price for a PAID run: it means the
+    // table told us nothing usable about what this row reserves.
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
+      unpriced.push(id);
+      continue;
+    }
+    usd.push(outputBudget * price);
+  }
+  return { usd, unpriced };
+}
+
+/**
+ * What the bench reserves before it has produced a single token.
+ *
+ * ⚠️ FOUR FIGURES, NOT ONE (council #264 r3, findings B1 + C1). A single `max`
+ * over everything was two mistakes at once:
+ *   * it refused the whole run when the money could not fund the DEAREST seat —
+ *     even when it could fund the cheap ones, and a cheaper quorum would have
+ *     seated. That contradicts this PR's own rationale: turning a partial round
+ *     into zero reviews is the harm being avoided, not a remedy for it.
+ *   * it folded the CHAIR into the bench's maximum. The chair runs sequentially,
+ *     AFTER the wave, out of a budget the bench has already spent from — so a
+ *     dear chair could refuse a bench that would have seated fine. It is priced
+ *     and reported, never a reason to refuse the bench.
+ * `waveUsd` is the SUM over the bench, not `seats x dearest`: the seats launch
+ * concurrently and each holds its OWN reservation, so the sum is the figure the
+ * provider sees. The approximation over-stated a mixed bench threefold here.
+ *
+ * @param {{prices: Object<string, number>, benchIds: string[], chairIds: string[],
+ *   outputBudget: number}} o
+ * @returns {{priced: boolean, cheapestSeatUsd: number|null, dearestSeatUsd: number|null,
+ *   waveUsd: number|null, chairUsd: number|null, unpriced: string[],
+ *   unpricedChair: string[], reason: string|null}}
+ */
+function priceBenchReservation({ prices, benchIds, chairIds, outputBudget } = {}) {
+  const none = (reason, unpriced = []) => ({ priced: false, cheapestSeatUsd: null,
+    dearestSeatUsd: null, waveUsd: null, chairUsd: null, unpriced, unpricedChair: [], reason });
 
   if (typeof outputBudget !== 'number' || !Number.isFinite(outputBudget) || outputBudget <= 0) {
     return none('the output budget is not a positive number');
   }
-  const list = Array.isArray(ids) ? ids : [];
-  if (list.length === 0) { return none('the bench resolved to no model ids'); }
+  const bench = Array.isArray(benchIds) ? benchIds : [];
+  if (bench.length === 0) { return none('the bench resolved to no model ids'); }
 
   const table = {};
   if (prices && typeof prices === 'object') {
@@ -121,26 +161,29 @@ function priceOneSeatReservation({ prices, ids, outputBudget } = {}) {
     }
   }
 
-  let max = null;
-  const unpriced = [];
-  for (const id of list) {
-    const key = catalogKey(id);
-    const price = key === null ? undefined : table[key];
-    // A zero or negative price is not a price for a PAID run: it means the
-    // table told us nothing usable about what this row reserves.
-    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
-      unpriced.push(id);
-      continue;
-    }
-    if (max === null || price > max) { max = price; }
+  const seats = priceRows(table, bench, outputBudget);
+  // ANY unpriced BENCH row leaves the bench unpriced: the row we could not price
+  // could be the cheapest one, so the refuse gate would have no floor.
+  if (seats.unpriced.length > 0) {
+    return none('one or more bench rows have no completion price', seats.unpriced);
   }
-  // ANY unpriced row leaves the bench unpriced: the row we could not price could
-  // be the dearest one, so a max over the rest is not a bound on the reservation.
-  if (unpriced.length > 0) { return none('one or more bench rows have no completion price', unpriced); }
-  if (max === null) { return none('no bench row carries a usable completion price'); }
+  if (seats.usd.length === 0) { return none('no bench row carries a usable completion price'); }
 
-  return { priced: true, oneSeatUsd: outputBudget * max, maxCompletionPrice: max,
-    unpriced: [], reason: null };
+  // An unpriced CHAIR does NOT unprice the bench: its affordability is a
+  // separate clause, so not knowing it must not suppress a bench verdict the
+  // bench's own prices fully support.
+  const chair = priceRows(table, chairIds, outputBudget);
+
+  return {
+    priced: true,
+    cheapestSeatUsd: Math.min(...seats.usd),
+    dearestSeatUsd: Math.max(...seats.usd),
+    waveUsd: seats.usd.reduce((a, b) => a + b, 0),
+    chairUsd: chair.usd.length ? Math.max(...chair.usd) : null,
+    unpriced: [],
+    unpricedChair: chair.unpriced,
+    reason: null,
+  };
 }
 
 /**
@@ -187,4 +230,4 @@ function fetchOpenRouterModelPrices({ timeoutMs = FETCH_TIMEOUT_MS } = {}) {
   });
 }
 
-module.exports = { resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices, catalogKey };
+module.exports = { resolveBenchIds, priceBenchReservation, fetchOpenRouterModelPrices, catalogKey };

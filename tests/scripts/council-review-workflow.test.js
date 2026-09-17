@@ -853,7 +853,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // priced from the provisioned map's outputBudget and the live catalog.
       expect(step).toContain('council-credit-reservation');
       expect(step).toContain('fetchOpenRouterModelPrices');
-      expect(step).toContain('priceOneSeatReservation');
+      expect(step).toContain('priceBenchReservation');
+      // Bench and chair resolved APART, so the chair cannot reach the bench figures.
+      expect(step).toContain('benchIds: bound.ids');
+      expect(step).toContain('chairIds: boundChair.ids');
       expect(step).toContain('resolveBenchIds');
       expect(step).toContain('outputBudget');
       // The SAME file the "Provision the alias map" step above wrote.
@@ -871,7 +874,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       const step = creditStep();
       // The two facts the comment must carry, because they are what changed.
       expect(step).toMatch(/MINIMUM of the key's monthly limit and the ACCOUNT\s*\n?\s*#\s*BALANCE/);
-      expect(step).toContain("ONE SEAT'S RESERVATION");
+      expect(step).toContain("THE CHEAPEST BENCH SEAT'S RESERVATION");
+      // Council #264 r3 (B1): the chair is priced but must never gate the bench,
+      // and the wave is the SUM of the seats, not seats x the dearest.
+      expect(step).toContain('the CHAIR is not in');
+      expect(step).toContain('SUM of the bench');
       // And the two superseded sentences must be gone for good.
       expect(step).not.toContain('is never a refusal');
       expect(step).not.toMatch(/Only for a key that can fund NOTHING/);
@@ -1192,11 +1199,13 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       });
 
       test('the reservation is priced from the PROVISIONED map and the live catalog', async () => {
-        // Council #264 r2 / HQ1: 64000 tokens x the bench's dearest completion
-        // price ($0.000015) = $0.96 reserved by ONE seat, before it emits a token.
+        // 64000 tokens x each bench row's completion price: qwen $0.0128 (the
+        // cheapest), gpt $0.96 (the dearest), the four together $1.02 — the SUM,
+        // not 4 x the dearest, which over-stated this bench by 3.7x (council
+        // #264 r3, C1). The chair (gemini-pro, $0.64) is priced apart.
         const r = await run({ modules: shipped(), env: { MAX_COST: '10.00' } });
         expect(r.reads.join('|')).toContain(path.join('amicus-cfg', 'config.json'));
-        expect(r.annotations[0]).toContain('$3.84'); // 4 bench seats x $0.96
+        expect(r.annotations[0]).toContain('$1.02');
       });
 
       test('clamp: ::warning::, exit 0, and the CLAMPED ceiling is what the paid step will read', async () => {
@@ -1222,26 +1231,60 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         expect(r.files.SUMMARY).not.toContain('Run ceiling in force');
       });
 
-      test('HQ1 refuse-by-reservation: money below ONE seat\'s reservation exits 1', async () => {
-        // The motivating run's exact shape, in dollars: $0.80 left against a
-        // $0.96 per-seat reservation. No aggregate ceiling could ever see this.
+      test('HQ1 refuse-by-reservation: money below the CHEAPEST seat exits 1', async () => {
+        // $0.005 against qwen's $0.0128 — not one row on this bench can be funded.
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 0.005 },
+          balance: { checked: true, balanceRemaining: 0.005 },
+        }) });
+        expect(r.exits).toEqual([1]);
+        expect(r.errors[0]).toMatch(/cheapest/i);
+        // The money is sub-cent so it renders to four decimals (r3 / C2), which
+        // is also what keeps it distinguishable from the cheapest seat's $0.01.
+        expect(r.errors[0]).toContain('$0.0050');
+        // The cheapest-seat rule fires BEFORE the sub-cent rule, so the reader is
+        // told the reservation they cannot meet, not merely that they are broke.
+        expect(r.errors[0]).not.toContain('below one cent');
+      });
+
+      test('C1: money that funds the cheap seats WARNS instead of refusing the run', async () => {
+        // The motivating run's own figure — $0.80 against gpt's $0.96 — which
+        // round 2 turned into a full refusal. It funds qwen, glm and deepseek,
+        // so a cheaper quorum may still seat; refusing would have been the very
+        // "partial round into zero reviews" harm this PR exists to avoid.
         const r = await run({ modules: shipped({
           credit: { checked: true, isFreeTier: false, limitRemaining: 0.8 },
           balance: { checked: true, balanceRemaining: 0.8 },
-        }) });
-        expect(r.exits).toEqual([1]);
-        expect(r.errors[0]).toContain('ONE seat reserves $0.96');
-        expect(r.errors[0]).toContain('$0.80');
+        }), env: { MAX_COST: '10.00' } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toMatch(/^::warning::/);
+        expect(r.annotations[0]).toContain('cheaper quorum');
+        expect(r.annotations[0]).toContain('$0.96');
       });
 
-      test('HQ1 warn-by-concurrency: money funds some seats but not the wave', async () => {
+      test('B1: a dear CHAIR is reported but never refuses the bench', async () => {
         const r = await run({ modules: shipped({
           credit: { checked: true, isFreeTier: false, limitRemaining: 2 },
           balance: { checked: true, balanceRemaining: 2 },
-        }), env: { MAX_COST: '2.00' } });
+          catalog: { checked: true, prices: { ...DEFAULT_PRICES,
+            'google/gemini-3.1-pro-preview': 0.001 } },  // chair reserves $64
+        }), env: { MAX_COST: '10.00' } });
         expect(r.exits).toEqual([0]);
-        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter key may not fund the first wave/);
-        expect(r.annotations[0]).toContain('4 seats reserve $3.84');
+        expect(r.annotations[0]).toMatch(/^::warning::/);
+        expect(r.annotations[0]).toContain('chair');
+        expect(r.annotations[0]).toContain('$64.00');
+      });
+
+      test('HQ1 warn-by-concurrency: every seat is affordable alone, the wave is not', async () => {
+        // $1.00 clears the dearest seat ($0.96) but not the bench's $1.02 sum.
+        const r = await run({ modules: shipped({
+          credit: { checked: true, isFreeTier: false, limitRemaining: 1 },
+          balance: { checked: true, balanceRemaining: 1 },
+        }), env: { MAX_COST: '1.00' } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter money may not fund the first wave/);
+        expect(r.annotations[0]).toContain('concurrently');
+        expect(r.annotations[0]).toContain('$1.02');
       });
 
       test('HQ1 unpriced bench: the rule is skipped with a ::warning::, never an ok', async () => {

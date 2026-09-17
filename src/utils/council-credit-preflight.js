@@ -52,7 +52,7 @@
 function usd(n) {
   const sign = n < 0 ? '-' : '';
   const v = Math.abs(n);
-  return `${sign}$${(v !== 0 && v < 0.005) ? v.toFixed(4) : v.toFixed(2)}`;
+  return `${sign}$${(v !== 0 && v < 0.01) ? v.toFixed(4) : v.toFixed(2)}`;
 }
 
 /** What every message ends with. See the module header. */
@@ -128,27 +128,50 @@ function decideCreditPreflight(inputs, maxCost) {
   const source = (bal !== null && (cap === null || bal <= cap)) ? 'account balance' : "key's monthly limit";
 
   // ---- refusals: states in which NOTHING can be dispatched ----
+  // ⚠️ THE FLOOR IS THE CHEAPEST BENCH SEAT, NOT THE DEAREST (council #264 r3,
+  // findings B1 + C1). Refusing when the money cannot fund the dearest seat
+  // turns a run that could have seated its cheap seats — possibly to quorum —
+  // into zero reviews, which is the harm this whole preflight exists to avoid.
+  // And the CHAIR is not in this figure at all: it runs sequentially AFTER the
+  // wave, so its price can never be a reason not to start the bench.
+  const cheapest = (r.priced === true) ? finite(r.cheapestSeatUsd) : null;
+  const dearest = (r.priced === true) ? finite(r.dearestSeatUsd) : null;
+  const wave = (r.priced === true) ? finite(r.waveUsd) : null;
+  const chairUsd = (r.priced === true) ? finite(r.chairUsd) : null;
+
   if (remaining !== null && remaining <= 0) {
     return refuse(`${usd(remaining)} of the ${source} remains, so every paid seat would be refused; `
       + "add credit or raise the key's monthly limit");
   }
-  if (remaining !== null && r.priced === true && finite(r.oneSeatUsd) !== null
-      && remaining < r.oneSeatUsd) {
-    return refuse(`${usd(remaining)} of the ${source} remains, but ONE seat reserves `
-      + `${usd(r.oneSeatUsd)} up front (the bench's dearest output price x its output budget), `
-      + 'so the provider would refuse every request before it ran');
+  if (remaining !== null && cheapest !== null && remaining < cheapest) {
+    return refuse(`${usd(remaining)} of the ${source} remains, but even the CHEAPEST bench seat `
+      + `reserves ${usd(cheapest)} up front (its output price x the run's output budget), so the `
+      + 'provider would refuse every request before it ran');
   }
-  if (remaining !== null && remaining < 0.01) {
+  // Cents, decided ONCE. `Math.floor(0.29 * 100)` is 28 — `0.29 * 100` is
+  // 28.999999999999996 in IEEE 754 — so the clamp published a ceiling a cent
+  // BELOW the money for every remainder whose second decimal is a 9 (council
+  // #264 r3 / A1). The epsilon is 1e-11 dollars: far under any real balance
+  // granularity, and far over the representation error. Deriving the sub-cent
+  // refusal from the SAME cents value is what keeps the two from disagreeing.
+  const cents = remaining === null ? null : Math.floor(remaining * 100 + 1e-9);
+  if (cents !== null && cents <= 0) {
     return refuse(`${usd(remaining)} of the ${source} remains, below one cent — too little to `
       + "give the run any usable ceiling; add credit or raise the key's monthly limit");
   }
 
   // The spend bound. Computed independently of the outcome, because it travels
   // on a `warn` too — and it is ONLY a spend bound.
-  const effectiveMaxCost = (remaining !== null && ceiling !== null && remaining < ceiling)
-    ? Math.floor(remaining * 100) / 100
+  const effectiveMaxCost = (cents !== null && ceiling !== null && remaining < ceiling)
+    ? cents / 100
     : null;
   const withBound = (res) => (effectiveMaxCost === null ? res : { ...res, effectiveMaxCost });
+  // The chair rides as a CLAUSE on whatever the bench verdict is, never as one
+  // of its own: reporting it must not be able to change the bench's outcome.
+  const chairClause = (remaining !== null && chairUsd !== null && remaining < chairUsd)
+    ? `; the chair reserves ${usd(chairUsd)} and may be refused after the bench` : '';
+  const benchWarn = (why) => withBound({ outcome: 'warn', effectiveMaxCost,
+    message: `${why}${chairClause}${GUARANTEE}` });
 
   // ---- warnings: states we cannot clear, or in which refusals are LIKELY ----
   if (b.checked !== true) {
@@ -160,19 +183,26 @@ function decideCreditPreflight(inputs, maxCost) {
       + 'number, so it is unknown rather than absent'));
   }
   if (r.priced !== true) {
-    return withBound(warn('could not price the bench\'s reservation'
+    return withBound(warn("could not price the bench's reservation"
       + `${Array.isArray(r.unpriced) && r.unpriced.length ? ` (${r.unpriced.join(', ')})` : ''}`
-      + `${r.reason ? `: ${r.reason}` : ''}, so whether one seat is affordable is unknown`));
+      + `${r.reason ? `: ${r.reason}` : ''}, so whether a seat is affordable is unknown`));
   }
   if (remaining === null) {
     return withBound(warn('neither a monthly limit nor an account balance could be read'));
   }
-  const wave = r.oneSeatUsd * seats;
-  if (remaining < wave) {
-    return withBound({ outcome: 'warn', effectiveMaxCost,
-      message: `OpenRouter key may not fund the first wave: ${usd(remaining)} of the ${source} `
-        + `remains, but ${seats} seats reserve ${usd(wave)} together (${usd(r.oneSeatUsd)} each) — `
-        + `expect some seats to be refused before they run${GUARANTEE}` });
+  if (dearest !== null && remaining < dearest) {
+    return benchWarn(`OpenRouter money funds only part of the bench: ${usd(remaining)} of the `
+      + `${source} remains, and the dearest seat reserves ${usd(dearest)} — expect the dearest `
+      + 'seat(s) to be refused, though a cheaper quorum may still seat');
+  }
+  if (wave !== null && remaining < wave) {
+    return benchWarn(`OpenRouter money may not fund the first wave: ${usd(remaining)} of the `
+      + `${source} remains, and the bench reserves ${usd(wave)} concurrently — expect some seats `
+      + 'to be refused before they run');
+  }
+  if (chairClause) {
+    return benchWarn('OpenRouter money funds the bench but may not fund the chair: '
+      + `${usd(remaining)} of the ${source} remains`);
   }
   if (ceiling === null) {
     return withBound(warn(`the run ceiling ${shown(maxCost)} is not a usable dollar amount, so `

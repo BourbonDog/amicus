@@ -27,7 +27,7 @@ const https = require('https');
 jest.mock('https');
 
 const {
-  resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices,
+  resolveBenchIds, priceBenchReservation, fetchOpenRouterModelPrices,
 } = require('../../src/utils/council-credit-reservation');
 
 const ALIASES = {
@@ -69,67 +69,104 @@ describe('#256 resolveBenchIds', () => {
   });
 });
 
-describe('#256 priceOneSeatReservation', () => {
-  // The r3 numbers: a $0.000015/token completion price over a 64000-token
-  // budget reserves $0.96 for ONE seat.
+describe('#256 priceBenchReservation', () => {
+  // Council #264 r3 (B1 + C1) reshaped this: one `max` is not enough. The gate
+  // needs the CHEAPEST bench seat (below it, nothing can run), the DEAREST
+  // (below it, some seats certainly will not), the SUM (the concurrent first
+  // wave), and the CHAIR priced apart from all three — it runs sequentially
+  // after the wave, so it can never be a reason to refuse the bench.
   const PRICES = {
     'z-ai/glm-5.3': 0.0000005,
     'qwen/qwen3.8-27b': 0.0000002,
     'openai/gpt-5.6-terra': 0.000015,
     'google/gemini-3.1-pro-preview': 0.00001,
   };
-  const IDS = Object.keys(PRICES);
+  const BENCH = ['z-ai/glm-5.3', 'qwen/qwen3.8-27b', 'openai/gpt-5.6-terra'];
+  const CHAIR = ['google/gemini-3.1-pro-preview'];
+  const price = (over = {}) => priceBenchReservation({
+    prices: PRICES, benchIds: BENCH, chairIds: CHAIR, outputBudget: 64000, ...over });
 
-  test('one seat reserves the budget times the DEAREST seat on the bench', () => {
-    const r = priceOneSeatReservation({ prices: PRICES, ids: IDS, outputBudget: 64000 });
+  test('the four figures the gate needs, over the BENCH alone', () => {
+    const r = price();
     expect(r.priced).toBe(true);
-    expect(r.maxCompletionPrice).toBe(0.000015);
-    expect(r.oneSeatUsd).toBeCloseTo(0.96, 10);
-    expect(r.unpriced).toEqual([]);
+    // 64000 x each row's completion price.
+    expect(r.cheapestSeatUsd).toBeCloseTo(0.0128, 10);  // qwen
+    expect(r.dearestSeatUsd).toBeCloseTo(0.96, 10);     // gpt
+    expect(r.waveUsd).toBeCloseTo(0.0128 + 0.032 + 0.96, 10);
+    expect(r.chairUsd).toBeCloseTo(0.64, 10);           // gemini-pro, priced apart
   });
 
-  test('the DEAREST seat is what sets it — a cheap majority cannot hide one expensive row', () => {
-    // The reservation is per-request, so the bench's worst row is the one that
-    // decides whether a request can be admitted at all.
-    const r = priceOneSeatReservation({ prices: PRICES, ids: ['z-ai/glm-5.3', 'openai/gpt-5.6-terra'], outputBudget: 1000 });
-    expect(r.maxCompletionPrice).toBe(0.000015);
-    expect(r.oneSeatUsd).toBeCloseTo(0.015, 10);
+  test('the CHAIR is never folded into the bench figures', () => {
+    // B1: the chair used to set the maximum that gated the bench, so a dear
+    // chair refused a bench that could have seated fine.
+    const dearChair = price({ prices: { ...PRICES, 'google/gemini-3.1-pro-preview': 0.001 } });
+    expect(dearChair.dearestSeatUsd).toBeCloseTo(0.96, 10);
+    expect(dearChair.waveUsd).toBeCloseTo(0.0128 + 0.032 + 0.96, 10);
+    expect(dearChair.chairUsd).toBeCloseTo(64, 10);
+  });
+
+  test('the wave is the SUM of the bench, not seats x the dearest', () => {
+    // The old approximation over-stated a mixed bench by 3x here.
+    const r = price();
+    expect(r.waveUsd).toBeLessThan(r.dearestSeatUsd * BENCH.length);
+    expect(r.waveUsd).toBeCloseTo(1.0048, 10);
+  });
+
+  test('a one-row bench makes cheapest, dearest and wave the same figure', () => {
+    const r = price({ benchIds: ['openai/gpt-5.6-terra'] });
+    expect(r.cheapestSeatUsd).toBeCloseTo(0.96, 10);
+    expect(r.dearestSeatUsd).toBeCloseTo(0.96, 10);
+    expect(r.waveUsd).toBeCloseTo(0.96, 10);
+  });
+
+  test('no chair at all prices cleanly, with chairUsd null', () => {
+    const r = price({ chairIds: [] });
+    expect(r.priced).toBe(true);
+    expect(r.chairUsd).toBeNull();
   });
 
   test('the lookup is case-insensitive on both sides', () => {
-    const r = priceOneSeatReservation({ prices: { 'Z-AI/GLM-5.3': 0.000002 }, ids: ['z-ai/glm-5.3'], outputBudget: 100 });
+    const r = priceBenchReservation({ prices: { 'Z-AI/GLM-5.3': 0.000002 },
+      benchIds: ['z-ai/glm-5.3'], chairIds: [], outputBudget: 100 });
     expect(r.priced).toBe(true);
-    expect(r.oneSeatUsd).toBeCloseTo(0.0002, 10);
+    expect(r.cheapestSeatUsd).toBeCloseTo(0.0002, 10);
   });
 
   describe('NOT priced — the rule is skipped rather than guessed at', () => {
-    test('ANY unpriced bench row makes the whole bench unpriced', () => {
-      // The missing row could be the dearest one, so a max over the rest is not
-      // a bound on anything.
-      const r = priceOneSeatReservation({ prices: PRICES, ids: [...IDS, 'mystery/model-x'], outputBudget: 64000 });
+    test('ANY unpriced BENCH row makes the whole bench unpriced', () => {
+      const r = price({ benchIds: [...BENCH, 'mystery/model-x'] });
       expect(r.priced).toBe(false);
       expect(r.unpriced).toEqual(['mystery/model-x']);
-      expect(r.oneSeatUsd).toBeNull();
+      expect(r.cheapestSeatUsd).toBeNull();
+      expect(r.dearestSeatUsd).toBeNull();
+      expect(r.waveUsd).toBeNull();
+    });
+
+    test('an unpriced CHAIR leaves the bench priced — it gates nothing', () => {
+      // The chair's affordability is a separate clause, so not knowing it must
+      // not suppress a bench verdict the bench's own prices support.
+      const r = price({ chairIds: ['mystery/chair'] });
+      expect(r.priced).toBe(true);
+      expect(r.chairUsd).toBeNull();
+      expect(r.unpricedChair).toEqual(['mystery/chair']);
     });
 
     test('an empty bench, an empty price table, or a missing one', () => {
-      expect(priceOneSeatReservation({ prices: PRICES, ids: [], outputBudget: 64000 }).priced).toBe(false);
-      expect(priceOneSeatReservation({ prices: {}, ids: IDS, outputBudget: 64000 }).priced).toBe(false);
-      expect(priceOneSeatReservation({ prices: null, ids: IDS, outputBudget: 64000 }).priced).toBe(false);
+      expect(price({ benchIds: [] }).priced).toBe(false);
+      expect(price({ prices: {} }).priced).toBe(false);
+      expect(price({ prices: null }).priced).toBe(false);
     });
 
     test('a non-positive or unreadable output budget', () => {
       for (const outputBudget of [0, -1, NaN, Infinity, null, undefined, '64000', {}]) {
-        const r = priceOneSeatReservation({ prices: PRICES, ids: IDS, outputBudget });
+        const r = price({ outputBudget });
         expect(r.priced).toBe(false);
-        expect(r.oneSeatUsd).toBeNull();
+        expect(r.cheapestSeatUsd).toBeNull();
       }
     });
 
     test('a zero or negative price is not a price', () => {
-      // A free row is legitimate, but a bench whose DEAREST row prices at zero
-      // means the table told us nothing usable about a paid run.
-      const r = priceOneSeatReservation({ prices: { 'a/b': 0 }, ids: ['a/b'], outputBudget: 64000 });
+      const r = priceBenchReservation({ prices: { 'a/b': 0 }, benchIds: ['a/b'], chairIds: [], outputBudget: 64000 });
       expect(r.priced).toBe(false);
     });
   });

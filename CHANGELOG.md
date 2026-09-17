@@ -17,17 +17,23 @@ All notable changes to Amicus are documented here. Format follows
     account is not healthy. The smaller of the two governs, and an unanswered balance read is
     never `ok`.
   - **the per-request RESERVATION, not the aggregate.** OpenRouter refuses on one request's
-    `max_tokens` reservation, never on `--max-cost`. `council-credit-reservation.js` prices it as
-    `outputBudget x the bench's dearest completion price`, taking the budget and the bench ids
-    from the alias map this job provisioned and the prices from a keyless `GET /api/v1/models`.
+    `max_tokens` reservation, never on `--max-cost`. `council-credit-reservation.js` prices each
+    bench row at `outputBudget x that row's completion price`, taking the budget and the bench ids
+    from the alias map this job provisioned and the prices from a keyless `GET /api/v1/models`. It
+    reports four figures: the **cheapest** seat, the **dearest**, the **sum** over the bench (what
+    the concurrent first wave holds), and the **chair** priced apart — the chair runs sequentially
+    after the wave, so its price is reported but never gates the bench.
   - **the run's own cost ceiling**, as a spend bound only.
 
-  The outcomes: **refuse** (`::error::`, exit 1, nothing dispatched) when the key can fund nothing
-  — free tier, money at or below zero or below one cent, or money below ONE seat's reservation;
-  **warn** (`::warning::`, exit 0) when refusals are likely (money below the whole first wave) or
-  when anything could not be read — an unanswered probe, an unpriced bench, an unreadable cap or
-  an unusable ceiling; **ok** otherwise. Separately, money below the run's ceiling **clamps**
-  `effective_max_cost`, which the paid step validates and passes as `--max-cost`.
+  The outcomes: **refuse** (`::error::`, exit 1, nothing dispatched) only when the key can fund
+  nothing at all — free tier, money at or below zero or below one cent, or money below the
+  **cheapest** bench seat's reservation; **warn** (`::warning::`, exit 0) when refusals are likely
+  — money below the dearest seat (the dearest seat(s) will be refused, though a cheaper quorum may
+  still seat), below the bench's concurrent sum, or below the chair's reservation — or when
+  anything could not be read: an unanswered probe, an unpriced bench, an unreadable cap or an
+  unusable ceiling; **ok** otherwise. Separately, money below the run's ceiling **clamps**
+  `effective_max_cost` to the money, exact to the cent, which the paid step validates and passes
+  as `--max-cost`.
 
   **What this guarantees, stated in every decision message it prints** (the step-level messages
   report that the check did not run, so they qualify nothing): it refuses when a refusal is
@@ -112,8 +118,9 @@ All notable changes to Amicus are documented here. Format follows
   inside the owner's account, not the key — was published unredacted inside the CI evidence
   artifact. `src/utils/redact-provider-error.js` replaces an id of 32 characters or more with
   `<redacted>` in a `/keys/<id>` path segment and in a `?key=`/`keys=`/`api_key=`/`apikey=`/
-  `token=`/`access_token=` query parameter — both rules case-insensitive, and both admitting
-  percent-encoded ids — and is applied where engine-authored text ENTERS a leg's death reason in
+  `token=`/`access_token=` query parameter — both rules case-insensitive, both admitting
+  percent-encoded ids, and both admitting a dot INSIDE an id but never as its last character, so a
+  sentence's trailing period is not swallowed — and is applied where engine-authored text ENTERS a leg's death reason in
   `src/headless.js` (the assistant message's error, and the engine-log excerpt on a no-output
   backstop). Every death-reason assignment site in `headless.js` and `sidecar/fanout-leg*.js` is
   enumerated and classified by the origin of its text in

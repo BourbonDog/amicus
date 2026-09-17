@@ -35,11 +35,23 @@ const balance = (balanceRemaining) => ({ checked: true, balanceRemaining,
   totalCredits: null, totalUsage: null });
 const UNCHECKED_BALANCE = { checked: false, balanceRemaining: null,
   totalCredits: null, totalUsage: null };
-/** A priced bench: 4 seats, $0.96 reserved per seat (64000 x $0.000015). */
-const priced = (oneSeatUsd = 0.96) => ({ priced: true, oneSeatUsd,
-  maxCompletionPrice: 0.000015, unpriced: [], reason: null });
-const UNPRICED = { priced: false, oneSeatUsd: null, maxCompletionPrice: null,
-  unpriced: ['openai/gpt-5.6-terra'], reason: 'one or more bench rows have no completion price' };
+/**
+ * A priced 4-seat bench. Uniform by default so a single figure drives the
+ * simple cases; `priced({cheapest, dearest, wave})` makes it mixed.
+ */
+const priced = (over = {}) => ({
+  priced: true, cheapestSeatUsd: 0.96, dearestSeatUsd: 0.96, waveUsd: 3.84,
+  chairUsd: 0.64, unpriced: [], unpricedChair: [], reason: null, ...over });
+const UNPRICED = { priced: false, cheapestSeatUsd: null, dearestSeatUsd: null,
+  waveUsd: null, chairUsd: null, unpriced: ['openai/gpt-5.6-terra'], unpricedChair: [],
+  reason: 'one or more bench rows have no completion price' };
+
+/**
+ * A bench priced so low that nothing but the MONEY can gate: used where the case
+ * is about the cent arithmetic or the sub-cent rule, not about the reservation.
+ */
+const CHEAP_BENCH = { priced: true, cheapestSeatUsd: 0.0001, dearestSeatUsd: 0.0001,
+  waveUsd: 0.0001, chairUsd: null, unpriced: [], unpricedChair: [], reason: null };
 
 /** Healthy everything unless a case says otherwise. */
 const decide = (over = {}, maxCost = '2.00') => decideCreditPreflight({
@@ -111,52 +123,95 @@ describe('#256 decideCreditPreflight', () => {
   });
 
   describe('HQ1 — the per-request RESERVATION is what gets refused', () => {
-    test('below ONE seat\'s reservation refuses: nothing can be dispatched', () => {
-      // run 35143585179's shape: 56 097 tokens affordable against a 64 000-token
-      // reservation. Aggregate ceilings never saw it.
+    /**
+     * Council #264 r3 (B1 + C1) narrowed this gate. Round 2 refused whenever the
+     * money could not fund the DEAREST seat — which turns a run that could have
+     * seated its cheap seats, possibly to quorum, into zero reviews. That is the
+     * harm this whole PR exists to avoid, reintroduced by its own remedy.
+     */
+    test('below the CHEAPEST bench seat refuses: nothing at all can be dispatched', () => {
       const d = decide({ credit: credit({ limitRemaining: 0.8 }), balance: balance(0.8) });
       expect(d.outcome).toBe('refuse');
       expect(d.message).toContain('$0.80');
       expect(d.message).toContain('$0.96');
-      expect(d.message).toContain('reserv');
+      expect(d.message).toMatch(/cheapest/i);
       expect(d.message).toContain('no seat was dispatched');
     });
 
-    test('between one seat and the whole wave WARNS, naming both figures and the seat count', () => {
-      // 4 seats x $0.96 = $3.84; $2.00 funds two seats, so the wave will see
-      // refusals but the run is not hopeless.
+    test('between the cheapest and the dearest WARNS — a cheaper quorum may still seat', () => {
+      // glm/qwen at $0.02, gpt at $0.96: $0.50 funds the cheap pair and not gpt.
+      const mixed = priced({ cheapestSeatUsd: 0.02, dearestSeatUsd: 0.96, waveUsd: 1.0 });
+      const d = decide({ reservation: mixed,
+        credit: credit({ limitRemaining: 0.5 }), balance: balance(0.5) }, '10.00');
+      expect(d.outcome).toBe('warn');
+      expect(d.message).toContain('$0.96');
+      expect(d.message).toContain('cheaper quorum');
+      expect(d.message).not.toContain('no seat was dispatched');
+    });
+
+    test('a mixed bench refuses only below its CHEAPEST row', () => {
+      const mixed = priced({ cheapestSeatUsd: 0.02, dearestSeatUsd: 0.96, waveUsd: 1.0 });
+      expect(decide({ reservation: mixed, credit: credit({ limitRemaining: 0.019 }),
+        balance: balance(0.019) }, '10.00').outcome).toBe('refuse');
+      expect(decide({ reservation: mixed, credit: credit({ limitRemaining: 0.021 }),
+        balance: balance(0.021) }, '10.00').outcome).toBe('warn');
+    });
+
+    test('below the WAVE (the SUM of the bench) warns about concurrency', () => {
       const d = decide({ credit: credit({ limitRemaining: 2 }), balance: balance(2) }, '10.00');
       expect(d.outcome).toBe('warn');
-      expect(d.message).toContain('$2.00');
       expect(d.message).toContain('$3.84');
-      expect(d.message).toContain('4 seats');
+      expect(d.message).toContain('concurrently');
     });
 
     test('at or above the whole wave is ok', () => {
-      // Ceiling at or below the money, so no spend bound competes with the verdict.
       const d = decide({ credit: credit({ limitRemaining: 3.84 }), balance: balance(3.84) }, '3.00');
       expect(d.outcome).toBe('ok');
-      expect(d.message).toContain('4-seat');
+    });
+
+    /**
+     * B1 verbatim: the chair runs sequentially AFTER the wave, so its price can
+     * never be a reason to refuse the bench — only a reason to say the chair may
+     * not make it.
+     */
+    test('the CHAIR is reported in its own clause and never refuses the bench', () => {
+      const d = decide({ reservation: priced({ chairUsd: 50 }),
+        credit: credit({ limitRemaining: 4 }), balance: balance(4) }, '3.00');
+      expect(d.outcome).toBe('warn');
+      expect(d.message).toContain('chair');
+      expect(d.message).toContain('$50.00');
+      expect(d.message).not.toContain('no seat was dispatched');
+    });
+
+    test('a dear chair rides ALONGSIDE a bench warning, never instead of it', () => {
+      const d = decide({ reservation: priced({ chairUsd: 50 }),
+        credit: credit({ limitRemaining: 2 }), balance: balance(2) }, '10.00');
+      expect(d.outcome).toBe('warn');
+      expect(d.message).toContain('concurrently');   // the bench clause
+      expect(d.message).toContain('chair');           // and the chair clause
+    });
+
+    test('an affordable chair adds no clause at all', () => {
+      const d = decide({ credit: credit({ limitRemaining: 3.84 }), balance: balance(3.84) }, '3.00');
+      expect(d.message).not.toContain('chair');
+    });
+
+    test('an UNPRICED chair is silent — it cannot make the bench verdict worse', () => {
+      const d = decide({ reservation: priced({ chairUsd: null, unpricedChair: ['x/y'] }),
+        credit: credit({ limitRemaining: 3.84 }), balance: balance(3.84) }, '3.00');
+      expect(d.outcome).toBe('ok');
     });
 
     test('an UNPRICED bench warns and skips the rule — never ok', () => {
       const d = decide({ reservation: UNPRICED });
       expect(d.outcome).toBe('warn');
       expect(d.message).toContain('could not price the bench');
-      // It names what it could not price, so the reader can fix the map.
       expect(d.message).toContain('openai/gpt-5.6-terra');
     });
 
     test('an unpriced bench does NOT suppress a refusal the money already proves', () => {
       const d = decide({ reservation: UNPRICED, credit: credit({ limitRemaining: 0 }), balance: balance(0) });
       expect(d.outcome).toBe('refuse');
-    });
-
-    test('a seat count that is not a positive integer falls back to one seat', () => {
-      for (const seats of [0, -3, NaN, null, undefined, 'four', 2.5]) {
-        const d = decide({ seats, credit: credit({ limitRemaining: 2 }), balance: balance(2) }, '2.00');
-        expect(d.outcome).toBe('ok'); // $2.00 covers 1 x $0.96
-      }
     });
   });
 
@@ -183,9 +238,22 @@ describe('#256 decideCreditPreflight', () => {
       expect(d.message).not.toContain('$-3.00');
     });
 
+    /**
+     * Council #264 r3 / C2: `usd()` only used four decimals below $0.005, so a
+     * remainder of $0.007 rendered as "$0.01 ... below one cent" — the same
+     * sentence asserting and denying the same fact.
+     */
+    test('a sub-cent figure never renders as $0.01 beside the words "below one cent"', () => {
+      const d = decide({ credit: credit({ limitRemaining: 0.007 }), balance: balance(0.007),
+        reservation: CHEAP_BENCH });
+      expect(d.message).toContain('below one cent');
+      expect(d.message).toContain('$0.0070');
+      expect(d.message).not.toContain('$0.01 ');
+    });
+
     test('a remainder below one cent refuses — a $0 ceiling is a bad CLI argument', () => {
       const d = decide({ credit: credit({ limitRemaining: 0.004 }), balance: balance(0.004),
-        reservation: priced(0.0001) });
+        reservation: CHEAP_BENCH });
       expect(d.outcome).toBe('refuse');
       expect(d.message).toContain('below one cent');
     });
@@ -248,9 +316,43 @@ describe('#256 decideCreditPreflight', () => {
       expect(d.message).toContain('cannot prevent a per-request refusal');
     });
 
+    /**
+     * Council #264 r3 / A1. `Math.floor(0.29 * 100) / 100` is 0.28, because
+     * `0.29 * 100` is 28.999999999999996 in IEEE 754 — so the clamp published a
+     * ceiling a cent BELOW the money for every remainder whose second decimal is
+     * a 9. A spend bound that does not match the money to the cent is not one.
+     */
+    test('the clamped ceiling is EXACT in cents, not one cent short', () => {
+      const clamp = (r) => decide({ credit: credit({ limitRemaining: r }), balance: balance(r),
+        reservation: priced({ cheapestSeatUsd: 0.0001, dearestSeatUsd: 0.0001, waveUsd: 0.0001,
+          chairUsd: null }) }, '10.00').effectiveMaxCost;
+      expect(clamp(0.29)).toBe(0.29);
+      expect(clamp(1.15)).toBe(1.15);
+      expect(clamp(0.59)).toBe(0.59);
+      expect(clamp(2.675)).toBe(2.67);   // still floors a real third decimal
+      expect(clamp(1.239)).toBe(1.23);
+    });
+
+    test('the cent arithmetic never rounds UP past the real money', () => {
+      for (const r of [0.2899999, 0.999, 1.101, 3.339]) {
+        const d = decide({ credit: credit({ limitRemaining: r }), balance: balance(r),
+          reservation: priced({ cheapestSeatUsd: 0.0001, dearestSeatUsd: 0.0001, waveUsd: 0.0001,
+            chairUsd: null }) }, '10.00');
+        expect(d.effectiveMaxCost).toBeLessThanOrEqual(r);
+      }
+    });
+
+    test('a remainder that floors to zero cents still refuses', () => {
+      const d = decide({ credit: credit({ limitRemaining: 0.0099 }), balance: balance(0.0099),
+        reservation: priced({ cheapestSeatUsd: 0.0001, dearestSeatUsd: 0.0001, waveUsd: 0.0001,
+          chairUsd: null }) }, '10.00');
+      expect(d.outcome).toBe('refuse');
+      expect(d.message).toContain('below one cent');
+    });
+
     test('the clamped ceiling rounds DOWN to cents and is never zero', () => {
       expect(decide({ credit: credit({ limitRemaining: 1.239 }), balance: balance(1.239),
-        reservation: priced(0.0001) }, '10.00').effectiveMaxCost).toBe(1.23);
+        reservation: CHEAP_BENCH }, '10.00').effectiveMaxCost).toBe(1.23);
       // Every point is accounted for, not just the clamps: a sweep that only
       // checks the branch it expects cannot see a point falling silently into
       // another one.
@@ -263,7 +365,7 @@ describe('#256 decideCreditPreflight', () => {
       for (let i = 1; i <= 200; i++) {
         const r = i * 0.001;
         const d = decide({ credit: credit({ limitRemaining: r }), balance: balance(r),
-          reservation: priced(0.0001) }, '10.00');
+          reservation: CHEAP_BENCH }, '10.00');
         if (d.outcome === 'clamp') {
           expect(d.effectiveMaxCost).toBeGreaterThan(0);
           expect(r).toBeGreaterThanOrEqual(0.01);

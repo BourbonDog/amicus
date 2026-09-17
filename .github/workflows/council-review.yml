@@ -362,18 +362,32 @@ jobs:
           #              one meaning NOTHING can run:
           #                * the key is free tier;
           #                * remaining <= 0;
-          #                * remaining < ONE SEAT'S RESERVATION (outputBudget x the
-          #                  bench's dearest completion price) — the motivating
-          #                  run's own shape, and the only rule that catches it;
+          #                * remaining < THE CHEAPEST BENCH SEAT'S RESERVATION
+          #                  (outputBudget x that row's completion price) — the
+          #                  motivating run's own shape. The CHEAPEST, not the
+          #                  dearest (council #264 r3, B1+C1): refusing when the
+          #                  money cannot fund the DEAREST seat turns a run that
+          #                  could have seated its cheap seats, possibly to
+          #                  quorum, into zero reviews — the very harm this
+          #                  preflight exists to avoid. And the CHAIR is not in
+          #                  this figure at all: it runs sequentially AFTER the
+          #                  wave, so its price can never stop the bench starting.
           #                * remaining < one cent, which would floor the clamp to
           #                  `--max-cost 0` — a bad ARGUMENT, not a tight budget:
           #                  cli-handlers-council-run.js rejects a non-positive
           #                  ceiling with exit 1 before any budget exists.
           #   warn    -> ::warning:: + exit 0. Either something could not be read
           #              (a probe, the balance, the bench's price, the ceiling) or
-          #              remaining < the whole first wave's reservation, i.e.
-          #              refusals are LIKELY but the run is not hopeless. A blind
-          #              preflight must never cost the repo a review.
+          #              refusals are LIKELY while the run is not hopeless:
+          #                * remaining < the DEAREST seat -> the dearest seat(s)
+          #                  will be refused, but a cheaper quorum may still seat;
+          #                * remaining < the SUM of the bench's per-seat
+          #                  reservations -> the wave cannot be funded
+          #                  concurrently (the sum, not seats x dearest: each seat
+          #                  holds its OWN reservation);
+          #                * remaining < the CHAIR's reservation -> a clause on
+          #                  whatever the bench verdict is, never a refusal.
+          #              A blind preflight must never cost the repo a review.
           #   clamp   -> ::warning:: + exit 0, and `effective_max_cost` carries a
           #              SMALLER ceiling. This is a SPEND BOUND ONLY and the
           #              weakest state: any warn outranks it, and the bound still
@@ -410,8 +424,8 @@ jobs:
           # read is never `ok`.
           # THE RESERVATION, not the aggregate (council #264 r2, HQ1): OpenRouter
           # refuses on ONE request's max_tokens reservation, never on --max-cost.
-          # outputBudget x the bench's dearest completion price is what a seat
-          # reserves before it emits a token; below that, nothing can run.
+          # outputBudget x a row's completion price is what THAT seat reserves
+          # before it emits a token; below the CHEAPEST of them, nothing can run.
           #
           # The key is passed by env and read from process.env — it is never
           # expanded by the shell and never printed. Only figures are.
@@ -529,12 +543,12 @@ jobs:
           };
           const { checkOpenRouterCredit, checkOpenRouterBalance } = load('openrouter-credit.js');
           const { decideCreditPreflight } = load('council-credit-preflight.js');
-          const { resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices } = load('council-credit-reservation.js');
+          const { resolveBenchIds, priceBenchReservation, fetchOpenRouterModelPrices } = load('council-credit-reservation.js');
           // A RENAMED EXPORT throws nothing at require time — it would reach the
           // call below as `undefined is not a function`, an uncaught TypeError
           // that exits non-zero and blocks the review. Named, warned, exit 0.
           const fns = [checkOpenRouterCredit, checkOpenRouterBalance, decideCreditPreflight,
-            resolveBenchIds, priceOneSeatReservation, fetchOpenRouterModelPrices];
+            resolveBenchIds, priceBenchReservation, fetchOpenRouterModelPrices];
           if (fns.some((f) => typeof f !== 'function')) {
             finish('warning', 'OpenRouter credit could not be checked — the installed amicus does not export checkOpenRouterCredit/decideCreditPreflight from src/utils; continuing', null);
           } else {
@@ -554,7 +568,11 @@ jobs:
           // it by the paid step and runs alone afterwards), but the chair's row
           // still has to be PRICED — it reserves like any other seat.
           const bench = String(process.env.MODELS || '').split(',').map((s) => s.trim()).filter(Boolean).filter((m) => m !== chair);
-          const bound = resolveBenchIds({ aliases: map.aliases, seats: bench.concat(chair ? [chair] : []) });
+          // Bench and chair resolved APART (council #264 r3, B1): the chair runs
+          // sequentially after the wave, so it is priced and reported but can
+          // never gate the bench.
+          const bound = resolveBenchIds({ aliases: map.aliases, seats: bench });
+          const boundChair = resolveBenchIds({ aliases: map.aliases, seats: chair ? [chair] : [] });
           Promise.all([
             checkOpenRouterCredit(process.env.OPENROUTER_API_KEY),
             checkOpenRouterBalance(process.env.OPENROUTER_API_KEY),
@@ -563,12 +581,14 @@ jobs:
             const credit = answers[0];
             const balance = answers[1];
             const catalog = answers[2];
-            const unpriceable = (reason, unpriced) => ({ priced: false, oneSeatUsd: null, maxCompletionPrice: null, unpriced: unpriced || [], reason });
+            const unpriceable = (reason, unpriced) => ({ priced: false, cheapestSeatUsd: null,
+              dearestSeatUsd: null, waveUsd: null, chairUsd: null, unpriced: unpriced || [],
+              unpricedChair: [], reason });
             const reservation = !catalog.checked
               ? unpriceable('the OpenRouter model catalog could not be read')
               : bound.unresolved.length
                 ? unpriceable('these seats resolve to no model id in the provisioned alias map', bound.unresolved)
-                : priceOneSeatReservation({ prices: catalog.prices, ids: bound.ids, outputBudget });
+                : priceBenchReservation({ prices: catalog.prices, benchIds: bound.ids, chairIds: boundChair.ids, outputBudget });
             const d = decideCreditPreflight({ credit, balance, reservation, seats: bench.length }, MAX_COST);
             finish(d.outcome === 'refuse' ? 'error' : (d.outcome === 'ok' ? 'notice' : 'warning'),
               d.message, d.effectiveMaxCost);

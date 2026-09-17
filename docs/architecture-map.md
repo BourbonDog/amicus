@@ -713,7 +713,7 @@ evals/
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-credit-preflight.js` | #256: the ruling the CI council's credit preflight makes, as a pure function. | `decideCreditPreflight()` |
-| `utils/council-credit-reservation.js` | #256 / council #264 r2 (HQ1): price the thing OpenRouter actually refuses. | `resolveBenchIds()`, `priceOneSeatReservation()`, `fetchOpenRouterModelPrices()`, `catalogKey()` |
+| `utils/council-credit-reservation.js` | #256 / council #264 r2 (HQ1): price the thing OpenRouter actually refuses. | `resolveBenchIds()`, `priceBenchReservation()`, `fetchOpenRouterModelPrices()`, `catalogKey()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
