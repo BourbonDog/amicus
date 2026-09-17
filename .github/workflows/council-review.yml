@@ -330,6 +330,70 @@ jobs:
           cat bindings.txt
           exit "$PF"
 
+      - name: Pre-flight the OpenRouter credit (refuses before any seat is dispatched)
+        if: steps.gate.outputs.available == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          # #256. MEASURED (run 35143585179, 309862bf, 2026-09-16): the key's
+          # remaining MONTHLY LIMIT sat below this run's own --max-cost, so
+          # OpenRouter refused four of seven legs in 2-3 s ("This request would
+          # exceed your available credits given your current in-flight
+          # requests"), the once-only Stage-1 retries were spent on those
+          # refusals, and the round ended COUNCIL_QUORUM with ONE seat reviewed
+          # for $0.003. No existing lever reaches that class: the no-output
+          # backstop is irrelevant to an instant refusal, and a second retry
+          # would be refused the same way against the other legs' in-flight
+          # max_tokens reservations (#218 — the reservation is the multiplier).
+          # The only cure is to ask the key what it can afford BEFORE dispatch.
+          #
+          # THREE OUTCOMES, and only one stops the job (src/utils/council-credit-preflight.js
+          # :: decideCreditPreflight owns the ruling, and is unit-tested per branch
+          # in tests/utils/council-credit-preflight.test.js):
+          #   refuse  -> ::error:: + exit 1. Zero spend, no seat dispatched.
+          #   warn    -> ::warning:: + exit 0. A network blip must never cost the
+          #              repo a review, so a blind preflight continues.
+          #   ok      -> ::notice:: + exit 0.
+          # A key with NO monthly limit reports limit_remaining null and is `ok`;
+          # it is never a refusal.
+          #
+          # The key is passed by env and read from process.env — it is never
+          # expanded by the shell and never printed. Only figures are.
+          cat > credit-preflight.js <<'CREDIT'
+          const { execSync } = require('child_process');
+          const path = require('path');
+          const root = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          // ONE-TIME BOOTSTRAP GAP, and it is real (same shape as the
+          // scripts/extract-workflow-env.js notice in the briefing step below):
+          // this job installs `amicus@latest` from npm, never the PR's code, so
+          // the release that ADDS council-credit-preflight.js cannot use it.
+          // Until that version is published the require throws, and a preflight
+          // that cannot run must warn, never fail the review.
+          let checkOpenRouterCredit, decideCreditPreflight;
+          try {
+            ({ checkOpenRouterCredit } = require(path.join(root, 'amicus', 'src', 'utils', 'openrouter-credit.js')));
+            ({ decideCreditPreflight } = require(path.join(root, 'amicus', 'src', 'utils', 'council-credit-preflight.js')));
+          } catch (err) {
+            console.log('::warning::OpenRouter credit could not be checked — the installed amicus has no credit preflight yet (bootstrap: ' + (err.code || err.message) + '); continuing');
+            process.exit(0);
+          }
+          checkOpenRouterCredit(process.env.OPENROUTER_API_KEY).then((result) => {
+            const d = decideCreditPreflight(result, process.env.MAX_COST);
+            if (d.outcome === 'refuse') {
+              console.error('::error::' + d.message);
+              process.exit(1);
+            }
+            console.log((d.outcome === 'warn' ? '::warning::' : '::notice::') + d.message);
+            process.exit(0);
+          }).catch(() => {
+            // checkOpenRouterCredit resolves on every failure path by contract;
+            // this is the belt for a contract change, and it warns like one.
+            console.log('::warning::OpenRouter credit could not be checked — the probe threw; continuing');
+            process.exit(0);
+          });
+          CREDIT
+          node credit-preflight.js
+
       - name: Build council briefing from the PR diff
         if: steps.gate.outputs.available == 'true'
         env:

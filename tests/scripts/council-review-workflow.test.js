@@ -645,7 +645,10 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       const y = yml();
       expect(y.indexOf('Pre-flight the bench')).toBeLessThan(
         y.indexOf('Run the adjudicated council'));
-      const step = stepFor('Pre-flight the bench', 'Build council briefing');
+      // Bounded by the step that now follows it (#256's credit preflight), not
+      // by the briefing step two down — a slice that silently swallows a third
+      // step stops being a pin on THIS one.
+      const step = stepFor('Pre-flight the bench', 'Pre-flight the OpenRouter credit');
       expect(step).toContain('getEffectiveAliases');
       expect(step).toContain('::error::');
       expect(step).toContain('exit "$PF"');
@@ -806,6 +809,78 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       const timeoutMinutes = Number(cmd.match(/--timeout (\d+)/)[1]);
       expect(ms).toBeGreaterThan(300000); // strictly more headroom than the default
       expect(ms).toBeLessThan(timeoutMinutes * 60000);
+    });
+  });
+
+  /**
+   * #256 — the OpenRouter credit preflight.
+   *
+   * MEASURED (run 35143585179, `309862bf`, 2026-09-16): the key's remaining
+   * monthly limit was below this run's own `--max-cost`, so the provider refused
+   * four of seven legs in 2–3 s, the once-only Stage-1 retries were spent on
+   * those refusals, and the round ended COUNCIL_QUORUM with ONE seat reviewed.
+   * No existing lever reached it: the backstop is irrelevant to an instant
+   * refusal, and a second retry would have been refused the same way. The only
+   * cure is to ask the key what it can afford BEFORE any seat is dispatched.
+   */
+  describe('OpenRouter credit preflight (#256)', () => {
+    const CREDIT_STEP = 'Pre-flight the OpenRouter credit';
+    const creditStep = () => {
+      const y = yml();
+      return y.slice(y.indexOf(CREDIT_STEP), y.indexOf('Build council briefing'));
+    };
+
+    test('the step exists, is gated like its neighbours, and sits between the bench pre-flight and the paid step', () => {
+      const y = yml();
+      const idx = y.indexOf(CREDIT_STEP);
+      expect(idx).toBeGreaterThan(-1);
+      // AFTER the bench pre-flight (so a bench that cannot bind fails first, for
+      // free) and BEFORE the paid step (so a refusal costs nothing).
+      expect(y.indexOf('Pre-flight the bench')).toBeLessThan(idx);
+      expect(idx).toBeLessThan(y.indexOf('Run the adjudicated council'));
+      expect(creditStep()).toContain("if: steps.gate.outputs.available == 'true'");
+    });
+
+    test('it calls the SHIPPED probe and the shipped decision module, resolved the way preflight.js resolves them', () => {
+      const step = creditStep();
+      // The workflow never checks out; `npm root -g` against the installed
+      // tarball is the only module path a runner has.
+      expect(step).toContain('npm root -g');
+      expect(step).toContain('openrouter-credit');
+      expect(step).toContain('council-credit-preflight');
+      expect(step).toContain('checkOpenRouterCredit');
+      expect(step).toContain('decideCreditPreflight');
+      // The run ceiling is the job-level MAX_COST, read from the environment by
+      // the node program — the same value the paid step passes as --max-cost.
+      expect(step).toContain('process.env.MAX_COST');
+    });
+
+    test('the refusal branch is an ::error:: that exits 1, and the unknown branch only warns', () => {
+      const step = creditStep();
+      expect(step).toMatch(/'refuse'[\s\S]{0,160}::error::/);
+      expect(step).toContain('process.exit(1)');
+      expect(step).toMatch(/'warn'[\s\S]{0,160}::warning::/);
+      // A blip must not block a review: every non-refusal path leaves 0.
+      expect(step).toContain('::notice::');
+    });
+
+    test('a decision module missing from an older published amicus warns instead of failing the job', () => {
+      // The runner installs `amicus@latest` from npm, never this PR's code, so
+      // the release that ADDS the module cannot use it — the same one-time
+      // bootstrap gap scripts/extract-workflow-env.js documents one step below.
+      const step = creditStep();
+      expect(step).toContain('catch');
+      expect(step).toContain('bootstrap');
+    });
+
+    test('the key never reaches any output — it is passed by env and only figures are printed', () => {
+      const step = creditStep();
+      expect(step).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
+      // No shell expansion of the secret anywhere in the step: the node program
+      // reads process.env directly, so there is nothing for `set -x` or an echo
+      // to leak.
+      expect(step).not.toContain('$OPENROUTER_API_KEY');
+      expect(step).not.toMatch(/echo[^\n]*OPENROUTER_API_KEY/);
     });
   });
 });

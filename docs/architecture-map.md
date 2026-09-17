@@ -214,6 +214,7 @@ src/
 │   ├── cli-preflight.js  # Tiny shared preflight guards used by more than one CLI run handler
 │   ├── client-detect.js  # Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
 │   ├── config.js  # Amicus Config Module
+│   ├── council-credit-preflight.js  # #256: the ruling the CI council's credit preflight makes, as a pure function.
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3).
 │   ├── curated-pins.js  # The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here.
@@ -294,6 +295,7 @@ src/
 │   ├── provider-registry.js  # Provider-capability registry — the single source of truth for provider
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
+│   ├── redact-provider-error.js  # #256 item 4: strip key IDENTIFIERS out of a provider's error text before it
 │   ├── remediation-hints.js
 │   ├── result-schema-rebuild.js
 │   ├── result-schema-version.js  # The single SCHEMA_VERSION constant shared by result-schema.js and
@@ -705,6 +707,7 @@ evals/
 | `utils/cli-preflight.js` | Tiny shared preflight guards used by more than one CLI run handler | `requireNoUiForJson()`, `requireValidTaskId()`, `packSaveVersionConflict()` |
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
+| `utils/council-credit-preflight.js` | #256: the ruling the CI council's credit preflight makes, as a pure function. | `decideCreditPreflight()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions (match rules) over the shipped pins in ./curated-pins.json (v3). | `getFamilies()`, `toDefaultAliases()`, `stripGatewayPrefix()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/curated-pins.js` | The shipped pin set (#238 D8): src/utils/curated-pins.json, loaded, validated and written here. | `loadCuratedPins()`, `validateCuratedPins()`, `saveCuratedPins()`, `setPinRoute()`, `setPinRuling()` |
@@ -784,6 +787,7 @@ evals/
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `canonicalRoutesFor()`, `pickCurrent()`, `resolveQuickPicks()`, `toStorableRoute()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
+| `utils/redact-provider-error.js` | #256 item 4: strip key IDENTIFIERS out of a provider's error text before it | `redactProviderError()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |
 | `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |

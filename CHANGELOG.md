@@ -3,6 +3,22 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **CI credit preflight** — `.github/workflows/council-review.yml` now asks the OpenRouter key
+  what it can afford before any seat is dispatched. Between the bench pre-flight and the paid
+  council step it calls the shipped probe (`src/utils/openrouter-credit.js`) and rules on the
+  answer with `src/utils/council-credit-preflight.js :: decideCreditPreflight`: a free-tier key
+  or a remaining monthly limit below the run's `--max-cost` fails the step with `::error::` and
+  exits 1 (zero spend, no seat dispatched); an unanswerable probe emits `::warning::` and
+  continues, so a network blip never costs the repo a review; otherwise `::notice::` names the
+  remaining figure and the run ceiling. A key with no monthly limit is never a refusal, and the
+  key never appears in any output. Motivated by run 35143585179, where a low remaining limit had
+  the provider refuse four of seven legs in 2–3 s, consume their once-only retries and lose the
+  round's quorum for $0.003. (#256)
+
 ## [4.11.0] - 2026-09-16
 
 ### Added
