@@ -221,15 +221,14 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
     emitStageTerminal(o.runDir, o.runId, 'stage2', 'complete', `${o.runId}-s2`, o.follow);
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
-    const usableJudges = s2.judgeResults.filter(j => j.ok).length;
-    if (usableJudges < 2) {
-      degrade.note({
-        channel: 'thin-cross-review',
-        what: `only ${usableJudges} of ${s2.judgeResults.length} judges returned a usable cross-review`,
-        why: 'the other judges produced no parseable Stage-2 block',
-        effect: 'findings were tiered on a thinner cross-review than the bench size implies; will exit degraded (2)',
-      });
-    }
+    // #202 / #251 item 3: the note is BUILT from what the judge legs did (its
+    // `why` used to be a fixed sentence blaming unparseable blocks, and on PR
+    // #254 r1 all three missing judges had DIED at the backstop instead).
+    // Required HERE, like `seatKey` below: this file is on the 300-line gate,
+    // and a top-of-file line would shift every `run.js:NNN` citation in the tree.
+    const { thinCrossReviewNote } = require('./run-stage2-notes');
+    const thinNote = thinCrossReviewNote(s2.judgeResults);
+    if (thinNote) { degrade.note(thinNote); }
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
     // Seat-keyed (v4.8 PR3 Task 4): an alias-only key collapses a twin bench

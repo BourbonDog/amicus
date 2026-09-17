@@ -18,6 +18,7 @@ const { createDegradeSink } = require('../../src/council/run-degrade');
 const { createBudget } = require('../../src/council/run-budget');
 const { recordServerFate } = require('../../src/council/run-server');
 const { writeRunTerminal } = require('../../src/council/run-finalize');
+const { thinCrossReviewNote } = require('../../src/council/run-stage2-notes');
 
 // Mirrors tests/council/run-stages.test.js's review() fixture: prose + a fenced
 // json findings block that validates cleanly, so a surviving seat never falls
@@ -180,22 +181,97 @@ describe('chair channels', () => {
 });
 
 describe('thin cross-review channel', () => {
+  // The note is BUILT by run-stage2-notes.js :: thinCrossReviewNote and only
+  // announced by run.js's conditional, so these call the real builder rather
+  // than re-spelling the note's shape (which is how the old copy of it drifted
+  // into asserting a `why` the runtime never produced).
   test('thin cross-review is announced with the judge count', () => {
     const noted = [];
     const degrade = { note: (r) => noted.push(r) };
-    // The Stage-2 gate is a plain conditional in run.js; exercise it directly with the
-    // same shape run.js sees, so this test does not need a whole council.
-    const judgeResults = [{ ok: true }, { ok: false }, { ok: false }];
-    const usable = judgeResults.filter(j => j.ok).length;
-    if (usable < 2) {
-      degrade.note({
-        channel: 'thin-cross-review',
-        what: `only ${usable} of ${judgeResults.length} judges returned a usable cross-review`,
-        why: 'the other judges produced no parseable Stage-2 block',
-        effect: 'findings were tiered on a thinner cross-review than the bench size implies; will exit degraded (2)',
-      });
-    }
+    const note = thinCrossReviewNote([{ ok: true }, { ok: false }, { ok: false }]);
+    if (note) { degrade.note(note); }
     expect(noted[0].what).toBe('only 1 of 3 judges returned a usable cross-review');
+    expect(noted[0].channel).toBe('thin-cross-review');
+    expect(noted[0].effect).toMatch(/exit degraded \(2\)/);
+  });
+
+  /**
+   * #202 / #251 item 3 — the `why` was a HARDCODED sentence: 'the other judges
+   * produced no parseable Stage-2 block'. On PR #254 round 1 the three missing
+   * judges DIED at the NO_OUTPUT_BACKSTOP (a `stage2-judge` degrade fired for
+   * each); not one of them returned an unparseable block. The note was the
+   * run's own account of why its verdict rested on one judge, and it named the
+   * wrong cause — the two have different fixes (a window/retry vs the judge
+   * output contract).
+   */
+  const died = { ok: false, died: true, emptyAnswer: false };
+  const emptyAnswer = { ok: false, died: true, emptyAnswer: true };
+  const unparseable = { ok: false, died: false, emptyAnswer: false };
+  const preMarker = { ok: false };        // a pre-#251 checkpoint, resumed
+
+  test('the why is DERIVED: judges that died are not judges that answered badly', () => {
+    expect(thinCrossReviewNote([{ ok: true }, died, died, died]).why)
+      .toBe('3 judge legs died before answering');
+    expect(thinCrossReviewNote([{ ok: true }, unparseable, unparseable]).why)
+      .toBe('2 returned no parseable Stage-2 block');
+    expect(thinCrossReviewNote([{ ok: true }, died, unparseable]).why)
+      .toBe('1 judge leg died before answering; 1 returned no parseable Stage-2 block');
+  });
+
+  /**
+   * Council #263 round 1, D3 [minor, Confirmed] — `legDied` is
+   * `!(status === 'complete' && summary)`, so it is TRUE for two different legs:
+   * one whose process never came back, and one that completed and answered with
+   * an EMPTY summary. Reporting the second as "died before answering" sends a CI
+   * reader at a dead process when the leg ran to completion and said nothing —
+   * the same wrong-cause defect this PR removes, one level down.
+   */
+  test('D3 a judge that COMPLETED with an empty summary did not die — it answered nothing', () => {
+    expect(thinCrossReviewNote([{ ok: true }, emptyAnswer, emptyAnswer]).why)
+      .toBe('2 returned an empty answer');
+    expect(thinCrossReviewNote([{ ok: true }, died, emptyAnswer]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer');
+    expect(thinCrossReviewNote([{ ok: true }, died, emptyAnswer, unparseable]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer; '
+        + '1 returned no parseable Stage-2 block');
+  });
+
+  /**
+   * Council #263 round 1, A1 [minor, Singleton] — a `judgeResults` entry with
+   * NO `died` field at all (a Stage-2 checkpoint written by a pre-#251 build and
+   * resumed by this one) fell into the `died === false` bucket and was reported
+   * as "returned no parseable Stage-2 block" — which may be a false statement
+   * about a judge that in fact died. Absent is not false.
+   */
+  test('A1 an entry that PREDATES the died marker is its own bucket, never a claim', () => {
+    expect(thinCrossReviewNote([{ ok: true }, preMarker]).why)
+      .toBe('1 judge result predates the died marker (outcome unknown)');
+    expect(thinCrossReviewNote([{ ok: true }, preMarker, preMarker]).why)
+      .toBe('2 judge results predate the died marker (outcome unknown)');
+    expect(thinCrossReviewNote([{ ok: true }, died, preMarker]).why)
+      .toBe('1 judge leg died before answering; '
+        + '1 judge result predates the died marker (outcome unknown)');
+  });
+
+  test('every zero clause is omitted, and the four buckets sum to the failures', () => {
+    expect(thinCrossReviewNote([died, emptyAnswer, unparseable, preMarker]).why)
+      .toBe('1 judge leg died before answering; 1 returned an empty answer; '
+        + '1 returned no parseable Stage-2 block; '
+        + '1 judge result predates the died marker (outcome unknown)');
+  });
+
+  test('a bench too small to cross-review says THAT, not something about the judges', () => {
+    // usableJudges < 2 with nothing failed: a one-judge bench. The old sentence
+    // asserted "the other judges produced no parseable block" about judges that
+    // do not exist.
+    expect(thinCrossReviewNote([{ ok: true }]).why)
+      .toBe('the bench seated only 1 judge, fewer than the two a cross-review needs');
+    expect(thinCrossReviewNote([]).why)
+      .toBe('the bench seated only 0 judges, fewer than the two a cross-review needs');
+  });
+
+  test('two usable judges is not thin — no note at all', () => {
+    expect(thinCrossReviewNote([{ ok: true }, { ok: true }, died])).toBeNull();
   });
 });
 
