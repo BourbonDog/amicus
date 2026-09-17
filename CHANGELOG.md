@@ -30,6 +30,14 @@ All notable changes to Amicus are documented here. Format follows
   Corrected to the v4.11.0 source: 300s default (`DEFAULT_NO_OUTPUT_BACKSTOP_MS`), the retry's
   actual escalation rule (doubled, clamped strictly below the leg cap), the tool-call disarm, and
   `ttftMs` as the disarm moment usable to size an override. (#245)
+- `config.json` is written atomically (temp + rename), so a **process** crash mid-write can no
+  longer truncate it — crash atomicity only; the temp and its directory are not fsync'd, so
+  power-loss durability is not claimed. An existing (resolvable) symlinked `config.json` is
+  followed to its target instead of being replaced by a regular file; a dangling link is still
+  replaced. The alias-conversion Notices print only after the write lands, and the caller's config
+  object is left untouched until then, so a failed write no longer reports conversions that did not
+  happen nor diverges memory from disk; a dead stderr after a committed write no longer makes the
+  save throw. (#258)
 - **The still-dead note names the retry's OWN cause** when it differs from the first failure's.
   `run.json`'s dead-leg prose read `the leg ended 'error': NO_OUTPUT_BACKSTOP …; its once-only
   retry also ended 'error'` for a seat whose retry was in fact REFUSED by the provider two
