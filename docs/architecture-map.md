@@ -458,6 +458,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── probe-agent-wire.js  # Wave 3.0 Read B — what leaves the engine for a leg running as `council-support`
 ├── probe-council-agents.js  # Spec 2026-09-11 §4 — the ENGINE side of the council agents (ruling P2-R21).
 ├── probe-darwin-extract.js
 ├── probe-max-tokens.js  # Wire probe for issue #218: what max_tokens / reasoning / thinking does the
