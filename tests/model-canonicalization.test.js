@@ -136,9 +136,10 @@ describe('directFormIfProven — persistence (conservative: strip only on positi
   // ONCE and reuse that same array for both `buildProviderDefaultChoices`
   // (which never offers a bare id classifying invalid under that catalog)
   // and `applyProviderDefault` -- so this path is unreachable there. It IS
-  // reachable via `electron/ipc-setup.js`'s two separate IPC calls
-  // (`save-key` builds choices from one `getCatalog()` fetch,
-  // `sidecar:set-provider-default` re-fetches independently before
+  // reachable via the setup window's two separate IPC calls (`save-key`, in
+  // `electron/ipc-keys.js` since issue #212, builds choices from one
+  // `getCatalog()` fetch; `sidecar:set-provider-default`, still in
+  // `electron/ipc-setup.js`, re-fetches independently before
   // applying) -- a real, if narrow, TOCTOU window between the two. See
   // .superpowers/sdd/issue-195-report.md for the fuller reasoning.
   test('A4: an ALREADY-BARE chosenId proven invalid is persisted verbatim, not upgraded to its OR twin (deliberate -- doctor --fix is the remediation layer)', () => {

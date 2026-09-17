@@ -399,6 +399,7 @@ electron/
 ├── fold.js  # Fold Logic
 ├── ipc-aliases.js  # IPC for the setup wizard's "Needs review" section (issue 238 D9, Phase 3).
 ├── ipc-guard.js  # IPC Guard Helpers
+├── ipc-keys.js  # Key IPC handlers for the setup window: `sidecar:validate-key` and
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── ipc-workspace.js  # Council Workspace IPC (v4.4 §4.5) — all seven workspace: channels.
