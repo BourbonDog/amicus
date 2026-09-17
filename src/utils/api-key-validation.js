@@ -66,7 +66,7 @@ const FORBIDDEN_MESSAGE =
  * The Google probe embeds the key in the URL as `?key=...`, so ANY error text
  * that quotes the request URL quotes the key with it — Node's ERR_INVALID_URL
  * and several socket errors do exactly that. Redacting here, at the source,
- * is what protects the callers that never look: electron/ipc-setup.js returns
+ * is what protects the callers that never look: electron/ipc-keys.js returns
  * `err.message` straight to the renderer AND logs it, and src/cli-handlers.js
  * awaits this function with no try/catch at all. (Council finding 3, PR 221.)
  *
@@ -170,7 +170,7 @@ function validateApiKey(provider, key) {
         // headers — is an 'error' event on this emitter, and an unhandled one
         // is a THROW, not a rejection: the promise never settles and the
         // process dies. Two of the three callers have no protection against
-        // that (src/cli-handlers.js has no try/catch; electron/ipc-setup.js
+        // that (src/cli-handlers.js has no try/catch; electron/ipc-keys.js
         // has one, but the throw lands on a later tick outside it). Issue #224.
         res.on('error', (err) => {
           resolve({ valid: false, status: null, error: redactSecret(messageOf(err), trimmedKey) });

@@ -11,7 +11,14 @@ const { PROVIDER_ENV_MAP } = require('./provider-registry');
 // (arbitrary-name local-provider bearer writes) are re-exported so every documented
 // `require('./api-key-store').saveRawEnv` call site keeps working. No load-time cycle:
 // env-raw-store requires THIS module only lazily, inside its functions.
-const { saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine } = require('./env-raw-store');
+// Issue 212's test-run write guard and the blank-secret predicate live in
+// env-raw-store.js too, beside upsertEnvLine/deleteEnvLine — the chokepoint every
+// .env writer funnels through (council review of PR 262, A2/D4). Re-exported
+// below so `require('./api-key-store').isTestWriteToRealKeyStore` keeps working.
+const {
+  saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine,
+  isBlankSecret, isTestWriteToRealKeyStore, assertNotTestWriteToRealKeyStore,
+} = require('./env-raw-store');
 
 /** Legacy key names that have been renamed (old -> new) */
 const LEGACY_KEY_NAMES = {
@@ -52,9 +59,23 @@ function parseEnvContent(content) {
   return entries;
 }
 
-/** Migrate a legacy key name in a .env file (best-effort, one-time) */
-function migrateEnvFileKey(envPath, oldName, newName) {
+/**
+ * Migrate a legacy key name in a .env file (best-effort, one-time).
+ *
+ * ⚠️ This writes with fs.writeFileSync and does NOT go through
+ * upsertEnvLine/deleteEnvLine, so the chokepoint guard does not reach it — it
+ * asserts for itself (issue 212 / council review of PR 262, A2/D4). The throw
+ * lands in this function's own best-effort catch, so a refused migration is a
+ * SKIPPED migration: inside a test run against the real store, not rewriting it
+ * is the outcome we want, and the read path above still serves the legacy value.
+ * @param {string} envPath
+ * @param {string} oldName
+ * @param {string} newName
+ * @param {object} [deps] see isTestWriteToRealKeyStore
+ */
+function migrateEnvFileKey(envPath, oldName, newName, deps) {
   try {
+    assertNotTestWriteToRealKeyStore(envPath, deps);
     const content = fs.readFileSync(envPath, 'utf-8');
     const re = new RegExp(`^${oldName}=`, 'm');
     const updated = content.replace(re, `${newName}=`);
@@ -68,8 +89,11 @@ function migrateEnvFileKey(envPath, oldName, newName) {
   }
 }
 
-/** Load .env file entries (auto-migrates legacy key names) */
-function loadEnvEntries() {
+/**
+ * Load .env file entries (auto-migrates legacy key names).
+ * @param {object} [deps] forwarded to the migration's issue-212 write guard
+ */
+function loadEnvEntries(deps) {
   const envPath = getEnvPath();
   let fileEntries = new Map();
   try {
@@ -81,7 +105,7 @@ function loadEnvEntries() {
         if (fileEntries.has(oldName) && !fileEntries.has(newName)) {
           fileEntries.set(newName, fileEntries.get(oldName));
           fileEntries.delete(oldName);
-          migrateEnvFileKey(envPath, oldName, newName);
+          migrateEnvFileKey(envPath, oldName, newName, deps);
         }
       }
     }
@@ -145,29 +169,49 @@ function readApiKeyValues() {
   return result;
 }
 
-/** Save an API key for a provider to the .env file */
-function saveApiKey(provider, key) {
+/**
+ * Save an API key for a provider to the .env file
+ * @param {string} provider
+ * @param {string} key
+ * @param {object} [deps] injected for tests — see isTestWriteToRealKeyStore
+ */
+function saveApiKey(provider, key, deps) {
   const envVar = PROVIDER_ENV_MAP[provider];
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
+  // Council #262 r1 (C1/D1/B4): an empty-after-trim key is a WIPE, not a save —
+  // upsertEnvLine rewrites the stored `<ENVVAR>=<real key>` line with a blank
+  // value and reports success. Refused at the FUNCTION boundary, not only in the
+  // callers, so `amicus key <provider> "   "`, the save-key IPC and every future
+  // caller are covered by one check. (The issue-212 test-run guard lives one
+  // level down, in upsertEnvLine.)
+  if (isBlankSecret(key)) {
+    return { success: false, error: 'API key is required' };
+  }
   // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL;
-  // strips CR/LF and returns the cleaned value).
-  const clean = upsertEnvLine(getEnvPath(), envVar, key);
+  // strips CR/LF and returns the cleaned value). It carries issue 212's test-run
+  // write guard, which THROWS before any write.
+  const clean = upsertEnvLine(getEnvPath(), envVar, key, deps);
   // Also set process.env so the key is immediately available (sanitized to match disk)
   process.env[envVar] = clean;
   return { success: true };
 }
 
-/** Remove an API key for a provider from the .env file */
-function removeApiKey(provider) {
+/**
+ * Remove an API key for a provider from the .env file
+ * @param {string} provider
+ * @param {object} [deps] injected for tests — see isTestWriteToRealKeyStore
+ */
+function removeApiKey(provider, deps) {
   const envVar = PROVIDER_ENV_MAP[provider];
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
 
-  // Shared merge helper (no-op when the file is absent; preserves other lines, 0600).
-  deleteEnvLine(getEnvPath(), envVar);
+  // Shared merge helper (no-op when the file is absent; preserves other lines,
+  // 0600). Carries issue 212's test-run write guard, which THROWS before any write.
+  deleteEnvLine(getEnvPath(), envVar, deps);
   delete process.env[envVar];
 
   // Check if key also exists in auth.json (caller decides whether to clean)
@@ -177,6 +221,7 @@ function removeApiKey(provider) {
 
 module.exports = {
   getEnvPath,
+  isTestWriteToRealKeyStore,
   loadEnvEntries,
   readApiKeys,
   readApiKeyHints,

@@ -2,9 +2,10 @@
  * IPC Setup Handlers
  *
  * Extracted from main.js to keep file sizes under 300 lines.
- * Registers all setup-mode IPC handlers: validate-key, save-key,
- * remove-key, setup-done, save-config, get-config, get-api-keys,
- * get-catalog, refresh-catalog, and (ipc-aliases.js) get-alias-review.
+ * Registers all setup-mode IPC handlers: remove-key, setup-done, save-config,
+ * get-config, get-api-keys, get-catalog, refresh-catalog, plus the key pair
+ * validate-key/save-key (ipc-keys.js, split out for issue 212) and
+ * get-alias-review (ipc-aliases.js).
  * (sidecar:fetch-models was retired in B33/#12 — Step 3's alias editor now
  * shares the TTL-cached get-catalog data Step 2 loads instead of a second,
  * uncached live fetch.)
@@ -13,6 +14,7 @@
 const { logger } = require('../src/utils/logger');
 const { registerLocalProviderHandlers } = require('./ipc-setup-local');
 const { registerAliasHandlers, applyDismissals } = require('./ipc-aliases');
+const { registerKeyHandlers } = require('./ipc-keys');
 
 /**
  * Register all setup-related IPC handlers
@@ -30,58 +32,11 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
   // lifetime contract lives in electron/offer-session.js.
   const offerCatalogs = require('./offer-session').createOfferSessions();
 
-  ipcMain.handle('sidecar:validate-key', async (_event, provider, key) => {
-    try {
-      const { validateApiKey } = require('../src/utils/api-key-store');
-      return await validateApiKey(provider, key);
-    } catch (err) {
-      logger.error('validate-key handler error', { error: err.message });
-      return { valid: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('sidecar:save-key', async (_event, provider, key) => {
-    try {
-      const { saveApiKey } = require('../src/utils/api-key-store');
-      const result = saveApiKey(provider, key);
-      // F5: warm the model catalog as soon as a key lands so the Step 2
-      // picker renders instantly. Fire-and-forget; failures are silent
-      // (a failed warm-up never clobbers the cache; Step 2's get-catalog or
-      // the refresh button retry it).
-      if (result && result.success !== false) {
-        setImmediate(() => {
-          try {
-            require('../src/utils/model-catalog').refreshCatalog().catch(() => {});
-          } catch { /* best-effort */ }
-        });
-        // Task 8: per-provider default picker choices for the key step.
-        // Per-provider defaults only make sense for DIRECT model vendors --
-        // openrouter is the GATEWAY, not a vendor, so it's skipped entirely
-        // (mirrors provider-default-prompt.js's runProviderDefaultFlow gate;
-        // this path calls the picker core directly instead of that
-        // readline-oriented helper, so it re-checks isDirectProvider itself).
-        const { isDirectProvider } = require('../src/utils/provider-registry');
-        if (isDirectProvider(provider)) {
-          try {
-            const { getCatalog } = require('../src/utils/model-catalog');
-            const { buildProviderDefaultChoices } = require('../src/utils/provider-default-picker');
-            const catalog = await getCatalog();
-            result.providerDefault = buildProviderDefaultChoices(provider, { catalog });
-            offerCatalogs.set(_event, provider, catalog);
-          } catch (err) {
-            logger.error('save-key providerDefault error', { error: err.message });
-            result.providerDefault = null;
-          }
-        } else {
-          result.providerDefault = null;
-        }
-      }
-      return result;
-    } catch (err) {
-      logger.error('save-key handler error', { error: err.message });
-      return { success: false, error: err.message };
-    }
-  });
+  // sidecar:validate-key + sidecar:save-key. Extracted to ipc-keys.js for
+  // issue 212 (this file was at 294 of the 300-line gate and the fix did not
+  // fit); registered on the SAME (possibly injected) ipcMain, in the place
+  // they used to occupy, so registration order is unchanged.
+  registerKeyHandlers({ ipcMain, offerCatalogs });
 
   // Task 8: apply a per-provider default picker choice. Read-modify-write,
   // no-clobber -- applyProviderDefault only ever writes aliases[vendor] and
@@ -224,7 +179,14 @@ function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ip
       const status = readApiKeys();
       const hints = readApiKeyHints();
 
-      // Auto-import keys from auth.json that sidecar doesn't have yet
+      // Auto-import keys from auth.json that sidecar doesn't have yet.
+      // Issue 212 deliberately does NOT gate this second saveApiKey call: it
+      // takes no caller input (this channel has no key argument), so it is not a
+      // bypass — importFromAuthJson only migrates credentials the user already
+      // stored locally via OpenCode. Probing them here would also put up to
+      // five 10s network calls in front of the wizard's first render and would
+      // silently drop a key that answered 401 for reasons of the moment. The
+      // key-auth doctor row (issue 210) is where stored keys get re-checked.
       const { imported } = importFromAuthJson(status);
       for (const entry of imported) {
         const result = saveApiKey(entry.provider, entry.key);
