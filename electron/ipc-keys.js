@@ -63,25 +63,21 @@ function registerKeyHandlers({ ipcMain, offerCatalogs, logger = defaultLogger })
 
   ipcMain.handle('sidecar:save-key', async (_event, provider, key) => {
     try {
-      // The CLI's own precondition, mirrored (src/cli-handlers.js :: handleKey):
-      //
-      //     // Save mode: key required
-      //     if (!keyArg) {
-      //       console.error(`Error: API key is required. Usage: amicus key ...`);
-      //       process.exit(1);
-      //     }
-      //
-      // It never reaches saveApiKey with a falsy key, and neither may this. An
-      // empty string validates to { valid: false, status: null }, and null is
-      // NOT in BLOCKS_SAVE — so the 401 gate below would wave it through, and
+      // A FAST PATH for the falsy case, not the rule itself. A blank key is a
+      // WIPE, not a save: it validates to { valid: false, status: null }, null
+      // is NOT in BLOCKS_SAVE, so the 401 gate below would wave it through and
       // upsertEnvLine (env-raw-store.js) would rewrite a stored
-      // `ANTHROPIC_API_KEY=<real key>` line as `ANTHROPIC_API_KEY=`, wiping the
-      // credential while still returning success. Reachable only by a direct
-      // IPC call (the renderer trims and returns early), which is the bypass
-      // issue 212 is about.
+      // `ANTHROPIC_API_KEY=<real key>` line with a blank value while still
+      // returning success. Reachable only by a direct IPC call (the renderer
+      // trims and returns early), which is the bypass issue 212 is about.
       //
-      // NOT trimmed, deliberately: the CLI saves a whitespace-only key, so
-      // trimming here would invent a rule rather than mirror one.
+      // The AUTHORITATIVE refusal is at the store boundary —
+      // api-key-store.js :: saveApiKey refuses anything empty after trim, via
+      // env-raw-store.js's isBlankSecret — which is the same check `amicus key`
+      // goes through, so the two entry points cannot drift. That is why this
+      // one does not trim: it would be a second, parallel definition of
+      // "blank". It exists only to answer a null/empty call without a network
+      // probe. Council review of PR 262, round 1.
       if (!key) { return { success: false, error: 'API key is required' }; }
       const { saveApiKey, validateApiKey } = require('../src/utils/api-key-store');
       // Issue 212: validate HERE, in the main process, before anything is written.
