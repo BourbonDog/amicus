@@ -17,6 +17,11 @@ All notable changes to Amicus are documented here. Format follows
   "the engine reported X" from "nobody asked". A session-keyed status answer is unwrapped the
   same way the poll-loop probe already unwraps it, so that shape is no longer reported as
   "the engine returned no status". (#251 item 3, #202)
+- **The `thin-cross-review` note names how many judges died vs answered unusably** instead of
+  always claiming "the other judges produced no parseable Stage-2 block" — on PR #254 round 1
+  all three missing judges had died at the backstop and none had returned an unparseable block,
+  which pointed the reader of `run.json` at the wrong fix. A bench too small to cross-review at
+  all now says that, rather than blaming judges that never existed. (#202)
 
 ## [4.11.0] - 2026-09-16
 

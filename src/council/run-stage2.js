@@ -261,6 +261,11 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         });
       }
       judgeResults.push({ judge, seat, ok: false, order: null, orderSeats: null, adjudications: null,
+        // #251 item 3: the ONE `legDied` predicate above, carried forward rather
+        // than re-derived downstream. run.js's thin-cross-review note needs to
+        // tell a judge that never answered from one that answered unusably —
+        // two different fixes — and this is the only place that fact is known.
+        died: legDied,
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
         // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
         // Stage-1's convention (reviews carry the original wave leg even when a
@@ -276,8 +281,10 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // alias-only. T3.3 wired it into street-cred.js :: rankPositions, via
     // rankings[] in run-assemble.js :: buildTallyInput; `order` never moved.
     const { order, orderSeats } = rankingToOrder(parsed.ranking, labels.labelMap, labels.seatMap);
+    // `died: false` by construction: a dead leg's `parsed` is the DEAD_LEG arm,
+    // which never becomes ok. Stamped anyway so every entry has the same shape.
     judgeResults.push({ judge, seat, ok: true, order, orderSeats, adjudications: parsed.adjudications,
-      conformance, leg: leg || null });
+      died: false, conformance, leg: leg || null });
   }
   return { aborted: null, judgeResults, extraRows };
 }

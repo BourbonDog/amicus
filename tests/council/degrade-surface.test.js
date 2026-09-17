@@ -163,9 +163,44 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
   const thin = (run.degrades || []).find(d => d.channel === 'thin-cross-review');
   expect(thin).toBeDefined();
   expect(thin.what).toMatch(/1 of \d+ judges/);
+  // #202 / #251 item 3: the `why` is derived from what the judge legs did. On
+  // THIS fixture every failed judge answered with prose that would not parse —
+  // and the note says so in those words, rather than in the fixed sentence it
+  // used to say whatever had happened.
+  expect(thin.why).toMatch(/^\d+ returned no parseable Stage-2 block$/);
 
   // #83 on the same fixture: every judge got a runStats row on the verdict.
   const verdict = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'verdict.json'), 'utf-8'));
   const judgeRows = verdict.runStats.filter(r => r.role === 'judge');
   expect(judgeRows.length).toBeGreaterThanOrEqual(2);
+});
+
+test('the PR #254 shape: judges that DIED are named as dead, not as bad output', async () => {
+  // The field case (#251 item 3, #202). On PR #254 round 1 three judge legs hit
+  // the NO_OUTPUT_BACKSTOP and produced nothing at all; the thin-cross-review
+  // note nonetheless said 'the other judges produced no parseable Stage-2
+  // block' — the one sentence it could say. A dead leg is a window/retry
+  // problem and an unparseable block is an output-contract problem; a reader of
+  // run.json was sent at the wrong one.
+  //
+  // A dead judge leg ('error', no summary) skips the repair loop entirely
+  // (run-stage2.js gates it on 'complete' AND a summary), so unlike the
+  // unparseable fixture above this script needs no -q solos.
+  const script = {
+    'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+    'abc123-s2': (o) => okWave(o.models.map((m, i) => (
+      i === 0 ? mkLeg(m, judgeOut(['Review A', 'Review B'], [])) : mkLeg(m, '', 'error')))),
+    'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
+  };
+  const opts = baseOptions(tmp);
+  const { exitCode } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+  expect(exitCode).toBe(2);
+
+  const run = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'run.json'), 'utf-8'));
+  const thin = (run.degrades || []).find(d => d.channel === 'thin-cross-review');
+  expect(thin).toBeDefined();
+  expect(thin.why).toBe('2 judge legs died before answering');
+  // The per-judge channel agrees with the summary note — the two are derived
+  // from the SAME `legDied` predicate and cannot disagree about who died.
+  expect((run.degrades || []).filter(d => d.channel === 'stage2-judge')).toHaveLength(2);
 });
