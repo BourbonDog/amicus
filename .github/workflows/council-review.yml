@@ -356,6 +356,12 @@ jobs:
           #   ok      -> ::notice:: + exit 0.
           # A key with NO monthly limit reports limit_remaining null and is `ok`;
           # it is never a refusal.
+          # ⚠️ WHAT `ok` DOES NOT MEAN, and the notice says so out loud: this
+          # endpoint reports the key's MONTHLY LIMIT only — not the account
+          # balance, and not the in-flight max_tokens reservations that were the
+          # multiplier behind three of the four refusals in the motivating run
+          # (#218). A green preflight is not a promise that the run cannot be
+          # refused, and nobody debugging a later refusal should read it as one.
           #
           # The key is passed by env and read from process.env — it is never
           # expanded by the shell and never printed. Only figures are.
@@ -363,18 +369,55 @@ jobs:
           const { execSync } = require('child_process');
           const path = require('path');
           const root = execSync('npm root -g', { encoding: 'utf8' }).trim();
-          // ONE-TIME BOOTSTRAP GAP, and it is real (same shape as the
-          // scripts/extract-workflow-env.js notice in the briefing step below):
-          // this job installs `amicus@latest` from npm, never the PR's code, so
-          // the release that ADDS council-credit-preflight.js cannot use it.
-          // Until that version is published the require throws, and a preflight
-          // that cannot run must warn, never fail the review.
-          let checkOpenRouterCredit, decideCreditPreflight;
-          try {
-            ({ checkOpenRouterCredit } = require(path.join(root, 'amicus', 'src', 'utils', 'openrouter-credit.js')));
-            ({ decideCreditPreflight } = require(path.join(root, 'amicus', 'src', 'utils', 'council-credit-preflight.js')));
-          } catch (err) {
-            console.log('::warning::OpenRouter credit could not be checked — the installed amicus has no credit preflight yet (bootstrap: ' + (err.code || err.message) + '); continuing');
+          // ONE RESOLUTION SHAPE for both modules (pinned in
+          // tests/scripts/council-review-workflow.test.js): a typo in this join
+          // is the kind of defect that would otherwise warn green forever.
+          //
+          // TWO DISTINCT FAILURES, said apart. The ONE-TIME BOOTSTRAP GAP is
+          // real (same shape as the scripts/extract-workflow-env.js notice in
+          // the briefing step below): this job installs `amicus@latest` from
+          // npm, never the PR's code, so the release that ADDS
+          // council-credit-preflight.js cannot use it, and the require throws
+          // MODULE_NOT_FOUND naming that exact path. But a SyntaxError in a
+          // shipped module, a broken transitive require, or a path typo throw
+          // here too — and reporting any of those as "not shipped yet" would be
+          // a FALSE sentence on a real defect, with the step green forever.
+          // So: only a miss of the target path itself is the bootstrap; every
+          // other throw names the module and the error. Both still exit 0,
+          // because a preflight that cannot run must never block a review.
+          const load = (file) => {
+            const target = path.join(root, 'amicus', 'src', 'utils', file);
+            try {
+              return require(target);
+            } catch (err) {
+              // The module WE asked for must be the one reported missing. A
+              // BROKEN TRANSITIVE require inside a shipped module also throws
+              // MODULE_NOT_FOUND, and `target` appears in its "Require stack:"
+              // — so a mere substring test called that the bootstrap gap too
+              // (measured). Node's first line is `Cannot find module '<spec>'`,
+              // and the spec for a direct miss is this absolute path.
+              const missingTarget = err.code === 'MODULE_NOT_FOUND'
+                && String(err.message).indexOf("Cannot find module '" + target + "'") === 0;
+              console.log('::warning::OpenRouter credit could not be checked — '
+                + (missingTarget
+                  ? 'the installed amicus does not ship src/utils/' + file + ' yet (bootstrap: the runner installs amicus@latest, never this PR)'
+                  : 'loading src/utils/' + file + ' failed: '
+                    // ONE LINE, BOUNDED. A MODULE_NOT_FOUND message carries a
+                    // multi-line "Require stack:" block, and a workflow command
+                    // ends at the first newline — the rest would spill into the
+                    // raw log outside the annotation (measured).
+                    + String(err.message || err.code || err).replace(/\s+/g, ' ').slice(0, 300))
+                + '; continuing');
+              process.exit(0);
+            }
+          };
+          const { checkOpenRouterCredit } = load('openrouter-credit.js');
+          const { decideCreditPreflight } = load('council-credit-preflight.js');
+          // A RENAMED EXPORT throws nothing at require time — it would reach the
+          // call below as `undefined is not a function`, an uncaught TypeError
+          // that exits non-zero and blocks the review. Named, warned, exit 0.
+          if (typeof checkOpenRouterCredit !== 'function' || typeof decideCreditPreflight !== 'function') {
+            console.log('::warning::OpenRouter credit could not be checked — the installed amicus does not export checkOpenRouterCredit/decideCreditPreflight from src/utils; continuing');
             process.exit(0);
           }
           checkOpenRouterCredit(process.env.OPENROUTER_API_KEY).then((result) => {

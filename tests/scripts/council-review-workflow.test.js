@@ -2,6 +2,9 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+// #256: compiles the credit-preflight heredoc without running it — a heredoc is
+// invisible to eslint, so this is the only gate a broken edit would hit.
+const vm = require('vm');
 const WF = path.join(__dirname, '..', '..', '.github', 'workflows', 'council-review.yml');
 
 describe('council-review workflow (v2 — adjudicated council engine)', () => {
@@ -864,13 +867,61 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('::notice::');
     });
 
-    test('a decision module missing from an older published amicus warns instead of failing the job', () => {
+    test('both modules resolve through ONE joined path, so a typo in it cannot pass this suite', () => {
+      // Review fix round 1, Important #1: asserting only the bare file names let
+      // `src/util/…` (or any other wrong join) through green, and a wrong path
+      // throws MODULE_NOT_FOUND — i.e. it would have been reported as the
+      // harmless bootstrap gap forever.
+      const step = creditStep();
+      expect(step).toContain("path.join(root, 'amicus', 'src', 'utils', file)");
+      expect(step).toContain("load('openrouter-credit.js')");
+      expect(step).toContain("load('council-credit-preflight.js')");
+      // EXACTLY ONE resolution shape. A second `path.join` would be a second
+      // spelling this pin does not cover — the trap `models` walked into.
+      expect(step.match(/path\.join\(/g)).toHaveLength(1);
+    });
+
+    test('the bootstrap gap and a BROKEN module are reported as different facts, both exit 0', () => {
       // The runner installs `amicus@latest` from npm, never this PR's code, so
       // the release that ADDS the module cannot use it — the same one-time
       // bootstrap gap scripts/extract-workflow-env.js documents one step below.
+      // But a SyntaxError, a broken transitive require or a path typo throw from
+      // the same `require`, and calling those "not shipped yet" would be a false
+      // sentence that leaves the step green forever on a real defect.
       const step = creditStep();
-      expect(step).toContain('catch');
-      expect(step).toContain('bootstrap');
+      // The bootstrap branch is gated on MODULE_NOT_FOUND *for the target path*,
+      // not on any throw.
+      expect(step).toContain("err.code === 'MODULE_NOT_FOUND'");
+      // MEASURED: a broken transitive require also throws MODULE_NOT_FOUND and
+      // puts `target` in its "Require stack:", so a bare substring test called
+      // that the bootstrap gap too. The module WE asked for must be the one
+      // Node names as missing, which is the message's first line.
+      expect(step).toContain('String(err.message).indexOf("Cannot find module \'" + target + "\'") === 0');
+      expect(step).toContain('does not ship src/utils/');
+      expect(step).toContain('(bootstrap:');
+      // The other branch names the module AND the error, and never claims the
+      // module is merely unpublished. One line, bounded: a workflow command
+      // ends at the first newline and a require-stack message has several.
+      expect(step).toContain("'loading src/utils/' + file + ' failed: '");
+      expect(step).toContain("replace(/\\s+/g, ' ').slice(0, 300)");
+      // A renamed export throws nothing at require time; it is caught by shape.
+      expect(step).toContain("typeof checkOpenRouterCredit !== 'function'");
+      expect(step).toContain('does not export checkOpenRouterCredit/decideCreditPreflight');
+      // Every load failure continues the review. The ONLY non-zero exit in this
+      // step is the credit refusal.
+      expect(step.match(/process\.exit\(1\)/g)).toHaveLength(1);
+    });
+
+    test('the step program is syntactically valid JavaScript as the runner will see it', () => {
+      // Harvested and compiled (never executed) — the same "the test runs what
+      // the runner runs" discipline the filter-diff suite above uses. A heredoc
+      // is invisible to eslint, so nothing else would catch a broken edit.
+      const y = yml();
+      const open = y.indexOf("cat > credit-preflight.js <<'CREDIT'");
+      const program = y.slice(y.indexOf('\n', open) + 1, y.indexOf('\n          CREDIT\n', open))
+        .split('\n').map((l) => l.replace(/^ {10}/, '')).join('\n');
+      expect(program).toContain('checkOpenRouterCredit');
+      expect(() => new vm.Script(program)).not.toThrow();
     });
 
     test('the key never reaches any output — it is passed by env and only figures are printed', () => {

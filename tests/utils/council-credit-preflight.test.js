@@ -64,6 +64,16 @@ describe('#256 decideCreditPreflight', () => {
       expect(d.message).toContain('no seat was dispatched');
     });
 
+    test('the free-tier remedy is ADD CREDIT only — raising a monthly limit cannot fix it', () => {
+      // Review fix round 1: the arm used to offer "add credit or raise the key's
+      // monthly limit", which sends a free-tier reader to a setting that cannot
+      // make their key paid. The low-limit arm below keeps both levers, because
+      // there both are real.
+      const d = decideCreditPreflight(checked({ isFreeTier: true }), 2);
+      expect(d.message).toContain('add credit');
+      expect(d.message).not.toContain('monthly limit');
+    });
+
     test('free tier is decided BEFORE the ceiling, so a bad ceiling cannot mask it', () => {
       const d = decideCreditPreflight(checked({ isFreeTier: true }), '');
       expect(d.outcome).toBe('refuse');
@@ -100,18 +110,38 @@ describe('#256 decideCreditPreflight', () => {
     test('limitRemaining null means the key has NO monthly limit — never a refusal', () => {
       const d = decideCreditPreflight(checked({ limitRemaining: null }), 2);
       expect(d.outcome).toBe('ok');
-      expect(d.message).toBe('OpenRouter credit ok (no key limit; run ceiling $2.00)');
+      expect(d.message).toBe('OpenRouter key limit ok (no monthly limit on the key; '
+        + 'run ceiling $2.00; in-flight reservations and account balance are not checked)');
     });
 
     test('the ok message names the remaining figure and the ceiling', () => {
       const d = decideCreditPreflight(checked({ limitRemaining: 12.34 }), '2.00');
-      expect(d.message).toBe('OpenRouter credit ok ($12.34 remaining; run ceiling $2.00)');
+      expect(d.message).toBe('OpenRouter key limit ok ($12.34 monthly limit remaining vs '
+        + 'run ceiling $2.00; in-flight reservations and account balance are not checked)');
+    });
+
+    /**
+     * Review fix round 1, Important #2. `GET /api/v1/key` reports the key's
+     * MONTHLY LIMIT and nothing else — not the account balance, and not the
+     * in-flight max_tokens reservations that refused three of the four legs in
+     * run 35143585179 (#218). A message reading "credit ok" would be read as a
+     * guarantee the probe cannot give by the next operator debugging a refusal
+     * that happened after a green preflight.
+     */
+    test('EVERY ok message says what it did not measure, and never claims "credit ok"', () => {
+      for (const limitRemaining of [null, 0.5, 12.34, 'lots']) {
+        const d = decideCreditPreflight(checked({ limitRemaining }), 0.25);
+        expect(d.outcome).toBe('ok');
+        expect(d.message).toContain('key limit ok');
+        expect(d.message).not.toContain('credit ok');
+        expect(d.message).toContain('in-flight reservations and account balance are not checked');
+      }
     });
 
     test('a non-numeric limitRemaining is treated as "no limit known", not as zero', () => {
       const d = decideCreditPreflight(checked({ limitRemaining: 'lots' }), 2);
       expect(d.outcome).toBe('ok');
-      expect(d.message).toContain('no key limit');
+      expect(d.message).toContain('no monthly limit on the key');
     });
   });
 

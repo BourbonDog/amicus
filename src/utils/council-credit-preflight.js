@@ -38,6 +38,15 @@ function usd(n) {
 }
 
 /**
+ * The boundary clause every `ok` message carries. `GET /api/v1/key` reports the
+ * key's monthly limit and nothing else — not the account balance, and not the
+ * in-flight `max_tokens` reservations that refused three of the four legs in run
+ * 35143585179. A green preflight is therefore not a promise that the run will
+ * not be refused, and the notice must not be readable as one.
+ */
+const UNCHECKED_BOUNDARY = '; in-flight reservations and account balance are not checked';
+
+/**
  * Coerce the run ceiling. The workflow hands this over as `$MAX_COST`, a string
  * ('2.00'), so a number and a numeric string are both legitimate. Everything
  * else is UNUSABLE, not zero: `Number('')` is 0 and `Number('x')` is NaN, and
@@ -64,10 +73,20 @@ function toCeiling(maxCost) {
  *               known remaining limit below the ceiling). The step exits 1
  *               BEFORE the paid step, so no seat is dispatched and nothing is
  *               spent.
- *  - `ok`     — the key can cover it, or it carries no monthly limit at all.
+ *  - `ok`     — the key's MONTHLY LIMIT can cover it, or there is no such limit.
  *
  * `limitRemaining === null` means OpenRouter reports NO monthly limit on the
  * key, which is the healthiest answer there is — never a refusal.
+ *
+ * ⚠️ WHAT `ok` DOES NOT MEAN, and the message says so out loud. `GET
+ * /api/v1/key` returns `limit`, `usage`, `limit_remaining` and `is_free_tier` —
+ * it does NOT return the account balance, and it cannot see the in-flight
+ * `max_tokens` reservations that were the multiplier behind three of the four
+ * refusals in run 35143585179 (#218: a concurrent leg's reservation is counted
+ * against the key while it is in flight). So `ok` is "the monthly limit is not
+ * the thing that will refuse you", not "this run will not be refused". An
+ * operator debugging a refusal after a green preflight must not read a
+ * guarantee this probe cannot give.
  *
  * The key itself is never an input here and never appears in a message: only
  * figures do.
@@ -89,11 +108,14 @@ function decideCreditPreflight(result, maxCost) {
 
   // Free tier first: it is true regardless of the ceiling, so an unusable
   // ceiling must not be able to mask it. Every paid seat 402s on such a key.
+  // ⚠️ The remedy is ADD CREDIT and nothing else: raising a monthly limit does
+  // not make a free-tier key paid, so offering that lever here would send the
+  // reader to a setting that cannot fix their run.
   if (r.isFreeTier === true) {
     const against = ceiling === null ? 'this run' : `a ${usd(ceiling)} run ceiling`;
     return { outcome: 'refuse',
       message: 'OpenRouter key cannot cover this run: the key is free tier, so every paid seat '
-        + `would be refused (${against}); add credit or raise the key's monthly limit `
+        + `would be refused (${against}); add credit at openrouter.ai/credits `
         + '— no seat was dispatched' };
   }
 
@@ -105,7 +127,8 @@ function decideCreditPreflight(result, maxCost) {
     // nothing to refuse. The ceiling is still printed so the notice says what
     // the run intends to spend.
     return { outcome: 'ok',
-      message: `OpenRouter credit ok (no key limit; run ceiling ${ceiling === null ? 'unreadable' : usd(ceiling)})` };
+      message: 'OpenRouter key limit ok (no monthly limit on the key; run ceiling '
+        + `${ceiling === null ? 'unreadable' : usd(ceiling)}${UNCHECKED_BOUNDARY})` };
   }
 
   if (ceiling === null) {
@@ -123,7 +146,8 @@ function decideCreditPreflight(result, maxCost) {
   }
 
   return { outcome: 'ok',
-    message: `OpenRouter credit ok (${usd(remaining)} remaining; run ceiling ${usd(ceiling)})` };
+    message: `OpenRouter key limit ok (${usd(remaining)} monthly limit remaining vs run ceiling `
+      + `${usd(ceiling)}${UNCHECKED_BOUNDARY})` };
 }
 
 module.exports = { decideCreditPreflight };
