@@ -8708,7 +8708,7 @@ Filed from the three council-leg-completion PRs (#246 idle-gate veto, #247 per-r
 release ritual (two live runs, $0.28: `--intent task`, and `--tools read` from a fake project
 whose seat was refused `.env` by `read[*.env]=deny` and `bash` as "not available", and continued).
 
-- [ ] **Policy: should an unverified or refused MAJORITY degrade the run?** Today (P3-R1, amended
+- [ ] **Policy: should an unverified or refused MAJORITY degrade the run?** RULED by the owner 2026-09-16 (open-issues review): degrade to exit 2 only when `unverified + refused >= half the bench`; a minority stays exit 0 with the surfaces as today. Not yet built — rides the verdict-surface (Cluster B) PR with #242 item 3, the #244 dead-row `conformance: clean` residue, #259 and #256's refusal classification. Today (P3-R1, amended
   by P3-R13) the seat census, the report rows, the CI title/footer and one end-of-run stderr line
   say it; the exit code stays 0, `run.json`/`verdict.json.degrades[]` stay clean, the Workspace
   GUI's lost-seat panels (which read `run.json.degrades`) stay dark, and the council-review check
@@ -8808,14 +8808,14 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
 - [ ] `seedFreeCouncil` after the single save is the one remaining partial-commit surface in the
   wizard's sink (pre-existing): a failed seed after a successful save leaves the aliases written
   and the council unseeded.
-- [ ] #212 waits for the `ipc-setup.js` split (294/300 at the cut; it cannot take #212's addition
+- [x] #212 waits for the `ipc-setup.js` split — DONE 2026-09-17: PR #262 extracted the key handlers into `electron/ipc-keys.js` (the split) and gated `save-key` on validation; see the Wave 1 section below. Original note: waits for the `ipc-setup.js` split (294/300 at the cut; it cannot take #212's addition
   without one).
 
 **The notice and the refresh (Phase 4, PR #254)**
-- [ ] `saveConfig` is a plain truncate-and-write — move it onto `atomic-write.js :: writeFileAtomic`
+- [x] `saveConfig` is a plain truncate-and-write — DONE 2026-09-17 as issue #258 / PR #261 (temp+rename via `writeFileAtomic`, symlinked target followed, Notices printed only after the rename). Original: move it onto `atomic-write.js :: writeFileAtomic`
   (council round 1, hard question 1: a crash mid-write truncates `config.json`). The exit hook no
   longer writes config at all; every other writer still does.
-- [ ] The `Notice: alias '<x>' matches the shipped recommendation — now following` lines print
+- [x] (DONE in PR #261 — the Notices are buffered and flushed after the rename.) The `Notice: alias '<x>' matches the shipped recommendation — now following` lines print
   BEFORE `saveConfig`'s write (pre-existing), so a failed write reports conversions that did not
   land.
 - [ ] The same-instant check-then-act race on the two stamps (two terminal exits within a few
@@ -8831,7 +8831,7 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
   CLOSED 2026-09-16 — the owner ran it in his own terminal after the release: no window flashed.
 
 **Council infrastructure**
-- [ ] OpenRouter credits: #254 round 3 lost its gpt leg to "This request would exceed your
+- [x] (FILED as #256, SHIPPED as PR #264 after three council rounds — see the Wave 1 section below.) OpenRouter credits: #254 round 3 lost its gpt leg to "This request would exceed your
   available credits given your current in-flight requests" — a refused leg costs the round. Check
   (or top up) the balance before the next council run; candidate: a preflight balance check in
   the workflow that degrades loudly before any seat is dispatched.
@@ -8849,3 +8849,100 @@ processed (rulings R-P4-1..22 in the committed plan). Parked at the cut, one lin
   except the version pin, so the same two advisories ship — `extract-zip` (high, no fix; the
   in-house extraction refuses symlink/traversal entries) and `hono ≤4.13.4` (moderate, fix
   available). Take the hono bump in a reviewed PR, not at a cut.
+
+## Wave 1 — open-issues review dispositions (2026-09-16/17)
+
+The 2026-09-16 review of the ten open issues (report and gh-ready drafts in the owner's vault,
+`output/2026-09-16-amicus-open-issues-review.md`) closed #241 and #244 as shipped in v4.9.8, filed
+#256 #257 #258 #259, and shipped five PRs, each behind the council-review gate (#260 on a docs-only
+waiver) and merged on the owner's in-branch call after verified fix waves:
+
+- #260 — #245: the shipped MODEL-NOTES `NO_OUTPUT_BACKSTOP` bullet (300 s default, the retry
+  escalates, a tool call disarms, `ttftMs` is the disarm moment). Docs-only.
+- #261 — #258: `saveConfig` writes `config.json` atomically (temp + rename, follows a symlinked
+  target), its Notices print only after the rename, the caller's object is untouched until the
+  write lands. One council round (14 Confirmed).
+- #262 — #212: the key IPC handlers move to `electron/ipc-keys.js`; `save-key` validates before it
+  persists (the CLI's `BLOCKS_SAVE` rule); a blank key is refused at the store boundary — which
+  also changed `amicus key` (it stored a blank before); the test-run write guard sits at the `.env`
+  chokepoint (`env-write-guard.js`). One round (14 Confirmed + 1 Singleton, two judges dead).
+- #263 — #251 item 3 + #202: the backstop death report says why the session probe answered
+  nothing (`(session: unknown — probe skipped|failed|no-status: …)`, a private marker an engine
+  cannot spoof); the `thin-cross-review` note counts died / empty / unparseable / pre-marker judges.
+  One round (7 Confirmed + 2 Singleton, two judges dead, one refused repair).
+- #264 — #256: the CI credit preflight. THREE rounds: r1 "Fix these first" proposed clamping
+  `--max-cost` to the remaining limit; r2 "Fundamental rethink" rejected the clamp as the wrong
+  lever and asked for the balance and the reservation math; r3 "Fix these first" corrected the gate
+  to the cheapest seat. Final shape: read the key's monthly limit AND the account balance; price the
+  bench's reservations from the provisioned alias map and a keyless models fetch (cheapest seat,
+  dearest seat, wave sum, chair); REFUSE only when even the cheapest bench seat cannot be funded (or
+  free tier, or nothing left); WARN below the dearest seat, the concurrent wave, or the chair; clamp
+  `--max-cost` to the money only as a spend bound; never fail the job except on a genuine refusal;
+  every decision message states what it does not guarantee. Also: the dead-leg note names the
+  retry's own cause; provider key-management URLs (path and query shapes) are redacted at the two
+  seams where engine prose becomes a death reason, with a perimeter test enumerating the seams.
+  ⚠️ INERT until a release ships the module (the workflow loads it from the global install by
+  design) — at the next cut, read the first post-release council run's step log for the
+  `OpenRouter key limit ok` notice.
+
+Deferred by the reviews — one line each, none blocks anything:
+
+**Config and key store**
+- [ ] `.config.json.<pid>.<hex>.tmp` orphans from a kill inside the temp→rename window have no
+  sweep (`session-index-tmp-sweep.js` is prefix-scoped to the index); a config-dir sweep in
+  `doctor --fix`. (#261)
+- [ ] A DANGLING `config.json` symlink is still replaced by a regular file (the dotfiles bootstrap
+  before the target exists); `lstat` + `readlink` fallback in `saveConfig`. (#261)
+- [ ] `atomic-write.js`'s docblock still claims "a crash mid-write leaves the original intact"
+  unqualified — the process-crash / no-fsync qualifier landed in `config.js` only. (#261)
+- [ ] An asynchronous EPIPE on a piped stderr is codebase-wide; `process.stderr.on('error', …)`
+  at startup is the general fix. (#261)
+- [ ] Rotted citations into `config.js`: `engine-variants.js:70`, `tests/utils/engine-variants.test.js:24`,
+  `tests/build-provider-models-local.test.js:84` — prefer `file.js :: symbol` anchors. (#261)
+- [ ] `migrateEnvFileKey`'s test-run guard sits inside its own best-effort `catch`, so that refusal
+  is SILENT (a skipped migration). (#262)
+- [ ] Drop the renderer's own key probe and render the SAVE's verdict — one round trip, and it
+  closes the revoked-between-probes window. (#262)
+- [ ] `logger.warn` on the empty-key refusal in `save-key` (the 401 refusal warns). (#262)
+- [ ] Containment: a POSIX filename containing a literal backslash splits into pseudo-segments
+  (false REFUSAL only, inside jest); `saveApiKey(provider, key, null)` throws a TypeError; the
+  `homedir() === null` branch is untested. (#262)
+- [ ] Bound `HEX_RE` in `tests/electron/electron-token-drift.test.js` — every 3–4-digit `#NNN`
+  issue reference in `electron/**` reads as a hex colour; tripped twice in one PR. (#262)
+
+**Council leg lifecycle and verdict surface**
+- [ ] Route the session-probe `detail` (a local engine HTTP error message) through
+  `redact-provider-error.js` now that #263 and #264 are both on main. (#263 B1)
+- [ ] `thinCrossReviewWhy` / `MIN_CROSS_REVIEW_JUDGES` exported with no consumer; a non-boolean
+  `died` lands in no bucket; a non-object non-empty status answer reads as "an empty status"; the
+  end-to-end S-W12 pin became a unit test. (#263)
+- [ ] `buildRoutingFailureLeg` sits outside the two redaction seams (amicus-authored text only
+  today; pinned as the known outside site); a future `metadata.reason = <provider text>` would
+  escape the perimeter pin. (#264)
+- [ ] Redaction can match a ≥32-char dotted/hyphenated doc slug under `/keys/` (accepted under the
+  length-floor ruling); `%` is not escaped in workflow annotations; `run-stages.test.js:538` is a
+  loose `toMatch`; a `MAX_COST` containing a newline fires the "run ceiling clamped" notice with
+  nothing clamped; an all-free `workflow_call` bench reads as unpriced (a permanent warn); the
+  models fetch is bounded by socket inactivity, not wall clock. (#264)
+- [ ] #256 Ask item 3 — a distinct classification of a provider refusal in `seatsReviewed` and the
+  report (schema change) — rides the Cluster B PR with the majority-degrade ruling above.
+
+**Test infrastructure**
+- [ ] `tests/setup/hermetic-config-dir.js` keys its scratch dir by jest worker only
+  (`amicus-hermetic-w<N>`), so full suites in SIBLING WORKTREES on one machine collide (EPERM,
+  observed twice this wave, pass on re-run). Key by pid or worktree too.
+
+**Council infrastructure — frequency record for #251 / #202, seven rounds**
+- Judge legs killed at the 480 s backstop: #261 r1 0 · #262 r1 2 (glm, qwen) · #263 r1 2 (glm,
+  deepseek) · #264 r1 1 · r2 2 (glm, deepseek) · r3 1 (deepseek) — 8 of 28 judge legs. Judges are
+  never retried, so five of seven rounds were adjudicated by two or three judges and every `a1`
+  finding was one-judge. Every Stage-1 first-attempt kill healed on retry; no seat was lost.
+- #263 r1: deepseek's seat reasoned 69 tokens and returned `unstructured`; its first repair was
+  refused → `seatsReviewed.refused: 1` (the #248 census working). Second instance of the
+  reasoning-absent class (PR #250 section above).
+- Two unanimous benches ruled in opposite directions on #264 (r1 proposed the clamp, r2 rejected
+  it). Both were right about something; neither verdict was authoritative alone. Council spend for
+  the wave: $2.54 across seven rounds, one cancelled.
+- CI ritual: the `council-review` label comes OFF the moment a round completes — a fix push on a
+  still-labelled PR auto-starts a paid round (happened once; cancelled inside its first minute,
+  $0.04).
