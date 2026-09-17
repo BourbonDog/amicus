@@ -8,20 +8,30 @@ All notable changes to Amicus are documented here. Format follows
 ### Added
 
 - **CI credit preflight** — `.github/workflows/council-review.yml` now checks the OpenRouter key's
-  remaining MONTHLY LIMIT against the run's cost ceiling before any seat is dispatched. Between
-  the bench pre-flight and the paid council step it calls the shipped probe
-  (`src/utils/openrouter-credit.js`) and rules on the answer with
-  `src/utils/council-credit-preflight.js :: decideCreditPreflight`: a free-tier key or a remaining
-  monthly limit below the run's `--max-cost` fails the step with `::error::` and exits 1 (zero
-  spend, no seat dispatched); an unanswerable probe emits `::warning::` and continues, so a
-  network blip never costs the repo a review; otherwise `::notice::` names the remaining figure
-  and the run ceiling. A key with no monthly limit is never a refusal, and the key never appears
-  in any output. **Boundary, stated in the notice itself:** `GET /api/v1/key` reports the monthly
-  limit only — it does not see the account balance or the in-flight `max_tokens` reservations
-  that were the multiplier behind three of the four refusals (#218), so a green preflight means
-  "the monthly limit is not what will refuse you", not "this run cannot be refused". Motivated by
-  run 35143585179, where a low remaining limit had the provider refuse four of seven legs in
-  2–3 s, consume their once-only retries and lose the round's quorum for $0.003. (#256)
+  remaining MONTHLY LIMIT before any seat is dispatched. Between the bench pre-flight and the paid
+  council step it calls the shipped probe (`src/utils/openrouter-credit.js`) and rules on the
+  answer with `src/utils/council-credit-preflight.js :: decideCreditPreflight`:
+  - a key that can fund **nothing** — free tier, or a monthly limit at or below zero — fails the
+    step with `::error::` and exits 1: zero spend, no seat dispatched;
+  - a limit that is merely **smaller than the run's ceiling** does not abort the run. It emits
+    `::warning::` and **clamps** the ceiling: the step publishes `effective_max_cost` and the paid
+    step passes it as `--max-cost`, so the run's own cost gate (exit 2 with degrade notes) bounds
+    the spend to what the key can fund instead of throwing away the reviews that would have
+    landed. `--max-cost` is a whole-run ceiling, not the expected spend;
+  - an unanswerable probe, an unreadable limit or an unusable ceiling emits `::warning::` and
+    continues, so a network blip never costs the repo a review;
+  - otherwise `::notice::` names the remaining figure and the run ceiling.
+
+  A key with no monthly limit is never a refusal; a malformed limit is *unknown*, never "no
+  limit". Nothing but a genuine refusal can fail the step — a missing, broken or renamed module, a
+  probe that throws or rejects, and any unhandled rejection all warn and continue, and the warning
+  is mirrored into the run's step summary. The key never appears in any output.
+  **Boundary, stated in the notice itself:** `GET /api/v1/key` reports the monthly limit only — it
+  does not see the account balance or the in-flight `max_tokens` reservations that were the
+  multiplier behind three of the four refusals (#218), so a green preflight means "the monthly
+  limit is not what will refuse you", not "this run cannot be refused". Motivated by run
+  35143585179, where a low remaining limit had the provider refuse four of seven legs in 2–3 s,
+  consume their once-only retries and lose the round's quorum for $0.003. (#256)
 
 ### Fixed
 
@@ -48,11 +58,12 @@ All notable changes to Amicus are documented here. Format follows
 - **Provider key-management URLs are redacted from death reasons** before they reach `run.json`.
   A refusal carrying `https://openrouter.ai/workspaces/default/keys/<64 hex>` — a key identifier
   inside the owner's account, not the key — was published unredacted inside the CI evidence
-  artifact. `src/utils/redact-provider-error.js` replaces the id in any `/keys/<id ≥32 chars>`
-  path segment with `<redacted>` and is applied at both seams where provider prose becomes a
-  leg's death reason in `src/headless.js` (the assistant message's error, and the engine-log
-  excerpt on a no-output backstop). Figures, doc links and short `/keys` paths are untouched.
-  (#256)
+  artifact. `src/utils/redact-provider-error.js` replaces an id of 32 characters or more with
+  `<redacted>` in a `/keys/<id>` path segment and in a `?key=`/`keys=`/`api_key=`/`apikey=`/
+  `token=` query parameter, and is applied at both seams where provider prose becomes a leg's
+  death reason in `src/headless.js` (the assistant message's error, and the engine-log excerpt on
+  a no-output backstop). Figures, doc links, short `/keys` paths and bare hex in prose — run ids,
+  shas, session ids — are untouched. (#256)
 
 > Deferred from #256 to the verdict-surface PR: classifying a provider refusal distinctly in the
 > census and report (issue Ask item 3) — it changes the verdict schema.

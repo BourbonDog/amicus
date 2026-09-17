@@ -858,13 +858,66 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('process.env.MAX_COST');
     });
 
-    test('the refusal branch is an ::error:: that exits 1, and the unknown branch only warns', () => {
+    test('ONE exit point, and the only non-zero exit is a genuine refusal', () => {
+      // Council #264 r1 / A1. Every decision, and every way this program can
+      // FAIL, funnels through `finish`, which is the only caller of
+      // process.exit — so "a preflight that cannot run never blocks a review"
+      // is provable from the text rather than hoped for.
       const step = creditStep();
-      expect(step).toMatch(/'refuse'[\s\S]{0,160}::error::/);
-      expect(step).toContain('process.exit(1)');
-      expect(step).toMatch(/'warn'[\s\S]{0,160}::warning::/);
-      // A blip must not block a review: every non-refusal path leaves 0.
+      expect(step.match(/process\.exit\(/g)).toHaveLength(1);
+      expect(step).toContain("process.exit(level === 'error' ? 1 : 0)");
+      // 'error' — the one level that exits non-zero — is PRODUCED in exactly one
+      // place, and that place is the refusal ternary. (The other two mentions of
+      // the string are comparisons inside `finish`, not producers.)
+      expect(step).toContain("d.outcome === 'refuse' ? 'error'");
+      expect(step.match(/\? 'error'/g)).toHaveLength(1);
       expect(step).toContain('::notice::');
+    });
+
+    test('the whole program is wrapped so nothing but a refusal can fail the job', () => {
+      // Council #264 r1 / A1: a synchronous throw (a bad `npm root -g`, a module
+      // that throws at load) and an unhandled rejection both used to leave a
+      // non-zero exit and take the review down with them.
+      const step = creditStep();
+      expect(step).toContain("process.on('unhandledRejection'");
+      expect(step).toContain('the preflight itself failed');
+      expect(step).toContain('the probe rejected');
+      // Two-arg `.then(onOk, onErr)`: a throw inside the SUCCESS handler must
+      // not be swallowed by the probe's own error path — it belongs to the
+      // unhandledRejection backstop, which is what makes the two distinguishable.
+      expect(step).toMatch(/\.then\(\(result\) => \{[\s\S]*?\}, \(err\) => \{/);
+    });
+
+    test('effective_max_cost is written on EVERY path, and the paid step is what uses it', () => {
+      // Council #264 r1 / B1. The clamp is only real if the paid step actually
+      // takes the clamped ceiling; and a path that skipped the write would hand
+      // it an empty --max-cost, which parseFloat turns into NaN — a silently
+      // DISABLED cost gate, the opposite of the intent.
+      const y = yml();
+      const step = creditStep();
+      expect(step).toContain('id: credit');
+      expect(step).toContain("'effective_max_cost=' + value");
+      // Written inside `finish`, the single exit point — so "every path" is
+      // structural, not a list of call sites that can be forgotten.
+      expect(step.match(/effective_max_cost=/g)).toHaveLength(1);
+      expect(step).toContain('GITHUB_OUTPUT');
+      const paid = y.slice(y.indexOf('Run the adjudicated council'), y.indexOf('Collect the spend receipt'));
+      expect(paid).toContain('EFFECTIVE_MAX_COST: ${{ steps.credit.outputs.effective_max_cost }}');
+      // Consumed as a shell variable, never as a `${{ }}` splice into the command
+      // line: max_cost is a workflow_call input, so a direct splice would be a
+      // script-injection seam.
+      expect(paid).toContain('--max-cost "$CEILING"');
+      expect(paid).not.toContain('--max-cost "$MAX_COST"');
+      expect(paid).toContain('CEILING="${EFFECTIVE_MAX_COST:-$MAX_COST}"');
+    });
+
+    test('the warning is mirrored into the step summary, not only into annotations', () => {
+      // Council #264 r1 / C1: a broken shipped module warns and continues by
+      // design; the accepted cost is that it can go unnoticed, so the same text
+      // lands on the run page where a reader will meet it.
+      const step = creditStep();
+      expect(step).toContain('GITHUB_STEP_SUMMARY');
+      expect(step).toContain('### OpenRouter credit preflight');
     });
 
     test('both modules resolve through ONE joined path, so a typo in it cannot pass this suite', () => {
@@ -907,9 +960,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // A renamed export throws nothing at require time; it is caught by shape.
       expect(step).toContain("typeof checkOpenRouterCredit !== 'function'");
       expect(step).toContain('does not export checkOpenRouterCredit/decideCreditPreflight');
-      // Every load failure continues the review. The ONLY non-zero exit in this
-      // step is the credit refusal.
-      expect(step.match(/process\.exit\(1\)/g)).toHaveLength(1);
+      // Every load failure continues the review — both branches hand off to the
+      // single exit point rather than exiting themselves (the exit code that
+      // results is pinned by the ONE-exit-point test above, and executed by the
+      // harness below).
+      expect(step.match(/finish\('warning'/g).length).toBeGreaterThanOrEqual(2);
     });
 
     test('the step program is syntactically valid JavaScript as the runner will see it', () => {
@@ -932,6 +987,182 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // to leak.
       expect(step).not.toContain('$OPENROUTER_API_KEY');
       expect(step).not.toMatch(/echo[^\n]*OPENROUTER_API_KEY/);
+    });
+
+    /**
+     * The heredoc, EXECUTED — the same "run what the runner runs" discipline the
+     * review-diff suite above uses for `filter-diff.js`.
+     *
+     * String pins cannot show that the program CONTINUES after a failure; only
+     * running it can, and council #264 r1 / A1 is exactly a claim about exit
+     * codes. `npm root -g`, `fs`, `console` and `process` are stubbed, so no
+     * child process is spawned, nothing is written to disk and the run is
+     * identical on every platform.
+     *
+     * `process.exit` records instead of throwing: the program's own `finished`
+     * latch then absorbs the statements that follow a real exit, which is what
+     * keeps each run to exactly one annotation — and the latch is a genuine
+     * belt in production too, where `process.exit` really does stop the process.
+     */
+    describe('the harvested program, executed (council #264 r1 / A1, B1, C1)', () => {
+      const FAKE_ROOT = path.join(path.sep, 'fake', 'global', 'root');
+      const modPath = (file) => path.join(FAKE_ROOT, 'amicus', 'src', 'utils', file);
+
+      const program = () => {
+        const y = yml();
+        const open = y.indexOf("cat > credit-preflight.js <<'CREDIT'");
+        return y.slice(y.indexOf('\n', open) + 1, y.indexOf('\n          CREDIT\n', open))
+          .split('\n').map((l) => l.replace(/^ {10}/, '')).join('\n');
+      };
+
+      /**
+       * @param {object} o.modules map of file name -> module object, or a
+       *   function to throw (simulating a load failure). Missing = not shipped.
+       */
+      const run = async (o = {}) => {
+        const out = { logs: [], errors: [], exits: [], files: {}, handlers: {} };
+        const append = (f, data) => { out.files[f] = (out.files[f] || '') + data; };
+        const stub = {
+          'child_process': { execSync: () => `${FAKE_ROOT}\n` },
+          'path': path,
+          'fs': { appendFileSync: append },
+        };
+        const req = (id) => {
+          if (Object.prototype.hasOwnProperty.call(stub, id)) { return stub[id]; }
+          for (const [file, mod] of Object.entries(o.modules || {})) {
+            if (id === modPath(file)) {
+              if (typeof mod === 'function') { throw mod(); }
+              return mod;
+            }
+          }
+          const err = new Error(`Cannot find module '${id}'\nRequire stack:\n- credit-preflight.js`);
+          err.code = 'MODULE_NOT_FOUND';
+          throw err;
+        };
+        const ctx = vm.createContext({
+          require: req,
+          console: { log: (m) => out.logs.push(m), error: (m) => out.errors.push(m) },
+          process: {
+            env: { MAX_COST: '2.00', OPENROUTER_API_KEY: 'sk-never-printed',
+              GITHUB_OUTPUT: 'OUT', GITHUB_STEP_SUMMARY: 'SUMMARY', ...(o.env || {}) },
+            exit: (code) => { out.exits.push(code); },
+            on: (name, fn) => { out.handlers[name] = fn; },
+          },
+        });
+        new vm.Script(program()).runInContext(ctx);
+        await new Promise((resolve) => setImmediate(resolve));
+        out.annotations = out.logs.concat(out.errors).filter((l) => /^::/.test(l));
+        return out;
+      };
+
+      const probe = (result) => ({ checkOpenRouterCredit: () => Promise.resolve(result) });
+      const decide = () => require('../../src/utils/council-credit-preflight');
+      const shipped = (result) => ({
+        'openrouter-credit.js': probe(result),
+        'council-credit-preflight.js': decide(),
+      });
+
+      test('ok: ::notice::, exit 0, and the ORIGINAL ceiling is written', async () => {
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 12.34 }) });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations).toHaveLength(1);
+        expect(r.annotations[0]).toMatch(/^::notice::OpenRouter key limit ok \(\$12\.34 /);
+        expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
+        expect(r.files.SUMMARY).toContain('### OpenRouter credit preflight');
+        expect(r.files.SUMMARY).toContain('Run ceiling in force: $2.00');
+      });
+
+      test('clamp: ::warning::, exit 0, and the CLAMPED ceiling is what the paid step will read', async () => {
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }) });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toMatch(/^::warning::OpenRouter key limit is below this run's ceiling/);
+        expect(r.files.OUT).toBe('effective_max_cost=0.42\n');
+      });
+
+      test('refuse: ::error:: on stderr, exit 1, and the output is STILL written', async () => {
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: true, limitRemaining: null }) });
+        expect(r.exits).toEqual([1]);
+        expect(r.errors[0]).toMatch(/^::error::OpenRouter key cannot cover this run/);
+        expect(r.logs.filter((l) => /^::/.test(l))).toHaveLength(0); // never on stdout
+        expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
+      });
+
+      test('A1: a probe that THROWS SYNCHRONOUSLY warns and exits 0', async () => {
+        const r = await run({ modules: {
+          'openrouter-credit.js': { checkOpenRouterCredit: () => { throw new Error('boom sync'); } },
+          'council-credit-preflight.js': decide(),
+        } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toContain('the preflight itself failed: boom sync');
+        expect(r.files.OUT).toBe('effective_max_cost=2.00\n');
+      });
+
+      test('A1: a probe that REJECTS warns and exits 0', async () => {
+        const r = await run({ modules: {
+          'openrouter-credit.js': { checkOpenRouterCredit: () => Promise.reject(new Error('boom async')) },
+          'council-credit-preflight.js': decide(),
+        } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toContain('the probe rejected: boom async');
+      });
+
+      test('A1: the unhandledRejection backstop warns and exits 0', async () => {
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 9 }) });
+        expect(typeof r.handlers.unhandledRejection).toBe('function');
+        const fresh = await run({ modules: { 'openrouter-credit.js': { checkOpenRouterCredit: () => new Promise(() => {}) },
+          'council-credit-preflight.js': decide() } });
+        expect(fresh.exits).toEqual([]); // still pending — nothing decided yet
+        fresh.handlers.unhandledRejection(new Error('stray'));
+        expect(fresh.exits).toEqual([0]);
+        // `annotations` was snapshotted before the handler fired, so read the
+        // live stream rather than the snapshot.
+        expect(fresh.logs[0]).toContain('an unhandled rejection: stray');
+        expect(fresh.logs[0]).toMatch(/^::warning::/);
+      });
+
+      test('A1: a module the release has not shipped yet warns and exits 0', async () => {
+        const r = await run({ modules: { 'openrouter-credit.js': probe({ checked: false }) } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations).toHaveLength(1);
+        expect(r.annotations[0]).toContain('does not ship src/utils/council-credit-preflight.js yet');
+      });
+
+      test('A1: a BROKEN shipped module warns, exits 0, and is NOT called the bootstrap gap', async () => {
+        const r = await run({ modules: {
+          'openrouter-credit.js': probe({ checked: false }),
+          'council-credit-preflight.js': () => new SyntaxError('Unexpected identifier'),
+        } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toContain('loading src/utils/council-credit-preflight.js failed');
+        expect(r.annotations[0]).not.toContain('does not ship');
+      });
+
+      test('A1: a RENAMED export warns and exits 0 instead of dying on a TypeError', async () => {
+        const r = await run({ modules: {
+          'openrouter-credit.js': probe({ checked: false }),
+          'council-credit-preflight.js': { decideCreditPreflightRenamed: () => ({}) },
+        } });
+        expect(r.exits).toEqual([0]);
+        expect(r.annotations[0]).toContain('does not export checkOpenRouterCredit/decideCreditPreflight');
+      });
+
+      test('a newline in MAX_COST cannot open a second output key', async () => {
+        // max_cost is a workflow_call input, so its value is caller-controlled.
+        const r = await run({ env: { MAX_COST: '2.00\nADMIN=1' },
+          modules: shipped({ checked: true, isFreeTier: false, limitRemaining: null }) });
+        const lines = r.files.OUT.split('\n').filter(Boolean);
+        expect(lines).toHaveLength(1);
+        // The newline is neutralised, so the injected text survives only as part
+        // of the ONE value — it never becomes a key the runner will parse.
+        const keys = lines.map((l) => l.slice(0, l.indexOf('=')));
+        expect(keys).toEqual(['effective_max_cost']);
+      });
+
+      test('the key never appears in anything the program writes or prints', async () => {
+        const r = await run({ modules: shipped({ checked: true, isFreeTier: false, limitRemaining: 0.42 }) });
+        const everything = JSON.stringify([r.logs, r.errors, r.files]);
+        expect(everything).not.toContain('sk-never-printed');
+      });
     });
   });
 });
