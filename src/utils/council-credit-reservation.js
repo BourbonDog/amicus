@@ -73,27 +73,31 @@ function catalogKey(id) {
  * the same rule the bench pre-flight step applies one step earlier.
  *
  * @param {{aliases: object, seats: string[]}} o
- * @returns {{ids: string[], unresolved: string[]}} `unresolved` is REPORTED, not
- *   dropped: a seat whose price cannot be looked up leaves the bench unpriced,
- *   and the caller has to be able to say which one.
+ * @returns {{ids: string[], unresolved: string[]}} ONE id per seat, duplicates
+ *   included — the sum over them is what the concurrent wave holds. `unresolved`
+ *   is REPORTED, not dropped: a seat whose price cannot be looked up leaves the
+ *   bench unpriced, and the caller has to be able to say which one.
  */
 function resolveBenchIds({ aliases, seats } = {}) {
   const map = (aliases && typeof aliases === 'object' && !Array.isArray(aliases)) ? aliases : {};
   const list = Array.isArray(seats) ? seats : [];
   const ids = [];
   const unresolved = [];
-  const seen = new Set();
   for (const raw of list) {
     const seat = typeof raw === 'string' ? raw.trim() : '';
     if (!seat) { continue; }
     const resolved = seat.indexOf('/') !== -1 ? seat : map[seat];
     const key = catalogKey(resolved);
     if (!key) {
+      // Reported once, however many seats share the unresolvable name.
       if (!unresolved.includes(seat)) { unresolved.push(seat); }
       continue;
     }
-    if (seen.has(key)) { continue; }
-    seen.add(key);
+    // ⚠️ ONE ID PER SEAT — duplicates are NOT collapsed (council #264 r3
+    // polish). Two aliases resolving to one model are still two concurrent
+    // requests, each holding its own max_tokens reservation, so deduping here
+    // made `waveUsd` under-count the wave by exactly the duplicate's share.
+    // `cheapest`/`dearest` are min/max and cannot notice the difference.
     ids.push(key);
   }
   return { ids, unresolved };

@@ -12,9 +12,12 @@
  * COUNCIL #264 r2 RESHAPED THIS AGAIN, and the bench was right twice:
  *
  *  - HQ1 — the AGGREGATE `--max-cost` is not the quantity OpenRouter refuses on.
- *    A per-request `max_tokens` RESERVATION is. So the decision now takes a
- *    priced reservation: below one seat's reservation nothing can be dispatched
- *    (refuse); below `seats x` it the first wave will see refusals (warn).
+ *    A per-request `max_tokens` RESERVATION is. So the decision takes a priced
+ *    reservation — and, since council #264 r3, FOUR figures from it: below the
+ *    CHEAPEST bench seat nothing can be dispatched (refuse); below the DEAREST
+ *    those seat(s) will be refused while a cheaper quorum may still seat (warn);
+ *    below the bench's SUM the wave cannot seat concurrently (warn); and the
+ *    CHAIR is priced apart, reported as a clause, never a reason to refuse.
  *  - HQ2 — `/api/v1/key` reports the key's monthly CAP only. A key with no cap
  *    (`limitRemaining: null`) on a depleted ACCOUNT passed as `ok`. The decision
  *    now takes a second probe and uses the MINIMUM of the two.
@@ -202,6 +205,32 @@ describe('#256 decideCreditPreflight', () => {
       expect(d.outcome).toBe('ok');
     });
 
+    test('a seat count that is not a positive integer falls back to one seat', () => {
+      // `seats` only labels the ok message now (the wave figure comes from the
+      // reservation), but a NaN would print "the NaN-seat first wave" — so the
+      // fallback stays, and so does its pin.
+      for (const seats of [0, -3, NaN, null, undefined, 'four', 2.5]) {
+        const d = decide({ seats, credit: credit({ limitRemaining: 50 }),
+          balance: balance(50) }, '3.00');
+        expect(d.outcome).toBe('ok');
+        expect(d.message).toContain('1-seat');
+      }
+    });
+
+    test('the chair being UNPRICEABLE is said out loud on a warn, and never invents one', () => {
+      // Council #264 r3 polish: `unpricedChair` was collected and never read.
+      const withWarn = decide({ reservation: priced({ chairUsd: null, unpricedChair: ['x/y'] }),
+        credit: credit({ limitRemaining: 1 }), balance: balance(1) }, '10.00');
+      expect(withWarn.outcome).toBe('warn');
+      expect(withWarn.message).toContain('the chair could not be priced');
+      // On a clean run it stays silent — an unpriced chair is not a problem with
+      // the bench, so it must not turn an `ok` into a warning.
+      const clean = decide({ reservation: priced({ chairUsd: null, unpricedChair: ['x/y'] }),
+        credit: credit({ limitRemaining: 50 }), balance: balance(50) }, '3.00');
+      expect(clean.outcome).toBe('ok');
+      expect(clean.message).not.toContain('could not be priced');
+    });
+
     test('an UNPRICED bench warns and skips the rule — never ok', () => {
       const d = decide({ reservation: UNPRICED });
       expect(d.outcome).toBe('warn');
@@ -331,6 +360,32 @@ describe('#256 decideCreditPreflight', () => {
       expect(clamp(0.59)).toBe(0.59);
       expect(clamp(2.675)).toBe(2.67);   // still floors a real third decimal
       expect(clamp(1.239)).toBe(1.23);
+    });
+
+    /**
+     * Council #264 r3 polish. `usd()` ROUNDED while the clamp FLOORED, so the
+     * same message could print a figure above the money it was describing:
+     * $1.236 rendered "$1.24 ... capped at $1.23". Every money figure is floored
+     * now — to the cent above one cent, to four decimals below it — so no
+     * rendered figure can exceed the balance, and the sub-cent sentence cannot
+     * contradict itself ($0.00999999 was printing "$0.0100 ... below one cent").
+     */
+    test('EVERY rendered figure is floored to the money, never rounded up', () => {
+      const d = decide({ credit: credit({ limitRemaining: 1.236 }), balance: balance(1.236),
+        reservation: CHEAP_BENCH }, '10.00');
+      expect(d.effectiveMaxCost).toBe(1.23);
+      expect(d.message).toContain('$1.23');
+      expect(d.message).not.toContain('$1.24');
+    });
+
+    test('a sub-cent figure floors too, so it can never read as $0.0100', () => {
+      const d = decide({ credit: credit({ limitRemaining: 0.00999999 }),
+        balance: balance(0.00999999), reservation: CHEAP_BENCH });
+      expect(d.outcome).toBe('refuse');
+      expect(d.message).toContain('below one cent');
+      expect(d.message).toContain('$0.0099');
+      expect(d.message).not.toContain('$0.0100');
+      expect(d.message).not.toContain('$0.01 ');
     });
 
     test('the cent arithmetic never rounds UP past the real money', () => {

@@ -880,7 +880,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(step).toContain('the CHAIR is not in');
       expect(step).toContain('SUM of the bench');
       // And the two superseded sentences must be gone for good.
-      expect(step).not.toContain('is never a refusal');
+      // The ORIGINAL sentence, not a fragment of it: `is never a refusal`
+      // stopped matching only because the new chair bullet happens to read
+      // "is, never a refusal" — a comma away from a pin that fires on the
+      // correct text and misses the wrong one.
+      expect(step).not.toContain('reports limit_remaining null and is');
       expect(step).not.toMatch(/Only for a key that can fund NOTHING/);
     });
 
@@ -1154,7 +1158,11 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
         return out;
       };
 
-      /** The bench and chair of the real CI map, priced so one seat reserves $0.96. */
+      /**
+       * The bench and chair of the real CI map. Priced so the four gate figures
+       * are all distinct: qwen $0.0128 (cheapest), gpt $0.96 (dearest), the four
+       * bench rows $1.02 together, and the chair $0.64 apart.
+       */
       const DEFAULT_MAP = {
         outputBudget: 64000,
         aliases: {

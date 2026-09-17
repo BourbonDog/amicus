@@ -15,9 +15,10 @@
  * messages — a module that would not load, a probe that threw — report that the
  * check did not RUN at all, so they have nothing to qualify:
  *   GUARANTEES: it refuses before any seat is dispatched when a refusal is
- *   CERTAIN (nothing on the key can fund even one seat's reservation), warns
- *   when refusals are LIKELY (the first wave cannot be funded in full), and
- *   bounds aggregate spend by clamping `--max-cost` to the money that is left.
+ *   CERTAIN (the money cannot fund even the CHEAPEST bench seat's reservation),
+ *   warns when refusals are LIKELY (the money cannot fund the dearest seat, the
+ *   whole concurrent wave, or the chair), and bounds aggregate spend by clamping
+ *   `--max-cost` to the money that is left.
  *   CANNOT: prevent a per-request refusal once seats are dispatched. Reservations
  *   are charged against the key CONCURRENTLY and settle asynchronously, so the
  *   money available to leg four is not knowable before legs one to three exist.
@@ -32,8 +33,19 @@
  * THE RESERVATION, not the aggregate (council #264 r2, HQ1 / findings A1+D1):
  * `--max-cost` is a whole-run ceiling, and OpenRouter never refuses on it. It
  * refuses on ONE request's `max_tokens` reservation. `utils/council-credit-
- * reservation.js` prices that; below one seat's worth nothing can be dispatched,
- * and below the first wave's worth some of it will be refused.
+ * reservation.js` prices EVERY bench row and hands back four figures, because
+ * one is not enough to gate on (council #264 r3, B1 + C1):
+ *   cheapest seat  — below it NOTHING can be dispatched. This is the refusal,
+ *                    and it is the cheapest rather than the dearest because a
+ *                    run whose cheap seats could still reach quorum must not be
+ *                    thrown away: that is the harm this preflight exists to stop.
+ *   dearest seat   — below it those seat(s) will be refused, but a cheaper
+ *                    quorum may still seat. A warning.
+ *   the bench SUM  — below it the wave cannot be funded concurrently, because
+ *                    every seat holds its OWN reservation at the same time.
+ *   the chair      — priced APART and reported as a clause. The chair runs
+ *                    sequentially, after the wave, so a cost incurred later can
+ *                    never be a reason not to start the bench.
  *
  * `clamp` survives as a SPEND BOUND only, and is the weakest state: any warn
  * outranks it, because "your spend is capped lower" matters less than "some of
@@ -43,16 +55,38 @@
 'use strict';
 
 /**
+ * The one flooring primitive both the clamp and the renderer use.
+ * `Math.floor(0.29 * 100)` is 28 — `0.29 * 100` is 28.999999999999996 in IEEE
+ * 754 — so the epsilon is what keeps an exact cent exact. It is 1e-11 dollars:
+ * far under any real balance granularity, far over the representation error.
+ * @param {number} v @param {number} units 100 for cents, 10000 for sub-cent
+ * @returns {number} the value in whole units, floored
+ */
+function floorUnits(v, units) {
+  return Math.floor(v * units + 1e-9);
+}
+
+/**
  * Format a USD figure for a human reading an Actions annotation.
- * Two decimals, except for a non-zero amount that would round to $0.00 — the
- * incident's own run spent $0.003, so "you have $0.00" would be a lie about a
- * real balance. The sign leads (`-$3.00`), because `$-3.00` is not money
- * (council #264 r2, finding D5).
+ *
+ * ⚠️ FLOORED, NEVER ROUNDED (council #264 r3 polish). `toFixed` rounds, so the
+ * renderer could print a figure ABOVE the money it described while the clamp
+ * floored: $1.236 rendered "$1.24 … capped at $1.23", and $0.00999999 rendered
+ * "$0.0100 … below one cent" — a sentence denying its own figure. Every money
+ * figure now comes off the same floor the clamp uses, so none can exceed the
+ * balance.
+ *
+ * Sub-cent values keep four decimals: the threshold is the CENT itself, not
+ * half a cent, because "below one cent" has to be readable beside the figure it
+ * describes (council #264 r3 / C2). The sign leads (`-$3.00`), because
+ * `$-3.00` is not money (council #264 r2 / D5) — and a negative floors AWAY
+ * from zero, so it never overstates what is left either.
  */
 function usd(n) {
-  const sign = n < 0 ? '-' : '';
-  const v = Math.abs(n);
-  return `${sign}$${(v !== 0 && v < 0.01) ? v.toFixed(4) : v.toFixed(2)}`;
+  const sub = n !== 0 && Math.abs(n) < 0.01;
+  const units = sub ? 10000 : 100;
+  const v = floorUnits(n, units) / units;
+  return `${v < 0 ? '-' : ''}$${Math.abs(v).toFixed(sub ? 4 : 2)}`;
 }
 
 /** What every message ends with. See the module header. */
@@ -81,7 +115,8 @@ const shown = (v) => (typeof v === 'number' ? String(v) : JSON.stringify(v));
  *
  * @param {{credit: object, balance: object, reservation: object, seats: number}} inputs
  *   `credit` from `checkOpenRouterCredit`, `balance` from `checkOpenRouterBalance`,
- *   `reservation` from `priceOneSeatReservation`, `seats` the concurrent bench size.
+ *   `reservation` from `priceBenchReservation`, `seats` the concurrent bench size
+ *   (a label for the ok message; the wave figure comes from the reservation).
  * @param {number|string} maxCost the run's `--max-cost` ceiling in USD
  * @returns {{outcome: 'ok'|'warn'|'refuse'|'clamp', message: string,
  *   effectiveMaxCost: number|null}} `effectiveMaxCost` is the clamped spend bound
@@ -148,13 +183,11 @@ function decideCreditPreflight(inputs, maxCost) {
       + `reserves ${usd(cheapest)} up front (its output price x the run's output budget), so the `
       + 'provider would refuse every request before it ran');
   }
-  // Cents, decided ONCE. `Math.floor(0.29 * 100)` is 28 — `0.29 * 100` is
-  // 28.999999999999996 in IEEE 754 — so the clamp published a ceiling a cent
-  // BELOW the money for every remainder whose second decimal is a 9 (council
-  // #264 r3 / A1). The epsilon is 1e-11 dollars: far under any real balance
-  // granularity, and far over the representation error. Deriving the sub-cent
-  // refusal from the SAME cents value is what keeps the two from disagreeing.
-  const cents = remaining === null ? null : Math.floor(remaining * 100 + 1e-9);
+  // Cents, decided ONCE, through the same `floorUnits` the renderer uses — so
+  // the published ceiling, the sub-cent refusal and every printed figure agree
+  // by construction rather than by three matching expressions (council #264 r3 /
+  // A1 and its polish).
+  const cents = remaining === null ? null : floorUnits(remaining, 100);
   if (cents !== null && cents <= 0) {
     return refuse(`${usd(remaining)} of the ${source} remains, below one cent — too little to `
       + "give the run any usable ceiling; add credit or raise the key's monthly limit");
@@ -170,8 +203,14 @@ function decideCreditPreflight(inputs, maxCost) {
   // of its own: reporting it must not be able to change the bench's outcome.
   const chairClause = (remaining !== null && chairUsd !== null && remaining < chairUsd)
     ? `; the chair reserves ${usd(chairUsd)} and may be refused after the bench` : '';
+  // An UNPRICEABLE chair is worth saying — it was collected and never read until
+  // council #264 r3's polish — but only alongside a warning the bench already
+  // earned. On its own it is not a problem with the bench, and promoting an `ok`
+  // over it would be the chair gating the bench by the back door.
+  const chairUnpriced = (!chairClause && Array.isArray(r.unpricedChair) && r.unpricedChair.length)
+    ? `; the chair could not be priced (${r.unpricedChair.join(', ')})` : '';
   const benchWarn = (why) => withBound({ outcome: 'warn', effectiveMaxCost,
-    message: `${why}${chairClause}${GUARANTEE}` });
+    message: `${why}${chairClause}${chairUnpriced}${GUARANTEE}` });
 
   // ---- warnings: states we cannot clear, or in which refusals are LIKELY ----
   if (b.checked !== true) {

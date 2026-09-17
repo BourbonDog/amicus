@@ -11,15 +11,19 @@
  * about ONE request's `max_tokens` reservation against the key's remaining
  * money, with no reference to any aggregate at all.
  *
- * So the preflight has to price the thing that actually gets refused:
+ * So the preflight has to price the thing that actually gets refused, per row:
  *
- *   oneSeatReservationUsd = outputBudget x max(pricing.completion over the bench)
+ *   seatReservationUsd = outputBudget x that row's pricing.completion
  *
  * `outputBudget` and the bench's ids come from the alias map this job's own
  * earlier step provisioned; the per-token completion prices come from a keyless
- * `GET /api/v1/models`. Below that figure NOTHING can be dispatched — that is a
- * refusal. Below `seats x` it, the first wave will see refusals — that is a
- * warning. Unpriced, the rule is skipped and the outcome is a warning, never ok.
+ * `GET /api/v1/models`. Four figures come out of it (council #264 r3, B1 + C1):
+ * the CHEAPEST bench seat — below it nothing at all can be dispatched, which is
+ * the refusal; the DEAREST — below it those seat(s) will be refused while a
+ * cheaper quorum may still seat; the SUM over the bench — below it the wave
+ * cannot be funded concurrently, since each seat holds its own reservation; and
+ * the CHAIR, priced apart because it runs sequentially and can never gate the
+ * bench. Unpriced, the rule is skipped and the outcome is a warning, never ok.
  */
 
 const https = require('https');
@@ -56,9 +60,12 @@ describe('#256 resolveBenchIds', () => {
     expect(r.unresolved).toEqual(['nope']);
   });
 
-  test('blanks and duplicates are removed; order is preserved', () => {
+  test('blanks are dropped but DUPLICATES are kept — two seats hold two reservations', () => {
+    // Council #264 r3 polish. Deduping by catalog key made the wave SUM
+    // under-count: two aliases pointing at one model are still two concurrent
+    // requests, each holding its own max_tokens reservation. One id per SEAT.
     const r = resolveBenchIds({ aliases: ALIASES, seats: ['glm', '', '  ', 'glm', 'qwen'] });
-    expect(r.ids).toEqual(['z-ai/glm-5.3', 'qwen/qwen3.8-27b']);
+    expect(r.ids).toEqual(['z-ai/glm-5.3', 'z-ai/glm-5.3', 'qwen/qwen3.8-27b']);
   });
 
   test('a missing or unusable map yields no ids and no crash', () => {
@@ -110,6 +117,13 @@ describe('#256 priceBenchReservation', () => {
     const r = price();
     expect(r.waveUsd).toBeLessThan(r.dearestSeatUsd * BENCH.length);
     expect(r.waveUsd).toBeCloseTo(1.0048, 10);
+  });
+
+  test('two aliases on ONE model still reserve twice over (council #264 r3 polish)', () => {
+    const r = price({ benchIds: ['openai/gpt-5.6-terra', 'openai/gpt-5.6-terra'] });
+    expect(r.cheapestSeatUsd).toBeCloseTo(0.96, 10);   // min is unaffected
+    expect(r.dearestSeatUsd).toBeCloseTo(0.96, 10);    // max is unaffected
+    expect(r.waveUsd).toBeCloseTo(1.92, 10);           // the SUM is not
   });
 
   test('a one-row bench makes cheapest, dearest and wave the same figure', () => {
