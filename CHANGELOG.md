@@ -25,6 +25,11 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **The shipped `second-opinion` skill's `MODEL-NOTES.md` `NO_OUTPUT_BACKSTOP` bullet said 120s
+  and claimed "the retry reuses the same threshold" — both stale since the default moved to 300s.**
+  Corrected to the v4.11.0 source: 300s default (`DEFAULT_NO_OUTPUT_BACKSTOP_MS`), the retry's
+  actual escalation rule (doubled, clamped strictly below the leg cap), the tool-call disarm, and
+  `ttftMs` as the disarm moment usable to size an override. (#245)
 - **The still-dead note names the retry's OWN cause** when it differs from the first failure's.
   `run.json`'s dead-leg prose read `the leg ended 'error': NO_OUTPUT_BACKSTOP …; its once-only
   retry also ended 'error'` for a seat whose retry was in fact REFUSED by the provider two
