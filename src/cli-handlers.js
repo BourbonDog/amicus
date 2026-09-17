@@ -119,6 +119,10 @@ async function handleKey(args) {
   const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey, loadEnvEntries, PROVIDER_ENV_MAP } = require('./utils/api-key-store');
   const { validateApiKey } = require('./utils/api-key-validation');
   const { getLocalProviders } = require('./utils/local-providers');
+  // From env-raw-store directly, not through api-key-store's re-exports: this is
+  // the same predicate saveApiKey/saveRawEnv refuse with, so the CLI and the
+  // store cannot drift apart on what "blank" means.
+  const { isBlankSecret } = require('./utils/env-raw-store');
 
   const provider = args._[1];
   const keyArg = args._[2];
@@ -175,8 +179,15 @@ async function handleKey(args) {
     return;
   }
 
-  // Save mode: key required
-  if (!keyArg) {
+  // Save mode: key required. isBlankSecret (env-raw-store.js) covers the
+  // whitespace-only case this guard used to miss — a blank key is a WIPE, not a
+  // save: the store rewrites `<PROVIDER>_API_KEY=<real key>` with an empty
+  // value. saveApiKey refuses it at the boundary, but reaching it from here
+  // meant probing the network first and printing "Saving the key anyway …"
+  // (the `status: null` arm below — a trimmed-to-empty key is unverifiable, not
+  // a 401) directly above the store's `Error:`. Refused before both now.
+  // Council #262 r1.
+  if (isBlankSecret(keyArg)) {
     console.error(`Error: API key is required. Usage: amicus key ${provider} <apikey>`);
     process.exit(1);
   }

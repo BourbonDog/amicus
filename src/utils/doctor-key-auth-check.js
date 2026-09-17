@@ -6,7 +6,7 @@
  *
  * WHY IT EXISTS: doctor's `keys` row tests PRESENCE only — readApiKeys()
  * returns booleans — and validateApiKey() was called at exactly two SAVE-TIME
- * sites (electron/ipc-setup.js, src/cli-handlers.js). A key that rotted after
+ * sites (electron/ipc-keys.js, src/cli-handlers.js). A key that rotted after
  * it was entered, or that reached .env by any path other than the wizard /
  * `amicus key`, was never re-checked: #210's reporter had a green doctor while
  * the stored DeepSeek key returned 401 and the catalog served 0 deepseek rows.
@@ -46,7 +46,7 @@
  *      escapes, and resolves rather than rejecting on a synchronous throw from
  *      https.get. That is the ROOT fix (council finding 3, PR 221): the Google
  *      probe embeds the key as `?key=...`, and the two save-time call sites
- *      have no protection of their own — electron/ipc-setup.js hands
+ *      have no protection of their own — electron/ipc-keys.js hands
  *      `err.message` to the renderer and logs it, and src/cli-handlers.js has
  *      no try/catch at all.
  *   4. Each probe here is STILL individually caught, because this module must

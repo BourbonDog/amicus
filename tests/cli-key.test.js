@@ -137,6 +137,37 @@ describe('handleKey — save', () => {
     exitSpy.mockRestore();
   });
 
+  // Council #262 r1 round 2. A whitespace-only key is a WIPE, not a save: the
+  // store rewrites `<PROVIDER>_API_KEY=<real key>` with a blank value. The
+  // boundary refusal in saveApiKey already stopped that, but the CLI reached it
+  // the long way round — it probed the network first, then printed
+  // "Saving the key anyway …" before the store's refusal exited 1, which reads
+  // as "we saved it" immediately above "Error". Refused next to the existing
+  // !keyArg guard now: before the probe, and before that sentence.
+  test.each([
+    ['whitespace only', '   '],
+    ['a tab', '\t'],
+  ])('refuses %s before probing, without the "saving anyway" line', async (_label, key) => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    try {
+      await expect(handleKey({ _: ['key', 'deepseek', key] })).rejects.toThrow('exit');
+
+      expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('API key is required'));
+      expect(validateApiKey).not.toHaveBeenCalled();   // no network probe
+      expect(saveApiKey).not.toHaveBeenCalled();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+
+      const said = (spy) => spy.mock.calls.flat().join('\n');
+      expect(said(consoleWarnSpy)).not.toContain('Saving the key anyway');
+      expect(said(consoleSpy)).not.toContain('Saving the key anyway');
+      expect(said(consoleErrSpy)).not.toContain('Saving the key anyway');
+    } finally {
+      exitSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+    }
+  });
+
   test('prints error and exits when saveApiKey fails after valid key', async () => {
     validateApiKey.mockResolvedValue({ valid: true });
     saveApiKey.mockReturnValue({ success: false, error: 'File permission denied' });
