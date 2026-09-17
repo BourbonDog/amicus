@@ -27,14 +27,19 @@
 /**
  * A `/keys/` path segment followed by an identifier: at least 32 characters of
  * the URL-safe id alphabet, where a percent-escape (`%2F`) counts as one
- * character because that is what it encodes. Case-insensitive, like the query
+ * character because that is what it encodes. A dot may appear INSIDE an id but
+ * never as its last character (council #264 r3 / C3 — the alphabet had been
+ * copied from the hex shape the incident happened to carry, so a dotted id
+ * escaped): that is what stops a sentence's trailing period being swallowed
+ * along with the id, which is why the quantifier is `{31,}` plus one non-dot
+ * unit rather than `{32,}`. Case-insensitive, like the query
  * rule below: the two used to disagree inside this one module, so `/Keys/<id>`
  * escaped redaction while `?KEY=<id>` did not (council #264 r2, A3 + D3).
  * The floor is what separates an identifier from a UI
  * or doc path (`/keys`, `/docs/keys/overview`) — those must survive, because
  * redacting them would destroy a useful pointer while protecting nothing.
  */
-const KEY_PATH_ID = /(\/keys\/)((?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}){32,})/gi;
+const KEY_PATH_ID = /(\/keys\/)((?:[A-Za-z0-9_.-]|%[0-9A-Fa-f]{2}){31,}(?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}))/gi;
 
 /**
  * The other shape a key identifier actually arrives in: a query parameter
@@ -57,7 +62,7 @@ const KEY_PATH_ID = /(\/keys\/)((?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}){32,})/gi;
  * emitting a key id with no surrounding URL, that is a new measured shape and
  * gets its own rule — not a guess applied to every hex string.
  */
-const KEY_QUERY_ID = /([?&](?:keys?|api_key|apikey|(?:access_)?token)=)((?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}){32,})/gi;
+const KEY_QUERY_ID = /([?&](?:keys?|api_key|apikey|(?:access_)?token)=)((?:[A-Za-z0-9_.-]|%[0-9A-Fa-f]{2}){31,}(?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}))/gi;
 
 /**
  * Redact key-management identifiers from provider error text.

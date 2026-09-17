@@ -70,6 +70,27 @@ describe('#256 redactProviderError', () => {
     test('a short percent-encoded segment is still not an identifier', () => {
       expect(redactProviderError('/keys/%2Fabc')).toBe('/keys/%2Fabc');
     });
+
+    /**
+     * Council #264 r3 / C3. The alphabet omitted `.`, so a dotted key id escaped
+     * both rules — an oversight, not a decision: the id alphabet was copied from
+     * the hex shape the incident happened to carry. A dot may appear INSIDE an
+     * id but never as its last character, so a sentence's trailing period is not
+     * swallowed along with the id.
+     */
+    test('a DOTTED id is redacted, in both rules', () => {
+      const dotted = 'sk.live.AAAAAAAAAAAAAAAAAAAAAAAAAAAA.99';
+      expect(dotted.length).toBeGreaterThanOrEqual(32);
+      expect(redactProviderError(`/keys/${dotted}`)).toBe('/keys/<redacted>');
+      expect(redactProviderError(`?api_key=${dotted}`)).toBe('?api_key=<redacted>');
+    });
+
+    test('a trailing period belongs to the SENTENCE, not to the id', () => {
+      expect(redactProviderError(`See https://openrouter.ai/keys/${HEX64}.`))
+        .toBe('See https://openrouter.ai/keys/<redacted>.');
+      expect(redactProviderError(`Use ?token=${HEX64}. Then retry.`))
+        .toBe('Use ?token=<redacted>. Then retry.');
+    });
   });
 
   test('a URL without /keys/ is untouched', () => {
